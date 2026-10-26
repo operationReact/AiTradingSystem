@@ -1,0 +1,30 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: ai-trading-system
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/aitrading}
+    username: ${SPRING_DATASOURCE_USERNAME:aitrading}
+    password: ${SPRING_DATASOURCE_PASSWORD:change_me_locally}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+app:
+  trading-mode: PAPER
+  risk:
+    default-capital: 80000
+    risk-per-trade-percent: 0.25
+    max-daily-drawdown-percent: 1.0
+    max-open-positions: 3
+  providers:
+    gemini-enabled: false
+    angel-one-enabled: false
