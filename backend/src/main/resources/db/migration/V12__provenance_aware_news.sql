@@ -1,3 +1,5 @@
+-- Phase 3 provenance-aware news records.
+-- Separate from V3__news_intelligence.sql to preserve existing applied migration history.
 CREATE TABLE news_item (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source VARCHAR(80) NOT NULL,

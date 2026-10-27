@@ -1,0 +1,113 @@
+name: Phase 0 - Baseline validation
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase0-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend tests (Java 21, PostgreSQL/Testcontainers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Run backend unit and integration tests
+        working-directory: backend
+        run: mvn --batch-mode --no-transfer-progress test
+
+  frontend-build:
+    name: Frontend production build (Node 20)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install locked dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build production assets
+        working-directory: frontend
+        run: npm run build
+
+  terraform-validation:
+    name: Terraform format and validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+      - name: Format Terraform files
+        working-directory: infra/terraform
+        run: terraform fmt -recursive
+      - name: Initialize providers without configuring remote state
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+      - name: Validate infrastructure
+        working-directory: infra/terraform
+        run: terraform validate
+
+  container-image-build:
+    name: Build production Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t ai-trading-system-backend:ci backend
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api -t ai-trading-system-frontend:ci frontend
+
+  budget-terraform-validation:
+    name: Budget Terraform format and validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+      - name: Format budget stack
+        working-directory: infra/terraform-budget
+        run: terraform fmt -recursive
+      - name: Initialize providers without remote state
+        working-directory: infra/terraform-budget
+        run: terraform init -backend=false
+      - name: Validate budget stack
+        working-directory: infra/terraform-budget
+        run: terraform validate

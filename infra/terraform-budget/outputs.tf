@@ -1,0 +1,11 @@
+output "aws_region" { value = var.aws_region }
+output "instance_id" { value = aws_instance.app.id }
+output "public_ip" { value = aws_eip.app.public_ip }
+output "github_actions_role_arn" { value = aws_iam_role.github_deploy.arn }
+output "ecr_backend_repository" { value = aws_ecr_repository.backend.repository_url }
+output "ecr_frontend_repository" { value = aws_ecr_repository.frontend.repository_url }
+output "runtime_secret_arn" { value = aws_secretsmanager_secret.runtime.arn }
+output "backup_bucket" { value = aws_s3_bucket.backups.bucket }
+output "route53_nameservers" { value = aws_route53_zone.main.name_servers }
+output "application_url" { value = "https://${var.domain_name}" }
+output "monthly_budget_usd" { value = var.monthly_budget_usd }

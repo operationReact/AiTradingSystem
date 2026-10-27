@@ -1,0 +1,143 @@
+#!/bin/bash
+set -euo pipefail
+exec > >(tee -a /var/log/ai-trading-bootstrap.log | logger -t ai-trading-bootstrap -s 2>/dev/console) 2>&1
+
+dnf update -y
+dnf install -y docker jq cronie curl awscli-2
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose
+systemctl enable --now docker
+systemctl enable --now amazon-ssm-agent || true
+systemctl enable --now crond
+
+mkdir -p /opt/ai-trading /var/lib/ai-trading/postgres /var/lib/caddy/data /var/lib/caddy/config
+chmod 700 /opt/ai-trading
+
+cat > /opt/ai-trading/Caddyfile <<'CADDY'
+${domain_name}, www.${domain_name} {
+  encode gzip
+  @api path /api/*
+  handle @api {
+    reverse_proxy backend:8080
+  }
+  handle {
+    reverse_proxy frontend:8080
+  }
+}
+CADDY
+
+cat > /opt/ai-trading/compose.yaml <<'COMPOSE'
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ai-trading-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aitrading
+      POSTGRES_USER: aitrading_admin
+      POSTGRES_PASSWORD: $${DB_PASSWORD}
+    volumes:
+      - /var/lib/ai-trading/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aitrading_admin -d aitrading"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 512m
+    networks: [private]
+  backend:
+    image: $${BACKEND_IMAGE}
+    container_name: ai-trading-backend
+    restart: unless-stopped
+    environment:
+      TRADING_MODE: PAPER
+      NEWS_ANALYSIS_PROVIDER: NONE
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/aitrading
+      SPRING_DATASOURCE_USERNAME: aitrading_admin
+      SPRING_DATASOURCE_PASSWORD: $${DB_PASSWORD}
+      APP_API_KEY: $${APP_API_KEY}
+      APP_CORS_ALLOWED_ORIGINS: https://${domain_name},https://www.${domain_name}
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx512m -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom"
+    depends_on:
+      db:
+        condition: service_healthy
+    mem_limit: 768m
+    networks: [private]
+  frontend:
+    image: $${FRONTEND_IMAGE}
+    container_name: ai-trading-frontend
+    restart: unless-stopped
+    mem_limit: 128m
+    networks: [private]
+  caddy:
+    image: caddy:2-alpine
+    container_name: ai-trading-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - /opt/ai-trading/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/lib/caddy/data:/data
+      - /var/lib/caddy/config:/config
+    depends_on: [frontend, backend]
+    mem_limit: 128m
+    networks: [private]
+networks:
+  private:
+    driver: bridge
+COMPOSE
+
+cat > /opt/ai-trading/deploy.sh <<'DEPLOY'
+#!/bin/bash
+set -euo pipefail
+TAG="$${1:?Pass the immutable Git commit SHA}"
+REGION="${region}"
+ACCOUNT_ID="${account_id}"
+BACKEND_REPO="${backend_image}"
+FRONTEND_REPO="${frontend_image}"
+SECRET_ARN="${secret_arn}"
+cd /opt/ai-trading
+
+SECRET_JSON="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$SECRET_ARN" --query SecretString --output text)"
+DB_PASSWORD="$(printf '%s' "$SECRET_JSON" | jq -r .dbPassword)"
+APP_API_KEY="$(printf '%s' "$SECRET_JSON" | jq -r .appApiKey)"
+unset SECRET_JSON
+cat > .env <<EOF
+DB_PASSWORD=$DB_PASSWORD
+APP_API_KEY=$APP_API_KEY
+BACKEND_IMAGE=$BACKEND_REPO:$TAG
+FRONTEND_IMAGE=$FRONTEND_REPO:$TAG
+EOF
+unset DB_PASSWORD APP_API_KEY
+chmod 600 .env
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com"
+docker pull "$BACKEND_REPO:$TAG"
+docker pull "$FRONTEND_REPO:$TAG"
+docker compose --env-file .env -f compose.yaml up -d --remove-orphans
+docker image prune -af --filter "until=168h" || true
+DEPLOY
+chmod 700 /opt/ai-trading/deploy.sh
+
+cat > /opt/ai-trading/backup.sh <<'BACKUP'
+#!/bin/bash
+set -euo pipefail
+REGION="${region}"
+SECRET_ARN="${secret_arn}"
+BUCKET="${backup_bucket}"
+SECRET_JSON="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$SECRET_ARN" --query SecretString --output text)"
+DB_PASSWORD="$(printf '%s' "$SECRET_JSON" | jq -r .dbPassword)"
+unset SECRET_JSON
+export PGPASSWORD="$DB_PASSWORD"
+unset DB_PASSWORD
+STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+docker exec ai-trading-db pg_dump -U aitrading_admin -d aitrading | gzip | aws s3 cp - "s3://$BUCKET/daily/aitrading-$STAMP.sql.gz" --region "$REGION" --only-show-errors
+unset PGPASSWORD
+BACKUP
+chmod 700 /opt/ai-trading/backup.sh
+echo '17 19 * * * root /opt/ai-trading/backup.sh >> /var/log/ai-trading-backup.log 2>&1' > /etc/cron.d/ai-trading-db-backup
+chmod 644 /etc/cron.d/ai-trading-db-backup
+
+touch /var/lib/ai-trading-bootstrap-complete
