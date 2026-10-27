@@ -48,7 +48,7 @@ public class DashboardController {
         List<AgentStatus> agents = List.of(
             new AgentStatus("news", "News Ingestion", "NOT_CONFIGURED", "No news provider adapter is configured."),
             new AgentStatus("scanner", "Market Scanner", "NOT_CONFIGURED", "No market-data adapter is configured; no live quotes are shown."),
-            new AgentStatus("strategy", "Strategy Analyst", "DEMO", "Signals shown are synthetic demo data."),
+            new AgentStatus("strategy", "Strategy Analyst", "ACTIVE", "Deterministic SMA trend and prior-volume evaluation over stored candles; signals remain non-executable paper candidates."),
             new AgentStatus("risk", "Risk Manager", "ACTIVE", "Deterministic checks run on every paper order."),
             new AgentStatus("execution", "Paper Execution", "ACTIVE", "Paper-only fills persisted to PostgreSQL."));
         List<ProviderStatus> providers = List.of(
