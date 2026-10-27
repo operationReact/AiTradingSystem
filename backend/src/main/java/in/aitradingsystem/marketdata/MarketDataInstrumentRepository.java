@@ -14,7 +14,7 @@ public class MarketDataInstrumentRepository {
         this.jdbc = jdbc;
     }
 
-    public int upsertBatch(List<InstrumentMasterService.MasterRow> rows) {
+    public int upsertBatch(List<PublicInstrumentMasterSyncService.MasterRow> rows) {
         String sql = """
             INSERT INTO market_instrument
                 (exchange, symbol_token, trading_symbol, name, instrument_type, expiry,
