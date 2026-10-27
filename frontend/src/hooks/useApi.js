@@ -1,0 +1,153 @@
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { apiFetch } from '../lib/api.js';
+import { useApp } from '../context/AppContext.jsx';
+
+/** Polling interval for live operational data. Chart and history data are not polled. */
+const LIVE_MS = 30_000;
+
+export const keys = {
+  summary: ['dashboard', 'summary'],
+  equity: (days) => ['dashboard', 'equity', days],
+  portfolio: ['paper', 'portfolio'],
+  trades: (params) => ['paper', 'trades', params],
+  order: (id) => ['paper', 'order', id],
+  signals: ['signals'],
+  riskConfig: ['risk', 'config'],
+  riskDecisions: (params) => ['risk', 'decisions', params],
+  newsStatus: ['news', 'status'],
+  newsArticles: (params) => ['news', 'articles', params],
+  executionMode: ['system', 'execution-mode'],
+  angelOneStatus: ['providers', 'angel-one', 'status'],
+};
+
+function useAuthedQuery(key, path, { poll = true, enabled = true, ...options } = {}) {
+  const { apiKey } = useApp();
+  return useQuery({
+    queryKey: [...key, apiKey ? 'authed' : 'anon'],
+    queryFn: ({ signal }) => apiFetch(path, { apiKey, signal }),
+    enabled: !!apiKey && enabled,
+    refetchInterval: poll ? LIVE_MS : false,
+    ...options,
+  });
+}
+
+export const useDashboardSummary = () => useAuthedQuery(keys.summary, '/dashboard/summary');
+
+export const useEquityCurve = (days) =>
+  useAuthedQuery(keys.equity(days), `/dashboard/equity-curve?days=${days}`, { poll: false });
+
+export const usePortfolio = () => useAuthedQuery(keys.portfolio, '/paper-trades/portfolio');
+
+export function useOrders({ page = 0, size = 10, status = '', symbol = '' }) {
+  const params = new URLSearchParams({ page, size });
+  if (status) params.set('status', status);
+  if (symbol) params.set('symbol', symbol);
+  return useAuthedQuery(keys.trades({ page, size, status, symbol }), `/paper-trades?${params}`, {
+    placeholderData: keepPreviousData,
+  });
+}
+
+export const useOrderDetail = (id) =>
+  useAuthedQuery(keys.order(id), `/paper-trades/${id}`, { poll: false, enabled: !!id });
+
+export const useSignals = () => useAuthedQuery(keys.signals, '/signals', { poll: false });
+
+export const useRiskConfig = () => useAuthedQuery(keys.riskConfig, '/risk/config', { poll: false });
+
+export const useRiskDecisions = ({ page = 0, size = 10 }) =>
+  useAuthedQuery(keys.riskDecisions({ page, size }), `/risk/decisions?page=${page}&size=${size}`, {
+    placeholderData: keepPreviousData,
+  });
+
+export const useNewsStatus = () => useAuthedQuery(keys.newsStatus, '/news/status', { poll: false });
+
+export const useNewsArticles = ({ page = 0, size = 5 } = {}) =>
+  useAuthedQuery(keys.newsArticles({ page, size }), `/news/articles?page=${page}&size=${size}`, {
+    poll: false,
+    placeholderData: keepPreviousData,
+  });
+
+/** Angel One provider state from the server. Secrets and tokens never reach the browser. */
+export const useAngelOneStatus = () =>
+  useAuthedQuery(keys.angelOneStatus, '/providers/angel-one/status', { poll: false, retry: 1 });
+
+/** Runs a server-side session check against Angel One. The response replaces the cached status. */
+export function useTestAngelOneConnection() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch('/providers/angel-one/test-connection', { apiKey, method: 'POST' }),
+    onSuccess: (data) => qc.setQueryData([...keys.angelOneStatus, apiKey ? 'authed' : 'anon'], data),
+  });
+}
+
+/** Runs one structured AI analysis for an article. The backend reuses a valid result unless forced. */
+export function useAnalyzeArticle() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => apiFetch(`/news/articles/${id}/analyze`, { apiKey, method: 'POST' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['news'] }),
+  });
+}
+
+/**
+ * Backend-reported execution mode. The UI never assumes a mode: it only reflects the last
+ * successful response from the server. Failures surface as an error state, not as a mode.
+ */
+export const useExecutionMode = () =>
+  useAuthedQuery(keys.executionMode, '/system/execution-mode', { poll: false, retry: 1 });
+
+/** Requests a mode change. The backend decides; the result is written to the cache only when the server accepts it. */
+export function useChangeExecutionMode() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ mode, confirmation }) =>
+      apiFetch('/system/execution-mode', { apiKey, method: 'PUT', body: { mode, confirmation } }),
+    onSuccess: (data) => qc.setQueryData([...keys.executionMode, apiKey ? 'authed' : 'anon'], data),
+    onError: (err) => {
+      if (err?.status === 409 && err.body) {
+        qc.setQueryData([...keys.executionMode, apiKey ? 'authed' : 'anon'], (prev) => ({ ...prev, ...err.body, liveAvailable: false }));
+      }
+    },
+  });
+}
+
+/** Invalidates everything that a paper order or a risk change can affect. */
+function useInvalidatePaper() {
+  const qc = useQueryClient();
+  return () =>
+    Promise.all(
+      [['dashboard'], ['paper'], ['risk']].map((queryKey) => qc.invalidateQueries({ queryKey })),
+    );
+}
+
+/**
+ * Submits a paper-only simulated order. The caller supplies the idempotency key so a retried
+ * submission of the same dialog session reuses it and the backend deduplicates the order.
+ */
+export function useSimulateTrade() {
+  const { apiKey } = useApp();
+  const invalidate = useInvalidatePaper();
+  return useMutation({
+    mutationFn: ({ idempotencyKey, body }) =>
+      apiFetch('/paper-trades/simulate', {
+        apiKey,
+        method: 'POST',
+        body,
+        headers: { 'Idempotency-Key': idempotencyKey },
+      }),
+    onSettled: invalidate,
+  });
+}
+
+export function useEmergencyStop() {
+  const { apiKey } = useApp();
+  const invalidate = useInvalidatePaper();
+  return useMutation({
+    mutationFn: ({ halted, reason }) =>
+      apiFetch('/risk/emergency-stop', { apiKey, method: 'PUT', body: { halted, reason } }),
+    onSettled: invalidate,
+  });
+}

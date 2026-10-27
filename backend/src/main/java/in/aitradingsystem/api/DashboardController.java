@@ -1,41 +1,68 @@
 package in.aitradingsystem.api;
 
+import in.aitradingsystem.paper.PaperQueryService;
+import in.aitradingsystem.paper.PaperViews.EquityPoint;
+import in.aitradingsystem.paper.PaperViews.PortfolioView;
+import in.aitradingsystem.provider.angelone.AngelOneHealthService;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/dashboard")
+@Validated
 public class DashboardController {
-    @GetMapping("/dashboard/summary")
-    public Map<String, Object> summary() {
-        return Map.of(
-            "mode", "PAPER", "liveTradingEnabled", false,
-            "capital", new BigDecimal("80000.00"), "availableCash", new BigDecimal("80000.00"),
-            "realizedPnl", BigDecimal.ZERO, "unrealizedPnl", BigDecimal.ZERO,
-            "openPositions", 0, "signalsToday", 3, "systemStatus", "DEMO", "asOf", Instant.now().toString(),
-            "agents", List.of(
-                Map.of("id", "scanner", "name", "Market Scanner", "status", "DEMO", "description", "Finds liquid-stock candidates; live data adapter not configured."),
-                Map.of("id", "news", "name", "News Analyst", "status", "DISABLED", "description", "News ingestion and Gemini integration are not configured."),
-                Map.of("id", "strategy", "name", "Strategy Analyst", "status", "DEMO", "description", "Evaluates explicit strategy rules; demo signals are synthetic."),
-                Map.of("id", "risk", "name", "Risk Manager", "status", "ACTIVE", "description", "Validates risk budgets and paper-only constraints."),
-                Map.of("id", "research", "name", "Research Analyst", "status", "PLANNED", "description", "Backtesting and out-of-sample evaluation planned."),
-                Map.of("id", "monitor", "name", "Paper Execution & Monitor", "status", "ACTIVE", "description", "Paper simulator only; live orders are not implemented.")
-            )
-        );
+    private final PaperQueryService queries;
+    private final boolean geminiConfigured;
+    private final AngelOneHealthService angelOne;
+
+    public DashboardController(PaperQueryService queries,
+                               @Value("${app.providers.gemini.api-key:}") String geminiKey,
+                               AngelOneHealthService angelOne) {
+        this.queries = queries;
+        this.geminiConfigured = geminiKey != null && !geminiKey.isBlank();
+        this.angelOne = angelOne;
     }
 
-    @GetMapping("/signals")
-    public List<Map<String, Object>> signals() {
-        var now = Instant.now().toString();
-        return List.of(
-            Map.of("id", "demo-1", "symbol", "RELIANCE", "action", "WATCH", "strategy", "trend_pullback_demo", "referencePrice", new BigDecimal("1400.00"), "stopLoss", new BigDecimal("1375.00"), "target", new BigDecimal("1450.00"), "confidence", 0.65, "reasonCodes", List.of("DEMO_DATA", "TREND_CHECK_PENDING"), "source", "SYNTHETIC_DEMO", "createdAt", now, "status", "NOT_EXECUTABLE"),
-            Map.of("id", "demo-2", "symbol", "INFY", "action", "WATCH", "strategy", "breakout_demo", "referencePrice", new BigDecimal("1500.00"), "stopLoss", new BigDecimal("1470.00"), "target", new BigDecimal("1560.00"), "confidence", 0.52, "reasonCodes", List.of("DEMO_DATA", "VOLUME_CONFIRMATION_PENDING"), "source", "SYNTHETIC_DEMO", "createdAt", now, "status", "NOT_EXECUTABLE"),
-            Map.of("id", "demo-3", "symbol", "TCS", "action", "NO_TRADE", "strategy", "news_watch_demo", "referencePrice", new BigDecimal("3800.00"), "stopLoss", new BigDecimal("0"), "target", new BigDecimal("0"), "confidence", 0.40, "reasonCodes", List.of("DEMO_DATA", "NEWS_SOURCE_NOT_CONNECTED"), "source", "SYNTHETIC_DEMO", "createdAt", now, "status", "NOT_EXECUTABLE")
-        );
+    public record AgentStatus(String id, String name, String status, String description) {}
+
+    public record ProviderStatus(String name, String status, Instant lastSuccessfulCheck) {}
+
+    public record DashboardSummary(String mode, boolean liveTradingEnabled, boolean newOrdersHalted,
+        BigDecimal capital, BigDecimal availableCash, BigDecimal investedCapital, BigDecimal marketValue,
+        BigDecimal equity, BigDecimal realizedPnl, BigDecimal unrealizedPnl, BigDecimal dailyPnl,
+        int openPositions, BigDecimal exposurePercent, boolean cashReconciled, String markPriceSource,
+        String systemStatus, Instant asOf, List<AgentStatus> agents, List<ProviderStatus> providers) {}
+
+    @GetMapping("/summary")
+    public DashboardSummary summary() {
+        PortfolioView p = queries.portfolio();
+        List<AgentStatus> agents = List.of(
+            new AgentStatus("news", "News Ingestion", "NOT_CONFIGURED", "No news provider adapter is configured."),
+            new AgentStatus("scanner", "Market Scanner", "NOT_CONFIGURED", "No market-data adapter is configured; no live quotes are shown."),
+            new AgentStatus("strategy", "Strategy Analyst", "DEMO", "Signals shown are synthetic demo data."),
+            new AgentStatus("risk", "Risk Manager", "ACTIVE", "Deterministic checks run on every paper order."),
+            new AgentStatus("execution", "Paper Execution", "ACTIVE", "Paper-only fills persisted to PostgreSQL."));
+        List<ProviderStatus> providers = List.of(
+            new ProviderStatus("Gemini", geminiConfigured ? "CONFIGURED_UNVERIFIED" : "NOT_CONFIGURED", null),
+            new ProviderStatus("Angel One SmartAPI", angelOne.status().state().name(), null));
+        String systemStatus = p.cashReconciled() ? (p.newOrdersHalted() ? "HALTED" : "OK") : "RECONCILIATION_FAILED";
+        return new DashboardSummary(p.mode(), p.liveTradingEnabled(), p.newOrdersHalted(), p.startingCapital(),
+            p.cash(), p.invested(), p.marketValue(), p.equity(), p.realizedPnl(), p.unrealizedPnl(),
+            p.realizedPnlToday(), p.openPositions(), p.exposurePercent(), p.cashReconciled(), p.markPriceSource(),
+            systemStatus, p.asOf(), agents, providers);
+    }
+
+    @GetMapping("/equity-curve")
+    public List<EquityPoint> equityCurve(@RequestParam(defaultValue = "90") @Min(1) @Max(365) int days) {
+        return queries.equityCurve(days);
     }
 }
