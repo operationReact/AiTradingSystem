@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 
 /** Imports the public Angel One instrument master only; it never authenticates or places orders. */
 @Service
-public class InstrumentMasterService {
+public class PublicInstrumentMasterSyncService {
     static final int MAX_BYTES = 50 * 1024 * 1024;
     static final int MAX_ROWS = 500_000;
 
@@ -27,7 +27,7 @@ public class InstrumentMasterService {
     private final HttpClient client;
     private final URI masterUri;
 
-    public InstrumentMasterService(
+    public PublicInstrumentMasterSyncService(
         MarketDataInstrumentRepository repository,
         ObjectMapper mapper,
         @Value("${app.market-data.instrument-master-url:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}") String masterUrl
