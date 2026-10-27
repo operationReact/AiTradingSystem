@@ -3,6 +3,7 @@ package in.aitradingsystem.marketdata;
 import com.fasterxml.jackson.databind.JsonNode;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.provider.angelone.AngelOneException;
 import in.aitradingsystem.provider.angelone.AngelOneHistoricalService;
 import jakarta.annotation.PostConstruct;
@@ -137,10 +138,21 @@ public class HistoricalCandleService {
         if (interval == null) throw new MarketDataException("INVALID_INTERVAL", "A supported candle interval is required");
         if (page < 0 || page > 1_000_000) throw new MarketDataException("INVALID_PAGE", "Page must be between 0 and 1000000");
         if (size < 1 || size > 500) throw new MarketDataException("INVALID_PAGE_SIZE", "Page size must be between 1 and 500");
-        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
+        String exchange;
+        String symbolToken;
+        try {
+            Instrument instrument = instruments.requireActiveInstrument(instrumentId);
+            exchange = instrument.exchange();
+            symbolToken = instrument.symbolToken();
+        } catch (InstrumentMasterException ex) {
+            MarketDataRepository.InstrumentIdentity identity = repository.findHistoricalInstrumentIdentity(instrumentId);
+            if (identity == null) throw ex;
+            exchange = identity.exchange();
+            symbolToken = identity.symbolToken();
+        }
         Instant from = fromDate.atStartOfDay(MARKET_ZONE).toInstant();
         Instant toExclusive = toDate.plusDays(1).atStartOfDay(MARKET_ZONE).toInstant();
-        return repository.candles(instrument.exchange(), instrument.symbolToken(), interval.name(), from, toExclusive, page, size);
+        return repository.candles(exchange, symbolToken, interval.name(), from, toExclusive, page, size);
     }
 
     public CandleBackfillRun getRun(UUID id) {
