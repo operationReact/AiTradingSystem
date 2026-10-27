@@ -1,6 +1,6 @@
 package in.aitradingsystem.api;
 
-import in.aitradingsystem.marketdata.InstrumentMasterService;
+import in.aitradingsystem.marketdata.PublicInstrumentMasterSyncService;
 import in.aitradingsystem.marketdata.MarketInstrument;
 import in.aitradingsystem.marketdata.MarketDataInstrumentRepository;
 import jakarta.validation.constraints.Max;
@@ -18,17 +18,17 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 @RequestMapping("/api/market-data")
 public class MarketDataController {
-    private final InstrumentMasterService masterService;
+    private final PublicInstrumentMasterSyncService masterService;
     private final MarketDataInstrumentRepository instruments;
 
-    public MarketDataController(InstrumentMasterService masterService, MarketDataInstrumentRepository instruments) {
+    public MarketDataController(PublicInstrumentMasterSyncService masterService, MarketDataInstrumentRepository instruments) {
         this.masterService = masterService;
         this.instruments = instruments;
     }
 
     /** Manually refreshes the bounded public instrument master. Protected by the operator API key. */
     @PostMapping("/instruments/sync")
-    public InstrumentMasterService.SyncResult syncInstrumentMaster() {
+    public PublicInstrumentMasterSyncService.SyncResult syncInstrumentMaster() {
         return masterService.sync();
     }
 
