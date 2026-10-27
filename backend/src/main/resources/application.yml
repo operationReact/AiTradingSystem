@@ -76,6 +76,13 @@ app:
       quote-min-interval-ms: 1000
       # Bounded wait used only for session recovery; normal requests remain fail-fast.
       session-retry-max-wait-ms: 6000
+      # Angel One publishes a daily public instrument JSON file; never follow redirects or accept oversized input.
+      instrument-master-url: ${ANGELONE_INSTRUMENT_MASTER_URL:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}
+      instrument-master-max-bytes: 52428800
+      instrument-master-max-rows: 500000
+      instrument-search-max-page-size: 100
+      instrument-master-max-rejected-percent: 5
+      instrument-master-min-retained-percent: 80
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

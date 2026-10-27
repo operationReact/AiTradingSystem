@@ -59,7 +59,7 @@ public class InstrumentMasterParser {
             throw new IllegalArgumentException("invalid token/symbol");
         }
         int lotSize = positiveInt(requiredText(node, "lotsize", 20));
-        BigDecimal tickSize = positiveDecimal(requiredText(node, "tick_size", 50));
+        BigDecimal tickSize = positiveDecimal(requiredText(node, "tick_size", 50)).movePointLeft(2).stripTrailingZeros();
         String type = optionalText(node, "instrumenttype", 30);
         String expiryText = optionalText(node, "expiry", 20);
         LocalDate expiry = parseExpiry(expiryText);
@@ -113,13 +113,14 @@ public class InstrumentMasterParser {
     }
 
     private static BigDecimal parseStrike(String text) {
-        if (text == null || text.equals("-1")) return null;
+        if (text == null) return null;
         try {
             BigDecimal value = new BigDecimal(text);
+            if (value.compareTo(new BigDecimal("-1")) == 0) return null;
             if (value.signum() < 0 || value.scale() > 6 || value.precision() > 20) {
                 throw new NumberFormatException();
             }
-            // SmartAPI option strike is expressed in paise in the master file.
+            // SmartAPI stores option strike and tick size in paise in the master file.
             return value.signum() == 0 ? BigDecimal.ZERO : value.movePointLeft(2).stripTrailingZeros();
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("invalid strike");
