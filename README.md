@@ -50,7 +50,7 @@ See `.env.example`. Do not place keys in React/Vite variables: frontend environm
 1. Foundation and demo dashboard.
 2. Angel One market-data adapter (read-only), instrument master and candle persistence.
 3. News ingestion and optional Gemini summarization with source/time provenance.
-4. Deterministic strategies and realistic paper fills with brokerage/slippage.
+4. Deterministic SMA trend/volume strategy over stored candles, persisted signal history, and risk-gated paper fills with configurable brokerage/slippage (see [Phase 4](docs/phase-4-deterministic-strategies-paper-fills.md)).
 5. Backtesting, out-of-sample validation, monitoring and audit trail.
 6. Evaluate current exchange/broker requirements before considering any live execution in a separately reviewed change.
 
