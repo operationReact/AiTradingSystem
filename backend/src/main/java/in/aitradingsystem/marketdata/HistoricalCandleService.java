@@ -136,9 +136,10 @@ public class HistoricalCandleService {
         if (interval == null) throw new MarketDataException("INVALID_INTERVAL", "A supported candle interval is required");
         if (page < 0 || page > 1_000_000) throw new MarketDataException("INVALID_PAGE", "Page must be between 0 and 1000000");
         if (size < 1 || size > 500) throw new MarketDataException("INVALID_PAGE_SIZE", "Page size must be between 1 and 500");
+        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         Instant from = fromDate.atStartOfDay(MARKET_ZONE).toInstant();
         Instant toExclusive = toDate.plusDays(1).atStartOfDay(MARKET_ZONE).toInstant();
-        return repository.candles(instrumentId, interval.name(), from, toExclusive, page, size);
+        return repository.candles(instrument.exchange(), instrument.symbolToken(), interval.name(), from, toExclusive, page, size);
     }
 
     public CandleBackfillRun getRun(UUID id) {
