@@ -139,7 +139,7 @@ public class PaperBacktestValidationService {
             holdoutResult.candlesEvaluated(), trainResult.totalReturnPercent(),
             holdoutResult.totalReturnPercent(), delta, now);
         backtests.saveValidation(validation);
-        audit.record("PAPER_BACKTEST_VALIDATION_COMPLETED", "PAPER_BACKTEST_VALIDATION", validation.id().toString(), Map.of(
+        audit.record("PAPER_BACKTEST_VALIDATION_COMPLETED", "PAPER_BACKTEST_VALIDATION", validation.id().toString(), Map.ofEntries(
             "instrumentId", instrument.id(),
             "symbol", instrument.tradingSymbol(),
             "interval", request.interval().name(),
