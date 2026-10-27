@@ -139,20 +139,21 @@ public class PaperBacktestValidationService {
             holdoutResult.candlesEvaluated(), trainResult.totalReturnPercent(),
             holdoutResult.totalReturnPercent(), delta, now);
         backtests.saveValidation(validation);
-        audit.record("PAPER_BACKTEST_VALIDATION_COMPLETED", "PAPER_BACKTEST_VALIDATION", validation.id().toString(), Map.ofEntries(
-            "instrumentId", instrument.id(),
-            "symbol", instrument.tradingSymbol(),
-            "interval", request.interval().name(),
-            "fromDate", request.fromDate().toString(),
-            "splitDate", splitDate.toString(),
-            "toDate", request.toDate().toString(),
-            "outOfSamplePercent", holdoutPercent,
-            "trainingCandles", trainResult.candlesEvaluated(),
-            "outOfSampleCandles", holdoutResult.candlesEvaluated(),
-            "trainingReturnPercent", trainResult.totalReturnPercent(),
-            "outOfSampleReturnPercent", holdoutResult.totalReturnPercent(),
-            "returnDeltaPercentagePoints", delta
-        ));
+        Map<String, Object> auditDetails = new java.util.LinkedHashMap<>();
+        auditDetails.put("instrumentId", instrument.id());
+        auditDetails.put("symbol", instrument.tradingSymbol());
+        auditDetails.put("interval", request.interval().name());
+        auditDetails.put("fromDate", request.fromDate().toString());
+        auditDetails.put("splitDate", splitDate.toString());
+        auditDetails.put("toDate", request.toDate().toString());
+        auditDetails.put("outOfSamplePercent", holdoutPercent);
+        auditDetails.put("trainingCandles", trainResult.candlesEvaluated());
+        auditDetails.put("outOfSampleCandles", holdoutResult.candlesEvaluated());
+        auditDetails.put("trainingReturnPercent", trainResult.totalReturnPercent());
+        auditDetails.put("outOfSampleReturnPercent", holdoutResult.totalReturnPercent());
+        auditDetails.put("returnDeltaPercentagePoints", delta);
+        audit.record("PAPER_BACKTEST_VALIDATION_COMPLETED", "PAPER_BACKTEST_VALIDATION",
+            validation.id().toString(), auditDetails);
         return new PaperBacktestValidationDetail(validation,
             new PaperBacktestDetail(trainingRun, trainResult.trades()),
             new PaperBacktestDetail(holdoutRun, holdoutResult.trades()));
