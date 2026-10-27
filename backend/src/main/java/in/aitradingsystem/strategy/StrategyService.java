@@ -122,7 +122,7 @@ public class StrategyService {
             }
             double confidence = confidence(fast, slow, volumeConfirmed, stale);
             signal = new StrategySignal(
-                    UUID.nameUUIDFromBytes((instrument.exchange() + ":" + instrument.symbolToken() + ":" + interval.name()
+                    UUID.nameUUIDFromBytes((instrument.id() + ":" + instrument.exchange() + ":" + instrument.symbolToken() + ":" + interval.name()
                             + ":" + last.candleTime() + ":" + STRATEGY).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),
                     instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(), action, STRATEGY,
                     close, stop, target, fast, slow, volumeAvg, latestVolume, confidence, List.copyOf(reasons),
