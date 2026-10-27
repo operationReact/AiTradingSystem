@@ -7,10 +7,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class InstrumentMasterRepository {
+public class MarketDataInstrumentRepository {
     private final JdbcTemplate jdbc;
 
-    public InstrumentMasterRepository(JdbcTemplate jdbc) {
+    public MarketDataInstrumentRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
     }
 
