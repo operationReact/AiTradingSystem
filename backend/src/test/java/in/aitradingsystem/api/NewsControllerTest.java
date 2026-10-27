@@ -17,7 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = NewsController.class, properties = "NEWS_API_TOKEN=test-news-token")
 @AutoConfigureMockMvc(addFilters = false)
-@Import(NewsApiTokenFilter.class)
+@Import({NewsApiTokenFilter.class, in.aitradingsystem.common.ApiExceptionHandler.class})
 class NewsControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean NewsRepository repository;
