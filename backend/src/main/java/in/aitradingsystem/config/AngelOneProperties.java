@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import java.net.URI;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.ConstructorBinding;
 import org.springframework.validation.annotation.Validated;
 
 @Validated
@@ -26,6 +27,7 @@ public record AngelOneProperties(
                 sessionMaxAgeSeconds, loginMinIntervalMs, quoteMinIntervalMs, 5_000);
     }
 
+    @ConstructorBinding
     public AngelOneProperties {
         if (baseUrl != null && !baseUrl.isBlank()) {
             try {
