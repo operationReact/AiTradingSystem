@@ -1,6 +1,10 @@
 package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.instrument.InstrumentMasterException;
+import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.instrument.InstrumentImportSummary;
+import in.aitradingsystem.instrument.InstrumentSearchResponse;
+import in.aitradingsystem.instrument.InstrumentMasterRepository;
 import in.aitradingsystem.provider.angelone.AngelOneException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -27,9 +31,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/market-data")
 public class MarketDataController {
     private final HistoricalCandleService service;
+    private final InstrumentMasterService instruments;
 
-    public MarketDataController(HistoricalCandleService service) {
+    public MarketDataController(HistoricalCandleService service, InstrumentMasterService instruments) {
         this.service = service;
+        this.instruments = instruments;
+    }
+
+    @PostMapping("/instruments/sync")
+    public InstrumentImportSummary syncInstruments() {
+        return instruments.importLatest();
+    }
+
+    @GetMapping("/instruments")
+    public InstrumentSearchResponse searchInstruments(
+            @RequestParam(required = false) @jakarta.validation.constraints.Size(max = 100)
+            @jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9 .&/_-]*") String query,
+            @RequestParam(required = false) @jakarta.validation.constraints.Pattern(regexp = "NSE|BSE|NFO|BFO|MCX|CDS|BCD") String exchange,
+            @RequestParam(required = false) @jakarta.validation.constraints.Size(max = 30)
+            @jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]*") String type,
+            @RequestParam(defaultValue = "0") @Min(0) @Max(1_000_000) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return instruments.search(query, exchange, type, page, size);
+    }
+
+    @GetMapping("/instruments/status")
+    public InstrumentMasterRepository.CatalogueSummary instrumentStatus() {
+        return instruments.catalogueSummary();
     }
 
     public record BackfillRequest(
