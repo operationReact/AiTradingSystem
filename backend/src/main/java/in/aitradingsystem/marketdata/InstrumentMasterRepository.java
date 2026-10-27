@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.sql.Date;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.ParameterizedPreparedStatementSetter;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -47,7 +46,7 @@ public class InstrumentMasterRepository {
                 else ps.setInt(8, row.lotSize());
                 ps.setBigDecimal(9, row.tickSize() == null ? BigDecimal.ZERO : row.tickSize());
             });
-        return counts.length;
+        return rows.size();
     }
 
     public List<MarketInstrument> search(String query, String exchange, int limit) {
