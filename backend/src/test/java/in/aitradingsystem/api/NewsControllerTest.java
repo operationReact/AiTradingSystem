@@ -17,18 +17,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(controllers = NewsController.class)
 @AutoConfigureMockMvc(addFilters = false)
-@Import(NewsControllerTestConfig.class)
+@Import(in.aitradingsystem.common.ApiExceptionHandler.class)
 class NewsControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean NewsRepository repository;
-
-    @Test
-    void returnsUnauthorizedWithoutBearerToken() throws Exception {
-        // Exercise the API filter directly in NewsApiTokenFilterTest; this MVC slice disables filters.
-        when(repository.recent(21, 0)).thenReturn(List.of());
-        mvc.perform(get("/api/news"))
-            .andExpect(status().isOk());
-    }
 
     @Test
     void returnsPaginatedReadOnlyResultsWithinBounds() throws Exception {
@@ -45,6 +37,6 @@ class NewsControllerTest {
     void rejectsUnboundedPageSize() throws Exception {
         mvc.perform(get("/api/news?limit=101"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.message").exists());
+            .andExpect(jsonPath("$.detail").exists());
     }
 }
