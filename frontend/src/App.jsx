@@ -6,6 +6,7 @@ import PaperTradesPage from './pages/PaperTradesPage.jsx';
 import RiskPage from './pages/RiskPage.jsx';
 import InstrumentsPage from './pages/InstrumentsPage.jsx';
 import MarketDataPage from './pages/MarketDataPage.jsx';
+import BacktestingPage from './pages/BacktestingPage.jsx';
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="risk" element={<RiskPage />} />
         <Route path="instruments" element={<InstrumentsPage />} />
         <Route path="market-data" element={<MarketDataPage />} />
+        <Route path="backtesting" element={<BacktestingPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
