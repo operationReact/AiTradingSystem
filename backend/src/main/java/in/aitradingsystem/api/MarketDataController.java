@@ -17,11 +17,11 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @Validated
 @RequestMapping("/api/market-data")
-public class MarketDataController {
+public class InstrumentMasterLookupController {
     private final PublicInstrumentMasterSyncService masterService;
     private final MarketDataInstrumentRepository instruments;
 
-    public MarketDataController(PublicInstrumentMasterSyncService masterService, MarketDataInstrumentRepository instruments) {
+    public InstrumentMasterLookupController(PublicInstrumentMasterSyncService masterService, MarketDataInstrumentRepository instruments) {
         this.masterService = masterService;
         this.instruments = instruments;
     }
