@@ -102,7 +102,7 @@ export default function ModeControl() {
           PAPER ONLY
         </button>
         <button type="button" role="radio" aria-checked={status === 'LIVE'}
-          disabled={unknown || !liveAvailable || busy} title={liveTitle}
+          disabled={unknown || busy} title={liveTitle}
           onClick={() => setConfirmOpen(true)}
           className={cn('inline-flex h-7 items-center gap-1 rounded px-2.5 text-[11px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed',
             status === 'LIVE' ? 'bg-loss text-white' : 'text-muted disabled:opacity-60')}>
