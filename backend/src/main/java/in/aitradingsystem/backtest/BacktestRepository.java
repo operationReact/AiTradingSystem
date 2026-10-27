@@ -168,6 +168,84 @@ public class BacktestRepository {
         return new PaperBacktestDetail(run, trades);
     }
 
+
+    private final RowMapper<BacktestValidationSummary> validationMapper = (rs, row) -> new BacktestValidationSummary(
+        rs.getObject("id", UUID.class),
+        rs.getLong("instrument_id"),
+        rs.getString("exchange"),
+        rs.getString("trading_symbol"),
+        rs.getString("symbol_token"),
+        rs.getObject("catalogue_version", UUID.class),
+        rs.getString("interval"),
+        rs.getObject("from_date", LocalDate.class),
+        rs.getObject("to_date", LocalDate.class),
+        rs.getObject("split_date", LocalDate.class),
+        rs.getInt("out_of_sample_percent"),
+        rs.getObject("training_run_id", UUID.class),
+        rs.getObject("out_of_sample_run_id", UUID.class),
+        rs.getInt("training_candles"),
+        rs.getInt("out_of_sample_candles"),
+        rs.getBigDecimal("training_return_percent"),
+        rs.getBigDecimal("out_of_sample_return_percent"),
+        rs.getBigDecimal("return_delta_percentage_points"),
+        instant(rs.getObject("created_at", OffsetDateTime.class))
+    );
+
+    public void saveValidation(BacktestValidationSummary validation) {
+        client.sql("""
+            INSERT INTO paper_backtest_validation (
+                id, instrument_id, exchange, trading_symbol, symbol_token, catalogue_version,
+                interval, from_date, to_date, split_date, out_of_sample_percent,
+                training_run_id, out_of_sample_run_id, training_candles, out_of_sample_candles,
+                training_return_percent, out_of_sample_return_percent, return_delta_percentage_points, created_at
+            ) VALUES (
+                :id, :instrumentId, :exchange, :tradingSymbol, :symbolToken, :catalogueVersion,
+                :interval, :fromDate, :toDate, :splitDate, :outOfSamplePercent,
+                :trainingRunId, :outOfSampleRunId, :trainingCandles, :outOfSampleCandles,
+                :trainingReturn, :outOfSampleReturn, :returnDelta, :createdAt
+            )
+            """)
+            .param("id", validation.id())
+            .param("instrumentId", validation.instrumentId())
+            .param("exchange", validation.exchange())
+            .param("tradingSymbol", validation.tradingSymbol())
+            .param("symbolToken", validation.symbolToken())
+            .param("catalogueVersion", validation.catalogueVersion(), Types.OTHER)
+            .param("interval", validation.interval())
+            .param("fromDate", validation.fromDate())
+            .param("toDate", validation.toDate())
+            .param("splitDate", validation.splitDate())
+            .param("outOfSamplePercent", validation.outOfSamplePercent())
+            .param("trainingRunId", validation.trainingRunId(), Types.OTHER)
+            .param("outOfSampleRunId", validation.outOfSampleRunId(), Types.OTHER)
+            .param("trainingCandles", validation.trainingCandles())
+            .param("outOfSampleCandles", validation.outOfSampleCandles())
+            .param("trainingReturn", validation.trainingReturnPercent())
+            .param("outOfSampleReturn", validation.outOfSampleReturnPercent())
+            .param("returnDelta", validation.returnDeltaPercentagePoints())
+            .param("createdAt", timestamp(validation.createdAt()))
+            .update();
+    }
+
+    public BacktestValidationSummary requireValidation(UUID id) {
+        return client.sql("SELECT * FROM paper_backtest_validation WHERE id = :id")
+            .param("id", id)
+            .query(validationMapper)
+            .optional()
+            .orElseThrow(() -> new BacktestException("VALIDATION_NOT_FOUND", "Backtest validation was not found"));
+    }
+
+    public List<BacktestValidationSummary> recentValidations(int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new BacktestException("INVALID_LIMIT", "Limit must be between 1 and 100");
+        }
+        return jdbc.query("""
+            SELECT * FROM paper_backtest_validation
+             ORDER BY created_at DESC, id DESC
+             LIMIT ?
+            """, validationMapper, limit);
+    }
+
     public List<BacktestRunSummary> recent(int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100");
         return jdbc.query("""
