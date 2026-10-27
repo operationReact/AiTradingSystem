@@ -3,7 +3,7 @@ set -euo pipefail
 exec > >(tee -a /var/log/ai-trading-bootstrap.log | logger -t ai-trading-bootstrap -s 2>/dev/console) 2>&1
 
 dnf update -y
-dnf install -y docker jq cronie curl
+dnf install -y docker jq cronie curl awscli-2
 mkdir -p /usr/local/lib/docker/cli-plugins
 curl -fsSL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64 -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod 755 /usr/local/lib/docker/cli-plugins/docker-compose
