@@ -159,6 +159,12 @@ class MarketDataApiIT extends AbstractPostgresIT {
             .andExpect(jsonPath("$.totalItems").value(1))
             .andExpect(jsonPath("$.items[0].instrumentId").value(refreshedInstrumentId));
 
+        mvc.perform(get("/api/market-data/candles").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .param("instrumentId", Long.toString(instrumentId))
+                .param("interval", "ONE_DAY").param("fromDate", "2026-10-26").param("toDate", "2026-10-26"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalItems").value(1));
+
         Integer count = jdbc.queryForObject("""
                 SELECT count(*) FROM market_candle
                  WHERE exchange = 'NSE' AND symbol_token = 'test-token' AND interval = 'ONE_DAY'
