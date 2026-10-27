@@ -319,27 +319,44 @@ resource "aws_route53_record" "cert_validation" {
   records = [each.value.record]
 }
 resource "aws_acm_certificate_validation" "main" {
-  certificate_arn = aws_acm_certificate.main.arn
+  count                   = var.enable_https ? 1 : 0
+  certificate_arn         = aws_acm_certificate.main.arn
   validation_record_fqdns = [for record in aws_route53_record.cert_validation : record.fqdn]
 }
-resource "aws_lb_listener" "http" {
+resource "aws_lb_listener" "http_setup" {
+  count             = var.enable_https ? 0 : 1
   load_balancer_arn = aws_lb.main.arn
-  port = 80
-  protocol = "HTTP"
+  port              = 80
+  protocol          = "HTTP"
+  default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "HTTPS setup pending. Delegate Route 53 nameservers, then apply with enable_https=true."
+      status_code  = "503"
+    }
+  }
+}
+resource "aws_lb_listener" "http_redirect" {
+  count             = var.enable_https ? 1 : 0
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
   default_action {
     type = "redirect"
     redirect {
-      port = "443"
-      protocol = "HTTPS"
+      port        = "443"
+      protocol    = "HTTPS"
       status_code = "HTTP_301"
     }
   }
 }
 resource "aws_lb_listener" "https" {
+  count             = var.enable_https ? 1 : 0
   load_balancer_arn = aws_lb.main.arn
   port = 443
   protocol = "HTTPS"
-  certificate_arn = aws_acm_certificate_validation.main.certificate_arn
+  certificate_arn = aws_acm_certificate_validation.main[0].certificate_arn
   ssl_policy = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   default_action {
     type = "forward"
@@ -347,7 +364,8 @@ resource "aws_lb_listener" "https" {
   }
 }
 resource "aws_lb_listener_rule" "api" {
-  listener_arn = aws_lb_listener.https.arn
+  count        = var.enable_https ? 1 : 0
+  listener_arn = aws_lb_listener.https[0].arn
   priority = 10
   action {
     type = "forward"
