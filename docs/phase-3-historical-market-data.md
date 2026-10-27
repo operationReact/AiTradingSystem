@@ -21,7 +21,7 @@ The application applies a stricter default total range limit of 366 days and pro
 ## Storage and integrity
 
 - Migration `V8__historical_market_data.sql` adds `market_candle`, `candle_backfill_run`, and `candle_backfill_checkpoint`.
-- Unique key `(instrument_id, interval, candle_time)` makes repeated downloads idempotent through PostgreSQL upserts.
+- Unique key `(exchange, symbol_token, interval, candle_time)` makes repeated downloads idempotent and preserves continuity when a new daily instrument catalogue assigns a new database ID.
 - OHLC and volume database constraints complement parser validation.
 - Candle rows preserve exchange, symbol, token, and catalogue-version snapshots so history remains interpretable if older instrument catalogue rows are pruned.
 - Successful chunk writes and cursor advancement share one transaction. Failed chunks leave the cursor in place and get a failure checkpoint. Interrupted runs are marked `FAILED` or `PARTIAL` after restart and can be resumed.
