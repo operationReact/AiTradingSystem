@@ -22,13 +22,13 @@ public class InstrumentMasterService {
     static final int MAX_BYTES = 50 * 1024 * 1024;
     static final int MAX_ROWS = 500_000;
 
-    private final InstrumentMasterRepository repository;
+    private final MarketDataInstrumentRepository repository;
     private final ObjectMapper mapper;
     private final HttpClient client;
     private final URI masterUri;
 
     public InstrumentMasterService(
-        InstrumentMasterRepository repository,
+        MarketDataInstrumentRepository repository,
         ObjectMapper mapper,
         @Value("${app.market-data.instrument-master-url:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}") String masterUrl
     ) {
