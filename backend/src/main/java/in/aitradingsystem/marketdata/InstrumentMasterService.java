@@ -3,6 +3,7 @@ package in.aitradingsystem.marketdata;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,7 +11,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -56,11 +56,15 @@ public class InstrumentMasterService {
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "application/json")
                 .GET().build();
-            HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
             if (response.statusCode() != 200) {
+                response.body().close();
                 throw new IllegalStateException("Instrument master provider returned HTTP " + response.statusCode());
             }
-            byte[] body = response.body();
+            byte[] body;
+            try (InputStream stream = response.body()) {
+                body = stream.readNBytes(MAX_BYTES + 1);
+            }
             if (body.length == 0 || body.length > MAX_BYTES) {
                 throw new IllegalStateException("Instrument master payload is empty or exceeds the 50 MiB limit");
             }
