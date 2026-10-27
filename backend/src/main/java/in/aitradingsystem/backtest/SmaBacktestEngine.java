@@ -102,7 +102,7 @@ public final class SmaBacktestEngine {
                     BacktestTradeResult trade = closed.trade();
                     trades.add(trade);
                     grossPnl = grossPnl.add(trade.grossPnl());
-                    totalFees = totalFees.add(trade.entryFee()).add(trade.exitFee());
+                    totalFees = totalFees.add(trade.exitFee());
                     if (trade.netPnl().signum() > 0) totalWins = totalWins.add(trade.netPnl());
                     else if (trade.netPnl().signum() < 0) totalLosses = totalLosses.add(trade.netPnl().abs());
                     position = null;
