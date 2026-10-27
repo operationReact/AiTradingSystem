@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
-import { Activity, ChevronsLeft, ChevronsRight, Gauge, KeyRound, ListOrdered, Menu, Moon, Search, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
+import { Activity, BarChart3, ChevronsLeft, ChevronsRight, Gauge, KeyRound, ListOrdered, Menu, Moon, Search, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { cn } from '../lib/cn.js';
 import { Button } from './ui.jsx';
@@ -14,9 +14,10 @@ const NAV = [
   { to: '/risk', label: 'Risk', icon: ShieldAlert },
   { to: '/instruments', label: 'Instruments', icon: Search },
   { to: '/market-data', label: 'Market data', icon: Activity },
+  { to: '/backtesting', label: 'Backtesting', icon: BarChart3 },
 ];
 
-const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data' };
+const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data', backtesting: 'Backtesting' };
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
