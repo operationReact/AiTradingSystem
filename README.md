@@ -51,7 +51,7 @@ See `.env.example`. Do not place keys in React/Vite variables: frontend environm
 2. Angel One market-data adapter (read-only), instrument master and candle persistence.
 3. News ingestion and optional Gemini summarization with source/time provenance.
 4. Deterministic SMA trend/volume strategy over stored candles, persisted signal history, and risk-gated paper fills with configurable brokerage/slippage (see [Phase 4](docs/phase-4-deterministic-strategies-paper-fills.md)).
-5. Backtesting, out-of-sample validation, monitoring and audit trail.
+5. Offline backtesting and persisted out-of-sample holdout validation (see [validation guide](docs/out-of-sample-validation.md)), monitoring and audit trail.
 6. Evaluate current exchange/broker requirements before considering any live execution in a separately reviewed change.
 
 This software is for research and testing. It does not provide financial advice or guarantee results.
