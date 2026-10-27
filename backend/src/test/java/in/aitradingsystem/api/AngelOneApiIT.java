@@ -36,7 +36,8 @@ class AngelOneApiIT extends AbstractPostgresIT {
     void ltpRequiresVerifiedInstrumentIdInsteadOfCallerSuppliedToken() throws Exception {
         mvc.perform(get(BASE + "/ltp").param("exchange", "NSE").param("tradingSymbol", "RELIANCE-EQ")
                 .param("symbolToken", "2885").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("INSTRUMENT_ID_REQUIRED"));
     }
 
     @Test

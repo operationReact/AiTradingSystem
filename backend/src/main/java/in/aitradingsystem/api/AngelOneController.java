@@ -52,7 +52,11 @@ public class AngelOneController {
 
     /** Resolves all provider arguments from the active instrument catalogue; caller-supplied tokens are not trusted. */
     @GetMapping("/ltp")
-    public LtpResponse ltp(@RequestParam @Min(1) long instrumentId) {
+    public LtpResponse ltp(@RequestParam(required = false) @Min(1) Long instrumentId) {
+        if (instrumentId == null) {
+            throw new InstrumentMasterException("INSTRUMENT_ID_REQUIRED",
+                    "instrumentId from the active instrument catalogue is required");
+        }
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         BigDecimal ltp = quotes.ltp(instrument.exchange(), instrument.tradingSymbol(), instrument.symbolToken());
         return new LtpResponse(instrument.id(), instrument.exchange(), instrument.tradingSymbol(),
@@ -61,8 +65,11 @@ public class AngelOneController {
 
     @ExceptionHandler(InstrumentMasterException.class)
     ProblemDetail instrumentFailure(InstrumentMasterException ex) {
-        HttpStatus status = "INSTRUMENT_NOT_FOUND".equals(ex.code())
-                ? HttpStatus.NOT_FOUND : HttpStatus.UNPROCESSABLE_ENTITY;
+        HttpStatus status = switch (ex.code()) {
+            case "INSTRUMENT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
+            case "INSTRUMENT_ID_REQUIRED", "INVALID_INSTRUMENT_ID" -> HttpStatus.BAD_REQUEST;
+            default -> HttpStatus.UNPROCESSABLE_ENTITY;
+        };
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
         problem.setProperty("code", ex.code());
         return problem;
