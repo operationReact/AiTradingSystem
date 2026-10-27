@@ -153,8 +153,7 @@ resource "aws_ecr_lifecycle_policy" "frontend" {
 resource "aws_db_instance" "postgres" {
   identifier                  = "${local.name}-postgres"
   engine                      = "postgres"
-  engine_version              = "16"
-  instance_class              = var.db_instance_class
+    instance_class              = var.db_instance_class
   allocated_storage           = var.db_allocated_storage_gb
   max_allocated_storage       = var.db_max_allocated_storage_gb
   storage_type                = "gp3"
@@ -329,7 +328,11 @@ resource "aws_lb_listener" "http" {
   protocol = "HTTP"
   default_action {
     type = "redirect"
-    redirect { port = "443", protocol = "HTTPS", status_code = "HTTP_301" }
+    redirect {
+      port = "443"
+      protocol = "HTTPS"
+      status_code = "HTTP_301"
+    }
   }
 }
 resource "aws_lb_listener" "https" {
@@ -365,7 +368,7 @@ resource "aws_route53_record" "app" {
   }
 }
 resource "aws_route53_record" "www" {
-  count = local.app_fqdn == var.domain_name ? 0 : 1
+  count = 1
   zone_id = aws_route53_zone.main.zone_id
   name = "www.${var.domain_name}"
   type = "A"
