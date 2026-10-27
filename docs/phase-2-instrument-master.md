@@ -40,7 +40,17 @@ curl --get "$API_BASE/api/instruments/search" \
   --data-urlencode "size=20"
 ```
 
-Import history is available from `GET /api/instruments/imports?limit=10`; a specific run is `GET /api/instruments/imports/{id}`. Do not put the operator API key in frontend environment variables, a URL, or shell history for a shared machine.
+Import history is available from `GET /api/instruments/imports?limit=10`; a specific run is `GET /api/instruments/imports/{id}`.
+
+To fetch an LTP after searching, use the returned instrument `id`. The backend resolves exchange, trading symbol, and token from the active catalogue; caller-supplied tokens are not accepted:
+
+```bash
+curl --get "$API_BASE/api/providers/angel-one/ltp" \
+  -H "X-API-Key: $APP_API_KEY" \
+  --data-urlencode "instrumentId=12345"
+```
+
+Replace `12345` with an `id` returned by the search API. IDs from previous catalogue versions are intentionally rejected. Do not put the operator API key in frontend environment variables, a URL, or shell history for a shared machine.
 
 ## Import safety properties
 
