@@ -191,6 +191,20 @@ public class MarketDataRepository {
                 runMapper, limit);
     }
 
+    public record InstrumentIdentity(String exchange, String symbolToken) {}
+
+    /** Historical run snapshots allow old backfill links to remain readable after catalogue IDs rotate. */
+    public InstrumentIdentity findHistoricalInstrumentIdentity(long instrumentId) {
+        return jdbc.query("""
+                SELECT exchange, symbol_token
+                  FROM candle_backfill_run
+                 WHERE instrument_id = ?
+                 ORDER BY started_at DESC, id DESC
+                 LIMIT 1
+                """, (rs, row) -> new InstrumentIdentity(rs.getString("exchange"), rs.getString("symbol_token")),
+                instrumentId).stream().findFirst().orElse(null);
+    }
+
     public CandlePage candles(String exchange, String symbolToken, String interval, Instant fromInclusive, Instant toExclusive,
                               int page, int size) {
         Long totalValue = jdbc.queryForObject("""
