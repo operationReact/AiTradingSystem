@@ -95,7 +95,8 @@ public class MarketDataRepository {
                             (instrument_id, exchange, trading_symbol, symbol_token, catalogue_version, interval,
                              candle_time, open_price, high_price, low_price, close_price, volume, source, fetched_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                        ON CONFLICT (instrument_id, interval, candle_time) DO UPDATE SET
+                        ON CONFLICT (exchange, symbol_token, interval, candle_time) DO UPDATE SET
+                            instrument_id = EXCLUDED.instrument_id,
                             exchange = EXCLUDED.exchange,
                             trading_symbol = EXCLUDED.trading_symbol,
                             symbol_token = EXCLUDED.symbol_token,
@@ -190,19 +191,19 @@ public class MarketDataRepository {
                 runMapper, limit);
     }
 
-    public CandlePage candles(long instrumentId, String interval, Instant fromInclusive, Instant toExclusive,
+    public CandlePage candles(String exchange, String symbolToken, String interval, Instant fromInclusive, Instant toExclusive,
                               int page, int size) {
         Long totalValue = jdbc.queryForObject("""
                 SELECT count(*) FROM market_candle
-                 WHERE instrument_id = ? AND interval = ? AND candle_time >= ? AND candle_time < ?
-                """, Long.class, instrumentId, interval, offset(fromInclusive), offset(toExclusive));
+                 WHERE exchange = ? AND symbol_token = ? AND interval = ? AND candle_time >= ? AND candle_time < ?
+                """, Long.class, exchange, symbolToken, interval, offset(fromInclusive), offset(toExclusive));
         long total = totalValue == null ? 0 : totalValue;
         List<MarketCandle> rows = jdbc.query("""
                 SELECT * FROM market_candle
-                 WHERE instrument_id = ? AND interval = ? AND candle_time >= ? AND candle_time < ?
+                 WHERE exchange = ? AND symbol_token = ? AND interval = ? AND candle_time >= ? AND candle_time < ?
                  ORDER BY candle_time ASC
                  LIMIT ? OFFSET ?
-                """, candleMapper, instrumentId, interval, offset(fromInclusive), offset(toExclusive), size,
+                """, candleMapper, exchange, symbolToken, interval, offset(fromInclusive), offset(toExclusive), size,
                 (long) page * size);
         int totalPages = total == 0 ? 0 : (int) Math.ceil(total / (double) size);
         return new CandlePage(rows, page, size, total, totalPages, page + 1 < totalPages);
