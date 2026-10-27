@@ -1,0 +1,40 @@
+package in.aitradingsystem.backtest;
+
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.UUID;
+
+public record BacktestRunSummary(
+    UUID id,
+    long instrumentId,
+    String exchange,
+    String tradingSymbol,
+    String symbolToken,
+    UUID catalogueVersion,
+    String interval,
+    LocalDate fromDate,
+    LocalDate toDate,
+    int fastPeriod,
+    int slowPeriod,
+    String strategyVersion,
+    BigDecimal initialCapital,
+    BigDecimal riskPerTradePercent,
+    BigDecimal feeRate,
+    BigDecimal slippageRate,
+    BigDecimal stopBufferPercent,
+    BigDecimal targetRiskReward,
+    int candlesEvaluated,
+    int tradeCount,
+    int winningTrades,
+    int losingTrades,
+    BigDecimal winRatePercent,
+    BigDecimal grossPnl,
+    BigDecimal totalFees,
+    BigDecimal netPnl,
+    BigDecimal finalEquity,
+    BigDecimal totalReturnPercent,
+    BigDecimal maxDrawdownPercent,
+    BigDecimal profitFactor,
+    Instant createdAt
+) {}

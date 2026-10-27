@@ -241,6 +241,19 @@ public class MarketDataRepository {
         return count == null ? 0 : count;
     }
 
+    /** Loads a bounded, chronological history window for an offline backtest. */
+    public List<MarketCandle> backtestCandles(long instrumentId, String interval, Instant fromInclusive,
+                                              Instant toExclusive, int limit) {
+        if (instrumentId < 1) throw new IllegalArgumentException("instrumentId must be positive");
+        if (limit < 1 || limit > 20_001) throw new IllegalArgumentException("Backtest candle limit must be between 1 and 20001");
+        return jdbc.query("""
+                SELECT * FROM market_candle
+                 WHERE instrument_id = ? AND interval = ? AND candle_time >= ? AND candle_time < ?
+                 ORDER BY candle_time ASC
+                 LIMIT ?
+                """, candleMapper, instrumentId, interval, offset(fromInclusive), offset(toExclusive), limit);
+    }
+
     private static OffsetDateTime offset(Instant value) {
         return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
     }
