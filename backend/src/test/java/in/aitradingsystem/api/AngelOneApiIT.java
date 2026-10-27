@@ -33,23 +33,23 @@ class AngelOneApiIT extends AbstractPostgresIT {
     }
 
     @Test
-    void ltpRejectsUnsupportedExchange() throws Exception {
-        mvc.perform(get(BASE + "/ltp").param("exchange", "MCX").param("tradingSymbol", "RELIANCE-EQ")
+    void ltpRequiresVerifiedInstrumentIdInsteadOfCallerSuppliedToken() throws Exception {
+        mvc.perform(get(BASE + "/ltp").param("exchange", "NSE").param("tradingSymbol", "RELIANCE-EQ")
                 .param("symbolToken", "2885").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
             .andExpect(status().isBadRequest());
     }
 
     @Test
-    void ltpRejectsMalformedSymbolToken() throws Exception {
-        mvc.perform(get(BASE + "/ltp").param("exchange", "NSE").param("tradingSymbol", "RELIANCE-EQ")
-                .param("symbolToken", "28;85").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
-            .andExpect(status().isBadRequest());
+    void ltpRejectsInstrumentIdNotInActiveCatalogue() throws Exception {
+        mvc.perform(get(BASE + "/ltp").param("instrumentId", "999999")
+                .header(KEY_HEADER, AbstractPostgresIT.API_KEY))
+            .andExpect(status().isNotFound())
+            .andExpect(jsonPath("$.code").value("INSTRUMENT_NOT_FOUND"));
     }
 
     @Test
     void ltpRequiresApiKey() throws Exception {
-        mvc.perform(get(BASE + "/ltp").param("exchange", "NSE").param("tradingSymbol", "RELIANCE-EQ")
-                .param("symbolToken", "2885"))
+        mvc.perform(get(BASE + "/ltp").param("instrumentId", "1"))
             .andExpect(status().isUnauthorized());
     }
 }

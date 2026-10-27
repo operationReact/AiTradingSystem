@@ -82,6 +82,13 @@ public class InstrumentMasterService {
         return repository.search(q, exchange, type, page, size);
     }
 
+    public Instrument requireActiveInstrument(long instrumentId) {
+        if (instrumentId < 1) {
+            throw new InstrumentMasterException("INSTRUMENT_NOT_FOUND", "Instrument ID is invalid");
+        }
+        return repository.findActiveInstrumentById(instrumentId);
+    }
+
     public InstrumentMasterRepository.CatalogueSummary catalogueSummary() {
         return repository.catalogueSummary();
     }

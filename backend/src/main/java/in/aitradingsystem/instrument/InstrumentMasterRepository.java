@@ -232,6 +232,24 @@ public class InstrumentMasterRepository {
                 state.version(), state.activatedAt());
     }
 
+    /** Resolves an ID only if it belongs to the currently active catalogue version. */
+    public Instrument findActiveInstrumentById(long instrumentId) {
+        List<Instrument> rows = jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.instrument_id = ? AND i.active = TRUE
+                """, instrumentMapper, instrumentId);
+        if (rows.isEmpty()) {
+            throw new InstrumentMasterException("INSTRUMENT_NOT_FOUND",
+                    "Instrument ID is not present in the active catalogue");
+        }
+        return rows.get(0);
+    }
+
     public CatalogueSummary catalogueSummary() {
         return jdbc.query("""
                 SELECT s.active_version, s.activated_at,

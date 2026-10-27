@@ -1,10 +1,13 @@
 package in.aitradingsystem.api;
 
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.instrument.InstrumentMasterException;
+import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.provider.angelone.AngelOneException;
 import in.aitradingsystem.provider.angelone.AngelOneHealthService;
 import in.aitradingsystem.provider.angelone.AngelOneHealthService.ProviderHealth;
 import in.aitradingsystem.provider.angelone.AngelOneQuoteService;
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.annotation.Validated;
@@ -25,14 +28,17 @@ public class AngelOneController {
 
     private final AngelOneHealthService health;
     private final AngelOneQuoteService quotes;
+    private final InstrumentMasterService instruments;
 
-    public AngelOneController(AngelOneHealthService health, AngelOneQuoteService quotes) {
+    public AngelOneController(AngelOneHealthService health, AngelOneQuoteService quotes,
+                              InstrumentMasterService instruments) {
         this.health = health;
         this.quotes = quotes;
+        this.instruments = instruments;
     }
 
-    public record LtpResponse(String exchange, String tradingSymbol, String symbolToken, BigDecimal ltp,
-                              Instant fetchedAt, String source) {}
+    public record LtpResponse(long instrumentId, String exchange, String tradingSymbol, String symbolToken,
+                              BigDecimal ltp, Instant fetchedAt, String source) {}
 
     @GetMapping("/status")
     public ProviderHealth status() {
@@ -44,12 +50,22 @@ public class AngelOneController {
         return health.testConnection();
     }
 
+    /** Resolves all provider arguments from the active instrument catalogue; caller-supplied tokens are not trusted. */
     @GetMapping("/ltp")
-    public LtpResponse ltp(@RequestParam @Pattern(regexp = "NSE|BSE") String exchange,
-                           @RequestParam @Pattern(regexp = "[A-Za-z0-9&._-]{1,40}") String tradingSymbol,
-                           @RequestParam @Pattern(regexp = "[0-9]{1,12}") String symbolToken) {
-        BigDecimal ltp = quotes.ltp(exchange, tradingSymbol, symbolToken);
-        return new LtpResponse(exchange, tradingSymbol, symbolToken, ltp, Instant.now(), "ANGEL_ONE_SMARTAPI");
+    public LtpResponse ltp(@RequestParam @Min(1) long instrumentId) {
+        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
+        BigDecimal ltp = quotes.ltp(instrument.exchange(), instrument.tradingSymbol(), instrument.symbolToken());
+        return new LtpResponse(instrument.id(), instrument.exchange(), instrument.tradingSymbol(),
+                instrument.symbolToken(), ltp, Instant.now(), "ANGEL_ONE_SMARTAPI");
+    }
+
+    @ExceptionHandler(InstrumentMasterException.class)
+    ProblemDetail instrumentFailure(InstrumentMasterException ex) {
+        HttpStatus status = "INSTRUMENT_NOT_FOUND".equals(ex.code())
+                ? HttpStatus.NOT_FOUND : HttpStatus.UNPROCESSABLE_ENTITY;
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
+        problem.setProperty("code", ex.code());
+        return problem;
     }
 
     @ExceptionHandler(AngelOneException.class)
