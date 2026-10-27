@@ -51,7 +51,6 @@ app:
     fee-rate: 0.0005
     slippage-rate: 0.001
     signal-max-age-minutes: 30
-  market-data:
   strategy:
     # Deterministic SMA trend + prior-volume confirmation. All generated signals are paper candidates.
     fast-period: ${STRATEGY_FAST_PERIOD:5}
