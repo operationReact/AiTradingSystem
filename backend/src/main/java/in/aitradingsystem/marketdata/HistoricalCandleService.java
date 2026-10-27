@@ -95,9 +95,10 @@ public class HistoricalCandleService {
                 List<HistoricalCandleParser.CandleValues> values = parser.parse(response);
                 validateTimestamps(values, chunkFrom, chunkTo);
                 Instant fetchedAt = Instant.now();
+                CandleBackfillRun chunkRun = run;
                 List<MarketCandle> bars = values.stream().map(value -> new MarketCandle(
-                        0, run.instrumentId(), run.exchange(), run.tradingSymbol(), run.symbolToken(),
-                        run.catalogueVersion(), run.interval(), value.candleTime(), value.open(), value.high(),
+                        0, chunkRun.instrumentId(), chunkRun.exchange(), chunkRun.tradingSymbol(), chunkRun.symbolToken(),
+                        chunkRun.catalogueVersion(), chunkRun.interval(), value.candleTime(), value.open(), value.high(),
                         value.low(), value.close(), value.volume(), SOURCE, fetchedAt)).toList();
                 repository.persistChunk(run.id(), chunkFrom, chunkTo, chunkTo.plusDays(1), bars);
             } catch (RuntimeException ex) {
