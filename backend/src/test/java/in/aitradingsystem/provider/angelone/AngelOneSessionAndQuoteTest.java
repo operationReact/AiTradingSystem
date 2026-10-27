@@ -152,7 +152,7 @@ class AngelOneSessionAndQuoteTest {
 
     @Test
     void recoveryWaitsForAuthenticationAndQuoteThrottleWithinBoundedWindow() {
-        build(credentials(), 3600, 30, 100);
+        build(credentials(), 3600, 100, 30);
         expectLogin("jwt-1");
         server.expect(requestTo(ROOT + AngelOneApiClient.LTP_PATH))
                 .andRespond(withSuccess("{\"status\":false,\"errorcode\":\"AG8001\",\"message\":\"expired\"}",
