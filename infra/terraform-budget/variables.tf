@@ -1,7 +1,7 @@
 variable "aws_region" {
-  description = "AWS region. Hyderabad is ap-south-2."
+  description = "AWS region. Mumbai is ap-south-1."
   type = string
-  default = "ap-south-2"
+  default = "ap-south-1"
 }
 variable "domain_name" {
   description = "Domain managed by the operator. Delegate Route 53 nameservers after apply."
