@@ -32,7 +32,7 @@ public class InstrumentMasterRepository {
                 source_updated_at = EXCLUDED.source_updated_at,
                 updated_at = CURRENT_TIMESTAMP
             """;
-        int[] counts = jdbc.batchUpdate(sql, rows, 500,
+        jdbc.batchUpdate(sql, rows, 500,
             (ps, row) -> {
                 ps.setString(1, row.exchange());
                 ps.setString(2, row.symbolToken());
