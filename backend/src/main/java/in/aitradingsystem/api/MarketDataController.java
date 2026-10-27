@@ -2,7 +2,7 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.marketdata.InstrumentMasterService;
 import in.aitradingsystem.marketdata.MarketInstrument;
-import in.aitradingsystem.marketdata.InstrumentMasterRepository;
+import in.aitradingsystem.marketdata.MarketDataInstrumentRepository;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
@@ -19,9 +19,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/market-data")
 public class MarketDataController {
     private final InstrumentMasterService masterService;
-    private final InstrumentMasterRepository instruments;
+    private final MarketDataInstrumentRepository instruments;
 
-    public MarketDataController(InstrumentMasterService masterService, InstrumentMasterRepository instruments) {
+    public MarketDataController(InstrumentMasterService masterService, MarketDataInstrumentRepository instruments) {
         this.masterService = masterService;
         this.instruments = instruments;
     }
