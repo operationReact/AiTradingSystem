@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AngelOneRateLimiter {
-    public enum Category { AUTH, MARKET_QUOTE }
+    public enum Category { AUTH, MARKET_QUOTE, HISTORICAL_CANDLES }
 
     private final Map<Category, Long> minIntervalNanos = new EnumMap<>(Category.class);
     private final Map<Category, Long> lastAcquiredNanos = new EnumMap<>(Category.class);
@@ -21,6 +21,8 @@ public class AngelOneRateLimiter {
     public AngelOneRateLimiter(AngelOneProperties properties) {
         minIntervalNanos.put(Category.AUTH, TimeUnit.MILLISECONDS.toNanos(properties.loginMinIntervalMs()));
         minIntervalNanos.put(Category.MARKET_QUOTE, TimeUnit.MILLISECONDS.toNanos(properties.quoteMinIntervalMs()));
+        // Conservative local pacing for historical candles; account limits can vary.
+        minIntervalNanos.put(Category.HISTORICAL_CANDLES, TimeUnit.MILLISECONDS.toNanos(1_000));
         recoveryMaxWaitMs = properties.sessionRetryMaxWaitMs();
     }
 
