@@ -94,6 +94,7 @@ public class StrategyService {
             String action = "WATCH";
             reasons.add("CLOSE_PRICE_ABOVE_ZERO");
             if (stale) {
+                action = "WATCH";
                 reasons.add("STALE_OR_FUTURE_CANDLE");
             } else if (fast.compareTo(slow) > 0 && close.compareTo(slow) > 0 && volumeConfirmed) {
                 action = "BUY";
@@ -113,6 +114,7 @@ public class StrategyService {
                 stop = close.subtract(buffer).setScale(2, RoundingMode.HALF_UP);
                 if (stop.signum() <= 0 || stop.compareTo(close) >= 0) {
                     action = "WATCH";
+                    stop = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
                     reasons.add("INVALID_STOP_LEVEL");
                 } else {
                     target = close.add(close.subtract(stop).multiply(targetRiskReward)).setScale(2, RoundingMode.HALF_UP);
