@@ -19,7 +19,7 @@ public class StrategySignalRepository {
         this.jdbc = jdbc;
     }
 
-    public void save(StrategySignal signal) {
+    public void save(StrategySignal signal, String symbolToken) {
         jdbc.update("""
                 INSERT INTO strategy_signal
                     (id, instrument_id, exchange, trading_symbol, symbol_token, interval, action, strategy,
@@ -42,7 +42,7 @@ public class StrategySignalRepository {
                     status = EXCLUDED.status
                 """,
                 UUID.fromString(signal.id()), signal.instrumentId(), signal.exchange(), signal.symbol(),
-                "", signal.interval(), signal.action(), signal.strategy(), signal.referencePrice(),
+                symbolToken, signal.interval(), signal.action(), signal.strategy(), signal.referencePrice(),
                 signal.stopLoss(), signal.target(), signal.fastAverage(), signal.slowAverage(),
                 signal.averageVolume(), signal.latestVolume(), signal.confidence(),
                 String.join(",", signal.reasonCodes()), signal.source(),
