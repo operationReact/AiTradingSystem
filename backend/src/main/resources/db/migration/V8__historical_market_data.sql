@@ -24,10 +24,10 @@ CREATE TABLE market_candle (
         AND high_price >= open_price AND high_price >= close_price
         AND low_price <= open_price AND low_price <= close_price
     ),
-    CONSTRAINT uq_market_candle_identity UNIQUE (instrument_id, interval, candle_time)
+    CONSTRAINT uq_market_candle_identity UNIQUE (exchange, symbol_token, interval, candle_time)
 );
 CREATE INDEX ix_market_candle_lookup
-    ON market_candle (instrument_id, interval, candle_time DESC);
+    ON market_candle (exchange, symbol_token, interval, candle_time DESC);
 CREATE INDEX ix_market_candle_symbol_lookup
     ON market_candle (exchange, trading_symbol, interval, candle_time DESC);
 
