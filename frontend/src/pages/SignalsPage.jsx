@@ -148,7 +148,7 @@ export default function SignalsPage() {
       </div>
 
       <Notice tone="neutral" title="How the strategy works">
-        The default strategy compares a 5-candle simple moving average with a 20-candle average, checks the latest close and confirms that the latest volume meets the previous 20-candle average. It is long-only: a confirmed setup can emit BUY; other conditions emit WATCH. All orders remain subject to the existing risk policy, fees and slippage.
+        The default strategy compares a 5-candle simple moving average with a 20-candle average, checks the latest close and confirms that the latest volume meets the previous 20-candle average. Use a complete stored history before interpreting a candidate. It is long-only: a confirmed setup can emit BUY; other conditions emit WATCH. All orders remain subject to the existing risk policy, fees and slippage.
       </Notice>
 
       {!apiKey && <Notice tone="warn" title="Operator API key required">Connect the operator API key in the top bar to search instruments, evaluate strategies and view stored signals.</Notice>}
