@@ -51,6 +51,11 @@ app:
     fee-rate: 0.0005
     slippage-rate: 0.001
     signal-max-age-minutes: 30
+  market-data:
+    # Strict app-level cap; requests may be split into provider-supported chunks.
+    max-range-days: 366
+    # Bounds synchronous operator work; partial runs remain resumable.
+    max-chunks-per-run: 5
   news:
     provider: ${NEWS_ANALYSIS_PROVIDER:NONE}
     gemini-model: ${GEMINI_MODEL:gemini-2.5-flash}
