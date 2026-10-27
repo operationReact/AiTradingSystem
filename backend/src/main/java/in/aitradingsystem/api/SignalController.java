@@ -1,32 +1,32 @@
 package in.aitradingsystem.api;
 
-import java.math.BigDecimal;
-import java.time.Instant;
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
+import in.aitradingsystem.strategy.StrategyEvaluation;
+import in.aitradingsystem.strategy.StrategyService;
 import java.util.List;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
-/** Synthetic demo signals until the Strategy Analyst is implemented. Never executable. */
 @RestController
+@Validated
 @RequestMapping("/api/signals")
 public class SignalController {
-    public record DemoSignal(String id, String symbol, String action, String strategy, BigDecimal referencePrice,
-        BigDecimal stopLoss, BigDecimal target, double confidence, List<String> reasonCodes, String source,
-        Instant createdAt, String status) {}
+    private final StrategyService strategies;
 
+    public SignalController(StrategyService strategies) {
+        this.strategies = strategies;
+    }
+
+    /** Read-only evaluation uses stored candles only. No sample prices or orders are fabricated. */
     @GetMapping
-    public List<DemoSignal> signals() {
-        Instant now = Instant.now();
-        return List.of(
-            new DemoSignal("demo-1", "RELIANCE", "WATCH", "trend_pullback_demo", new BigDecimal("1400.00"),
-                new BigDecimal("1375.00"), new BigDecimal("1450.00"), 0.65,
-                List.of("DEMO_DATA", "TREND_CHECK_PENDING"), "SYNTHETIC_DEMO", now, "NOT_EXECUTABLE"),
-            new DemoSignal("demo-2", "INFY", "WATCH", "breakout_demo", new BigDecimal("1500.00"),
-                new BigDecimal("1470.00"), new BigDecimal("1560.00"), 0.52,
-                List.of("DEMO_DATA", "VOLUME_CONFIRMATION_PENDING"), "SYNTHETIC_DEMO", now, "NOT_EXECUTABLE"),
-            new DemoSignal("demo-3", "TCS", "NO_TRADE", "news_watch_demo", new BigDecimal("3800.00"),
-                BigDecimal.ZERO, BigDecimal.ZERO, 0.40,
-                List.of("DEMO_DATA", "NEWS_SOURCE_NOT_CONNECTED"), "SYNTHETIC_DEMO", now, "NOT_EXECUTABLE"));
+    public List<StrategyEvaluation> signals(
+            @RequestParam @Min(1) long instrumentId,
+            @RequestParam(defaultValue = "FIVE_MINUTE") HistoricalCandleInterval interval) {
+        return List.of(strategies.evaluate(instrumentId, interval));
     }
 }
