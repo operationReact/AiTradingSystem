@@ -22,7 +22,7 @@ RDS deletion protection is enabled and automated backups are retained for seven 
 2. Check current prices and service availability in ap-south-2; set a budget and billing alerts.
 3. Decide whether to use the apex domain maargglobal.com (default) or a subdomain by setting app_subdomain.
 4. Inspect the Terraform plan for every resource and its estimated ongoing cost.
-5. Confirm the domain is controlled by you. Terraform creates a Route 53 hosted zone. After apply, copy the route53_nameservers output into your domain registrar's nameserver settings. Public DNS and ACM validation will not complete until delegation propagates.
+5. Confirm the domain is controlled by you. Terraform creates a Route 53 hosted zone. The first apply uses the default enable_https=false and leaves HTTP returning a setup-pending 503, allowing Terraform to finish and output the route53_nameservers. Copy those nameservers into your domain registrar and wait for delegation to propagate. Then run a second plan/apply with -var='enable_https=true' to validate the ACM certificate and create HTTPS/redirect listeners.
 6. Run Terraform from a trusted workstation with Terraform 1.8+ and AWS credentials for the intended account.
 
 ## Commands — only after the cost gate
@@ -36,6 +36,11 @@ RDS deletion protection is enabled and automated backups are retained for seven 
 Inspect the saved plan and approve the costs/resources before running:
 
     terraform apply tfplan
+
+For the second stage, after DNS delegation is verified, run:
+
+    terraform plan -var='enable_https=true' -out=tfplan-https
+    terraform apply tfplan-https
 
 The Terraform backend is intentionally local for this initial scaffold. Before team/production use, move state to an encrypted, access-controlled remote backend with versioning and locking. Do not upload state to GitHub.
 
