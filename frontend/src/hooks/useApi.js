@@ -23,6 +23,8 @@ export const keys = {
   instrumentImports: (limit) => ['instruments', 'imports', limit],
   marketBackfills: (limit) => ['market-data', 'backfills', limit],
   candles: (params) => ['market-data', 'candles', params],
+  backtestValidations: (limit) => ['backtests', 'validation', limit],
+  backtestValidation: (id) => ['backtests', 'validation', id],
 };
 
 function useAuthedQuery(key, path, { poll = true, enabled = true, ...options } = {}) {
@@ -234,5 +236,26 @@ export function useResumeCandleBackfill() {
   return useMutation({
     mutationFn: (id) => apiFetch('/market-data/backfills/' + id + '/resume', { apiKey, method: 'POST' }),
     onSettled: () => qc.invalidateQueries({ queryKey: ['market-data'] }),
+  });
+}
+
+
+/** Persisted out-of-sample validation history; keys stay in memory and are sent only as request headers. */
+export const useBacktestValidations = (limit = 20) =>
+  useAuthedQuery(keys.backtestValidations(limit), `/backtests/validation?limit=${limit}`, { poll: false, retry: 1 });
+
+/** Full persisted training/holdout report with both independently simulated trade lists. */
+export const useBacktestValidationDetail = (id) =>
+  useAuthedQuery(keys.backtestValidation(id), `/backtests/validation/${id}`, {
+    poll: false, enabled: !!id, retry: 1,
+  });
+
+/** Creates a new fixed-parameter PAPER validation and refreshes saved validation history. */
+export function useRunBacktestValidation() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => apiFetch('/backtests/validation', { apiKey, method: 'POST', body }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['backtests', 'validation'] }),
   });
 }
