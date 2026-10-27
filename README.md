@@ -40,10 +40,33 @@ The app starts with demo dashboard data and a paper-only status. Provider integr
 - `GET /api/signals`
 - `GET /api/paper-trades`
 - `POST /api/paper-trades/simulate` (paper-only simulated order; validates inputs and risk budget)
+- `GET /api/news?limit=20&offset=0` (read-only, bearer-token authenticated; limit 1–100)
 
 ## Environment variables
 
 See `.env.example`. Do not place keys in React/Vite variables: frontend environment values are public. Gemini and Angel One secrets belong only in the Spring Boot environment/secret manager.
+
+## News ingestion (Phase 3)
+
+News polling is disabled by default. To enable it, set `NEWS_INGESTION_ENABLED=true` and configure
+`NEWS_API_TOKEN` to a unique server-side secret. The dashboard asks for that token at runtime and
+keeps it in memory only; it is not a Vite variable or stored in browser storage. Set
+`NEWS_CORS_ALLOWED_ORIGINS` to the exact browser origin(s) that may call the news API.
+
+Only the built-in `moneycontrol` and `economic-times` RSS adapters are accepted. Their HTTPS feed
+URLs are fixed in the backend; redirects are disabled, article URLs are validated against each
+publisher's host allowlist, and article links are recorded but never fetched. Configure source IDs
+with `NEWS_INGESTION_SOURCES`; arbitrary feed URLs are not accepted. The scheduler bounds its
+polling interval (at least 60 seconds), feed payload (at most 2 MiB), parsed articles, and total
+articles and Gemini summaries per run. It deduplicates normalized title/content with SHA-256 and deletes records older
+than `NEWS_RETENTION_DAYS` (capped at 365 days). The default instrument watchlist is configurable
+with `NEWS_WATCHLIST`; only exact symbol matches are linked.
+
+Gemini summaries are separately opt-in: set `NEWS_SUMMARIZATION_ENABLED=true` and configure the
+backend-only `GEMINI_API_KEY` and `GEMINI_MODEL`. Missing API configuration disables summarization.
+Article text and generated summaries remain untrusted display/research data; neither is connected to
+strategy, risk approval, or order placement. The existing deterministic risk checks and paper-only
+execution behavior are unchanged.
 
 ## Roadmap
 
