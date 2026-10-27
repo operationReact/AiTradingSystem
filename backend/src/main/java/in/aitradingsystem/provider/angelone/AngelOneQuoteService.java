@@ -1,16 +1,11 @@
 package in.aitradingsystem.provider.angelone;
 
+import java.math.BigDecimal;
 import org.springframework.stereotype.Service;
 
-import java.math.BigDecimal;
-
-/**
- * Read-only last-traded-price lookups. Retries once after a provider-reported session expiry.
- * Callers must supply a verified exchange and symbol token; no token is ever guessed.
- */
+/** Read-only LTP lookups; one recovery retry is allowed only after a provider-reported session expiry. */
 @Service
 public class AngelOneQuoteService {
-
     private final AngelOneSessionManager session;
     private final AngelOneApiClient api;
     private final AngelOneRateLimiter rateLimiter;
@@ -25,36 +20,33 @@ public class AngelOneQuoteService {
     }
 
     public BigDecimal ltp(String exchange, String tradingSymbol, String symbolToken) {
+        String usedToken = null;
         try {
-            BigDecimal ltp = fetch(exchange, tradingSymbol, symbolToken);
-            health.recordSuccess();
-            return ltp;
+            rateLimiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
+            usedToken = session.accessToken();
+            BigDecimal price = api.ltp(usedToken, exchange, tradingSymbol, symbolToken);
+            health.recordQuoteSuccess();
+            return price;
         } catch (AngelOneException e) {
-            if (e.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
-                session.invalidate();
-                return retryOnce(exchange, tradingSymbol, symbolToken);
+            if (e.kind() == AngelOneException.Kind.SESSION_EXPIRED && usedToken != null) {
+                return retryOnce(exchange, tradingSymbol, symbolToken, usedToken);
             }
             health.recordFailure(e);
             throw e;
         }
     }
 
-    /** Exactly one retry after a session expiry. The retry is a separate provider request, so it is throttled too. */
-    private BigDecimal retryOnce(String exchange, String tradingSymbol, String symbolToken) {
+    private BigDecimal retryOnce(String exchange, String tradingSymbol, String symbolToken, String failedToken) {
         try {
-            rateLimiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
-            BigDecimal ltp = api.ltp(session.accessToken(), exchange, tradingSymbol, symbolToken);
-            health.recordSuccess();
-            return ltp;
+            // Reserve the quote slot first, avoiding an unnecessary login if the quote throttle remains active.
+            rateLimiter.acquireForRecovery(AngelOneRateLimiter.Category.MARKET_QUOTE);
+            String retryToken = session.recoverAfterSessionExpiry(failedToken);
+            BigDecimal price = api.ltp(retryToken, exchange, tradingSymbol, symbolToken);
+            health.recordQuoteSuccess();
+            return price;
         } catch (AngelOneException e) {
             health.recordFailure(e);
             throw e;
         }
-    }
-
-    private BigDecimal fetch(String exchange, String tradingSymbol, String symbolToken) {
-        rateLimiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
-        String jwt = session.accessToken();
-        return api.ltp(jwt, exchange, tradingSymbol, symbolToken);
     }
 }

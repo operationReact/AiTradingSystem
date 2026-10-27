@@ -1,27 +1,24 @@
 package in.aitradingsystem.provider.angelone;
 
+import java.time.Clock;
+import java.time.Instant;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-import java.time.Clock;
-import java.time.Instant;
-
-/**
- * Tracks the last observed provider state. Status reads never call the provider; only testConnection() logs in.
- */
+/** Status reads do not call SmartAPI; the explicit connection test performs one login request. */
 @Service
 public class AngelOneHealthService {
-
     public enum State { NOT_CONFIGURED, CONFIGURED_UNVERIFIED, AUTHENTICATED, SESSION_EXPIRED, DEGRADED, UNAVAILABLE }
 
-    public record ProviderHealth(State state, String lastErrorCode, Instant lastSuccessAt, Instant checkedAt) {}
+    public record ProviderHealth(State state, String lastErrorCode, Instant lastSuccessAt, Instant lastQuoteAt,
+                                 Instant checkedAt, boolean sessionActive, Long sessionAgeSeconds) {}
 
     private final AngelOneSessionManager session;
     private final Clock clock;
-
     private State state;
     private String lastErrorCode;
     private Instant lastSuccessAt;
+    private Instant lastQuoteAt;
     private Instant checkedAt;
 
     @Autowired
@@ -32,17 +29,19 @@ public class AngelOneHealthService {
     AngelOneHealthService(AngelOneSessionManager session, Clock clock) {
         this.session = session;
         this.clock = clock;
-        this.state = session.credentialsConfigured() ? State.CONFIGURED_UNVERIFIED : State.NOT_CONFIGURED;
+        state = session.credentialsConfigured() ? State.CONFIGURED_UNVERIFIED : State.NOT_CONFIGURED;
     }
 
     public synchronized ProviderHealth status() {
         if (!session.credentialsConfigured()) {
-            return new ProviderHealth(State.NOT_CONFIGURED, null, null, null);
+            return new ProviderHealth(State.NOT_CONFIGURED, null, null, null, null, false, null);
         }
-        return new ProviderHealth(state, lastErrorCode, lastSuccessAt, checkedAt);
+        boolean active = session.hasActiveSession();
+        State visibleState = state == State.AUTHENTICATED && !active ? State.CONFIGURED_UNVERIFIED : state;
+        return new ProviderHealth(visibleState, lastErrorCode, lastSuccessAt, lastQuoteAt, checkedAt,
+                active, session.sessionAgeSeconds());
     }
 
-    /** Performs one login attempt and records the outcome. */
     public ProviderHealth testConnection() {
         if (!session.credentialsConfigured()) {
             return status();
@@ -61,6 +60,15 @@ public class AngelOneHealthService {
         state = State.AUTHENTICATED;
         lastErrorCode = null;
         lastSuccessAt = now;
+        checkedAt = now;
+    }
+
+    public synchronized void recordQuoteSuccess() {
+        Instant now = clock.instant();
+        state = State.AUTHENTICATED;
+        lastErrorCode = null;
+        lastSuccessAt = now;
+        lastQuoteAt = now;
         checkedAt = now;
     }
 

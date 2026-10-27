@@ -1,34 +1,31 @@
 package in.aitradingsystem.provider.angelone;
 
 import in.aitradingsystem.config.AngelOneProperties;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import java.time.Clock;
-import java.time.Instant;
-
-/**
- * Owns the SmartAPI session tokens in memory. Tokens are never persisted, logged, or returned to the frontend.
- * A session is reused until it is invalidated by the provider or exceeds the configured maximum age.
- */
+/** Keeps the active SmartAPI JWT in process memory only; never persists or exposes it to clients. */
 @Component
 public class AngelOneSessionManager {
-
     private final AngelOneProperties properties;
     private final AngelOneApiClient api;
     private final AngelOneRateLimiter rateLimiter;
     private final Clock clock;
-
     private String jwtToken;
     private Instant authenticatedAt;
 
     @Autowired
-    public AngelOneSessionManager(AngelOneProperties properties, AngelOneApiClient api, AngelOneRateLimiter rateLimiter) {
+    public AngelOneSessionManager(AngelOneProperties properties, AngelOneApiClient api,
+                                  AngelOneRateLimiter rateLimiter) {
         this(properties, api, rateLimiter, Clock.systemUTC());
     }
 
-    AngelOneSessionManager(AngelOneProperties properties, AngelOneApiClient api, AngelOneRateLimiter rateLimiter,
-                           Clock clock) {
+    AngelOneSessionManager(AngelOneProperties properties, AngelOneApiClient api,
+                           AngelOneRateLimiter rateLimiter, Clock clock) {
         this.properties = properties;
         this.api = api;
         this.rateLimiter = rateLimiter;
@@ -39,35 +36,71 @@ public class AngelOneSessionManager {
         return properties.credentialsConfigured();
     }
 
-    /** Returns a valid JWT, logging in only when no current session exists. */
     public synchronized String accessToken() {
         requireConfigured();
-        if (jwtToken != null && authenticatedAt.plusSeconds(properties.sessionMaxAgeSeconds()).isAfter(clock.instant())) {
+        if (hasActiveSession()) {
             return jwtToken;
         }
+        invalidate();
         return login();
     }
 
-    /** Performs a fresh TOTP login. Throws AngelOneException on failure with no token retained. */
+    /** Manual/connection-test login fails fast when the configured auth throttle is active. */
     public synchronized String login() {
         requireConfigured();
         rateLimiter.acquire(AngelOneRateLimiter.Category.AUTH);
-        invalidate();
-        String totp = AngelOneTotp.generate(properties.totpSecret(), clock.instant());
-        AngelOneApiClient.LoginTokens tokens = api.login(properties.clientCode(), properties.password(), totp);
-        jwtToken = tokens.jwtToken();
-        authenticatedAt = clock.instant();
-        return jwtToken;
+        return authenticate();
     }
 
-    /** Drops the in-memory session so the next call re-authenticates. */
+    /**
+     * Refreshes only when the failed JWT is still current. A delayed expiry from an old request must not invalidate
+     * a newer session established by another request.
+     */
+    public synchronized String recoverAfterSessionExpiry(String failedJwtToken) {
+        requireConfigured();
+        if (hasActiveSession() && !Objects.equals(jwtToken, failedJwtToken)) {
+            return jwtToken;
+        }
+        invalidate();
+        rateLimiter.acquireForRecovery(AngelOneRateLimiter.Category.AUTH);
+        return authenticate();
+    }
+
+    private String authenticate() {
+        invalidate();
+        final String totp;
+        try {
+            totp = AngelOneTotp.generate(properties.totpSecret(), clock.instant());
+        } catch (IllegalArgumentException e) {
+            throw new AngelOneException(AngelOneException.Kind.NOT_CONFIGURED, "INVALID_TOTP_SECRET",
+                    "Angel One TOTP secret is invalid");
+        }
+        try {
+            AngelOneApiClient.LoginTokens tokens = api.login(properties.clientCode(), properties.password(), totp);
+            jwtToken = tokens.jwtToken();
+            authenticatedAt = clock.instant();
+            return jwtToken;
+        } catch (RuntimeException e) {
+            invalidate();
+            throw e;
+        }
+    }
+
     public synchronized void invalidate() {
         jwtToken = null;
         authenticatedAt = null;
     }
 
     public synchronized boolean hasActiveSession() {
-        return jwtToken != null && authenticatedAt.plusSeconds(properties.sessionMaxAgeSeconds()).isAfter(clock.instant());
+        return jwtToken != null && authenticatedAt != null
+                && authenticatedAt.plusSeconds(properties.sessionMaxAgeSeconds()).isAfter(clock.instant());
+    }
+
+    public synchronized Long sessionAgeSeconds() {
+        if (jwtToken == null || authenticatedAt == null) {
+            return null;
+        }
+        return Math.max(0L, Duration.between(authenticatedAt, clock.instant()).getSeconds());
     }
 
     private void requireConfigured() {

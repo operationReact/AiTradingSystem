@@ -129,9 +129,9 @@ public class AngelOneApiClient {
                                     : new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_401",
                                             "Provider rejected the request as unauthorised");
                         }
-                        if (status >= 500) {
+                        if (status == 408 || status == 425 || status >= 500) {
                             throw new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "HTTP_" + status,
-                                    "Provider returned a server error");
+                                    "Provider returned a transient HTTP error");
                         }
                         if (status >= 400) {
                             throw new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_" + status,
