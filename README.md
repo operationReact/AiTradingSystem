@@ -55,3 +55,9 @@ See `.env.example`. Do not place keys in React/Vite variables: frontend environm
 6. Evaluate current exchange/broker requirements before considering any live execution in a separately reviewed change.
 
 This software is for research and testing. It does not provide financial advice or guarantee results.
+
+## AWS deployment preparation
+
+The repository includes an AWS paper-deployment scaffold for Hyderabad (ap-south-2): Terraform infrastructure, production Dockerfiles, GitHub OIDC deployment workflow, and setup instructions in [infra/terraform/README.md](infra/terraform/README.md).
+
+No AWS resources are created by GitHub commits or CI. Review account access, regional pricing, budget alerts, domain ownership, and the Terraform plan before any apply. ECS services start with desired count zero. The deployment workflow is manual and fixes trading to PAPER mode; live broker execution is not configured.

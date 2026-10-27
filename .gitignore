@@ -19,3 +19,12 @@ frontend/.vite/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Terraform state, plans and provider cache
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan*
+crash.log
+crash.*.log

@@ -57,3 +57,36 @@ jobs:
       - name: Build production assets
         working-directory: frontend
         run: npm run build
+
+  terraform-validation:
+    name: Terraform format and validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.8.5"
+      - name: Format Terraform files
+        working-directory: infra/terraform
+        run: terraform fmt -recursive
+      - name: Initialize providers without configuring remote state
+        working-directory: infra/terraform
+        run: terraform init -backend=false
+      - name: Validate infrastructure
+        working-directory: infra/terraform
+        run: terraform validate
+
+  container-image-build:
+    name: Build production Docker images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -f backend/Dockerfile -t ai-trading-system-backend:ci backend
+      - name: Build frontend image
+        run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api -t ai-trading-system-frontend:ci frontend
