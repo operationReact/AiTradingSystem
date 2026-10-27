@@ -1,14 +1,20 @@
 package in.aitradingsystem.config;
 
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
-/** Fails startup unless the application runs in paper mode. No live order path exists in this codebase. */
+/**
+ * Ensures this build never starts configured as LIVE. The application has no live broker-order adapter,
+ * so paper-only remains the only safe execution mode until that capability is implemented and reviewed.
+ */
 @Component
 public class TradingModeGuard {
-    public TradingModeGuard(@Value("${app.trading-mode:PAPER}") String tradingMode) {
-        if (!"PAPER".equals(tradingMode)) {
-            throw new IllegalStateException("Unsupported trading mode '" + tradingMode + "'. Only PAPER is allowed in this build.");
+    public TradingModeGuard(JdbcClient jdbc) {
+        String activeMode = jdbc.sql("SELECT active_mode FROM trading_execution_mode WHERE id = 1")
+            .query(String.class).optional().orElse("PAPER");
+        if (!"PAPER".equals(activeMode)) {
+            throw new IllegalStateException("Unsupported active trading mode '" + activeMode
+                + "'. This build has no live broker order adapter; only PAPER is allowed.");
         }
     }
 }
