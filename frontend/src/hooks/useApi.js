@@ -21,6 +21,8 @@ export const keys = {
   instrumentCatalogueStatus: ['instruments', 'status'],
   instrumentSearch: (params) => ['instruments', 'search', params],
   instrumentImports: (limit) => ['instruments', 'imports', limit],
+  marketBackfills: (limit) => ['market-data', 'backfills', limit],
+  candles: (params) => ['market-data', 'candles', params],
 };
 
 function useAuthedQuery(key, path, { poll = true, enabled = true, ...options } = {}) {
@@ -184,5 +186,39 @@ export function useEmergencyStop() {
     mutationFn: ({ halted, reason }) =>
       apiFetch('/risk/emergency-stop', { apiKey, method: 'PUT', body: { halted, reason } }),
     onSettled: invalidate,
+  });
+}
+
+
+/** Stored historical OHLCV, scoped to a selected instrument/interval/date range. */
+export function useCandles({ instrumentId, interval, fromDate, toDate, page = 0, size = 100, enabled = true }) {
+  const params = new URLSearchParams({
+    instrumentId: String(instrumentId ?? 0), interval, fromDate, toDate, page: String(page), size: String(size),
+  });
+  return useAuthedQuery(
+    keys.candles({ instrumentId, interval, fromDate, toDate, page, size }),
+    '/market-data/candles?' + params.toString(),
+    { poll: false, enabled: enabled && !!instrumentId && !!interval && !!fromDate && !!toDate, placeholderData: keepPreviousData },
+  );
+}
+
+export const useCandleBackfills = (limit = 10) =>
+  useAuthedQuery(keys.marketBackfills(limit), '/market-data/backfills?limit=' + limit, { poll: false });
+
+export function useStartCandleBackfill() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => apiFetch('/market-data/backfills', { apiKey, method: 'POST', body }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['market-data'] }),
+  });
+}
+
+export function useResumeCandleBackfill() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id) => apiFetch('/market-data/backfills/' + id + '/resume', { apiKey, method: 'POST' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['market-data'] }),
   });
 }

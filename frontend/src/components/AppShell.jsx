@@ -13,9 +13,10 @@ const NAV = [
   { to: '/trades', label: 'Paper trades', icon: ListOrdered },
   { to: '/risk', label: 'Risk', icon: ShieldAlert },
   { to: '/instruments', label: 'Instruments', icon: Search },
+  { to: '/market-data', label: 'Market data', icon: Activity },
 ];
 
-const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments' };
+const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data' };
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
