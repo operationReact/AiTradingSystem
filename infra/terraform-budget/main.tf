@@ -220,11 +220,8 @@ resource "aws_route53_record" "www" {
   ttl = 300
   records = [aws_eip.app.public_ip]
 }
-resource "aws_iam_openid_connect_provider" "github" {
+data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-  tags = local.tags
 }
 resource "aws_iam_role" "github_deploy" {
   name = "${local.name}-github-deploy"
