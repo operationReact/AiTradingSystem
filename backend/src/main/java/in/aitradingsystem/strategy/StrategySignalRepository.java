@@ -1,6 +1,5 @@
 package in.aitradingsystem.strategy;
 
-import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
