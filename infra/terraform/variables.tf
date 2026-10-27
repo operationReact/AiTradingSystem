@@ -18,12 +18,32 @@ variable "db_instance_class" {
   type        = string
   default     = "db.t4g.micro"
 }
-variable "db_allocated_storage_gb" { type = number, default = 20 }
-variable "db_max_allocated_storage_gb" { type = number, default = 50 }
-variable "db_name" { type = string, default = "aitrading" }
-variable "db_username" { type = string, default = "aitrading_admin" }
-variable "ecs_cpu" { description = "Backend Fargate CPU units.", type = number, default = 512 }
-variable "ecs_memory" { description = "Backend Fargate memory in MiB.", type = number, default = 1024 }
+variable "db_allocated_storage_gb" {
+  type    = number
+  default = 20
+}
+variable "db_max_allocated_storage_gb" {
+  type    = number
+  default = 50
+}
+variable "db_name" {
+  type    = string
+  default = "aitrading"
+}
+variable "db_username" {
+  type    = string
+  default = "aitrading_admin"
+}
+variable "ecs_cpu" {
+  description = "Backend Fargate CPU units."
+  type        = number
+  default     = 512
+}
+variable "ecs_memory" {
+  description = "Backend Fargate memory in MiB."
+  type        = number
+  default     = 1024
+}
 variable "allowed_github_repository" {
   description = "Exact owner/repository allowed to assume the deploy role."
   type        = string
