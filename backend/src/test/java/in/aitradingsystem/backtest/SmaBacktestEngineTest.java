@@ -45,6 +45,29 @@ class SmaBacktestEngineTest {
         assertEquals(first.netPnl(), first.finalEquity().subtract(new BigDecimal("100000.00")).setScale(2));
     }
 
+    @Test
+    void holdoutModeUsesEarlierCandlesOnlyForWarmupAndNeverOpensTrainingTrades() {
+        List<MarketCandle> history = candles(100);
+        Instant holdoutStart = history.get(70).candleTime();
+        var result = engine.run(history, config(), holdoutStart);
+
+        assertEquals(30, result.candlesEvaluated());
+        assertEquals(history.stream().filter(c -> !c.candleTime().isBefore(holdoutStart)).count(),
+            result.candlesEvaluated());
+        assertEquals(result.tradeCount(), result.trades().size());
+        result.trades().forEach(trade ->
+            org.junit.jupiter.api.Assertions.assertFalse(trade.entryAt().isBefore(holdoutStart)));
+    }
+
+    @Test
+    void holdoutModeRequiresWarmupAndEvaluationCandlesOnBothSidesOfBoundary() {
+        List<MarketCandle> history = candles(20);
+        assertThrows(IllegalArgumentException.class,
+            () -> engine.run(history, config(), history.getFirst().candleTime()));
+        assertThrows(IllegalArgumentException.class,
+            () -> engine.run(history, config(), Instant.parse("2025-12-31T00:00:00Z")));
+    }
+
     private static SmaBacktestEngine.Config config() {
         return new SmaBacktestEngine.Config(
             new BigDecimal("100000"), 3, 5, new BigDecimal("0.25"),

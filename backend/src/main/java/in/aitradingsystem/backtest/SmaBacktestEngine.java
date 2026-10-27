@@ -75,10 +75,28 @@ public final class SmaBacktestEngine {
     private record Exit(BigDecimal rawPrice, String reason) {}
 
     public BacktestEngineResult run(List<MarketCandle> candles, Config config) {
-        if (candles == null || candles.size() < config.slowPeriod() + 2) {
+        return run(candles, config, null);
+    }
+
+    /**
+     * Runs on chronological candles while restricting new entries to the evaluation window.
+     * Earlier candles are available only for indicator warm-up; no position is carried into
+     * the evaluation window, preventing training-period trades from contaminating holdout metrics.
+     */
+    public BacktestEngineResult run(List<MarketCandle> candles, Config config, Instant evaluationStartInclusive) {
+        if (candles == null || config == null || candles.size() < config.slowPeriod() + 2) {
             throw new IllegalArgumentException("Insufficient candles: at least slowPeriod + 2 are required");
         }
+        if (evaluationStartInclusive != null
+                && (candles.stream().noneMatch(c -> c != null && c.candleTime() != null
+                        && !c.candleTime().isBefore(evaluationStartInclusive))
+                    || candles.stream().noneMatch(c -> c != null && c.candleTime() != null
+                        && c.candleTime().isBefore(evaluationStartInclusive)))) {
+            throw new IllegalArgumentException("Evaluation boundary must leave both warm-up and evaluation candles");
+        }
         validateChronology(candles);
+        int evaluatedCandles = evaluationStartInclusive == null ? candles.size()
+            : (int) candles.stream().filter(c -> !c.candleTime().isBefore(evaluationStartInclusive)).count();
 
         BigDecimal cash = money(config.initialCapital());
         BigDecimal grossPnl = ZERO_MONEY;
@@ -112,7 +130,10 @@ public final class SmaBacktestEngine {
                 }
             }
 
-            if (position == null && !exitedThisCandle && isBuySignal(candles, i - 1, config)) {
+            boolean inEvaluationWindow = evaluationStartInclusive == null
+                || !candle.candleTime().isBefore(evaluationStartInclusive);
+            if (position == null && !exitedThisCandle && inEvaluationWindow
+                    && isBuySignal(candles, i - 1, config)) {
                 MarketCandle signalCandle = candles.get(i - 1);
                 position = openAtNextBar(signalCandle, candle, trades.size() + 1, cash, config);
                 if (position != null) {
@@ -174,7 +195,7 @@ public final class SmaBacktestEngine {
             ? null : totalWins.divide(totalLosses, 4, RoundingMode.HALF_UP);
 
         return new BacktestEngineResult(
-            candles.size(), tradeCount, wins, losses, money(winRate), money(grossPnl), money(totalFees),
+            evaluatedCandles, tradeCount, wins, losses, money(winRate), money(grossPnl), money(totalFees),
             netPnl, money(cash), totalReturn, money(maxDrawdown), profitFactor, List.copyOf(trades));
     }
 
