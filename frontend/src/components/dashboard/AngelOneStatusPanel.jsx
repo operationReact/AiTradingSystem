@@ -7,8 +7,8 @@ const STATES = {
   NOT_CONFIGURED: { label: 'Not configured', tone: 'neutral', note: 'Set the ANGELONE_* environment variables on the backend. Demo data is shown instead.' },
   CONFIGURED_UNVERIFIED: { label: 'Configured, not verified', tone: 'warn', note: 'Credentials are present. Run a connection test to verify them.' },
   AUTHENTICATED: { label: 'Authenticated', tone: 'gain', note: 'Session is active on the server.' },
-  SESSION_EXPIRED: { label: 'Session expired', tone: 'warn', note: 'The next request will log in again automatically.' },
-  DEGRADED: { label: 'Degraded', tone: 'warn', note: 'Recent requests failed. Market data may be stale.' },
+  SESSION_EXPIRED: { label: 'Session expired', tone: 'warn', note: 'The last provider request reported an expired session. Recovery is attempted only for that response.' },
+  DEGRADED: { label: 'Degraded', tone: 'warn', note: 'Recent requests failed or were throttled. Market data may be stale.' },
   UNAVAILABLE: { label: 'Unavailable', tone: 'loss', note: 'Angel One could not be reached. Market data is not live.' },
 };
 
@@ -17,14 +17,8 @@ export function AngelOneStatusPanel() {
   const test = useTestAngelOneConnection();
 
   const actions = (
-    <Button
-      size="sm"
-      variant="secondary"
-      icon={RefreshCw}
-      loading={test.isPending}
-      disabled={test.isPending}
-      onClick={() => test.mutate()}
-    >
+    <Button size="sm" variant="secondary" icon={RefreshCw} loading={test.isPending}
+      disabled={test.isPending} onClick={() => test.mutate()}>
       Test connection
     </Button>
   );
@@ -45,6 +39,7 @@ export function AngelOneStatusPanel() {
 
 function StatusBody({ health }) {
   const info = STATES[health.state] ?? { label: health.state, tone: 'neutral', note: '' };
+  const sessionAge = Number.isFinite(health.sessionAgeSeconds) ? `${health.sessionAgeSeconds}s` : 'unknown';
   return (
     <div className="space-y-3 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -52,6 +47,10 @@ function StatusBody({ health }) {
         <span className="text-muted">{info.note}</span>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-muted">
+        <dt>Session</dt>
+        <dd className="text-text">{health.sessionActive ? `Active · age ${sessionAge}` : 'Inactive'}</dd>
+        <dt>Last successful quote</dt>
+        <dd className="text-text">{health.lastQuoteAt ? formatDateTime(health.lastQuoteAt) : 'never'}</dd>
         <dt>Last successful call</dt>
         <dd className="text-text">{health.lastSuccessAt ? formatDateTime(health.lastSuccessAt) : 'never'}</dd>
         <dt>Last error code</dt>

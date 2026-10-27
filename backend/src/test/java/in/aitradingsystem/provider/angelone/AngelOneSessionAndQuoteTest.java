@@ -75,7 +75,7 @@ class AngelOneSessionAndQuoteTest {
 
     private void build(String[] creds, long maxAgeSeconds, int loginInterval, int quoteInterval) {
         props = new AngelOneProperties(creds[0], creds[1], creds[2], creds[3], ROOT, 5000, 10000,
-                maxAgeSeconds, loginInterval, quoteInterval);
+                maxAgeSeconds, loginInterval, quoteInterval, 150);
         RestClient.Builder builder = RestClient.builder().baseUrl(ROOT);
         server = MockRestServiceServer.bindTo(builder).build();
         AngelOneApiClient api = new AngelOneApiClient(builder.build(), props, new ObjectMapper());
@@ -147,6 +147,51 @@ class AngelOneSessionAndQuoteTest {
 
         assertThat(ltp).isEqualByComparingTo("250.5");
         assertThat(health.status().state()).isEqualTo(AngelOneHealthService.State.AUTHENTICATED);
+        server.verify();
+    }
+
+    @Test
+    void recoveryWaitsForAuthenticationAndQuoteThrottleWithinBoundedWindow() {
+        build(credentials(), 3600, 30, 100);
+        expectLogin("jwt-1");
+        server.expect(requestTo(ROOT + AngelOneApiClient.LTP_PATH))
+                .andRespond(withSuccess("{\"status\":false,\"errorcode\":\"AG8001\",\"message\":\"expired\"}",
+                        MediaType.APPLICATION_JSON));
+        expectLogin("jwt-2");
+        expectLtp("jwt-2", "105.25");
+
+        assertThat(quotes.ltp("NSE", "RELIANCE-EQ", "2885")).isEqualByComparingTo("105.25");
+        assertThat(health.status().lastQuoteAt()).isNotNull();
+        assertThat(health.status().sessionActive()).isTrue();
+        assertThat(health.status().sessionAgeSeconds()).isNotNull();
+        server.verify();
+    }
+
+    @Test
+    void staleExpiredRequestCannotInvalidateNewerSession() {
+        build(credentials(), 3600, 0, 0);
+        expectLogin("jwt-1");
+        expectLogin("jwt-2");
+
+        String first = session.accessToken();
+        String refreshed = session.recoverAfterSessionExpiry(first);
+
+        assertThat(refreshed).isEqualTo("jwt-2");
+        assertThat(session.recoverAfterSessionExpiry(first)).isEqualTo("jwt-2");
+        assertThat(session.hasActiveSession()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void invalidTotpSecretIsCategorizedWithoutCallingProvider() {
+        build(new String[] {AngelOneApiClientTest.API_KEY, "CLIENT1", "pin-secret", "not*base32!"},
+                3600, 0, 0);
+
+        assertThatThrownBy(() -> session.accessToken())
+                .isInstanceOfSatisfying(AngelOneException.class, e -> {
+                    assertThat(e.kind()).isEqualTo(AngelOneException.Kind.NOT_CONFIGURED);
+                    assertThat(e.code()).isEqualTo("INVALID_TOTP_SECRET");
+                });
         server.verify();
     }
 
@@ -230,12 +275,33 @@ class AngelOneSessionAndQuoteTest {
     }
 
     @Test
-    void failedLoginLeavesNoSessionAndReportsUnavailable() {
+    void failedLoginLeavesNoSessionAndTestConnectionRecordsFailure() {
         server.expect(requestTo(ROOT + AngelOneApiClient.LOGIN_PATH))
                 .andRespond(withStatus(HttpStatus.INTERNAL_SERVER_ERROR));
 
-        assertThatThrownBy(() -> session.login()).isInstanceOf(AngelOneException.class);
+        AngelOneHealthService.ProviderHealth result = health.testConnection();
+
         assertThat(session.hasActiveSession()).isFalse();
-        assertThat(health.status().state()).isEqualTo(AngelOneHealthService.State.CONFIGURED_UNVERIFIED);
+        assertThat(result.state()).isEqualTo(AngelOneHealthService.State.UNAVAILABLE);
+        assertThat(result.lastErrorCode()).isEqualTo("HTTP_500");
+    }
+
+    @Test
+    void recoveryFailsWithinConfiguredWaitRatherThanSleepingForProviderInterval() {
+        build(credentials(), 3600, 0, 60_000);
+        expectLogin("jwt-1");
+        server.expect(requestTo(ROOT + AngelOneApiClient.LTP_PATH))
+                .andRespond(withSuccess("{\"status\":false,\"errorcode\":\"AG8001\",\"message\":\"expired\"}",
+                        MediaType.APPLICATION_JSON));
+
+        long startedAt = System.nanoTime();
+        assertThatThrownBy(() -> quotes.ltp("NSE", "RELIANCE-EQ", "2885"))
+                .isInstanceOfSatisfying(AngelOneException.class, e -> {
+                    assertThat(e.kind()).isEqualTo(AngelOneException.Kind.RATE_LIMITED);
+                    assertThat(e.code()).isEqualTo("LOCAL_RATE_LIMIT");
+                });
+        long elapsedMs = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+        assertThat(elapsedMs).isLessThan(1_500);
+        server.verify();
     }
 }

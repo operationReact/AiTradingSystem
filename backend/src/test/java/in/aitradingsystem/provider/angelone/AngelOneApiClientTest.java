@@ -152,6 +152,30 @@ class AngelOneApiClientTest {
     }
 
     @Test
+    void http408MapsToUnavailableWithoutRetrying() {
+        server.expect(requestTo(ROOT + AngelOneApiClient.LTP_PATH))
+                .andRespond(withStatus(HttpStatus.REQUEST_TIMEOUT));
+
+        assertThatThrownBy(() -> client.ltp(JWT, "NSE", "RELIANCE-EQ", "2885"))
+                .isInstanceOfSatisfying(AngelOneException.class,
+                        e -> assertThat(e.kind()).isEqualTo(AngelOneException.Kind.UNAVAILABLE));
+        server.verify();
+    }
+
+    @Test
+    void propertiesNeverPrintCredentialsAndRejectInsecureProviderUrl() {
+        assertThat(new AngelOneProperties(API_KEY, "CLIENT1", "pin-secret", "JBSWY3DPEHPK3PXP",
+                ROOT, 5000, 10000, 3600, 0, 0).toString())
+                .doesNotContain(API_KEY)
+                .doesNotContain("pin-secret")
+                .doesNotContain("JBSWY3DPEHPK3PXP");
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> new AngelOneProperties(API_KEY, "CLIENT1",
+                "pin-secret", "JBSWY3DPEHPK3PXP", "http://apiconnect.angelone.in", 5000, 10000, 3600, 0, 0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void http5xxMapsToUnavailable() {
         server.expect(requestTo(ROOT + AngelOneApiClient.LTP_PATH)).andRespond(withServerError());
 
