@@ -26,6 +26,7 @@ public class StrategyService {
     private static final BigDecimal TWO = new BigDecimal("2");
     private final InstrumentMasterService instruments;
     private final MarketDataRepository candles;
+    private final StrategySignalRepository signalRepository;
     private final Clock clock;
     private final int fastPeriod;
     private final int slowPeriod;
@@ -36,6 +37,7 @@ public class StrategyService {
     public StrategyService(
             InstrumentMasterService instruments,
             MarketDataRepository candles,
+            StrategySignalRepository signalRepository,
             Clock clock,
             @Value("${app.strategy.fast-period:5}") int fastPeriod,
             @Value("${app.strategy.slow-period:20}") int slowPeriod,
@@ -58,6 +60,7 @@ public class StrategyService {
         }
         this.instruments = instruments;
         this.candles = candles;
+        this.signalRepository = signalRepository;
         this.clock = clock;
         this.fastPeriod = fastPeriod;
         this.slowPeriod = slowPeriod;
@@ -85,7 +88,7 @@ public class StrategyService {
             BigDecimal close = last.close();
             BigDecimal fast = average(bars, bars.size() - fastPeriod, bars.size());
             BigDecimal slow = average(bars, bars.size() - slowPeriod, bars.size());
-            BigDecimal volumeAvg = averageVolume(bars, bars.size() - slowPeriod, bars.size() - 1);
+            BigDecimal volumeAvg = averageVolume(bars, bars.size() - 1 - slowPeriod, bars.size() - 1);
             BigDecimal latestVolume = BigDecimal.valueOf(last.volume());
             boolean volumeConfirmed = volumeAvg.signum() > 0 && latestVolume.compareTo(volumeAvg) >= 0;
             String action = "WATCH";
@@ -122,6 +125,7 @@ public class StrategyService {
                     instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(), action, STRATEGY,
                     close, stop, target, fast, slow, volumeAvg, latestVolume, confidence, List.copyOf(reasons),
                     last.source(), now, last.candleTime(), "CANDIDATE_NOT_EXECUTABLE");
+            signalRepository.save(signal, instrument.symbolToken());
         }
         return new StrategyEvaluation(instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
                 required, bars.size(), latest, signal, List.copyOf(reasons), now,
@@ -143,6 +147,7 @@ public class StrategyService {
 
     private double confidence(BigDecimal fast, BigDecimal slow, boolean volumeConfirmed, boolean stale) {
         if (stale) return 0.0;
+        if (fast.compareTo(slow) <= 0) return 0.25;
         BigDecimal trend = fast.subtract(slow).abs().divide(slow.abs().max(new BigDecimal("0.01")), 6, RoundingMode.HALF_UP);
         double score = 0.50 + Math.min(0.25, trend.doubleValue() * 5.0) + (volumeConfirmed ? 0.15 : 0.0);
         return Math.min(0.90, Math.max(0.0, score));
