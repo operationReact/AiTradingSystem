@@ -12,6 +12,7 @@ import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -66,7 +67,7 @@ class StrategyServiceTest {
 
     @Test
     void staleCandlesNeverEmitBuy() {
-        List<MarketCandle> bars = risingBars(now.minusSeconds(DurationSeconds.TWO_DAYS));
+        List<MarketCandle> bars = risingBars(now.minus(Duration.ofSeconds(DurationSeconds.TWO_DAYS)));
         when(instruments.requireActiveInstrument(INSTRUMENT_ID)).thenReturn(instrument);
         when(marketData.countCandles(INSTRUMENT_ID, INTERVAL)).thenReturn(bars.size());
         when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(bars);
