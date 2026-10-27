@@ -6,6 +6,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.stereotype.Component;
 
 /**
  * Offline, deterministic, long-only SMA/volume backtest.
@@ -14,6 +15,7 @@ import java.util.List;
  * When one candle touches both stop and target, stop-loss is assumed first.
  * This engine never calls a broker, retrieves live prices, or creates paper orders.
  */
+@Component
 public final class SmaBacktestEngine {
     private static final BigDecimal HUNDRED = new BigDecimal("100");
     private static final BigDecimal ZERO_MONEY = new BigDecimal("0.00");
