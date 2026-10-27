@@ -4,6 +4,7 @@ import OverviewPage from './pages/OverviewPage.jsx';
 import SignalsPage from './pages/SignalsPage.jsx';
 import PaperTradesPage from './pages/PaperTradesPage.jsx';
 import RiskPage from './pages/RiskPage.jsx';
+import InstrumentsPage from './pages/InstrumentsPage.jsx';
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="signals" element={<SignalsPage />} />
         <Route path="trades" element={<PaperTradesPage />} />
         <Route path="risk" element={<RiskPage />} />
+        <Route path="instruments" element={<InstrumentsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

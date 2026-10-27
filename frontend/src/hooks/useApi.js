@@ -18,6 +18,9 @@ export const keys = {
   newsArticles: (params) => ['news', 'articles', params],
   executionMode: ['system', 'execution-mode'],
   angelOneStatus: ['providers', 'angel-one', 'status'],
+  instrumentCatalogueStatus: ['instruments', 'status'],
+  instrumentSearch: (params) => ['instruments', 'search', params],
+  instrumentImports: (limit) => ['instruments', 'imports', limit],
 };
 
 function useAuthedQuery(key, path, { poll = true, enabled = true, ...options } = {}) {
@@ -78,6 +81,38 @@ export function useTestAngelOneConnection() {
   return useMutation({
     mutationFn: () => apiFetch('/providers/angel-one/test-connection', { apiKey, method: 'POST' }),
     onSuccess: (data) => qc.setQueryData([...keys.angelOneStatus, apiKey ? 'authed' : 'anon'], data),
+  });
+}
+
+
+/** Active Angel One instrument catalogue metadata. */
+export const useInstrumentCatalogueStatus = () =>
+  useAuthedQuery(keys.instrumentCatalogueStatus, '/instruments/status', { poll: false, retry: 1 });
+
+/** Bounded server-side search against the active catalogue version. */
+export function useInstrumentSearch({ q = '', exchange = '', type = '', page = 0, size = 20, enabled = true } = {}) {
+  const params = new URLSearchParams({ page: String(page), size: String(size) });
+  if (q) params.set('q', q);
+  if (exchange) params.set('exchange', exchange);
+  if (type) params.set('type', type);
+  return useAuthedQuery(
+    keys.instrumentSearch({ q, exchange, type, page, size }),
+    '/instruments/search?' + params.toString(),
+    { poll: false, enabled, placeholderData: keepPreviousData },
+  );
+}
+
+/** Recent import attempts, including rejected/incomplete catalogue files. */
+export const useRecentInstrumentImports = (limit = 5) =>
+  useAuthedQuery(keys.instrumentImports(limit), '/instruments/imports?limit=' + limit, { poll: false });
+
+/** Downloads the catalogue on the backend and refreshes search/status/history after the attempt. */
+export function useImportInstrumentMaster() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiFetch('/instruments/import', { apiKey, method: 'POST' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['instruments'] }),
   });
 }
 
