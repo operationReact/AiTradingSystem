@@ -92,7 +92,8 @@ jobs:
         run: |
           test -n "$AWS_INSTANCE_ID" || (echo "Set repository variable AWS_INSTANCE_ID from Terraform output." && exit 1)
           test -n "${{ vars.AWS_ROLE_ARN }}" || (echo "Set repository variable AWS_ROLE_ARN from Terraform output." && exit 1)
-          COMMAND_JSON="$(jq -n --arg command "test -f /var/lib/ai-trading-bootstrap-complete && sudo /opt/ai-trading/deploy.sh $IMAGE_TAG" '{commands: [$command]}')"
+          COMMAND_TEXT="for attempt in $(seq 1 60); do test -f /var/lib/ai-trading-bootstrap-complete && break; sleep 10; done; test -f /var/lib/ai-trading-bootstrap-complete && sudo /opt/ai-trading/deploy.sh $IMAGE_TAG"
+          COMMAND_JSON="$(jq -n --arg command "$COMMAND_TEXT" '{commands: [$command]}')"
           COMMAND_ID="$(aws ssm send-command --region "$AWS_REGION" --instance-ids "$AWS_INSTANCE_ID" --document-name AWS-RunShellScript --parameters "$COMMAND_JSON" --comment "Deploy PAPER-only AiTradingSystem commit $IMAGE_TAG" --query 'Command.CommandId' --output text)"
           echo "SSM command: $COMMAND_ID"
           for attempt in $(seq 1 60); do
