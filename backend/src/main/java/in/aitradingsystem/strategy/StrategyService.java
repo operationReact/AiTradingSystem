@@ -23,7 +23,6 @@ import org.springframework.stereotype.Service;
 @Service
 public class StrategyService {
     private static final String STRATEGY = "SMA_TREND_VOLUME_V1";
-    private static final BigDecimal TWO = new BigDecimal("2");
     private final InstrumentMasterService instruments;
     private final MarketDataRepository candles;
     private final StrategySignalRepository signalRepository;
