@@ -27,7 +27,8 @@ public class NewsApiTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        return !("/api/news".equals(path) || path.startsWith("/api/news/"));
+        // Protect only the provenance-feed root. Existing /api/news/articles and analysis routes use APP_API_KEY.
+        return !"/api/news".equals(path);
     }
 
     @Override
