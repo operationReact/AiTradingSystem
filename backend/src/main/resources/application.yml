@@ -52,6 +52,14 @@ app:
     slippage-rate: 0.001
     signal-max-age-minutes: 30
   market-data:
+  strategy:
+    # Deterministic SMA trend + prior-volume confirmation. All generated signals are paper candidates.
+    fast-period: ${STRATEGY_FAST_PERIOD:5}
+    slow-period: ${STRATEGY_SLOW_PERIOD:20}
+    target-risk-reward: ${STRATEGY_TARGET_RISK_REWARD:2}
+    stop-buffer-percent: ${STRATEGY_STOP_BUFFER_PERCENT:0.5}
+    max-signal-age-minutes: ${STRATEGY_MAX_SIGNAL_AGE_MINUTES:1440}
+  market-data:
     # Strict app-level cap; requests may be split into provider-supported chunks.
     max-range-days: 366
     # Bounds synchronous operator work; partial runs remain resumable.
