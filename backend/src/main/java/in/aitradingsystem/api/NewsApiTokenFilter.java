@@ -11,8 +11,11 @@ import java.util.Arrays;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 
 @Component
+@Order(Ordered.HIGHEST_PRECEDENCE)
 public class NewsApiTokenFilter extends OncePerRequestFilter {
     private final String configuredToken;
     private final String[] allowedOrigins;
@@ -27,7 +30,6 @@ public class NewsApiTokenFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI().substring(request.getContextPath().length());
-        // The bearer token protects only the provenance-feed root endpoint, not existing news-intelligence routes.
         return !"/api/news".equals(path);
     }
 
