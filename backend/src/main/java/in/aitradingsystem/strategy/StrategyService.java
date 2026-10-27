@@ -73,13 +73,14 @@ public class StrategyService {
         if (interval == null) throw new IllegalArgumentException("A supported interval is required");
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         int required = slowPeriod + 1;
+        int available = candles.countCandles(instrumentId, interval.name());
         List<MarketCandle> bars = candles.recentCandles(instrumentId, interval.name(), required);
         Instant now = clock.instant();
         Instant latest = bars.isEmpty() ? null : bars.getLast().candleTime();
         List<String> reasons = new ArrayList<>();
         StrategySignal signal = null;
 
-        if (bars.size() < required) {
+        if (available < required || bars.size() < required) {
             reasons.add("INSUFFICIENT_HISTORY");
         } else {
             MarketCandle last = bars.getLast();
@@ -128,7 +129,7 @@ public class StrategyService {
             signalRepository.save(signal, instrument.symbolToken());
         }
         return new StrategyEvaluation(instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
-                required, bars.size(), latest, signal, List.copyOf(reasons), now,
+                required, available, latest, signal, List.copyOf(reasons), now,
                 bars.isEmpty() ? "NO_STORED_CANDLES" : bars.getLast().source());
     }
 
