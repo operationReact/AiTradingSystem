@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
@@ -17,7 +18,10 @@ import org.springframework.stereotype.Component;
 public class InstrumentMasterParser {
     private static final Set<String> ALLOWED_SEGMENTS =
             Set.of("NSE_CM", "BSE_CM", "NSE_FO", "BSE_FO", "MCX_FO", "CDS", "BCD");
-    private static final DateTimeFormatter EXPIRY = DateTimeFormatter.ofPattern("ddMMMyyyy", Locale.ENGLISH);
+    private static final DateTimeFormatter EXPIRY = new DateTimeFormatterBuilder()
+            .parseCaseInsensitive()
+            .appendPattern("ddMMMyyyy")
+            .toFormatter(Locale.ENGLISH);
     private final ObjectMapper mapper;
 
     public InstrumentMasterParser(ObjectMapper mapper) {

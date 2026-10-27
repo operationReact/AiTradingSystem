@@ -7,13 +7,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.nio.charset.StandardCharsets;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.web.servlet.MockMvc;
 
 class InstrumentMasterApiIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
     @Autowired InstrumentMasterService service;
+    @Autowired JdbcTemplate jdbc;
+
+    @BeforeEach
+    void resetInstrumentCatalogue() {
+        jdbc.update("DELETE FROM instrument_master");
+        jdbc.update("UPDATE instrument_catalogue_state SET active_version = NULL, activated_at = NULL WHERE singleton_id = 1");
+        jdbc.update("DELETE FROM instrument_import_run");
+    }
 
     private static final String BASE = "/api/instruments";
     private static final String FIRST_MASTER = """

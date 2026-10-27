@@ -212,6 +212,7 @@ public class InstrumentMasterRepository {
         Long total = jdbc.queryForObject("SELECT count(*) FROM instrument_master i" + where, Long.class,
                 args.toArray());
         List<Object> pageArgs = new ArrayList<>(args);
+        pageArgs.add(q == null ? "" : q);
         pageArgs.add(size);
         pageArgs.add((long) page * size);
         List<Instrument> content = jdbc.query("""
@@ -224,7 +225,7 @@ public class InstrumentMasterRepository {
                           i.trading_symbol ASC, i.instrument_type NULLS FIRST, i.expiry NULLS FIRST,
                           i.strike NULLS FIRST, i.symbol_token ASC
                  LIMIT ? OFFSET ?
-                """, (rs, row) -> instrumentMapper.mapRow(rs, row), addOrderArgs(pageArgs, q));
+                """, (rs, row) -> instrumentMapper.mapRow(rs, row), pageArgs.toArray());
         long count = total == null ? 0L : total;
         int pages = count == 0 ? 0 : (int) Math.ceil(count / (double) size);
         return new InstrumentSearchResponse(content, page, size, count, pages, page + 1 < pages,
@@ -244,13 +245,6 @@ public class InstrumentMasterRepository {
                 .stream().findFirst().orElse(new CatalogueSummary(null, null, 0));
     }
 
-    private static Object[] addOrderArgs(List<Object> args, String q) {
-        List<Object> all = new ArrayList<>();
-        all.addAll(args.subList(0, args.size() - 2));
-        all.add(q == null ? "" : q);
-        all.addAll(args.subList(args.size() - 2, args.size()));
-        return all.toArray();
-    }
 
     private static Instant toInstant(java.time.OffsetDateTime value) {
         return value == null ? null : value.toInstant();
