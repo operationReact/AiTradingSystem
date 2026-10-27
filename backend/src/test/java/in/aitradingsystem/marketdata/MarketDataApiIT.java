@@ -110,6 +110,63 @@ class MarketDataApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void historyRemainsAccessibleWhenTheInstrumentCatalogueAssignsANewDatabaseId() throws Exception {
+        var payload = mapper.readTree("""
+                [["2026-10-26T09:15:00+05:30",100,105,99,104,2500]]
+                """);
+        when(provider.fetch(eq("NSE"), eq("test-token"), eq("ONE_DAY"), anyString(), anyString()))
+            .thenReturn(payload).thenReturn(payload);
+        String request = """
+                {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-10-26","toDate":"2026-10-26"}
+                """.formatted(instrumentId);
+
+        mvc.perform(post("/api/market-data/backfills").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content(request))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+
+        UUID refreshedCatalogue = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO instrument_import_run (id, status, source_url, completed_at, catalogue_version)
+                VALUES (?, 'SUCCEEDED', 'test-refresh', now(), ?)
+                """, refreshedCatalogue, refreshedCatalogue);
+        jdbc.update("""
+                INSERT INTO instrument_master
+                    (exchange_segment, exchange, symbol_token, trading_symbol, instrument_name, instrument_type,
+                     expiry, strike, lot_size, tick_size, active, catalogue_version)
+                VALUES ('NSE_EQ', 'NSE', 'test-token', 'TEST-EQ', 'Test Equity', 'EQ',
+                        NULL, NULL, 1, 0.05, TRUE, ?)
+                """, refreshedCatalogue);
+        Long refreshedInstrumentId = jdbc.queryForObject("""
+                SELECT instrument_id FROM instrument_master
+                 WHERE catalogue_version = ? AND trading_symbol = 'TEST-EQ'
+                """, Long.class, refreshedCatalogue);
+        jdbc.update("UPDATE instrument_catalogue_state SET active_version = ?, activated_at = now() WHERE singleton_id = 1",
+                refreshedCatalogue);
+
+        String refreshedRequest = """
+                {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-10-26","toDate":"2026-10-26"}
+                """.formatted(refreshedInstrumentId);
+        mvc.perform(post("/api/market-data/backfills").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content(refreshedRequest))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("SUCCEEDED"));
+
+        mvc.perform(get("/api/market-data/candles").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .param("instrumentId", refreshedInstrumentId.toString())
+                .param("interval", "ONE_DAY").param("fromDate", "2026-10-26").param("toDate", "2026-10-26"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.totalItems").value(1))
+            .andExpect(jsonPath("$.items[0].instrumentId").value(refreshedInstrumentId));
+
+        Integer count = jdbc.queryForObject("""
+                SELECT count(*) FROM market_candle
+                 WHERE exchange = 'NSE' AND symbol_token = 'test-token' AND interval = 'ONE_DAY'
+                """, Integer.class);
+        org.assertj.core.api.Assertions.assertThat(count).isEqualTo(1);
+    }
+
+    @Test
     void longRangeUsesBoundedChunksAndCanResumeFromItsCheckpoint() throws Exception {
         var first = mapper.readTree("""
                 [["2026-07-01T09:15:00+05:30",100,101,99,100,10]]
