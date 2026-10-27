@@ -144,3 +144,4 @@ public class InstrumentMasterParser {
                                   String name, String instrumentType, LocalDate expiry, BigDecimal strike,
                                   int lotSize, BigDecimal tickSize) {}
     public record ParseResult(int parsedCount, List<InstrumentDraft> accepted, int rejectedCount) {}
+}
