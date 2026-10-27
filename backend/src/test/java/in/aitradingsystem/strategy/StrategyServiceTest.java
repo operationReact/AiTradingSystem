@@ -1,7 +1,6 @@
 package in.aitradingsystem.strategy;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -55,7 +54,7 @@ class StrategyServiceTest {
     void returnsInsufficientHistoryWithoutCreatingASignal() {
         when(instruments.requireActiveInstrument(INSTRUMENT_ID)).thenReturn(instrument);
         when(marketData.countCandles(INSTRUMENT_ID, INTERVAL)).thenReturn(5);
-        when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(risingBars(now).subList(0, 5));
+        when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(List.of());
 
         StrategyEvaluation result = service().evaluate(INSTRUMENT_ID, HistoricalCandleInterval.FIVE_MINUTE);
 
@@ -67,7 +66,7 @@ class StrategyServiceTest {
 
     @Test
     void staleCandlesNeverEmitBuy() {
-        List<MarketCandle> bars = risingBars(now.minus(DurationSeconds.TWO_DAYS));
+        List<MarketCandle> bars = risingBars(now.minusSeconds(DurationSeconds.TWO_DAYS));
         when(instruments.requireActiveInstrument(INSTRUMENT_ID)).thenReturn(instrument);
         when(marketData.countCandles(INSTRUMENT_ID, INTERVAL)).thenReturn(bars.size());
         when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(bars);
