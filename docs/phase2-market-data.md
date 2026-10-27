@@ -4,20 +4,20 @@ This phase adds a protected, read-only instrument discovery path. It does not pl
 
 ## Instrument master
 
-- `POST /api/market-data/instruments/sync` downloads the public Angel One instrument master from the fixed approved HTTPS host.
+- `POST /api/market-data/instruments/sync` triggers the existing backend instrument catalogue import. The established importer performs bounded download, validation, deduplication, import auditing, and atomic catalogue publication.
 - The download does not follow redirects and rejects non-200, empty, oversized, malformed, or excessive-row payloads.
-- Only NSE/BSE cash-equity rows are persisted; derivative instruments are excluded.
-- Rows are upserted by exchange + symbol token, making repeated syncs idempotent.
-- `GET /api/market-data/instruments?query=RELIANCE&exchange=NSE&limit=20` searches the local catalog.
+- Instrument parsing and supported exchange/type filtering are centralized in the existing catalogue parser; the active catalogue is retained if a refresh is incomplete or invalid.
+- Imports are versioned and audited. The active catalogue is only switched after the import passes validation.
+- `GET /api/market-data/instruments?query=RELIANCE&exchange=NSE&page=0&size=20` searches the existing versioned catalogue; `GET /api/market-data/instruments/status` returns the current catalogue summary.
 - Both endpoints are under `/api/**` and therefore require the existing operator API-key authentication.
 
 ## Persistence
 
-Flyway migration `V3__market_data_foundation.sql` creates `market_instrument` and `market_candle`. Candle rows have OHLC consistency checks and a unique key on instrument, interval, and candle timestamp. Historical-candle fetching from authenticated SmartAPI is intentionally a separate follow-up; this phase does not assume a broker session or create one.
+The application already has a versioned `instrument_master` catalogue and historical `market_candle` schema (migration V8). This phase reuses those persistence paths instead of introducing duplicate instrument or candle tables. Authenticated SmartAPI historical-candle ingestion is already implemented through the existing resumable backfill flow (`POST /api/market-data/backfills`); this phase adds instrument catalogue access under the market-data API namespace.
 
 ## Safety
 
 - The adapter is read-only and uses a fixed provider host to avoid arbitrary URL fetching.
-- Payload limits are enforced after the HTTP response is read; keep this endpoint operator-only and review memory limits before running on a small instance.
+- All catalogue imports use the existing download and parser guardrails. API endpoints remain operator-only.
 - No API credentials belong in frontend environment variables or source control.
 - The application remains PAPER-only. Imported prices are market-data inputs, not trade instructions or investment advice.
