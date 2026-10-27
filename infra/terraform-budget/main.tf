@@ -1,16 +1,31 @@
 data "aws_caller_identity" "current" {}
 data "aws_vpc" "default" { default = true }
 data "aws_subnets" "default" {
-  filter { name = "vpc-id", values = [data.aws_vpc.default.id] }
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
+  }
 }
 data "aws_subnet" "selected" { id = sort(data.aws_subnets.default.ids)[0] }
 data "aws_ami" "al2023_arm64" {
   most_recent = true
   owners = ["amazon"]
-  filter { name = "name", values = ["al2023-ami-2023.*-kernel-6.1-arm64"] }
-  filter { name = "architecture", values = ["arm64"] }
-  filter { name = "virtualization-type", values = ["hvm"] }
-  filter { name = "root-device-type", values = ["ebs"] }
+  filter {
+    name   = "name"
+    values = ["al2023-ami-2023.*-kernel-6.1-arm64"]
+  }
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
+  }
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
 }
 locals {
   name = "ai-trading-paper"
@@ -163,7 +178,10 @@ resource "aws_instance" "app" {
     account_id = data.aws_caller_identity.current.account_id
   })
   user_data_replace_on_change = true
-  metadata_options { http_endpoint = "enabled", http_tokens = "required" }
+  metadata_options {
+    http_endpoint = "enabled"
+    http_tokens   = "required"
+  }
   tags = merge(local.tags, { Name = local.name })
   lifecycle {
     precondition {
