@@ -223,6 +223,24 @@ public class MarketDataRepository {
         return new CandlePage(rows, page, size, total, totalPages, page + 1 < totalPages);
     }
 
+    /** Latest candles for deterministic strategy evaluation; orders bars newest-first in SQL then restores chronology. */
+    public List<MarketCandle> recentCandles(long instrumentId, String interval, int limit) {
+        List<MarketCandle> rows = jdbc.query("""
+                SELECT * FROM market_candle
+                 WHERE instrument_id = ? AND interval = ?
+                 ORDER BY candle_time DESC
+                 LIMIT ?
+                """, candleMapper, instrumentId, interval, limit);
+        return rows.reversed();
+    }
+
+    public int countCandles(long instrumentId, String interval) {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM market_candle WHERE instrument_id = ? AND interval = ?",
+                Integer.class, instrumentId, interval);
+        return count == null ? 0 : count;
+    }
+
     private static OffsetDateTime offset(Instant value) {
         return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
     }

@@ -11,7 +11,7 @@ export const keys = {
   portfolio: ['paper', 'portfolio'],
   trades: (params) => ['paper', 'trades', params],
   order: (id) => ['paper', 'order', id],
-  signals: ['signals'],
+  signals: (limit = 50) => ['signals', limit],
   riskConfig: ['risk', 'config'],
   riskDecisions: (params) => ['risk', 'decisions', params],
   newsStatus: ['news', 'status'],
@@ -55,7 +55,21 @@ export function useOrders({ page = 0, size = 10, status = '', symbol = '' }) {
 export const useOrderDetail = (id) =>
   useAuthedQuery(keys.order(id), `/paper-trades/${id}`, { poll: false, enabled: !!id });
 
-export const useSignals = () => useAuthedQuery(keys.signals, '/signals', { poll: false });
+export const useSignals = (limit = 50) =>
+  useAuthedQuery(keys.signals(limit), `/signals?limit=${limit}`, { poll: false });
+
+/** Evaluates the deterministic strategy using stored OHLCV only, then refreshes persisted signal history. */
+export function useEvaluateStrategy() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instrumentId, interval }) =>
+      apiFetch(`/strategies/${instrumentId}/evaluate?interval=${encodeURIComponent(interval)}`, {
+        apiKey, method: 'POST',
+      }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['signals'] }),
+  });
+}
 
 export const useRiskConfig = () => useAuthedQuery(keys.riskConfig, '/risk/config', { poll: false });
 
