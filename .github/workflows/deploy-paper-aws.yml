@@ -63,7 +63,6 @@ jobs:
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: paper-production
     steps:
       - uses: actions/checkout@v4
       - name: Configure AWS credentials with GitHub OIDC
