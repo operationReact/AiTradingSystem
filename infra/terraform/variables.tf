@@ -54,3 +54,9 @@ variable "allowed_github_branch" {
   type        = string
   default     = "dev"
 }
+
+variable "enable_https" {
+  description = "Set true only after the Route 53 nameservers have been delegated and the ACM DNS validation records can resolve."
+  type        = bool
+  default     = false
+}
