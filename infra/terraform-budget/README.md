@@ -4,7 +4,7 @@ This is a separate, cost-oriented alternative to `infra/terraform`. It is not pr
 
 ## Architecture
 
-- One ARM64 EC2 `t4g.small` instance in `ap-south-2`, with an encrypted 20 GiB gp3 root volume.
+- One ARM64 EC2 `t4g.small` instance in `ap-south-1`, with an encrypted 20 GiB gp3 root volume.
 - Docker Compose runs Spring Boot, React/Nginx, PostgreSQL, and Caddy HTTPS on the same instance.
 - PostgreSQL data persists on EBS; nightly compressed dumps are copied to a private encrypted S3 bucket and expire after 7 days.
 - ECR stores immutable backend/frontend images.
@@ -15,7 +15,7 @@ This is a separate, cost-oriented alternative to `infra/terraform`. It is not pr
 
 ## Cost gate — estimates, not a quote
 
-USD 25/month after credits is a target, not a guarantee. EC2, public IPv4, EBS, Route 53, S3 backups, ECR storage, outbound transfer, and incidental usage can be billable. Prices and Free account plan service access differ by region and account. Check the AWS Pricing Calculator for ap-south-2 before applying. AWS Budgets is an alert, not a hard spending cap.
+USD 25/month after credits is a target, not a guarantee. EC2, public IPv4, EBS, Route 53, S3 backups, ECR storage, outbound transfer, and incidental usage can be billable. Prices and Free account plan service access differ by region and account. Check the AWS Pricing Calculator for ap-south-1 before applying. AWS Budgets is an alert, not a hard spending cap.
 
 For low traffic, use a rough planning range of USD 18–30/month before tax and credits. Traffic, image retention, storage, or support charges can increase it. If the live estimate exceeds USD 25, do not apply. This single-instance design sacrifices high availability: one instance failure takes down the app and database. Nightly S3 backups reduce data-loss risk but do not provide automatic failover.
 
@@ -24,7 +24,7 @@ For low traffic, use a rough planning range of USD 18–30/month before tax and 
 1. Confirm the AWS account plan permits EC2, ECR, SSM, Secrets Manager, S3, Route 53, and AWS Budgets. The Free account plan restricts some services; do not upgrade to Paid without reviewing the terms and cost implications.
 2. Confirm you control `maargglobal.com` and can update registrar nameservers.
 3. Supply a monitored alert email address.
-4. Confirm the default VPC exists in `ap-south-2`; this stack uses its first subnet.
+4. Confirm the default VPC exists in `ap-south-1`; this stack uses its first subnet.
 5. Review the Terraform plan and current AWS pricing. Never run apply without inspecting the full plan.
 
 ## Plan only — do not apply until reviewed
