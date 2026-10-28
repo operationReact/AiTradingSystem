@@ -20,6 +20,15 @@ import org.springframework.stereotype.Component;
 @Component
 public class RssFeedParser {
     public List<NewsArticle> parse(byte[] feed, NewsSource source, List<String> watchlist, int maxItems) {
+        if (feed == null || feed.length == 0 || feed.length > 2_097_152) {
+            throw new IllegalArgumentException("RSS feed payload must be between 1 and 2097152 bytes");
+        }
+        if (source == null || !NewsSource.SUPPORTED.contains(source)) {
+            throw new IllegalArgumentException("Unsupported RSS source");
+        }
+        if (watchlist == null || maxItems < 1 || maxItems > 100) {
+            throw new IllegalArgumentException("Invalid RSS parsing limits");
+        }
         XMLInputFactory factory = XMLInputFactory.newFactory();
         setXmlProperty(factory, XMLInputFactory.SUPPORT_DTD, false);
         setXmlProperty(factory, "javax.xml.stream.isSupportingExternalEntities", false);
