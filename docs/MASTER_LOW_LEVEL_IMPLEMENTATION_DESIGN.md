@@ -2216,3 +2216,122 @@ Adding any of these requires an explicit product-scope change to `MASTER_IMPLEME
 5. PR descriptions — change-specific evidence.
 
 If lower-level material conflicts with items 1 or 2, update the source-of-truth documents explicitly before treating the conflicting behavior as intended architecture.
+
+
+---
+
+# ALL-PHASE SECOND-PASS DESIGN REVIEW — MANDATORY REFINEMENTS (2026-10-28)
+
+This section reviews **every phase 0–15**, not only Phase 5. It supplements the phase work items above and is binding on implementation PRs. A separate detailed Phase 5 design exists at \`docs/PHASE_5_RISK_ENGINE_LOW_LEVEL_DESIGN.md\`; its stricter Phase 5 contracts prevail. The review is a **design refinement, not evidence that code or tests are complete**.
+
+## Cross-phase decisions to settle before coding
+
+1. **Canonical identifiers and ownership:** document exact existing SQL PK/FK types before migrations; no guessed UUID/BIGINT links. Every account-scoped table/API/query must carry paper_account_id (and user/tenant ownership once identity exists). Instrument identity must reference catalogue IDs, not ambiguous symbols.
+2. **Canonical lifecycle and failure semantics:** define legal status transitions, transaction owner, retry/idempotency fingerprint, error response and audit event for every mutating operation. No order/approval/broker submission in a GET or background replay.
+3. **Time and money:** UTC Instant/TIMESTAMPTZ for persistence, Asia/Kolkata for trading sessions; use exchange holidays and special sessions. BigDecimal with explicit currency, rounding, tick-size and quantity rules; fees/taxes/slippage are versioned assumptions.
+4. **Evidence lineage:** candidate -> scan -> strategy/config -> candle cutoff/quality -> backtest -> scenario -> risk -> order/approval -> fill -> ledger/portfolio -> audit must have immutable references. Every derived value records methodology version and as-of time.
+5. **Deployment safety:** all new database changes expand/backfill/verify/cutover/contract; test upgrade from the existing schema. No production LIVE orders until a separately approved Phase 15 release gate.
+6. **UI parity:** each feature PR identifies Pro Terminal and Clear Invest screens, loading/empty/error/stale states, keyboard/mobile accessibility, safe action confirmation, query invalidation and end-to-end parity evidence.
+7. **CI evidence:** attach migration integration tests, deterministic replay, negative/failure tests, API contract tests and at least one affected UI path. Do not mark a phase DONE based solely on a document or a merged PR.
+
+## Phase-by-phase review additions
+
+### Phase 0 — governance and CI
+- P00-R01: add an automated phase-work-item manifest (ID, owner, dependencies, acceptance test, status, PR, CI run), and reject undocumented phase completion.
+- P00-R02: pin Java/Node/PostgreSQL/Testcontainers and frontend package lock; add secret scanning, dependency scanning and migration smoke test against upgrade-from-current schema.
+- P00-R03: document architecture decision records for PAPER/LIVE boundary, dual UI, idempotency, transaction isolation and market data source of truth.
+
+### Phase 1 — instrument and market data
+- P01-R01: enforce exchange+segment+instrument token+catalogue version identity and handle delisted/renamed/corporate-action instruments without rewriting historical signals.
+- P01-R02: record source timezone, candle completeness, late correction/version, corporate action adjustment policy, volume validity and market holiday/special-session calendar; define data-quality eligibility thresholds by strategy/interval.
+- P01-R03: implement bounded provider throttling, backfill resume/checkpoint, deduplicated ingestion and reconciliation; include provider outage, duplicate and out-of-order fixtures.
+- P01-R04: require UI to show data age, coverage %, gap count, source and last reconciliation, not just a green/red health badge.
+
+### Phase 2 — strategies and scanning
+- P02-R01: pin strategy code+version+typed config schema, candle cutoff, universe and candidate fingerprint; reject non-deterministic or unbounded plugin code.
+- P02-R02: define universe inclusion/exclusion, circuit-limit/illiquidity handling, long-only cash-equity rules, duplicate signals and stable score tie-breaks.
+- P02-R03: enforce bounded scans, partial-failure diagnostics, cancellation/timeout and replay with the same input snapshot; fixture-test each strategy at exact indicator thresholds.
+- P02-R04: present scanner reasons, risk flags, data freshness and research-only status identically in both UI experiences.
+
+### Phase 3 — backtesting
+- P03-R01: separate train/validation/test periods; use walk-forward and no-lookahead guards, next-bar execution rules and survivorship/corporate-action limitations.
+- P03-R02: model fees, taxes, slippage, partial fills/volume assumptions and intraday session gaps with versioned methodology; explicitly mark any unavailable historical adjustment data.
+- P03-R03: persist benchmark definition, trade-by-trade evidence, equity/drawdown points, run fingerprint and failure reason; verify deterministic replay and no future-candle access.
+- P03-R04: include sample size, confidence/uncertainty and overfitting warnings in both UI experiences; do not equate historical backtest performance with future results.
+
+### Phase 4 — scenario research
+- P04-R01: ensure block bootstrap never crosses trade date/session, never samples after cutoff, and records fallback tier when regime-matched history is insufficient.
+- P04-R02: make regime classification past-only, record window/threshold methodology and enforce minimum independent sessions/eligible blocks; reject insufficient history instead of manufacturing confidence.
+- P04-R03: store seed, input fingerprint, costs, sample counts, probability counts, stop-first tie rule, percentiles and immutable candidate/backtest linkage.
+- P04-R04: show uncertainty, methodology and 'research only' distinction in both experiences; simulations must never directly authorize an order.
+
+### Phase 5 — deterministic risk
+- P05-R01: implement account-scoped consistent snapshot and pending-order cash/exposure reservations; race-test simultaneous orders, emergency stop and policy changes.
+- P05-R02: define entry versus protective exit rules, market freshness, tick/lot validation, daily P&L basis and hard-reject precedence.
+- P05-R03: persist policy snapshot, context hash and every rule result; migrate V1 decisions without changing their meaning; add deterministic replay.
+- P05-R04: position sizing is advisory; actual execution recomputes after account lock. Use the dedicated Phase 5 replacement design for full acceptance matrix.
+
+### Phase 6 — PAPER accounting
+- P06-R01: choose and document cost-basis convention, fee/tax allocation, rounding and ledger double-entry invariants; every fill must reconcile to order, cash and position.
+- P06-R02: support partial fills and cancellation races with immutable fill sequence, unique idempotency and no negative cash/long-only quantity; reconcile restart/retry.
+- P06-R03: distinguish reserved, available and settled cash; mark stale valuations and never treat stale prices as zero exposure.
+- P06-R04: define intraday square-off calendar, missing-price fallback, failure escalation and audit; never delete a position as a shortcut.
+- P06-R05: include position, fill, cash-ledger and reconciliation drilldowns in both UI experiences.
+
+### Phase 7 — MANUAL/AUTO/HYBRID approvals
+- P07-R01: policy resolution precedence, versioned policy snapshot and hard-risk-first behavior must be deterministic and unit-tested.
+- P07-R02: use compare-and-set approval row version, expiry and one-time execution intent; revalidate fresh risk, cash and market data after approval.
+- P07-R03: distinguish approval permission from order execution permission; audit actor, reason, time, before/after, and deny self-approval if required by governance.
+- P07-R04: define queue ownership, stale/expired/duplicate-click UX and safe notifications in both designs; no offline approval replay.
+
+### Phase 8 — portfolio, analytics, alerts and operations
+- P08-R01: define metric formulas and denominators (realized/unrealized P&L, returns, drawdown, win rate, fees, exposure) and reconciliation to Phase 6 ledger.
+- P08-R02: define event outbox or durable notification claim/retry, dedupe keys, retention, acknowledgment and delivery failures; alerts must not be silently lost.
+- P08-R03: separate stale market data from application outage and broker outage in operational health; define escalation thresholds and runbooks.
+- P08-R04: ensure exports are account-scoped, paginated, timezone-explicit and CSV-injection safe.
+
+### Phase 9 — dual design system and UI
+- P09-R01: inventory every route, shared controller, Pro composition, Clear composition, permissions, keyboard flow and mobile breakpoints; enforce parity with a route-feature matrix.
+- P09-R02: codify semantic tokens for positive/negative/neutral/warning/stale, density, typography, spacing, charts and motion; never rely on color alone for risk.
+- P09-R03: preserve route, form draft, focus and in-flight mutations when switching experiences; never duplicate API mutation or reset execution mode.
+- P09-R04: add visual regression and accessibility checks for 320/375/411/768/1024/1440, reduced motion, empty/loading/error/offline/stale, long numbers and INR formatting.
+- P09-R05: define design-to-code asset governance and component ownership; no neumorphism, and no screen may claim LIVE enabled while backend blocks it.
+
+### Phase 10 — authentication and authorization
+- P10-R01: select identity provider via ADR; define actor, account ownership, roles and per-endpoint permission matrix before switching operator-key auth.
+- P10-R02: specify session expiry/refresh/revocation, CSRF/CORS, secret handling, audit identity, IDOR protection and safe auth migration.
+- P10-R03: role-restrict policy changes, resume from emergency stop, approvals, exports and operational actions at backend, not only UI.
+- P10-R04: test cross-account access and privilege escalation for all existing and new endpoints.
+
+### Phase 11 — PWA and mobile
+- P11-R01: offline shell is read-only with conspicuous stale state; prohibit background-sync/order/approval/policy/emergency-stop mutation replay.
+- P11-R02: test installability, manifest, asset links/TWA full-screen verification, viewport and back navigation on real Android devices.
+- P11-R03: make iOS distribution a documented decision (PWA vs native wrapper/App Store) rather than promising App Store availability from PWA metadata.
+- P11-R04: test device reconnection, interrupted confirmation, app background/resume and notification permissions without duplicate mutations.
+
+### Phase 12 — AWS
+- P12-R01: choose one deployment topology by ADR with monthly cost envelope, scaling ceiling, failure domain and recovery objectives; do not maintain two production stacks.
+- P12-R02: implement remote state locking, environment isolation, least privilege/OIDC, secrets rotation, encrypted DB backups and tested restore.
+- P12-R03: define deploy/rollback, health probes, schema compatibility and smoke tests before first apply; account activation is a provisioning dependency only.
+- P12-R04: no provider credentials in repo, Terraform state output, frontend bundle or CI logs.
+
+### Phase 13 — reliability
+- P13-R01: define measurable SLOs for API, ingestion, scan, simulation and order/risk paths based on load tests; bound metric label cardinality.
+- P13-R02: test provider 429/outage, DB failover, interrupted transaction, duplicate event, restart during run, stale data and reconciliation recovery.
+- P13-R03: document incident ownership, kill-switch drills, backup restore drills, retention/privacy and operational audit review.
+
+### Phase 14 — production PAPER launch
+- P14-R01: require an evidence-backed release checklist mapping every Phase 0–13 exit criterion to CI, runbook, migration, accessibility and security proof.
+- P14-R02: perform staged production PAPER smoke test with no broker submission, data-quality checks, simulated risk rejection, restart/reconcile and rollback drill.
+- P14-R03: define explicit go/no-go signoff, known limitations, monitoring window, incident response and launch rollback triggers.
+
+### Phase 15 — separately gated LIVE pilot
+- P15-R01: verify current Indian regulatory/broker permissions, Angel One official order API behavior and exchange product rules before any LIVE enablement.
+- P15-R02: isolate broker credentials and LIVE account from PAPER; durable order intent and reconcile-before-retry for unknown submission outcomes.
+- P15-R03: require separate server-side feature flag, operator permission, manual pilot limits, live emergency stop and broker/account reconciliation.
+- P15-R04: test duplicate callbacks, broker timeout, partial fill, rejection, exchange outage and cancel race in mock/sandbox before real funds.
+- P15-R05: LIVE remains disabled until explicit separate approval and documented launch gate; AI never has order-submission authority.
+
+## Required PR review template (all phases)
+
+Every PR must include: phase/work-item IDs; current-code paths inspected; exact SQL migration and rollback/forward-fix plan; Java interfaces/classes and API contract; UI parity checklist; test classes and CI links; security and PAPER/LIVE impact; migration compatibility; remaining gaps. Update the status table only with verified evidence.
