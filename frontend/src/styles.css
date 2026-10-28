@@ -50,3 +50,21 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* Experience composition tokens: separate from light/dark color mode. */
+:root, :root[data-experience='pro-terminal'] {
+  --experience-radius: 0.5rem;
+  --experience-panel-gap: 0.75rem;
+  --experience-panel-padding: 1rem;
+}
+:root[data-experience='clear-invest'] {
+  --experience-radius: 1rem;
+  --experience-panel-gap: 1.25rem;
+  --experience-panel-padding: 1.25rem;
+}
+:root[data-experience='clear-invest'] .experience-panel {
+  border-radius: var(--experience-radius);
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}
