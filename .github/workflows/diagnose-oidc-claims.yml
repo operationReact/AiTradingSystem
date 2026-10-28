@@ -1,0 +1,34 @@
+name: Diagnose GitHub OIDC claims (no AWS access)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  claims:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Show non-sensitive OIDC identity claims
+        env:
+          REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
+          REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import os, json, base64, urllib.request
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+          sep = "&" if "?" in url else "?"
+          req = urllib.request.Request(url + sep + "audience=sts.amazonaws.com", headers={
+              "Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+          })
+          with urllib.request.urlopen(req, timeout=20) as resp:
+              token = json.load(resp)["value"]
+          part = token.split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+          for field in ("iss", "aud", "sub", "repository", "ref", "event_name", "workflow_ref", "job_workflow_ref"):
+              print(field + ": " + str(claims.get(field, "(not present)")))
+          # Never print the JWT or request authorization token.
+          PY
