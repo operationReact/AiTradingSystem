@@ -22,6 +22,15 @@ public class RssFeedClient {
     }
 
     public byte[] fetch(NewsSource source, int maxBytes) throws IOException, InterruptedException {
+        if (source == null || source.feedUri() == null || !NewsSource.SUPPORTED.contains(source)) {
+            throw new IOException("Unsupported RSS source");
+        }
+        if (!"https".equalsIgnoreCase(source.feedUri().getScheme())) {
+            throw new IOException("RSS source must use HTTPS");
+        }
+        if (maxBytes < 1 || maxBytes > 2_097_152) {
+            throw new IllegalArgumentException("RSS payload limit must be between 1 and 2097152 bytes");
+        }
         HttpRequest request = HttpRequest.newBuilder(source.feedUri())
             .timeout(Duration.ofSeconds(5))
             .header("Accept", "application/rss+xml, application/xml, text/xml")

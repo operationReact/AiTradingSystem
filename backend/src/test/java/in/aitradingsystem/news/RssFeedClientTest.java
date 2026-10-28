@@ -8,6 +8,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.net.URI;
+import java.util.Set;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
@@ -18,6 +20,18 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RssFeedClientTest {
+    @Test
+    void rejectsUnregisteredSourceAndInvalidLimitsBeforeNetworkAccess() {
+        RssFeedClient client = new RssFeedClient(mock(HttpClient.class));
+        NewsSource spoofed = new NewsSource("moneycontrol", "Spoofed",
+            URI.create("https://attacker.example/feed"), Set.of("attacker.example"));
+        assertThrows(IOException.class, () -> client.fetch(spoofed, 1024));
+        assertThrows(IOException.class, () -> client.fetch(null, 1024));
+        NewsSource source = NewsSource.byId("moneycontrol");
+        assertThrows(IllegalArgumentException.class, () -> client.fetch(source, 0));
+        assertThrows(IllegalArgumentException.class, () -> client.fetch(source, 2_097_153));
+    }
+
     @Test
     void rejectsProviderErrorsAndOversizedResponses() throws Exception {
         HttpClient http = mock(HttpClient.class);
