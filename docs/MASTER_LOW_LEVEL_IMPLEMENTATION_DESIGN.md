@@ -2420,3 +2420,13 @@ For every proposed table, run a migration inventory and record: current table/co
 P1: market quote/stream/session adapters. P2–P4: normalized market data and deterministic replay. P5: broker-aware pre-trade risk. P6: LIVE order state/ledger abstraction alongside PAPER. P7: LIVE approval authorization. P8: broker reconciliation/alerts. P9–P11: LIVE UI, auth and mobile safety. P12–P13: deployment and reliability. P14: integrated readiness. P15: **controlled real-money activation**, not first LIVE implementation.
 
 **Acceptance:** PRs show code, exact API contracts, schema inventory, tests, failure-injection evidence and owner approval where necessary. The architecture and adapter implementation may progress now; connectivity testing remains deferred.
+
+## LIVE order authorization addendum — DDPI and AUTO (2026-10-28)
+
+- Define server-owned ExecutionMode PAPER/SHADOW/LIVE and ApprovalMode AUTO/MANUAL/HYBRID; AUTO removes routine human confirmation, not hard risk checks.
+- Model delivery authorization states VERIFIED_DDPI, AUTHORIZATION_REQUIRED, UNKNOWN, NOT_APPLICABLE; planned DDPI is not verified DDPI.
+- Classify sell source as intraday position versus demat delivery holding. Unattended eligible delivery sale requires account-scoped DDPI verification; otherwise block and alert. Interactive eDIS cannot be used as an unattended workaround.
+- Verify the broker's DDPI status/eligibility mechanism; do not assume a SmartAPI DDPI status endpoint exists.
+- Add authorization decision evidence and freshness to durable LIVE intent. Persist intent before external call; mark ambiguous outcome UNKNOWN and reconcile before any retry.
+- Test AUTO intraday close, AUTO delivery sale with/without verified DDPI, MANUAL/HYBRID, risk denial, duplicate request, partial fill, timeout, restart, kill switch, cross-account isolation and dual UI parity.
+- This clarifies Phase 5 risk, Phase 6 LIVE gateway, Phase 7 approval policy, Phase 8 reconciliation, Phase 9 dual UI and Phase 15 activation.
