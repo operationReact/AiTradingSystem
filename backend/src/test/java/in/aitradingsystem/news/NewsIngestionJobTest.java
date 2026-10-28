@@ -128,6 +128,27 @@ class NewsIngestionJobTest {
         verify(repository, never()).saveSummary(any(), any(), any(), any(), any());
     }
 
+    @Test
+    void retentionCleanupFailureDoesNotStopIngestion() throws Exception {
+        RssFeedClient client = Mockito.mock(RssFeedClient.class);
+        RssFeedParser parser = Mockito.mock(RssFeedParser.class);
+        NewsRepository repository = Mockito.mock(NewsRepository.class);
+        GeminiNewsSummarizer summarizer = Mockito.mock(GeminiNewsSummarizer.class);
+        org.mockito.Mockito.doThrow(new IllegalStateException("retention unavailable"))
+            .when(repository).deleteExpired(90);
+        when(client.fetch(any(), anyInt())).thenReturn(new byte[] {1});
+        when(parser.parse(any(), any(), any(), anyInt()))
+            .thenReturn(List.of(article("after-retention-error")));
+        when(repository.insert(any())).thenReturn(Optional.of("inserted"));
+
+        var job = new NewsIngestionJob(client, parser, repository, summarizer,
+            List.of("moneycontrol"), List.of(), 1024, 50, 100, 0, 90);
+        job.ingest();
+
+        verify(repository).deleteExpired(90);
+        verify(repository, times(1)).insert(any());
+    }
+
     private static NewsArticle article(String id) {
         return new NewsArticle("moneycontrol", "Moneycontrol",
             "https://www.moneycontrol.com/news/" + id, Instant.now(), "TCS headline " + id,
