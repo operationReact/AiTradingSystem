@@ -14,7 +14,12 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ResearchScanService {
-    private static final String STRATEGY_SET = "VOLUME_BREAKOUT_V1,MA_RECLAIM_V1";
+    private static final String STRATEGY_SET = String.join(",",
+            VolumeBreakoutStrategy.NAME,
+            MovingAverageReclaimStrategy.NAME,
+            OpeningRangeBreakoutStrategy.NAME,
+            VwapMomentumStrategy.NAME,
+            RsiReversalStrategy.NAME);
     private static final int REQUIRED_CANDLES = 64;
 
     private final ResearchScanRepository scans;
@@ -40,7 +45,12 @@ public class ResearchScanService {
         this.clock = clock;
         this.maxUniverseSize = maxUniverseSize;
         this.engine = new ScannerEngine(
-                List.of(new VolumeBreakoutStrategy(), new MovingAverageReclaimStrategy()),
+                List.of(
+                        new VolumeBreakoutStrategy(),
+                        new MovingAverageReclaimStrategy(),
+                        new OpeningRangeBreakoutStrategy(),
+                        new VwapMomentumStrategy(),
+                        new RsiReversalStrategy()),
                 Duration.ofMinutes(maxCandleAgeMinutes));
     }
 
