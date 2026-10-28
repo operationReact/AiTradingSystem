@@ -195,6 +195,32 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void riskRejectedBuyDoesNotChangeCashOrCreateFillOrCashEntry() throws Exception {
+        String key = newKey();
+        BigDecimal cashBefore = cash();
+        simulate(key, buy("RELIANCE", 100))
+            .andExpect(status().isUnprocessableEntity())
+            .andExpect(jsonPath("$.reasonCodes[0]").value("RISK_BUDGET_EXCEEDED"));
+
+        assertThat(cash()).isEqualByComparingTo(cashBefore);
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM paper_cash_entry e
+            JOIN paper_order o ON o.id = e.order_id
+            WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM paper_fill f
+            JOIN paper_order o ON o.id = f.order_id
+            WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM risk_decision d
+            JOIN paper_order o ON o.id = d.order_id
+            WHERE o.idempotency_key = :key AND d.decision = 'REJECTED'
+            """).param("key", key).query(Long.class).single()).isEqualTo(1L);
+    }
+
+    @Test
     void buySellAccountingReconcilesToLedger() throws Exception {
         BigDecimal cashBefore = cash();
         BigDecimal realizedBefore = realizedPnl();
