@@ -949,3 +949,17 @@ The project owner reports that a static IP has already been reserved and Angel O
 4. Implement broker account/holdings/positions/RMS/margin adapters and reconciliation, including stale-state and timeout handling.
 5. Implement LIVE pre-trade risk and approval integration, cost estimates, execution monitoring and UI controls for Pro Terminal/Clear Invest.
 6. Complete CI failure injection, contract tests, security review and go-live evidence. Schedule live connectivity and broker activation verification only when the owner requests it.
+
+## Product decisions — unattended LIVE execution and DDPI (2026-10-28)
+
+The product target is full LIVE trading; PAPER/shadow is a validation mode. Earlier references to LIVE as optional are superseded. Phase 15 is the controlled activation milestone, not the beginning of LIVE-capable development.
+
+The owner reports the static IP, API key and TOTP configured; connection checks are deferred. The owner plans to enable DDPI but activation has not yet been verified. Do not treat planned DDPI as active.
+
+AUTO is the intended normal order workflow, with no routine human approval when deterministic risk, account, market and broker requirements pass. MANUAL/HYBRID remain configurable exceptions. Emergency stop and account authorization checks always apply.
+
+Distinguish intraday position closes from delivery holding sales. Eligible delivery sells may operate without routine TPIN/OTP only after DDPI eligibility is confirmed for the broker account. Without confirmed DDPI, block unattended delivery selling and report authorization required. eDIS is an interactive fallback, not an automated consent bypass. Do not invent a SmartAPI endpoint for DDPI status.
+
+Mandatory engineering: durable order intents, idempotency, unknown-outcome reconciliation before retry, partial-fill accounting, broker order/trade/position reconciliation, quote and balance freshness, server-side LIVE activation controls, and consistent Pro Terminal/Clear Invest state.
+
+Implementation priorities: verified SmartAPI endpoint inventory; market quote/WebSocket adapters; broker order and account gateways; DDPI-aware delivery-sale authorization; AUTO policy integration; failure-injection and contract tests. Connectivity testing remains deferred until requested. Documented capability counts are planning estimates, not a verified number of distinct SmartAPI endpoints.
