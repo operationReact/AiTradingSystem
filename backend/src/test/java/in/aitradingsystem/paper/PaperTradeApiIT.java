@@ -83,6 +83,46 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void duplicateReplayPreservesFillAndRiskDecisionCounts() throws Exception {
+        String key = newKey();
+        String payload = buy("TCS", 10);
+        BigDecimal cashBefore = cash();
+        simulate(key, payload).andExpect(status().isCreated());
+        BigDecimal cashAfter = cash();
+        simulate(key, payload).andExpect(status().isOk())
+            .andExpect(jsonPath("$.replayed").value(true));
+
+        assertThat(cash()).isEqualByComparingTo(cashAfter);
+        assertThat(cashAfter).isLessThan(cashBefore);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM paper_order WHERE idempotency_key = :key")
+            .param("key", key).query(Long.class).single()).isEqualTo(1L);
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM paper_fill f
+            JOIN paper_order o ON o.id = f.order_id WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isEqualTo(1L);
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM risk_decision d
+            JOIN paper_order o ON o.id = d.order_id WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isEqualTo(1L);
+    }
+
+    @Test
+    void rejectedOrderReplayDoesNotCreateFillOrExtraRiskDecision() throws Exception {
+        String key = newKey();
+        String payload = buy("RELIANCE", 100);
+        simulate(key, payload).andExpect(status().isUnprocessableEntity());
+        simulate(key, payload).andExpect(status().isUnprocessableEntity());
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM paper_fill f
+            JOIN paper_order o ON o.id = f.order_id WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("""
+            SELECT COUNT(*) FROM risk_decision d
+            JOIN paper_order o ON o.id = d.order_id WHERE o.idempotency_key = :key
+            """).param("key", key).query(Long.class).single()).isEqualTo(1L);
+    }
+
+    @Test
     void concurrentDuplicateRequestsCreateExactlyOneFill() throws Exception {
         String key = newKey();
         String payload = buy("INFY", 10);
