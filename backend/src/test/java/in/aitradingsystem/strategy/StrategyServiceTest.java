@@ -79,6 +79,36 @@ class StrategyServiceTest {
         assertThat(result.signal().reasonCodes()).contains("STALE_OR_FUTURE_CANDLE");
     }
 
+    @Test
+    void futureCandlesNeverEmitBuyEvenWithBullishTrendAndVolume() {
+        List<MarketCandle> bars = risingBars(now.plusSeconds(120));
+        when(instruments.requireActiveInstrument(INSTRUMENT_ID)).thenReturn(instrument);
+        when(marketData.countCandles(INSTRUMENT_ID, INTERVAL)).thenReturn(bars.size());
+        when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(bars);
+
+        StrategyEvaluation result = service().evaluate(INSTRUMENT_ID, HistoricalCandleInterval.FIVE_MINUTE);
+
+        assertThat(result.signal()).isNotNull();
+        assertThat(result.signal().action()).isEqualTo("WATCH");
+        assertThat(result.signal().reasonCodes()).contains("STALE_OR_FUTURE_CANDLE");
+        assertThat(result.signal().status()).isEqualTo("CANDIDATE_NOT_EXECUTABLE");
+    }
+
+    @Test
+    void identicalCandleSnapshotProducesSameDeterministicSignalId() {
+        List<MarketCandle> bars = risingBars(now.minusSeconds(30));
+        when(instruments.requireActiveInstrument(INSTRUMENT_ID)).thenReturn(instrument);
+        when(marketData.countCandles(INSTRUMENT_ID, INTERVAL)).thenReturn(bars.size());
+        when(marketData.recentCandles(INSTRUMENT_ID, INTERVAL, 21)).thenReturn(bars);
+
+        StrategyEvaluation first = service().evaluate(INSTRUMENT_ID, HistoricalCandleInterval.FIVE_MINUTE);
+        StrategyEvaluation second = service().evaluate(INSTRUMENT_ID, HistoricalCandleInterval.FIVE_MINUTE);
+
+        assertThat(first.signal().id()).isEqualTo(second.signal().id());
+        assertThat(first.signal().action()).isEqualTo(second.signal().action());
+        assertThat(first.signal().reasonCodes()).isEqualTo(second.signal().reasonCodes());
+    }
+
     private StrategyService service() {
         return new StrategyService(instruments, marketData, signals, clock, 5, 20,
                 new BigDecimal("2"), new BigDecimal("0.5"), 1440);
