@@ -96,7 +96,7 @@ export default function ModeControl() {
         <button type="button" role="radio" aria-checked={status === 'PAPER'}
           disabled={unknown || busy || status === 'PAPER'} title={unknown ? tooltip : 'Paper only — simulated trades, no broker orders'}
           onClick={requestPaper}
-          className={cn('inline-flex h-7 items-center gap-1 rounded px-2.5 text-[11px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed',
+          className={cn('inline-flex min-h-10 items-center gap-1 rounded px-2 text-[11px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed sm:min-h-7 sm:px-2.5',
             status === 'PAPER' ? 'bg-accent text-white' : 'text-muted hover:text-text disabled:opacity-50')}>
           <ShieldCheck className="h-3 w-3" aria-hidden />
           PAPER ONLY
@@ -104,7 +104,7 @@ export default function ModeControl() {
         <button type="button" role="radio" aria-checked={status === 'LIVE'}
           disabled={unknown || busy} title={liveTitle}
           onClick={() => setConfirmOpen(true)}
-          className={cn('inline-flex h-7 items-center gap-1 rounded px-2.5 text-[11px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed',
+          className={cn('inline-flex min-h-10 items-center gap-1 rounded px-2 text-[11px] font-semibold tracking-wide transition-colors disabled:cursor-not-allowed sm:min-h-7 sm:px-2.5',
             status === 'LIVE' ? 'bg-loss text-white' : 'text-muted disabled:opacity-60')}>
           {!liveAvailable && !unknown && <TriangleAlert className="h-3 w-3" aria-hidden />}
           LIVE
