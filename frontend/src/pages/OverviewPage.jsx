@@ -15,6 +15,7 @@ import {
   TradesPanel,
 } from '../components/dashboard/OperationalPanels.jsx';
 import { NewsPanel } from '../components/dashboard/NewsPanel.jsx';
+import { ProvenanceNewsPanel } from '../components/dashboard/ProvenanceNewsPanel.jsx';
 import { AngelOneStatusPanel } from '../components/dashboard/AngelOneStatusPanel.jsx';
 import { formatAge, formatDateTime, formatInr, formatInteger, formatPct, formatSignedInr, ageSeconds, pnlTone } from '../lib/format.js';
 
@@ -40,7 +41,8 @@ const WIDGETS = [
   { id: 'trades', label: 'Recent trades' },
   { id: 'agents', label: 'Agents' },
   { id: 'providers', label: 'Providers' },
-  { id: 'news', label: 'News' },
+  { id: 'news', label: 'News intelligence' },
+  { id: 'provenance-news', label: 'RSS news feed' },
 ];
 
 function readJson(key, fallback) {
@@ -230,6 +232,7 @@ export default function OverviewPage() {
         )}
         {show('providers') && <AngelOneStatusPanel />}
         {show('news') && <NewsPanel />}
+        {show('provenance-news') && <div className="xl:col-span-3"><ProvenanceNewsPanel /></div>}
       </div>
     </div>
   );
