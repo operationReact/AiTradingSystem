@@ -123,6 +123,38 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void filledOrderCreatesExactlyOneAuditEventAndReplayDoesNotDuplicateIt() throws Exception {
+        String key = newKey();
+        String payload = buy("TCS", 10);
+        simulate(key, payload).andExpect(status().isCreated());
+        simulate(key, payload).andExpect(status().isOk());
+
+        assertThat(auditCountForKey(key, "ORDER_FILLED")).isEqualTo(1L);
+        assertThat(auditCountForKey(key, "ORDER_REJECTED")).isZero();
+    }
+
+    @Test
+    void rejectedOrderCreatesExactlyOneAuditEventAndReplayDoesNotDuplicateIt() throws Exception {
+        String key = newKey();
+        String payload = buy("RELIANCE", 100);
+        simulate(key, payload).andExpect(status().isUnprocessableEntity());
+        simulate(key, payload).andExpect(status().isUnprocessableEntity());
+
+        assertThat(auditCountForKey(key, "ORDER_REJECTED")).isEqualTo(1L);
+        assertThat(auditCountForKey(key, "ORDER_FILLED")).isZero();
+    }
+
+    private long auditCountForKey(String key, String eventType) {
+        return jdbc.sql("""
+            SELECT COUNT(*) FROM audit_event a
+            JOIN paper_order o ON a.entity_id = CAST(o.id AS text)
+            WHERE o.idempotency_key = :key AND a.event_type = :eventType
+              AND a.entity_type = 'PAPER_ORDER'
+            """).param("key", key).param("eventType", eventType)
+            .query(Long.class).single();
+    }
+
+    @Test
     void concurrentDuplicateRequestsCreateExactlyOneFill() throws Exception {
         String key = newKey();
         String payload = buy("INFY", 10);
