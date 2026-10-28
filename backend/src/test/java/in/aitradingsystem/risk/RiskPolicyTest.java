@@ -95,6 +95,30 @@ class RiskPolicyTest {
     }
 
     @Test
+    void rejectsLossBeyondDailyLimit() {
+        RiskInput in = buy(10, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "-801", false);
+        assertThat(policy.evaluate(in).reasons()).contains(RiskReason.DAILY_LOSS_LIMIT_REACHED);
+    }
+
+    @Test
+    void acceptsLossJustInsideDailyLimit() {
+        RiskInput in = buy(10, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "-799.99", false);
+        assertThat(policy.evaluate(in).approved()).isTrue();
+    }
+
+    @Test
+    void rejectsTargetAtReferencePrice() {
+        RiskInput in = buy(10, NOW.minusSeconds(60), "490", "500", "80000", 0, 0, "0", false);
+        assertThat(policy.evaluate(in).reasons()).contains(RiskReason.INVALID_PRICE_LEVELS);
+    }
+
+    @Test
+    void rejectsStopAtReferencePrice() {
+        RiskInput in = buy(10, NOW.minusSeconds(60), "500", "530", "80000", 0, 0, "0", false);
+        assertThat(policy.evaluate(in).reasons()).contains(RiskReason.INVALID_PRICE_LEVELS);
+    }
+
+    @Test
     void approvesSellWithinHoldings() {
         RiskInput in = new RiskInput(Side.SELL, 10, new BigDecimal("500"), null, null, NOW.minusSeconds(60), NOW,
             new BigDecimal("80000"), new BigDecimal("80000"), 10, 1, BigDecimal.ZERO, false);
