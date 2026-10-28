@@ -39,7 +39,7 @@ export const Button = forwardRef(function Button(
       className={cn(
         'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-150',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm',
+        size === 'sm' ? 'min-h-10 px-2.5 text-xs sm:min-h-7' : 'min-h-11 px-3.5 text-sm sm:min-h-9',
         variants[variant],
         className,
       )}
@@ -137,7 +137,7 @@ export function SegmentedControl({ label, options, value, onChange }) {
             aria-checked={active}
             onClick={() => onChange(opt.value)}
             className={cn(
-              'h-6 rounded px-2.5 text-xs font-medium transition-colors',
+              'min-h-10 rounded px-2.5 text-xs font-medium transition-colors sm:min-h-6',
               active ? 'bg-accent text-white' : 'text-muted hover:text-text',
             )}
           >
