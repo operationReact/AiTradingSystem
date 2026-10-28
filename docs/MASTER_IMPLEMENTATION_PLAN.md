@@ -883,3 +883,53 @@ Any such change must explicitly state:
 ## Final rule
 
 Implementation does **not** continue indefinitely. The mandatory roadmap ends at Phase 14 for the production PAPER/research product and Phase 15 for the separately authorized real-money pilot. Once the applicable exit gates are complete, the product is launched; subsequent feature ideas belong to a new post-V1 roadmap rather than silently extending this one.
+
+
+---
+
+# LIVE-FIRST SMARTAPI PRODUCT ALIGNMENT — 2026-10-28
+
+**Product intent clarification:** AiTradingSystem is a production LIVE trading platform with PAPER/shadow mode for validation and safety. Phase 15 is the controlled *activation* of real-money execution, not the first phase in which LIVE capabilities are architected. Design, database models, adapters, UI and tests for LIVE must be delivered incrementally across earlier phases. Do not enable order submission merely because the adapter exists.
+
+## Official sources and version verification
+- SmartAPI reference: https://smartapi.angelone.in/docs/Edis/
+- Official Java SDK routes: https://github.com/angel-one/smartapi-java/blob/main/src/main/java/com/angelbroking/smartapi/Routes.java
+- Official Python SDK routes: https://github.com/angel-one/smartapi-python/blob/main/SmartApi/smartConnect.py
+- Angel One April 2026 algo trading requirements: https://www.angelone.in/news/market-updates/what-s-changing-in-angel-one-s-smartapi-access-from-april-1-2026
+
+**Research finding:** The existing adapter implements loginByPassword, getLtpData and getCandleData only. The SDK documents additional endpoints; documentation presence does not establish permission or runtime availability for our account. Check path differences between SDKs, particularly GTT service routes, against the current official reference before implementing.
+
+## Required capability inventory and delivery order
+
+| Family | Required operations | Design integration | Target |
+|---|---|---|---|
+| Session | login, token refresh, profile, logout | centralized token lifecycle, rotation, session-expiry recovery | P1/P10 |
+| Instrument | official instrument master, searchScrip, cautionary-scrip check, NSE/BSE intraday eligibility | canonical instrument ID, daily reconciliation, eligibility checks | P1/P5 |
+| Quotes | market/v1/quote LTP/OHLC/FULL; existing getLtpData | normalized quote, depth, volume, circuit bands, freshness | P1/P2/P5 |
+| Streaming | WebSocket V2 market feed | central subscriptions, binary parser, heartbeat, reconnect, gap recovery | P1/P8/P13 |
+| Historical | getCandleData; getOIData if derivatives enabled | bounded historical ingestion, provenance and replay | P1/P3 |
+| Cost/margin | estimateCharges, margin/v1/batch | versioned cost model and LIVE buying-power checks | P3/P5/P6/P15 |
+| Orders | placeOrder, modifyOrder, cancelOrder, individual details | durable LIVE intent, idempotency, UNKNOWN recovery | P6/P7/P15 |
+| Execution events | order-status WebSocket / postback, getOrderBook, getTradeBook | event dedupe, monotonic state machine, broker reconciliation | P6/P8/P13/P15 |
+| Broker accounts | getRMS, getHolding, getAllHolding, getPosition, convertPosition | account reconciliation, margin/exposure checks | P6/P8/P15 |
+| Conditional orders | GTT create/modify/cancel/details/list | feature-flagged, broker capability and product validation | conditional P15 |
+| Delivery authorization | EDIS verifyDis, generateTPIN, getTranStatus | required only for supported delivery-sale workflows | conditional P15 |
+| Research enrichments | gainersLosers, NSE/BSE intraday, cautionary instruments | research signals; never bypass deterministic risk | P2 |
+| Derivatives enrichments | optionGreek, putCallRatio, OIBuildup, historical OI | only if derivatives explicitly added to scope and risk engine | post-V1 unless separately approved |
+
+## LIVE-grade engineering invariants
+
+1. **Broker gateway built early:** define \`BrokerGateway\`, \`MarketDataGateway\`, \`BrokerAccountGateway\`, \`BrokerExecutionEventGateway\` interfaces; use a strict PAPER adapter and a LIVE Angel One adapter. Never route orders based on a UI-supplied mode flag.
+2. **Order intent and unknown outcomes:** write a durable idempotent intent before network submission; never automatically resubmit a timed-out/unknown order without querying broker order details/order book and reconciling.
+3. **Risk checks before submission:** validate exchange session, eligible instrument, quote freshness, lot/tick, account margin/cash, exposure, quantity, cost, limits and kill switch. Broker RMS/margin checks are necessary for LIVE but not sufficient substitutes for our own risk policy.
+4. **Execution event model:** reconcile place response, order-status stream/postback, order book, trade book and positions. Deduplicate, handle out-of-order events, partial fills, rejects and cancel/modify races.
+5. **Rate limits and stream quotas:** centralized budgets by endpoint and account; provider docs specify cumulative order place/modify/cancel rate of 9 requests/sec, 500/min, 1000/hour; WebSocket up to 3 concurrent connections/client and 1000 token-mode subscriptions/session. Verify current limits before go-live.
+6. **2026 compliance gate:** registered primary static egress IP for API order placement, applicable exchange/broker algo IDs, exchange-segment order rate controls, deployment/hosting eligibility, and permitted order varieties. Angel One states market and IOC orders are prohibited for algorithmic trading under its April 2026 changes; validate applicability and exact approved order types before enabling LIVE.
+7. **Security:** backend-only broker secrets, separate PAPER/LIVE account identifiers, encrypted token storage, scoped permissions, privileged LIVE enablement, audited emergency stop and reconciliation-first restart.
+8. **Observability:** quote freshness, websocket gap/reconnect, rate-limit budget, broker order latency, UNKNOWN order count, fills unmatched to intents, broker-versus-local position/cash divergence; fail closed for new entries on uncertain state.
+9. **Data rights:** validate Angel One market-data storage, display, sharing and commercial licensing restrictions before any multi-user commercialization.
+10. **Acceptance:** official SDK contract tests, synthetic/sandbox provider tests, deterministic order state-machine tests, failure injection, manual small-limit pilot, signed-off compliance and deployment review. Connection test and credential provisioning can be deferred without deferring architecture.
+
+## Roadmap interpretation
+
+Phases 0–14 now deliver **LIVE-capable architecture and operational readiness**, with PAPER/shadow execution proving correctness. Phase 15 activates real-money broker submission only after external dependencies, security, regulatory and broker checks pass. All phase implementation PRs must state how their data/contracts work for both PAPER and LIVE. This section clarifies scope; it does not assert existing LIVE code or permission.
