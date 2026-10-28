@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
-import { Activity, BarChart3, ChevronsLeft, ChevronsRight, Gauge, KeyRound, ListOrdered, Menu, Moon, Search, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
+import { Activity, BarChart3, ChevronsLeft, ChevronsRight, Gauge, KeyRound, ListOrdered, Menu, Moon, PanelsTopLeft, Search, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { cn } from '../lib/cn.js';
 import { Button } from './ui.jsx';
@@ -133,7 +133,7 @@ function ApiKeyControl() {
 }
 
 export default function AppShell() {
-  const { collapsed, toggleCollapsed, theme, toggleTheme, mobileOpen, setMobileOpen } = useApp();
+  const { collapsed, toggleCollapsed, theme, toggleTheme, experience, setExperience, mobileOpen, setMobileOpen } = useApp();
   const fetching = useIsFetching();
 
   return (
@@ -196,6 +196,15 @@ export default function AppShell() {
           </div>
           {fetching > 0 && <span className="hidden text-xs text-muted lg:inline" aria-live="polite">Syncing…</span>}
           <ModeControl />
+          <label className="flex shrink-0 items-center gap-1 text-xs text-muted" title="Appearance — Experience">
+            <PanelsTopLeft className="hidden h-4 w-4 lg:block" aria-hidden />
+            <span className="sr-only">Appearance — Experience</span>
+            <select aria-label="Appearance — Experience" value={experience} onChange={(e) => setExperience(e.target.value)}
+              className="h-10 max-w-[105px] rounded-md border border-border bg-surface-2 px-1 text-[11px] text-text sm:max-w-none sm:px-2 sm:text-xs">
+              <option value="pro-terminal">Pro Terminal</option>
+              <option value="clear-invest">Clear Invest</option>
+            </select>
+          </label>
           <ApiKeyControl />
           <button
             type="button"
