@@ -49,7 +49,11 @@ public class NewsIngestionJob {
 
     @Scheduled(fixedDelayString = "#{T(java.lang.Math).min(86400000, T(java.lang.Math).max(60000, ${app.news.ingestion.interval-ms:900000}))}")
     public void ingest() {
-        repository.deleteExpired(retentionDays);
+        try {
+            repository.deleteExpired(retentionDays);
+        } catch (Exception e) {
+            log.warn("News retention cleanup failed; continuing ingestion");
+        }
         int inserted = 0;
         int summaries = 0;
         for (String id : sourceIds.stream().limit(NewsSource.SUPPORTED.size()).toList()) {
