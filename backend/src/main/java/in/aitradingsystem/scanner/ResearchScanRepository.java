@@ -4,6 +4,7 @@ import in.aitradingsystem.instrument.Instrument;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -61,6 +62,24 @@ public class ResearchScanRepository {
                 String.join("|", c.reasons()));
     }
 
+    public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
+        requireRun(runId);
+        if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
+        return jdbc.query("""
+                SELECT scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
+                       entry_price, stop_price, target_price, signal_candle_time, reasons
+                  FROM research_scan_candidate
+                 WHERE scan_run_id = ?
+                 ORDER BY score DESC, trading_symbol ASC, strategy ASC, signal_candle_time DESC
+                 LIMIT ?
+                """, (rs, row) -> new ResearchScanCandidateView(
+                rs.getObject("scan_run_id", UUID.class), rs.getLong("instrument_id"), rs.getString("trading_symbol"),
+                rs.getString("exchange"), rs.getString("interval"), rs.getString("strategy"), rs.getDouble("score"),
+                rs.getBigDecimal("entry_price"), rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price"),
+                instant(rs.getObject("signal_candle_time", OffsetDateTime.class)), splitReasons(rs.getString("reasons"))),
+                runId, limit);
+    }
+
     public void finishRun(UUID id, int scannedCount, int candidateCount) {
         jdbc.update("""
                 UPDATE research_scan_run
@@ -87,6 +106,13 @@ public class ResearchScanRepository {
                 instant(rs.getObject("completed_at", OffsetDateTime.class)), rs.getString("error_code"),
                 rs.getString("error_message")), id).stream().findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Scan run was not found"));
+    }
+
+    private static List<String> splitReasons(String reasons) {
+        if (reasons == null || reasons.isBlank()) return List.of();
+        return Arrays.stream(reasons.split("\\|"))
+                .filter(value -> !value.isBlank())
+                .toList();
     }
 
     private static OffsetDateTime offset(Instant value) {
