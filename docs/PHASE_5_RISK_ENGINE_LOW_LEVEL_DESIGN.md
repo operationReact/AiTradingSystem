@@ -2222,3 +2222,7 @@ Add metrics for risk_evaluations_total{outcome,rule}, risk_evaluation_duration_s
 ## K. Phase 5 implementation acceptance matrix
 
 For each rule and order side: positive, negative, equality boundary, null/missing, stale, and concurrent-state cases. Mandatory cross-service tests: policy activation race, emergency stop race, two competing orders exhausting shared cash, duplicate pending intent, idempotent retry, approval revalidation, migration of legacy decisions, V1/V2 parity, account isolation, and no broker network call. No Phase 5 exit until all applicable cases pass in CI and any intentional V1 behavioral differences are documented.
+
+## LIVE risk policy clarification — DDPI and AUTO (2026-10-28)
+
+LIVE is the target product; PAPER/shadow validates the implementation. AUTO does not require routine human approval but never bypasses hard risk or broker authorization checks. Intraday closes and demat delivery sells require distinct sell-source classification. For eligible delivery sales, DDPI is planned but must be verified active and account-scoped before unattended execution; missing/unknown eligibility blocks the order with an explicit authorization reason. eDIS is an interactive fallback, not a headless substitute. Risk returns deterministic evidence and never directly places broker orders. Add test cases for DDPI active/inactive/unknown, stale verification, AUTO/MANUAL/HYBRID, cross-account isolation and kill switch. Connectivity checks remain deferred.
