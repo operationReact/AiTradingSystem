@@ -60,7 +60,7 @@ function Nav({ compact, onNavigate }) {
           title={compact ? label : undefined}
           className={({ isActive }) =>
             cn(
-              'flex h-9 items-center gap-3 rounded-md px-2.5 text-sm transition-colors',
+              'flex min-h-11 items-center gap-3 rounded-md px-2.5 text-sm transition-colors md:min-h-9',
               isActive ? 'bg-accent/15 text-text' : 'text-muted hover:bg-surface-2 hover:text-text',
               compact && 'justify-center px-0',
             )
@@ -123,7 +123,7 @@ function ApiKeyControl() {
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         placeholder="Operator API key"
-        className="h-8 w-40 rounded-md border border-border bg-surface-2 px-2.5 text-xs text-text placeholder:text-muted focus:border-accent focus:outline-none sm:w-56"
+        className="h-11 w-28 min-w-0 rounded-md border border-border bg-surface-2 px-2.5 text-xs text-text placeholder:text-muted focus:border-accent focus:outline-none sm:h-8 sm:w-56"
       />
       <Button size="sm" variant="primary" icon={KeyRound} type="submit" disabled={!draft.trim()}>
         Connect
@@ -170,7 +170,7 @@ export default function AppShell() {
           <aside className="relative flex h-full w-64 flex-col border-r border-border bg-surface">
             <div className="flex h-14 items-center justify-between border-b border-border px-4">
               <Brand />
-              <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="rounded p-1 text-muted hover:text-text">
+              <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-11 w-11 items-center justify-center rounded text-muted hover:text-text">
                 <X className="h-4 w-4" aria-hidden />
               </button>
             </div>
@@ -182,26 +182,26 @@ export default function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/80 px-3 backdrop-blur sm:gap-3 sm:px-4">
+        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface/80 px-2 backdrop-blur sm:gap-3 sm:px-4">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Open navigation"
-            className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-text md:hidden"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text md:hidden"
           >
             <Menu className="h-4 w-4" aria-hidden />
           </button>
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 sm:block">
             <Breadcrumbs />
           </div>
-          {fetching > 0 && <span className="text-xs text-muted" aria-live="polite">Syncing…</span>}
+          {fetching > 0 && <span className="hidden text-xs text-muted lg:inline" aria-live="polite">Syncing…</span>}
           <ModeControl />
           <ApiKeyControl />
           <button
             type="button"
             onClick={toggleTheme}
             aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            className="rounded-md p-1.5 text-muted hover:bg-surface-2 hover:text-text"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text md:h-8 md:w-8"
           >
             {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
           </button>
