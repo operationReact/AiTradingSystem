@@ -17,6 +17,8 @@ const NAV = [
   { to: '/backtesting', label: 'Backtesting', icon: BarChart3 },
 ];
 
+const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], NAV[3]];
+
 const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data', backtesting: 'Backtesting' };
 
 function Breadcrumbs() {
@@ -180,7 +182,7 @@ export default function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-surface/80 px-4 backdrop-blur">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-surface/80 px-3 backdrop-blur sm:gap-3 sm:px-4">
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -204,11 +206,19 @@ export default function AppShell() {
             {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
           </button>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-[1400px] px-4 py-5 md:px-6">
+        <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
+          <div className="mx-auto w-full max-w-[1400px] px-3 py-3 sm:px-4 md:px-6 md:py-5">
             <Outlet />
           </div>
         </main>
+        <nav aria-label="Mobile primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
+          {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => (
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => cn('flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium', isActive ? 'text-accent' : 'text-muted')}>
+              <Icon className="h-5 w-5" aria-hidden />
+              <span className="truncate">{label}</span>
+            </NavLink>
+          ))}
+        </nav>
       </div>
     </div>
   );
