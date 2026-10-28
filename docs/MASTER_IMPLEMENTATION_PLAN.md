@@ -933,3 +933,19 @@ Implementation does **not** continue indefinitely. The mandatory roadmap ends at
 ## Roadmap interpretation
 
 Phases 0–14 now deliver **LIVE-capable architecture and operational readiness**, with PAPER/shadow execution proving correctness. Phase 15 activates real-money broker submission only after external dependencies, security, regulatory and broker checks pass. All phase implementation PRs must state how their data/contracts work for both PAPER and LIVE. This section clarifies scope; it does not assert existing LIVE code or permission.
+
+
+## Delivery clarification — credentials and network setup (2026-10-28)
+
+The project owner reports that a static IP has already been reserved and Angel One API key/TOTP configuration is in place. Treat these as **user-reported configured, not independently verified**. Do not repeatedly request initial provisioning. Connectivity, IP registration validation and production activation checks are **deferred by request**; retain them as launch verification gates.
+
+**Immediate scope is implementation, not connectivity:** complete SmartAPI adapters, broker execution orchestration, reconciliation, risk, event streams, testing and both UI experiences. Do not frame PAPER as the end product. LIVE capabilities must be implemented and testable with mocks ahead of broker connectivity, while real-money order submission remains disabled until explicit go-live approval.
+
+### Concrete next PR sequence
+
+1. Inventory existing SmartAPI code, official endpoint contracts, request/response models and exact database types; publish a traceable endpoint-to-phase matrix.
+2. Implement shared broker interfaces and authentication/market-data provider adapters; add quote batching and WebSocket V2 with replayable fixtures.
+3. Implement LIVE order-intent persistence, broker gateway adapters and deterministic order-state reconciliation, with outbound submission feature-gated OFF.
+4. Implement broker account/holdings/positions/RMS/margin adapters and reconciliation, including stale-state and timeout handling.
+5. Implement LIVE pre-trade risk and approval integration, cost estimates, execution monitoring and UI controls for Pro Terminal/Clear Invest.
+6. Complete CI failure injection, contract tests, security review and go-live evidence. Schedule live connectivity and broker activation verification only when the owner requests it.
