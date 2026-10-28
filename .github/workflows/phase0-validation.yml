@@ -54,6 +54,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Validate mobile app metadata
+        working-directory: frontend
+        run: npm run validate:mobile
+
       - name: Build production assets
         working-directory: frontend
         run: npm run build
