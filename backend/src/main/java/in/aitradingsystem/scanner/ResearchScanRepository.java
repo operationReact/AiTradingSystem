@@ -57,7 +57,7 @@ public class ResearchScanRepository {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (scan_run_id, instrument_id, strategy, signal_candle_time) DO NOTHING
                 """, runId, c.instrumentId(), c.tradingSymbol(), c.exchange(), c.interval(), c.strategy(),
-                c.score(), c.entryPrice(), c.stopPrice(), c.targetPrice(), offset(c.signalCandleTime()),
+                c.score(), c.referencePrice(), c.suggestedStop(), c.suggestedTarget(), offset(c.candleTime()),
                 String.join("|", c.reasons()));
     }
 
