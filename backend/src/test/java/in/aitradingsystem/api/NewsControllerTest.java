@@ -34,6 +34,26 @@ class NewsControllerTest {
     }
 
     @Test
+    void acceptsMaximumPageAndOffsetWithOneExtraRowForHasMore() throws Exception {
+        when(repository.recent(101, 10000)).thenReturn(List.of());
+        mvc.perform(get("/api/news?limit=100&offset=10000"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.limit").value(100))
+            .andExpect(jsonPath("$.offset").value(10000))
+            .andExpect(jsonPath("$.hasMore").value(false));
+        verify(repository).recent(101, 10000);
+    }
+
+    @Test
+    void rejectsNegativeAndExcessiveOffsetsAndZeroPageSize() throws Exception {
+        mvc.perform(get("/api/news?offset=-1")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/news?offset=10001")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/news?limit=0")).andExpect(status().isBadRequest());
+        mvc.perform(get("/api/news?limit=-1")).andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(repository);
+    }
+
+    @Test
     void rejectsUnboundedPageSize() throws Exception {
         mvc.perform(get("/api/news?limit=101"))
             .andExpect(status().isBadRequest())
