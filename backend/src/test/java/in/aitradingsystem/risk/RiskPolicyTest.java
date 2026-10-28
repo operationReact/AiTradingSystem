@@ -35,6 +35,55 @@ class RiskPolicyTest {
     }
 
     @Test
+    void identicalInputAndPolicySnapshotProduceIdenticalDecision() {
+        RiskInput input = freshBuy(10);
+        RiskDecision first = policy.evaluate(input);
+        RiskDecision replay = policy.evaluate(input);
+
+        assertThat(replay).isEqualTo(first);
+        assertThat(RiskPolicy.VERSION).isEqualTo("risk-policy-v1");
+    }
+
+    @Test
+    void rejectionReplayPreservesOrderedReasonCodesAndAmounts() {
+        RiskInput input = buy(100, NOW.minusSeconds(16 * 60), "490", "530", "1000", 0, 3, "-800", true);
+        RiskDecision first = policy.evaluate(input);
+        RiskDecision replay = policy.evaluate(input);
+
+        assertThat(first.approved()).isFalse();
+        assertThat(replay).isEqualTo(first);
+        assertThat(replay.reasons()).containsExactly(
+            RiskReason.EMERGENCY_STOP_ACTIVE,
+            RiskReason.STALE_SIGNAL,
+            RiskReason.DAILY_LOSS_LIMIT_REACHED,
+            RiskReason.RISK_BUDGET_EXCEEDED,
+            RiskReason.MAX_OPEN_POSITIONS,
+            RiskReason.INSUFFICIENT_CASH);
+    }
+
+    @Test
+    void riskExactlyAtBudgetIsApprovedButOneCentBeyondIsRejected() {
+        RiskInput atBudget = buy(19, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "0", false);
+        RiskDecision boundary = policy.evaluate(atBudget);
+        assertThat(boundary.estimatedRisk()).isLessThanOrEqualTo(boundary.riskBudget());
+        assertThat(boundary.reasons()).doesNotContain(RiskReason.RISK_BUDGET_EXCEEDED);
+
+        RiskInput beyondBudget = buy(20, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "0", false);
+        RiskDecision rejected = policy.evaluate(beyondBudget);
+        assertThat(rejected.estimatedRisk()).isGreaterThan(rejected.riskBudget());
+        assertThat(rejected.reasons()).contains(RiskReason.RISK_BUDGET_EXCEEDED);
+    }
+
+    @Test
+    void signalAtMaximumAgeIsAcceptedButOneMinuteOlderIsRejected() {
+        RiskInput atBoundary = buy(10, NOW.minusSeconds(15 * 60), "490", "530", "80000", 0, 0, "0", false);
+        assertThat(policy.evaluate(atBoundary).reasons()).doesNotContain(RiskReason.STALE_SIGNAL);
+
+        RiskInput stale = buy(10, NOW.minusSeconds(16 * 60), "490", "530", "80000", 0, 0, "0", false);
+        assertThat(policy.evaluate(stale).reasons()).contains(RiskReason.STALE_SIGNAL);
+    }
+
+    @Test
     void rejectsRiskAboveBudget() {
         assertThat(policy.evaluate(freshBuy(100)).reasons()).contains(RiskReason.RISK_BUDGET_EXCEEDED);
     }
