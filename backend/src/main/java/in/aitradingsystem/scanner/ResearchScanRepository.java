@@ -1,9 +1,6 @@
 package in.aitradingsystem.scanner;
 
 import in.aitradingsystem.instrument.Instrument;
-import java.sql.Array;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -12,13 +9,10 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.support.TransactionTemplate;
 
 @Repository
 public class ResearchScanRepository {
     private final JdbcTemplate jdbc;
-    private final TransactionTemplate transaction;
 
     private final RowMapper<Instrument> instrumentMapper = (rs, row) -> new Instrument(
             rs.getLong("instrument_id"), rs.getString("exchange_segment"), rs.getString("exchange"),
@@ -27,9 +21,8 @@ public class ResearchScanRepository {
             rs.getBigDecimal("strike"), rs.getInt("lot_size"), rs.getBigDecimal("tick_size"),
             rs.getObject("catalogue_version", UUID.class));
 
-    public ResearchScanRepository(JdbcTemplate jdbc, PlatformTransactionManager transactionManager) {
+    public ResearchScanRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.transaction = new TransactionTemplate(transactionManager);
     }
 
     public void createRun(UUID id, String interval, int requestedLimit, String strategySet) {
@@ -54,21 +47,6 @@ public class ResearchScanRepository {
                  ORDER BY i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
                  LIMIT ?
                 """, instrumentMapper, limit);
-    }
-
-    public void saveCandidates(UUID runId, List<ScanCandidate> candidates) {
-        if (candidates.isEmpty()) return;
-        transaction.executeWithoutResult(status -> jdbc.batchUpdate("""
-                INSERT INTO research_scan_candidate
-                    (scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
-                     entry_price, stop_price, target_price, signal_candle_time, reasons)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (scan_run_id, instrument_id, strategy, signal_candle_time) DO NOTHING
-                """, candidates, candidates.size(), this::bindCandidate));
-    }
-
-    private void bindCandidate(PreparedStatement ps, ScanCandidate c) throws SQLException {
-        ps.setObject(1, null); // replaced by saveCandidates wrapper not supported by batch binder
     }
 
     public void saveCandidate(UUID runId, ScanCandidate c) {
