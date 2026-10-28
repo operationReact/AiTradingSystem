@@ -60,6 +60,17 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Fail closed on unapproved AWS deployment target
+        env:
+          CONFIGURED_REGION: ${{ vars.AWS_REGION }}
+          CONFIGURED_ROLE: ${{ vars.AWS_ROLE_ARN }}
+          WORKFLOW_REGION: ${{ env.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/dev" || { echo "::error::Deployment allowed only from dev"; exit 1; }
+          test "$CONFIGURED_REGION" = "us-east-1" || { echo "::error::AWS_REGION must be us-east-1"; exit 1; }
+          test "$WORKFLOW_REGION" = "$CONFIGURED_REGION" || { echo "::error::Workflow region differs from verified OIDC region; reconcile stack first"; exit 1; }
+          test "$CONFIGURED_ROLE" = "arn:aws:iam::816344830716:role/aitradingsystem-github-deploy" || { echo "::error::Unexpected AWS role"; exit 1; }
       - name: Configure AWS credentials with GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
