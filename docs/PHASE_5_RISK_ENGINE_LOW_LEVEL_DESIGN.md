@@ -2172,3 +2172,53 @@ docs/MASTER_IMPLEMENTATION_PLAN.md
 If this file conflicts with the older Phase 5 section inside `MASTER_LOW_LEVEL_IMPLEMENTATION_DESIGN.md`, **this file wins for Phase 5** until the master low-level document is next consolidated.
 
 Implementation must proceed by the `P05-PR*` sequence above unless a PR explicitly updates this design with repository evidence.
+
+---
+
+# Architecture review addendum — mandatory implementation refinements (2026-10-28)
+
+These items are acceptance criteria for the existing Phase 5 PR sequence, not new phases. They close gaps found in a second design review.
+
+## A. Define account and exposure scope explicitly
+
+All risk queries and policy lookups must be scoped by immutable paper_account_id (and authenticated actor/tenant once Phase 10 lands). Do not aggregate across accounts. Define exposure as sum of absolute marked position notionals plus reserved pending BUY notionals, and cash available as ledger cash minus pending reservations. Document whether SELL reduces exposure only after fill; pending SELL must not free capacity early. Add multi-account isolation fixtures.
+
+## B. Make the snapshot consistent under concurrency
+
+Within the existing paper_account FOR UPDATE transaction, read positions, cash ledger, pending order reservations, daily trade count, halt state and active policy from one consistent database snapshot. Define lock ordering (account -> trading control -> pending intent/position), and avoid deadlocks with concurrent orders/emergency stop. Re-evaluate after approval and before fill. Add two-thread race tests for simultaneous BUYs, stop activation, and policy switch.
+
+## C. Resolve risk semantics before implementation
+
+Specify BUY versus SELL/exit behavior per rule in a decision matrix: exits must not be blocked by entry-only max-position, concentration, or min reward:risk rules; emergency stop must distinguish halt-new-entry from halt-all-execution; protective liquidation must use a separately audited safe path. Define trading-day boundary in Asia/Kolkata, inclusive/exclusive threshold comparisons, daily-loss calculation (realized vs unrealized and fee inclusion), and whether fees/slippage affect effective reward:risk and cash reservations. Never silently assume zero exposure on stale prices.
+
+## D. Define price/quantity precision and reference freshness
+
+Resolve exchange tick size and permitted quantity/lot size from instrument master; validate all prices on tick and all quantities on lot multiples. Define max quote/candle age per order type, holiday/market-session behavior, and reference price source priority. Mark stale/missing quote, incomplete candle and unrecognized instrument as explicit hard-reject codes. Avoid using client-submitted entry price as trusted market-state evidence.
+
+## E. Policy schema lifecycle and migration safety
+
+Implement policy DDL with check constraints for nonnegative limits, one active policy per account/scope (partial unique index), immutable activated versions, effective interval consistency, actor/reason/correlation, and explicit policy status DRAFT/ACTIVE/RETIRED. Backfill a V1-equivalent snapshot before switching reads. Stage migration as expand -> backfill -> dual-read/compare -> cutover -> contract; do not silently reinterpret old decisions under new policy.
+
+## F. Evidence, replay and explainability
+
+Persist a canonical context hash, market-data cutoff/source, instrument catalogue version, policy version, risk engine version, ordered per-rule outcomes, fee/slippage assumptions, observed/limit values and evaluation timestamp. Keep sensitive account details out of client responses and logs. Replaying a historical decision must use its stored snapshot, not current limits; parity test existing V1 outcomes before enabling V2.
+
+## G. Position sizing as advisory, not authorization
+
+Compute quantity by floor(min(risk budget / stop distance including costs, cash capacity, notional capacity, concentration capacity, gross exposure capacity)) then round down to valid lot multiple. Reject zero, invalid tick/lot, nonpositive stop distance and missing market state. UI must display limiting constraint and estimation timestamp; server recomputes all quantities/rules at submission.
+
+## H. API security and concurrency contracts
+
+Policy updates require If-Match/row version, reason, actor audit and idempotency; reject stale updates with 409/412. Policy preview/dry-run cannot reserve cash or create executable intents. Preserve emergency-stop endpoint behavior and make resume a privileged, audited operation. Introduce role restrictions as Phase 10 integration contracts rather than trusting frontend visibility.
+
+## I. Dual UI acceptance details
+
+Both Pro Terminal and Clear Invest must expose identical policy version, risk utilization, last evaluated timestamp, data freshness, per-rule reason codes, entry/exit distinction and emergency-stop state. Pro uses compact inspection; Clear uses guided explanations. Test keyboard/screen reader, mobile 320px, reduced motion, stale/error/empty, and experience switching during an in-flight risk preview without duplicating mutations.
+
+## J. Quantitative operational gates
+
+Add metrics for risk_evaluations_total{outcome,rule}, risk_evaluation_duration_seconds, risk_context_stale_total, risk_policy_activation_total, risk_context_lock_wait_seconds, and risk_decision_persistence_failures_total (bounded labels only). Performance target must be measured against realistic PostgreSQL fixtures and documented before a hard latency SLO is committed. Fail closed on unavailable policy/context/audit persistence; never record an approved order without durable risk evidence.
+
+## K. Phase 5 implementation acceptance matrix
+
+For each rule and order side: positive, negative, equality boundary, null/missing, stale, and concurrent-state cases. Mandatory cross-service tests: policy activation race, emergency stop race, two competing orders exhausting shared cash, duplicate pending intent, idempotent retry, approval revalidation, migration of legacy decisions, V1/V2 parity, account isolation, and no broker network call. No Phase 5 exit until all applicable cases pass in CI and any intentional V1 behavioral differences are documented.
