@@ -2335,3 +2335,50 @@ This section reviews **every phase 0–15**, not only Phase 5. It supplements th
 ## Required PR review template (all phases)
 
 Every PR must include: phase/work-item IDs; current-code paths inspected; exact SQL migration and rollback/forward-fix plan; Java interfaces/classes and API contract; UI parity checklist; test classes and CI links; security and PAPER/LIVE impact; migration compatibility; remaining gaps. Update the status table only with verified evidence.
+
+
+---
+
+# THIRD-PASS LINE-REFERENCED DESIGN AUDIT — ALL PHASES (2026-10-28)
+
+**Review scope:** read the full 886-line master roadmap, full 2,338-line master LLD and full 2,225-line Phase 5 replacement. The findings below reference **line numbers in the master LLD before this addendum**, and classify unverified schema assumptions rather than claiming source-code verification. This is a documentation audit, **not** a full repository source-code audit or executed test suite. Each finding must be resolved against actual Flyway DDL and Java types before implementing affected SQL.
+
+## Critical cross-document findings
+
+| ID | Existing LLD location | Finding | Required resolution | Gate |
+|---|---|---|---|---|
+| A-01 | L547, L635, L659-660, L721-722, L822-824, L947, L1037, L1220, L1230 | Multiple FK types are written as UUID/BIGINT without demonstrated existing PK reconciliation. | Extract actual PK types from current migrations; maintain a checked FK type matrix. No migration until verified. | P2–P7 |
+| A-02 | L875–1018 vs dedicated Phase 5 design | The master LLD retains an obsolete five-work-item Phase 5, while replacement has P05-W01+ with **colliding IDs** and different semantics. | Mark old master section deprecated and link the dedicated file; use only dedicated P05 IDs in new PRs. Consolidate master in a future controlled rewrite. | P5 |
+| A-03 | L278–287 | Proposed market_holiday uses trade_date PRIMARY KEY but also market column; cannot represent different NSE/BSE segment calendars on same day. | Composite PK (market, trade_date), or one canonical cash-market calendar explicitly declared. Include special trading sessions. | P1 |
+| A-04 | L470–486 | Unique active strategy config + effective_from/to does not prevent overlapping historical effective windows. | Add interval exclusion constraint or transactional overlap validation; preserve historical version lookup. | P2 |
+| A-05 | L618–665 | Walk-forward training and validation run IDs are assumed UUID; train/validation data boundaries and fixed-config replay need exact PK and lookahead checks. | Verify DDL, pin data snapshot, define folds and no leakage in SQL/service tests. | P3 |
+| A-06 | L716–830 | Scenario tables assume candidate ID BIGINT and scan run UUID; no schema proof; regime fallback can overstate reliability. | Verify FK types; record effective sample size, independent sessions, fallback and insufficiency status. | P4 |
+| A-07 | L916–950 | risk_decision_rule assumes UUID decision PK; policy activation uniqueness and account scope are underspecified. | Align real risk_decision PK; scope policy and activation; use dedicated Phase 5 DDL only after verification. | P5 |
+| A-08 | L1028–1070 | paper_order and fill state machine is described, but reservation and partial-fill cash/position accounting must be atomic. | Specify state transition CAS, fill uniqueness, cash reservation release and ledger invariant tests. | P6 |
+| A-09 | L1216–1234 | Approval order_id UUID and risk_decision_id UUID are assumptions; Phase 6 order approval_id is circular sequencing. | Verify keys, create approval table before adding FK, and stage nullable FK forward migration. | P7 |
+| A-10 | L1431 onward | UI parity is specified as architecture, but needs a per-route executable feature/state matrix to prove parity. | Add testable route × experience × state × permission matrix; screenshots alone insufficient. | P9 |
+| A-11 | Global contracts L126–199 | Global error contract and pagination may conflict with existing controller ProblemDetail and PageResponse shape. | Introduce explicit backwards-compatible API version/adapter and consumer contract tests before changing response shape. | P0, P9 |
+| A-12 | L176–184 | 'Order/risk/fill/cash/position mutation is one transaction' is correct for PAPER but not sufficient for eventual broker workflow. | Keep LIVE durable intent + external call outside lock; reconcile UNKNOWN before retry. | P15 |
+
+## Work-item acceptance tightening, phase by phase
+
+- **P00:** line-review each existing controller for error shape, auth and idempotency; pin CI/tool versions and define migration-upgrade fixture from current schema.
+- **P01:** verify calendar PK, instrument identity, candle uniqueness and corporate actions; fixtures for special session, holiday, late correction, provider 429 and missing slots.
+- **P02:** verify strategy config effective-date overlap, scan diagnostics FK, stable tie-break ordering, deterministic config snapshot and cancellation bounds.
+- **P03:** verify actual backtest PK types, training/validation temporal nonoverlap, benchmark definition, fee/tax assumptions and future-data guards.
+- **P04:** verify scan/candidate FK types, immutable candidate linkage, past-only regime thresholds, minimum independent sessions and replay fingerprint.
+- **P05:** dedicated Phase 5 file governs; verify risk_decision PK, account-level policy, lock order, BUY versus protective SELL, stale quote rejection and V1/V2 parity.
+- **P06:** verify current fill unique constraint name before migration; specify cash reservation ledger, partial-fill fee allocation, zero/negative balance prevention and reconciliation.
+- **P07:** verify order and decision PK types, approval FK ordering, expiration races, compare-and-set approval, re-risk and authorization before fill.
+- **P08:** tie analytics formulas to reconciled ledger, notification outbox/deduplication, audit export scoping and operational runbook thresholds.
+- **P09:** enforce identical feature capability, API/cache state and mutation safety across Pro/Clear; route-by-route keyboard, mobile and stale/error testing.
+- **P10:** create endpoint permission matrix and migration from API key to secure sessions; cross-account IDOR and CSRF tests.
+- **P11:** offline read-only, Android TWA origin verification and real device viewport checks; iOS packaging decision must be explicit.
+- **P12:** choose one AWS topology and verify backup/restore, secrets/OIDC, Terraform state and forward-compatible database deploys.
+- **P13:** measure SLOs from load tests; add chaos fixtures for provider/DB/restart and bounded-cardinality metrics.
+- **P14:** no launch without evidence links for every preceding phase gate, PAPER-only smoke test, restore and rollback drill.
+- **P15:** no LIVE enablement without current regulatory/broker review, separate authorization, durable broker intent, UNKNOWN reconciliation and tiny manual pilot.
+
+## Mandatory next-pass source verification checklist
+
+For every proposed table, run a migration inventory and record: current table/column, exact SQL type, nullable/default, FK target and type, unique/index/constraint names, and forward migration number. For every service/controller, record existing Java path, method signature, transaction boundary, authorization and current API shape. For every frontend route, record hooks, components, Pro/Clear behavior and test evidence. **Unverified items remain OPEN, not DONE.** This is the prerequisite for claiming an actual line-by-line repository implementation audit.
