@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class ExtendedScannerStrategiesTest {
@@ -72,6 +74,35 @@ class ExtendedScannerStrategiesTest {
         assertEquals(RsiReversalStrategy.NAME, candidate.strategy());
         assertTrue(candidate.reasons().contains("RSI_RECOVERED_ABOVE_30"));
         assertTrue(candidate.reasons().contains("RESEARCH_CANDIDATE_ONLY"));
+    }
+
+    @Test
+    void scannerEngineRanksByScoreThenStrategyNameDeterministically() {
+        List<MarketCandle> bars = List.of(
+                candle(1, "2026-10-28T03:45:00Z", "100", "101", "99", "100", 1000));
+        ScanContext context = context(bars, "2026-10-28T03:46:00Z");
+        ScannerEngine engine = new ScannerEngine(List.of(
+                fixed("B_STRATEGY", 0.75),
+                fixed("A_STRATEGY", 0.75),
+                fixed("TOP_STRATEGY", 0.90)), Duration.ofMinutes(10));
+
+        List<ScanCandidate> ranked = engine.scan(context);
+
+        assertEquals(List.of("TOP_STRATEGY", "A_STRATEGY", "B_STRATEGY"),
+                ranked.stream().map(ScanCandidate::strategy).toList());
+    }
+
+    private static ScannerStrategy fixed(String name, double score) {
+        return new ScannerStrategy() {
+            @Override public String name() { return name; }
+            @Override public int minimumCandles() { return 1; }
+            @Override public Optional<ScanCandidate> evaluate(ScanContext context) {
+                MarketCandle latest = context.candles().getLast();
+                return Optional.of(new ScanCandidate(context.instrumentId(), context.tradingSymbol(), context.exchange(),
+                        context.interval(), name, score, latest.close(), latest.close().subtract(BigDecimal.ONE),
+                        latest.close().add(BigDecimal.ONE), latest.candleTime(), List.of("RESEARCH_CANDIDATE_ONLY")));
+            }
+        };
     }
 
     private static ScanContext context(List<MarketCandle> bars, String evaluatedAt) {
