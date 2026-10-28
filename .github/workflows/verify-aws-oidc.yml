@@ -1,0 +1,46 @@
+name: Verify AWS OIDC (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: verify-aws-oidc
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify account and role
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate required configuration
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$AWS_REGION" = "us-east-1"
+          test "$AWS_ROLE_ARN" = "arn:aws:iam::816344830716:role/aitradingsystem-github-deploy"
+      - name: Configure short-lived AWS credentials using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: aitradingsystem-oidc-verify
+          role-duration-seconds: 900
+      - name: Verify caller identity (no resource changes)
+        run: |
+          set -euo pipefail
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          ROLE_ARN="$(aws sts get-caller-identity --query Arn --output text)"
+          test "$ACCOUNT_ID" = "816344830716"
+          case "$ROLE_ARN" in
+            arn:aws:sts::816344830716:assumed-role/aitradingsystem-github-deploy/*) ;;
+            *) echo "::error::Unexpected assumed role"; exit 1 ;;
+          esac
+          echo "GitHub OIDC authentication verified for account $ACCOUNT_ID"
+          echo "No infrastructure resources were modified."
