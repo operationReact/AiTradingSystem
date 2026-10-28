@@ -1,37 +1,42 @@
 # AI Trading System — Master Low-Level Implementation Design
 
-> **Status:** AUTHORITATIVE TECHNICAL EXECUTION COMPANION  
+> **Status:** AUTHORITATIVE TECHNICAL EXECUTION SOURCE  
 > **Scope authority:** `docs/MASTER_IMPLEMENTATION_PLAN.md`  
 > **Repository:** `operationReact/AiTradingSystem`  
 > **Integration branch:** `dev`  
 > **Last reconciled:** 2026-10-28  
-> **Purpose:** Define the concrete database, backend, API, frontend, test, infrastructure and launch implementation for every phase through production PAPER launch and the separately gated LIVE pilot.
+> **Purpose:** Concrete implementation blueprint from the current repository state through production PAPER/research launch and the separately gated LIVE pilot.
 
 ---
 
-## 1. Authority and engineering rules
+# 1. How this document must be used
 
-`docs/MASTER_IMPLEMENTATION_PLAN.md` remains the product/phase source of truth. This document is the low-level implementation source of truth. When a phase is implemented, engineers should follow the classes, tables, APIs, state transitions and UI ownership defined here unless a PR explicitly updates both documents.
+This is not an aspirational roadmap. It is the implementation contract for engineering work.
 
-Rules:
+Every future implementation PR must reference at least one work-item ID in this document, for example `P04-W03`. If implementation discovers that a table, API, class, state transition, or UI contract in this document is wrong, the PR must update this file and `MASTER_IMPLEMENTATION_PLAN.md` in the same change.
 
-1. Extend existing packages/classes before creating parallel implementations.
-2. Java 21 + Spring Boot + JdbcTemplate/PostgreSQL/Flyway remain the backend baseline.
-3. Flyway migrations are forward-only. Use the next available version at implementation time (`V<next>__...sql`) rather than reserving numbers months in advance.
-4. All money/price/risk values use `BigDecimal`; never `double` for persisted trading/accounting calculations.
-5. Persist timestamps as `TIMESTAMPTZ` and use `Instant` in Java; use `Asia/Kolkata` only for NSE/BSE session/calendar interpretation.
-6. Every order/research/risk workflow has a correlation/idempotency identity and immutable provenance.
-7. AI/news are research-only inputs and never authorize or submit trades.
-8. `RiskPolicy` remains a hard execution gate. Approval policy cannot override a hard rejection.
-9. PAPER remains default. LIVE submission remains disabled until Phase 15 activation gates pass.
-10. Pro Terminal and Clear Invest share the same backend APIs, React Query cache and business rules. They differ only in composition/presentation.
-11. AWS account activation is not a blocker for Phases 1–11 and 13. Terraform review and application code continue while AWS is unavailable.
+Historical issue/PR phase numbers are supporting history only. The authoritative phase numbers are Phase 0–15 here and in `MASTER_IMPLEMENTATION_PLAN.md`.
+
+## 1.1 Non-negotiable product rules
+
+1. Product scope for V1 is Indian NSE/BSE cash-equity research + PAPER execution.
+2. `PAPER` is the default execution mode.
+3. LIVE broker submission remains technically disabled until Phase 15 activation criteria pass.
+4. AI/news is research context only. It cannot create an executable order, approve a hard risk rejection, change risk limits, activate LIVE, or bypass an emergency stop.
+5. Deterministic risk evaluation is mandatory immediately before execution.
+6. Money, price, fee, risk and P&L calculations use `BigDecimal`; persisted numeric fields use `NUMERIC`, never floating-point.
+7. Persist absolute timestamps as `TIMESTAMPTZ`; Java domain uses `Instant`. NSE/BSE session interpretation uses `Asia/Kolkata` only at domain boundaries.
+8. Every execution-impacting workflow carries a `correlationId`; mutating idempotent endpoints additionally carry an idempotency key or immutable intent ID.
+9. Pro Terminal and Clear Invest use identical APIs, authorization, data, risk rules, React Query cache and business state. They differ in composition/presentation only.
+10. No service worker/offline component may queue or replay order-submission, approval, emergency-stop, execution-mode or other trading mutations.
+11. Flyway migrations are forward-only. Use the next available migration number at implementation time; do not reserve future version numbers in this document.
+12. AWS account activation is not a blocker for application phases. Terraform/code/security work proceeds independently until apply credentials exist.
 
 ---
 
-## 2. Target package and frontend structure
+# 2. Current code that must be extended, not replaced
 
-Existing backend roots remain authoritative:
+## Backend roots
 
 ```text
 in.aitradingsystem
@@ -45,589 +50,831 @@ in.aitradingsystem
 ├── marketdata
 ├── news
 ├── paper
-├── provider
-│   └── angelone
-├── research
-│   └── simulation
+├── provider/angelone
+├── research/simulation
 ├── risk
 ├── scanner
 ├── security
 └── strategy
 ```
 
-New code should be added under these roots unless the domain is genuinely new. Planned additions:
+New roots are allowed only for genuinely new domains:
 
 ```text
-in.aitradingsystem
-├── approval
-├── analytics
-├── notification
-├── portfolio
-├── reconciliation
-└── broker
-    ├── BrokerOrderGateway.java
-    ├── mock
-    └── angelone
+approval
+analytics
+broker
+notification
+portfolio
+reconciliation
 ```
 
-Frontend continues under:
+## Existing database baseline
+
+Existing tables include, among others:
+
+- `paper_account`
+- `trading_control`
+- `paper_order`
+- `risk_decision`
+- `paper_position`
+- `paper_fill`
+- `paper_cash_entry`
+- `audit_event`
+- instrument-master/version/import tables
+- `market_candle`
+- `candle_backfill_run`
+- `candle_backfill_checkpoint`
+- `strategy_signal`
+- `paper_backtest_run`
+- `paper_backtest_trade`
+- `paper_backtest_validation`
+- provenance-aware news tables
+- `research_scan_run`
+- `research_scan_candidate`
+
+Do not create duplicate account/order/fill/candle/signal/scanner tables where forward-compatible ALTER/new-child-table migrations can extend these.
+
+## Existing frontend roots
 
 ```text
 frontend/src
-├── components
-├── context
+├── App.jsx
+├── components/
+├── context/AppContext.jsx
 ├── hooks/useApi.js
-├── lib
-├── pages
-└── styles.css
+├── lib/
+└── pages/
 ```
 
-As scope grows, split `useApi.js` without changing hook behavior:
+Existing routes:
 
-```text
-frontend/src/hooks/api/
-├── useMarketDataApi.js
-├── useResearchApi.js
-├── useBacktestApi.js
-├── useRiskApi.js
-├── usePaperApi.js
-├── usePortfolioApi.js
-├── useApprovalApi.js
-├── useNotificationApi.js
-└── useOperationsApi.js
-```
+- `/` Overview
+- `/signals`
+- `/trades`
+- `/risk`
+- `/instruments`
+- `/market-data`
+- `/backtesting`
 
-Shared API client/auth header handling stays centralized in `frontend/src/lib/apiClient.js` (extract from current behavior when the split is implemented).
+Existing global experience values are `pro-terminal` and `clear-invest` in `AppContext`.
 
 ---
 
-# Phase 0 — Architecture, safety and CI foundation
+# 3. Cross-cutting technical contracts
 
-**Status:** DONE / governance only.
+## 3.1 API response/error contract
 
-## Backend
-
-Keep existing:
-
-- `AiTradingSystemApplication`
-- `TradingModeGuard`
-- `ExecutionModeController`
-- `AuditService`
-- Spring configuration classes in `config`
-- Java 21 Maven build
-
-Add only governance utilities when required:
-
-- `CorrelationIdFilter` — generate/propagate `X-Correlation-Id`.
-- `ApiExceptionHandler` — stable error contract `{code,message,correlationId,timestamp}` without raw stack traces.
-- `Clock` bean in `AppConfig` and inject it anywhere time affects deterministic logic.
-
-## Database
-
-Do not replace current schema. Future migrations must be additive. Add indexes only from measured query needs. Every new mutable business table should normally include:
-
-```sql
-created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-updated_at TIMESTAMPTZ,
-version BIGINT NOT NULL DEFAULT 0
-```
-
-`version` is required where optimistic state transitions are needed.
-
-## CI
-
-Keep `.github/workflows/phase0-validation.yml` as mandatory baseline:
-
-- Maven tests with PostgreSQL/Testcontainers;
-- frontend production build;
-- PWA/mobile metadata validation;
-- backend/frontend Docker builds;
-- full Terraform validation;
-- budget Terraform validation.
-
-Later phases add jobs but must not weaken these.
-
-## Frontend
-
-Keep `App.jsx`, `AppShell.jsx`, `ModeControl.jsx`, `DataState.jsx`, shared `ui.jsx` and existing route/state behavior.
-
-## Exit tests
-
-- `TradingModeGuard` rejects accidental LIVE startup/config drift.
-- no API returns secrets;
-- CI required checks green on `dev`.
-
----
-
-# Phase 1 — Instrument master and market-data production readiness
-
-**Status:** PARTIAL. Extend existing `instrument`, `marketdata`, `provider.angelone` implementations.
-
-## Database
-
-### New table: `market_data_quality`
-
-```sql
-id BIGSERIAL PRIMARY KEY,
-instrument_id BIGINT NOT NULL,
-interval VARCHAR(32) NOT NULL,
-window_start TIMESTAMPTZ NOT NULL,
-window_end TIMESTAMPTZ NOT NULL,
-expected_candles INT NOT NULL,
-actual_candles INT NOT NULL,
-missing_candles INT NOT NULL,
-duplicate_candles INT NOT NULL DEFAULT 0,
-status VARCHAR(20) NOT NULL, -- HEALTHY/WARNING/FAILED
-last_candle_time TIMESTAMPTZ,
-stale_seconds BIGINT,
-checked_at TIMESTAMPTZ NOT NULL,
-details_json JSONB,
-UNIQUE(instrument_id, interval, window_start, window_end)
-```
-
-Indexes:
-
-- `(instrument_id, interval, checked_at DESC)`
-- `(status, checked_at DESC)`
-
-### New table: `market_data_reconciliation_run`
-
-```sql
-id UUID PRIMARY KEY,
-status VARCHAR(20) NOT NULL,
-exchange VARCHAR(20),
-interval VARCHAR(32),
-started_at TIMESTAMPTZ NOT NULL,
-completed_at TIMESTAMPTZ,
-checked_instruments INT NOT NULL DEFAULT 0,
-gaps_found INT NOT NULL DEFAULT 0,
-gaps_repaired INT NOT NULL DEFAULT 0,
-error_code VARCHAR(80),
-error_message VARCHAR(500)
-```
-
-Reuse current historical candle/backfill tables. Do not create another candle store.
-
-## Backend classes
-
-Add under `marketdata`:
-
-- `MarketSessionCalendar`
-  - `boolean isTradingDay(LocalDate date)`
-  - `Instant sessionOpen(LocalDate date)`
-  - `Instant sessionClose(LocalDate date)`
-  - `List<Instant> expectedCandleTimes(date, interval)`
-- `MarketDataQualityService`
-  - detects missing candles, duplicates, stale data and session gaps.
-- `MarketDataQualityRepository`
-- `MarketDataReconciliationService`
-  - creates bounded repair/backfill work from quality gaps.
-- `MarketDataRateLimiter`
-  - provider-aware pacing/backoff; no `Thread.sleep` scattered across services.
-- `ProviderRequestMetrics`
-  - request count, failures, throttles, latency.
-
-Extend existing `MarketDataRepository` with bounded methods only:
-
-- `latestCandle(instrumentId, interval)`
-- `countCandles(instrumentId, interval, from, to)`
-- `findMissingRangeCandidates(...)` if SQL can safely help.
-
-## API
-
-Add `MarketDataOperationsController`:
-
-- `GET /api/market-data/quality?instrumentId=&interval=`
-- `POST /api/market-data/quality/check`
-- `POST /api/market-data/reconciliation`
-- `GET /api/market-data/reconciliation/{id}`
-
-All mutating operations require operator authentication and bounded limits.
-
-## Frontend
-
-Extend existing `MarketDataPage.jsx` rather than create a duplicate page.
-
-Components:
-
-- `MarketDataQualityCard`
-- `CandleGapTable`
-- `BackfillRunStatus`
-- `ReconciliationRunPanel`
-- `ProviderHealthBadge`
-
-Pro Terminal: compact quality/status grid + detailed table.  
-Clear Invest: summary health cards + guided “repair gaps” flow.
-
-## Tests
-
-- holiday/weekend/session boundary fixtures;
-- 1m/3m/5m/15m/1h expected-count tests;
-- stale latest candle detection;
-- gap repair idempotency;
-- provider 429/backoff behavior;
-- reconciliation does not cross requested instrument/date bounds.
-
-## Exit gate
-
-Persisted NSE/BSE cash-equity history is quality-scored, recoverable and observable before scanner/backtest/execution consume it.
-
----
-
-# Phase 2 — Deterministic strategy and scanner suite
-
-**Status:** PARTIAL. Existing scanner strategies remain; no rewrite.
-
-## Database
-
-### `strategy_definition`
-
-```sql
-strategy_key VARCHAR(80) PRIMARY KEY,
-version VARCHAR(32) NOT NULL,
-enabled BOOLEAN NOT NULL DEFAULT TRUE,
-trading_style VARCHAR(20) NOT NULL, -- INTRADAY/SWING
-supported_intervals VARCHAR(300) NOT NULL,
-minimum_candles INT NOT NULL,
-requires_session_data BOOLEAN NOT NULL,
-config_json JSONB NOT NULL,
-updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-```
-
-This is configuration/metadata, not executable scripting. Strategy algorithms remain compiled Java.
-
-### Optional candidate de-duplication columns
-
-Extend `research_scan_candidate` only if needed:
-
-- `candidate_fingerprint VARCHAR(64)` unique per semantic setup;
-- `metadata_json JSONB` for strategy-version/config snapshot.
-
-## Backend classes
-
-Keep existing `ScannerStrategy`, `ScannerEngine`, `ScanContext`, `ScanCandidate`, `IndicatorMath`.
-
-Add:
-
-- `StrategyDefinition`
-- `StrategyRegistry`
-  - owns compiled implementations + metadata;
-  - rejects duplicate strategy names.
-- `StrategyDefinitionRepository`
-- `StrategyEligibilityService`
-  - interval/session/history/data-quality checks before strategy execution.
-- `CandidateFingerprint`
-  - SHA-256 of instrument/strategy/version/interval/signal candle/levels.
-- `ScannerPerformanceGuard`
-  - bounded universe and deadline/cancellation guard.
-
-Each strategy must expose metadata via `ScannerStrategyDescriptor`:
+All new controllers must converge on a single `ApiError` record:
 
 ```java
-record ScannerStrategyDescriptor(
-    String name,
-    String version,
-    TradingStyle tradingStyle,
-    Set<HistoricalCandleInterval> intervals,
-    int minimumCandles,
-    boolean sessionBound
+public record ApiError(
+    String code,
+    String message,
+    String correlationId,
+    Instant timestamp,
+    Map<String, Object> details
 ) {}
 ```
 
-## API
+Create/extend `GlobalExceptionHandler` to map:
 
-- `GET /api/research/strategies`
-- `PATCH /api/research/strategies/{key}` — enable/disable/config only, never upload code.
-- retain current scan endpoints.
+- validation -> `400`
+- authentication -> `401`
+- authorization -> `403`
+- not found -> `404`
+- idempotency conflict -> `409`
+- invalid state transition -> `409`
+- rate/provider unavailable -> `503`
+- unexpected exception -> `500` without leaking credentials/provider payloads.
 
-## Frontend
+Do not expose raw exception stack traces or broker secrets.
 
-New `ResearchScannerPage.jsx` with shared data model.
+## 3.2 Pagination contract
 
-Components:
+Use `page >= 0`, `1 <= size <= 200` for ordinary operational lists. Research/history-specific APIs may have their own tighter bounds. Response:
 
-- `ScannerRunForm`
-- `StrategyFilterBar`
-- `RankedCandidateTable`
-- `CandidateReasonChips`
-- `CandidateRiskRewardPreview`
-- `ScannerRunHistory`
+```java
+public record PageResponse<T>(List<T> items, int page, int size, long total) {}
+```
 
-Click candidate opens `ResearchCandidatePage.jsx` (Phase 4 orchestration content added later).
+Cursor pagination can be introduced only where timestamp/ID ordering materially improves scale; do not mix styles on the same endpoint.
 
-## Tests
+## 3.3 Audit contract
 
-Per strategy: positive, negative, insufficient history, future candle, stale candle, wrong interval/session, deterministic replay. Add scanner max-universe runtime test with mocked repository data.
+`AuditService.record(eventType, entityType, entityId, details)` remains the canonical write entry point until Phase 10 adds authenticated actor identity. Every mutation below explicitly identifies required audit events.
 
-## Exit gate
+Required detail fields for execution-impacting events:
 
-All enabled strategies are versioned, deterministic, bounded and reproducible from persisted candles/configuration.
+- `correlationId`
+- `actorId` when available
+- `executionMode`
+- `entityVersion`/policy version when relevant
+- before/after state when appropriate
+- reason codes, not only prose.
+
+## 3.4 Database transaction rules
+
+- Order/risk/fill/cash/position mutation is one transaction.
+- Approval decision and order-intent transition are transactional.
+- External broker calls are never executed while holding a long database transaction/row lock. Use durable state-before-call, call broker, then persist result in a second transaction.
+- Scanner/backtest/simulation runs persist status transitions (`CREATED/RUNNING/SUCCEEDED/FAILED`) so restarts are visible.
+- Reconciliation writes differences; it does not silently mutate historical audit/fill records.
+
+## 3.5 Query/cache keys
+
+Extend `frontend/src/hooks/useApi.js` `keys` object; do not scatter ad-hoc query keys throughout components. New domain roots:
+
+```js
+research: ['research', ...]
+approvals: ['approvals', ...]
+portfolioAnalytics: ['portfolio-analytics', ...]
+notifications: ['notifications', ...]
+operations: ['operations', ...]
+audit: ['audit', ...]
+settings: ['settings', ...]
+```
+
+Mutations must invalidate only affected root keys, not the entire cache.
 
 ---
 
-# Phase 3 — Backtesting and statistical validation
+# PHASE 0 — Architecture, safety, CI and engineering baseline
 
-**Status:** PARTIAL. Extend current `backtest` package and `BacktestingPage.jsx`.
+**Status:** DONE for baseline; governance remains mandatory.
 
-## Database
+## P00-W01 — Correlation/error normalization
 
-Extend current backtest run model with a JSON snapshot if absent:
+### Backend
 
-```sql
-strategy_key VARCHAR(80),
-strategy_version VARCHAR(32),
-strategy_config_json JSONB,
-fee_model_version VARCHAR(32),
-slippage_model_version VARCHAR(32),
-data_cutoff_at TIMESTAMPTZ,
-benchmark_return NUMERIC(19,8),
-max_drawdown NUMERIC(19,8),
-win_rate NUMERIC(19,8),
-profit_factor NUMERIC(19,8),
-expectancy_r NUMERIC(19,8),
-average_r NUMERIC(19,8),
-turnover NUMERIC(19,4),
-exposure_pct NUMERIC(19,8)
-```
+Existing `CorrelationIdFilter` remains canonical. Add/confirm:
 
-### `walk_forward_validation_run`
+- incoming `X-Correlation-Id` accepted only if bounded/safe (`<=64`, `[A-Za-z0-9._-]`), otherwise generate UUID;
+- response always includes `X-Correlation-Id`;
+- MDC cleanup in `finally`;
+- `ApiError` uses current MDC correlation ID.
 
-```sql
-id UUID PRIMARY KEY,
-strategy_key VARCHAR(80) NOT NULL,
-instrument_id BIGINT NOT NULL,
-interval VARCHAR(32) NOT NULL,
-window_count INT NOT NULL,
-train_bars INT NOT NULL,
-test_bars INT NOT NULL,
-step_bars INT NOT NULL,
-status VARCHAR(20) NOT NULL,
-config_snapshot JSONB NOT NULL,
-started_at TIMESTAMPTZ NOT NULL,
-completed_at TIMESTAMPTZ,
-summary_json JSONB
-```
+### Tests
 
-### `walk_forward_window`
+`CorrelationIdFilterTest`
+- generates when absent;
+- preserves valid caller ID;
+- rejects oversized/invalid ID;
+- clears MDC between requests.
 
-```sql
-id BIGSERIAL PRIMARY KEY,
-run_id UUID NOT NULL REFERENCES walk_forward_validation_run(id) ON DELETE CASCADE,
-window_index INT NOT NULL,
-train_from TIMESTAMPTZ NOT NULL,
-train_to TIMESTAMPTZ NOT NULL,
-test_from TIMESTAMPTZ NOT NULL,
-test_to TIMESTAMPTZ NOT NULL,
-metrics_json JSONB NOT NULL,
-UNIQUE(run_id, window_index)
-```
+`GlobalExceptionHandlerTest`
+- no stack trace/secret leakage;
+- correct HTTP mappings.
 
-## Backend classes
+## P00-W02 — CI contract
 
-Keep current backtest repository/service types. Add:
+`.github/workflows/phase0-validation.yml` remains required for PRs into `dev` and pushes to `dev`.
 
-- `BacktestStrategyAdapter` — adapts `ScannerStrategy`/strategy signal logic to historical replay without network calls.
-- `BacktestMetricsCalculator`
-- `BenchmarkCalculator`
-- `WalkForwardValidationService`
-- `WalkForwardRepository`
-- `LookaheadGuard`
-  - ensures decision uses only candles at/before evaluation cutoff.
-- `TradingCostModel`
-  - versioned fee/slippage assumptions.
-- `BacktestExportService` — CSV/JSON export, bounded.
+Required jobs:
 
-## API
+1. backend Java 21 tests with PostgreSQL/Testcontainers;
+2. frontend Node 20 install + mobile metadata validation + production build;
+3. backend Docker build;
+4. frontend Docker build;
+5. `terraform fmt -check` + `terraform validate` for both infra stacks;
+6. later phases add security/dependency/E2E jobs without removing the above.
 
-- retain `/api/backtests` and validation endpoints;
-- `POST /api/backtests/walk-forward`
-- `GET /api/backtests/walk-forward/{id}`
-- `GET /api/backtests/{id}/export?format=csv|json`
+### Exit evidence
 
-## Frontend
-
-Extend `BacktestingPage.jsx`:
-
-- tabs: `Single Run`, `Holdout`, `Walk Forward`;
-- `BacktestMetricGrid`;
-- `EquityCurveChart`;
-- `DrawdownChart`;
-- `TradeDistributionPanel`;
-- `AssumptionSnapshot`;
-- `BenchmarkComparison`;
-- `ValidationWarningBanner` (“historical results do not guarantee future performance”).
-
-## Tests
-
-- no look-ahead with boundary candle;
-- same input -> same trades/metrics;
-- cost model snapshot immutable;
-- zero-trade and all-loss edge cases;
-- walk-forward window separation;
-- benchmark calculation fixtures.
-
-## Exit gate
-
-Every enabled strategy can be compared using reproducible leakage-safe historical validation with immutable assumptions.
+No phase is marked complete unless latest `dev` run is green.
 
 ---
 
-# Phase 4 — Scenario simulation and regime-aware research
+# PHASE 1 — Instrument master and market-data production readiness
 
-**Status:** IN PROGRESS. Continue from existing `research.simulation` implementation.
+**Status:** PARTIAL. Existing instrument/version/backfill/candle pipeline is reused.
 
-## Database
+## P01-W01 — Shared market session/calendar service
 
-### `research_scenario_run`
+### New classes
 
-```sql
-id UUID PRIMARY KEY,
-scan_run_id UUID REFERENCES research_scan_run(id),
-scan_candidate_id BIGINT REFERENCES research_scan_candidate(id),
-instrument_id BIGINT NOT NULL,
-interval VARCHAR(32) NOT NULL,
-methodology_version VARCHAR(80) NOT NULL,
-status VARCHAR(20) NOT NULL,
-entry_price NUMERIC(19,4) NOT NULL,
-stop_price NUMERIC(19,4) NOT NULL,
-target_price NUMERIC(19,4) NOT NULL,
-simulations INT NOT NULL,
-horizon_bars INT NOT NULL,
-block_size INT NOT NULL,
-seed BIGINT NOT NULL,
-slippage_bps INT NOT NULL,
-round_trip_cost_bps INT NOT NULL,
-history_from TIMESTAMPTZ NOT NULL,
-history_to TIMESTAMPTZ NOT NULL,
-data_cutoff_at TIMESTAMPTZ NOT NULL,
-regime VARCHAR(30),
-historical_samples INT,
-target_first_count INT,
-stop_first_count INT,
-neither_count INT,
-target_probability NUMERIC(19,10),
-stop_probability NUMERIC(19,10),
-neither_probability NUMERIC(19,10),
-expected_r NUMERIC(19,10),
-p05_r NUMERIC(19,10),
-p50_r NUMERIC(19,10),
-p95_r NUMERIC(19,10),
-started_at TIMESTAMPTZ NOT NULL,
-completed_at TIMESTAMPTZ,
-error_code VARCHAR(80),
-error_message VARCHAR(500)
+`marketdata/MarketSessionCalendar.java`
+
+```java
+boolean isTradingDay(LocalDate date);
+MarketSession session(LocalDate date);
+boolean isInsideCashSession(Instant instant);
+Optional<Instant> previousExpectedCandle(Instant candle, HistoricalCandleInterval interval);
+List<ExpectedCandleSlot> expectedSlots(LocalDate date, HistoricalCandleInterval interval);
 ```
+
+`marketdata/MarketSession.java`
+
+```java
+record MarketSession(LocalDate tradeDate, ZonedDateTime open, ZonedDateTime close, boolean tradingDay) {}
+```
+
+`marketdata/IndianCashMarketCalendar.java`
+- timezone fixed to `Asia/Kolkata`;
+- regular session baseline 09:15–15:30;
+- weekends closed;
+- holiday override supplied by database/config, not hard-coded forever.
+
+### New table `market_holiday`
+
+- `trade_date DATE PRIMARY KEY`
+- `market VARCHAR(16) NOT NULL DEFAULT 'NSE_CASH'`
+- `holiday_name VARCHAR(120) NOT NULL`
+- `source VARCHAR(80) NOT NULL`
+- `source_as_of DATE NOT NULL`
+- `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`
+
+Index only PK needed initially.
+
+### API
+
+`GET /api/market-data/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD`
+- max 370 days;
+- returns sessions/holidays for operational visibility.
+
+## P01-W02 — Candle quality and gap detection
+
+### New table `market_data_quality`
+
+Columns:
+- `id BIGSERIAL PK`
+- `instrument_id BIGINT NOT NULL`
+- `interval VARCHAR(20) NOT NULL`
+- `window_from TIMESTAMPTZ NOT NULL`
+- `window_to TIMESTAMPTZ NOT NULL`
+- `expected_candles INTEGER NOT NULL`
+- `actual_candles INTEGER NOT NULL`
+- `missing_candles INTEGER NOT NULL`
+- `duplicate_candles INTEGER NOT NULL DEFAULT 0`
+- `zero_volume_candles INTEGER NOT NULL DEFAULT 0`
+- `status VARCHAR(16) CHECK IN ('HEALTHY','DEGRADED','INCOMPLETE','FAILED')`
+- `gap_ranges JSONB NOT NULL DEFAULT '[]'`
+- `evaluated_at TIMESTAMPTZ NOT NULL`
+- unique `(instrument_id, interval, window_from, window_to)`
 
 Indexes:
+- `(instrument_id, interval, evaluated_at DESC)`
+- `(status, evaluated_at DESC)`
 
-- `(scan_candidate_id, started_at DESC)`
-- `(instrument_id, interval, started_at DESC)`
-- `(status, started_at DESC)`
+### New classes
 
-## Backend classes
+`CandleGapDetector`
+- input: chronologically ordered candles + expected slots;
+- output: immutable `MarketDataQualityResult`;
+- ignore non-trading-day gaps;
+- detect missing expected candle timestamps;
+- detect duplicates defensively even though DB unique constraint exists;
+- never invent/interpolate candle values.
 
-Keep:
+`MarketDataQualityService`
+- `evaluate(instrumentId, interval, from, to)`
+- `latest(instrumentId, interval)`
+- `eligibleForResearch(...)` -> fail closed when missing percentage exceeds configured threshold.
 
-- `HistoricalScenarioSimulator`
-- `ScenarioSimulationRequest`
-- `ScenarioSimulationResult`
-- `ScenarioSimulationService`
-- `ScenarioSimulationController`
+`MarketDataQualityRepository`
+- `upsertQualityResult`
+- `findLatest`
+- `findDegraded(limit)`.
 
-Add:
+### Existing integration
 
-- `MarketRegime` enum: `LOW_VOL`, `NORMAL`, `HIGH_VOL`, with liquidity dimension stored separately initially.
-- `RegimeClassifier`
-  - rolling ATR/return-vol percentile;
-  - volume ratio/liquidity bucket;
-  - deterministic thresholds from config snapshot.
-- `HistoricalBlock`
-- `HistoricalBlockSampler`
-  - never crosses trading-day boundary;
-  - only samples blocks compatible with requested regime when enough samples exist;
-  - deterministic fallback to broader pool with `fallbackReason` provenance.
-- `ScenarioSimulationRepository`
-- `ScenarioResearchOrchestrator`
-  - candidate -> historical validation lookup/run -> scenario simulation.
-- `ScenarioMethodologyVersion` constants.
+`ResearchScanService`, `StrategyService`, backtest and scenario orchestration must call the quality gate before evaluating a production candidate. Unit tests may use explicit fixture bypass.
 
-Methodology becomes e.g. `REGIME_BLOCK_BOOTSTRAP_CONSERVATIVE_V2`.
+## P01-W03 — Backfill reconciliation
 
-## API
+### New service
 
-- retain `POST /api/research/simulations`;
-- `GET /api/research/simulations/{id}`
-- `GET /api/research/simulations?candidateId=&limit=`
-- `POST /api/research/candidates/{candidateId}/analyze`
-- `GET /api/research/candidates/{candidateId}/analysis`
+`MarketDataReconciliationService`
 
-`analyze` never places an order.
+```java
+ReconciliationResult reconcile(long instrumentId, String interval, Instant from, Instant to);
+List<GapWindow> findMissingWindows(...);
+```
 
-## Frontend
+It does not fetch automatically unless `marketdata.reconciliation.auto-backfill=true`; default `false` until provider verification.
 
-`ResearchCandidatePage.jsx`:
+### Scheduler
 
-- candidate identity/strategy/reasons;
-- historical validation status;
-- target/stop/neither probability visualization;
-- expected R + P05/P50/P95;
-- regime badge and methodology details;
-- cost/slippage assumptions;
-- reproducibility panel (`seed`, sample count, cutoff, methodology);
-- button `Review Paper Trade` only after Phase 5 risk precheck; never “Auto Buy”.
+`MarketDataReconciliationScheduler`
+- disabled by default locally;
+- production configurable cron after market close;
+- bounded max instruments/run;
+- uses distributed-safe database claim if multiple app instances are possible.
 
-Pro Terminal: compact analytics grid/distribution chart.  
-Clear Invest: guided explanation cards with identical values.
+### Operational API
 
-## Tests
+- `POST /api/market-data/quality/evaluate`
+- `GET /api/market-data/quality?status=&limit=`
+- `POST /api/market-data/reconcile` (operator only; no broker order implications)
 
-- same seed/history/config -> identical output;
-- blocks never cross session/day;
-- regime filter/fallback deterministic;
-- both stop+target -> stop first;
-- costs reduce expected R correctly;
-- persistence round-trip preserves exact seed/methodology/cutoff.
+## P01-W04 — Angel One throttling/provider metrics
 
-## Exit gate
+### New/extended classes
 
-Candidate analysis is fully reproducible and auditable without broker/AI authority.
+`provider/angelone/AngelOneRateLimiter`
+- token-bucket/sliding-window based on verified current provider limits;
+- config properties only after official docs review;
+- rate values must not be guessed into production defaults.
+
+`AngelOneCallMetrics`
+- request count;
+- response class;
+- latency;
+- throttled count;
+- retry count;
+- auth/session failures.
+
+`AngelOneRetryPolicy`
+- retry only safe read requests;
+- exponential backoff + jitter;
+- max attempts bounded;
+- do not retry validation/auth failures blindly.
+
+## P01-W05 — UI market-data operations
+
+Extend `/market-data` page, preserving existing backfill UI.
+
+New components:
+- `MarketDataQualityCard.jsx`
+- `GapRangeTable.jsx`
+- `BackfillRunDetailDrawer.jsx`
+- `ProviderHealthBadge.jsx`
+- `MarketCalendarPanel.jsx`
+
+New hooks:
+- `useMarketDataQuality(params)`
+- `useEvaluateMarketDataQuality()`
+- `useMarketCalendar(range)`
+- `useReconcileMarketData()`
+
+Both designs render the same data:
+- Pro Terminal: dense status table + inline quality badges;
+- Clear Invest: guided health cards + human-readable gap explanation.
+
+## Phase 1 tests
+
+- `IndianCashMarketCalendarTest`
+- `CandleGapDetectorTest`
+- `MarketDataQualityRepositoryIT`
+- `MarketDataQualityApiIT`
+- `MarketDataReconciliationServiceTest`
+- existing historical ingestion/backfill tests remain green.
+
+### Phase 1 exit gate
+
+Instrument identity + candle history for configured production universe can be quality-scored, gaps identified, provider calls bounded, and recovery initiated without direct DB access.
 
 ---
 
-# Phase 5 — Risk engine completion
+# PHASE 2 — Deterministic strategy and scanner suite
 
-**Status:** PARTIAL. Extend existing `RiskPolicy`, `RiskInput`, `RiskDecision`, `RiskReason`.
+**Status:** PARTIAL. Existing scanner classes remain the implementation base.
 
-## Database
+## P02-W01 — Strategy metadata registry
 
-### `risk_policy_version`
+### New interface
 
-```sql
-id UUID PRIMARY KEY,
-version VARCHAR(40) NOT NULL UNIQUE,
-active BOOLEAN NOT NULL DEFAULT FALSE,
-config_json JSONB NOT NULL,
-created_by VARCHAR(120) NOT NULL,
-created_at TIMESTAMPTZ NOT NULL,
-activated_at TIMESTAMPTZ
+`scanner/StrategyDescriptorProvider.java`
+
+```java
+StrategyDescriptor descriptor();
 ```
 
-### Extend persisted risk decision
+Extend `ScannerStrategy` to expose metadata without changing deterministic `evaluate` semantics.
 
-Ensure every decision stores:
+`StrategyDescriptor` fields:
+- `code`
+- `version`
+- `displayName`
+- supported intervals;
+- minimum candles;
+- `TradingStyle` (`INTRADAY`, `SWING`);
+- session requirement;
+- data-quality minimum;
+- long/short capability (V1 cash-equity remains long-only unless explicitly implemented).
 
-```sql
-policy_version VARCHAR(40) NOT NULL,
-order_intent_id UUID,
-input_snapshot JSONB NOT NULL,
-reasons_json JSONB NOT NULL,
-decision VARCHAR(30) NOT NULL, -- APPROVED/REJECTED/APPROVAL_REQUIRED
-created_at TIMESTAMPTZ NOT NULL
+### Registry
+
+`StrategyRegistry`
+
+```java
+List<ScannerStrategy> enabledStrategies();
+Optional<ScannerStrategy> require(String code);
+List<StrategyDescriptor> descriptors();
 ```
 
-## Backend
+Spring injects implementations; registry sorts by stable strategy code to preserve deterministic iteration.
 
-Add `RiskRule` interface:
+## P02-W02 — Persisted strategy configuration/versioning
+
+### New table `strategy_config`
+
+- `id UUID PK`
+- `strategy_code VARCHAR(80) NOT NULL`
+- `config_version INTEGER NOT NULL`
+- `enabled BOOLEAN NOT NULL`
+- `config_json JSONB NOT NULL DEFAULT '{}'`
+- `effective_from TIMESTAMPTZ NOT NULL`
+- `effective_to TIMESTAMPTZ NULL`
+- `created_by VARCHAR(120) NOT NULL`
+- `created_at TIMESTAMPTZ NOT NULL`
+- unique `(strategy_code, config_version)`
+- partial unique index allowing one active row per `strategy_code` where `effective_to IS NULL`.
+
+Do not allow arbitrary formulas/scripts in `config_json`. Only validated typed keys declared by each strategy.
+
+### Classes
+
+`StrategyConfigRepository`
+`StrategyConfigService`
+`StrategyConfigSnapshot`
+
+The snapshot ID/version is attached to future scan/backtest/simulation provenance.
+
+## P02-W03 — Candidate identity/deduplication
+
+Extend `research_scan_candidate` with forward migration:
+
+- `candidate_fingerprint CHAR(64)`
+- `strategy_config_version INTEGER`
+- `catalogue_version UUID`
+- `data_cutoff_at TIMESTAMPTZ`
+
+Fingerprint canonical input:
+`instrumentId|interval|strategy|strategyVersion|signalCandleTime|entry|stop|target`.
+
+Unique `(scan_run_id, candidate_fingerprint)`.
+
+`CandidateFingerprint` utility must canonicalize `BigDecimal.stripTrailingZeros().toPlainString()` and UTC instant strings.
+
+## P02-W04 — Strategy hardening
+
+For every existing strategy:
+
+- `VolumeBreakoutStrategy`
+- `MovingAverageReclaimStrategy`
+- `OpeningRangeBreakoutStrategy`
+- `VwapMomentumStrategy`
+- `RsiReversalStrategy`
+- existing `StrategyService` SMA trend/volume path
+
+add:
+
+1. positive fixture;
+2. negative fixture;
+3. exact-boundary fixture;
+4. insufficient-history fixture;
+5. future/stale candle fixture;
+6. duplicate/out-of-order candle rejection fixture;
+7. deterministic replay fixture.
+
+Create `CandleSeriesValidator` shared by scanner/backtest/research:
+- strict ascending candle times;
+- no future candle relative to cutoff;
+- interval continuity quality delegated to Phase 1;
+- non-empty/positive OHLC already database-constrained but checked for unit fixtures.
+
+## P02-W05 — Scanner runtime/performance
+
+`ResearchScanService` changes:
+- registry-driven strategies instead of hard-coded list;
+- max universe still hard capped at 500 unless master plan changes;
+- per-instrument failures captured as scan diagnostics instead of failing entire run when safe;
+- scan-run status becomes `RUNNING/SUCCEEDED/PARTIAL/FAILED`.
+
+Add child table `research_scan_diagnostic`:
+- `id BIGSERIAL PK`
+- `scan_run_id UUID FK`
+- `instrument_id BIGINT NULL`
+- `strategy VARCHAR(80) NULL`
+- `severity VARCHAR(12)`
+- `code VARCHAR(80)`
+- `message VARCHAR(300)`
+- `created_at TIMESTAMPTZ`.
+
+## P02-W06 — Strategy/scanner APIs
+
+- `GET /api/research/strategies`
+- `GET /api/research/strategies/{code}`
+- `PUT /api/research/strategies/{code}/config` operator/admin only once Phase 10 auth exists; before then existing operator API-key gate.
+- existing `POST /api/research/scans`
+- existing `GET /api/research/scans/{id}`
+- existing `GET /api/research/scans/{id}/candidates`
+- add `GET /api/research/scans/{id}/diagnostics`.
+
+## P02-W07 — UI scanner foundation
+
+New route `/research` initially hosts scanner list/candidates.
+
+Components:
+- `ResearchScanLauncher.jsx`
+- `StrategySelector.jsx`
+- `ScanRunStatus.jsx`
+- `CandidateTable.jsx`
+- `CandidateScoreBadge.jsx`
+- `CandidateReasonList.jsx`
+- `ResearchDiagnosticsDrawer.jsx`
+
+Hooks:
+- `useResearchStrategies()`
+- `useResearchScans(params)`
+- `useResearchScan(id)`
+- `useResearchCandidates(id, limit)`
+- `useStartResearchScan()`
+
+No UI control may convert a candidate directly into an executed order. Candidate detail can open an order-review flow only after Phase 5/7 rules.
+
+### Phase 2 exit gate
+
+Every enabled strategy is versioned/configured, deterministic, fixture-covered, scanner-bounded and provenance-linked.
+
+---
+
+# PHASE 3 — Backtesting and statistical validation
+
+**Status:** PARTIAL. Existing `paper_backtest_run/trade/validation` are extended.
+
+## P03-W01 — Strategy-neutral backtest SPI
+
+New interfaces:
+
+`backtest/BacktestStrategy.java`
+
+```java
+String code();
+String version();
+BacktestSignal evaluate(BacktestContext context);
+```
+
+`ScannerBacktestAdapter` wraps compatible `ScannerStrategy` implementations without duplicating strategy math.
+
+`BacktestContext` includes:
+- candles up to current index only;
+- current cutoff;
+- config snapshot;
+- account/equity state;
+- no future candles.
+
+## P03-W02 — Provenance/metrics schema extension
+
+Alter `paper_backtest_run` add:
+
+- `strategy_config_version INTEGER NULL`
+- `methodology_version VARCHAR(80) NOT NULL DEFAULT 'BACKTEST_V1'`
+- `data_cutoff_at TIMESTAMPTZ NULL`
+- `source_candle_count INTEGER`
+- `benchmark_return_percent NUMERIC(12,4)`
+- `expectancy_r NUMERIC(14,6)`
+- `average_r NUMERIC(14,6)`
+- `exposure_percent NUMERIC(12,4)`
+- `turnover NUMERIC(20,2)`
+- `max_consecutive_losses INTEGER`
+- `assumptions_json JSONB NOT NULL DEFAULT '{}'`.
+
+Add `paper_backtest_equity_point`:
+- `run_id UUID FK`
+- `point_time TIMESTAMPTZ`
+- `equity NUMERIC(20,2)`
+- `cash NUMERIC(20,2)`
+- `open_value NUMERIC(20,2)`
+- primary key `(run_id, point_time)`.
+
+## P03-W03 — Walk-forward validation
+
+New tables:
+
+`backtest_walk_forward_run`
+- `id UUID PK`
+- instrument/interval/strategy identity;
+- overall from/to;
+- training window days;
+- validation window days;
+- step days;
+- status;
+- created/completed/error fields.
+
+`backtest_walk_forward_fold`
+- `walk_forward_id UUID FK`
+- `fold_number INTEGER`
+- `training_run_id UUID FK paper_backtest_run`
+- `validation_run_id UUID FK paper_backtest_run`
+- date ranges;
+- train return;
+- validation return;
+- validation max drawdown;
+- primary key `(walk_forward_id, fold_number)`.
+
+No optimization/hyperparameter search is introduced unless separately specified. Same fixed strategy config is used across folds for V1.
+
+## P03-W04 — Leakage protections
+
+Create `BacktestDataGuard`:
+- rejects unordered candles;
+- no candidate/evaluation may read candle index > current simulation index;
+- entry only at next candle open where existing methodology requires it;
+- session gap handling explicit;
+- no use of post-cutoff corporate/news information in deterministic price strategy.
+
+`LookAheadBiasRegressionTest` uses a fixture where a future spike would change an SMA if future data leaked; expected pre-spike decisions must remain unchanged.
+
+## P03-W05 — APIs
+
+Existing endpoints stay compatible. Add:
+
+- `POST /api/backtests`
+- `GET /api/backtests/{id}`
+- `GET /api/backtests?instrumentId=&strategy=&page=&size=`
+- `POST /api/backtests/walk-forward`
+- `GET /api/backtests/walk-forward/{id}`
+- `GET /api/backtests/{id}/equity`
+- `GET /api/backtests/{id}/export.csv` with CSV-injection-safe escaping.
+
+## P03-W06 — UI
+
+Extend existing `BacktestingPage.jsx` into controller composition; extract:
+- `BacktestForm.jsx`
+- `BacktestMetricsGrid.jsx`
+- `EquityCurveChart.jsx`
+- `DrawdownChart.jsx`
+- `BacktestTradeTable.jsx`
+- `ValidationComparison.jsx`
+- `WalkForwardPanel.jsx`
+- `AssumptionsDrawer.jsx`.
+
+Pro Terminal uses dense metric strip + charts/table; Clear Invest uses guided summary, explicit assumptions and plain-language labels.
+
+### Phase 3 exit gate
+
+Every enabled production strategy has repeatable leakage-safe historical validation with persisted methodology/config/data cutoff and exportable evidence.
+
+---
+
+# PHASE 4 — Scenario simulation and regime-aware research
+
+**Status:** IN PROGRESS. Existing `HistoricalScenarioSimulator` and request/result/service/controller remain.
+
+## P04-W01 — Scenario persistence
+
+Create `research_scenario_run`:
+
+- `id UUID PK`
+- `scan_run_id UUID NULL FK research_scan_run`
+- `candidate_id BIGINT NULL FK research_scan_candidate`
+- `instrument_id BIGINT NOT NULL`
+- `exchange VARCHAR(20)`
+- `trading_symbol VARCHAR(120)`
+- `interval VARCHAR(32) NOT NULL`
+- `strategy VARCHAR(80) NULL`
+- `strategy_config_version INTEGER NULL`
+- `entry_price NUMERIC(20,6) NOT NULL`
+- `stop_price NUMERIC(20,6) NOT NULL`
+- `target_price NUMERIC(20,6) NOT NULL`
+- `history_from TIMESTAMPTZ NOT NULL`
+- `history_to TIMESTAMPTZ NOT NULL`
+- `data_cutoff_at TIMESTAMPTZ NOT NULL`
+- `simulation_count INTEGER NOT NULL`
+- `horizon_bars INTEGER NOT NULL`
+- `block_size INTEGER NOT NULL`
+- `seed BIGINT NOT NULL`
+- `slippage_bps INTEGER NOT NULL`
+- `round_trip_cost_bps INTEGER NOT NULL`
+- `methodology VARCHAR(80) NOT NULL`
+- `regime VARCHAR(32) NOT NULL`
+- `historical_samples INTEGER NOT NULL`
+- `eligible_block_count INTEGER NOT NULL`
+- target/stop/neither counts + probabilities;
+- `expected_r NUMERIC(18,8)`
+- `p05_r/p50_r/p95_r NUMERIC(18,8)`
+- `status VARCHAR(16) CHECK IN ('CREATED','RUNNING','SUCCEEDED','FAILED')`
+- error fields;
+- `started_at/completed_at/created_at TIMESTAMPTZ`.
+
+Indexes:
+- `(candidate_id, created_at DESC)`
+- `(instrument_id, interval, created_at DESC)`
+- `(status, created_at DESC)`.
+
+## P04-W02 — Regime model
+
+New enum `MarketRegime { LOW_VOL, NORMAL_VOL, HIGH_VOL }`.
+
+`RegimeClassifier`
+- default window 20 completed candles;
+- calculate returns using close-to-close log/simple return consistently (document method);
+- realized volatility estimate;
+- classify against historical 33rd/67th percentile thresholds from eligible historical blocks;
+- no future observations beyond `dataCutoffAt`.
+
+`LiquidityRegime { LOW, NORMAL, HIGH }`
+- based on relative rolling median/average volume;
+- used as secondary match filter, never price prediction.
+
+`RegimeSnapshot`
+- volatility metric;
+- lower/upper thresholds;
+- volatility regime;
+- volume metric;
+- volume regime;
+- methodology version.
+
+## P04-W03 — Session-safe block sampling
+
+Replace unrestricted transition list with `HistoricalBlockSampler`.
+
+`HistoricalBlock` contains:
+- source trade date;
+- start candle time;
+- observations list;
+- regime snapshot at block start.
+
+Rules:
+- block cannot cross `Asia/Kolkata` trade date;
+- block cannot cross session close;
+- block length exactly request block size;
+- block cannot include candle after data cutoff;
+- prefer exact volatility + volume regime match;
+- fallback order: same volatility -> all eligible blocks;
+- persist `eligibleBlockCount` and fallback tier.
+
+Methodology becomes `SESSION_REGIME_BLOCK_BOOTSTRAP_V2`.
+
+Same seed + same history/config must produce byte-for-byte-equivalent numeric result after scale normalization.
+
+## P04-W04 — Orchestration
+
+`ScenarioResearchOrchestrator`
+
+```java
+ResearchEvaluationResult evaluateCandidate(long candidateId, ResearchEvaluationRequest request);
+```
+
+Flow:
+1. load candidate + scan provenance;
+2. verify candidate still references immutable historical candle time;
+3. resolve strategy/config version;
+4. run/reuse backtest if requested;
+5. run/reuse scenario simulation by request fingerprint;
+6. persist research-evaluation link;
+7. return research-only result.
+
+Create `research_evaluation`:
+- `id UUID PK`
+- `candidate_id BIGINT NOT NULL`
+- `backtest_run_id UUID NULL`
+- `scenario_run_id UUID NOT NULL`
+- `decision_label VARCHAR(24)` limited to research labels such as `FAVORABLE/MIXED/UNFAVORABLE/INSUFFICIENT_DATA`; never `EXECUTE`;
+- `reason_codes JSONB`
+- `created_at`.
+
+## P04-W05 — APIs
+
+- keep `POST /api/research/simulations` for direct expert use;
+- `POST /api/research/candidates/{candidateId}/evaluate`
+- `GET /api/research/candidates/{candidateId}/evaluations`
+- `GET /api/research/simulations/{id}`
+- `GET /api/research/simulations?candidateId=&page=&size=`.
+
+Defaults for candidate evaluation:
+- simulations 10,000;
+- server-defined cost/slippage profile;
+- deterministic seed derived from explicit stored seed generator/request, never hidden random replayability loss.
+
+## P04-W06 — Tests
+
+- `RegimeClassifierTest`
+- `HistoricalBlockSamplerTest`
+- `SessionBoundarySamplingTest`
+- `HistoricalScenarioSimulatorV2Test`
+- `ScenarioSimulationRepositoryIT`
+- `ScenarioResearchOrchestratorIT`
+- same-seed replay;
+- exact regime fallback;
+- no overnight block crossing;
+- stop-first same-bar conservative behavior preserved.
+
+## P04-W07 — UI contract (implemented visually in Phase 9)
+
+Define now:
+- `CandidateResearchDrawer`
+- scenario probability chart;
+- R distribution summary;
+- regime chips;
+- methodology/provenance drawer;
+- explicit `Research only — not an order` label.
+
+### Phase 4 exit gate
+
+Candidate -> historical validation -> regime-aware scenario result is persisted, reproducible and linked to immutable provenance.
+
+---
+
+# PHASE 5 — Deterministic risk engine completion
+
+**Status:** PARTIAL. Existing `RiskPolicy`, `RiskInput`, `RiskDecision`, `RiskReason` remain core.
+
+## P05-W01 — Rule decomposition without behavior regression
+
+Introduce:
 
 ```java
 interface RiskRule {
@@ -636,1058 +883,1336 @@ interface RiskRule {
 }
 ```
 
-`RiskPolicy` becomes orchestrator over ordered immutable rules, preserving current behavior.
+`RiskRuleResult`:
+- code;
+- `PASS`, `HARD_REJECT`, `APPROVAL_REQUIRED`;
+- numeric observed value;
+- numeric configured limit;
+- message key.
 
-Concrete rules:
+`RiskPolicy.evaluate` becomes ordered composition of immutable rules, preserving existing outputs during migration.
 
+Rules:
 - `EmergencyStopRule`
-- `MarketSessionRule`
 - `SignalFreshnessRule`
+- `DailyLossRule`
 - `PriceLevelRule`
 - `MinimumRewardRiskRule`
 - `PerTradeRiskBudgetRule`
-- `MaxOrderNotionalRule`
-- `DailyLossRule`
-- `DailyTradeCountRule`
-- `MaxPositionsRule`
-- `GrossExposureRule`
-- `SymbolConcentrationRule`
-- `DuplicateExposureRule`
+- `MaxOpenPositionsRule`
+- `ExistingSymbolExposureRule`
 - `CashAvailabilityRule`
-- `MarketStateFreshnessRule`
+- `HoldingsAvailabilityRule`
+- `MaxOrderNotionalRule`
+- `GrossPortfolioExposureRule`
+- `MaxTradesPerDayRule`
+- `MarketSessionRule`
+- `SymbolConcentrationRule`
+- `DuplicatePendingExposureRule`
+- `MarketStateFreshnessRule`.
 
-Add:
+Hard risk rules cannot return `APPROVAL_REQUIRED` merely because policy mode is MANUAL/HYBRID.
 
-- `RiskContextFactory`
-- `RiskPolicyRepository`
-- `RiskPolicyService`
-- `PositionSizingService`
-- `RiskPrecheckService`
+## P05-W02 — Risk policy version persistence
 
-`PositionSizingService` returns suggestion only; final submitted quantity is revalidated.
+Create `risk_policy_config`:
+- `id UUID PK`
+- `policy_version INTEGER NOT NULL UNIQUE`
+- `active BOOLEAN NOT NULL`
+- all typed limits as NUMERIC/INTEGER columns where stable;
+- `additional_config JSONB NOT NULL DEFAULT '{}'` only for forward extension;
+- `effective_from/effective_to`;
+- `created_by`;
+- `created_at`.
 
-## API
+Core typed columns:
+- risk per trade %;
+- max daily drawdown %;
+- max open positions;
+- max order notional;
+- max gross exposure %;
+- max symbol exposure %;
+- max trades/day;
+- min reward:risk;
+- max signal age minutes;
+- market-state max age seconds;
+- fee/slippage profile version.
 
+Alter `risk_decision` add:
+- `policy_config_id UUID NULL`
+- `policy_snapshot JSONB NOT NULL DEFAULT '{}'`
+- `result_class VARCHAR(24)`.
+
+Create `risk_decision_rule`:
+- `risk_decision_id UUID FK`
+- `rule_code VARCHAR(80)`
+- `outcome VARCHAR(24)`
+- `observed_value NUMERIC(24,8) NULL`
+- `limit_value NUMERIC(24,8) NULL`
+- `details JSONB`
+- primary key `(risk_decision_id, rule_code)`.
+
+## P05-W03 — Position sizing
+
+`PositionSizingService`
+
+Inputs:
+- capital/equity;
+- entry;
+- stop;
+- configured risk budget;
+- max notional;
+- concentration/exposure remaining;
+- lot size (cash equity default 1).
+
+Output `PositionSizeSuggestion`:
+- quantity;
+- risk/share;
+- total estimated risk;
+- estimated notional;
+- limiting rule code.
+
+Quantity uses floor division and returns zero if minimum one share violates any hard limit.
+
+Endpoint:
+`POST /api/risk/position-size` — advisory only, server recalculates at actual order evaluation.
+
+## P05-W04 — RiskContextFactory
+
+New `RiskContextFactory` centralizes fresh state loading:
+- trading control;
+- account cash/equity;
+- current positions;
+- daily realized P&L;
+- today trade count;
+- pending intents;
+- current market/session state;
+- candidate/signal timestamp;
+- active risk-policy snapshot.
+
+No controller builds risk input manually.
+
+## P05-W05 — Risk API/UI contract
+
+APIs:
 - `GET /api/risk/policy`
-- `POST /api/risk/precheck`
-- `GET /api/risk/utilization`
-- `GET /api/risk/decisions?limit=&offset=&decision=`
-- operator-only versioned policy update endpoint; activation must be audited.
+- `GET /api/risk/policies?page=&size=`
+- `PUT /api/risk/policy` admin-only after Phase 10;
+- existing decisions endpoint adds rule details;
+- `POST /api/risk/position-size`;
+- emergency stop preserved.
 
-## Frontend
+Audit events:
+- `RISK_POLICY_CHANGED`
+- `RISK_EVALUATED`
+- `EMERGENCY_STOP_CHANGED`.
 
-Extend `RiskPage.jsx`:
+### Phase 5 tests
 
-- hard-limit cards;
-- utilization bars;
-- emergency-stop status;
-- rejection history;
-- policy version/details;
-- position-size calculator;
-- non-overridable rule labeling.
+One exact-boundary test per rule, plus:
+- concurrency duplicate exposure;
+- missing/stale market state fail closed;
+- risk snapshot immutability;
+- approval cannot turn HARD_REJECT into pass.
 
-`SimulateTradeDialog.jsx` calls risk precheck and renders exact reason codes before submission.
+### Phase 5 exit gate
 
-## Tests
-
-Boundary tests for every rule; concurrent duplicate exposure; stale quote/account state; policy snapshot immutability; rule ordering must not alter hard-rejection result.
-
-## Exit gate
-
-Every executable order intent is deterministically risk-gated with immutable policy/input provenance.
+An immutable order intent cannot move toward execution unless every hard deterministic risk rule passes against fresh state and the persisted policy snapshot is auditable.
 
 ---
 
-# Phase 6 — PAPER trading accounting and portfolio engine
+# PHASE 6 — PAPER order lifecycle, accounting and portfolio engine
 
-**Status:** PARTIAL. Extend `paper` package; do not replace `PaperTradingService` until behavior is safely decomposed.
+**Status:** PARTIAL. Existing `PaperTradingService` transaction/account lock remains until safely decomposed.
 
-## Database
+## P06-W01 — Explicit order model
 
-Use/extend current paper tables. Target normalized model:
+Forward migration alters `paper_order` add:
+- `instrument_id BIGINT NULL` (backfill from symbol/catalogue where deterministic; nullable for legacy rows);
+- `exchange VARCHAR(8)`;
+- `order_type VARCHAR(12) DEFAULT 'MARKET'` (`MARKET`,`LIMIT`);
+- `limit_price NUMERIC(20,6) NULL`;
+- `product_type VARCHAR(12) DEFAULT 'DELIVERY'` (`DELIVERY`,`INTRADAY`);
+- `strategy VARCHAR(80) NULL`;
+- `candidate_id BIGINT NULL`;
+- `approval_id UUID NULL` added after Phase 7 table exists;
+- `submitted_quantity INTEGER`;
+- `filled_quantity INTEGER DEFAULT 0`;
+- `average_fill_price NUMERIC(20,6) NULL`.
 
-### `paper_order`
+Expand allowed status state machine:
 
-Required columns/state:
+`NEW -> RISK_APPROVED -> APPROVAL_PENDING -> READY -> PARTIALLY_FILLED -> FILLED`
 
-```text
-id UUID
-idempotency_key VARCHAR UNIQUE
-correlation_id UUID
-instrument_id BIGINT
-side BUY/SELL
-order_type MARKET/LIMIT
-quantity BIGINT
-limit_price NUMERIC nullable
-status CREATED/RISK_REJECTED/APPROVAL_PENDING/ACCEPTED/PARTIALLY_FILLED/FILLED/CANCELLED/REJECTED
-strategy_key VARCHAR
-signal_id/research_candidate_id nullable
-trading_style INTRADAY/SWING
-risk_policy_version VARCHAR
-created_at/updated_at
-```
+Terminal alternatives:
+- `REJECTED`
+- `CANCELLED`
+- `EXPIRED`
+- `FAILED`.
 
-### `paper_fill`
+For Phase 6 PAPER before approvals exist, `RISK_APPROVED -> READY` directly.
 
-```text
-id UUID PK
-order_id UUID FK
-quantity BIGINT
-raw_price NUMERIC(19,4)
-slippage NUMERIC(19,4)
-fees NUMERIC(19,4)
-net_price NUMERIC(19,4)
-filled_at TIMESTAMPTZ
-UNIQUE(order_id, fill_sequence)
-```
+Create `OrderStateMachine` with explicit allowed transition map. Database updates always use `WHERE id=? AND status=?` optimistic transition check.
 
-### `paper_position`
+## P06-W02 — Partial-fill-safe fill schema
 
-```text
-instrument_id BIGINT + trading_style composite identity
-quantity BIGINT
-average_cost NUMERIC(19,4)
-realized_pnl NUMERIC(19,4)
-opened_at
-updated_at
-version BIGINT
-```
+Current `paper_fill.order_id` is unique and must be relaxed before partial fills.
 
-### `portfolio_snapshot`
+Migration:
+- drop unique constraint on `order_id`;
+- add `fill_sequence INTEGER NOT NULL DEFAULT 1`;
+- unique `(order_id, fill_sequence)`;
+- add `execution_model_version VARCHAR(40)`;
+- add `liquidity_assumption VARCHAR(40)`.
 
-```sql
-id BIGSERIAL PRIMARY KEY,
-snapshot_at TIMESTAMPTZ NOT NULL,
-cash NUMERIC(19,4) NOT NULL,
-market_value NUMERIC(19,4) NOT NULL,
-unrealized_pnl NUMERIC(19,4) NOT NULL,
-realized_pnl NUMERIC(19,4) NOT NULL,
-total_equity NUMERIC(19,4) NOT NULL,
-gross_exposure NUMERIC(19,4) NOT NULL,
-source VARCHAR(30) NOT NULL
-```
+`PaperFillRepository.appendFill(orderId, fillSequence, ...)`.
 
-Current cash ledger remains authoritative for cash movements.
+V1 PAPER default may still produce one fill per order; schema must no longer prevent future deterministic partial fill simulation.
 
-## Backend decomposition
+## P06-W03 — Position model
 
-Keep `OrderCommand`, `PaperExecutionModel`, `PaperQueryService`, `PaperTradingService`, `PaperViews`.
+Alter `paper_position`:
+- add `instrument_id BIGINT`;
+- `exchange VARCHAR(8)`;
+- `product_type VARCHAR(12)`;
+- rename semantics by adding `average_price NUMERIC(20,6)`; keep legacy `cost_basis` until migration/backfill complete;
+- `realized_pnl NUMERIC(20,2) DEFAULT 0`;
+- unique target becomes `(instrument_id, product_type)` once legacy data converted.
 
-Gradually extract:
+Create `PositionAccountingService`:
+- weighted-average cost for cash positions;
+- deterministic realized P&L on SELL;
+- no short positions in V1 cash-equity unless master scope changes;
+- intraday positions handled separately from delivery.
 
+## P06-W04 — Portfolio snapshots
+
+Create `paper_portfolio_snapshot`:
+- `id BIGSERIAL PK`
+- `snapshot_at TIMESTAMPTZ`
+- `cash NUMERIC(20,2)`
+- `market_value NUMERIC(20,2)`
+- `equity NUMERIC(20,2)`
+- `realized_pnl_day NUMERIC(20,2)`
+- `unrealized_pnl NUMERIC(20,2)`
+- `gross_exposure NUMERIC(20,2)`
+- `open_positions INTEGER`
+- unique `snapshot_at` or controlled interval key.
+
+`PortfolioValuationService` uses latest persisted/reference market price with freshness status. If stale, valuation response exposes stale flag; execution risk still fails closed where freshness required.
+
+## P06-W05 — Reconciliation
+
+Create:
+
+`paper_reconciliation_run`
+- id/status/start/end/counts.
+
+`paper_reconciliation_difference`
+- run id;
+- entity type/id;
+- difference code;
+- expected/actual JSONB;
+- severity;
+- resolved flag;
+- resolution audit reference.
+
+`PaperReconciliationService` verifies:
+- account cash == seed + cash ledger sum;
+- fill totals == order filled quantities;
+- position quantities == BUY fills - SELL fills by instrument/product;
+- position cost basis matches accounting rule;
+- realized P&L equals sell-fill accounting;
+- no rejected order has fill/cash settlement.
+
+Never auto-delete historical inconsistencies.
+
+## P06-W06 — Intraday end-of-session behavior
+
+`IntradayPaperCloseService`
+- scheduled only when enabled;
+- after configured square-off cutoff, create explicit SYSTEM-origin SELL order intents through normal risk/accounting path;
+- idempotency key derived from trade date + position;
+- audit origin `INTRADAY_AUTO_CLOSE`;
+- no direct position deletion.
+
+## P06-W07 — Service decomposition
+
+Refactor current `PaperTradingService` incrementally into:
+- `PaperOrderService`
 - `PaperOrderRepository`
 - `PaperFillRepository`
+- `PaperAccountRepository`
 - `PaperPositionRepository`
-- `CashLedgerRepository`
-- `PaperOrderStateMachine`
-- `PaperExecutionService`
-- `PaperAccountingService`
-- `PortfolioValuationService`
-- `PaperReconciliationService`
-- `PaperSessionCloseService`
+- `PositionAccountingService`
+- `PaperExecutionEngine`.
 
-State transitions must use SQL conditions/version to prevent double transitions.
+Do not perform big-bang rewrite. First extract repository methods under existing integration tests, then transaction orchestration.
 
-## API
+## P06-W08 — APIs
 
-- keep current paper endpoints;
-- `POST /api/paper/orders/{id}/cancel`
-- `GET /api/paper/orders/{id}`
-- `GET /api/paper/positions`
-- `GET /api/paper/portfolio`
-- `GET /api/paper/portfolio/equity-curve`
-- admin-only `POST /api/paper/account/reset` with confirmation token/audit.
+- existing `POST /api/paper-trades/simulate` remains compatibility path;
+- new `POST /api/paper-orders` eventually becomes canonical request;
+- `GET /api/paper-orders/{id}`;
+- `POST /api/paper-orders/{id}/cancel` for cancellable states;
+- `GET /api/paper-portfolio`;
+- `GET /api/paper-positions`;
+- `GET /api/paper-reconciliation/runs`;
+- `POST /api/paper-reconciliation` operator/admin.
 
-## Frontend
+## P06-W09 — UI
 
-Extend `PaperTradesPage.jsx` and add:
+Existing `PaperTradesPage` evolves into tabs/sections:
+- Orders
+- Fills
+- Positions
+- Cash ledger
+- Reconciliation.
 
-- `PositionsPage.jsx`
-- `PortfolioPage.jsx`
+New `PortfolioPage.jsx` route `/portfolio`.
 
 Components:
-
-- `OrderLifecycleTimeline`
+- `OrderStatusTimeline`
 - `FillBreakdown`
 - `PositionTable`
 - `PnLSummary`
-- `EquityCurveChart`
-- `CostBreakdown`
-- `ReconciliationStatus`
+- `ExposureChart`
+- `CashLedgerTable`
+- `ReconciliationBanner`.
 
-## Tests
+### Phase 6 exit gate
 
-- idempotent replay;
-- rejected order no cash mutation;
-- partial fill accounting;
-- buy then sell realized P&L;
-- restart reconciliation;
-- concurrent order state transition;
-- intraday session close behavior.
-
-## Exit gate
-
-Cash + fills + positions + portfolio equity reconcile exactly.
+Cash, orders, fills, positions, realized/unrealized P&L and snapshots reconcile under replay, restart, rejection and concurrency tests.
 
 ---
 
-# Phase 7 — Approval policy and operator workflow
+# PHASE 7 — MANUAL / AUTO / HYBRID approval policy
 
 **Status:** NOT STARTED.
 
-## Database
+## P07-W01 — Execution policy schema
 
-### `execution_policy`
+Create `execution_policy`:
+- `id UUID PK`
+- `policy_version INTEGER UNIQUE NOT NULL`
+- `execution_mode VARCHAR(8)` (`PAPER`,`LIVE`)
+- `strategy VARCHAR(80) NULL` (NULL = default)
+- `trading_style VARCHAR(16)` (`INTRADAY`,`SWING`,`ANY`)
+- `approval_mode VARCHAR(12)` (`MANUAL`,`AUTO`,`HYBRID`)
+- `max_order_notional NUMERIC(20,2)`
+- `max_daily_trades INTEGER`
+- `max_gross_exposure NUMERIC(20,2)`
+- `max_daily_loss NUMERIC(20,2)`
+- `symbol_allowlist JSONB`
+- `symbol_denylist JSONB`
+- `session_start TIME NULL`
+- `session_end TIME NULL`
+- `active BOOLEAN`
+- `effective_from/effective_to`
+- actor/timestamps.
 
-```sql
-id UUID PRIMARY KEY,
-name VARCHAR(100) NOT NULL,
-mode VARCHAR(10) NOT NULL, -- PAPER/LIVE
-policy_type VARCHAR(10) NOT NULL, -- MANUAL/AUTO/HYBRID
-strategy_key VARCHAR(80),
-trading_style VARCHAR(20),
-max_order_notional NUMERIC(19,4),
-max_daily_trades INT,
-max_gross_exposure NUMERIC(19,4),
-max_daily_loss NUMERIC(19,4),
-allowed_symbols JSONB,
-denied_symbols JSONB,
-allowed_sessions JSONB,
-active BOOLEAN NOT NULL,
-version BIGINT NOT NULL,
-created_by VARCHAR(120) NOT NULL,
-created_at TIMESTAMPTZ NOT NULL
-```
+Policy limits can be stricter than hard risk limits, never looser in a way that bypasses hard risk.
 
-### `order_approval`
+## P07-W02 — Approval schema
 
-```sql
-id UUID PRIMARY KEY,
-order_intent_id UUID NOT NULL,
-policy_id UUID NOT NULL REFERENCES execution_policy(id),
-policy_version BIGINT NOT NULL,
-status VARCHAR(20) NOT NULL, -- PENDING/APPROVED/REJECTED/EXPIRED/CANCELLED/EXECUTED
-requested_at TIMESTAMPTZ NOT NULL,
-expires_at TIMESTAMPTZ NOT NULL,
-decided_at TIMESTAMPTZ,
-decided_by VARCHAR(120),
-reason VARCHAR(500),
-risk_decision_id UUID NOT NULL,
-version BIGINT NOT NULL DEFAULT 0,
-UNIQUE(order_intent_id)
-```
+Create `order_approval`:
+- `id UUID PK`
+- `order_id UUID UNIQUE FK paper_order`
+- `policy_id UUID FK execution_policy`
+- `policy_version INTEGER`
+- `state VARCHAR(20)` (`PENDING`,`APPROVED`,`REJECTED`,`EXPIRED`,`CANCELLED`,`AUTO_APPROVED`)
+- `decision_reason VARCHAR(300)`
+- `requested_at`
+- `expires_at`
+- `decided_at`
+- `decided_by VARCHAR(120) NULL`
+- `row_version INTEGER NOT NULL DEFAULT 0`
+- `risk_decision_id UUID NOT NULL`
+- `request_snapshot JSONB NOT NULL`.
 
-## Backend
+Index `(state, requested_at)`.
 
-Package `approval`:
+## P07-W03 — Policy evaluator
 
-- `ExecutionPolicyType`
-- `ExecutionPolicy`
-- `ExecutionPolicyRepository`
-- `ExecutionPolicyService`
-- `ApprovalDecision`
-- `OrderApprovalRepository`
-- `OrderApprovalService`
-- `ApprovalEligibilityService`
-- `PreExecutionRevalidationService`
+`ExecutionPolicyService.resolvePolicy(mode, strategy, style)` precedence:
+1. exact mode+strategy+style;
+2. mode+strategy+ANY;
+3. mode default style;
+4. mode default ANY.
 
-Flow:
+`ApprovalPolicyEvaluator` returns:
+- hard risk reject -> `REJECT` before policy;
+- MANUAL -> `PENDING`;
+- AUTO -> auto only if every policy constraint passes;
+- HYBRID -> auto if stricter auto criteria pass, otherwise manual pending;
+- policy failure can reject or require manual depending on explicitly classified rule; never silently promote.
 
-```text
-OrderIntent -> hard RiskPolicy
-  REJECTED -> terminal reject
-  APPROVED -> policy evaluation
-      MANUAL -> approval queue
-      AUTO -> immediate pre-execution revalidation
-      HYBRID -> auto only if hybrid thresholds pass, else manual
- -> final risk/quote/account revalidation
- -> PAPER execution (LIVE gateway still disabled)
-```
+## P07-W04 — Pre-execution revalidation
 
-## API
+`ExecutionReadinessService.revalidate(orderId)` reloads:
+- latest quote/reference market state;
+- account cash/holdings;
+- risk policy;
+- emergency stop;
+- approval state/expiry;
+- execution policy;
+- market session.
 
-- `GET /api/execution-policies`
-- `POST /api/execution-policies`
-- `PATCH /api/execution-policies/{id}`
-- `GET /api/approvals?status=PENDING`
+Approval is not execution authorization forever. Immediately before fill/broker submission, this service must pass again.
+
+## P07-W05 — Concurrency
+
+Approval update uses optimistic `row_version`.
+
+SQL pattern:
+`UPDATE order_approval SET ..., row_version=row_version+1 WHERE id=:id AND state='PENDING' AND row_version=:expected`.
+
+Only one approver can win. Duplicate clicks return current state, not duplicate execution.
+
+## P07-W06 — APIs
+
+- `GET /api/approval-policies`
+- `PUT /api/approval-policies/{id}`
+- `GET /api/approvals?state=PENDING&page=&size=`
+- `GET /api/approvals/{id}`
 - `POST /api/approvals/{id}/approve`
 - `POST /api/approvals/{id}/reject`
-- `POST /api/approvals/{id}/cancel`
+- `POST /api/approvals/{id}/cancel`.
 
-All decisions require authenticated operator identity and optimistic version.
+Audit:
+- `APPROVAL_REQUESTED`
+- `APPROVAL_APPROVED`
+- `APPROVAL_REJECTED`
+- `APPROVAL_EXPIRED`
+- `APPROVAL_CANCELLED`
+- `AUTO_APPROVAL_GRANTED`.
 
-## Frontend
+## P07-W07 — UI
 
-Add `ApprovalsPage.jsx` and settings policy section.
+New route `/approvals`.
 
-Components:
+`ApprovalsPage.jsx`
+- queue filters;
+- pending count;
+- policy mode badge;
+- order/risk snapshot;
+- approve/reject buttons;
+- expiry countdown;
+- final confirmation.
 
-- `ApprovalQueue`
-- `ApprovalOrderSummary`
-- `RiskSnapshotPanel`
-- `ApprovalCountdown`
-- `ApproveRejectControls`
-- `PolicyEditor`
-- `PolicyScopeChips`
+`ApprovalPolicySettings.jsx` under Settings.
 
-Hard rejection controls are never shown as approvable.
+Clear Invest presents guided explanation; Pro Terminal dense queue + hotkeys only for navigation, never one-key irreversible approval.
 
-## Tests
+### Phase 7 exit gate
 
-Expiry race, double approval, concurrent approval/reject, policy change after request, revalidation failure after approval, AUTO/HYBRID boundaries.
-
-## Exit gate
-
-MANUAL/AUTO/HYBRID are concurrency-safe and cannot bypass risk.
+MANUAL/AUTO/HYBRID are deterministic, audited, expiry-aware, concurrency-safe and unable to override hard risk.
 
 ---
 
-# Phase 8 — Portfolio, analytics, alerts and operational backend
+# PHASE 8 — Portfolio analytics, notifications and operations backend
 
 **Status:** PARTIAL.
 
-## Database
+## P08-W01 — Daily performance materialization
 
-### `notification`
+Create `portfolio_performance_daily`:
+- `trade_date DATE PK`
+- opening equity;
+- closing equity;
+- realized P&L;
+- unrealized P&L;
+- fees;
+- gross/net P&L;
+- return %;
+- max intraday drawdown %;
+- trade count;
+- win/loss counts;
+- created/updated.
 
-```sql
-id UUID PRIMARY KEY,
-type VARCHAR(40) NOT NULL,
-severity VARCHAR(20) NOT NULL,
-source VARCHAR(40) NOT NULL,
-title VARCHAR(160) NOT NULL,
-message VARCHAR(1000) NOT NULL,
-correlation_id UUID,
-entity_type VARCHAR(40),
-entity_id VARCHAR(100),
-created_at TIMESTAMPTZ NOT NULL,
-read_at TIMESTAMPTZ,
-acknowledged_by VARCHAR(120)
-```
+Create `strategy_performance_daily` keyed `(trade_date, strategy)` with same relevant attribution fields.
 
-### `operational_health_snapshot`
+`PerformanceAggregationService` recalculates deterministically from ledger/fills; materialized rows are derived cache, not source of truth.
 
-```sql
-id BIGSERIAL PRIMARY KEY,
-component VARCHAR(40) NOT NULL,
-status VARCHAR(20) NOT NULL,
-details_json JSONB NOT NULL,
-observed_at TIMESTAMPTZ NOT NULL
-```
+## P08-W02 — Analytics services
 
-Portfolio snapshots come from Phase 6.
+`PortfolioAnalyticsService`
+- equity curve;
+- drawdown series;
+- period summaries;
+- exposure;
+- win rate;
+- expectancy;
+- fee attribution.
 
-## Backend
+`StrategyAnalyticsService`
+- strategy-level trade/P&L/research conversion metrics.
 
-Packages:
+`ResearchAnalyticsService`
+- scans run;
+- candidate rates;
+- evaluation distribution;
+- backtest/scenario summaries;
+- explicitly no claim of future profitability.
 
-- `portfolio.PortfolioQueryService`
-- `analytics.PerformanceAnalyticsService`
-- `analytics.StrategyPerformanceService`
-- `analytics.DrawdownCalculator`
-- `notification.NotificationService`
-- `notification.NotificationRepository`
-- `notification.OperationalAlertService`
-- `audit.AuditQueryService`
+## P08-W03 — Notification model
 
-Scheduled detectors:
+Create `system_notification`:
+- `id UUID PK`
+- `type VARCHAR(60)`
+- `severity VARCHAR(12)` (`INFO`,`WARNING`,`CRITICAL`)
+- `title VARCHAR(160)`
+- `message VARCHAR(500)`
+- `entity_type/entity_id`
+- `dedupe_key VARCHAR(160) NULL`
+- `created_at`
+- `acknowledged_at NULL`
+- `acknowledged_by NULL`
+- unique active dedupe policy implemented service-side.
 
+`NotificationService.raise(...)` and `acknowledge(...)`.
+
+Sources:
+- provider outage;
 - stale market data;
-- failed reconciliation;
-- emergency stop activation;
-- broker/provider outage (when applicable);
-- unexplained ledger difference;
-- failed scheduled ingestion/backfill.
+- backfill failure;
+- risk emergency stop;
+- reconciliation difference;
+- scenario/backtest failure;
+- deployment/health incident later.
 
-## API
+## P08-W04 — Operational health aggregation
 
-- `GET /api/portfolio/summary`
-- `GET /api/portfolio/performance?from=&to=`
-- `GET /api/analytics/strategies`
-- `GET /api/analytics/research`
-- `GET /api/operations/health`
-- `GET /api/notifications`
-- `POST /api/notifications/{id}/read`
-- `GET /api/audit?correlationId=&entityType=&from=&to=&limit=&offset=`
-- `GET /api/audit/export`
+`OperationalHealthService` returns component states:
+- database;
+- Angel One session/read-only connectivity;
+- instrument catalogue age;
+- market data latest candle age;
+- news ingestion age;
+- scanner last run;
+- reconciliation status;
+- execution mode;
+- emergency stop.
 
-## Frontend
+No secret values returned.
 
-Add:
+API `GET /api/operations/health`.
 
-- `PortfolioPage.jsx`
-- `OperationsPage.jsx`
-- `NotificationsPanel`
-- `AuditPage.jsx`
+## P08-W05 — Audit search
 
-Charts: equity, drawdown, strategy return, win/loss and risk utilization. Pro Terminal may place these in dense panels; Clear Invest uses guided cards.
+`AuditQueryService`
+- filters: event type, entity type, entity id, correlation ID, actor, from/to;
+- bounded pages;
+- CSV export with spreadsheet formula injection protection (prefix dangerous leading `=,+,-,@`).
 
-## Exit gate
+## P08-W06 — APIs/UI contracts
 
-Operator can diagnose system and trading state without SQL/database access.
+APIs:
+- `/api/analytics/portfolio`
+- `/api/analytics/equity`
+- `/api/analytics/strategies`
+- `/api/analytics/research`
+- `/api/notifications`
+- `/api/notifications/{id}/acknowledge`
+- `/api/operations/health`
+- `/api/audit`.
 
----
+UI routes later implemented fully in Phase 9:
+- `/portfolio`
+- `/operations`
+- `/audit`.
 
-# Phase 9 — Complete dual frontend experiences
+### Phase 8 exit gate
 
-**Status:** IN PROGRESS.
-
-## Architecture
-
-Do not fork the entire React app. Use shared route/data components plus experience-specific compositions.
-
-### Experience model
-
-Keep current selector/context; normalize to:
-
-```js
-const EXPERIENCE = {
-  PRO_TERMINAL: 'pro-terminal',
-  CLEAR_INVEST: 'clear-invest'
-}
-```
-
-Add `ExperienceContext` responsibility only for presentation choice, never trading behavior.
-
-### Composition pattern
-
-```text
-Page route
-  -> shared page controller/hook
-  -> ExperienceBoundary
-       -> ProTerminalXView
-       -> ClearInvestXView
-```
-
-Example:
-
-```text
-ResearchScannerPage
-├── useResearchScannerController
-├── ProTerminalScannerView
-└── ClearInvestScannerView
-```
-
-## Required pages
-
-Existing pages to evolve:
-
-- `OverviewPage.jsx`
-- `SignalsPage.jsx`
-- `PaperTradesPage.jsx`
-- `RiskPage.jsx`
-- `InstrumentsPage.jsx`
-- `MarketDataPage.jsx`
-- `BacktestingPage.jsx`
-
-New pages:
-
-- `ResearchScannerPage.jsx`
-- `ResearchCandidatePage.jsx`
-- `ApprovalsPage.jsx`
-- `PositionsPage.jsx`
-- `PortfolioPage.jsx`
-- `NewsPage.jsx`
-- `OperationsPage.jsx`
-- `AuditPage.jsx`
-- `SettingsPage.jsx`
-
-## Shared design system
-
-Add semantic tokens, not per-page magic colors:
-
-```text
---surface-app
---surface-panel
---surface-elevated
---text-primary
---text-secondary
---border-subtle
---positive
---negative
---warning
---info
---focus-ring
---risk-hard-stop
---mode-paper
---mode-live
-```
-
-Pro Terminal: compact spacing/dense tables/advanced charts.  
-Clear Invest: larger spacing/guided hierarchy/accessibility.  
-No neumorphism.
-
-## Navigation
-
-Desktop and mobile route inventory must include every mandatory screen. Mobile bottom nav remains limited to primary actions; secondary routes remain in drawer/more menu.
-
-## State
-
-React Query is the server-state source. Do not duplicate fetched entities in `localStorage`. Persist only UI preferences such as experience/theme; auth/session rules defined Phase 10.
-
-## Testing
-
-- component tests for shared controllers;
-- Playwright/Cypress E2E (choose one and standardize) for both experiences;
-- axe accessibility tests;
-- responsive viewports 320, 375, 390, 768, 1024, 1440;
-- visual snapshots for both experiences;
-- experience switch preserves route/form/query state.
-
-## Exit gate
-
-Every mandatory flow exists and works in both designs with shared business logic and accessible responsive behavior.
+Operator can understand account performance, strategy/research performance, component health, notifications and audit trail entirely through supported APIs.
 
 ---
 
-# Phase 10 — Authentication, authorization and security hardening
+# PHASE 9 — Complete dual frontend experiences
+
+**Status:** IN PROGRESS. Existing `AppContext` experience selector and first Clear Invest dashboard remain.
+
+## P09-W01 — Frontend architecture refactor
+
+Keep `App.jsx` routing as single source. Add routes:
+
+```text
+/research
+/research/candidates/:candidateId
+/portfolio
+/approvals
+/operations
+/notifications
+/settings
+/audit
+```
+
+Introduce:
+
+`components/experience/ExperienceBoundary.jsx`
+
+```jsx
+<ExperienceBoundary
+  pro={<ProTerminalResearchView ... />}
+  clear={<ClearInvestResearchView ... />}
+/>
+```
+
+Page components own data/controller state; variant views receive view models/callbacks. Variant views must not call APIs directly.
+
+## P09-W02 — Design tokens
+
+Create:
+- `styles/tokens/base.css`
+- `styles/tokens/pro-terminal.css`
+- `styles/tokens/clear-invest.css`
+- `lib/experience.js` typed constants/validation.
+
+Token groups:
+- semantic background/surface/text/border;
+- positive/negative/warning/info;
+- risk severity;
+- spacing scale;
+- radii;
+- elevations;
+- typography scale;
+- chart grid/axis/series semantic tokens;
+- focus ring;
+- motion duration/easing.
+
+No component hard-codes experience-specific colors when a semantic token exists.
+
+## P09-W03 — Shared page-controller pattern
+
+For every major page create:
+
+```text
+<Page>.jsx                   // route + data/controller
+components/<domain>/shared/* // shared semantic building blocks
+components/<domain>/pro/*    // Pro composition
+components/<domain>/clear/*  // Clear composition
+```
+
+Example research:
+
+```text
+ResearchPage.jsx
+components/research/shared/CandidateReasonList.jsx
+components/research/pro/ProResearchView.jsx
+components/research/clear/ClearResearchView.jsx
+```
+
+## P09-W04 — Required screen inventory
+
+Both variants must implement the same actions/states for:
+
+1. Overview
+2. Instruments
+3. Market Data
+4. Research scanner
+5. Candidate detail
+6. Backtesting/walk-forward
+7. Scenario/regime analysis
+8. Signals
+9. Simulated order review
+10. Approval queue
+11. Orders/fills
+12. Positions/holdings
+13. Portfolio analytics
+14. Risk policy/decisions
+15. News context
+16. Notifications
+17. Operations health
+18. Settings/experience/runtime mode
+19. Audit history.
+
+## P09-W05 — Data state requirements
+
+Every screen explicitly renders:
+- initial loading skeleton;
+- empty state;
+- recoverable error + retry;
+- unauthorized state;
+- stale-data badge where backend exposes age;
+- mutation pending state preventing duplicate click;
+- success state;
+- immutable reason/audit details when a decision rejects.
+
+No spinner-only indefinite state.
+
+## P09-W06 — Experience switching
+
+Current local preference remains fallback. After Phase 10 auth:
+- anonymous/local -> localStorage;
+- authenticated -> load server `user_preference`;
+- on login, server preference wins unless absent, then persist local preference to server;
+- switch updates server asynchronously and local immediately;
+- route/form/query cache does not remount/clear;
+- API key/session/auth never depends on selected design.
+
+## P09-W07 — Responsive matrix
+
+Mandatory viewport checks:
+- 320
+- 375
+- 411
+- 768
+- 1024
+- 1440 px.
+
+Minimum interactive target 44 CSS px on mobile where practical. Dense desktop controls may be smaller but remain keyboard accessible.
+
+Safe-area CSS for bottom navigation/header.
+
+## P09-W08 — Accessibility
+
+- visible focus;
+- semantic headings;
+- labels/error associations;
+- no color-only P&L/risk meaning;
+- charts have text summary/table fallback;
+- dialogs trap/restore focus;
+- `prefers-reduced-motion` respected;
+- contrast automated check in CI where possible.
+
+## P09-W09 — Frontend tests
+
+Add Vitest/RTL if not already adequate and Playwright for E2E.
+
+Required E2E flows in BOTH experiences:
+- sign in/unlock operator session;
+- start research scan -> inspect candidate -> run evaluation;
+- position-size -> submit PAPER order -> risk result -> approval when policy requires -> fill/order history;
+- emergency stop blocks order;
+- switch experience mid-form without losing inputs;
+- backtest run/history;
+- degraded market-data error state.
+
+Visual snapshots for key screens at mandatory widths.
+
+### Phase 9 exit gate
+
+Every supported feature exists in both experiences with equivalent behavior, responsive/accessibility quality and E2E evidence.
+
+---
+
+# PHASE 10 — Authentication, authorization and security hardening
+
+**Status:** PARTIAL. Existing API-key filter is development/operator baseline only.
+
+## P10-W01 — Production user/role model
+
+Create:
+
+`app_user`
+- `id UUID PK`
+- `email VARCHAR(254) UNIQUE NOT NULL`
+- `display_name VARCHAR(120)`
+- `password_hash VARCHAR(255)` if local credentials are retained;
+- `status VARCHAR(16)` (`ACTIVE`,`LOCKED`,`DISABLED`)
+- `created_at/updated_at/last_login_at`.
+
+`app_role`
+- codes `ADMIN`, `TRADER`, `VIEWER`.
+
+`app_user_role`
+- composite PK user/role.
+
+`user_preference`
+- `user_id UUID PK/FK`
+- `experience VARCHAR(20)`
+- `theme VARCHAR(20)`
+- `timezone VARCHAR(60)` default `Asia/Kolkata` display preference;
+- updated_at.
+
+If an external IdP is selected before implementation, replace password columns with provider subject mapping, but preserve internal user/role IDs.
+
+## P10-W02 — Session model
+
+Prefer HttpOnly Secure SameSite cookie session for first-party web rather than browser-stored bearer token.
+
+If persistent DB sessions are used:
+
+`auth_session`
+- id UUID PK;
+- user id;
+- token hash only, never raw token;
+- created/expires/revoked/last_seen;
+- user agent hash/IP metadata only if justified and privacy-reviewed.
+
+CSRF protection required for cookie-authenticated mutations.
+
+Existing API-key auth:
+- allowed only in local/dev or explicit automation endpoint scope;
+- production startup must fail if insecure default key configured;
+- never store API key in localStorage (current behavior already memory-only).
+
+## P10-W03 — Authorization matrix
+
+- VIEWER: read research/analytics/orders/audit allowed as configured, no mutations.
+- TRADER: PAPER order/approval actions, research runs; cannot change security/risk/admin policy unless explicitly allowed.
+- ADMIN: risk policy, execution policy, user/role, emergency controls, deployment-facing settings.
+- LIVE activation later requires separate role/privilege and explicit Phase 15 gate.
+
+Annotate service/controller authorization; do not rely on hiding buttons.
+
+## P10-W04 — Security hardening
+
+- strict CORS allowlist;
+- CSRF for cookie auth;
+- request size limits;
+- rate limit login/sensitive mutations;
+- security headers CSP/HSTS/X-Content-Type-Options/Referrer-Policy;
+- no secrets in logs;
+- credential values from environment/Secrets Manager only;
+- sanitize provider error logging;
+- dependency scanning;
+- container non-root user;
+- read-only filesystem where feasible;
+- database least-privilege app user.
+
+## P10-W05 — Security tests
+
+- unauthenticated matrix;
+- role matrix;
+- CSRF rejection;
+- CORS rejection;
+- login brute-force/rate-limit behavior;
+- API-key disabled production profile;
+- IDOR tests for every resource-by-ID endpoint;
+- secrets/log regression scans.
+
+### Phase 10 exit gate
+
+Production does not rely on a shared browser API key; all mutations are authenticated/authorized, security boundaries are tested, and secrets are server-only.
+
+---
+
+# PHASE 11 — Mobile web/PWA and platform validation
 
 **Status:** PARTIAL.
 
-## Target security model
+## P11-W01 — PWA cache policy
 
-Current operator/API-key mechanisms must evolve to durable operator identity before production multi-user/LIVE operation.
+Service worker may cache only:
+- versioned static assets;
+- shell HTML with safe network strategy;
+- optional read-only GET responses only if explicitly reviewed.
 
-## Database
+Never cache/replay mutation requests under:
+- `/paper-*`
+- `/approvals`
+- `/risk/emergency-stop`
+- `/system/execution-mode`
+- future `/broker`/LIVE routes.
 
-### `app_user`
+Offline UI must show `Offline — trading actions unavailable` and disable mutations.
 
-```sql
-id UUID PRIMARY KEY,
-email VARCHAR(254) NOT NULL UNIQUE,
-display_name VARCHAR(120),
-status VARCHAR(20) NOT NULL,
-created_at TIMESTAMPTZ NOT NULL,
-last_login_at TIMESTAMPTZ
-```
+## P11-W02 — Installability assets
 
-### `app_role`
+Required production assets:
+- 192x192 PNG;
+- 512x512 PNG;
+- maskable 512x512;
+- apple-touch-icon;
+- favicon variants;
+- manifest start_url/scope/display standalone;
+- theme/background colors matching brand.
 
-```text
-id BIGSERIAL PK
-name VARCHAR UNIQUE -- ADMIN/OPERATOR/VIEWER
-```
+CI validates existence/dimensions/manifest links.
 
-### `app_user_role`
+## P11-W03 — Android/iOS position
 
-```text
-user_id UUID FK
-role_id BIGINT FK
-PRIMARY KEY(user_id, role_id)
-```
+Required V1 platform support:
+- desktop web;
+- mobile web;
+- installable PWA on Android/iOS where browser supports it.
 
-### `user_preference`
+Android TWA may be shipped after domain/TLS is active:
+- Digital Asset Links at `/.well-known/assetlinks.json`;
+- verified package/signing fingerprint;
+- fullscreen trusted origin behavior;
+- Play Store screenshots/policy checklist.
 
-```sql
-user_id UUID PRIMARY KEY REFERENCES app_user(id),
-experience VARCHAR(30) NOT NULL,
-theme VARCHAR(20),
-updated_at TIMESTAMPTZ NOT NULL
-```
+Do not claim native iOS app unless a native wrapper actually exists. iOS Safari PWA behavior is mandatory; a native iOS shell is optional future scope unless explicitly promoted.
 
-Do not store passwords unless the selected identity architecture requires local credentials. Preferred production direction: external/OIDC identity with server session/JWT validation; decide provider before implementation.
+## P11-W04 — Device validation
 
-## Backend
+At minimum:
+- Android Chrome physical device;
+- Android standalone PWA/TWA if used;
+- iPhone Safari/PWA;
+- desktop Chrome/Edge/Safari where available.
 
-Package `security`:
+Check:
+- viewport/safe areas;
+- keyboard/form behavior;
+- reconnect handling;
+- no browser toolbar in verified TWA;
+- external links leave app safely;
+- no duplicate order on network retry.
 
-- `CurrentUser`
-- `AuthenticationFilter` / Spring Security configuration
-- `AuthorizationService`
-- `OperatorPrincipal`
-- `Role`
-- `SecurityAuditService`
+### Phase 11 exit gate
 
-Endpoint authorization:
-
-- VIEWER: research/read-only dashboards;
-- OPERATOR: PAPER order/approval actions;
-- ADMIN: policies, emergency stop, account reset, infrastructure-sensitive settings;
-- LIVE actions later require explicit additional LIVE permission/activation state.
-
-Security controls:
-
-- rate limits on auth/mutating endpoints;
-- CSRF strategy appropriate to chosen auth method;
-- CORS exact allowlist;
-- secure headers;
-- request-size limits;
-- SSRF protections retained for external fetchers;
-- secrets only server-side/AWS Secrets Manager later;
-- log redaction for tokens/account identifiers.
-
-## Frontend
-
-Add:
-
-- `AuthContext` only if not fully handled by cookie/session;
-- `ProtectedRoute`;
-- `PermissionGate` for UX only (backend remains authority);
-- user/profile section in `SettingsPage`;
-- sync `experience` preference to profile when authenticated while retaining safe local fallback.
-
-## Tests
-
-Role matrix API tests, IDOR tests, CORS/CSRF tests, token expiry, forbidden escalation, log redaction and dependency/security scan in CI.
-
-## Exit gate
-
-Every mutating API has authenticated identity, explicit authorization and auditable actor attribution.
+Supported web/PWA platforms pass functional/mobile/security tests with trading mutations disabled offline.
 
 ---
 
-# Phase 11 — Mobile/PWA/platform validation
+# PHASE 12 — AWS production infrastructure
 
-**Status:** PARTIAL.
+**Status:** EXTERNAL WAIT for account activation. Not a blocker for other phases.
 
-## Web/PWA
+## P12-W01 — Infrastructure profile decision
 
-Keep current manifest/mobile CI. Add:
+Before apply, create/update ADR selecting exactly one initial stack:
 
-- production PNG icons 192/512 and maskable asset;
-- offline shell only for non-trading static navigation;
-- never queue order/approval requests offline;
-- network/offline banner;
-- stale-data indicators;
-- installability checks over HTTPS production/staging.
+- `infra/terraform-budget` for cost-minimized single-instance PAPER launch, or
+- `infra/terraform` for managed ECS/RDS architecture.
 
-## Android
+Never apply both to the same environment.
 
-If TWA remains selected:
+Selection criteria:
+- expected users/load;
+- availability requirement;
+- monthly budget;
+- operational tolerance;
+- LIVE timeline.
 
-```text
-android/
-├── app
-├── assetlinks.json deployment contract
-└── release signing documentation
-```
+## P12-W02 — Environment separation
 
-Requirements:
+At minimum Terraform/workspace/state separation:
+- `staging`
+- `production`.
 
-- verified Digital Asset Links;
-- no browser toolbar when verification succeeds;
-- Play signing/release configuration;
-- deep-link tests;
-- physical-device validation.
+Remote Terraform state with encryption and locking after AWS account exists. No production secrets/state committed to Git.
 
-## iOS
+## P12-W03 — Budget stack target details
 
-If native wrapper/PWA distribution is selected, document exact chosen mechanism before code. Do not claim App Store readiness from PWA metadata alone.
-
-## UI validation
-
-Test both Pro Terminal and Clear Invest on supported mobile viewports and physical Android/iOS where applicable.
-
-## Exit gate
-
-Production domain installation/navigation behaves as an app, with no offline trade execution and no unsafe state loss.
-
----
-
-# Phase 12 — AWS production infrastructure and deployment
-
-**Status:** EXTERNAL WAIT for account activation. Implementation review continues.
-
-## Decision gate
-
-Choose exactly one initial stack before apply:
-
-1. `infra/terraform` — managed VPC/ECS/RDS/ALB/ECR/ACM/Route53/CloudWatch/Secrets Manager;
-2. `infra/terraform-budget` — single ARM64 EC2 + Docker Compose + encrypted EBS + S3 backups.
-
-Do not provision both.
-
-## Preferred production resource contracts
-
-If full stack selected:
-
-- VPC with public/private subnets;
-- ALB public HTTPS only;
-- backend/frontend ECS services private where applicable;
-- PostgreSQL RDS private, encrypted, deletion protection;
-- ECR immutable commit-tag images;
-- Secrets Manager for DB/operator/broker/news secrets;
-- CloudWatch logs/alarms;
-- Route53 + ACM;
-- GitHub OIDC deployment role scoped to repository/branch;
+If selected:
+- region `ap-south-1` unless ADR changes based on current pricing/availability;
+- ARM64 EC2;
+- Docker Compose backend/frontend/Postgres;
+- encrypted EBS;
+- S3 encrypted backups;
+- IAM instance role;
+- SSM access, no public SSH requirement;
+- HTTPS reverse proxy/ALB strategy documented;
+- CloudWatch logs/metrics;
 - AWS Budget alerts.
 
-## Terraform modules/files
+Restore drill is mandatory because database is single-instance.
 
-Refactor only if useful, preserving current working configuration:
+## P12-W04 — Managed stack target details
 
-```text
-infra/terraform/
-├── providers.tf
-├── variables.tf
-├── network.tf
-├── security.tf
-├── database.tf
-├── compute.tf
-├── load_balancer.tf
-├── dns_tls.tf
-├── secrets.tf
-├── observability.tf
-├── oidc.tf
-├── budget.tf
-└── outputs.tf
-```
+If selected:
+- VPC multi-AZ subnets;
+- public ALB, private app/RDS;
+- ECS Fargate;
+- ECR immutable commit tags;
+- RDS PostgreSQL encrypted + backups + deletion protection;
+- Secrets Manager;
+- CloudWatch logs/alarms;
+- ACM + Route53;
+- GitHub OIDC deployment role scoped to repo/branch/environment.
 
-## Deployment pipeline
+## P12-W05 — Deployment flow
 
-`deploy-paper-aws.yml`:
+Manual/approved production workflow:
+1. CI green;
+2. build immutable images tagged commit SHA;
+3. vulnerability scan;
+4. Terraform plan artifact reviewed;
+5. apply infra when needed;
+6. run Flyway migration as controlled release step;
+7. deploy services;
+8. health/readiness smoke tests;
+9. rollback service image on failure; database rollback uses forward fix, not destructive Flyway downgrade.
 
-1. baseline CI;
-2. build immutable images;
-3. assume AWS role via OIDC;
-4. push ECR;
-5. run DB migration as controlled deployment step/startup gate;
-6. deploy PAPER services;
-7. smoke health/read-only endpoints;
-8. verify `TRADING_MODE=PAPER`;
-9. rollback to prior image on failed health gate.
+No production workflow changes `TRADING_MODE` to LIVE.
 
-No AWS apply until account is active and Terraform plan/cost/security review is approved.
+## P12-W06 — Secrets
 
-## Exit gate
+Secrets:
+- DB credentials;
+- operator auth secret/session key;
+- Angel One credentials;
+- optional Gemini key;
+- news API token if still used;
+- encryption/signing secrets.
 
-Staging and production PAPER workloads deploy reproducibly with TLS, backups, secrets, monitoring and rollback.
+Runtime receives them via Secrets Manager/SSM/environment injection; never Terraform output plaintext or frontend bundle.
+
+### Phase 12 exit gate
+
+Staging and production infrastructure are reproducibly provisioned, TLS/secrets/backups/alerts verified, and PAPER app deploys from immutable CI artifacts.
 
 ---
 
-# Phase 13 — Observability, reliability and production hardening
+# PHASE 13 — Observability, reliability and production hardening
 
 **Status:** PARTIAL.
 
-## Backend observability
+## P13-W01 — Metrics
 
-Use Micrometer/Spring Actuator where compatible.
+Use Spring Actuator/Micrometer. Custom metric names:
 
-Metrics:
+- `aitrading_marketdata_provider_requests_total`
+- `aitrading_marketdata_gap_count`
+- `aitrading_scanner_runs_total`
+- `aitrading_backtest_runs_total`
+- `aitrading_scenario_runs_total`
+- `aitrading_risk_decisions_total{outcome,reason}`
+- `aitrading_paper_orders_total{status}`
+- `aitrading_approvals_total{state}`
+- `aitrading_reconciliation_differences_total{severity}`
+- `aitrading_broker_requests_total` only after Phase 15.
 
-- API latency/error rate;
-- DB pool saturation;
-- market-data provider latency/errors/throttles;
-- candle freshness/gaps;
-- scanner duration/candidate count;
-- backtest/simulation duration;
-- risk approvals/rejections by reason;
-- paper order/fill counts;
-- reconciliation differences;
-- approval queue age;
-- news ingestion failures;
-- JVM memory/GC/thread metrics.
+Avoid symbol/user IDs as high-cardinality metric labels.
 
-## Structured logs
+## P13-W02 — Structured logging
 
-Every trading-impacting path logs:
+JSON logs in production with:
+- timestamp;
+- level;
+- service/version;
+- correlation ID;
+- event name;
+- entity ID when safe;
+- no token/password/full provider payload.
 
-- correlationId;
-- orderIntentId/orderId if applicable;
-- strategy key/version;
-- policy version;
-- outcome/status;
-- never token/secret content.
+## P13-W03 — Health/readiness
 
-## Reliability tests
+Liveness: process/JVM only.
 
-Add CI/nightly suites:
+Readiness: DB + critical migrations/config. External broker/news should not necessarily make process unready; expose degraded component status separately to avoid restart loops.
 
-- load test read APIs/scanner bounded universe;
-- restart tests during pending PAPER/approval flow;
-- DB connectivity interruption;
-- provider timeout/429/5xx;
+## P13-W04 — Alerts
+
+Critical:
+- DB unavailable;
+- repeated app crash/restart;
+- emergency stop active unexpectedly/long duration;
+- reconciliation critical difference;
+- LIVE broker unknown state later.
+
+Warning:
 - stale market data;
-- duplicate requests;
-- migration-from-prior-version test;
-- backup/restore drill in staging after AWS available.
+- provider failures;
+- backfill failures;
+- elevated 5xx;
+- disk/EBS threshold budget stack.
 
-## Operations
+## P13-W05 — Reliability testing
 
-Add runbooks under `docs/runbooks/`:
+- restart during PAPER order workflow;
+- concurrent duplicate order submissions;
+- database transient failure;
+- Angel One read timeout/throttle;
+- stale quote/candle;
+- malformed provider payload;
+- scanner partial instrument failure;
+- simulation insufficient block pool;
+- reconciliation mismatch detection;
+- container restart and DB recovery.
 
-- emergency stop;
-- market data outage;
-- database recovery;
-- bad deployment rollback;
-- ledger reconciliation failure;
-- broker outage (Phase 15);
-- credential rotation.
+## P13-W06 — Performance budgets
 
-## Exit gate
+Establish measured targets before release, including:
+- dashboard API p95;
+- research scan max-universe duration;
+- 10k scenario simulation duration;
+- order risk/evaluation transaction duration;
+- frontend initial JS bundle size;
+- key page LCP/interaction baseline.
 
-No critical/high unresolved production defect; failure scenarios are observable and recoverable with documented procedures.
+Targets must be based on staging measurements, not invented numbers.
+
+### Phase 13 exit gate
+
+Known failure modes are observable, alerted, recoverable and exercised through repeatable tests/runbooks.
 
 ---
 
-# Phase 14 — Production PAPER/research V1 launch
+# PHASE 14 — Production PAPER/research V1 launch
 
-**Status:** NOT STARTED.
+**Status:** NOT STARTED until Phases 1–13 mandatory gates complete.
 
-This is the first finite production launch milestone.
+## P14-W01 — Release candidate freeze
 
-## Release artifacts
+Create release branch/tag only after:
+- required phase checklist green;
+- zero unresolved critical security/reconciliation defects;
+- production migrations validated from clean DB and upgraded staging DB;
+- dual UI E2E matrix green.
 
-- versioned release tag;
-- migration manifest;
-- configuration manifest (no secret values);
-- test evidence;
+## P14-W02 — Production seed/config
+
+Required controlled setup:
+- production admin/operator user;
+- active risk policy;
+- PAPER execution policy;
+- starting PAPER capital;
+- instrument catalogue sync;
+- bounded historical data bootstrap;
+- holiday/calendar data;
+- emergency stop default known;
+- LIVE hard-disabled.
+
+## P14-W03 — Smoke test sequence
+
+1. login/auth;
+2. health/operations page;
+3. instrument search;
+4. market-data recent candle/backfill;
+5. research scan;
+6. candidate evaluation/backtest/scenario;
+7. position-size advisory;
+8. PAPER order happy path;
+9. hard risk reject path;
+10. emergency stop reject path;
+11. approval path according to PAPER policy;
+12. order/fill/cash/position reconciliation;
+13. both Pro Terminal and Clear Invest;
+14. mobile PWA smoke.
+
+## P14-W04 — Operational signoff
+
+Required artifacts:
+- release commit/tag;
+- CI URL;
+- migration evidence;
+- backup evidence;
+- restore drill result;
 - security checklist;
-- backup/restore evidence;
 - known limitations;
-- rollback version;
-- operator runbook links.
+- rollback procedure;
+- support/runbook contacts/process.
 
-## Launch checklist
+## P14-W05 — V1 completion definition
 
-1. All mandatory Phase 0–13 gates required for PAPER are green.
-2. AWS production environment healthy.
-3. `TRADING_MODE=PAPER` verified in runtime and UI.
-4. LIVE broker submission implementation either absent or hard-disabled.
-5. Market data provider configured and small-range verification passed.
-6. Database backup verified.
-7. Alert delivery verified.
-8. Dual-design critical E2E flows pass.
-9. Paper order -> risk -> approval policy (if enabled) -> fill -> ledger -> position -> analytics reconciles.
-10. Research candidate -> backtest -> scenario -> paper review path passes.
-
-## Smoke workflow
-
-Automate `ProductionPaperSmokeTest` / external smoke script:
-
-- health;
-- auth;
-- instrument search;
-- historical candle read;
-- scanner run;
-- candidate analysis;
-- PAPER risk precheck;
-- small PAPER order;
-- verify fill/ledger/position/audit;
-- verify notification/metrics.
-
-## Exit gate
-
-Product is publicly/privately available in production for the intended PAPER/research audience with operational support and no real-money execution.
+Product is considered **production live for PAPER/research** when:
+- public/approved production endpoint is healthy;
+- authentication enforced;
+- market/research/PAPER flows function;
+- both designs work;
+- monitoring/backups exist;
+- no LIVE broker submission code path can be activated through normal UI/config.
 
 ---
 
-# Phase 15 — Optional Angel One LIVE broker execution and controlled pilot
+# PHASE 15 — Optional Angel One real-money LIVE pilot
 
-**Status:** NOT STARTED; separately gated. This phase must not be interpreted as permission to place real-money orders.
+**Status:** SEPARATELY GATED. Phase 14 success does not automatically authorize Phase 15 activation.
 
-## Regulatory/provider prerequisite
+## P15-W01 — Broker abstraction
 
-Before implementation activation, re-check current Angel One SmartAPI capabilities/rate limits/order semantics and applicable SEBI/exchange/broker retail algorithmic-trading requirements using current official sources. Record review date and decisions in `docs/live/REGULATORY_AND_BROKER_REVIEW.md`.
-
-## Database
-
-### `live_order_intent`
-
-```sql
-id UUID PRIMARY KEY,
-client_order_id VARCHAR(80) NOT NULL UNIQUE,
-request_hash VARCHAR(64) NOT NULL,
-instrument_id BIGINT NOT NULL,
-side VARCHAR(10) NOT NULL,
-order_type VARCHAR(20) NOT NULL,
-quantity BIGINT NOT NULL,
-limit_price NUMERIC(19,4),
-status VARCHAR(30) NOT NULL,
-risk_decision_id UUID NOT NULL,
-approval_id UUID,
-policy_snapshot JSONB NOT NULL,
-created_by VARCHAR(120) NOT NULL,
-created_at TIMESTAMPTZ NOT NULL,
-submitted_at TIMESTAMPTZ,
-version BIGINT NOT NULL DEFAULT 0
-```
-
-### `broker_order`
-
-```sql
-id UUID PRIMARY KEY,
-live_order_intent_id UUID NOT NULL REFERENCES live_order_intent(id),
-broker VARCHAR(30) NOT NULL,
-broker_order_id VARCHAR(120),
-status VARCHAR(30) NOT NULL,
-raw_status VARCHAR(80),
-submitted_at TIMESTAMPTZ,
-last_reconciled_at TIMESTAMPTZ,
-response_metadata JSONB,
-UNIQUE(broker, broker_order_id)
-```
-
-### `broker_fill`
-
-```text
-id UUID PK
-broker_order_id UUID FK
-broker_trade_id VARCHAR UNIQUE
-quantity BIGINT
-price NUMERIC
-fees NUMERIC nullable
-filled_at TIMESTAMPTZ
-raw_payload_hash VARCHAR
-```
-
-## Backend broker boundary
-
-Package `broker`:
+Create:
 
 ```java
-interface BrokerOrderGateway {
-    BrokerOrderSubmission submit(BrokerOrderCommand command);
+public interface BrokerOrderGateway {
+    BrokerOrderReceipt submit(BrokerOrderRequest request);
     BrokerOrderStatus getOrder(String brokerOrderId);
-    BrokerCancelResult cancel(String brokerOrderId);
-    BrokerAccountSnapshot accountSnapshot();
-    List<BrokerPosition> positions();
+    BrokerCancelReceipt cancel(String brokerOrderId);
+    BrokerAccountSnapshot account();
 }
 ```
 
 Implementations:
+- `broker/mock/MockBrokerOrderGateway`
+- `broker/angelone/AngelOneBrokerOrderGateway`.
 
-- `broker.mock.MockBrokerOrderGateway` first;
-- `broker.angelone.AngelOneBrokerOrderGateway` later.
+All contract tests first run against mock. Angel One submission method remains runtime-disabled until activation gate.
 
-Services:
+## P15-W02 — LIVE intent schema
 
-- `LiveOrderIntentService`
-- `LiveExecutionGuard`
-- `BrokerOrderService`
-- `BrokerReconciliationService`
-- `BrokerSessionService`
-- `BrokerAccountSyncService`
-- `LiveEmergencyStopService`
+Create `live_order_intent`:
+- `id UUID PK`
+- `client_order_id VARCHAR(80) UNIQUE`
+- `request_hash CHAR(64)`
+- instrument/exchange/symbol;
+- side/quantity/order type/limit/product;
+- strategy/candidate;
+- risk decision ID;
+- approval ID;
+- state;
+- correlation ID;
+- created/updated.
 
-## LIVE state machine
+State machine:
+
+`CREATED -> RISK_APPROVED -> APPROVAL_PENDING -> READY_TO_SUBMIT -> SUBMITTING -> ACKNOWLEDGED -> PARTIALLY_FILLED -> FILLED`
+
+Terminal/exception:
+- `REJECTED`
+- `CANCELLED`
+- `EXPIRED`
+- `UNKNOWN`.
+
+`UNKNOWN` is mandatory for network timeout/ambiguous submission. Never retry submission blindly from UNKNOWN.
+
+## P15-W03 — Broker order/fill schema
+
+`broker_order`
+- intent ID unique;
+- broker name;
+- broker order ID unique nullable until ack;
+- raw status normalized + bounded sanitized provider code;
+- submitted/ack/updated timestamps.
+
+`broker_fill`
+- broker order ID;
+- broker fill/trade ID unique;
+- quantity/price/fees if available;
+- fill timestamp;
+- raw provider status code bounded.
+
+## P15-W04 — LIVE submission workflow
+
+1. authenticated operator creates immutable live intent;
+2. deterministic risk evaluation;
+3. approval policy;
+4. immediately before submit call `ExecutionReadinessService.revalidate`;
+5. transaction sets `READY_TO_SUBMIT -> SUBMITTING` and commits;
+6. external broker call;
+7. persist ACK/REJECT/UNKNOWN;
+8. reconciliation polls/status endpoint/webhook as provider supports;
+9. fills update broker records and live portfolio accounting;
+10. every transition audited.
+
+## P15-W05 — Read-only Angel One integration first
+
+Before order submission implementation is enabled, verify:
+- auth/session lifecycle;
+- funds;
+- holdings;
+- positions;
+- order book;
+- provider clock/session behavior;
+- rate limits/error codes against current official Angel One docs.
+
+## P15-W06 — Compliance/regulatory gate
+
+Before real-money submission:
+- review current SEBI/exchange/broker retail API/algo requirements from official current sources;
+- verify broker terms, supported order types, session rules, rate limits and account permissions;
+- document required operator declarations/approvals;
+- no assumption based on old docs.
+
+## P15-W07 — Activation controls
+
+Require all simultaneously:
+- `live.feature.enabled=true` server-side deployment setting;
+- production execution mode change authorized by ADMIN/LIVE_ACTIVATOR role;
+- active LIVE execution policy;
+- broker credentials/account verified;
+- emergency stop tested;
+- monitoring/alerts active;
+- explicit pilot limit config;
+- explicit go-live approval recorded.
+
+No single environment variable alone may enable real-money orders.
+
+## P15-W08 — Pilot
+
+Pilot begins MANUAL only:
+- tiny configured notional cap;
+- small daily order cap;
+- allowlisted symbols;
+- market-hours only;
+- reconcile every order/fill;
+- stop immediately on UNKNOWN/reconciliation divergence/provider instability.
+
+AUTO/HYBRID for LIVE is not enabled until separate post-pilot approval.
+
+### Phase 15 exit gate
+
+A separately approved low-limit real-money pilot completes with correct broker reconciliation, no duplicate submissions, tested emergency stop and documented compliance/operational signoff.
+
+---
+
+# 4. Mandatory implementation sequencing and PR granularity
+
+The current active sequence is:
 
 ```text
-CREATED
- -> RISK_REJECTED (terminal)
- -> APPROVAL_PENDING
- -> READY_FOR_SUBMISSION
- -> SUBMITTING
- -> SUBMITTED
- -> PARTIALLY_FILLED
- -> FILLED
- -> CANCEL_PENDING -> CANCELLED
- -> BROKER_REJECTED
- -> UNKNOWN (must reconcile; never blind retry)
+P04 scenario/regime/provenance
+  -> P05 risk completion
+  -> P06 PAPER accounting/portfolio
+  -> P07 approval workflow
+  -> P08 analytics/operations
+  -> P09 complete dual UI
+  -> P10 production auth/security
+  -> P11 mobile/PWA validation
+  -> P12 AWS when account is available
+  -> P13 hardening/reliability
+  -> P14 PAPER/research production launch
+  -> P15 separately gated LIVE pilot
 ```
 
-`UNKNOWN` outcome is critical: retries use same `client_order_id` and reconciliation before any resubmission.
+Phases 1–3 remaining hardening can run before or alongside P04–P08 when dependencies are clear, but their exit gates must be complete before Phase 14.
 
-## Hard activation controls
+## PR sizing rule
 
-All must be true before real submission:
+A PR should normally implement one work item (`Pxx-Wyy`) or a coherent subset. A PR must not combine unrelated database, UI and infrastructure work merely because they belong to the same phase.
 
-- runtime mode `LIVE`;
-- explicit server-side `LIVE_ORDER_SUBMISSION_ENABLED=true`;
-- operator has LIVE permission;
-- broker credentials/session healthy;
-- compliance/provider review current;
-- emergency stop false;
-- fresh quote/account/position state;
-- hard risk approved;
-- required approval complete;
-- production pilot allowlist/notional limits active.
+For a schema-bearing work item, expected PR order is usually:
 
-Any false/missing state fails closed.
+1. forward Flyway migration + migration integration test;
+2. repository/domain model;
+3. service/business rules + unit tests;
+4. controller/API + integration tests;
+5. frontend hook/controller;
+6. both experience compositions + UI/E2E tests;
+7. docs/status update.
 
-## API
-
-LIVE endpoints are separate from PAPER:
-
-- `GET /api/live/status`
-- `GET /api/live/account`
-- `GET /api/live/orders`
-- `POST /api/live/orders` only after activation gate;
-- `POST /api/live/orders/{id}/cancel`
-- `POST /api/live/emergency-stop`
-
-## Frontend
-
-Never silently reuse PAPER visuals for LIVE.
-
-Add persistent LIVE banner and distinct confirmation:
-
-- account/broker health;
-- LIVE order review;
-- risk snapshot;
-- approval state;
-- notional/quantity;
-- explicit “Real money” wording;
-- emergency stop control for authorized users;
-- broker order/reconciliation status.
-
-## Pilot sequence
-
-1. mock gateway tests;
-2. read-only Angel One connectivity;
-3. shadow reconciliation without submission;
-4. production LIVE code deployed hard-disabled;
-5. emergency-stop drill;
-6. separately authorized tiny MANUAL order pilot;
-7. reconcile broker/order/fill/account;
-8. only then consider bounded expansion.
-
-## Exit gate
-
-Real-money trading is enabled only after explicit go-live approval and a successful controlled pilot. AUTO LIVE remains separately configurable and should not be enabled merely because manual LIVE works.
+Security/risk/accounting changes require regression tests before merge.
 
 ---
 
-# 16. Cross-phase API/data invariants
+# 5. Definition of implementation completion for every work item
 
-1. `instrument_id` is internal durable identity; broker token/symbol is provider metadata and may version/change.
-2. Research candidates are non-executable objects.
-3. Scenario/backtest results never directly create orders.
-4. Every order starts as an immutable `OrderIntent`/command with idempotency identity.
-5. Hard risk rejection is terminal for that intent version.
-6. Manual approval never freezes market/risk state; full revalidation occurs before execution.
-7. PAPER and LIVE accounting are distinguishable in persistence/API/UI.
-8. No frontend-calculated P&L/risk number is authoritative; frontend displays backend-calculated values.
-9. All list APIs use bounded pagination.
-10. All data used for a trading-impacting decision has freshness/cutoff provenance.
-11. No endpoint may expose broker/API keys or raw secret-bearing provider responses.
+A work item is not complete because classes exist. It is complete only when applicable evidence exists for all of:
 
----
-
-# 17. Implementation order from current repository state
-
-The immediate coding sequence is fixed unless a blocker makes a later independent task preferable:
-
-```text
-A. Finish Phase 4 regime/provenance persistence
-B. Phase 5 risk-rule completion
-C. Phase 6 PAPER accounting/portfolio reconciliation
-D. Phase 7 approval policies
-E. Phase 8 analytics/operations backend
-F. Phase 9 complete dual-design UI against those APIs
-G. Phase 10 security identity/authorization hardening
-H. Phase 11 mobile/platform validation
-I. Phase 12 AWS provisioning when account becomes active (parallel when possible)
-J. Phase 13 reliability/observability hardening
-K. Phase 14 production PAPER/research launch
-L. Phase 15 separately gated LIVE pilot
-```
-
-Phase 1/2/3 remaining production-readiness gaps are implemented before any dependent launch gate and may be interleaved with A–F when they unblock research accuracy.
+- migration applied from prior production-like schema;
+- repository query/index correctness;
+- unit tests for domain boundaries;
+- PostgreSQL integration tests for persistence/transactions;
+- controller/API validation/auth tests;
+- frontend loading/empty/error/success behavior;
+- Pro Terminal + Clear Invest parity when UI-visible;
+- mobile responsive behavior when UI-visible;
+- audit event where mutation is security/trading significant;
+- no secret logging;
+- CI green;
+- master plan/status updated.
 
 ---
 
-# 18. PR contract
+# 6. Global V1 non-goals unless explicitly promoted
 
-Every implementation PR must state:
+The following do not silently become mandatory V1 scope:
 
-- Master phase and low-level work items implemented.
-- Tables/migrations changed.
-- APIs changed.
-- Backend classes added/modified.
-- Frontend pages/components/hooks added/modified.
-- Tests added and actual CI result.
-- Safety impact: PAPER/LIVE/risk/AI authority.
-- Remaining items in that phase.
+- F&O/options/futures;
+- short selling beyond explicitly supported product rules;
+- scalping/high-frequency trading;
+- autonomous AI order authorization;
+- social/copy trading;
+- multi-broker execution;
+- native iOS application if only PWA is shipped;
+- multi-tenant brokerage SaaS;
+- strategy marketplace;
+- ML price prediction.
 
-A phase is marked `DONE` in `MASTER_IMPLEMENTATION_PLAN.md` only after its exit gate is demonstrated, not merely because code exists.
+Adding any of these requires an explicit product-scope change to `MASTER_IMPLEMENTATION_PLAN.md`, not an endless new implementation phase.
+
+---
+
+# 7. Source-of-truth hierarchy
+
+1. `docs/MASTER_IMPLEMENTATION_PLAN.md` — product scope, finite phases, launch gates.
+2. `docs/MASTER_LOW_LEVEL_IMPLEMENTATION_DESIGN.md` — exact technical implementation and work-item IDs.
+3. Phase/design/provider documents — supporting rationale/reference.
+4. GitHub issues — execution tracking.
+5. PR descriptions — change-specific evidence.
+
+If lower-level material conflicts with items 1 or 2, update the source-of-truth documents explicitly before treating the conflicting behavior as intended architecture.
