@@ -101,6 +101,33 @@ class NewsIngestionJobTest {
         verify(repository, times(1)).saveSummary(any(), any(), any(), any(), any());
     }
 
+    @Test
+    void optionalSummaryFailureDoesNotBlockSubsequentArticleOrProvider() throws Exception {
+        RssFeedClient client = Mockito.mock(RssFeedClient.class);
+        RssFeedParser parser = Mockito.mock(RssFeedParser.class);
+        NewsRepository repository = Mockito.mock(NewsRepository.class);
+        GeminiNewsSummarizer summarizer = Mockito.mock(GeminiNewsSummarizer.class);
+        var first = NewsSource.byId("moneycontrol");
+        var second = NewsSource.byId("economic-times");
+        when(client.fetch(any(), anyInt())).thenReturn(new byte[] {1});
+        when(parser.parse(any(), org.mockito.ArgumentMatchers.eq(first), any(), anyInt()))
+            .thenReturn(List.of(article("first"), article("second")));
+        when(parser.parse(any(), org.mockito.ArgumentMatchers.eq(second), any(), anyInt()))
+            .thenReturn(List.of(article("third")));
+        when(repository.insert(any())).thenReturn(Optional.of("inserted"));
+        when(summarizer.summarize(any()))
+            .thenThrow(new IllegalStateException("optional model unavailable"));
+
+        var job = new NewsIngestionJob(client, parser, repository, summarizer,
+            List.of("moneycontrol", "economic-times"), List.of(), 1024, 50, 3, 1, 90);
+        job.ingest();
+
+        verify(repository, times(3)).insert(any());
+        verify(client).fetch(org.mockito.ArgumentMatchers.eq(second), anyInt());
+        verify(summarizer, times(3)).summarize(any());
+        verify(repository, never()).saveSummary(any(), any(), any(), any(), any());
+    }
+
     private static NewsArticle article(String id) {
         return new NewsArticle("moneycontrol", "Moneycontrol",
             "https://www.moneycontrol.com/news/" + id, Instant.now(), "TCS headline " + id,
