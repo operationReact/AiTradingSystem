@@ -74,7 +74,7 @@ function KpiStrip({ summary, loading }) {
 }
 
 export default function OverviewPage() {
-  const { apiKey } = useApp();
+  const { apiKey, experience } = useApp();
   const qc = useQueryClient();
   const fetching = useIsFetching({ queryKey: ['dashboard'] }) + useIsFetching({ queryKey: ['paper'] });
   const [days, setDays] = useState(() => {
@@ -111,10 +111,10 @@ export default function OverviewPage() {
   const freshness = summary.dataUpdatedAt ? formatAge(ageSeconds(summary.dataUpdatedAt)) : 'not yet loaded';
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={experience === 'clear-invest' ? 'flex flex-col gap-7 md:gap-8' : 'flex flex-col gap-4'}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-text">Overview</h1>
+          <h1 className={experience === 'clear-invest' ? 'text-2xl font-semibold tracking-tight text-text md:text-3xl' : 'text-lg font-semibold text-text'}>{experience === 'clear-invest' ? 'Your paper portfolio' : 'Overview'}</h1>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" aria-hidden />Refreshed {freshness}</span>
             {summary.data?.asOf && <span>Snapshot {formatDateTime(summary.data.asOf)}</span>}
@@ -162,9 +162,9 @@ export default function OverviewPage() {
         </DataState>
       )}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className={experience === 'clear-invest' ? 'grid grid-cols-1 gap-6 lg:grid-cols-2 xl:gap-7' : 'grid grid-cols-1 gap-4 xl:grid-cols-3'}>
         {show('equity') && (
-          <Panel className="xl:col-span-2" title="Realized equity" subtitle={`Last ${days} days · click to open trades`} >
+          <Panel className={experience === 'clear-invest' ? 'lg:col-span-2 experience-panel' : 'xl:col-span-2'} title="Realized equity" subtitle={`Last ${days} days · click to open trades`} >
             <DataState query={equity} skeleton={<Skeleton className="h-64 w-full" />}>
               {() => <EquityChart points={curve} />}
             </DataState>
@@ -209,7 +209,7 @@ export default function OverviewPage() {
           </div>
         )}
         {show('trades') && (
-          <div className="xl:col-span-1">
+          <div className={experience === 'clear-invest' ? 'experience-panel' : 'xl:col-span-1'}>
             <TradesPanel query={orders} />
           </div>
         )}
@@ -232,7 +232,7 @@ export default function OverviewPage() {
         )}
         {show('providers') && <AngelOneStatusPanel />}
         {show('news') && <NewsPanel />}
-        {show('provenance-news') && <div className="xl:col-span-3"><ProvenanceNewsPanel /></div>}
+        {show('provenance-news') && <div className={experience === 'clear-invest' ? 'lg:col-span-2 experience-panel' : 'xl:col-span-3'}><ProvenanceNewsPanel /></div>}
       </div>
     </div>
   );
