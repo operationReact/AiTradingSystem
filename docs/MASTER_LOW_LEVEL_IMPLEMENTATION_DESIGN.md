@@ -2382,3 +2382,41 @@ Every PR must include: phase/work-item IDs; current-code paths inspected; exact 
 ## Mandatory next-pass source verification checklist
 
 For every proposed table, run a migration inventory and record: current table/column, exact SQL type, nullable/default, FK target and type, unique/index/constraint names, and forward migration number. For every service/controller, record existing Java path, method signature, transaction boundary, authorization and current API shape. For every frontend route, record hooks, components, Pro/Clear behavior and test evidence. **Unverified items remain OPEN, not DONE.** This is the prerequisite for claiming an actual line-by-line repository implementation audit.
+
+
+## LIVE execution detailed design amendment — 2026-10-28
+
+**Architecture target:** full LIVE-capable trading platform, not a PAPER-only application. PAPER/shadow trading is a testing mode. Current broker credentials and reserved static IP are **reported configured** by the owner; actual connectivity and production activation validation are intentionally deferred. No repeated setup requests.
+
+### Required component contracts
+
+- `BrokerGateway`: `submit(intent)`, `modify(brokerOrderId, change)`, `cancel(brokerOrderId)`, `getOrder(brokerOrderId)`, `getOrderBook()`, `getTradeBook()`; provider-specific failures must be typed as REJECTED, RATE_LIMITED, RETRYABLE or UNKNOWN_OUTCOME.
+- `BrokerAccountGateway`: `getFunds()`, `getMargin(request)`, `getHoldings()`, `getPositions()`; snapshot freshness, account identity and source timestamp mandatory.
+- `MarketDataGateway`: `getQuotes(instruments, mode)`, `getHistoricalCandles(query)`, `subscribe(instruments, mode)`; normalized instrument ID, source timestamp, receive timestamp and data-quality flags.
+- `BrokerExecutionEventGateway`: normalized broker order events from WebSocket/postback and polling; dedupe by broker ID + event version/fill ID, reconcile out-of-order events.
+
+### Durable order submission protocol
+
+1. Accept an authenticated account-scoped immutable `OrderIntent` and idempotency key; server resolves execution mode and broker account.
+2. Under DB transaction, verify policy, current risk state, approvals, fresh market/broker data; reserve local exposure; persist `PREPARED` intent with canonical payload hash and audit. Commit before network I/O.
+3. Worker acquires leased intent, checks LIVE activation flag and approved order variety; transitions to `SUBMITTING` by compare-and-set, records attempt metadata.
+4. Call broker **outside the DB transaction**. On acknowledged response persist broker order ID and `ACKNOWLEDGED`; on definitive reject release reservation; on timeout/network ambiguity mark `UNKNOWN`.
+5. Never blindly resubmit `UNKNOWN`; reconcile broker order details/order book/trade book using stable correlation, then either link existing broker order or require controlled resolution.
+6. Process partial fills, cancels, modifications and rejects via monotonic state transitions; each fill has broker-unique identity; ledger and exposure updates are atomic and idempotent.
+7. On restart, rebuild from persisted intents, broker events and reconciliation; new entries fail closed when broker/account/market state is stale or uncertain.
+
+### Minimum data model to reconcile against actual migrations
+
+`broker_account`, `broker_session_metadata`, `live_order_intent`, `live_order_attempt`, `live_order_event`, `live_fill`, `broker_account_snapshot`, `broker_position_snapshot`, `broker_reconciliation_run`, `market_stream_subscription`, `provider_rate_limit_state`. **These are proposed logical entities, not approved SQL definitions.** Verify existing tables and PK types before writing Flyway migrations. Store no API secrets or JWTs in audit/event payloads.
+
+### Tests required before enabling real-money orders
+
+- Duplicate submit with same/different payload, crash between commit and submit, broker timeout after acceptance, stale quote, stale funds, insufficient margin, late fill after cancel, partial fill plus modify, duplicate/out-of-order events, stream outage, reconnect, kill switch during pending order, cross-account authorization, account reconciliation divergence, restart recovery.
+- Contract tests using captured/redacted official SDK fixtures and synthetic broker behavior; test provider throttling and reconnect without live credentials.
+- UI parity for order preview, confirm, pending/unknown/rejected/partial/filled states, cancel/modify controls, reconciliation warning and emergency stop in both Pro Terminal and Clear Invest.
+
+### Phase assignment
+
+P1: market quote/stream/session adapters. P2–P4: normalized market data and deterministic replay. P5: broker-aware pre-trade risk. P6: LIVE order state/ledger abstraction alongside PAPER. P7: LIVE approval authorization. P8: broker reconciliation/alerts. P9–P11: LIVE UI, auth and mobile safety. P12–P13: deployment and reliability. P14: integrated readiness. P15: **controlled real-money activation**, not first LIVE implementation.
+
+**Acceptance:** PRs show code, exact API contracts, schema inventory, tests, failure-injection evidence and owner approval where necessary. The architecture and adapter implementation may progress now; connectivity testing remains deferred.
