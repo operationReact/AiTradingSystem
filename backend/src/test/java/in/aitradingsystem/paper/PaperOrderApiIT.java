@@ -40,6 +40,16 @@ class PaperOrderApiIT extends AbstractPostgresIT {
             .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM paper_fill WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")
             .param("symbol", SYMBOL).update();
+        jdbc.sql("""
+                UPDATE paper_account
+                   SET cash_balance = cash_balance - COALESCE((
+                       SELECT SUM(e.amount)
+                         FROM paper_cash_entry e
+                         JOIN paper_order o ON o.id = e.order_id
+                        WHERE o.symbol = :symbol), 0),
+                       updated_at = now()
+                 WHERE id = 1
+                """).param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM paper_cash_entry WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")
             .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM paper_order WHERE symbol = :symbol").param("symbol", SYMBOL).update();
@@ -100,8 +110,10 @@ class PaperOrderApiIT extends AbstractPostgresIT {
         jdbc.sql("""
                 INSERT INTO paper_order (
                     id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,
-                    filled_quantity, order_type, product_type, reference_price, status, created_at, updated_at)
-                VALUES (:id, :key, :hash, :symbol, 'BUY', 1, 1, 0, 'MARKET', 'DELIVERY', 100, 'READY', :now, :now)
+                    filled_quantity, order_type, product_type, reference_price, stop_loss, target_price,
+                    status, created_at, updated_at)
+                VALUES (:id, :key, :hash, :symbol, 'BUY', 1, 1, 0, 'MARKET', 'DELIVERY', 100, 95, 110,
+                        'READY', :now, :now)
                 """)
             .param("id", orderId).param("key", "cancel-" + orderId).param("hash", "c".repeat(64))
             .param("symbol", SYMBOL).param("now", now).update();
