@@ -5,6 +5,7 @@ import in.aitradingsystem.config.RiskProperties;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.marketdata.CandleSeriesValidator;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataQualityService;
@@ -115,6 +116,11 @@ public class PaperBacktestService {
         if (candles.size() < slowPeriod + 2) {
             throw new BacktestException("INSUFFICIENT_HISTORY",
                 "At least " + (slowPeriod + 2) + " stored candles are required for the configured strategy");
+        }
+        CandleSeriesValidator.Validation structural = CandleSeriesValidator.validate(candles, toExclusive, null);
+        if (!structural.valid()) {
+            throw new BacktestException("INVALID_CANDLE_SERIES",
+                "Stored candles failed structural validation: " + structural.reason());
         }
         if (quality != null && !quality.eligibleForResearch(quality.evaluate(instrument.id(), request.interval(), fromInclusive, toExclusive))) {
             throw new BacktestException("DATA_QUALITY_NOT_ELIGIBLE",
