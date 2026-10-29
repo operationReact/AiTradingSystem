@@ -20,7 +20,7 @@ import org.springframework.stereotype.Component;
 public class AngelOneRateLimiter {
     public enum Category { AUTH, MARKET_QUOTE, HISTORICAL_CANDLES }
 
-    private record ProviderLimit(long perSecondIntervalMs, int perMinute, int perHour) {}
+    record ProviderLimit(long perSecondIntervalMs, int perMinute, int perHour) {}
 
     private static final Map<Category, ProviderLimit> VERIFIED_LIMITS = Map.of(
             Category.AUTH, new ProviderLimit(1_000, 0, 0),
