@@ -32,7 +32,7 @@ public final class CandleSeriesValidator {
         if (maxLatestAge != null && Duration.between(previous, cutoff).compareTo(maxLatestAge) > 0) {
             return Validation.invalid("STALE_CANDLE");
         }
-        return Validation.valid();
+        return Validation.accepted();
     }
 
     private static boolean positive(BigDecimal value) {
@@ -40,7 +40,7 @@ public final class CandleSeriesValidator {
     }
 
     public record Validation(boolean valid, String reason) {
-        public static Validation valid() { return new Validation(true, null); }
+        public static Validation accepted() { return new Validation(true, null); }
         public static Validation invalid(String reason) { return new Validation(false, reason); }
     }
 }
