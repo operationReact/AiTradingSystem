@@ -49,6 +49,13 @@ public class ResearchScanService {
                 maxUniverseSize, maxCandleAgeMinutes, true);
     }
 
+    /** Quality-gate fixture constructor retained for focused scan tests. */
+    ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
+            MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes) {
+        this(scans, marketData, quality, clock, defaultRegistry(), null,
+                maxUniverseSize, maxCandleAgeMinutes, true);
+    }
+
     private ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
             MarketDataQualityService quality, Clock clock, StrategyRegistry registry,
             StrategyConfigService strategyConfigs, int maxUniverseSize, int maxCandleAgeMinutes,
