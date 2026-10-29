@@ -3,7 +3,6 @@ package in.aitradingsystem.execution;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.risk.RiskContextFactory;
 import in.aitradingsystem.risk.RiskPolicyEngine;
 import in.aitradingsystem.support.AbstractPostgresIT;
@@ -29,7 +28,6 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
     @Autowired RiskPolicyEngine riskEngine;
     @Autowired ExecutionPolicyService policies;
     @Autowired ApprovalPolicyEvaluator policyEvaluator;
-    @Autowired ObjectMapper json;
 
     private UUID previousCatalogueVersion;
     private UUID catalogueVersion;
@@ -92,7 +90,7 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
     @Test
     void failsClosedWhenLatestMarketStateIsStale() {
         jdbc.sql("UPDATE market_candle SET candle_time = :stale WHERE instrument_id = :instrumentId")
-            .param("stale", OffsetDateTime.ofInstant(NOW.minusSeconds(3600), ZoneOffset.UTC))
+            .param("stale", OffsetDateTime.ofInstant(NOW.minusSeconds(7200), ZoneOffset.UTC))
             .param("instrumentId", instrumentId).update();
 
         assertNotReady("MARKET_STATE_STALE");
