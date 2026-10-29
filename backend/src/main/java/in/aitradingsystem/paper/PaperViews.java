@@ -8,9 +8,30 @@ import java.util.UUID;
 public final class PaperViews {
     private PaperViews() {}
 
-    public record OrderView(UUID id, String symbol, String side, int quantity, BigDecimal entryPrice,
-        BigDecimal stopLoss, BigDecimal target, String status, String rejectionReason,
-        Instant signalGeneratedAt, Instant createdAt, Instant updatedAt, String correlationId) {}
+    public record OrderView(
+        UUID id,
+        Long instrumentId,
+        String exchange,
+        String symbol,
+        String side,
+        int quantity,
+        int submittedQuantity,
+        int filledQuantity,
+        String orderType,
+        BigDecimal limitPrice,
+        String productType,
+        String strategy,
+        Long candidateId,
+        BigDecimal averageFillPrice,
+        BigDecimal entryPrice,
+        BigDecimal stopLoss,
+        BigDecimal target,
+        String status,
+        String rejectionReason,
+        Instant signalGeneratedAt,
+        Instant createdAt,
+        Instant updatedAt,
+        String correlationId) {}
 
     public record DecisionView(UUID id, UUID orderId, String decision, List<String> reasonCodes, BigDecimal riskBudget,
         BigDecimal estimatedRisk, BigDecimal availableCash, int openPositions,
