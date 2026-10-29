@@ -13,7 +13,12 @@ export const keys = {
   order: (id) => ['paper', 'order', id],
   signals: (limit = 50) => ['signals', limit],
   riskConfig: ['risk', 'config'],
+  riskPolicy: ['risk', 'policy'],
+  riskPolicies: (params) => ['risk', 'policies', params],
+  riskPolicyDetail: (id) => ['risk', 'policy', id],
+  riskDecision: (id) => ['risk', 'decision', id],
   riskDecisions: (params) => ['risk', 'decisions', params],
+  riskPositionSize: (input) => ['risk', 'position-size', input],
   newsStatus: ['news', 'status'],
   newsArticles: (params) => ['news', 'articles', params],
   executionMode: ['system', 'execution-mode'],
@@ -75,10 +80,53 @@ export function useEvaluateStrategy() {
 
 export const useRiskConfig = () => useAuthedQuery(keys.riskConfig, '/risk/config', { poll: false });
 
-export const useRiskDecisions = ({ page = 0, size = 10 }) =>
+/** Active immutable persisted risk policy used by new risk evaluations. */
+export const useRiskPolicy = () =>
+  useAuthedQuery(keys.riskPolicy, '/risk/policy', { poll: false, retry: 1 });
+
+export function useRiskPolicies({ page = 0, size = 20 } = {}) {
+  const params = { page, size };
+  return useAuthedQuery(keys.riskPolicies(params), `/risk/policies?page=${page}&size=${size}`, {
+    poll: false,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export const useRiskPolicyDetail = (id) =>
+  useAuthedQuery(keys.riskPolicyDetail(id), `/risk/policies/${id}`, {
+    poll: false, enabled: !!id, retry: 1,
+  });
+
+export function useCreateRiskPolicy() {
+  const { apiKey } = useApp();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => apiFetch('/risk/policies', { apiKey, method: 'POST', body }),
+    onSettled: () => Promise.all([
+      qc.invalidateQueries({ queryKey: ['risk', 'policy'] }),
+      qc.invalidateQueries({ queryKey: ['risk', 'policies'] }),
+      qc.invalidateQueries({ queryKey: ['risk', 'config'] }),
+    ]),
+  });
+}
+
+export const useRiskDecisions = ({ page = 0, size = 10 } = {}) =>
   useAuthedQuery(keys.riskDecisions({ page, size }), `/risk/decisions?page=${page}&size=${size}`, {
     placeholderData: keepPreviousData,
   });
+
+export const useRiskDecisionDetail = (id) =>
+  useAuthedQuery(keys.riskDecision(id), `/risk/decisions/${id}`, {
+    poll: false, enabled: !!id, retry: 1,
+  });
+
+/** Advisory only; the server reloads authoritative policy/portfolio state and actual orders re-evaluate risk. */
+export function usePositionSizeSuggestion() {
+  const { apiKey } = useApp();
+  return useMutation({
+    mutationFn: (input) => apiFetch('/risk/position-size', { apiKey, method: 'POST', body: input }),
+  });
+}
 
 export const useNewsStatus = () => useAuthedQuery(keys.newsStatus, '/news/status', { poll: false });
 
@@ -101,7 +149,6 @@ export function useTestAngelOneConnection() {
     onSuccess: (data) => qc.setQueryData([...keys.angelOneStatus, apiKey ? 'authed' : 'anon'], data),
   });
 }
-
 
 /** Active Angel One instrument catalogue metadata. */
 export const useInstrumentCatalogueStatus = () =>
@@ -205,7 +252,6 @@ export function useEmergencyStop() {
   });
 }
 
-
 /** Stored historical OHLCV, scoped to a selected instrument/interval/date range. */
 export function useCandles({ instrumentId, interval, fromDate, toDate, page = 0, size = 100, enabled = true }) {
   const params = new URLSearchParams({
@@ -238,7 +284,6 @@ export function useResumeCandleBackfill() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['market-data'] }),
   });
 }
-
 
 /** Persisted out-of-sample validation history; keys stay in memory and are sent only as request headers. */
 export const useBacktestValidations = (limit = 20) =>
