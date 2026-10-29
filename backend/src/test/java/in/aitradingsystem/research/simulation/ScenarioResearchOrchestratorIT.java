@@ -23,6 +23,7 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
     private static final OffsetDateTime SIGNAL_TIME = OffsetDateTime.of(2026, 6, 30, 9, 55, 0, 0, ZoneOffset.UTC);
 
     @Autowired ScenarioResearchOrchestrator orchestrator;
+    @Autowired ScenarioRunRepository scenarioRuns;
     @Autowired ResearchEvaluationRepository evaluations;
     @Autowired JdbcTemplate jdbc;
     @MockBean ScenarioSimulationService simulations;
@@ -81,12 +82,7 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
         assertThat(replay.scenarioRunId()).isEqualTo(first.scenarioRunId());
         assertThat(replay.evaluationId()).isNotEqualTo(first.evaluationId());
 
-        ScenarioRunView persisted = jdbc.queryForObject(
-                "SELECT id FROM research_scenario_run WHERE id = ?",
-                (rs, row) -> {
-                    UUID id = rs.getObject("id", UUID.class);
-                    return new ScenarioRunViewProxy(id).load(jdbc);
-                }, first.scenarioRunId()).view();
+        ScenarioRunView persisted = scenarioRuns.requireView(first.scenarioRunId());
         assertThat(persisted.status()).isEqualTo(ScenarioRunStatus.SUCCEEDED);
         assertThat(persisted.candidateId()).isEqualTo(candidateId);
         assertThat(persisted.requestFingerprint()).hasSize(64);
@@ -99,14 +95,4 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
                 });
         verify(simulations, times(1)).simulate(any());
     }
-
-    /** Keeps the assertion routed through the production repository view without exposing it as another fixture dependency. */
-    private record ScenarioRunViewProxy(UUID id) {
-        Loaded load(JdbcTemplate jdbc) {
-            ScenarioRunRepository repository = new ScenarioRunRepository(jdbc);
-            return new Loaded(repository.requireView(id));
-        }
-    }
-
-    private record Loaded(ScenarioRunView view) {}
 }
