@@ -144,8 +144,8 @@ resource "aws_iam_role_policy_attachment" "ssm" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 resource "aws_iam_role_policy" "instance_access" {
-  name   = "${local.name}-runtime-access"
-  role   = aws_iam_role.instance.id
+  name = "${local.name}-runtime-access"
+  role = aws_iam_role.instance.id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
     { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:GetDownloadUrlForLayer", "ecr:BatchGetImage"], Resource = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn] },
@@ -224,7 +224,7 @@ data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
 }
 resource "aws_iam_role" "github_deploy" {
-  name               = "${local.name}-github-deploy"
+  name = "${local.name}-github-deploy"
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{
     Effect    = "Allow"
     Principal = { Federated = data.aws_iam_openid_connect_provider.github.arn }
@@ -237,8 +237,8 @@ resource "aws_iam_role" "github_deploy" {
   tags = local.tags
 }
 resource "aws_iam_role_policy" "github_deploy" {
-  name   = "${local.name}-github-deploy"
-  role   = aws_iam_role.github_deploy.id
+  name = "${local.name}-github-deploy"
+  role = aws_iam_role.github_deploy.id
   policy = jsonencode({ Version = "2012-10-17", Statement = [
     { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
     { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"], Resource = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn] },
