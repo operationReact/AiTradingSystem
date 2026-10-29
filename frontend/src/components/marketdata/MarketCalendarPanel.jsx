@@ -14,8 +14,8 @@ export default function MarketCalendarPanel({ query }) {
         </thead>
         <tbody>
           {sessions.map((session) => (
-            <tr key={session.date} className="border-t border-border/70">
-              <td className="px-3 py-2 text-text">{session.date}</td>
+            <tr key={session.tradeDate} className="border-t border-border/70">
+              <td className="px-3 py-2 text-text">{session.tradeDate}</td>
               <td className="px-3 py-2"><Badge tone={session.tradingDay ? 'gain' : 'neutral'}>{session.tradingDay ? 'TRADING' : 'CLOSED'}</Badge></td>
               <td className="px-3 py-2 text-muted">{session.open || '—'}</td>
               <td className="px-3 py-2 text-muted">{session.close || '—'}</td>
