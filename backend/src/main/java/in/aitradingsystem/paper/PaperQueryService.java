@@ -44,26 +44,7 @@ public class PaperQueryService {
             .query((rs, n) -> new Account(rs.getBigDecimal("starting_capital"), rs.getBigDecimal("cash_balance")))
             .single();
 
-        List<PositionView> positions = jdbc.sql("""
-                SELECT p.symbol, p.quantity, p.cost_basis, p.stop_loss, p.target_price, p.opened_at,
-                       (SELECT f.fill_price FROM paper_fill f WHERE f.symbol = p.symbol
-                        ORDER BY f.filled_at DESC LIMIT 1) AS mark_price
-                FROM paper_position p ORDER BY p.symbol
-                """).query((rs, n) -> {
-                    int qty = rs.getInt("quantity");
-                    BigDecimal cost = rs.getBigDecimal("cost_basis");
-                    BigDecimal mark = rs.getBigDecimal("mark_price");
-                    if (mark == null) {
-                        mark = cost.divide(BigDecimal.valueOf(qty), 4, RoundingMode.HALF_UP);
-                    }
-                    BigDecimal value = PaperExecutionModel.money(mark.multiply(BigDecimal.valueOf(qty)));
-                    return new PositionView(rs.getString("symbol"), qty,
-                        PaperExecutionModel.money(cost.divide(BigDecimal.valueOf(qty), 4, RoundingMode.HALF_UP)),
-                        cost, mark, value, PaperExecutionModel.money(value.subtract(cost)),
-                        rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price"),
-                        PaperTradingService.instant(rs, "opened_at"));
-                }).list();
-
+        List<PositionView> positions = positions();
         BigDecimal invested = ZERO;
         BigDecimal marketValue = ZERO;
         BigDecimal unrealized = ZERO;
@@ -86,6 +67,35 @@ public class PaperQueryService {
         return new PortfolioView("PAPER", false, trading.isHalted(), account.startingCapital(), account.cash(),
             money(invested), money(marketValue), equity, realized, money(unrealized), realizedToday, exposure,
             positions.size(), ledgerTotal.compareTo(account.cash()) == 0, MARK_SOURCE, positions, Instant.now(clock));
+    }
+
+    public List<PositionView> positions() {
+        return jdbc.sql("""
+                SELECT p.instrument_id, p.exchange, p.symbol, p.product_type, p.quantity, p.cost_basis,
+                       p.average_price, p.stop_loss, p.target_price, p.opened_at,
+                       (SELECT f.fill_price
+                          FROM paper_fill f
+                          JOIN paper_order o ON o.id = f.order_id
+                         WHERE o.symbol = p.symbol AND o.product_type = p.product_type
+                           AND (p.instrument_id IS NULL OR o.instrument_id = p.instrument_id)
+                         ORDER BY f.filled_at DESC, f.fill_sequence DESC, f.id DESC
+                         LIMIT 1) AS mark_price
+                  FROM paper_position p
+                 ORDER BY p.symbol, p.product_type, p.instrument_id NULLS LAST
+                """).query((rs, n) -> {
+                    int qty = rs.getInt("quantity");
+                    BigDecimal cost = rs.getBigDecimal("cost_basis");
+                    BigDecimal average = rs.getBigDecimal("average_price");
+                    if (average == null) average = cost.divide(BigDecimal.valueOf(qty), 4, RoundingMode.HALF_UP);
+                    BigDecimal mark = rs.getBigDecimal("mark_price");
+                    if (mark == null) mark = average;
+                    BigDecimal value = PaperExecutionModel.money(mark.multiply(BigDecimal.valueOf(qty)));
+                    return new PositionView(rs.getObject("instrument_id", Long.class), rs.getString("exchange"),
+                        rs.getString("symbol"), rs.getString("product_type"), qty,
+                        PaperExecutionModel.money(average), cost, mark, value,
+                        PaperExecutionModel.money(value.subtract(cost)), rs.getBigDecimal("stop_loss"),
+                        rs.getBigDecimal("target_price"), PaperTradingService.instant(rs, "opened_at"));
+                }).list();
     }
 
     public PageResponse<OrderView> orders(String status, String symbol, int page, int size) {
@@ -131,7 +141,6 @@ public class PaperQueryService {
             .list()
             .forEach(row -> {
                 BigDecimal dayPnl = money((BigDecimal) row[1]);
-                // Realized total applies to the running sum only; rows are ordered by day.
                 points.add(new EquityPoint(row[0].toString(), dayPnl, null, null));
             });
         List<EquityPoint> curve = new ArrayList<>();

@@ -35,6 +35,15 @@ public class PaperOrderRepository {
             .optional();
     }
 
+    public OrderStatus statusForUpdate(UUID id) {
+        return jdbc.sql("SELECT status FROM paper_order WHERE id = :id FOR UPDATE")
+            .param("id", id)
+            .query(String.class)
+            .optional()
+            .map(OrderStatus::valueOf)
+            .orElseThrow(() -> new NotFoundException("Paper order not found: " + id));
+    }
+
     public void insert(UUID id, String key, String hash, OrderCommand cmd, Instant now) {
         jdbc.sql("""
                 INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,

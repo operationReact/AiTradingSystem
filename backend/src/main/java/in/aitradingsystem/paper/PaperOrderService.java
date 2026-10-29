@@ -89,6 +89,18 @@ public class PaperOrderService {
         return orders.loadResult(orderId, false);
     }
 
+    @Transactional
+    public OrderResult cancel(UUID orderId) {
+        OrderStatus current = orders.statusForUpdate(orderId);
+        if (!current.canTransitionTo(OrderStatus.CANCELLED)) {
+            throw new IllegalStateException("Order " + orderId + " cannot be cancelled from state " + current);
+        }
+        Instant now = clock.instant();
+        orders.transition(orderId, current, OrderStatus.CANCELLED, null, now);
+        audit.record("ORDER_CANCELLED", "PAPER_ORDER", orderId.toString(), Map.of("previousStatus", current.name()));
+        return orders.loadResult(orderId, false);
+    }
+
     public OrderResult loadResult(UUID orderId, boolean replayed) {
         return orders.loadResult(orderId, replayed);
     }
