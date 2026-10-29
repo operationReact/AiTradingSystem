@@ -188,7 +188,8 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     @Test
     void emergencyStopBlocksNewOrders() throws Exception {
         mvc.perform(put("/api/risk/emergency-stop").header(KEY_HEADER, API_KEY)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"halted\":true}"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"halted\":true,\"reason\":\"Integration test emergency stop\"}"))
             .andExpect(status().isOk());
         simulate(newKey(), buy("TCS", 10)).andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.reasonCodes[0]").value("EMERGENCY_STOP_ACTIVE"));
