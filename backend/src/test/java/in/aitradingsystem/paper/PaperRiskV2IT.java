@@ -56,7 +56,7 @@ class PaperRiskV2IT extends AbstractPostgresIT {
                 .isEqualTo("REJECTED");
         assertThat(jdbc.queryForObject("SELECT policy_snapshot->>'id' FROM risk_decision WHERE id = ?", String.class, decisionId))
                 .isEqualTo(originalPolicyId.toString());
-        assertThat(ruleCount).isEqualTo(18);
+        assertThat(ruleCount).isEqualTo(19);
         assertThat(jdbc.queryForObject("""
                 SELECT COUNT(*) FROM risk_decision_rule
                 WHERE risk_decision_id = ? AND reason_code = 'RISK_BUDGET_EXCEEDED'
