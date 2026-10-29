@@ -43,8 +43,9 @@ public final class PaperViews {
 
     public record OrderResult(OrderView order, DecisionView decision, FillView fill, boolean replayed) {}
 
-    public record PositionView(String symbol, int quantity, BigDecimal averageCost, BigDecimal costBasis,
-        BigDecimal markPrice, BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal stopLoss,
+    public record PositionView(Long instrumentId, String exchange, String symbol, String productType,
+        int quantity, BigDecimal averageCost, BigDecimal costBasis, BigDecimal markPrice,
+        BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal stopLoss,
         BigDecimal target, Instant openedAt) {}
 
     public record PortfolioView(String mode, boolean liveTradingEnabled, boolean newOrdersHalted,
