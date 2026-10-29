@@ -21,7 +21,7 @@ export function Panel({ title, subtitle, actions, children, className, bodyClass
 }
 
 const variants = {
-  primary: 'bg-accent text-white hover:brightness-110',
+  primary: 'bg-accent text-[rgb(var(--accent-contrast))] hover:brightness-110',
   secondary: 'border border-border bg-surface-2 text-text hover:bg-border/60',
   ghost: 'text-muted hover:bg-surface-2 hover:text-text',
   danger: 'bg-loss text-white hover:brightness-110',
@@ -138,7 +138,7 @@ export function SegmentedControl({ label, options, value, onChange }) {
             onClick={() => onChange(opt.value)}
             className={cn(
               'min-h-10 rounded px-2.5 text-xs font-medium transition-colors sm:min-h-6',
-              active ? 'bg-accent text-white' : 'text-muted hover:text-text',
+              active ? 'bg-accent text-[rgb(var(--accent-contrast))]' : 'text-muted hover:text-text',
             )}
           >
             {opt.label}
@@ -183,7 +183,7 @@ export function DataTable({ columns, rows, rowKey, pageSize = 10, onRowClick, em
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" tabIndex={0} aria-label="Scrollable data table">
         <table className="w-full text-left text-xs" style={{ minWidth }}>
           <thead>
             <tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted">

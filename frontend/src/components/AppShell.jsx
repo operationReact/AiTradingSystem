@@ -38,7 +38,7 @@ function Breadcrumbs() {
 function Brand({ compact }) {
   return (
     <div className="flex items-center gap-2.5 overflow-hidden">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-white">SF</div>
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-[rgb(var(--accent-contrast))]">SF</div>
       {!compact && (
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-text">SignalForge</p>
@@ -91,6 +91,7 @@ function ApiKeyControl() {
           size="sm"
           variant="ghost"
           icon={LogOut}
+          aria-label="Clear operator API key"
           onClick={() => {
             setApiKey('');
             qc.clear();

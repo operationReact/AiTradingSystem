@@ -4,7 +4,7 @@ import { formatDateTime, formatInr, formatInteger, pnlTone } from '../../lib/for
 export default function BacktestTradeTable({ trades = [] }) {
   if (!trades.length) return <EmptyState title="No trades in this run" description="The strategy did not open a qualifying paper position in the selected history." />;
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" tabIndex={0} aria-label="Scrollable backtest trades table">
       <table className="w-full min-w-[760px] text-left text-xs">
         <thead><tr className="border-b border-border text-[11px] uppercase tracking-wide text-muted">
           <th className="px-2 py-2 font-medium">#</th><th className="px-2 py-2 font-medium">Entry</th><th className="px-2 py-2 font-medium">Exit</th>
