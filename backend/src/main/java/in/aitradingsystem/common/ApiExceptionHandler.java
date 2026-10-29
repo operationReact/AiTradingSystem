@@ -1,5 +1,6 @@
 package in.aitradingsystem.common;
 
+import in.aitradingsystem.risk.RiskApiException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import java.time.Instant;
@@ -43,6 +44,15 @@ public class ApiExceptionHandler {
             ? "Required header is missing: " + missing.getHeaderName()
             : "Malformed request";
         return response(HttpStatus.BAD_REQUEST, message, List.of(), request);
+    }
+
+    @ExceptionHandler(RiskApiException.class)
+    ResponseEntity<ApiError> risk(RiskApiException ex, HttpServletRequest request) {
+        ApiError body = new ApiError(
+                Instant.now(), ex.status().value(), ex.code().name(), ex.getMessage(),
+                ex.code().name(), ex.getMessage(), request.getRequestURI(),
+                MDC.get(CorrelationIdFilter.MDC_KEY), List.of());
+        return ResponseEntity.status(ex.status()).body(body);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
