@@ -42,6 +42,12 @@ app:
     api-key: ${APP_API_KEY:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  paper:
+    intraday-close:
+      # Fail-safe default: no automatic end-of-session orders unless explicitly enabled.
+      enabled: ${PAPER_INTRADAY_CLOSE_ENABLED:false}
+      cutoff: ${PAPER_INTRADAY_CLOSE_CUTOFF:15:10}
+      poll-ms: ${PAPER_INTRADAY_CLOSE_POLL_MS:60000}
   risk:
     default-capital: 80000
     risk-per-trade-percent: 0.25
