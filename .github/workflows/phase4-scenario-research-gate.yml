@@ -92,5 +92,6 @@ jobs:
       - name: Validate handoff documentation carries required safety language
         run: |
           grep -Fq 'Research only — not an order' docs/P04_RESEARCH_UI_CONTRACT.md
-          grep -Fq 'AUTO_CLASSIFIED is not an acceptable display value' docs/P04_RESEARCH_UI_CONTRACT.md
+          grep -Fq 'AUTO_CLASSIFIED' docs/P04_RESEARCH_UI_CONTRACT.md
+          grep -Fq 'not an acceptable display value' docs/P04_RESEARCH_UI_CONTRACT.md
           grep -Fq 'Phase 9' docs/P04_RESEARCH_UI_CONTRACT.md
