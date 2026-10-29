@@ -3,12 +3,14 @@ package in.aitradingsystem.scanner;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
+import in.aitradingsystem.marketdata.MarketDataQualityService;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -24,24 +26,41 @@ public class ResearchScanService {
 
     private final ResearchScanRepository scans;
     private final MarketDataRepository marketData;
+    private final MarketDataQualityService quality;
     private final Clock clock;
     private final int maxUniverseSize;
     private final ScannerEngine engine;
 
+    @Autowired
     public ResearchScanService(
             ResearchScanRepository scans,
             MarketDataRepository marketData,
+            MarketDataQualityService quality,
             Clock clock,
             @Value("${app.research.scan.max-universe-size:200}") int maxUniverseSize,
             @Value("${app.research.scan.max-candle-age-minutes:60}") int maxCandleAgeMinutes) {
+        this(scans, marketData, quality, clock, maxUniverseSize, maxCandleAgeMinutes, false);
+    }
+
+    /** Unit-fixture constructor: production always injects the quality gate. */
+    ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData, Clock clock,
+            int maxUniverseSize, int maxCandleAgeMinutes) {
+        this(scans, marketData, null, clock, maxUniverseSize, maxCandleAgeMinutes, true);
+    }
+
+    private ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
+            MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes,
+            boolean fixtureBypass) {
         if (maxUniverseSize < 1 || maxUniverseSize > 500) {
             throw new IllegalArgumentException("maxUniverseSize must be between 1 and 500");
         }
         if (maxCandleAgeMinutes < 1 || maxCandleAgeMinutes > 1440) {
             throw new IllegalArgumentException("maxCandleAgeMinutes must be between 1 and 1440");
         }
+        if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
         this.scans = scans;
         this.marketData = marketData;
+        this.quality = quality;
         this.clock = clock;
         this.maxUniverseSize = maxUniverseSize;
         this.engine = new ScannerEngine(
@@ -72,6 +91,11 @@ public class ResearchScanService {
             Instant evaluatedAt = clock.instant();
             for (Instrument instrument : universe) {
                 List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
+                if (quality != null && (candles.isEmpty()
+                        || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
+                    scannedCount++;
+                    continue;
+                }
                 ScanContext context = new ScanContext(
                         instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
                         evaluatedAt, candles);

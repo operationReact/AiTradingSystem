@@ -7,9 +7,9 @@ import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
+import in.aitradingsystem.marketdata.MarketDataQualityService;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -18,6 +18,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class PaperBacktestService {
 
     private final InstrumentMasterService instruments;
     private final MarketDataRepository marketData;
+    private final MarketDataQualityService quality;
     private final BacktestRepository backtests;
     private final SmaBacktestEngine engine;
     private final RiskProperties risk;
@@ -41,9 +43,11 @@ public class PaperBacktestService {
     private final BigDecimal targetRiskReward;
     private final BigDecimal stopBufferPercent;
 
+    @Autowired
     public PaperBacktestService(
         InstrumentMasterService instruments,
         MarketDataRepository marketData,
+        MarketDataQualityService quality,
         BacktestRepository backtests,
         SmaBacktestEngine engine,
         RiskProperties risk,
@@ -54,13 +58,31 @@ public class PaperBacktestService {
         @Value("${app.strategy.target-risk-reward:2}") BigDecimal targetRiskReward,
         @Value("${app.strategy.stop-buffer-percent:0.5}") BigDecimal stopBufferPercent
     ) {
+        this(instruments, marketData, quality, backtests, engine, risk, audit, clock,
+                fastPeriod, slowPeriod, targetRiskReward, stopBufferPercent, false);
+    }
+
+    /** Unit-fixture constructor: production always injects the market-data quality gate. */
+    PaperBacktestService(InstrumentMasterService instruments, MarketDataRepository marketData,
+        BacktestRepository backtests, SmaBacktestEngine engine, RiskProperties risk, AuditService audit,
+        Clock clock, int fastPeriod, int slowPeriod, BigDecimal targetRiskReward, BigDecimal stopBufferPercent) {
+        this(instruments, marketData, null, backtests, engine, risk, audit, clock,
+                fastPeriod, slowPeriod, targetRiskReward, stopBufferPercent, true);
+    }
+
+    private PaperBacktestService(InstrumentMasterService instruments, MarketDataRepository marketData,
+        MarketDataQualityService quality, BacktestRepository backtests, SmaBacktestEngine engine,
+        RiskProperties risk, AuditService audit, Clock clock, int fastPeriod, int slowPeriod,
+        BigDecimal targetRiskReward, BigDecimal stopBufferPercent, boolean fixtureBypass) {
         this.instruments = instruments;
         this.marketData = marketData;
+        this.quality = quality;
         this.backtests = backtests;
         this.engine = engine;
         this.risk = risk;
         this.audit = audit;
         this.clock = clock;
+        if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
         if (fastPeriod < 2 || slowPeriod <= fastPeriod || slowPeriod > 500) {
             throw new IllegalArgumentException("Strategy periods must satisfy 2 <= fastPeriod < slowPeriod <= 500");
         }
@@ -93,6 +115,10 @@ public class PaperBacktestService {
         if (candles.size() < slowPeriod + 2) {
             throw new BacktestException("INSUFFICIENT_HISTORY",
                 "At least " + (slowPeriod + 2) + " stored candles are required for the configured strategy");
+        }
+        if (quality != null && !quality.eligibleForResearch(quality.evaluate(instrument.id(), request.interval(), fromInclusive, toExclusive))) {
+            throw new BacktestException("DATA_QUALITY_NOT_ELIGIBLE",
+                "Stored candles failed the market-data quality gate for this backtest window");
         }
 
         BigDecimal capital = request.initialCapital() == null ? risk.defaultCapital() : request.initialCapital();

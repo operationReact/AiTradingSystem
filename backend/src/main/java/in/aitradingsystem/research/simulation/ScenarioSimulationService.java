@@ -2,18 +2,30 @@ package in.aitradingsystem.research.simulation;
 
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
+import in.aitradingsystem.marketdata.MarketDataQualityService;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ScenarioSimulationService {
     private static final int MAX_HISTORY_CANDLES = 20_000;
     private final MarketDataRepository marketData;
+    private final MarketDataQualityService quality;
     private final HistoricalScenarioSimulator simulator = new HistoricalScenarioSimulator();
 
-    public ScenarioSimulationService(MarketDataRepository marketData) {
+    @Autowired
+    public ScenarioSimulationService(MarketDataRepository marketData, MarketDataQualityService quality) {
+        if (quality == null) throw new IllegalArgumentException("market data quality gate is required");
         this.marketData = marketData;
+        this.quality = quality;
+    }
+
+    /** Unit-fixture constructor: production always injects the quality gate. */
+    ScenarioSimulationService(MarketDataRepository marketData) {
+        this.marketData = marketData;
+        this.quality = null;
     }
 
     public ScenarioSimulationResult simulate(ScenarioSimulationRequest request) {
@@ -28,6 +40,9 @@ public class ScenarioSimulationService {
         }
         List<MarketCandle> history = marketData.backtestCandles(
                 request.instrumentId(), request.interval(), request.historyFrom(), request.historyTo(), MAX_HISTORY_CANDLES);
+        if (quality != null && !quality.eligibleForResearch(quality.evaluateBars(request.instrumentId(), interval, history))) {
+            throw new IllegalArgumentException("historical scenario data failed the market-data quality gate");
+        }
         return simulator.simulate(request, history);
     }
 }
