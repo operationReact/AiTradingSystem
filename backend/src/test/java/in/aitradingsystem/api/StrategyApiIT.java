@@ -8,19 +8,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.http.MediaType;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+@TestPropertySource(properties = "app.strategy.max-signal-age-minutes=10080")
 class StrategyApiIT extends AbstractPostgresIT {
     private static final String KEY_HEADER = "X-API-Key";
+    private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
@@ -29,6 +34,7 @@ class StrategyApiIT extends AbstractPostgresIT {
     @BeforeEach
     void resetAndSeedInstrument() {
         jdbc.update("DELETE FROM strategy_signal");
+        jdbc.update("DELETE FROM market_data_quality");
         jdbc.update("DELETE FROM market_candle");
         jdbc.update("DELETE FROM candle_backfill_checkpoint");
         jdbc.update("DELETE FROM candle_backfill_run");
@@ -78,10 +84,14 @@ class StrategyApiIT extends AbstractPostgresIT {
 
     @Test
     void evaluationPersistsOneIdempotentSignalAndListsIt() throws Exception {
-        Instant latest = Instant.now().minusSeconds(30);
+        LocalDate tradingDay = LocalDate.now(MARKET_ZONE).minusDays(1);
+        while (tradingDay.getDayOfWeek() == DayOfWeek.SATURDAY || tradingDay.getDayOfWeek() == DayOfWeek.SUNDAY) {
+            tradingDay = tradingDay.minusDays(1);
+        }
+        Instant firstCandle = tradingDay.atTime(9, 15).atZone(MARKET_ZONE).toInstant();
         for (int i = 0; i < 21; i++) {
             BigDecimal close = BigDecimal.valueOf(100 + i);
-            Instant candleTime = latest.minusSeconds(60L * (20 - i));
+            Instant candleTime = firstCandle.plusSeconds(300L * i);
             jdbc.update("""
                     INSERT INTO market_candle
                         (instrument_id, exchange, trading_symbol, symbol_token, interval, candle_time,
