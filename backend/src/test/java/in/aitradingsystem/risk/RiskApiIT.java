@@ -1,18 +1,15 @@
 package in.aitradingsystem.risk;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.nio.charset.StandardCharsets;
-import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -114,7 +111,7 @@ class RiskApiIT extends AbstractPostgresIT {
                                  "availableCash":999999999,"policyVersion":999}
                                 """.formatted(instrumentId)))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.recommendedQuantity").isNumber())
+                .andExpect(jsonPath("$.quantity").isNumber())
                 .andExpect(jsonPath("$.policyVersion").value(policies.requireActive().version()));
     }
 
