@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   backend-accounting-evidence:
-    name: P6 replay + rejection + concurrency + accounting evidence
+    name: P6 replay + restart + rejection + concurrency + accounting evidence
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -40,7 +40,7 @@ jobs:
       - name: Run Phase 6 canonical PAPER accounting evidence
         run: >-
           mvn --batch-mode --no-transfer-progress
-          -Dtest=PaperTradeApiIT,PaperOrderApiIT,PaperFillRepositoryIT,PositionAccountingServiceIT,PortfolioValuationServiceIT,PaperReconciliationServiceIT,IntradayPaperCloseServiceIT,PaperLedgerApiIT
+          -Dtest=PaperTradeApiIT,PaperOrderApiIT,PaperFillRepositoryIT,PositionAccountingServiceIT,PortfolioValuationServiceIT,PaperReconciliationServiceIT,IntradayPaperCloseServiceIT,PaperLedgerApiIT,Phase6RestartPersistenceIT
           test
 
   persistence-contract:
@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           doc=docs/phase6-paper-accounting-contract.md
           grep -F 'Idempotent replay' "$doc"
-          grep -F 'Rejected order' "$doc"
+          grep -F 'rejected order' "$doc" -i
           grep -F 'Concurrent duplicate submissions' "$doc"
           grep -F 'Restart safety' "$doc"
           grep -F 'reconciliation records differences but never silently repairs' "$doc"
