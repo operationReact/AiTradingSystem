@@ -2,17 +2,20 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.config.RiskProperties;
-import in.aitradingsystem.paper.PaperQueryService;
 import in.aitradingsystem.paper.PaperTradingService;
-import in.aitradingsystem.paper.PaperViews.DecisionView;
+import in.aitradingsystem.risk.RiskDecisionDetail;
+import in.aitradingsystem.risk.RiskDecisionPersistenceService;
+import in.aitradingsystem.risk.RiskDecisionSummary;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.util.UUID;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,12 +28,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class RiskController {
     private final RiskProperties props;
     private final PaperTradingService trading;
-    private final PaperQueryService queries;
+    private final RiskDecisionPersistenceService decisions;
 
-    public RiskController(RiskProperties props, PaperTradingService trading, PaperQueryService queries) {
+    public RiskController(
+            RiskProperties props,
+            PaperTradingService trading,
+            RiskDecisionPersistenceService decisions) {
         this.props = props;
         this.trading = trading;
-        this.queries = queries;
+        this.decisions = decisions;
     }
 
     public record RiskConfigView(String tradingMode, boolean liveTradingEnabled, String policyVersion,
@@ -51,9 +57,15 @@ public class RiskController {
     }
 
     @GetMapping("/decisions")
-    public PageResponse<DecisionView> decisions(@RequestParam(defaultValue = "0") @Min(0) int page,
-                                                @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
-        return queries.decisions(page, size);
+    public PageResponse<RiskDecisionSummary> decisions(
+            @RequestParam(defaultValue = "0") @Min(0) int page,
+            @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        return decisions.list(page, size);
+    }
+
+    @GetMapping("/decisions/{decisionId}")
+    public RiskDecisionDetail decision(@PathVariable UUID decisionId) {
+        return decisions.require(decisionId);
     }
 
     @PutMapping("/emergency-stop")
