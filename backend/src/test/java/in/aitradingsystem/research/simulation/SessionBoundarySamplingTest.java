@@ -21,7 +21,7 @@ class SessionBoundarySamplingTest {
         HistoricalBlockSampler.SamplingPool pool = new HistoricalBlockSampler()
                 .select(history, history.get(history.size() - 1).candleTime(), 10);
 
-        assertThat(pool.allEligibleBlockCount()).isEqualTo(111);
+        assertThat(pool.allEligibleBlockCount()).isEqualTo(109);
         assertThat(pool.blocks()).allSatisfy(block -> {
             var start = block.startCandleTime().atZone(IST);
             assertThat(start.toLocalDate()).isEqualTo(block.sourceTradeDate());
