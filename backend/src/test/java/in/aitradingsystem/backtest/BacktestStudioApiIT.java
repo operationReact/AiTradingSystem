@@ -11,7 +11,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -26,6 +26,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 class BacktestStudioApiIT extends AbstractPostgresIT {
     private static final String KEY_HEADER = "X-API-Key";
+    private static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
@@ -44,6 +45,7 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
         jdbc.update("DELETE FROM market_candle");
         jdbc.update("DELETE FROM candle_backfill_checkpoint");
         jdbc.update("DELETE FROM candle_backfill_run");
+        jdbc.update("DELETE FROM market_holiday");
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = NULL, activated_at = NULL WHERE singleton_id = 1");
         jdbc.update("DELETE FROM instrument_master");
         jdbc.update("DELETE FROM instrument_import_run");
@@ -65,11 +67,11 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = ?, activated_at = now() WHERE singleton_id = 1",
                 catalogue);
 
-        Instant start = LocalDate.parse("2026-01-01").atStartOfDay(ZoneId.of("Asia/Kolkata")).toInstant();
-        for (int i = 0; i < 40; i++) {
-            BigDecimal close = BigDecimal.valueOf(100 + i);
-            Instant at = start.plusSeconds(i * 86400L);
-            OffsetDateTime timestamp = OffsetDateTime.ofInstant(at, ZoneOffset.UTC);
+        int candleNumber = 0;
+        for (LocalDate date = LocalDate.parse("2026-01-01"); !date.isAfter(LocalDate.parse("2026-02-25")); date = date.plusDays(1)) {
+            if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) continue;
+            BigDecimal close = BigDecimal.valueOf(100L + candleNumber);
+            OffsetDateTime timestamp = OffsetDateTime.ofInstant(date.atTime(9, 15).atZone(MARKET_ZONE).toInstant(), ZoneOffset.UTC);
             jdbc.update("""
                 INSERT INTO market_candle
                     (instrument_id, exchange, trading_symbol, symbol_token, catalogue_version, interval,
@@ -78,7 +80,8 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
                         ?, ?, ?, ?, ?, ?, 'TEST_FIXTURE', ?)
                 """, instrumentId, catalogue, timestamp,
                     close.subtract(new BigDecimal("0.2")), close.add(new BigDecimal("0.8")),
-                    close.subtract(new BigDecimal("0.8")), close, 10000L + i * 50L, timestamp);
+                    close.subtract(new BigDecimal("0.8")), close, 10000L + candleNumber * 50L, timestamp);
+            candleNumber++;
         }
     }
 
@@ -88,7 +91,7 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
                         .header(KEY_HEADER, API_KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-01-01","toDate":"2026-02-09"}
+                            {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-01-01","toDate":"2026-02-25"}
                             """.formatted(instrumentId)))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
@@ -130,7 +133,7 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
                         .header(KEY_HEADER, API_KEY)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                            {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-01-01","toDate":"2026-02-09",
+                            {"instrumentId":%d,"interval":"ONE_DAY","fromDate":"2026-01-01","toDate":"2026-02-25",
                              "trainingWindowDays":0,"validationWindowDays":10,"stepDays":10}
                             """.formatted(instrumentId)))
                 .andExpect(status().isBadRequest())
