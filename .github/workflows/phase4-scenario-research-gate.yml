@@ -1,0 +1,96 @@
+name: Phase 4 - Scenario research completion gate
+
+on:
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase4-scenario-research-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-phase4-evidence:
+    name: P4 candidate → provenance → regime-aware scenario evidence
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Run Phase 4 reproducibility, persistence, provenance and API evidence
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dtest=RegimeClassifierTest,HistoricalBlockSamplerTest,SessionBoundarySamplingTest,HistoricalScenarioSimulatorTest,HistoricalScenarioSimulatorV2Test,ScenarioSimulationRepositoryIT,ScenarioResearchOrchestratorIT,ResearchEvaluationProvenanceIT,ScenarioResearchApiIT
+          test
+
+  research-ui-contract:
+    name: P4 research-only Phase 9 handoff contract
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate research drawer contract and forbidden trade actions
+        run: |
+          node --input-type=module <<'NODE'
+          import {
+            CANDIDATE_RESEARCH_DRAWER_CONTRACT,
+            RESEARCH_ONLY_LABEL,
+            buildCandidateResearchDrawerModel,
+          } from './frontend/src/components/research/CandidateResearchDrawer.contract.js';
+
+          const expectedLabel = 'Research only — not an order';
+          if (RESEARCH_ONLY_LABEL !== expectedLabel) throw new Error('research-only safety label changed');
+          if (CANDIDATE_RESEARCH_DRAWER_CONTRACT.visualImplementationPhase !== 9) {
+            throw new Error('P4 contract must defer visual implementation to Phase 9');
+          }
+          const forbidden = new Set(CANDIDATE_RESEARCH_DRAWER_CONTRACT.forbiddenActions);
+          for (const action of ['placeOrder', 'submitOrder', 'approveOrder', 'executeTrade']) {
+            if (!forbidden.has(action)) throw new Error(`missing forbidden action ${action}`);
+          }
+          const evaluation = {
+            evaluationId: 'eval-1', candidateId: 42, scenarioRunId: 'scenario-1',
+            decisionLabel: 'FAVORABLE', reasonCodes: ['POSITIVE_EXPECTANCY'], createdAt: '2026-10-29T00:00:00Z'
+          };
+          const scenario = {
+            id: 'scenario-1', candidateId: 42,
+            targetFirstProbability: 0.55, stopFirstProbability: 0.30, neitherProbability: 0.15,
+            expectedR: 0.50, p05R: -1.02, p50R: 0.40, p95R: 2.05,
+            regime: 'HIGH_VOL', fallbackTier: 'EXACT_VOLATILITY_AND_VOLUME',
+            methodology: 'SESSION_REGIME_BLOCK_BOOTSTRAP_V2', strategy: 'OPENING_RANGE_BREAKOUT_V1',
+            strategyConfigVersion: null, scanRunId: 'scan-1', requestFingerprint: 'a'.repeat(64),
+            historyFrom: '2026-01-01T00:00:00Z', historyTo: '2026-06-30T00:00:00Z',
+            dataCutoffAt: '2026-06-30T00:00:00Z', seed: 424242, simulationCount: 1000,
+            horizonBars: 20, blockSize: 5, historicalSamples: 480, eligibleBlockCount: 350
+          };
+          const model = buildCandidateResearchDrawerModel(evaluation, scenario);
+          if (model.safetyLabel !== expectedLabel) throw new Error('projected model lost safety label');
+          if (model.regimeChips.marketRegime === 'AUTO_CLASSIFIED') throw new Error('placeholder regime is forbidden');
+          if (model.regimeChips.marketRegime !== 'HIGH_VOL') throw new Error('resolved regime not projected');
+          if (!Object.isFrozen(model)) throw new Error('research drawer projection must be immutable');
+          NODE
+
+      - name: Validate handoff documentation carries required safety language
+        run: |
+          grep -Fq 'Research only — not an order' docs/P04_RESEARCH_UI_CONTRACT.md
+          grep -Fq 'AUTO_CLASSIFIED is not an acceptable display value' docs/P04_RESEARCH_UI_CONTRACT.md
+          grep -Fq 'Phase 9' docs/P04_RESEARCH_UI_CONTRACT.md
