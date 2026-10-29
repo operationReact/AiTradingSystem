@@ -42,8 +42,8 @@ public class RiskPolicyConfigService {
         validate(request);
         if (actor == null || actor.isBlank()) throw new IllegalArgumentException("authenticated actor is required");
 
-        RiskPolicyView previous = repository.requireActiveView();
         int version = repository.nextVersionForUpdate();
+        RiskPolicyView previous = repository.requireActiveView();
         UUID id = UUID.randomUUID();
         RiskPolicySnapshot snapshot = new RiskPolicySnapshot(
                 id,
