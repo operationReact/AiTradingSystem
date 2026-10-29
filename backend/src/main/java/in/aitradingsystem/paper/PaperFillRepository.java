@@ -2,6 +2,7 @@ package in.aitradingsystem.paper;
 
 import in.aitradingsystem.domain.Side;
 import java.math.BigDecimal;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -51,8 +52,8 @@ public class PaperFillRepository {
             .param("netAmount", fill.netAmount())
             .param("costBasis", fill.costBasis())
             .param("realizedPnl", fill.realizedPnl())
-            .param("executionModelVersion", fill.executionModelVersion())
-            .param("liquidityAssumption", fill.liquidityAssumption())
+            .param("executionModelVersion", fill.executionModelVersion(), Types.VARCHAR)
+            .param("liquidityAssumption", fill.liquidityAssumption(), Types.VARCHAR)
             .param("filledAt", OffsetDateTime.ofInstant(fill.filledAt(), ZoneOffset.UTC))
             .update();
         return fillId;
