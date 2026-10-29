@@ -3,6 +3,7 @@ import AppShell from './components/AppShell.jsx';
 import OverviewPage from './pages/OverviewPage.jsx';
 import SignalsPage from './pages/SignalsPage.jsx';
 import PaperTradesPage from './pages/PaperTradesPage.jsx';
+import PortfolioPage from './pages/PortfolioPage.jsx';
 import RiskPage from './pages/RiskPage.jsx';
 import InstrumentsPage from './pages/InstrumentsPage.jsx';
 import MarketDataPage from './pages/MarketDataPage.jsx';
@@ -16,6 +17,7 @@ export default function App() {
         <Route index element={<OverviewPage />} />
         <Route path="signals" element={<SignalsPage />} />
         <Route path="trades" element={<PaperTradesPage />} />
+        <Route path="portfolio" element={<PortfolioPage />} />
         <Route path="risk" element={<RiskPage />} />
         <Route path="instruments" element={<InstrumentsPage />} />
         <Route path="market-data" element={<MarketDataPage />} />
