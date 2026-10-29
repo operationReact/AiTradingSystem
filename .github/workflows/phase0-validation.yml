@@ -77,7 +77,7 @@ jobs:
           terraform_version: "1.8.5"
       - name: Check Terraform formatting
         working-directory: infra/terraform
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
       - name: Initialize providers without configuring remote state
         working-directory: infra/terraform
         run: terraform init -backend=false
@@ -110,7 +110,7 @@ jobs:
           terraform_version: "1.8.5"
       - name: Check budget Terraform formatting
         working-directory: infra/terraform-budget
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
       - name: Initialize providers without remote state
         working-directory: infra/terraform-budget
         run: terraform init -backend=false
