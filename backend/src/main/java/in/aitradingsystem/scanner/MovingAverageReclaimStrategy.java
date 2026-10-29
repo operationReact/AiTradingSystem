@@ -1,10 +1,12 @@
 package in.aitradingsystem.scanner;
 
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Reclaim of the 20-bar SMA while the 5-bar SMA is above the 20-bar SMA. */
 public final class MovingAverageReclaimStrategy implements ScannerStrategy {
@@ -21,6 +23,14 @@ public final class MovingAverageReclaimStrategy implements ScannerStrategy {
     @Override
     public int minimumCandles() {
         return SLOW + 1;
+    }
+
+    @Override
+    public StrategyDescriptor descriptor() {
+        return new StrategyDescriptor(NAME, "1", "Moving Average Reclaim",
+                Set.of(HistoricalCandleInterval.FIFTEEN_MINUTE, HistoricalCandleInterval.THIRTY_MINUTE,
+                        HistoricalCandleInterval.ONE_HOUR, HistoricalCandleInterval.ONE_DAY),
+                minimumCandles(), TradingStyle.SWING, false, "HEALTHY", true, false);
     }
 
     @Override
