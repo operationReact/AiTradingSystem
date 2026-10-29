@@ -9,12 +9,22 @@ import java.util.List;
 import java.util.SplittableRandom;
 
 /**
- * Deterministic long-only scenario simulator using contiguous historical OHLC return blocks.
+ * Deterministic long-only scenario simulator using session-safe, regime-aware historical blocks.
  * If stop and target are touched in the same simulated bar, stop wins conservatively.
  */
 public final class HistoricalScenarioSimulator {
-    public static final String METHODOLOGY = "BLOCK_BOOTSTRAP_CONSERVATIVE_V1";
+    public static final String METHODOLOGY = "SESSION_REGIME_BLOCK_BOOTSTRAP_V2";
     private static final BigDecimal TEN_THOUSAND = new BigDecimal("10000");
+    private final HistoricalBlockSampler blockSampler;
+
+    public HistoricalScenarioSimulator() {
+        this(new HistoricalBlockSampler());
+    }
+
+    HistoricalScenarioSimulator(HistoricalBlockSampler blockSampler) {
+        if (blockSampler == null) throw new IllegalArgumentException("blockSampler is required");
+        this.blockSampler = blockSampler;
+    }
 
     public ScenarioSimulationResult simulate(ScenarioSimulationRequest request, List<MarketCandle> history) {
         if (request == null) throw new IllegalArgumentException("request is required");
@@ -22,11 +32,8 @@ public final class HistoricalScenarioSimulator {
             throw new IllegalArgumentException("insufficient historical candles for simulation");
         }
 
-        List<Observation> observations = observations(history);
-        if (observations.size() <= request.blockSize()) {
-            throw new IllegalArgumentException("insufficient historical transitions for requested block size");
-        }
-        int eligibleBlockCount = observations.size() - request.blockSize() + 1;
+        HistoricalBlockSampler.SamplingPool pool = blockSampler.select(history, request.historyTo(), request.blockSize());
+        List<HistoricalBlock> blocks = pool.blocks();
 
         BigDecimal slippage = request.entryPrice()
                 .multiply(BigDecimal.valueOf(request.slippageBps()))
@@ -47,9 +54,9 @@ public final class HistoricalScenarioSimulator {
             int remaining = request.horizonBars();
 
             while (remaining > 0 && outcome == Outcome.NEITHER) {
-                int start = random.nextInt(eligibleBlockCount);
-                for (int j = 0; j < request.blockSize() && remaining > 0; j++, remaining--) {
-                    Observation observation = observations.get(start + j);
+                HistoricalBlock block = blocks.get(random.nextInt(blocks.size()));
+                for (HistoricalBlock.Observation observation : block.observations()) {
+                    if (remaining-- <= 0) break;
                     BigDecimal high = price.multiply(observation.highFactor());
                     BigDecimal low = price.multiply(observation.lowFactor());
                     BigDecimal close = price.multiply(observation.closeFactor());
@@ -82,8 +89,9 @@ public final class HistoricalScenarioSimulator {
                 METHODOLOGY,
                 request.seed(),
                 request.simulations(),
-                observations.size(),
-                eligibleBlockCount,
+                pool.historicalSamples(),
+                pool.eligibleBlockCount(),
+                pool.fallbackTier().name(),
                 request.horizonBars(),
                 request.blockSize(),
                 targetFirst,
@@ -92,24 +100,10 @@ public final class HistoricalScenarioSimulator {
                 targetFirst / (double) request.simulations(),
                 stopFirst / (double) request.simulations(),
                 neither / (double) request.simulations(),
-                rOutcomes.stream().mapToDouble(Double::doubleValue).average().orElse(0.0),
-                percentile(rOutcomes, 0.05),
-                percentile(rOutcomes, 0.50),
-                percentile(rOutcomes, 0.95));
-    }
-
-    private static List<Observation> observations(List<MarketCandle> history) {
-        List<Observation> observations = new ArrayList<>(history.size() - 1);
-        for (int i = 1; i < history.size(); i++) {
-            MarketCandle previous = history.get(i - 1);
-            MarketCandle current = history.get(i);
-            if (previous.close().signum() <= 0) continue;
-            observations.add(new Observation(
-                    current.high().divide(previous.close(), 10, RoundingMode.HALF_UP),
-                    current.low().divide(previous.close(), 10, RoundingMode.HALF_UP),
-                    current.close().divide(previous.close(), 10, RoundingMode.HALF_UP)));
-        }
-        return List.copyOf(observations);
+                normalize(rOutcomes.stream().mapToDouble(Double::doubleValue).average().orElse(0.0)),
+                normalize(percentile(rOutcomes, 0.05)),
+                normalize(percentile(rOutcomes, 0.50)),
+                normalize(percentile(rOutcomes, 0.95)));
     }
 
     private static double outcomeR(ScenarioSimulationRequest request, BigDecimal effectiveEntry,
@@ -127,7 +121,9 @@ public final class HistoricalScenarioSimulator {
         return sorted.get(Math.max(0, Math.min(sorted.size() - 1, index)));
     }
 
-    private enum Outcome { TARGET_FIRST, STOP_FIRST, NEITHER }
+    private static double normalize(double value) {
+        return BigDecimal.valueOf(value).setScale(10, RoundingMode.HALF_UP).doubleValue();
+    }
 
-    private record Observation(BigDecimal highFactor, BigDecimal lowFactor, BigDecimal closeFactor) {}
+    private enum Outcome { TARGET_FIRST, STOP_FIRST, NEITHER }
 }
