@@ -82,6 +82,19 @@ public class ResearchScanRepository {
                 """, runId, instrumentId, bounded(strategy, 80), bounded(severity, 12), bounded(code, 80), bounded(message, 300));
     }
 
+    public List<ResearchScanDiagnostic> diagnostics(UUID runId) {
+        requireRun(runId);
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, strategy, severity, code, message, created_at
+                  FROM research_scan_diagnostic
+                 WHERE scan_run_id = ?
+                 ORDER BY created_at ASC, id ASC
+                """, (rs, row) -> new ResearchScanDiagnostic(
+                rs.getLong("id"), rs.getObject("scan_run_id", UUID.class), (Long) rs.getObject("instrument_id"),
+                rs.getString("strategy"), rs.getString("severity"), rs.getString("code"), rs.getString("message"),
+                instant(rs.getObject("created_at", OffsetDateTime.class))), runId);
+    }
+
     public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
         requireRun(runId);
         if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
