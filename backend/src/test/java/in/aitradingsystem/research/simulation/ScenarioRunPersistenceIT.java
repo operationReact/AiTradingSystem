@@ -39,7 +39,8 @@ class ScenarioRunPersistenceIT extends AbstractPostgresIT {
         assertThat(repository.status(id)).isEqualTo(ScenarioRunStatus.RUNNING);
 
         ScenarioSimulationResult result = new ScenarioSimulationResult(
-                HistoricalScenarioSimulator.METHODOLOGY, 123456789L, 1000, 400, 396, 20, 5,
+                HistoricalScenarioSimulator.METHODOLOGY, 123456789L, 1000, 400, 396,
+                BlockSamplingFallbackTier.EXACT_VOLATILITY_AND_VOLUME.name(), 20, 5,
                 520, 310, 170, .52, .31, .17, .42, -1.1, .30, 2.0);
         repository.markSucceeded(id, result);
 
@@ -48,6 +49,7 @@ class ScenarioRunPersistenceIT extends AbstractPostgresIT {
         assertThat(row.get("instrument_id")).isEqualTo(42L);
         assertThat(row.get("seed")).isEqualTo(123456789L);
         assertThat(row.get("eligible_block_count")).isEqualTo(396);
+        assertThat(row.get("fallback_tier")).isEqualTo(BlockSamplingFallbackTier.EXACT_VOLATILITY_AND_VOLUME.name());
         assertThat(row.get("target_first_count")).isEqualTo(520);
         assertThat(row.get("error_code")).isNull();
         assertThat(row.get("completed_at")).isNotNull();
