@@ -23,15 +23,6 @@ public record BacktestContext(
         if (interval == null || interval.isBlank()) throw new IllegalArgumentException("interval is required");
         if (cutoff == null) throw new IllegalArgumentException("cutoff is required");
         if (accountState == null) throw new IllegalArgumentException("accountState is required");
-        candles = candles == null ? List.of() : List.copyOf(candles);
-        Instant previous = null;
-        for (MarketCandle candle : candles) {
-            if (candle == null) throw new IllegalArgumentException("candles cannot contain null values");
-            if (candle.candleTime().isAfter(cutoff)) throw new IllegalArgumentException("future candles are not allowed");
-            if (previous != null && candle.candleTime().isBefore(previous)) {
-                throw new IllegalArgumentException("candles must be chronological");
-            }
-            previous = candle.candleTime();
-        }
+        candles = candles == null ? List.of() : BacktestDataGuard.pointInTimeView(candles, cutoff);
     }
 }
