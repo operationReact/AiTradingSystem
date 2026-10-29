@@ -1,12 +1,8 @@
 package in.aitradingsystem.domain;
 
-import java.util.EnumSet;
 import java.util.Set;
 
-/**
- * Explicit PAPER order lifecycle. The direct RISK_APPROVED -> FILLED edge remains temporarily valid for the
- * existing /paper-trades/simulate compatibility path; the canonical Phase 6 order path will use READY/fill states.
- */
+/** Explicit PAPER order lifecycle values. Transition policy lives in {@link OrderStateMachine}. */
 public enum OrderStatus {
     NEW,
     RISK_APPROVED,
@@ -20,18 +16,11 @@ public enum OrderStatus {
     FAILED;
 
     public Set<OrderStatus> allowedNext() {
-        return switch (this) {
-            case NEW -> EnumSet.of(RISK_APPROVED, REJECTED, CANCELLED, EXPIRED, FAILED);
-            case RISK_APPROVED -> EnumSet.of(APPROVAL_PENDING, READY, FILLED, CANCELLED, EXPIRED, FAILED);
-            case APPROVAL_PENDING -> EnumSet.of(READY, REJECTED, CANCELLED, EXPIRED, FAILED);
-            case READY -> EnumSet.of(PARTIALLY_FILLED, FILLED, CANCELLED, EXPIRED, FAILED);
-            case PARTIALLY_FILLED -> EnumSet.of(FILLED, CANCELLED, EXPIRED, FAILED);
-            case FILLED, REJECTED, CANCELLED, EXPIRED, FAILED -> EnumSet.noneOf(OrderStatus.class);
-        };
+        return OrderStateMachine.allowedNext(this);
     }
 
     public boolean canTransitionTo(OrderStatus next) {
-        return allowedNext().contains(next);
+        return OrderStateMachine.canTransition(this, next);
     }
 
     public boolean terminal() {
@@ -42,9 +31,6 @@ public enum OrderStatus {
     }
 
     public OrderStatus transitionTo(OrderStatus next) {
-        if (!canTransitionTo(next)) {
-            throw new IllegalStateException("Illegal order transition " + this + " -> " + next);
-        }
-        return next;
+        return OrderStateMachine.requireTransition(this, next);
     }
 }
