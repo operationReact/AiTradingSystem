@@ -68,6 +68,12 @@ public class ResearchScanRepository {
         return inserted == 1;
     }
 
+    /** Legacy fixture signature; production code must provide explicit provenance. */
+    @Deprecated
+    public void saveCandidate(UUID runId, ScanCandidate c) {
+        throw new UnsupportedOperationException("candidate provenance is required");
+    }
+
     public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
         requireRun(runId);
         if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
