@@ -33,10 +33,11 @@ public class AngelOneCallMetrics {
                     .register(registry).increment();
         }
         if (error.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
-            Counter.builder("aitrading.provider.angelone.auth_failures")
-                    .description("Angel One authentication or session failures")
-                    .tag("type", "session_expired")
-                    .register(registry).increment();
+            recordAuthFailure("session_expired");
+        } else if (AngelOneApiClient.LOGIN_PATH.equals(endpoint)
+                && (error.kind() == AngelOneException.Kind.REJECTED
+                    || error.kind() == AngelOneException.Kind.INVALID_RESPONSE)) {
+            recordAuthFailure("login_failed");
         }
     }
 
