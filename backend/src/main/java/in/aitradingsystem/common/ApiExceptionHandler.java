@@ -1,82 +1,85 @@
 package in.aitradingsystem.common;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.server.ResponseStatusException;
-import org.springframework.http.ProblemDetail;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.server.ResponseStatusException;
 
-/** Consistent RFC 7807 error bodies. Internal details are logged, never returned. */
+/** Consistent API error bodies. Internal exception details are logged, never returned. */
 @RestControllerAdvice
 public class ApiExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    ProblemDetail validation(MethodArgumentNotValidException ex) {
+    ResponseEntity<ApiError> validation(MethodArgumentNotValidException ex, HttpServletRequest request) {
         List<String> errors = ex.getBindingResult().getFieldErrors().stream()
             .map(e -> e.getField() + ": " + e.getDefaultMessage()).toList();
-        return problem(HttpStatus.BAD_REQUEST, "Request validation failed", errors);
+        return response(HttpStatus.BAD_REQUEST, "Request validation failed", errors, request);
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    ProblemDetail constraints(ConstraintViolationException ex) {
-        return problem(HttpStatus.BAD_REQUEST, "Request validation failed",
-            ex.getConstraintViolations().stream().map(v -> v.getPropertyPath() + ": " + v.getMessage()).toList());
+    ResponseEntity<ApiError> constraints(ConstraintViolationException ex, HttpServletRequest request) {
+        List<String> errors = ex.getConstraintViolations().stream()
+            .map(v -> v.getPropertyPath() + ": " + v.getMessage()).toList();
+        return response(HttpStatus.BAD_REQUEST, "Request validation failed", errors, request);
     }
 
     @ExceptionHandler({MissingRequestHeaderException.class, HttpMessageNotReadableException.class,
         MethodArgumentTypeMismatchException.class})
-    ProblemDetail badRequest(Exception ex) {
-        return problem(HttpStatus.BAD_REQUEST, ex instanceof MissingRequestHeaderException
-            ? "Required header is missing: " + ((MissingRequestHeaderException) ex).getHeaderName()
-            : "Malformed request", List.of());
+    ResponseEntity<ApiError> badRequest(Exception ex, HttpServletRequest request) {
+        String message = ex instanceof MissingRequestHeaderException missing
+            ? "Required header is missing: " + missing.getHeaderName()
+            : "Malformed request";
+        return response(HttpStatus.BAD_REQUEST, message, List.of(), request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
-    ProblemDetail illegalArgument(IllegalArgumentException ex) {
-        return problem(HttpStatus.BAD_REQUEST, ex.getMessage(), List.of());
+    ResponseEntity<ApiError> illegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
+        return response(HttpStatus.BAD_REQUEST, "Invalid request", List.of(), request);
     }
 
     @ExceptionHandler(IdempotencyConflictException.class)
-    ProblemDetail conflict(IdempotencyConflictException ex) {
-        return problem(HttpStatus.CONFLICT, ex.getMessage(), List.of());
+    ResponseEntity<ApiError> conflict(IdempotencyConflictException ex, HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, "Request conflicts with current state", List.of(), request);
     }
 
     @ExceptionHandler(NotFoundException.class)
-    ProblemDetail notFound(NotFoundException ex) {
-        return problem(HttpStatus.NOT_FOUND, ex.getMessage(), List.of());
+    ResponseEntity<ApiError> notFound(NotFoundException ex, HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, "Resource not found", List.of(), request);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
-    ResponseEntity<ProblemDetail> responseStatus(ResponseStatusException ex) {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(ex.getStatusCode(),
-            ex.getReason() == null ? "Request rejected" : ex.getReason());
-        pd.setProperty("correlationId", MDC.get(CorrelationIdFilter.MDC_KEY));
-        return ResponseEntity.status(ex.getStatusCode()).body(pd);
+    ResponseEntity<ApiError> responseStatus(ResponseStatusException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode().value());
+        if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
+        String message = status.is5xxServerError() ? "Internal server error" : status.getReasonPhrase();
+        return response(status, message, List.of(), request);
     }
 
     @ExceptionHandler(Exception.class)
-    ProblemDetail unexpected(Exception ex) {
+    ResponseEntity<ApiError> unexpected(Exception ex, HttpServletRequest request) {
         log.error("Unhandled API error", ex);
-        return problem(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error", List.of());
+        return response(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", List.of(), request);
     }
 
-    private static ProblemDetail problem(HttpStatus status, String detail, List<String> errors) {
-        ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, detail);
-        pd.setProperty("correlationId", MDC.get(CorrelationIdFilter.MDC_KEY));
-        if (!errors.isEmpty()) {
-            pd.setProperty("errors", errors);
-        }
-        return pd;
+    private static ResponseEntity<ApiError> response(
+            HttpStatus status, String message, List<String> errors, HttpServletRequest request) {
+        ApiError body = new ApiError(
+            Instant.now(), status.value(), status.getReasonPhrase(), message,
+            status.getReasonPhrase(), message,
+            request.getRequestURI(), MDC.get(CorrelationIdFilter.MDC_KEY), List.copyOf(errors));
+        return ResponseEntity.status(status).body(body);
     }
 }

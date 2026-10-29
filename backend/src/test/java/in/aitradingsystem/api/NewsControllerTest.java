@@ -57,6 +57,7 @@ class NewsControllerTest {
     void rejectsUnboundedPageSize() throws Exception {
         mvc.perform(get("/api/news?limit=101"))
             .andExpect(status().isBadRequest())
-            .andExpect(jsonPath("$.detail").exists());
+            .andExpect(jsonPath("$.detail").value("Bad Request"))
+            .andExpect(jsonPath("$.title").value("Bad Request"));
     }
 }
