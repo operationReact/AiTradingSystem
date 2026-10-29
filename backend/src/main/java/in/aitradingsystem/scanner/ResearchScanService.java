@@ -91,8 +91,8 @@ public class ResearchScanService {
             Instant evaluatedAt = clock.instant();
             for (Instrument instrument : universe) {
                 List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
-                if (quality != null && (!candles.isEmpty()
-                        && !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
+                if (quality != null && (candles.isEmpty()
+                        || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
                     scannedCount++;
                     continue;
                 }
