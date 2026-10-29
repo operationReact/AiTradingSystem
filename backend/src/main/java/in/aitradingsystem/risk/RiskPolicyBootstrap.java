@@ -12,7 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class RiskPolicyBootstrap implements ApplicationRunner {
     private static final BigDecimal HUNDRED = new BigDecimal("100");
+    private static final BigDecimal MINIMUM_REWARD_RISK = BigDecimal.ONE;
     private static final BigDecimal UNBOUNDED_NOTIONAL = new BigDecimal("999999999999999.99");
+    private static final int MAX_TRADES_PER_DAY = 1000;
+    private static final int MAX_MARKET_STATE_AGE_SECONDS = 3600;
 
     private final RiskPolicyConfigRepository repository;
     private final RiskProperties properties;
@@ -44,13 +47,13 @@ public class RiskPolicyBootstrap implements ApplicationRunner {
                 properties.riskPerTradePercent(),
                 properties.maxDailyDrawdownPercent(),
                 properties.maxOpenPositions(),
-                BigDecimal.ZERO,
+                MINIMUM_REWARD_RISK,
                 UNBOUNDED_NOTIONAL,
                 HUNDRED,
                 HUNDRED,
-                Integer.MAX_VALUE,
+                MAX_TRADES_PER_DAY,
                 properties.signalMaxAgeMinutes(),
-                300,
+                MAX_MARKET_STATE_AGE_SECONDS,
                 false,
                 true,
                 false,
