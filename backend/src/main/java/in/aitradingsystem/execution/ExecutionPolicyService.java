@@ -2,6 +2,7 @@ package in.aitradingsystem.execution;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.common.NotFoundException;
 import in.aitradingsystem.risk.ExecutionMode;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -11,8 +12,10 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExecutionPolicyService {
@@ -26,6 +29,32 @@ public class ExecutionPolicyService {
         this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
+    }
+
+    public List<ExecutionPolicy> listPolicies() {
+        return jdbc.sql("SELECT * FROM execution_policy ORDER BY policy_version DESC")
+            .query((rs, rowNum) -> map(rs))
+            .list();
+    }
+
+    @Transactional
+    public ExecutionPolicy updateApprovalMode(UUID policyId, ApprovalMode approvalMode) {
+        if (policyId == null) throw new IllegalArgumentException("policyId is required");
+        if (approvalMode == null) throw new IllegalArgumentException("approvalMode is required");
+        int updated = jdbc.sql("UPDATE execution_policy SET approval_mode = :approvalMode WHERE id = :id")
+            .param("approvalMode", approvalMode.name())
+            .param("id", policyId)
+            .update();
+        if (updated == 0) throw new NotFoundException("Execution policy not found: " + policyId);
+        return requireById(policyId);
+    }
+
+    public ExecutionPolicy requireById(UUID policyId) {
+        return jdbc.sql("SELECT * FROM execution_policy WHERE id = :id")
+            .param("id", policyId)
+            .query((rs, rowNum) -> map(rs))
+            .optional()
+            .orElseThrow(() -> new NotFoundException("Execution policy not found: " + policyId));
     }
 
     /**
