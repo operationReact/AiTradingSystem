@@ -1,20 +1,19 @@
 package in.aitradingsystem.risk;
 
 import in.aitradingsystem.common.CorrelationIdFilter;
-import in.aitradingsystem.domain.Side;
 import in.aitradingsystem.marketdata.IndianCashMarketCalendar;
 import in.aitradingsystem.marketdata.MarketSession;
 import in.aitradingsystem.paper.OrderCommand;
 import java.math.BigDecimal;
-import java.sql.Types;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Locale;
 import java.util.UUID;
 import org.slf4j.MDC;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 
-/** Builds server-owned risk state inside the existing PAPER order transaction. */
+/** Builds all server-owned risk state inside the existing serialized PAPER order transaction. */
 @Service
 public class RiskContextFactory {
     private final JdbcClient jdbc;
@@ -40,7 +39,6 @@ public class RiskContextFactory {
         Position position = position(command.symbol());
         BigDecimal currentGrossExposure = currentGrossExposure();
         BigDecimal currentEquity = account.cash().add(currentGrossExposure);
-        BigDecimal symbolExposure = position.marketValue();
         Instant dayStart = now.atZone(IndianCashMarketCalendar.ZONE).toLocalDate()
                 .atStartOfDay(IndianCashMarketCalendar.ZONE).toInstant();
 
@@ -88,7 +86,7 @@ public class RiskContextFactory {
                 position.marketValue(),
                 openPositions,
                 currentGrossExposure,
-                symbolExposure,
+                position.marketValue(),
                 tradesToday,
                 duplicatePending,
                 halted,
@@ -97,6 +95,12 @@ public class RiskContextFactory {
                 policies.requireActive());
     }
 
+    /**
+     * The legacy PAPER simulation API is symbol-based rather than instrument-id based. Until Phase 6 introduces the
+     * canonical instrument-id order API, symbols absent from the live catalogue receive a deterministic PAPER-only
+     * identity so the existing simulator remains backward compatible. Catalogue-backed non-EQ instruments still fail
+     * the eligibility rule.
+     */
     private InstrumentIdentity resolveInstrument(String symbol) {
         return jdbc.sql("""
                 SELECT i.instrument_id, i.exchange, i.instrument_type
@@ -137,7 +141,7 @@ public class RiskContextFactory {
     }
 
     private static long syntheticInstrumentId(String symbol) {
-        long hash = Integer.toUnsignedLong(symbol.toUpperCase(java.util.Locale.ROOT).hashCode());
+        long hash = Integer.toUnsignedLong(symbol.toUpperCase(Locale.ROOT).hashCode());
         return Math.max(1L, hash);
     }
 
