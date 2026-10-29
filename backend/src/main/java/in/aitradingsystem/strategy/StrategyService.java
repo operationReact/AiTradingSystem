@@ -4,6 +4,7 @@ import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
+import in.aitradingsystem.marketdata.MarketDataQualityService;
 import in.aitradingsystem.marketdata.MarketDataRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -13,6 +14,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +27,7 @@ public class StrategyService {
     private static final String STRATEGY = "SMA_TREND_VOLUME_V1";
     private final InstrumentMasterService instruments;
     private final MarketDataRepository candles;
+    private final MarketDataQualityService quality;
     private final StrategySignalRepository signalRepository;
     private final Clock clock;
     private final int fastPeriod;
@@ -33,9 +36,11 @@ public class StrategyService {
     private final BigDecimal stopBufferPercent;
     private final int maxSignalAgeMinutes;
 
+    @Autowired
     public StrategyService(
             InstrumentMasterService instruments,
             MarketDataRepository candles,
+            MarketDataQualityService quality,
             StrategySignalRepository signalRepository,
             Clock clock,
             @Value("${app.strategy.fast-period:5}") int fastPeriod,
@@ -43,6 +48,22 @@ public class StrategyService {
             @Value("${app.strategy.target-risk-reward:2}") BigDecimal targetRiskReward,
             @Value("${app.strategy.stop-buffer-percent:0.5}") BigDecimal stopBufferPercent,
             @Value("${app.strategy.max-signal-age-minutes:1440}") int maxSignalAgeMinutes) {
+        this(instruments, candles, quality, signalRepository, clock, fastPeriod, slowPeriod,
+                targetRiskReward, stopBufferPercent, maxSignalAgeMinutes, false);
+    }
+
+    /** Unit-fixture constructor: production always injects the market-data quality gate. */
+    StrategyService(InstrumentMasterService instruments, MarketDataRepository candles,
+            StrategySignalRepository signalRepository, Clock clock, int fastPeriod, int slowPeriod,
+            BigDecimal targetRiskReward, BigDecimal stopBufferPercent, int maxSignalAgeMinutes) {
+        this(instruments, candles, null, signalRepository, clock, fastPeriod, slowPeriod,
+                targetRiskReward, stopBufferPercent, maxSignalAgeMinutes, true);
+    }
+
+    private StrategyService(InstrumentMasterService instruments, MarketDataRepository candles,
+            MarketDataQualityService quality, StrategySignalRepository signalRepository, Clock clock,
+            int fastPeriod, int slowPeriod, BigDecimal targetRiskReward, BigDecimal stopBufferPercent,
+            int maxSignalAgeMinutes, boolean fixtureBypass) {
         if (fastPeriod < 2 || slowPeriod <= fastPeriod || slowPeriod > 500) {
             throw new IllegalArgumentException("Strategy periods must satisfy 2 <= fastPeriod < slowPeriod <= 500");
         }
@@ -57,8 +78,10 @@ public class StrategyService {
         if (maxSignalAgeMinutes < 1 || maxSignalAgeMinutes > 10080) {
             throw new IllegalArgumentException("maxSignalAgeMinutes must be between 1 and 10080");
         }
+        if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
         this.instruments = instruments;
         this.candles = candles;
+        this.quality = quality;
         this.signalRepository = signalRepository;
         this.clock = clock;
         this.fastPeriod = fastPeriod;
@@ -81,6 +104,8 @@ public class StrategyService {
 
         if (available < required || bars.size() < required) {
             reasons.add("INSUFFICIENT_HISTORY");
+        } else if (quality != null && !quality.eligibleForResearch(quality.evaluateBars(instrumentId, interval, bars))) {
+            reasons.add("DATA_QUALITY_NOT_ELIGIBLE");
         } else {
             MarketCandle last = bars.getLast();
             boolean stale = Duration.between(last.candleTime(), now).toMinutes() > maxSignalAgeMinutes
