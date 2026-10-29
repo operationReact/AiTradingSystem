@@ -89,7 +89,25 @@ class RiskDecisionPersistenceIT extends AbstractPostgresIT {
         assertThat(detail.summary().failedRuleCount()).isEqualTo(1);
         assertThat(detail.summary().policyConfigId()).isEqualTo(policy.id());
         assertThat(detail.summary().correlationId()).isEqualTo("risk-persistence-it");
-        assertThat(detail.policySnapshot()).isEqualTo(policy);
+        RiskPolicySnapshot storedPolicy = detail.policySnapshot();
+        assertThat(storedPolicy.id()).isEqualTo(policy.id());
+        assertThat(storedPolicy.version()).isEqualTo(policy.version());
+        assertThat(storedPolicy.riskPerTradePercent()).isEqualByComparingTo(policy.riskPerTradePercent());
+        assertThat(storedPolicy.maxDailyDrawdownPercent()).isEqualByComparingTo(policy.maxDailyDrawdownPercent());
+        assertThat(storedPolicy.maxOpenPositions()).isEqualTo(policy.maxOpenPositions());
+        assertThat(storedPolicy.minRewardRiskRatio()).isEqualByComparingTo(policy.minRewardRiskRatio());
+        assertThat(storedPolicy.maxOrderNotional()).isEqualByComparingTo(policy.maxOrderNotional());
+        assertThat(storedPolicy.maxGrossExposurePercent()).isEqualByComparingTo(policy.maxGrossExposurePercent());
+        assertThat(storedPolicy.maxSymbolExposurePercent()).isEqualByComparingTo(policy.maxSymbolExposurePercent());
+        assertThat(storedPolicy.maxTradesPerDay()).isEqualTo(policy.maxTradesPerDay());
+        assertThat(storedPolicy.signalMaxAgeMinutes()).isEqualTo(policy.signalMaxAgeMinutes());
+        assertThat(storedPolicy.marketStateMaxAgeSeconds()).isEqualTo(policy.marketStateMaxAgeSeconds());
+        assertThat(storedPolicy.enforceMarketSession()).isEqualTo(policy.enforceMarketSession());
+        assertThat(storedPolicy.rejectExistingSymbolPosition()).isEqualTo(policy.rejectExistingSymbolPosition());
+        assertThat(storedPolicy.rejectDuplicatePendingExposure()).isEqualTo(policy.rejectDuplicatePendingExposure());
+        assertThat(storedPolicy.feeRate()).isEqualByComparingTo(policy.feeRate());
+        assertThat(storedPolicy.slippageRate()).isEqualByComparingTo(policy.slippageRate());
+        assertThat(storedPolicy.feeSlippageProfileVersion()).isEqualTo(policy.feeSlippageProfileVersion());
         assertThat(detail.ruleResults()).hasSize(3);
         assertThat(detail.ruleResults().get(1).details()).containsEntry("source", "market-candle");
 
