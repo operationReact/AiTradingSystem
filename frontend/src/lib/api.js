@@ -42,3 +42,30 @@ export async function apiFetch(path, { apiKey, method = 'GET', body, headers = {
   }
   return json;
 }
+
+/** Downloads a protected non-JSON API response without persisting or exposing the operator key. */
+export async function apiDownload(path, { apiKey, signal } = {}) {
+  let res;
+  try {
+    res = await fetch(`${API}${path}`, {
+      signal,
+      headers: {
+        Accept: 'text/csv,*/*',
+        ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+      },
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') throw err;
+    throw new ApiError('Backend unreachable', 0, null);
+  }
+  if (!res.ok) {
+    let body = null;
+    try { body = await res.json(); } catch { /* non-JSON error */ }
+    const message = res.status === 401 ? 'Operator key rejected' : body?.detail || body?.title || `Request failed (${res.status})`;
+    throw new ApiError(message, res.status, body);
+  }
+  return {
+    blob: await res.blob(),
+    contentDisposition: res.headers.get('Content-Disposition') || '',
+  };
+}
