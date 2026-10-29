@@ -164,7 +164,7 @@ class StrategyHardeningFixtureMatrixTest {
 
     private static MarketCandle copyAt(MarketCandle candle, Instant time) {
         return new MarketCandle(candle.id(), candle.instrumentId(), candle.exchange(), candle.tradingSymbol(), candle.symbolToken(),
-                candle.catalogueVersion(), candle.interval(), time, candle.open(), candle.high(), candle.low(), candle.close(), candle.volume(), candle.source(), candle.updatedAt());
+                candle.catalogueVersion(), candle.interval(), time, candle.open(), candle.high(), candle.low(), candle.close(), candle.volume(), candle.source(), candle.fetchedAt());
     }
 
     private static MarketCandle candle(long id, Instant time, BigDecimal open, BigDecimal high, BigDecimal low, BigDecimal close, long volume) {
