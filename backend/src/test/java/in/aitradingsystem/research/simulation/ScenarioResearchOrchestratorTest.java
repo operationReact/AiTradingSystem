@@ -9,13 +9,14 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import in.aitradingsystem.backtest.BacktestRepository;
+import in.aitradingsystem.scanner.ScannerStrategy;
+import in.aitradingsystem.scanner.StrategyRegistry;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
@@ -24,6 +25,8 @@ class ScenarioResearchOrchestratorTest {
     @Mock ScenarioRunRepository scenarioRuns;
     @Mock ScenarioSimulationService simulations;
     @Mock BacktestRepository backtests;
+    @Mock StrategyRegistry strategies;
+    @Mock ScannerStrategy strategy;
 
     private ScenarioResearchOrchestrator orchestrator;
     private ResearchCandidateProvenance candidate;
@@ -31,13 +34,14 @@ class ScenarioResearchOrchestratorTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        orchestrator = new ScenarioResearchOrchestrator(evaluations, scenarioRuns, simulations, backtests);
+        orchestrator = new ScenarioResearchOrchestrator(evaluations, scenarioRuns, simulations, backtests, strategies);
         candidate = new ResearchCandidateProvenance(
                 11L, UUID.fromString("11111111-1111-1111-1111-111111111111"), 42L, "RELIANCE", "NSE",
                 "FIVE_MINUTE", "VOLUME_BREAKOUT_V1", 3,
                 UUID.fromString("22222222-2222-2222-2222-222222222222"), "a".repeat(64),
                 Instant.parse("2026-06-30T09:55:00Z"), Instant.parse("2026-06-30T10:00:00Z"),
                 new BigDecimal("2500"), new BigDecimal("2450"), new BigDecimal("2600"));
+        when(strategies.require(candidate.strategy())).thenReturn(Optional.of(strategy));
     }
 
     @Test
@@ -54,6 +58,8 @@ class ScenarioResearchOrchestratorTest {
         assertThat(result.scenarioReused()).isTrue();
         assertThat(result.decisionLabel()).isEqualTo(ResearchDecisionLabel.FAVORABLE);
         assertThat(result.reasonCodes()).containsExactly("POSITIVE_EXPECTANCY", "TARGET_PROBABILITY_EXCEEDS_STOP");
+        verify(strategies).require(candidate.strategy());
+        verify(evaluations).verifyImmutableProvenance(candidate);
         verify(simulations, never()).simulate(any());
         verify(scenarioRuns, never()).create(any());
         verify(evaluations).saveEvaluation(any(), eq(11L), eq(null), eq(existingScenario),
@@ -70,7 +76,35 @@ class ScenarioResearchOrchestratorTest {
         assertThatThrownBy(() -> orchestrator.evaluateCandidate(11L, invalid))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("data cutoff");
+        verify(evaluations, never()).verifyImmutableProvenance(any());
         verify(evaluations, never()).findSucceededScenario(any(Long.class), any());
+    }
+
+    @Test
+    void rejectsCandidateWhenStrategyIsNoLongerRegistered() {
+        when(evaluations.requireCandidate(11L)).thenReturn(candidate);
+        when(strategies.require(candidate.strategy())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orchestrator.evaluateCandidate(11L, request()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("no longer registered");
+
+        verify(evaluations, never()).verifyImmutableProvenance(any());
+        verify(evaluations, never()).findSucceededScenario(any(Long.class), any());
+    }
+
+    @Test
+    void immutableProvenanceFailureStopsScenarioReuseAndSimulation() {
+        when(evaluations.requireCandidate(11L)).thenReturn(candidate);
+        org.mockito.Mockito.doThrow(new IllegalArgumentException("candidate historical candle provenance is no longer available"))
+                .when(evaluations).verifyImmutableProvenance(candidate);
+
+        assertThatThrownBy(() -> orchestrator.evaluateCandidate(11L, request()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("historical candle provenance");
+
+        verify(evaluations, never()).findSucceededScenario(any(Long.class), any());
+        verify(simulations, never()).simulate(any());
     }
 
     @Test
