@@ -6,6 +6,7 @@ public record ScenarioSimulationResult(
         int simulations,
         int historicalSamples,
         int eligibleBlockCount,
+        String fallbackTier,
         int horizonBars,
         int blockSize,
         int targetFirstCount,

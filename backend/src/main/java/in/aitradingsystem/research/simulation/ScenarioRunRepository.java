@@ -40,14 +40,14 @@ public class ScenarioRunRepository {
     public void markSucceeded(UUID id, ScenarioSimulationResult result) {
         requireTransition(id, jdbc.update("""
                 UPDATE research_scenario_run
-                SET status = 'SUCCEEDED', historical_samples = ?, eligible_block_count = ?,
+                SET status = 'SUCCEEDED', historical_samples = ?, eligible_block_count = ?, fallback_tier = ?,
                     target_first_count = ?, stop_first_count = ?, neither_count = ?,
                     target_first_probability = ?, stop_first_probability = ?, neither_probability = ?,
                     expected_r = ?, p05_r = ?, p50_r = ?, p95_r = ?, completed_at = now(),
                     error_code = NULL, error_message = NULL
                 WHERE id = ? AND status = 'RUNNING'
                 """,
-                result.historicalSamples(), result.eligibleBlockCount(), result.targetFirstCount(),
+                result.historicalSamples(), result.eligibleBlockCount(), result.fallbackTier(), result.targetFirstCount(),
                 result.stopFirstCount(), result.neitherCount(), result.targetFirstProbability(),
                 result.stopFirstProbability(), result.neitherProbability(), result.expectedR(), result.p05R(),
                 result.p50R(), result.p95R(), id), "RUNNING", "SUCCEEDED");
