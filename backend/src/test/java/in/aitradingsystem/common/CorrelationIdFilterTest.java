@@ -41,6 +41,23 @@ class CorrelationIdFilterTest {
     void replacesInvalidId() throws Exception { assertRejected("bad id/with spaces"); }
 
     @Test
+    void doesNotLeakCorrelationIdBetweenSequentialRequests() throws Exception {
+        var first = new MockHttpServletRequest();
+        first.addHeader(CorrelationIdFilter.HEADER, "first-request");
+        var firstResponse = new MockHttpServletResponse();
+        filter.doFilter(first, firstResponse, assertingChain(firstResponse, "first-request"));
+        assertThat(MDC.get(CorrelationIdFilter.MDC_KEY)).isNull();
+
+        var second = new MockHttpServletRequest();
+        var secondResponse = new MockHttpServletResponse();
+        filter.doFilter(second, secondResponse, assertingChain(secondResponse, null));
+        assertThat(secondResponse.getHeader(CorrelationIdFilter.HEADER))
+            .isNotEqualTo("first-request")
+            .matches("[0-9a-f-]{36}");
+        assertThat(MDC.get(CorrelationIdFilter.MDC_KEY)).isNull();
+    }
+
+    @Test
     void clearsMdcEvenWhenDownstreamThrows() {
         var request = new MockHttpServletRequest();
         var response = new MockHttpServletResponse();
