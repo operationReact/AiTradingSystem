@@ -2,7 +2,6 @@ package in.aitradingsystem.research.simulation;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.sql.Timestamp;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -38,6 +37,66 @@ public class ResearchEvaluationRepository {
                 rs.getBigDecimal("entry_price"), rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price")),
                 candidateId).stream().findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("research candidate not found: " + candidateId));
+    }
+
+    /**
+     * Fail closed when candidate provenance can no longer be reproduced. A research evaluation may only
+     * consume candidates produced by a completed/partial scan and whose exact signal candle is still present.
+     */
+    public void verifyImmutableProvenance(ResearchCandidateProvenance candidate) {
+        if (candidate == null) throw new IllegalArgumentException("candidate is required");
+
+        Integer scanCount = jdbc.queryForObject("""
+                SELECT count(*)
+                  FROM research_scan_run
+                 WHERE id = ?
+                   AND status IN ('SUCCEEDED','PARTIAL')
+                """, Integer.class, candidate.scanRunId());
+        if (scanCount == null || scanCount != 1) {
+            throw new IllegalArgumentException("candidate scan provenance is not eligible for research evaluation");
+        }
+
+        Integer candleCount;
+        if (candidate.catalogueVersion() == null) {
+            candleCount = jdbc.queryForObject("""
+                    SELECT count(*)
+                      FROM market_candle
+                     WHERE instrument_id = ?
+                       AND exchange = ?
+                       AND trading_symbol = ?
+                       AND interval = ?
+                       AND candle_time = ?
+                    """, Integer.class, candidate.instrumentId(), candidate.exchange(), candidate.tradingSymbol(),
+                    candidate.interval(), OffsetDateTime.ofInstant(candidate.signalCandleTime(), java.time.ZoneOffset.UTC));
+        } else {
+            candleCount = jdbc.queryForObject("""
+                    SELECT count(*)
+                      FROM market_candle
+                     WHERE instrument_id = ?
+                       AND exchange = ?
+                       AND trading_symbol = ?
+                       AND interval = ?
+                       AND candle_time = ?
+                       AND catalogue_version = ?
+                    """, Integer.class, candidate.instrumentId(), candidate.exchange(), candidate.tradingSymbol(),
+                    candidate.interval(), OffsetDateTime.ofInstant(candidate.signalCandleTime(), java.time.ZoneOffset.UTC),
+                    candidate.catalogueVersion());
+        }
+        if (candleCount == null || candleCount != 1) {
+            throw new IllegalArgumentException("candidate historical candle provenance is no longer available");
+        }
+
+        if (candidate.strategyConfigVersion() != null) {
+            Integer configCount = jdbc.queryForObject("""
+                    SELECT count(*)
+                      FROM strategy_config
+                     WHERE strategy_code = ?
+                       AND config_version = ?
+                    """, Integer.class, candidate.strategy(), candidate.strategyConfigVersion());
+            if (configCount == null || configCount != 1) {
+                throw new IllegalArgumentException("candidate strategy configuration provenance is no longer available");
+            }
+        }
     }
 
     public Optional<UUID> findSucceededScenario(long candidateId, String requestFingerprint) {
