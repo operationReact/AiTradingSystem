@@ -5,6 +5,7 @@ public record ScenarioSimulationResult(
         long seed,
         int simulations,
         int historicalSamples,
+        int eligibleBlockCount,
         int horizonBars,
         int blockSize,
         int targetFirstCount,
