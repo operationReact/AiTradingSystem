@@ -1,0 +1,114 @@
+name: Phase 6 - PAPER accounting completion gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/paper/**'
+      - 'backend/src/main/java/in/aitradingsystem/api/Paper**'
+      - 'backend/src/test/java/in/aitradingsystem/paper/**'
+      - 'frontend/src/pages/PaperTradesPage.jsx'
+      - 'frontend/src/pages/PortfolioPage.jsx'
+      - 'frontend/src/components/PaperExecutionComponents.jsx'
+      - 'frontend/src/hooks/usePaperApi.js'
+      - 'frontend/e2e/paper-accounting.spec.mjs'
+      - 'docs/phase6-paper-accounting-contract.md'
+      - '.github/workflows/phase6-paper-accounting-gate.yml'
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-accounting-evidence:
+    name: P6 replay + restart + rejection + concurrency + accounting evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run Phase 6 canonical PAPER accounting evidence
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dtest=PaperTradeApiIT,PaperOrderApiIT,PaperFillRepositoryIT,PositionAccountingServiceIT,PortfolioValuationServiceIT,PaperReconciliationServiceIT,IntradayPaperCloseServiceIT,PaperLedgerApiIT,Phase6RestartPersistenceIT
+          test
+
+  persistence-contract:
+    name: P6 durable restart/reconciliation architecture contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify completion contract records restart and reconciliation invariants
+        shell: bash
+        run: |
+          set -euo pipefail
+          doc=docs/phase6-paper-accounting-contract.md
+          grep -Fi 'idempotent replay' "$doc"
+          grep -Fi 'rejected order' "$doc"
+          grep -Fi 'concurrent duplicate submissions' "$doc"
+          grep -Fi 'restart safety' "$doc"
+          grep -Fi 'reconciliation records differences but never silently repairs' "$doc"
+          grep -Fi 'PAPER execution never implies LIVE broker submission' "$doc"
+      - name: Verify correctness-critical PAPER state is PostgreSQL-backed
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(paper_order paper_fill paper_position paper_cash_entry paper_portfolio_snapshot paper_reconciliation_run)
+          migrations=$(cat backend/src/main/resources/db/migration/*.sql)
+          for table in "${required[@]}"; do
+            grep -F "$table" <<<"$migrations" >/dev/null || { echo "Missing durable table evidence: $table" >&2; exit 1; }
+          done
+
+  browser-e2e:
+    name: E2E-P6 fills → positions → ledger → reconciliation — Pro + Clear
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked application dependencies
+        run: npm ci
+      - name: Install pinned gate-only Playwright and axe tooling
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build application
+        run: npm run build
+      - name: Start Vite test server
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/ats-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/portfolio >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/ats-vite.log
+          exit 1
+      - name: Run canonical E2E-P6 accounting flow
+        run: npx playwright test e2e/paper-accounting.spec.mjs --reporter=line
+      - name: Upload Phase 6 browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p06-completion-browser-evidence
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
