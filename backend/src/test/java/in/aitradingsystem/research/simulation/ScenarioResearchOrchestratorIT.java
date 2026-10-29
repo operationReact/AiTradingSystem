@@ -63,7 +63,7 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
 
         when(simulations.classifyRegime(any())).thenReturn(new RegimeSnapshot(
                 .031, .012, .024, MarketRegime.HIGH_VOL,
-                1.18, LiquidityRegime.NORMAL, RegimeClassifier.METHODOLOGY_VERSION));
+                1.18, LiquidityRegime.NORMAL, RegimeClassifier.METHODOLOGY));
         when(simulations.simulate(any())).thenReturn(new ScenarioSimulationResult(
                 HistoricalScenarioSimulator.METHODOLOGY, 123456L, 1_000, 480, 350,
                 BlockSamplingFallbackTier.EXACT_VOLATILITY_AND_VOLUME.name(), 20, 5,
