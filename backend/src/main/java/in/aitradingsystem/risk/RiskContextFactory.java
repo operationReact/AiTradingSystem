@@ -36,7 +36,7 @@ public class RiskContextFactory {
                 .query((rs, row) -> new Account(rs.getBigDecimal("starting_capital"), rs.getBigDecimal("cash_balance")))
                 .optional().orElseThrow(() -> new IllegalStateException("Paper account is not initialized"));
         InstrumentIdentity instrument = resolveInstrument(command.symbol());
-        Position position = position(command.symbol());
+        Position position = position(command.symbol(), command.productType().name());
         BigDecimal currentGrossExposure = currentGrossExposure();
         BigDecimal currentEquity = account.cash().add(currentGrossExposure);
         Instant dayStart = now.atZone(IndianCashMarketCalendar.ZONE).toLocalDate()
@@ -52,10 +52,14 @@ public class RiskContextFactory {
         boolean duplicatePending = jdbc.sql("""
                 SELECT EXISTS (
                     SELECT 1 FROM paper_order
-                     WHERE symbol = :symbol AND id <> :orderId
-                       AND status IN ('NEW','RISK_APPROVED')
+                     WHERE symbol = :symbol AND product_type = :productType AND id <> :orderId
+                       AND status IN ('NEW','RISK_APPROVED','APPROVAL_PENDING','READY','PARTIALLY_FILLED')
                 )
-                """).param("symbol", command.symbol()).param("orderId", orderId).query(Boolean.class).single();
+                """)
+            .param("symbol", command.symbol())
+            .param("productType", command.productType().name())
+            .param("orderId", orderId)
+            .query(Boolean.class).single();
         boolean halted = jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1")
                 .query(Boolean.class).single();
 
@@ -70,7 +74,7 @@ public class RiskContextFactory {
                 instrument.exchange(),
                 command.symbol(),
                 "PAPER_MANUAL",
-                TradingStyle.DELIVERY,
+                TradingStyle.valueOf(command.productType().name()),
                 command.quantity(),
                 command.entryPrice(),
                 command.stopLoss(),
@@ -118,9 +122,10 @@ public class RiskContextFactory {
                 .orElse(new InstrumentIdentity(syntheticInstrumentId(symbol), "PAPER", true));
     }
 
-    private Position position(String symbol) {
-        return jdbc.sql("SELECT quantity, cost_basis FROM paper_position WHERE symbol = :symbol")
+    private Position position(String symbol, String productType) {
+        return jdbc.sql("SELECT quantity, cost_basis FROM paper_position WHERE symbol = :symbol AND product_type = :productType")
                 .param("symbol", symbol)
+                .param("productType", productType)
                 .query((rs, row) -> new Position(rs.getInt("quantity"), rs.getBigDecimal("cost_basis")))
                 .optional().orElse(new Position(0, BigDecimal.ZERO.setScale(2)));
     }
