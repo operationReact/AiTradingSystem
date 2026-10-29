@@ -32,7 +32,15 @@ class RiskApiIT extends AbstractPostgresIT {
     @Autowired RiskPolicyConfigRepository policies;
 
     @AfterEach
-    void resetEmergencyStop() {
+    void cleanupRiskApiFixture() {
+        jdbc.update("""
+                DELETE FROM risk_decision_rule
+                 WHERE risk_decision_id IN (
+                    SELECT id FROM risk_decision WHERE correlation_id = 'risk-api-it'
+                 )
+                """);
+        jdbc.update("DELETE FROM risk_decision WHERE correlation_id = 'risk-api-it'");
+        jdbc.update("DELETE FROM paper_order WHERE symbol = 'RISKAPI' AND idempotency_key LIKE 'risk-api-%'");
         jdbc.update("UPDATE trading_control SET new_orders_halted = FALSE, reason = 'risk api cleanup', updated_at = now() WHERE id = 1");
     }
 
