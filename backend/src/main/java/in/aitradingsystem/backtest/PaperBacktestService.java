@@ -35,6 +35,7 @@ public class PaperBacktestService {
     private final MarketDataRepository marketData;
     private final MarketDataQualityService quality;
     private final BacktestRepository backtests;
+    private final BacktestAnalyticsRepository analyticsRepository;
     private final SmaBacktestEngine engine;
     private final RiskProperties risk;
     private final AuditService audit;
@@ -50,6 +51,7 @@ public class PaperBacktestService {
         MarketDataRepository marketData,
         MarketDataQualityService quality,
         BacktestRepository backtests,
+        BacktestAnalyticsRepository analyticsRepository,
         SmaBacktestEngine engine,
         RiskProperties risk,
         AuditService audit,
@@ -59,7 +61,7 @@ public class PaperBacktestService {
         @Value("${app.strategy.target-risk-reward:2}") BigDecimal targetRiskReward,
         @Value("${app.strategy.stop-buffer-percent:0.5}") BigDecimal stopBufferPercent
     ) {
-        this(instruments, marketData, quality, backtests, engine, risk, audit, clock,
+        this(instruments, marketData, quality, backtests, analyticsRepository, engine, risk, audit, clock,
                 fastPeriod, slowPeriod, targetRiskReward, stopBufferPercent, false);
     }
 
@@ -67,23 +69,25 @@ public class PaperBacktestService {
     PaperBacktestService(InstrumentMasterService instruments, MarketDataRepository marketData,
         BacktestRepository backtests, SmaBacktestEngine engine, RiskProperties risk, AuditService audit,
         Clock clock, int fastPeriod, int slowPeriod, BigDecimal targetRiskReward, BigDecimal stopBufferPercent) {
-        this(instruments, marketData, null, backtests, engine, risk, audit, clock,
+        this(instruments, marketData, null, backtests, null, engine, risk, audit, clock,
                 fastPeriod, slowPeriod, targetRiskReward, stopBufferPercent, true);
     }
 
     private PaperBacktestService(InstrumentMasterService instruments, MarketDataRepository marketData,
-        MarketDataQualityService quality, BacktestRepository backtests, SmaBacktestEngine engine,
-        RiskProperties risk, AuditService audit, Clock clock, int fastPeriod, int slowPeriod,
+        MarketDataQualityService quality, BacktestRepository backtests, BacktestAnalyticsRepository analyticsRepository,
+        SmaBacktestEngine engine, RiskProperties risk, AuditService audit, Clock clock, int fastPeriod, int slowPeriod,
         BigDecimal targetRiskReward, BigDecimal stopBufferPercent, boolean fixtureBypass) {
         this.instruments = instruments;
         this.marketData = marketData;
         this.quality = quality;
         this.backtests = backtests;
+        this.analyticsRepository = analyticsRepository;
         this.engine = engine;
         this.risk = risk;
         this.audit = audit;
         this.clock = clock;
         if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
+        if (!fixtureBypass && analyticsRepository == null) throw new IllegalArgumentException("backtest analytics repository is required");
         if (fastPeriod < 2 || slowPeriod <= fastPeriod || slowPeriod > 500) {
             throw new IllegalArgumentException("Strategy periods must satisfy 2 <= fastPeriod < slowPeriod <= 500");
         }
@@ -145,6 +149,10 @@ public class PaperBacktestService {
             result.maxDrawdownPercent(), result.profitFactor(), now);
 
         backtests.save(summary, result.trades());
+        if (analyticsRepository != null) {
+            BacktestMetricsCalculator.Calculated calculated = BacktestMetricsCalculator.calculate(candles, result.trades(), capital);
+            analyticsRepository.save(summary.id(), calculated.analytics(), calculated.equityPoints());
+        }
         audit.record("PAPER_BACKTEST_COMPLETED", "PAPER_BACKTEST", summary.id().toString(), Map.of(
             "instrumentId", instrument.id(),
             "symbol", instrument.tradingSymbol(),
