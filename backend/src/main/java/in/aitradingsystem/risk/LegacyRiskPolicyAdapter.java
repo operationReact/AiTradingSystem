@@ -66,6 +66,25 @@ public final class LegacyRiskPolicyAdapter {
                 bootstrapPolicy);
     }
 
+    /** Test/shadow-only inverse for verifying that the compatibility migration preserves V1 inputs. */
+    public RiskInput toLegacyInput(RiskContext context) {
+        if (context == null) throw new IllegalArgumentException("risk context is required");
+        return new RiskInput(
+                context.side(),
+                context.quantity(),
+                context.referencePrice(),
+                context.stopLoss(),
+                context.targetPrice(),
+                context.signalGeneratedAt(),
+                context.now(),
+                context.startingCapital(),
+                context.availableCash(),
+                context.heldQuantity(),
+                context.openPositionCount(),
+                context.realizedPnlToday(),
+                context.emergencyStopActive());
+    }
+
     public RiskPolicySnapshot bootstrapPolicy() {
         return bootstrapPolicy;
     }
