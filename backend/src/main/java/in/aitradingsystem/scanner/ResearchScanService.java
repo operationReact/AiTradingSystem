@@ -95,35 +95,49 @@ public class ResearchScanService {
         scans.createRun(runId, interval.name(), requestedLimit, strategySet);
         int scannedCount = 0;
         int candidateCount = 0;
+        int diagnosticCount = 0;
         try {
             List<Instrument> universe = scans.activeCashEquityUniverse(requestedLimit);
             Instant evaluatedAt = clock.instant();
             for (Instrument instrument : universe) {
-                List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
-                if (quality != null && (candles.isEmpty()
-                        || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
-                    scannedCount++;
-                    continue;
-                }
-                ScanContext context = new ScanContext(
-                        instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
-                        evaluatedAt, candles);
-                List<ScanCandidate> candidates = engine.scan(context);
-                Instant dataCutoffAt = candles.isEmpty() ? null : candles.getLast().candleTime();
-                for (ScanCandidate candidate : candidates) {
-                    ScannerStrategy strategy = registry.require(candidate.strategy())
-                            .orElseThrow(() -> new IllegalStateException("Candidate references unknown strategy: " + candidate.strategy()));
-                    StrategyConfigSnapshot activeConfig = strategyConfigs == null ? null : strategyConfigs.active(candidate.strategy());
-                    Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
-                    if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
-                            instrument.catalogueVersion(), dataCutoffAt)) {
-                        candidateCount++;
+                try {
+                    List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
+                    if (quality != null && (candles.isEmpty()
+                            || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
+                        scannedCount++;
+                        continue;
                     }
+                    ScanContext context = new ScanContext(
+                            instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
+                            evaluatedAt, candles);
+                    List<ScanCandidate> candidates = engine.scan(context);
+                    Instant dataCutoffAt = candles.isEmpty() ? null : candles.getLast().candleTime();
+                    for (ScanCandidate candidate : candidates) {
+                        ScannerStrategy strategy = registry.require(candidate.strategy())
+                                .orElseThrow(() -> new IllegalStateException("Candidate references unknown strategy: " + candidate.strategy()));
+                        StrategyConfigSnapshot activeConfig = strategyConfigs == null ? null : strategyConfigs.active(candidate.strategy());
+                        Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
+                        if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
+                                instrument.catalogueVersion(), dataCutoffAt)) {
+                            candidateCount++;
+                        }
+                    }
+                    scannedCount++;
+                } catch (RuntimeException instrumentFailure) {
+                    diagnosticCount++;
+                    scans.saveDiagnostic(runId, instrument.id(), null, "ERROR", "INSTRUMENT_SCAN_FAILED",
+                            "Instrument scan failed; remaining universe continued");
                 }
-                scannedCount++;
             }
-            scans.finishRun(runId, scannedCount, candidateCount);
+            if (diagnosticCount == 0) {
+                scans.finishRun(runId, scannedCount, candidateCount);
+            } else {
+                scans.partialRun(runId, scannedCount, candidateCount, "PARTIAL_SCAN",
+                        diagnosticCount + " instrument(s) failed during scan");
+            }
         } catch (RuntimeException e) {
+            scans.saveDiagnostic(runId, null, null, "ERROR", "SCAN_FAILED",
+                    "Research scan failed before the universe could be completed");
             scans.failRun(runId, scannedCount, candidateCount, "SCAN_FAILED", "Research scan failed before completion");
         }
         return scans.requireRun(runId);
