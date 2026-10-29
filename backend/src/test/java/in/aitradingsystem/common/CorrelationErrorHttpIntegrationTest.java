@@ -33,6 +33,9 @@ class CorrelationErrorHttpIntegrationTest {
             .andExpect(jsonPath("$.status").value(400))
             .andExpect(jsonPath("$.path").value("/probe"))
             .andExpect(jsonPath("$.message").value("Invalid request"))
+            .andExpect(jsonPath("$.detail").value("Invalid request"))
+            .andExpect(jsonPath("$.error").value("Bad Request"))
+            .andExpect(jsonPath("$.title").value("Bad Request"))
             .andExpect(jsonPath("$.correlationId").value("e2e.request_42"));
     }
 

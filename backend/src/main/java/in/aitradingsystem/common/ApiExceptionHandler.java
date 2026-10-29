@@ -78,6 +78,7 @@ public class ApiExceptionHandler {
             HttpStatus status, String message, List<String> errors, HttpServletRequest request) {
         ApiError body = new ApiError(
             Instant.now(), status.value(), status.getReasonPhrase(), message,
+            status.getReasonPhrase(), message,
             request.getRequestURI(), MDC.get(CorrelationIdFilter.MDC_KEY), List.copyOf(errors));
         return ResponseEntity.status(status).body(body);
     }
