@@ -17,4 +17,8 @@ public record ResearchScanCandidateView(
         BigDecimal suggestedStop,
         BigDecimal suggestedTarget,
         Instant candleTime,
-        List<String> reasons) {}
+        List<String> reasons,
+        String candidateFingerprint,
+        Integer strategyConfigVersion,
+        UUID catalogueVersion,
+        Instant dataCutoffAt) {}
