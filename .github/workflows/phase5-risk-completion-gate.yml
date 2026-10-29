@@ -1,0 +1,121 @@
+name: Phase 5 - Deterministic risk completion gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/risk/**'
+      - 'backend/src/main/java/in/aitradingsystem/paper/**'
+      - 'backend/src/main/java/in/aitradingsystem/api/RiskController.java'
+      - 'backend/src/main/java/in/aitradingsystem/api/RiskPolicyConfigController.java'
+      - 'backend/src/test/java/in/aitradingsystem/risk/**'
+      - 'backend/src/test/java/in/aitradingsystem/paper/**'
+      - 'frontend/src/pages/RiskPage.jsx'
+      - 'frontend/src/hooks/useApi.js'
+      - 'frontend/e2e/risk-management.spec.mjs'
+      - 'docs/phase5-risk-operational-contract.md'
+      - '.github/workflows/phase5-risk-completion-gate.yml'
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-risk-evidence:
+    name: P5 deterministic risk + persistence + concurrency evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run Phase 5 canonical risk evidence
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dtest=RiskPolicyV1ParityTest,ExistingRiskRulesTest,ProductionRiskRulesTest,RiskPolicyEngineTest,RiskPolicyConfigIT,RiskDecisionPersistenceIT,RiskApiIT,PositionSizingServiceTest,PositionSizingApiIT,RiskPerformanceContractTest,RiskMetricsTest,PaperRiskV2IT,PaperTradeApiIT
+          test
+
+  architecture-contract:
+    name: P5 immutable hard-risk architecture contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify risk engine has no AI/research/provider execution dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          files=(
+            backend/src/main/java/in/aitradingsystem/risk/RiskPolicyEngine.java
+            backend/src/main/java/in/aitradingsystem/risk/RiskContext.java
+          )
+          if grep -E -i 'in\.aitradingsystem\.(news|research|provider)|Gemini|Claude|OpenAI' "${files[@]}"; then
+            echo 'Hard deterministic risk may not depend on AI/news/research/provider execution.' >&2
+            exit 1
+          fi
+          if grep -R -E -i 'JdbcClient|JdbcTemplate|DataSource|RestClient|WebClient|HttpClient|in\.aitradingsystem\.(news|research|provider)' \
+            backend/src/main/java/in/aitradingsystem/risk/rules; then
+            echo 'Risk rules must remain pure in-memory computations.' >&2
+            exit 1
+          fi
+      - name: Verify Phase 5 operational contract records immutable evidence and replay boundaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          doc=docs/phase5-risk-operational-contract.md
+          grep -F 'No metric tag contains order IDs' "$doc"
+          grep -F 'Every `RiskRule` is a pure in-memory computation' "$doc"
+          grep -F 'Idempotent replay returns the original persisted risk decision/policy snapshot' "$doc"
+          grep -F 'fail' "$doc" >/dev/null || true
+
+  browser-e2e:
+    name: E2E-P5 policy → risk verdict → audit — Pro + Clear
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked application dependencies
+        run: npm ci
+      - name: Install pinned gate-only Playwright and axe tooling
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Build application
+        run: npm run build
+      - name: Start Vite test server
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/ats-vite.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/risk >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/ats-vite.log
+          exit 1
+      - name: Run canonical E2E-P5 dual-design flow
+        run: npx playwright test e2e/risk-management.spec.mjs --reporter=line
+      - name: Upload Phase 5 browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p05-completion-browser-evidence
+          path: |
+            frontend/test-results
+            frontend/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
