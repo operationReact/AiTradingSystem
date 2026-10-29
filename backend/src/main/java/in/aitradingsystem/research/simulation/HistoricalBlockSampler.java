@@ -34,6 +34,7 @@ public final class HistoricalBlockSampler {
 
         List<MarketCandle> eligible = history.stream()
                 .filter(c -> c != null && c.candleTime() != null && !c.candleTime().isAfter(dataCutoffAt))
+                .filter(this::insideCashSession)
                 .sorted(Comparator.comparing(MarketCandle::candleTime))
                 .toList();
         validateChronology(eligible);
@@ -77,9 +78,7 @@ public final class HistoricalBlockSampler {
             while (endExclusive < eligible.size() && tradeDate(eligible.get(endExclusive)).equals(tradeDate)) {
                 endExclusive++;
             }
-            List<MarketCandle> session = eligible.subList(index, endExclusive).stream()
-                    .filter(this::insideCashSession)
-                    .toList();
+            List<MarketCandle> session = eligible.subList(index, endExclusive);
             addSessionBlocks(eligible, session, dataCutoffAt, blockSize, blocks);
             index = endExclusive;
         }
