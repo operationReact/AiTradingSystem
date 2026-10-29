@@ -5,7 +5,7 @@ locals {
   name     = "ai-trading-system"
   app_fqdn = var.app_subdomain == "" ? var.domain_name : "${var.app_subdomain}.${var.domain_name}"
   azs      = slice(data.aws_availability_zones.available.names, 0, 2)
-  tags     = {
+  tags = {
     Application = local.name
     Environment = "paper"
     ManagedBy   = "terraform"
@@ -129,7 +129,7 @@ resource "aws_ecr_repository" "frontend" {
 }
 resource "aws_ecr_lifecycle_policy" "backend" {
   repository = aws_ecr_repository.backend.name
-  policy     = jsonencode({
+  policy = jsonencode({
     rules = [{
       rulePriority = 1
       description  = "Keep latest 20 tagged images"
@@ -140,7 +140,7 @@ resource "aws_ecr_lifecycle_policy" "backend" {
 }
 resource "aws_ecr_lifecycle_policy" "frontend" {
   repository = aws_ecr_repository.frontend.name
-  policy     = jsonencode({
+  policy = jsonencode({
     rules = [{
       rulePriority = 1
       description  = "Keep latest 20 tagged images"
@@ -151,9 +151,9 @@ resource "aws_ecr_lifecycle_policy" "frontend" {
 }
 
 resource "aws_db_instance" "postgres" {
-  identifier = "${local.name}-postgres"
-  engine     = "postgres"
-    instance_class = var.db_instance_class
+  identifier                  = "${local.name}-postgres"
+  engine                      = "postgres"
+  instance_class              = var.db_instance_class
   allocated_storage           = var.db_allocated_storage_gb
   max_allocated_storage       = var.db_max_allocated_storage_gb
   storage_type                = "gp3"
@@ -206,9 +206,9 @@ resource "aws_ecs_cluster" "main" {
 }
 
 resource "aws_iam_role" "ecs_execution" {
-  name               = "${local.name}-ecs-execution"
+  name = "${local.name}-ecs-execution"
   assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
+    Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
@@ -222,13 +222,13 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 resource "aws_iam_role_policy" "ecs_secrets" {
-  name   = "${local.name}-read-runtime-secrets"
-  role   = aws_iam_role.ecs_execution.id
+  name = "${local.name}-read-runtime-secrets"
+  role = aws_iam_role.ecs_execution.id
   policy = jsonencode({
-    Version   = "2012-10-17"
+    Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = ["secretsmanager:GetSecretValue"]
+      Effect = "Allow"
+      Action = ["secretsmanager:GetSecretValue"]
       Resource = [
         aws_db_instance.postgres.master_user_secret[0].secret_arn,
         aws_secretsmanager_secret.app_api_key.arn
@@ -237,9 +237,9 @@ resource "aws_iam_role_policy" "ecs_secrets" {
   })
 }
 resource "aws_iam_role" "ecs_task" {
-  name               = "${local.name}-ecs-task"
+  name = "${local.name}-ecs-task"
   assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
+    Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
@@ -405,12 +405,12 @@ resource "aws_ecs_task_definition" "backend" {
   memory                   = var.ecs_memory
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
-  container_definitions    = jsonencode([{
+  container_definitions = jsonencode([{
     name         = "backend"
     image        = "${aws_ecr_repository.backend.repository_url}:bootstrap"
     essential    = true
     portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
-    environment  = [
+    environment = [
       { name = "TRADING_MODE", value = "PAPER" },
       { name = "SPRING_DATASOURCE_URL", value = "jdbc:postgresql://${aws_db_instance.postgres.address}:5432/${var.db_name}" },
       { name = "SPRING_DATASOURCE_USERNAME", value = var.db_username },
@@ -423,7 +423,7 @@ resource "aws_ecs_task_definition" "backend" {
     ]
     logConfiguration = {
       logDriver = "awslogs"
-      options   = {
+      options = {
         "awslogs-group"         = aws_cloudwatch_log_group.backend.name
         "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
@@ -440,14 +440,14 @@ resource "aws_ecs_task_definition" "frontend" {
   memory                   = 512
   execution_role_arn       = aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
-  container_definitions    = jsonencode([{
-    name             = "frontend"
-    image            = "${aws_ecr_repository.frontend.repository_url}:bootstrap"
-    essential        = true
-    portMappings     = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
+  container_definitions = jsonencode([{
+    name         = "frontend"
+    image        = "${aws_ecr_repository.frontend.repository_url}:bootstrap"
+    essential    = true
+    portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
     logConfiguration = {
       logDriver = "awslogs"
-      options   = {
+      options = {
         "awslogs-group"         = aws_cloudwatch_log_group.frontend.name
         "awslogs-region"        = var.aws_region
         "awslogs-stream-prefix" = "ecs"
@@ -506,9 +506,9 @@ resource "aws_iam_openid_connect_provider" "github" {
   tags            = local.tags
 }
 resource "aws_iam_role" "github_deploy" {
-  name               = "${local.name}-github-deploy"
+  name = "${local.name}-github-deploy"
   assume_role_policy = jsonencode({
-    Version   = "2012-10-17"
+    Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
       Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
@@ -522,10 +522,10 @@ resource "aws_iam_role" "github_deploy" {
   tags = local.tags
 }
 resource "aws_iam_role_policy" "github_deploy" {
-  name   = "${local.name}-github-deploy"
-  role   = aws_iam_role.github_deploy.id
+  name = "${local.name}-github-deploy"
+  role = aws_iam_role.github_deploy.id
   policy = jsonencode({
-    Version   = "2012-10-17"
+    Version = "2012-10-17"
     Statement = [
       { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
       { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn] },
