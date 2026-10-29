@@ -9,6 +9,8 @@ import in.aitradingsystem.risk.PositionSizingApplicationService;
 import in.aitradingsystem.risk.RiskDecisionDetail;
 import in.aitradingsystem.risk.RiskDecisionPersistenceService;
 import in.aitradingsystem.risk.RiskDecisionSummary;
+import in.aitradingsystem.risk.RiskPolicyConfigService;
+import in.aitradingsystem.risk.RiskPolicyView;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -37,16 +39,19 @@ public class RiskController {
     private final PaperTradingService trading;
     private final RiskDecisionPersistenceService decisions;
     private final PositionSizingApplicationService positionSizing;
+    private final RiskPolicyConfigService policies;
 
     public RiskController(
             RiskProperties props,
             PaperTradingService trading,
             RiskDecisionPersistenceService decisions,
-            PositionSizingApplicationService positionSizing) {
+            PositionSizingApplicationService positionSizing,
+            RiskPolicyConfigService policies) {
         this.props = props;
         this.trading = trading;
         this.decisions = decisions;
         this.positionSizing = positionSizing;
+        this.policies = policies;
     }
 
     public record RiskConfigView(String tradingMode, boolean liveTradingEnabled, String policyVersion,
@@ -57,6 +62,12 @@ public class RiskController {
     public record EmergencyStopRequest(@NotNull Boolean halted, @Size(max = 200) String reason) {}
 
     public record EmergencyStopView(boolean newOrdersHalted, String reason) {}
+
+    /** Canonical shared-model endpoint for the active immutable persisted policy. */
+    @GetMapping("/policy")
+    public RiskPolicyView policy() {
+        return policies.active();
+    }
 
     @GetMapping("/config")
     public RiskConfigView config() {
@@ -85,10 +96,21 @@ public class RiskController {
 
     @PutMapping("/emergency-stop")
     public EmergencyStopView emergencyStop(@Valid @RequestBody EmergencyStopRequest request) {
-        String reason = request.reason() == null || request.reason().isBlank()
-            ? (request.halted() ? "Operator emergency stop" : "Operator resumed trading") : request.reason();
+        String reason = normalizeReason(request.reason());
+        if (request.halted() && (reason == null || reason.length() < 3)) {
+            throw new IllegalArgumentException("A halt reason of at least 3 characters is required");
+        }
+        if (reason == null) reason = "Operator resumed trading";
+
+        // PaperTradingService persists the requested state with an UPDATE, so repeating the same state remains idempotent.
         trading.setNewOrdersHalted(request.halted(), reason);
         return new EmergencyStopView(trading.isHalted(), reason);
+    }
+
+    private static String normalizeReason(String reason) {
+        if (reason == null) return null;
+        String normalized = reason.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
