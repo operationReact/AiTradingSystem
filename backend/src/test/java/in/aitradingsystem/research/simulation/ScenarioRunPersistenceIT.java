@@ -19,6 +19,7 @@ class ScenarioRunPersistenceIT extends AbstractPostgresIT {
 
     @BeforeEach
     void reset() {
+        jdbc.update("DELETE FROM research_evaluation");
         jdbc.update("DELETE FROM research_scenario_run");
     }
 
