@@ -52,6 +52,7 @@ public class ScenarioResearchOrchestrator {
         ResearchEvaluationRepository.ScenarioOutcome outcome;
 
         if (scenarioRunId == null) {
+            RegimeSnapshot regime = simulations.classifyRegime(simulationRequest);
             scenarioRunId = UUID.randomUUID();
             scenarioRuns.create(new ScenarioRunCreate(
                     scenarioRunId, candidate.scanRunId(), candidate.id(), candidate.instrumentId(), candidate.exchange(),
@@ -59,7 +60,7 @@ public class ScenarioResearchOrchestrator {
                     candidate.entryPrice(), candidate.stopPrice(), candidate.targetPrice(), request.historyFrom(),
                     request.historyTo(), candidate.dataCutoffAt(), request.simulations(), request.horizonBars(),
                     request.blockSize(), request.seed(), request.slippageBps(), request.roundTripCostBps(), fingerprint,
-                    HistoricalScenarioSimulator.METHODOLOGY, "AUTO_CLASSIFIED"));
+                    HistoricalScenarioSimulator.METHODOLOGY, regime.volatilityRegime().name()));
             scenarioRuns.markRunning(scenarioRunId);
             try {
                 ScenarioSimulationResult result = simulations.simulate(simulationRequest);
