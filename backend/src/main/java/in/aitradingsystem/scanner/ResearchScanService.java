@@ -10,18 +10,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ResearchScanService {
-    private static final String STRATEGY_SET = String.join(",",
-            VolumeBreakoutStrategy.NAME,
-            MovingAverageReclaimStrategy.NAME,
-            OpeningRangeBreakoutStrategy.NAME,
-            VwapMomentumStrategy.NAME,
-            RsiReversalStrategy.NAME);
     private static final int REQUIRED_CANDLES = 64;
 
     private final ResearchScanRepository scans;
@@ -29,6 +24,8 @@ public class ResearchScanService {
     private final MarketDataQualityService quality;
     private final Clock clock;
     private final int maxUniverseSize;
+    private final StrategyRegistry registry;
+    private final StrategyConfigService strategyConfigs;
     private final ScannerEngine engine;
 
     @Autowired
@@ -37,19 +34,31 @@ public class ResearchScanService {
             MarketDataRepository marketData,
             MarketDataQualityService quality,
             Clock clock,
+            StrategyRegistry registry,
+            StrategyConfigService strategyConfigs,
             @Value("${app.research.scan.max-universe-size:200}") int maxUniverseSize,
             @Value("${app.research.scan.max-candle-age-minutes:60}") int maxCandleAgeMinutes) {
-        this(scans, marketData, quality, clock, maxUniverseSize, maxCandleAgeMinutes, false);
+        this(scans, marketData, quality, clock, registry, strategyConfigs,
+                maxUniverseSize, maxCandleAgeMinutes, false);
     }
 
-    /** Unit-fixture constructor: production always injects the quality gate. */
+    /** Unit-fixture constructor: production always injects the quality/configuration gates. */
     ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData, Clock clock,
             int maxUniverseSize, int maxCandleAgeMinutes) {
-        this(scans, marketData, null, clock, maxUniverseSize, maxCandleAgeMinutes, true);
+        this(scans, marketData, null, clock, defaultRegistry(), null,
+                maxUniverseSize, maxCandleAgeMinutes, true);
+    }
+
+    /** Quality-gate fixture constructor retained for focused scan tests. */
+    ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
+            MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes) {
+        this(scans, marketData, quality, clock, defaultRegistry(), null,
+                maxUniverseSize, maxCandleAgeMinutes, true);
     }
 
     private ResearchScanService(ResearchScanRepository scans, MarketDataRepository marketData,
-            MarketDataQualityService quality, Clock clock, int maxUniverseSize, int maxCandleAgeMinutes,
+            MarketDataQualityService quality, Clock clock, StrategyRegistry registry,
+            StrategyConfigService strategyConfigs, int maxUniverseSize, int maxCandleAgeMinutes,
             boolean fixtureBypass) {
         if (maxUniverseSize < 1 || maxUniverseSize > 500) {
             throw new IllegalArgumentException("maxUniverseSize must be between 1 and 500");
@@ -57,20 +66,17 @@ public class ResearchScanService {
         if (maxCandleAgeMinutes < 1 || maxCandleAgeMinutes > 1440) {
             throw new IllegalArgumentException("maxCandleAgeMinutes must be between 1 and 1440");
         }
+        if (registry == null) throw new IllegalArgumentException("strategy registry is required");
         if (!fixtureBypass && quality == null) throw new IllegalArgumentException("market data quality gate is required");
+        if (!fixtureBypass && strategyConfigs == null) throw new IllegalArgumentException("strategy config service is required");
         this.scans = scans;
         this.marketData = marketData;
         this.quality = quality;
         this.clock = clock;
         this.maxUniverseSize = maxUniverseSize;
-        this.engine = new ScannerEngine(
-                List.of(
-                        new VolumeBreakoutStrategy(),
-                        new MovingAverageReclaimStrategy(),
-                        new OpeningRangeBreakoutStrategy(),
-                        new VwapMomentumStrategy(),
-                        new RsiReversalStrategy()),
-                Duration.ofMinutes(maxCandleAgeMinutes));
+        this.registry = registry;
+        this.strategyConfigs = strategyConfigs;
+        this.engine = new ScannerEngine(registry.enabledStrategies(), Duration.ofMinutes(maxCandleAgeMinutes));
     }
 
     public ResearchScanSummary run(HistoricalCandleInterval interval, int requestedLimit) {
@@ -83,7 +89,10 @@ public class ResearchScanService {
         }
 
         UUID runId = UUID.randomUUID();
-        scans.createRun(runId, interval.name(), requestedLimit, STRATEGY_SET);
+        String strategySet = registry.descriptors().stream()
+                .map(StrategyDescriptor::code)
+                .collect(Collectors.joining(","));
+        scans.createRun(runId, interval.name(), requestedLimit, strategySet);
         int scannedCount = 0;
         int candidateCount = 0;
         try {
@@ -100,9 +109,16 @@ public class ResearchScanService {
                         instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
                         evaluatedAt, candles);
                 List<ScanCandidate> candidates = engine.scan(context);
+                Instant dataCutoffAt = candles.isEmpty() ? null : candles.getLast().candleTime();
                 for (ScanCandidate candidate : candidates) {
-                    scans.saveCandidate(runId, candidate);
-                    candidateCount++;
+                    ScannerStrategy strategy = registry.require(candidate.strategy())
+                            .orElseThrow(() -> new IllegalStateException("Candidate references unknown strategy: " + candidate.strategy()));
+                    StrategyConfigSnapshot activeConfig = strategyConfigs == null ? null : strategyConfigs.active(candidate.strategy());
+                    Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
+                    if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
+                            instrument.catalogueVersion(), dataCutoffAt)) {
+                        candidateCount++;
+                    }
                 }
                 scannedCount++;
             }
@@ -111,5 +127,14 @@ public class ResearchScanService {
             scans.failRun(runId, scannedCount, candidateCount, "SCAN_FAILED", "Research scan failed before completion");
         }
         return scans.requireRun(runId);
+    }
+
+    private static StrategyRegistry defaultRegistry() {
+        return new StrategyRegistry(List.of(
+                new VolumeBreakoutStrategy(),
+                new MovingAverageReclaimStrategy(),
+                new OpeningRangeBreakoutStrategy(),
+                new VwapMomentumStrategy(),
+                new RsiReversalStrategy()));
     }
 }
