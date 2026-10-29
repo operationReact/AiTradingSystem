@@ -104,7 +104,7 @@ class ProductionRiskRulesTest {
     void exposureRulesRejectNewBuyButNeverBlockClosingSell() {
         RiskPolicySnapshot tight = policy(true, "1.50", "100000", "50", "20", 20);
         RiskDecisionV2 buy = engine().evaluate(context(true, NOW, MarketSessionState.OPEN,
-                "500", "490", "530", "39000", "14000", 0, false, tight));
+                "500", "490", "530", "48000", "18000", 0, false, tight));
         assertRejected(buy, RiskRuleCode.MAX_GROSS_EXPOSURE, "MAX_GROSS_EXPOSURE_EXCEEDED");
         assertRejected(buy, RiskRuleCode.MAX_SYMBOL_EXPOSURE, "MAX_SYMBOL_EXPOSURE_EXCEEDED");
 
