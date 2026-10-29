@@ -17,14 +17,18 @@ public class RiskPolicyConfigService {
 
     private final RiskPolicyConfigRepository repository;
     private final AuditService audit;
+    private final RiskMetrics metrics;
 
-    public RiskPolicyConfigService(RiskPolicyConfigRepository repository, AuditService audit) {
+    public RiskPolicyConfigService(RiskPolicyConfigRepository repository, AuditService audit, RiskMetrics metrics) {
         this.repository = repository;
         this.audit = audit;
+        this.metrics = metrics;
     }
 
     public RiskPolicyView active() {
-        return repository.requireActiveView();
+        RiskPolicyView active = repository.requireActiveView();
+        metrics.activePolicyVersion(active.version());
+        return active;
     }
 
     public PageResponse<RiskPolicyView> history(int page, int size) {
@@ -67,6 +71,7 @@ public class RiskPolicyConfigService {
 
         repository.insert(snapshot, request.policyName().trim(), false, actor);
         RiskPolicyView activated = repository.activate(id);
+        metrics.activePolicyVersion(activated.version());
         audit.record("RISK_POLICY_CREATED_AND_ACTIVATED", "RISK_POLICY_CONFIG", id.toString(), Map.of(
                 "previousPolicyId", previous.id().toString(),
                 "previousPolicyVersion", previous.version(),

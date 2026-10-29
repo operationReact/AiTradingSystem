@@ -9,6 +9,7 @@ import in.aitradingsystem.risk.PositionSizingApplicationService;
 import in.aitradingsystem.risk.RiskDecisionDetail;
 import in.aitradingsystem.risk.RiskDecisionPersistenceService;
 import in.aitradingsystem.risk.RiskDecisionSummary;
+import in.aitradingsystem.risk.RiskMetrics;
 import in.aitradingsystem.risk.RiskPolicyConfigService;
 import in.aitradingsystem.risk.RiskPolicyView;
 import jakarta.validation.Valid;
@@ -40,18 +41,21 @@ public class RiskController {
     private final RiskDecisionPersistenceService decisions;
     private final PositionSizingApplicationService positionSizing;
     private final RiskPolicyConfigService policies;
+    private final RiskMetrics metrics;
 
     public RiskController(
             RiskProperties props,
             PaperTradingService trading,
             RiskDecisionPersistenceService decisions,
             PositionSizingApplicationService positionSizing,
-            RiskPolicyConfigService policies) {
+            RiskPolicyConfigService policies,
+            RiskMetrics metrics) {
         this.props = props;
         this.trading = trading;
         this.decisions = decisions;
         this.positionSizing = positionSizing;
         this.policies = policies;
+        this.metrics = metrics;
     }
 
     public record RiskConfigView(String tradingMode, boolean liveTradingEnabled, String policyVersion,
@@ -71,10 +75,12 @@ public class RiskController {
 
     @GetMapping("/config")
     public RiskConfigView config() {
+        boolean halted = trading.isHalted();
+        metrics.emergencyStop(halted);
         return new RiskConfigView("PAPER", false, in.aitradingsystem.risk.RiskPolicy.VERSION,
             props.defaultCapital(), props.riskPerTradePercent(), props.maxDailyDrawdownPercent(),
             props.maxOpenPositions(), props.feeRate(), props.slippageRate(), props.signalMaxAgeMinutes(),
-            trading.isHalted());
+            halted);
     }
 
     @GetMapping("/decisions")
@@ -104,7 +110,9 @@ public class RiskController {
 
         // PaperTradingService persists the requested state with an UPDATE, so repeating the same state remains idempotent.
         trading.setNewOrdersHalted(request.halted(), reason);
-        return new EmergencyStopView(trading.isHalted(), reason);
+        boolean halted = trading.isHalted();
+        metrics.emergencyStop(halted);
+        return new EmergencyStopView(halted, reason);
     }
 
     private static String normalizeReason(String reason) {

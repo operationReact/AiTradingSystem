@@ -5,12 +5,14 @@ import in.aitradingsystem.paper.PaperExecutionModel;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,16 +23,24 @@ public final class RiskPolicyEngine {
             .thenComparing(rule -> rule.code().name());
 
     private final List<RiskRule> rules;
+    private final RiskMetrics metrics;
 
     public RiskPolicyEngine(List<RiskRule> rules) {
+        this(rules, null);
+    }
+
+    @Autowired
+    public RiskPolicyEngine(List<RiskRule> rules, RiskMetrics metrics) {
         List<RiskRule> ordered = new ArrayList<>(rules == null ? List.of() : rules);
         ordered.sort(RULE_ORDER);
         validateUniqueRuleCodes(ordered);
         this.rules = List.copyOf(ordered);
+        this.metrics = metrics;
     }
 
     public RiskDecisionV2 evaluate(RiskContext context) {
         if (context == null) throw new IllegalArgumentException("context is required");
+        long started = System.nanoTime();
 
         List<RiskRuleResult> results = rules.stream()
                 .map(rule -> evaluateRule(rule, context))
@@ -40,7 +50,7 @@ public final class RiskPolicyEngine {
         MonetarySnapshot monetary = monetary(context);
         UUID decisionId = deterministicDecisionId(context, results, decisionClass);
 
-        return new RiskDecisionV2(
+        RiskDecisionV2 decision = new RiskDecisionV2(
                 decisionId,
                 decisionClass,
                 results,
@@ -57,6 +67,12 @@ public final class RiskPolicyEngine {
                 context.policy().id(),
                 context.policy().version(),
                 context.now());
+        if (metrics != null) {
+            metrics.recordEvaluation(Duration.ofNanos(System.nanoTime() - started), decisionClass, results);
+            metrics.activePolicyVersion(context.policy().version());
+            metrics.emergencyStop(context.emergencyStopActive());
+        }
+        return decision;
     }
 
     public List<RiskRuleCode> orderedRuleCodes() {
