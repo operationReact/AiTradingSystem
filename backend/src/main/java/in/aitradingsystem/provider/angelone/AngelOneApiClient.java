@@ -4,15 +4,15 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import in.aitradingsystem.config.AngelOneProperties;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestClient;
-
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClient;
 
 /**
  * Thin HTTP adapter for the Angel One SmartAPI endpoints in use. Paths were taken from the official SDK source
@@ -39,11 +39,23 @@ public class AngelOneApiClient {
     private final RestClient rest;
     private final AngelOneProperties properties;
     private final ObjectMapper mapper;
+    private final AngelOneCallMetrics metrics;
 
-    public AngelOneApiClient(RestClient angelOneRestClient, AngelOneProperties properties, ObjectMapper mapper) {
+    @Autowired
+    public AngelOneApiClient(RestClient angelOneRestClient, AngelOneProperties properties, ObjectMapper mapper,
+                             AngelOneCallMetrics metrics) {
         this.rest = angelOneRestClient;
         this.properties = properties;
         this.mapper = mapper;
+        this.metrics = metrics;
+    }
+
+    /** Backwards-compatible constructor for focused HTTP adapter tests. */
+    AngelOneApiClient(RestClient angelOneRestClient, AngelOneProperties properties, ObjectMapper mapper) {
+        this.rest = angelOneRestClient;
+        this.properties = properties;
+        this.mapper = mapper;
+        this.metrics = null;
     }
 
     public LoginTokens login(String clientCode, String password, String totp) {
@@ -102,8 +114,9 @@ public class AngelOneApiClient {
     }
 
     private JsonNode call(String path, String jwtToken, Object body) {
+        long startedAt = metrics == null ? 0L : metrics.start();
         try {
-            return rest.post()
+            JsonNode result = rest.post()
                     .uri(path)
                     .headers(h -> {
                         h.setContentType(MediaType.APPLICATION_JSON);
@@ -111,15 +124,14 @@ public class AngelOneApiClient {
                         h.set("X-PrivateKey", properties.apiKey());
                         h.set("X-UserType", "USER");
                         h.set("X-SourceID", "WEB");
-                        if (jwtToken != null) {
-                            h.setBearerAuth(jwtToken);
-                        }
+                        if (jwtToken != null) h.setBearerAuth(jwtToken);
                     })
                     .body(body)
                     .exchange((request, response) -> {
                         int status = response.getStatusCode().value();
-                        if (status == 429) {
-                            throw new AngelOneException(AngelOneException.Kind.RATE_LIMITED, "HTTP_429",
+                        // SmartAPI's current official RateLimit page documents 403 when a provider rate limit is hit.
+                        if (status == 403 || status == 429) {
+                            throw new AngelOneException(AngelOneException.Kind.RATE_LIMITED, "HTTP_" + status,
                                     "Provider rate limit reached");
                         }
                         if (status == 401) {
@@ -140,9 +152,16 @@ public class AngelOneApiClient {
                         String raw = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
                         return parseEnvelope(raw);
                     });
+            if (metrics != null) metrics.recordSuccess(path, startedAt);
+            return result;
+        } catch (AngelOneException e) {
+            if (metrics != null) metrics.recordFailure(path, e, startedAt);
+            throw e;
         } catch (ResourceAccessException e) {
-            throw new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "NETWORK",
+            AngelOneException mapped = new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "NETWORK",
                     "Provider could not be reached");
+            if (metrics != null) metrics.recordFailure(path, mapped, startedAt);
+            throw mapped;
         }
     }
 
@@ -160,9 +179,7 @@ public class AngelOneApiClient {
         }
         if (!root.get("status").asBoolean()) {
             String code = text(root, "errorcode");
-            if (code == null) {
-                code = "UNKNOWN";
-            }
+            if (code == null) code = "UNKNOWN";
             if (SESSION_EXPIRED_CODES.contains(code)) {
                 throw new AngelOneException(AngelOneException.Kind.SESSION_EXPIRED, code,
                         "Provider session is no longer valid");
