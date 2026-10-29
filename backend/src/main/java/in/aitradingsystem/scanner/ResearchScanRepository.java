@@ -74,6 +74,14 @@ public class ResearchScanRepository {
         throw new UnsupportedOperationException("candidate provenance is required");
     }
 
+    public void saveDiagnostic(UUID runId, Long instrumentId, String strategy, String severity, String code, String message) {
+        jdbc.update("""
+                INSERT INTO research_scan_diagnostic
+                    (scan_run_id, instrument_id, strategy, severity, code, message)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """, runId, instrumentId, bounded(strategy, 80), bounded(severity, 12), bounded(code, 80), bounded(message, 300));
+    }
+
     public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
         requireRun(runId);
         if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
@@ -96,21 +104,24 @@ public class ResearchScanRepository {
     }
 
     public void finishRun(UUID id, int scannedCount, int candidateCount) {
-        jdbc.update("""
-                UPDATE research_scan_run
-                   SET status = 'SUCCEEDED', scanned_count = ?, candidate_count = ?, completed_at = now(),
-                       error_code = NULL, error_message = NULL
-                 WHERE id = ? AND status = 'RUNNING'
-                """, scannedCount, candidateCount, id);
+        completeRun(id, "SUCCEEDED", scannedCount, candidateCount, null, null);
+    }
+
+    public void partialRun(UUID id, int scannedCount, int candidateCount, String code, String message) {
+        completeRun(id, "PARTIAL", scannedCount, candidateCount, code, message);
     }
 
     public void failRun(UUID id, int scannedCount, int candidateCount, String code, String message) {
+        completeRun(id, "FAILED", scannedCount, candidateCount, code, message);
+    }
+
+    private void completeRun(UUID id, String status, int scannedCount, int candidateCount, String code, String message) {
         jdbc.update("""
                 UPDATE research_scan_run
-                   SET status = 'FAILED', scanned_count = ?, candidate_count = ?, completed_at = now(),
+                   SET status = ?, scanned_count = ?, candidate_count = ?, completed_at = now(),
                        error_code = ?, error_message = ?
                  WHERE id = ? AND status = 'RUNNING'
-                """, scannedCount, candidateCount, bounded(code, 80), bounded(message, 500), id);
+                """, status, scannedCount, candidateCount, bounded(code, 80), bounded(message, 500), id);
     }
 
     public ResearchScanSummary requireRun(UUID id) {
