@@ -34,9 +34,14 @@ public class AngelOneRetryPolicy {
     }
 
     public <T> T executeSafeRead(String endpoint, Supplier<T> call) {
+        return executeSafeRead(endpoint, call, call);
+    }
+
+    /** First attempt may fail fast; retry attempt can use bounded recovery pacing. */
+    public <T> T executeSafeRead(String endpoint, Supplier<T> firstAttempt, Supplier<T> retryAttempt) {
         for (int attempt = 1; ; attempt++) {
             try {
-                return call.get();
+                return (attempt == 1 ? firstAttempt : retryAttempt).get();
             } catch (AngelOneException error) {
                 if (!retryable(error) || attempt >= maxAttempts) throw error;
                 metrics.recordRetry(endpoint, error.kind().name().toLowerCase());
