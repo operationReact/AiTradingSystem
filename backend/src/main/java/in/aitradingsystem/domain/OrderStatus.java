@@ -1,28 +1,36 @@
 package in.aitradingsystem.domain;
 
-import java.util.EnumSet;
 import java.util.Set;
 
-/** Order lifecycle. Transitions are enforced in code and mirrored by a CHECK constraint on paper_order.status. */
+/** Explicit PAPER order lifecycle values. Transition policy lives in {@link OrderStateMachine}. */
 public enum OrderStatus {
-    NEW, RISK_APPROVED, REJECTED, FILLED;
+    NEW,
+    RISK_APPROVED,
+    APPROVAL_PENDING,
+    READY,
+    PARTIALLY_FILLED,
+    FILLED,
+    REJECTED,
+    CANCELLED,
+    EXPIRED,
+    FAILED;
 
     public Set<OrderStatus> allowedNext() {
-        return switch (this) {
-            case NEW -> EnumSet.of(RISK_APPROVED, REJECTED);
-            case RISK_APPROVED -> EnumSet.of(FILLED);
-            case REJECTED, FILLED -> EnumSet.noneOf(OrderStatus.class);
-        };
+        return OrderStateMachine.allowedNext(this);
     }
 
     public boolean canTransitionTo(OrderStatus next) {
-        return allowedNext().contains(next);
+        return OrderStateMachine.canTransition(this, next);
+    }
+
+    public boolean terminal() {
+        return switch (this) {
+            case FILLED, REJECTED, CANCELLED, EXPIRED, FAILED -> true;
+            default -> false;
+        };
     }
 
     public OrderStatus transitionTo(OrderStatus next) {
-        if (!canTransitionTo(next)) {
-            throw new IllegalStateException("Illegal order transition " + this + " -> " + next);
-        }
-        return next;
+        return OrderStateMachine.requireTransition(this, next);
     }
 }

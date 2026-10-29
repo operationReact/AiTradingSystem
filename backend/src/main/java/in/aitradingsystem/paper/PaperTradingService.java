@@ -66,13 +66,11 @@ public class PaperTradingService {
     public OrderResult placeOrder(OrderCommand cmd, String idempotencyKey) {
         String requestHash = cmd.canonicalHash();
 
-        // Fast replay path: completed requests do not acquire the account lock or execute risk rules again.
         Optional<ExistingOrder> existing = findExisting(idempotencyKey);
         if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
 
         AccountSnapshot account = lockAccount();
 
-        // A concurrent request may have completed while this transaction waited for the account lock.
         existing = findExisting(idempotencyKey);
         if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
 
@@ -82,6 +80,7 @@ public class PaperTradingService {
 
         Optional<PositionRow> held = findPosition(cmd.symbol());
         RiskContext context = contextFactory.build(orderId, cmd, now);
+        enrichOrderIdentity(orderId, context, now);
         RiskDecisionV2 decision = riskEngine.evaluate(context);
         decisions.persist(orderId, context, decision);
 
@@ -142,9 +141,11 @@ public class PaperTradingService {
 
     private void insertOrder(UUID id, String key, String hash, OrderCommand cmd, Instant now) {
         jdbc.sql("""
-                INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, reference_price,
-                    stop_loss, target_price, signal_generated_at, status, correlation_id, created_at, updated_at)
-                VALUES (:id, :key, :hash, :symbol, :side, :qty, :ref, :stop, :target, :signal, 'NEW', :cid, :now, :now)
+                INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,
+                    filled_quantity, order_type, product_type, reference_price, stop_loss, target_price,
+                    signal_generated_at, status, correlation_id, created_at, updated_at)
+                VALUES (:id, :key, :hash, :symbol, :side, :qty, :qty, 0, 'MARKET', 'DELIVERY',
+                    :ref, :stop, :target, :signal, 'NEW', :cid, :now, :now)
                 """)
             .param("id", id)
             .param("key", key)
@@ -158,6 +159,30 @@ public class PaperTradingService {
             .param("signal", cmd.signalGeneratedAt() == null ? null : ts(cmd.signalGeneratedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
             .param("cid", MDC.get(CorrelationIdFilter.MDC_KEY), Types.VARCHAR)
             .param("now", ts(now))
+            .update();
+    }
+
+    /**
+     * P06-W01 stores authoritative identity resolved by the server-side risk context. Synthetic compatibility
+     * identities are intentionally not persisted as instrument FKs.
+     */
+    private void enrichOrderIdentity(UUID orderId, RiskContext context, Instant now) {
+        Long instrumentId = "PAPER".equalsIgnoreCase(context.exchange()) ? null : context.instrumentId();
+        jdbc.sql("""
+                UPDATE paper_order
+                   SET instrument_id = :instrumentId,
+                       exchange = :exchange,
+                       strategy = :strategy,
+                       product_type = :productType,
+                       updated_at = :now
+                 WHERE id = :id
+                """)
+            .param("instrumentId", instrumentId, Types.BIGINT)
+            .param("exchange", context.exchange(), Types.VARCHAR)
+            .param("strategy", context.strategy(), Types.VARCHAR)
+            .param("productType", context.tradingStyle().name(), Types.VARCHAR)
+            .param("now", ts(now))
+            .param("id", orderId)
             .update();
     }
 
@@ -229,6 +254,18 @@ public class PaperTradingService {
             .param("pnl", realized)
             .param("now", ts(now))
             .update();
+        jdbc.sql("""
+                UPDATE paper_order
+                   SET filled_quantity = :qty,
+                       average_fill_price = :fill,
+                       updated_at = :now
+                 WHERE id = :id
+                """)
+            .param("qty", cmd.quantity())
+            .param("fill", d.effectiveFillPrice())
+            .param("now", ts(now))
+            .param("id", orderId)
+            .update();
     }
 
     private static BigDecimal netAmount(Side side, RiskDecisionV2 decision) {
@@ -289,10 +326,29 @@ public class PaperTradingService {
     }
 
     static OrderView toOrderView(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new OrderView(rs.getObject("id", UUID.class), rs.getString("symbol"), rs.getString("side"),
-            rs.getInt("quantity"), rs.getBigDecimal("reference_price"), rs.getBigDecimal("stop_loss"),
-            rs.getBigDecimal("target_price"), rs.getString("status"), rs.getString("rejection_reason"),
-            instant(rs, "signal_generated_at"), instant(rs, "created_at"), instant(rs, "updated_at"),
+        return new OrderView(
+            rs.getObject("id", UUID.class),
+            rs.getObject("instrument_id", Long.class),
+            rs.getString("exchange"),
+            rs.getString("symbol"),
+            rs.getString("side"),
+            rs.getInt("quantity"),
+            rs.getInt("submitted_quantity"),
+            rs.getInt("filled_quantity"),
+            rs.getString("order_type"),
+            rs.getBigDecimal("limit_price"),
+            rs.getString("product_type"),
+            rs.getString("strategy"),
+            rs.getObject("candidate_id", Long.class),
+            rs.getBigDecimal("average_fill_price"),
+            rs.getBigDecimal("reference_price"),
+            rs.getBigDecimal("stop_loss"),
+            rs.getBigDecimal("target_price"),
+            rs.getString("status"),
+            rs.getString("rejection_reason"),
+            instant(rs, "signal_generated_at"),
+            instant(rs, "created_at"),
+            instant(rs, "updated_at"),
             rs.getString("correlation_id"));
     }
 
