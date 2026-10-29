@@ -7,8 +7,10 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /** Reclaim of the 20-bar SMA while the 5-bar SMA is above the 20-bar SMA. */
+@Component
 public final class MovingAverageReclaimStrategy implements ScannerStrategy {
     public static final String NAME = "MA_RECLAIM_V1";
     private static final int FAST = 5;
@@ -28,9 +30,11 @@ public final class MovingAverageReclaimStrategy implements ScannerStrategy {
     @Override
     public StrategyDescriptor descriptor() {
         return new StrategyDescriptor(NAME, "1", "Moving Average Reclaim",
-                Set.of(HistoricalCandleInterval.FIFTEEN_MINUTE, HistoricalCandleInterval.THIRTY_MINUTE,
-                        HistoricalCandleInterval.ONE_HOUR, HistoricalCandleInterval.ONE_DAY),
-                minimumCandles(), TradingStyle.SWING, false, "HEALTHY", true, false);
+                Set.of(HistoricalCandleInterval.ONE_MINUTE, HistoricalCandleInterval.THREE_MINUTE,
+                        HistoricalCandleInterval.FIVE_MINUTE, HistoricalCandleInterval.TEN_MINUTE,
+                        HistoricalCandleInterval.FIFTEEN_MINUTE, HistoricalCandleInterval.THIRTY_MINUTE,
+                        HistoricalCandleInterval.ONE_HOUR),
+                minimumCandles(), TradingStyle.INTRADAY, false, "HEALTHY", true, false);
     }
 
     @Override
