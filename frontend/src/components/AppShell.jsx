@@ -14,12 +14,13 @@ const NAV = [
   { to: '/risk', label: 'Risk', icon: ShieldAlert },
   { to: '/instruments', label: 'Instruments', icon: Search },
   { to: '/market-data', label: 'Market data', icon: Activity },
+  { to: '/research', label: 'Research', icon: Search },
   { to: '/backtesting', label: 'Backtesting', icon: BarChart3 },
 ];
 
-const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], NAV[3]];
+const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], NAV[6]];
 
-const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data', backtesting: 'Backtesting' };
+const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data', research: 'Research', backtesting: 'Backtesting' };
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
@@ -138,95 +139,42 @@ export default function AppShell() {
 
   return (
     <div className="flex h-full">
-      {/* Desktop sidebar */}
-      <aside
-        className={cn(
-          'hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 md:flex',
-          collapsed ? 'w-16' : 'w-56',
-        )}
-      >
-        <div className={cn('flex h-14 items-center border-b border-border', collapsed ? 'justify-center' : 'px-4')}>
-          <Brand compact={collapsed} />
-        </div>
-        <div className="flex-1 overflow-y-auto py-3">
-          <Nav compact={collapsed} />
-        </div>
+      <aside className={cn('hidden shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 md:flex', collapsed ? 'w-16' : 'w-56')}>
+        <div className={cn('flex h-14 items-center border-b border-border', collapsed ? 'justify-center' : 'px-4')}><Brand compact={collapsed} /></div>
+        <div className="flex-1 overflow-y-auto py-3"><Nav compact={collapsed} /></div>
         <div className="border-t border-border p-2">
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            className="flex h-8 w-full items-center justify-center gap-2 rounded-md text-xs text-muted hover:bg-surface-2 hover:text-text"
-          >
+          <button type="button" onClick={toggleCollapsed} aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} className="flex h-8 w-full items-center justify-center gap-2 rounded-md text-xs text-muted hover:bg-surface-2 hover:text-text">
             {collapsed ? <ChevronsRight className="h-4 w-4" aria-hidden /> : <><ChevronsLeft className="h-4 w-4" aria-hidden /><span>Collapse</span></>}
           </button>
         </div>
       </aside>
 
-      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <aside className="relative flex h-full w-64 flex-col border-r border-border bg-surface">
-            <div className="flex h-14 items-center justify-between border-b border-border px-4">
-              <Brand />
-              <button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-11 w-11 items-center justify-center rounded text-muted hover:text-text">
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
-            <div className="py-3">
-              <Nav onNavigate={() => setMobileOpen(false)} />
-            </div>
+            <div className="flex h-14 items-center justify-between border-b border-border px-4"><Brand /><button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-11 w-11 items-center justify-center rounded text-muted hover:text-text"><X className="h-4 w-4" aria-hidden /></button></div>
+            <div className="py-3"><Nav onNavigate={() => setMobileOpen(false)} /></div>
           </aside>
         </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface/80 px-2 backdrop-blur sm:gap-3 sm:px-4">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text md:hidden"
-          >
-            <Menu className="h-4 w-4" aria-hidden />
-          </button>
-          <div className="hidden min-w-0 flex-1 sm:block">
-            <Breadcrumbs />
-          </div>
+          <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text md:hidden"><Menu className="h-4 w-4" aria-hidden /></button>
+          <div className="hidden min-w-0 flex-1 sm:block"><Breadcrumbs /></div>
           {fetching > 0 && <span className="hidden text-xs text-muted lg:inline" aria-live="polite">Syncing…</span>}
           <ModeControl />
           <label className="flex shrink-0 items-center gap-1 text-xs text-muted" title="Appearance — Experience">
-            <PanelsTopLeft className="hidden h-4 w-4 lg:block" aria-hidden />
-            <span className="sr-only">Appearance — Experience</span>
-            <select aria-label="Appearance — Experience" value={experience} onChange={(e) => setExperience(e.target.value)}
-              className="h-10 max-w-[105px] rounded-md border border-border bg-surface-2 px-1 text-[11px] text-text sm:max-w-none sm:px-2 sm:text-xs">
-              <option value="pro-terminal">Pro Terminal</option>
-              <option value="clear-invest">Clear Invest</option>
-            </select>
+            <PanelsTopLeft className="hidden h-4 w-4 lg:block" aria-hidden /><span className="sr-only">Appearance — Experience</span>
+            <select aria-label="Appearance — Experience" value={experience} onChange={(e) => setExperience(e.target.value)} className="h-10 max-w-[105px] rounded-md border border-border bg-surface-2 px-1 text-[11px] text-text sm:max-w-none sm:px-2 sm:text-xs"><option value="pro-terminal">Pro Terminal</option><option value="clear-invest">Clear Invest</option></select>
           </label>
           <ApiKeyControl />
-          <button
-            type="button"
-            onClick={toggleTheme}
-            aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text md:h-8 md:w-8"
-          >
-            {theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}
-          </button>
+          <button type="button" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-text md:h-8 md:w-8">{theme === 'dark' ? <Sun className="h-4 w-4" aria-hidden /> : <Moon className="h-4 w-4" aria-hidden />}</button>
         </header>
-        <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
-          <div className="mx-auto w-full max-w-[1400px] px-3 py-3 sm:px-4 md:px-6 md:py-5">
-            <Outlet />
-          </div>
-        </main>
+        <main className="min-h-0 flex-1 overflow-y-auto pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0"><div className="mx-auto w-full max-w-[1400px] px-3 py-3 sm:px-4 md:px-6 md:py-5"><Outlet /></div></main>
         <nav aria-label="Mobile primary" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] md:hidden">
-          {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink key={to} to={to} end={end} className={({ isActive }) => cn('flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium', isActive ? 'text-accent' : 'text-muted')}>
-              <Icon className="h-5 w-5" aria-hidden />
-              <span className="truncate">{label}</span>
-            </NavLink>
-          ))}
+          {MOBILE_NAV.map(({ to, label, icon: Icon, end }) => <NavLink key={to} to={to} end={end} className={({ isActive }) => cn('flex min-h-[56px] flex-col items-center justify-center gap-1 px-1 text-[11px] font-medium', isActive ? 'text-accent' : 'text-muted')}><Icon className="h-5 w-5" aria-hidden /><span className="truncate">{label}</span></NavLink>)}
         </nav>
       </div>
     </div>
