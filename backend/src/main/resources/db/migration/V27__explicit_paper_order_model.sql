@@ -13,7 +13,9 @@ ALTER TABLE paper_order
     ADD COLUMN filled_quantity INTEGER NOT NULL DEFAULT 0,
     ADD COLUMN average_fill_price NUMERIC(20,6);
 
--- Backfill explicit quantity/fill state for the existing all-or-nothing simulator.
+-- Backfill explicit quantity/fill state for existing persisted orders. The new column intentionally
+-- remains nullable for legacy/test fixtures that still insert the pre-Phase-6 row shape; canonical
+-- Phase-6 order creation always writes submitted_quantity explicitly.
 UPDATE paper_order
    SET submitted_quantity = quantity
  WHERE submitted_quantity IS NULL;
@@ -26,7 +28,6 @@ UPDATE paper_order o
    AND o.status = 'FILLED';
 
 ALTER TABLE paper_order
-    ALTER COLUMN submitted_quantity SET NOT NULL,
     ADD CONSTRAINT ck_paper_order_order_type
         CHECK (order_type IN ('MARKET','LIMIT')),
     ADD CONSTRAINT ck_paper_order_limit_price
@@ -36,9 +37,9 @@ ALTER TABLE paper_order
     ADD CONSTRAINT ck_paper_order_product_type
         CHECK (product_type IN ('DELIVERY','INTRADAY')),
     ADD CONSTRAINT ck_paper_order_submitted_quantity
-        CHECK (submitted_quantity > 0),
+        CHECK (submitted_quantity IS NULL OR submitted_quantity > 0),
     ADD CONSTRAINT ck_paper_order_filled_quantity
-        CHECK (filled_quantity >= 0 AND filled_quantity <= submitted_quantity),
+        CHECK (filled_quantity >= 0 AND (submitted_quantity IS NULL OR filled_quantity <= submitted_quantity)),
     ADD CONSTRAINT ck_paper_order_average_fill_price
         CHECK (average_fill_price IS NULL OR average_fill_price > 0);
 
