@@ -78,7 +78,7 @@ public class PaperTradingService {
         Instant now = clock.instant();
         insertOrder(orderId, idempotencyKey, requestHash, cmd, now);
 
-        Optional<PositionRow> held = findPosition(cmd.symbol());
+        Optional<PositionRow> held = findPosition(cmd.symbol(), cmd.productType().name());
         RiskContext context = contextFactory.build(orderId, cmd, now);
         enrichOrderIdentity(orderId, context, now);
         RiskDecisionV2 decision = riskEngine.evaluate(context);
@@ -98,6 +98,7 @@ public class PaperTradingService {
         transition(orderId, OrderStatus.RISK_APPROVED, OrderStatus.FILLED, null, now);
         audit.record("ORDER_FILLED", "PAPER_ORDER", orderId.toString(),
                 Map.of("symbol", cmd.symbol(), "side", cmd.side().name(), "quantity", cmd.quantity(),
+                        "productType", cmd.productType().name(),
                         "fillPrice", decision.effectiveFillPrice(), "policyVersion", decision.policyVersion()));
         return loadResult(orderId, false);
     }
@@ -144,7 +145,7 @@ public class PaperTradingService {
                 INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,
                     filled_quantity, order_type, product_type, reference_price, stop_loss, target_price,
                     signal_generated_at, status, correlation_id, created_at, updated_at)
-                VALUES (:id, :key, :hash, :symbol, :side, :qty, :qty, 0, 'MARKET', 'DELIVERY',
+                VALUES (:id, :key, :hash, :symbol, :side, :qty, :qty, 0, 'MARKET', :productType,
                     :ref, :stop, :target, :signal, 'NEW', :cid, :now, :now)
                 """)
             .param("id", id)
@@ -153,6 +154,7 @@ public class PaperTradingService {
             .param("symbol", cmd.symbol())
             .param("side", cmd.side().name())
             .param("qty", cmd.quantity())
+            .param("productType", cmd.productType().name())
             .param("ref", cmd.entryPrice())
             .param("stop", cmd.stopLoss(), Types.NUMERIC)
             .param("target", cmd.target(), Types.NUMERIC)
@@ -162,10 +164,7 @@ public class PaperTradingService {
             .update();
     }
 
-    /**
-     * P06-W01 stores authoritative identity resolved by the server-side risk context. Synthetic compatibility
-     * identities are intentionally not persisted as instrument FKs.
-     */
+    /** P06-W01 stores authoritative identity resolved by the server-side risk context. */
     private void enrichOrderIdentity(UUID orderId, RiskContext context, Instant now) {
         Long instrumentId = "PAPER".equalsIgnoreCase(context.exchange()) ? null : context.instrumentId();
         jdbc.sql("""
@@ -196,9 +195,7 @@ public class PaperTradingService {
             .param("id", orderId)
             .param("from", from.name())
             .update();
-        if (updated != 1) {
-            throw new IllegalStateException("Order " + orderId + " was not in state " + from);
-        }
+        if (updated != 1) throw new IllegalStateException("Order " + orderId + " was not in state " + from);
     }
 
     private void applyFill(UUID orderId, OrderCommand cmd, RiskDecisionV2 d, BigDecimal cashBefore,
@@ -213,6 +210,7 @@ public class PaperTradingService {
             cashAfter = cashBefore.subtract(costBasis);
             insertPosition(cmd, costBasis, now);
         } else {
+            if (held == null) throw new IllegalStateException("SELL requires an existing " + cmd.productType() + " position");
             BigDecimal qty = BigDecimal.valueOf(cmd.quantity());
             costBasis = held.quantity() == cmd.quantity()
                 ? held.costBasis()
@@ -256,9 +254,7 @@ public class PaperTradingService {
             .update();
         jdbc.sql("""
                 UPDATE paper_order
-                   SET filled_quantity = :qty,
-                       average_fill_price = :fill,
-                       updated_at = :now
+                   SET filled_quantity = :qty, average_fill_price = :fill, updated_at = :now
                  WHERE id = :id
                 """)
             .param("qty", cmd.quantity())
@@ -275,34 +271,59 @@ public class PaperTradingService {
     }
 
     private void insertPosition(OrderCommand cmd, BigDecimal costBasis, Instant now) {
-        jdbc.sql("INSERT INTO paper_position (symbol, quantity, cost_basis, stop_loss, target_price, opened_at, updated_at) "
-                + "VALUES (:symbol, :qty, :basis, :stop, :target, :now, :now)")
+        BigDecimal average = costBasis.divide(BigDecimal.valueOf(cmd.quantity()), 6, RoundingMode.HALF_UP);
+        jdbc.sql("""
+                INSERT INTO paper_position (
+                    symbol, product_type, quantity, cost_basis, average_price, stop_loss, target_price,
+                    realized_pnl, opened_at, updated_at)
+                VALUES (:symbol, :productType, :qty, :basis, :average, :stop, :target, 0, :now, :now)
+                """)
             .param("symbol", cmd.symbol())
+            .param("productType", cmd.productType().name())
             .param("qty", cmd.quantity())
             .param("basis", costBasis)
-            .param("stop", cmd.stopLoss())
-            .param("target", cmd.target())
+            .param("average", average)
+            .param("stop", cmd.stopLoss(), Types.NUMERIC)
+            .param("target", cmd.target(), Types.NUMERIC)
             .param("now", ts(now))
             .update();
     }
 
     private void reducePosition(PositionRow held, int soldQuantity, BigDecimal soldCostBasis, Instant now) {
         if (held.quantity() == soldQuantity) {
-            jdbc.sql("DELETE FROM paper_position WHERE symbol = :symbol").param("symbol", held.symbol()).update();
+            jdbc.sql("DELETE FROM paper_position WHERE symbol = :symbol AND product_type = :productType")
+                .param("symbol", held.symbol())
+                .param("productType", held.productType())
+                .update();
             return;
         }
-        jdbc.sql("UPDATE paper_position SET quantity = :qty, cost_basis = :basis, updated_at = :now WHERE symbol = :symbol")
-            .param("qty", held.quantity() - soldQuantity)
-            .param("basis", held.costBasis().subtract(soldCostBasis))
+        BigDecimal remainingBasis = held.costBasis().subtract(soldCostBasis);
+        int remainingQuantity = held.quantity() - soldQuantity;
+        BigDecimal average = remainingBasis.divide(BigDecimal.valueOf(remainingQuantity), 6, RoundingMode.HALF_UP);
+        jdbc.sql("""
+                UPDATE paper_position
+                   SET quantity = :qty, cost_basis = :basis, average_price = :average, updated_at = :now
+                 WHERE symbol = :symbol AND product_type = :productType
+                """)
+            .param("qty", remainingQuantity)
+            .param("basis", remainingBasis)
+            .param("average", average)
             .param("now", ts(now))
             .param("symbol", held.symbol())
+            .param("productType", held.productType())
             .update();
     }
 
-    private Optional<PositionRow> findPosition(String symbol) {
-        return jdbc.sql("SELECT symbol, quantity, cost_basis FROM paper_position WHERE symbol = :symbol")
+    private Optional<PositionRow> findPosition(String symbol, String productType) {
+        return jdbc.sql("""
+                SELECT symbol, product_type, quantity, cost_basis
+                  FROM paper_position
+                 WHERE symbol = :symbol AND product_type = :productType
+                """)
             .param("symbol", symbol)
-            .query((rs, n) -> new PositionRow(rs.getString("symbol"), rs.getInt("quantity"), rs.getBigDecimal("cost_basis")))
+            .param("productType", productType)
+            .query((rs, n) -> new PositionRow(rs.getString("symbol"), rs.getString("product_type"),
+                rs.getInt("quantity"), rs.getBigDecimal("cost_basis")))
             .optional();
     }
 
@@ -316,7 +337,8 @@ public class PaperTradingService {
             .orElseThrow(() -> new NotFoundException("Paper order not found: " + orderId));
         DecisionView decision = jdbc.sql("SELECT * FROM risk_decision WHERE order_id = :id").param("id", orderId)
             .query((rs, n) -> toDecisionView(rs)).optional().orElse(null);
-        FillView fill = jdbc.sql("SELECT * FROM paper_fill WHERE order_id = :id").param("id", orderId)
+        FillView fill = jdbc.sql("SELECT * FROM paper_fill WHERE order_id = :id ORDER BY fill_sequence DESC LIMIT 1")
+            .param("id", orderId)
             .query((rs, n) -> new FillView(rs.getObject("id", UUID.class), rs.getBigDecimal("fill_price"),
                 rs.getBigDecimal("gross_amount"), rs.getBigDecimal("fee_amount"), rs.getBigDecimal("slippage_amount"),
                 rs.getBigDecimal("net_amount"), rs.getBigDecimal("cost_basis"), rs.getBigDecimal("realized_pnl"),
@@ -383,5 +405,5 @@ public class PaperTradingService {
 
     private record AccountSnapshot(BigDecimal startingCapital, BigDecimal cash) {}
     private record ExistingOrder(UUID id, String requestHash) {}
-    private record PositionRow(String symbol, int quantity, BigDecimal costBasis) {}
+    private record PositionRow(String symbol, String productType, int quantity, BigDecimal costBasis) {}
 }
