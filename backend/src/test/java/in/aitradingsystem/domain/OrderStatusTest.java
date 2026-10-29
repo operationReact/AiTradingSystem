@@ -7,28 +7,40 @@ import org.junit.jupiter.api.Test;
 
 class OrderStatusTest {
     @Test
-    void newOrdersMayBeApprovedOrRejected() {
+    void newOrdersMustPassRiskBeforeExecutionStates() {
         assertThat(OrderStatus.NEW.transitionTo(OrderStatus.RISK_APPROVED)).isEqualTo(OrderStatus.RISK_APPROVED);
         assertThat(OrderStatus.NEW.transitionTo(OrderStatus.REJECTED)).isEqualTo(OrderStatus.REJECTED);
+        assertThat(OrderStatus.NEW.canTransitionTo(OrderStatus.READY)).isFalse();
+        assertThat(OrderStatus.NEW.canTransitionTo(OrderStatus.FILLED)).isFalse();
     }
 
     @Test
-    void approvedOrdersMayOnlyFill() {
+    void approvedOrdersSupportCanonicalApprovalReadyAndCompatibilityFillPaths() {
+        assertThat(OrderStatus.RISK_APPROVED.canTransitionTo(OrderStatus.APPROVAL_PENDING)).isTrue();
+        assertThat(OrderStatus.RISK_APPROVED.canTransitionTo(OrderStatus.READY)).isTrue();
+        // Existing /paper-trades/simulate remains an all-or-nothing compatibility path until P06-W08.
         assertThat(OrderStatus.RISK_APPROVED.transitionTo(OrderStatus.FILLED)).isEqualTo(OrderStatus.FILLED);
-        assertThatThrownBy(() -> OrderStatus.RISK_APPROVED.transitionTo(OrderStatus.REJECTED))
-            .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    void readyAndPartialOrdersSupportFillAndTerminalAlternatives() {
+        assertThat(OrderStatus.READY.canTransitionTo(OrderStatus.PARTIALLY_FILLED)).isTrue();
+        assertThat(OrderStatus.READY.canTransitionTo(OrderStatus.FILLED)).isTrue();
+        assertThat(OrderStatus.PARTIALLY_FILLED.canTransitionTo(OrderStatus.FILLED)).isTrue();
+        assertThat(OrderStatus.PARTIALLY_FILLED.canTransitionTo(OrderStatus.CANCELLED)).isTrue();
+        assertThat(OrderStatus.PARTIALLY_FILLED.canTransitionTo(OrderStatus.EXPIRED)).isTrue();
+        assertThat(OrderStatus.PARTIALLY_FILLED.canTransitionTo(OrderStatus.FAILED)).isTrue();
     }
 
     @Test
     void terminalStatesAreFinal() {
-        assertThat(OrderStatus.REJECTED.allowedNext()).isEmpty();
-        assertThat(OrderStatus.FILLED.allowedNext()).isEmpty();
-        assertThatThrownBy(() -> OrderStatus.FILLED.transitionTo(OrderStatus.NEW))
-            .isInstanceOf(IllegalStateException.class);
-    }
-
-    @Test
-    void newOrdersCannotSkipRiskApproval() {
-        assertThat(OrderStatus.NEW.canTransitionTo(OrderStatus.FILLED)).isFalse();
+        for (OrderStatus status : new OrderStatus[] {
+                OrderStatus.FILLED, OrderStatus.REJECTED, OrderStatus.CANCELLED,
+                OrderStatus.EXPIRED, OrderStatus.FAILED }) {
+            assertThat(status.terminal()).isTrue();
+            assertThat(status.allowedNext()).isEmpty();
+            assertThatThrownBy(() -> status.transitionTo(OrderStatus.NEW))
+                    .isInstanceOf(IllegalStateException.class);
+        }
     }
 }
