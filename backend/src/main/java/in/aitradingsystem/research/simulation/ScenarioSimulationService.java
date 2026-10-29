@@ -14,6 +14,7 @@ public class ScenarioSimulationService {
     private final MarketDataRepository marketData;
     private final MarketDataQualityService quality;
     private final HistoricalScenarioSimulator simulator = new HistoricalScenarioSimulator();
+    private final RegimeClassifier regimeClassifier = new RegimeClassifier();
 
     @Autowired
     public ScenarioSimulationService(MarketDataRepository marketData, MarketDataQualityService quality) {
@@ -29,6 +30,21 @@ public class ScenarioSimulationService {
     }
 
     public ScenarioSimulationResult simulate(ScenarioSimulationRequest request) {
+        List<MarketCandle> history = eligibleHistory(request);
+        return simulator.simulate(request, history);
+    }
+
+    /**
+     * Point-in-time regime evidence used by orchestration persistence and later UI presentation.
+     * The same historical window and research quality gate as simulation are applied; no future candle is read.
+     */
+    public RegimeSnapshot classifyRegime(ScenarioSimulationRequest request) {
+        List<MarketCandle> history = eligibleHistory(request);
+        return regimeClassifier.classify(history, request.historyTo());
+    }
+
+    private List<MarketCandle> eligibleHistory(ScenarioSimulationRequest request) {
+        if (request == null) throw new IllegalArgumentException("request is required");
         HistoricalCandleInterval interval;
         try {
             interval = HistoricalCandleInterval.valueOf(request.interval());
@@ -43,6 +59,6 @@ public class ScenarioSimulationService {
         if (quality != null && !quality.eligibleForResearch(quality.evaluateBars(request.instrumentId(), interval, history))) {
             throw new IllegalArgumentException("historical scenario data failed the market-data quality gate");
         }
-        return simulator.simulate(request, history);
+        return history;
     }
 }

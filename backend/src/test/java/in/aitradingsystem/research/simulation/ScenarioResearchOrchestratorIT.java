@@ -61,6 +61,9 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
                 RETURNING id
                 """, Long.class, SCAN_ID, SIGNAL_TIME, "e".repeat(64), CATALOGUE_VERSION, SIGNAL_TIME);
 
+        when(simulations.classifyRegime(any())).thenReturn(new RegimeSnapshot(
+                .031, .012, .024, MarketRegime.HIGH_VOL,
+                1.18, LiquidityRegime.NORMAL, RegimeClassifier.METHODOLOGY));
         when(simulations.simulate(any())).thenReturn(new ScenarioSimulationResult(
                 HistoricalScenarioSimulator.METHODOLOGY, 123456L, 1_000, 480, 350,
                 BlockSamplingFallbackTier.EXACT_VOLATILITY_AND_VOLUME.name(), 20, 5,
@@ -87,12 +90,14 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
         assertThat(persisted.candidateId()).isEqualTo(candidateId);
         assertThat(persisted.requestFingerprint()).hasSize(64);
         assertThat(persisted.eligibleBlockCount()).isEqualTo(350);
+        assertThat(persisted.regime()).isEqualTo(MarketRegime.HIGH_VOL.name());
 
         assertThat(evaluations.listEvaluations(candidateId)).hasSize(2)
                 .allSatisfy(evaluation -> {
                     assertThat(evaluation.scenarioRunId()).isEqualTo(first.scenarioRunId());
                     assertThat(evaluation.decisionLabel()).isEqualTo(ResearchDecisionLabel.FAVORABLE);
                 });
+        verify(simulations, times(1)).classifyRegime(any());
         verify(simulations, times(1)).simulate(any());
     }
 }
