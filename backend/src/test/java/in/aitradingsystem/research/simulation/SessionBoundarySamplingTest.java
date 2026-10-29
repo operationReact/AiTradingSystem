@@ -25,7 +25,7 @@ class SessionBoundarySamplingTest {
         assertThat(pool.blocks()).allSatisfy(block -> {
             var start = block.startCandleTime().atZone(IST);
             assertThat(start.toLocalDate()).isEqualTo(block.sourceTradeDate());
-            assertThat(start.toLocalTime()).isGreaterThanOrEqualTo(LocalTime.of(9, 20));
+            assertThat(start.toLocalTime().compareTo(LocalTime.of(9, 20))).isGreaterThanOrEqualTo(0);
             assertThat(start.toLocalTime().plusMinutes(45)).isBefore(LocalTime.of(15, 30));
             assertThat(block.observations()).hasSize(10);
         });
