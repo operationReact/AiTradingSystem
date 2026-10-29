@@ -1,5 +1,6 @@
 package in.aitradingsystem.scanner;
 
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -9,8 +10,11 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /** India cash-market opening-range breakout using the 09:15-09:30 IST range. */
+@Component
 public final class OpeningRangeBreakoutStrategy implements ScannerStrategy {
     public static final String NAME = "OPENING_RANGE_BREAKOUT_V1";
     private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
@@ -20,6 +24,14 @@ public final class OpeningRangeBreakoutStrategy implements ScannerStrategy {
 
     @Override public String name() { return NAME; }
     @Override public int minimumCandles() { return 4; }
+
+    @Override
+    public StrategyDescriptor descriptor() {
+        return new StrategyDescriptor(NAME, "1", "Opening Range Breakout",
+                Set.of(HistoricalCandleInterval.ONE_MINUTE, HistoricalCandleInterval.THREE_MINUTE,
+                        HistoricalCandleInterval.FIVE_MINUTE),
+                minimumCandles(), TradingStyle.INTRADAY, true, "HEALTHY", true, false);
+    }
 
     @Override
     public Optional<ScanCandidate> evaluate(ScanContext context) {
