@@ -3,6 +3,7 @@ package in.aitradingsystem.scanner;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ExtendedScannerStrategiesTest {
@@ -96,6 +98,11 @@ class ExtendedScannerStrategiesTest {
         return new ScannerStrategy() {
             @Override public String name() { return name; }
             @Override public int minimumCandles() { return 1; }
+            @Override public StrategyDescriptor descriptor() {
+                return new StrategyDescriptor(name, "test-v1", name,
+                        Set.of(HistoricalCandleInterval.FIVE_MINUTE), 1, TradingStyle.INTRADAY,
+                        true, "HEALTHY", true, false);
+            }
             @Override public Optional<ScanCandidate> evaluate(ScanContext context) {
                 MarketCandle latest = context.candles().getLast();
                 return Optional.of(new ScanCandidate(context.instrumentId(), context.tradingSymbol(), context.exchange(),
