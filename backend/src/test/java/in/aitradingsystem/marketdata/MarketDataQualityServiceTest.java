@@ -12,7 +12,7 @@ class MarketDataQualityServiceTest {
     private final MarketSessionCalendar calendar = mock(MarketSessionCalendar.class);
     private final MarketDataQualityRepository repository = mock(MarketDataQualityRepository.class);
     private final MarketDataQualityService service = new MarketDataQualityService(
-            calendar, repository, new CandleGapDetector(), new ObjectMapper(), 0.0);
+            calendar, repository, new CandleGapDetector(), new ObjectMapper().findAndRegisterModules(), 0.0);
     private static final Instant START = Instant.parse("2026-10-29T03:45:00Z");
     private static final HistoricalCandleInterval INTERVAL = HistoricalCandleInterval.ONE_MINUTE;
 
