@@ -2,6 +2,7 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.scanner.ResearchScanCandidateView;
+import in.aitradingsystem.scanner.ResearchScanDiagnostic;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import in.aitradingsystem.scanner.ResearchScanService;
 import in.aitradingsystem.scanner.ResearchScanSummary;
@@ -43,5 +44,10 @@ public class ResearchScanController {
             @PathVariable UUID id,
             @RequestParam(defaultValue = "50") int limit) {
         return ResponseEntity.ok(repository.rankedCandidates(id, limit));
+    }
+
+    @GetMapping("/{id}/diagnostics")
+    public ResponseEntity<List<ResearchScanDiagnostic>> diagnostics(@PathVariable UUID id) {
+        return ResponseEntity.ok(repository.diagnostics(id));
     }
 }
