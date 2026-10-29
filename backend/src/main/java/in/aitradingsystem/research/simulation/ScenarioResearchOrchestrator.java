@@ -2,6 +2,7 @@ package in.aitradingsystem.research.simulation;
 
 import in.aitradingsystem.backtest.BacktestRepository;
 import in.aitradingsystem.backtest.BacktestRunSummary;
+import in.aitradingsystem.scanner.StrategyRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -16,22 +17,27 @@ public class ScenarioResearchOrchestrator {
     private final ScenarioRunRepository scenarioRuns;
     private final ScenarioSimulationService simulations;
     private final BacktestRepository backtests;
+    private final StrategyRegistry strategies;
 
     public ScenarioResearchOrchestrator(
             ResearchEvaluationRepository evaluations,
             ScenarioRunRepository scenarioRuns,
             ScenarioSimulationService simulations,
-            BacktestRepository backtests) {
+            BacktestRepository backtests,
+            StrategyRegistry strategies) {
         this.evaluations = evaluations;
         this.scenarioRuns = scenarioRuns;
         this.simulations = simulations;
         this.backtests = backtests;
+        this.strategies = strategies;
     }
 
     public ResearchEvaluationResult evaluateCandidate(long candidateId, ResearchEvaluationRequest request) {
         if (request == null) throw new IllegalArgumentException("request is required");
         ResearchCandidateProvenance candidate = evaluations.requireCandidate(candidateId);
         validateHistoryBoundary(candidate, request);
+        resolveStrategy(candidate);
+        evaluations.verifyImmutableProvenance(candidate);
         UUID backtestRunId = validateBacktestLink(candidate, request.backtestRunId());
 
         ScenarioSimulationRequest simulationRequest = new ScenarioSimulationRequest(
@@ -77,6 +83,20 @@ public class ScenarioResearchOrchestrator {
                 decision.label(), decision.reasonCodes(), reused);
     }
 
+    /**
+     * A historical candidate is only reproducible while its strategy implementation remains registered.
+     * The persisted config-version row (when one was used) is verified independently by the repository.
+     */
+    private void resolveStrategy(ResearchCandidateProvenance candidate) {
+        strategies.require(candidate.strategy())
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "candidate strategy is no longer registered: " + candidate.strategy()));
+    }
+
+    /**
+     * W04 safely reuses a caller-selected backtest only after provenance compatibility checks. It deliberately
+     * does not auto-run the legacy SMA-specific backtest service for arbitrary scanner strategies.
+     */
     private UUID validateBacktestLink(ResearchCandidateProvenance candidate, UUID requestedBacktestRunId) {
         if (requestedBacktestRunId == null) return null;
         BacktestRunSummary run = backtests.requireRun(requestedBacktestRunId);
