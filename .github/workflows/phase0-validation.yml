@@ -1,6 +1,12 @@
 name: Phase 0 - Baseline validation
 
 on:
+  pull_request:
+    branches:
+      - dev
+  push:
+    branches:
+      - dev
   workflow_dispatch:
 
 permissions:
@@ -69,7 +75,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.5"
-      - name: Format Terraform files
+      - name: Check Terraform formatting
         working-directory: infra/terraform
         run: terraform fmt -check -recursive
       - name: Initialize providers without configuring remote state
@@ -102,7 +108,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: "1.8.5"
-      - name: Format budget stack
+      - name: Check budget Terraform formatting
         working-directory: infra/terraform-budget
         run: terraform fmt -check -recursive
       - name: Initialize providers without remote state
