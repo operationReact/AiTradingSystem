@@ -17,9 +17,17 @@ public class PositionAccountingService {
         this.positions = positions;
     }
 
+    /** Compatibility overload used by accounting-only callers that do not carry risk levels. */
     @Transactional
     public AccountingResult applyBuy(Long instrumentId, String exchange, String symbol, ProductType productType,
                                      int quantity, BigDecimal fillCostBasis, Instant now) {
+        return applyBuy(instrumentId, exchange, symbol, productType, quantity, fillCostBasis, null, null, now);
+    }
+
+    @Transactional
+    public AccountingResult applyBuy(Long instrumentId, String exchange, String symbol, ProductType productType,
+                                     int quantity, BigDecimal fillCostBasis, BigDecimal stopLoss,
+                                     BigDecimal targetPrice, Instant now) {
         requireCommon(symbol, productType, quantity, now);
         if (fillCostBasis == null || fillCostBasis.signum() <= 0) {
             throw new IllegalArgumentException("fillCostBasis must be positive");
@@ -28,7 +36,8 @@ public class PositionAccountingService {
         PositionRow existing = positions.lock(instrumentId, symbol, productType);
         if (existing == null) {
             BigDecimal average = average(appliedCostBasis, quantity);
-            positions.insert(instrumentId, exchange, symbol, productType, quantity, appliedCostBasis, average, now);
+            positions.insert(instrumentId, exchange, symbol, productType, quantity, appliedCostBasis, average,
+                stopLoss, targetPrice, now);
             return new AccountingResult(quantity, appliedCostBasis, average, BigDecimal.ZERO.setScale(2),
                 appliedCostBasis, BigDecimal.ZERO.setScale(2));
         }
