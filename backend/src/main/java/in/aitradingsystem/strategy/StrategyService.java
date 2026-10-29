@@ -2,6 +2,7 @@ package in.aitradingsystem.strategy;
 
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.marketdata.CandleSeriesValidator;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataQualityService;
@@ -104,55 +105,61 @@ public class StrategyService {
 
         if (available < required || bars.size() < required) {
             reasons.add("INSUFFICIENT_HISTORY");
-        } else if (quality != null && !quality.eligibleForResearch(quality.evaluateBars(instrumentId, interval, bars))) {
-            reasons.add("DATA_QUALITY_NOT_ELIGIBLE");
         } else {
-            MarketCandle last = bars.getLast();
-            boolean stale = Duration.between(last.candleTime(), now).toMinutes() > maxSignalAgeMinutes
-                    || last.candleTime().isAfter(now.plusSeconds(30));
-            BigDecimal close = last.close();
-            BigDecimal fast = average(bars, bars.size() - fastPeriod, bars.size());
-            BigDecimal slow = average(bars, bars.size() - slowPeriod, bars.size());
-            BigDecimal volumeAvg = averageVolume(bars, bars.size() - 1 - slowPeriod, bars.size() - 1);
-            BigDecimal latestVolume = BigDecimal.valueOf(last.volume());
-            boolean volumeConfirmed = volumeAvg.signum() > 0 && latestVolume.compareTo(volumeAvg) >= 0;
-            String action = "WATCH";
-            reasons.add("CLOSE_PRICE_ABOVE_ZERO");
-            if (stale) {
-                action = "WATCH";
-                reasons.add("STALE_OR_FUTURE_CANDLE");
-            } else if (fast.compareTo(slow) > 0 && close.compareTo(slow) > 0 && volumeConfirmed) {
-                action = "BUY";
-                reasons.add("FAST_SMA_ABOVE_SLOW_SMA");
-                reasons.add("CLOSE_ABOVE_SLOW_SMA");
-                reasons.add("VOLUME_CONFIRMED");
+            CandleSeriesValidator.Validation validation = CandleSeriesValidator.validate(
+                    bars, now, Duration.ofMinutes(maxSignalAgeMinutes));
+            boolean staleOrFuture = !validation.valid()
+                    && ("STALE_CANDLE".equals(validation.reason()) || "FUTURE_CANDLE".equals(validation.reason()));
+            if (!validation.valid() && !staleOrFuture) {
+                reasons.add(validation.reason());
+            } else if (quality != null && !quality.eligibleForResearch(quality.evaluateBars(instrumentId, interval, bars))) {
+                reasons.add("DATA_QUALITY_NOT_ELIGIBLE");
             } else {
-                if (fast.compareTo(slow) <= 0) reasons.add("TREND_NOT_BULLISH");
-                if (close.compareTo(slow) <= 0) reasons.add("CLOSE_NOT_ABOVE_SLOW_SMA");
-                if (!volumeConfirmed) reasons.add("VOLUME_NOT_CONFIRMED");
-            }
-
-            BigDecimal stop = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-            BigDecimal target = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-            if ("BUY".equals(action)) {
-                BigDecimal buffer = close.multiply(stopBufferPercent).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP);
-                stop = close.subtract(buffer).setScale(2, RoundingMode.HALF_UP);
-                if (stop.signum() <= 0 || stop.compareTo(close) >= 0) {
+                MarketCandle last = bars.getLast();
+                BigDecimal close = last.close();
+                BigDecimal fast = average(bars, bars.size() - fastPeriod, bars.size());
+                BigDecimal slow = average(bars, bars.size() - slowPeriod, bars.size());
+                BigDecimal volumeAvg = averageVolume(bars, bars.size() - 1 - slowPeriod, bars.size() - 1);
+                BigDecimal latestVolume = BigDecimal.valueOf(last.volume());
+                boolean volumeConfirmed = volumeAvg.signum() > 0 && latestVolume.compareTo(volumeAvg) >= 0;
+                String action = "WATCH";
+                reasons.add("CLOSE_PRICE_ABOVE_ZERO");
+                if (staleOrFuture) {
                     action = "WATCH";
-                    stop = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-                    reasons.add("INVALID_STOP_LEVEL");
+                    reasons.add("STALE_OR_FUTURE_CANDLE");
+                } else if (fast.compareTo(slow) > 0 && close.compareTo(slow) > 0 && volumeConfirmed) {
+                    action = "BUY";
+                    reasons.add("FAST_SMA_ABOVE_SLOW_SMA");
+                    reasons.add("CLOSE_ABOVE_SLOW_SMA");
+                    reasons.add("VOLUME_CONFIRMED");
                 } else {
-                    target = close.add(close.subtract(stop).multiply(targetRiskReward)).setScale(2, RoundingMode.HALF_UP);
+                    if (fast.compareTo(slow) <= 0) reasons.add("TREND_NOT_BULLISH");
+                    if (close.compareTo(slow) <= 0) reasons.add("CLOSE_NOT_ABOVE_SLOW_SMA");
+                    if (!volumeConfirmed) reasons.add("VOLUME_NOT_CONFIRMED");
                 }
+
+                BigDecimal stop = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                BigDecimal target = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                if ("BUY".equals(action)) {
+                    BigDecimal buffer = close.multiply(stopBufferPercent).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP);
+                    stop = close.subtract(buffer).setScale(2, RoundingMode.HALF_UP);
+                    if (stop.signum() <= 0 || stop.compareTo(close) >= 0) {
+                        action = "WATCH";
+                        stop = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+                        reasons.add("INVALID_STOP_LEVEL");
+                    } else {
+                        target = close.add(close.subtract(stop).multiply(targetRiskReward)).setScale(2, RoundingMode.HALF_UP);
+                    }
+                }
+                double confidence = confidence(fast, slow, volumeConfirmed, staleOrFuture);
+                signal = new StrategySignal(
+                        UUID.nameUUIDFromBytes((instrument.id() + ":" + instrument.exchange() + ":" + instrument.symbolToken() + ":" + interval.name()
+                                + ":" + last.candleTime() + ":" + STRATEGY).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),
+                        instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(), action, STRATEGY,
+                        close, stop, target, fast, slow, volumeAvg, latestVolume, confidence, List.copyOf(reasons),
+                        last.source(), now, last.candleTime(), "CANDIDATE_NOT_EXECUTABLE");
+                signalRepository.save(signal, instrument.symbolToken());
             }
-            double confidence = confidence(fast, slow, volumeConfirmed, stale);
-            signal = new StrategySignal(
-                    UUID.nameUUIDFromBytes((instrument.id() + ":" + instrument.exchange() + ":" + instrument.symbolToken() + ":" + interval.name()
-                            + ":" + last.candleTime() + ":" + STRATEGY).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),
-                    instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(), action, STRATEGY,
-                    close, stop, target, fast, slow, volumeAvg, latestVolume, confidence, List.copyOf(reasons),
-                    last.source(), now, last.candleTime(), "CANDIDATE_NOT_EXECUTABLE");
-            signalRepository.save(signal, instrument.symbolToken());
         }
         return new StrategyEvaluation(instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
                 required, available, latest, signal, List.copyOf(reasons), now,
