@@ -4,17 +4,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.common.NotFoundException;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.paper.PaperExecutionModel;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -92,7 +91,10 @@ public class RiskDecisionPersistenceService {
                   FROM risk_decision rd
                  WHERE rd.id = ?
                 """, (rs, row) -> mapBase(rs), id).stream().findFirst()
-                .orElseThrow(() -> new NotFoundException("risk decision not found: " + id));
+                .orElseThrow(() -> new RiskApiException(
+                        RiskErrorCode.RISK_DECISION_NOT_FOUND,
+                        HttpStatus.NOT_FOUND,
+                        "Risk decision not found"));
 
         List<RiskRuleResult> rules = jdbc.query("""
                 SELECT rule_code, outcome, reason_code, observed_value, limit_value, unit, details
