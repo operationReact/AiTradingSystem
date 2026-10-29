@@ -16,18 +16,29 @@ public class RiskPolicyConfigRepository {
     }
 
     public RiskPolicySnapshot requireActive() {
+        return requireActiveView().snapshot();
+    }
+
+    public RiskPolicyView requireActiveView() {
         return jdbc.query("""
                 SELECT * FROM risk_policy_config
                 WHERE active = TRUE AND effective_from <= now()
                   AND (effective_to IS NULL OR effective_to > now())
                 ORDER BY policy_version DESC
                 LIMIT 1
-                """, (rs, row) -> map(rs)).stream().findFirst()
+                """, (rs, row) -> mapView(rs)).stream().findFirst()
                 .orElseThrow(() -> new IllegalStateException("no active risk policy configured"));
     }
 
-    public List<RiskPolicySnapshot> listAll() {
-        return jdbc.query("SELECT * FROM risk_policy_config ORDER BY policy_version DESC", (rs, row) -> map(rs));
+    public RiskPolicyView requireView(UUID id) {
+        if (id == null) throw new IllegalArgumentException("risk policy id is required");
+        return jdbc.query("SELECT * FROM risk_policy_config WHERE id = ?", (rs, row) -> mapView(rs), id)
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("risk policy not found: " + id));
+    }
+
+    public List<RiskPolicyView> listViews() {
+        return jdbc.query("SELECT * FROM risk_policy_config ORDER BY policy_version DESC", (rs, row) -> mapView(rs));
     }
 
     public boolean existsAny() {
@@ -36,6 +47,9 @@ public class RiskPolicyConfigRepository {
     }
 
     public void insert(RiskPolicySnapshot snapshot, String policyName, boolean active, String createdBy) {
+        if (snapshot == null) throw new IllegalArgumentException("risk policy snapshot is required");
+        if (policyName == null || policyName.isBlank()) throw new IllegalArgumentException("policy name is required");
+        if (createdBy == null || createdBy.isBlank()) throw new IllegalArgumentException("createdBy is required");
         jdbc.update("""
                 INSERT INTO risk_policy_config (
                     id, policy_version, policy_name, active,
@@ -58,25 +72,32 @@ public class RiskPolicyConfigRepository {
     }
 
     @Transactional
-    public void activate(UUID id) {
-        RiskPolicySnapshot current = jdbc.query("""
+    public RiskPolicyView activate(UUID id) {
+        if (id == null) throw new IllegalArgumentException("risk policy id is required");
+        RiskPolicyView current = jdbc.query("""
                 SELECT * FROM risk_policy_config
                 WHERE active = TRUE
                 FOR UPDATE
-                """, (rs, row) -> map(rs)).stream().findFirst().orElse(null);
+                """, (rs, row) -> mapView(rs)).stream().findFirst().orElse(null);
 
-        if (current != null && current.id().equals(id)) return;
+        if (current != null && current.id().equals(id)) return current;
 
-        int targetExists = jdbc.queryForObject("SELECT COUNT(*) FROM risk_policy_config WHERE id = ?", Integer.class, id);
-        if (targetExists != 1) throw new IllegalArgumentException("risk policy not found: " + id);
+        RiskPolicyView target = jdbc.query("SELECT * FROM risk_policy_config WHERE id = ? FOR UPDATE",
+                (rs, row) -> mapView(rs), id).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("risk policy not found: " + id));
 
         jdbc.update("UPDATE risk_policy_config SET active = FALSE, effective_to = now() WHERE active = TRUE");
-        int rows = jdbc.update("UPDATE risk_policy_config SET active = TRUE, effective_from = now(), effective_to = NULL WHERE id = ?", id);
+        int rows = jdbc.update("""
+                UPDATE risk_policy_config
+                   SET active = TRUE, effective_from = now(), effective_to = NULL
+                 WHERE id = ?
+                """, target.id());
         if (rows != 1) throw new IllegalStateException("risk policy activation failed: " + id);
+        return requireActiveView();
     }
 
-    private static RiskPolicySnapshot map(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new RiskPolicySnapshot(
+    private static RiskPolicyView mapView(java.sql.ResultSet rs) throws java.sql.SQLException {
+        RiskPolicySnapshot snapshot = new RiskPolicySnapshot(
                 rs.getObject("id", UUID.class),
                 rs.getInt("policy_version"),
                 rs.getBigDecimal("risk_per_trade_percent"),
@@ -95,5 +116,16 @@ public class RiskPolicyConfigRepository {
                 rs.getBigDecimal("fee_rate"),
                 rs.getBigDecimal("slippage_rate"),
                 rs.getString("fee_slippage_profile_version"));
+        OffsetDateTime effectiveTo = rs.getObject("effective_to", OffsetDateTime.class);
+        return new RiskPolicyView(
+                snapshot.id(),
+                snapshot.version(),
+                rs.getString("policy_name"),
+                rs.getBoolean("active"),
+                snapshot,
+                rs.getObject("effective_from", OffsetDateTime.class).toInstant(),
+                effectiveTo == null ? null : effectiveTo.toInstant(),
+                rs.getString("created_by"),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant());
     }
 }
