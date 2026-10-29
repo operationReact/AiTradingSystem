@@ -50,16 +50,22 @@ public class ResearchScanRepository {
                 """, instrumentMapper, limit);
     }
 
-    public void saveCandidate(UUID runId, ScanCandidate c) {
-        jdbc.update("""
+    public boolean saveCandidate(UUID runId, ScanCandidate c, String strategyVersion,
+                                 Integer strategyConfigVersion, UUID catalogueVersion, Instant dataCutoffAt) {
+        String fingerprint = CandidateFingerprint.of(c.instrumentId(), c.interval(), c.strategy(), strategyVersion,
+                c.candleTime(), c.referencePrice(), c.suggestedStop(), c.suggestedTarget());
+        int inserted = jdbc.update("""
                 INSERT INTO research_scan_candidate
                     (scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
-                     entry_price, stop_price, target_price, signal_candle_time, reasons)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (scan_run_id, instrument_id, strategy, signal_candle_time) DO NOTHING
+                     entry_price, stop_price, target_price, signal_candle_time, reasons,
+                     candidate_fingerprint, strategy_config_version, catalogue_version, data_cutoff_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (scan_run_id, candidate_fingerprint) WHERE candidate_fingerprint IS NOT NULL DO NOTHING
                 """, runId, c.instrumentId(), c.tradingSymbol(), c.exchange(), c.interval(), c.strategy(),
                 c.score(), c.referencePrice(), c.suggestedStop(), c.suggestedTarget(), offset(c.candleTime()),
-                String.join("|", c.reasons()));
+                String.join("|", c.reasons()), fingerprint, strategyConfigVersion, catalogueVersion,
+                dataCutoffAt == null ? null : offset(dataCutoffAt));
+        return inserted == 1;
     }
 
     public List<ResearchScanCandidateView> rankedCandidates(UUID runId, int limit) {
@@ -67,7 +73,8 @@ public class ResearchScanRepository {
         if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
         return jdbc.query("""
                 SELECT scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
-                       entry_price, stop_price, target_price, signal_candle_time, reasons
+                       entry_price, stop_price, target_price, signal_candle_time, reasons,
+                       candidate_fingerprint, strategy_config_version, catalogue_version, data_cutoff_at
                   FROM research_scan_candidate
                  WHERE scan_run_id = ?
                  ORDER BY score DESC, trading_symbol ASC, strategy ASC, signal_candle_time DESC
@@ -76,8 +83,10 @@ public class ResearchScanRepository {
                 rs.getObject("scan_run_id", UUID.class), rs.getLong("instrument_id"), rs.getString("trading_symbol"),
                 rs.getString("exchange"), rs.getString("interval"), rs.getString("strategy"), rs.getDouble("score"),
                 rs.getBigDecimal("entry_price"), rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price"),
-                instant(rs.getObject("signal_candle_time", OffsetDateTime.class)), splitReasons(rs.getString("reasons"))),
-                runId, limit);
+                instant(rs.getObject("signal_candle_time", OffsetDateTime.class)), splitReasons(rs.getString("reasons")),
+                rs.getString("candidate_fingerprint"), (Integer) rs.getObject("strategy_config_version"),
+                rs.getObject("catalogue_version", UUID.class),
+                instant(rs.getObject("data_cutoff_at", OffsetDateTime.class))), runId, limit);
     }
 
     public void finishRun(UUID id, int scannedCount, int candidateCount) {
