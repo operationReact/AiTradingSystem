@@ -33,16 +33,19 @@ class LookAheadBiasRegressionTest {
         var baselineResult = engine.run(baseline, config());
         var spikedResult = engine.run(List.copyOf(withFutureSpike), config());
 
+        // Compare only decisions whose full lifecycle completed before the future candle exists.
+        // A position opened before the spike but still live at the spike is expected to have a
+        // different eventual exit and is therefore not evidence of pre-spike look-ahead.
         var baselinePreSpike = baselineResult.trades().stream()
-            .filter(trade -> trade.entryAt().isBefore(spikeTime))
+            .filter(trade -> trade.exitAt().isBefore(spikeTime))
             .toList();
         var spikedPreSpike = spikedResult.trades().stream()
-            .filter(trade -> trade.entryAt().isBefore(spikeTime))
+            .filter(trade -> trade.exitAt().isBefore(spikeTime))
             .toList();
 
-        assertFalse(baselinePreSpike.isEmpty(), "fixture must exercise at least one pre-spike decision");
+        assertFalse(baselinePreSpike.isEmpty(), "fixture must exercise at least one completed pre-spike decision");
         assertEquals(baselinePreSpike, spikedPreSpike,
-            "future candle values must not alter decisions already made before that candle");
+            "future candle values must not alter decisions completed before that candle");
     }
 
     @Test
