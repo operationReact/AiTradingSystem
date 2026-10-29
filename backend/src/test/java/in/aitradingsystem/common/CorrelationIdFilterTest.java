@@ -1,6 +1,7 @@
 package in.aitradingsystem.common;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.AfterEach;
@@ -38,6 +39,17 @@ class CorrelationIdFilterTest {
 
     @Test
     void replacesInvalidId() throws Exception { assertRejected("bad id/with spaces"); }
+
+    @Test
+    void clearsMdcEvenWhenDownstreamThrows() {
+        var request = new MockHttpServletRequest();
+        var response = new MockHttpServletResponse();
+        assertThatThrownBy(() -> filter.doFilter(request, response, (req, res) -> {
+            assertThat(MDC.get(CorrelationIdFilter.MDC_KEY)).isNotBlank();
+            throw new jakarta.servlet.ServletException("downstream failure");
+        })).isInstanceOf(jakarta.servlet.ServletException.class);
+        assertThat(MDC.get(CorrelationIdFilter.MDC_KEY)).isNull();
+    }
 
     private void assertRejected(String supplied) throws Exception {
         var request = new MockHttpServletRequest();
