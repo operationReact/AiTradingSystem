@@ -53,12 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           doc=docs/phase6-paper-accounting-contract.md
-          grep -F 'Idempotent replay' "$doc"
-          grep -F 'rejected order' "$doc" -i
-          grep -F 'Concurrent duplicate submissions' "$doc"
-          grep -F 'Restart safety' "$doc"
-          grep -F 'reconciliation records differences but never silently repairs' "$doc"
-          grep -F 'PAPER execution never implies LIVE broker submission' "$doc"
+          grep -Fi 'idempotent replay' "$doc"
+          grep -Fi 'rejected order' "$doc"
+          grep -Fi 'concurrent duplicate submissions' "$doc"
+          grep -Fi 'restart safety' "$doc"
+          grep -Fi 'reconciliation records differences but never silently repairs' "$doc"
+          grep -Fi 'PAPER execution never implies LIVE broker submission' "$doc"
       - name: Verify correctness-critical PAPER state is PostgreSQL-backed
         shell: bash
         run: |
