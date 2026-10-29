@@ -37,13 +37,28 @@ public class RiskPolicyConfigRepository {
                 .orElseThrow(() -> new IllegalArgumentException("risk policy not found: " + id));
     }
 
-    public List<RiskPolicyView> listViews() {
-        return jdbc.query("SELECT * FROM risk_policy_config ORDER BY policy_version DESC", (rs, row) -> mapView(rs));
+    public List<RiskPolicyView> listViews(int page, int size) {
+        return jdbc.query("""
+                SELECT * FROM risk_policy_config
+                ORDER BY policy_version DESC
+                LIMIT ? OFFSET ?
+                """, (rs, row) -> mapView(rs), size, page * size);
+    }
+
+    public long count() {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM risk_policy_config", Long.class);
+        return count == null ? 0L : count;
     }
 
     public boolean existsAny() {
-        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM risk_policy_config", Integer.class);
-        return count != null && count > 0;
+        return count() > 0;
+    }
+
+    /** Must be called inside the same transaction that inserts/activates the new version. */
+    public int nextVersionForUpdate() {
+        jdbc.execute("LOCK TABLE risk_policy_config IN SHARE ROW EXCLUSIVE MODE");
+        Integer version = jdbc.queryForObject("SELECT COALESCE(MAX(policy_version), 0) + 1 FROM risk_policy_config", Integer.class);
+        return version == null ? 1 : version;
     }
 
     public void insert(RiskPolicySnapshot snapshot, String policyName, boolean active, String createdBy) {
