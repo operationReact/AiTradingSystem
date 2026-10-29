@@ -1,5 +1,6 @@
 package in.aitradingsystem.paper;
 
+import in.aitradingsystem.domain.ProductType;
 import in.aitradingsystem.domain.Side;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -15,12 +16,23 @@ public record OrderCommand(
     BigDecimal entryPrice,
     BigDecimal stopLoss,
     BigDecimal target,
-    Instant signalGeneratedAt
+    Instant signalGeneratedAt,
+    ProductType productType
 ) {
+    /** Backward-compatible PAPER simulation command: legacy callers remain DELIVERY by default. */
+    public OrderCommand(String symbol, Side side, int quantity, BigDecimal entryPrice,
+                        BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt) {
+        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, ProductType.DELIVERY);
+    }
+
+    public OrderCommand {
+        if (productType == null) productType = ProductType.DELIVERY;
+    }
+
     /** Hash of the normalized payload, used to detect Idempotency-Key reuse with different content. */
     public String canonicalHash() {
         String canonical = String.join("|",
-            symbol, side.name(), Integer.toString(quantity),
+            symbol, side.name(), Integer.toString(quantity), productType.name(),
             normalize(entryPrice), normalize(stopLoss), normalize(target),
             signalGeneratedAt == null ? "" : signalGeneratedAt.toString());
         try {
