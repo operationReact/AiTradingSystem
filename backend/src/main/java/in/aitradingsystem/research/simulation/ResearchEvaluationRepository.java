@@ -1,6 +1,7 @@
 package in.aitradingsystem.research.simulation;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public class ResearchEvaluationRepository {
+    private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {};
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
 
@@ -131,11 +133,40 @@ public class ResearchEvaluationRepository {
                 """, id, candidateId, backtestRunId, scenarioRunId, label.name(), json(reasonCodes));
     }
 
+    public List<ResearchEvaluationView> listEvaluations(long candidateId) {
+        if (candidateId < 1) throw new IllegalArgumentException("candidateId must be positive");
+        requireCandidate(candidateId);
+        return jdbc.query("""
+                SELECT id, candidate_id, backtest_run_id, scenario_run_id, decision_label,
+                       reason_codes::text AS reason_codes, created_at
+                  FROM research_evaluation
+                 WHERE candidate_id = ?
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT 200
+                """, (rs, row) -> new ResearchEvaluationView(
+                rs.getObject("id", UUID.class),
+                rs.getLong("candidate_id"),
+                rs.getObject("backtest_run_id", UUID.class),
+                rs.getObject("scenario_run_id", UUID.class),
+                ResearchDecisionLabel.valueOf(rs.getString("decision_label")),
+                parseReasonCodes(rs.getString("reason_codes")),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant()), candidateId);
+    }
+
     private String json(List<String> reasonCodes) {
         try {
             return objectMapper.writeValueAsString(reasonCodes == null ? List.of() : reasonCodes);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("failed to serialize research reason codes", e);
+        }
+    }
+
+    private List<String> parseReasonCodes(String json) {
+        if (json == null || json.isBlank()) return List.of();
+        try {
+            return objectMapper.readValue(json, STRING_LIST);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("failed to parse persisted research reason codes", e);
         }
     }
 
