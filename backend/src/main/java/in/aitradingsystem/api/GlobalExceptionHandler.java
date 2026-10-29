@@ -20,16 +20,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     ResponseEntity<ApiError> badRequest(IllegalArgumentException exception, HttpServletRequest request) {
-        return response(HttpStatus.BAD_REQUEST, safeClientMessage(exception.getMessage(), "Invalid request"), request);
+        return response(HttpStatus.BAD_REQUEST, "Invalid request", request);
     }
 
     @ExceptionHandler(ResponseStatusException.class)
     ResponseEntity<ApiError> responseStatus(ResponseStatusException exception, HttpServletRequest request) {
         HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
         if (status == null) status = HttpStatus.INTERNAL_SERVER_ERROR;
-        String message = status.is5xxServerError()
-                ? "Internal server error"
-                : safeClientMessage(exception.getReason(), status.getReasonPhrase());
+        String message = status.is5xxServerError() ? "Internal server error" : status.getReasonPhrase();
         return response(status, message, request);
     }
 
@@ -43,10 +41,5 @@ public class GlobalExceptionHandler {
                 Instant.now(), status.value(), status.getReasonPhrase(), message,
                 request.getRequestURI(), MDC.get(CorrelationIdFilter.MDC_KEY));
         return ResponseEntity.status(status).body(body);
-    }
-
-    private String safeClientMessage(String message, String fallback) {
-        if (message == null || message.isBlank() || message.length() > 256) return fallback;
-        return message;
     }
 }
