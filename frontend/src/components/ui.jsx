@@ -24,7 +24,7 @@ const variants = {
   primary: 'bg-accent text-[rgb(var(--accent-contrast))] hover:brightness-110',
   secondary: 'border border-border bg-surface-2 text-text hover:bg-border/60',
   ghost: 'text-muted hover:bg-surface-2 hover:text-text',
-  danger: 'bg-loss text-white hover:brightness-110',
+  danger: 'bg-loss text-[rgb(var(--loss-contrast))] hover:brightness-110',
 };
 
 export const Button = forwardRef(function Button(
@@ -179,70 +179,51 @@ export function DataTable({ columns, rows, rowKey, pageSize = 10, onRowClick, em
     setPage(0);
   };
 
-  if (rows.length === 0) return empty || <EmptyState title="No rows to display" />;
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto" tabIndex={0} aria-label="Scrollable data table">
-        <table className="w-full text-left text-xs" style={{ minWidth }}>
-          <thead>
-            <tr className="border-b border-border text-[11px] uppercase tracking-wider text-muted">
-              {columns.map((col) => {
-                const active = sort.key === col.key;
-                const SortIcon = active && sort.dir === 'desc' ? ChevronDown : ChevronUp;
-                return (
-                  <th key={col.key} scope="col" className={cn('px-2 py-2 font-medium', col.align === 'right' && 'text-right')}>
-                    {col.sortable === false ? (
-                      col.header
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(col.key)}
-                        aria-label={`Sort by ${col.header}`}
-                        className="inline-flex items-center gap-1 hover:text-text"
-                      >
-                        {col.header}
-                        <SortIcon className={cn('h-3 w-3', active ? 'opacity-100' : 'opacity-0')} aria-hidden />
-                      </button>
-                    )}
-                  </th>
-                );
-              })}
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((row) => (
-              <tr
-                key={rowKey(row)}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                onKeyDown={
-                  onRowClick
-                    ? (e) => {
-                        if (e.key === 'Enter') onRowClick(row);
-                      }
-                    : undefined
-                }
-                tabIndex={onRowClick ? 0 : undefined}
-                className={cn('border-b border-border/60 last:border-0', onRowClick && 'cursor-pointer hover:bg-surface-2 focus-visible:bg-surface-2')}
-              >
-                {columns.map((col) => (
-                  <td key={col.key} className={cn('num px-2 py-2 text-text', col.align === 'right' && 'text-right', col.className)}>
-                    {col.cell ? col.cell(row) : row[col.key]}
-                  </td>
-                ))}
-              </tr>
+    <div className="min-w-0 overflow-x-auto" tabIndex={0} aria-label="Scrollable data table">
+      <table className="w-full border-collapse text-xs" style={{ minWidth }}>
+        <thead>
+          <tr className="border-b border-border text-left text-muted">
+            {columns.map((col) => (
+              <th key={col.key} className={cn('px-3 py-2 font-medium', col.align === 'right' && 'text-right')}>
+                {col.sortable === false ? col.header : (
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(col.key)}
+                    className={cn('inline-flex items-center gap-1 hover:text-text', col.align === 'right' && 'float-right')}
+                  >
+                    {col.header}
+                    {sort.key === col.key && (sort.dir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+                  </button>
+                )}
+              </th>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.length === 0 ? (
+            <tr><td colSpan={columns.length} className="px-3 py-8 text-center text-muted">{empty || 'No data'}</td></tr>
+          ) : visible.map((row) => (
+            <tr
+              key={rowKey(row)}
+              className={cn('border-b border-border/70 last:border-b-0', onRowClick && 'cursor-pointer hover:bg-surface-2')}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+            >
+              {columns.map((col) => (
+                <td key={col.key} className={cn('px-3 py-2.5 text-text', col.align === 'right' && 'text-right')}>
+                  {col.cell ? col.cell(row) : row[col.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
       {pageCount > 1 && (
-        <div className="flex items-center justify-between text-xs text-muted">
-          <span>
-            Page {safePage + 1} of {pageCount} · {sorted.length} rows
-          </span>
+        <div className="flex items-center justify-between border-t border-border px-3 py-2 text-xs text-muted">
+          <span>Page {safePage + 1} of {pageCount}</span>
           <div className="flex gap-1">
-            <Button size="sm" variant="ghost" icon={ChevronLeft} aria-label="Previous page" disabled={safePage === 0} onClick={() => setPage(safePage - 1)} />
-            <Button size="sm" variant="ghost" icon={ChevronRight} aria-label="Next page" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)} />
+            <Button size="sm" variant="ghost" disabled={safePage === 0} onClick={() => setPage((p) => Math.max(0, p - 1))} icon={ChevronLeft}>Previous</Button>
+            <Button size="sm" variant="ghost" disabled={safePage + 1 >= pageCount} onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))} icon={ChevronRight}>Next</Button>
           </div>
         </div>
       )}
@@ -250,38 +231,27 @@ export function DataTable({ columns, rows, rowKey, pageSize = 10, onRowClick, em
   );
 }
 
-export function Modal({ open, onOpenChange, title, description, children, footer, size = 'md' }) {
+export function Modal({ open, onOpenChange, title, description, children, footer }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
-        <Dialog.Content
-          className={cn(
-            'fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-border bg-surface shadow-2xl focus:outline-none',
-            size === 'lg' ? 'max-w-2xl' : 'max-w-md',
-          )}
-        >
-          <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-3">
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface shadow-2xl">
+          <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
             <div>
               <Dialog.Title className="text-sm font-semibold text-text">{title}</Dialog.Title>
               {description && <Dialog.Description className="mt-0.5 text-xs text-muted">{description}</Dialog.Description>}
             </div>
-            <Dialog.Close aria-label="Close" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-text">
-              <X className="h-4 w-4" aria-hidden />
+            <Dialog.Close asChild>
+              <button type="button" className="rounded p-1 text-muted hover:bg-surface-2 hover:text-text" aria-label="Close dialog">
+                <X className="h-4 w-4" />
+              </button>
             </Dialog.Close>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-          {footer && <div className="flex justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>}
+          <div className="p-4">{children}</div>
+          {footer && <div className="flex justify-end gap-2 border-t border-border px-4 py-3">{footer}</div>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
-  );
-}
-
-export function RefreshButton({ onClick, fetching }) {
-  return (
-    <Button size="sm" variant="ghost" icon={RefreshCw} loading={fetching} onClick={onClick} aria-label="Refresh data">
-      {fetching ? 'Refreshing' : 'Refresh'}
-    </Button>
   );
 }

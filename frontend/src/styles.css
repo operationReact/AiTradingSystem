@@ -13,6 +13,7 @@
   --accent-contrast: 11 15 23;
   --gain: 52 211 153;
   --loss: 248 113 113;
+  --loss-contrast: 11 15 23;
   --warn: 251 191 36;
   color-scheme: dark;
 }
@@ -28,6 +29,7 @@
   --accent-contrast: 255 255 255;
   --gain: 4 120 87;
   --loss: 185 28 28;
+  --loss-contrast: 255 255 255;
   --warn: 180 83 9;
   color-scheme: light;
 }
@@ -116,22 +118,4 @@
 }
 :root[data-experience='clear-invest'] .backtest-studio .backtest-metric {
   min-height: 5rem;
-}
-
-/* Respect the OS accessibility preference across both UI experiences. */
-@media (prefers-reduced-motion: reduce) {
-  html:focus-within {
-    scroll-behavior: auto;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-delay: 0s !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-delay: 0s !important;
-    transition-duration: 0.01ms !important;
-  }
 }
