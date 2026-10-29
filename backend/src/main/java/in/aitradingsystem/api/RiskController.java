@@ -3,6 +3,9 @@ package in.aitradingsystem.api;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.config.RiskProperties;
 import in.aitradingsystem.paper.PaperTradingService;
+import in.aitradingsystem.risk.PositionSizeRequest;
+import in.aitradingsystem.risk.PositionSizeSuggestion;
+import in.aitradingsystem.risk.PositionSizingApplicationService;
 import in.aitradingsystem.risk.RiskDecisionDetail;
 import in.aitradingsystem.risk.RiskDecisionPersistenceService;
 import in.aitradingsystem.risk.RiskDecisionSummary;
@@ -16,6 +19,7 @@ import java.util.UUID;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -29,14 +33,17 @@ public class RiskController {
     private final RiskProperties props;
     private final PaperTradingService trading;
     private final RiskDecisionPersistenceService decisions;
+    private final PositionSizingApplicationService positionSizing;
 
     public RiskController(
             RiskProperties props,
             PaperTradingService trading,
-            RiskDecisionPersistenceService decisions) {
+            RiskDecisionPersistenceService decisions,
+            PositionSizingApplicationService positionSizing) {
         this.props = props;
         this.trading = trading;
         this.decisions = decisions;
+        this.positionSizing = positionSizing;
     }
 
     public record RiskConfigView(String tradingMode, boolean liveTradingEnabled, String policyVersion,
@@ -66,6 +73,11 @@ public class RiskController {
     @GetMapping("/decisions/{decisionId}")
     public RiskDecisionDetail decision(@PathVariable UUID decisionId) {
         return decisions.require(decisionId);
+    }
+
+    @PostMapping("/position-size")
+    public PositionSizeSuggestion positionSize(@Valid @RequestBody PositionSizeRequest request) {
+        return positionSizing.suggest(request);
     }
 
     @PutMapping("/emergency-stop")
