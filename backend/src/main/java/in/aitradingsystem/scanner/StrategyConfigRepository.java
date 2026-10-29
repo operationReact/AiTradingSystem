@@ -21,6 +21,10 @@ public class StrategyConfigRepository {
         this.objectMapper = objectMapper;
     }
 
+    public void lockStrategy(String strategyCode) {
+        jdbc.queryForObject("select pg_advisory_xact_lock(hashtext(?))", Long.class, strategyCode);
+    }
+
     public int nextVersion(String strategyCode) {
         Integer version = jdbc.queryForObject(
                 "select coalesce(max(config_version), 0) + 1 from strategy_config where strategy_code = ?",
@@ -47,11 +51,12 @@ public class StrategyConfigRepository {
                                          Instant effectiveFrom, String createdBy) {
         UUID id = UUID.randomUUID();
         String json = write(config);
-        jdbc.update("insert into strategy_config (id, strategy_code, config_version, enabled, config_json, effective_from, created_by) " +
-                        "values (?, ?, ?, ?, cast(? as jsonb), ?, ?)",
-                id, strategyCode, version, enabled, json, Timestamp.from(effectiveFrom), createdBy);
+        Instant createdAt = Instant.now();
+        jdbc.update("insert into strategy_config (id, strategy_code, config_version, enabled, config_json, effective_from, created_by, created_at) " +
+                        "values (?, ?, ?, ?, cast(? as jsonb), ?, ?, ?)",
+                id, strategyCode, version, enabled, json, Timestamp.from(effectiveFrom), createdBy, Timestamp.from(createdAt));
         return new StrategyConfigSnapshot(id, strategyCode, version, enabled, config.deepCopy(), effectiveFrom, null,
-                createdBy, Instant.now());
+                createdBy, createdAt);
     }
 
     public List<StrategyConfigSnapshot> history(String strategyCode) {
