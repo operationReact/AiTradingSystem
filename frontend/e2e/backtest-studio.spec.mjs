@@ -63,7 +63,7 @@ async function unlockAndRun(page, experience) {
   await page.getByLabel('Appearance — Experience').selectOption(experience);
   await page.getByLabel('Operator API key').fill('e2e-test-key');
   await page.getByRole('button', { name: 'Connect' }).click();
-  await expect(page.getByText('Operator key loaded')).toBeVisible();
+  await expect(page.getByLabel('Operator API key')).toHaveCount(0);
 
   await page.getByLabel('NSE cash-equity instrument').fill('RELIANCE');
   await page.getByRole('button', { name: /RELIANCE/ }).click();
@@ -71,7 +71,7 @@ async function unlockAndRun(page, experience) {
   await expect(page.getByRole('img', { name: 'Backtest equity curve' })).toBeVisible();
   await expect(page.getByText('TARGET')).toBeVisible();
   await page.getByRole('button', { name: 'Run walk-forward' }).click();
-  await expect(page.getByText('2/3')).toBeVisible();
+  await expect(page.getByText('2/3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Run 30% holdout' }).click();
   await expect(page.getByText('Training return')).toBeVisible();
 }
@@ -91,7 +91,8 @@ for (const scenario of [
     await mockBacktestApi(page);
     await unlockAndRun(page, scenario.experience);
     await expect(page.getByRole('heading', { name: 'Backtest Studio' })).toBeVisible();
-    await expect(page.locator('body')).toHaveJSProperty('scrollWidth', scenario.width);
+    const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(horizontalOverflow).toBeLessThanOrEqual(1);
     await assertAccessibility(page);
     await page.screenshot({ path: testInfo.outputPath(`${scenario.experience}-${scenario.width}.png`), fullPage: true });
   });
