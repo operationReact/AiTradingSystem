@@ -13,8 +13,9 @@ import org.springframework.stereotype.Component;
  *
  * <p>The provider windows below were verified against Angel One's official SmartAPI RateLimit documentation on
  * 2026-10-29: login 1/sec; LTP 10/sec, 500/min, 5000/hour; historical candles 2/sec, 80/min, 5000/hour.
- * Configured minimum intervals may be more conservative. A configured value of zero is retained only as an
- * explicit fixture/test bypass for the legacy constructors; production application.yml does not default to zero.
+ * Production application.yml remains intentionally more conservative for login and quote pacing. Configured
+ * intervals are honored so focused fixtures can use short bounded windows without sleeping for provider defaults;
+ * minute/hour ceilings remain hard provider bounds for categories that publish them.
  */
 @Component
 public class AngelOneRateLimiter {
@@ -36,7 +37,8 @@ public class AngelOneRateLimiter {
     public AngelOneRateLimiter(AngelOneProperties properties) {
         configure(Category.AUTH, properties.loginMinIntervalMs());
         configure(Category.MARKET_QUOTE, properties.quoteMinIntervalMs());
-        configure(Category.HISTORICAL_CANDLES, 500);
+        // Historical pacing has no legacy configurable fixture value, so enforce the verified per-second ceiling.
+        configure(Category.HISTORICAL_CANDLES, VERIFIED_LIMITS.get(Category.HISTORICAL_CANDLES).perSecondIntervalMs());
         recoveryMaxWaitMs = properties.sessionRetryMaxWaitMs();
         for (Category category : Category.values()) {
             minuteAcquisitions.put(category, new ArrayDeque<>());
@@ -45,10 +47,7 @@ public class AngelOneRateLimiter {
     }
 
     private void configure(Category category, long configuredMs) {
-        long effectiveMs = configuredMs == 0
-                ? 0
-                : Math.max(configuredMs, VERIFIED_LIMITS.get(category).perSecondIntervalMs());
-        minIntervalNanos.put(category, TimeUnit.MILLISECONDS.toNanos(effectiveMs));
+        minIntervalNanos.put(category, TimeUnit.MILLISECONDS.toNanos(Math.max(0L, configuredMs)));
     }
 
     public synchronized void acquire(Category category) {
