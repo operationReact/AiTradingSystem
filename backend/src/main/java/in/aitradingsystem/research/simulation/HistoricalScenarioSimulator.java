@@ -26,6 +26,7 @@ public final class HistoricalScenarioSimulator {
         if (observations.size() <= request.blockSize()) {
             throw new IllegalArgumentException("insufficient historical transitions for requested block size");
         }
+        int eligibleBlockCount = observations.size() - request.blockSize() + 1;
 
         BigDecimal slippage = request.entryPrice()
                 .multiply(BigDecimal.valueOf(request.slippageBps()))
@@ -46,8 +47,7 @@ public final class HistoricalScenarioSimulator {
             int remaining = request.horizonBars();
 
             while (remaining > 0 && outcome == Outcome.NEITHER) {
-                int maxStart = observations.size() - request.blockSize();
-                int start = random.nextInt(maxStart + 1);
+                int start = random.nextInt(eligibleBlockCount);
                 for (int j = 0; j < request.blockSize() && remaining > 0; j++, remaining--) {
                     Observation observation = observations.get(start + j);
                     BigDecimal high = price.multiply(observation.highFactor());
@@ -83,6 +83,7 @@ public final class HistoricalScenarioSimulator {
                 request.seed(),
                 request.simulations(),
                 observations.size(),
+                eligibleBlockCount,
                 request.horizonBars(),
                 request.blockSize(),
                 targetFirst,
