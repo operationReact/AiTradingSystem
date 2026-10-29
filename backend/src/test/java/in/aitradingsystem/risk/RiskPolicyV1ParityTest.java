@@ -4,11 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import in.aitradingsystem.config.RiskProperties;
 import in.aitradingsystem.domain.Side;
+import in.aitradingsystem.risk.rules.CashAvailabilityRule;
+import in.aitradingsystem.risk.rules.DailyLossRule;
+import in.aitradingsystem.risk.rules.EmergencyStopRule;
+import in.aitradingsystem.risk.rules.ExistingSymbolPositionRule;
+import in.aitradingsystem.risk.rules.HoldingsAvailabilityRule;
+import in.aitradingsystem.risk.rules.MaxOpenPositionsRule;
+import in.aitradingsystem.risk.rules.PerTradeRiskBudgetRule;
+import in.aitradingsystem.risk.rules.PriceLevelsRule;
+import in.aitradingsystem.risk.rules.SignalFreshnessRule;
+import in.aitradingsystem.risk.rules.SignalTimestampRule;
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RiskPolicyV1ParityTest {
@@ -19,6 +27,17 @@ class RiskPolicyV1ParityTest {
 
     private final RiskPolicy legacy = new RiskPolicy(PROPS);
     private final LegacyRiskPolicyAdapter adapter = new LegacyRiskPolicyAdapter(PROPS);
+    private final RiskPolicyEngine extracted = new RiskPolicyEngine(List.of(
+            new EmergencyStopRule(),
+            new SignalTimestampRule(),
+            new SignalFreshnessRule(),
+            new PriceLevelsRule(),
+            new DailyLossRule(),
+            new PerTradeRiskBudgetRule(),
+            new CashAvailabilityRule(),
+            new HoldingsAvailabilityRule(),
+            new ExistingSymbolPositionRule(),
+            new MaxOpenPositionsRule()));
 
     @Test
     void existingV1FixturesRemainDecisionAndReasonCompatible() {
@@ -28,18 +47,21 @@ class RiskPolicyV1ParityTest {
                 buy(10, NOW.minusSeconds(16 * 60), "490", "530", "80000", 0, 0, "0", false),
                 buy(10, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "-800.00", false),
                 buy(10, NOW.minusSeconds(60), "505", "530", "80000", 0, 0, "0", false),
+                buy(100, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "0", false),
                 buy(10, NOW.minusSeconds(60), "480.75", "530", "80000", 0, 0, "0", false),
-                buy(10, NOW.minusSeconds(60), "490", "530", "80000", 5, 1, "0", false),
+                buy(10, NOW.minusSeconds(60), "490", "530", "80000", 5, 3, "0", false),
                 buy(10, NOW.minusSeconds(60), "490", "530", "80000", 0, 3, "0", false),
                 buy(10, NOW.minusSeconds(60), "490", "530", "1000", 0, 0, "0", false),
                 new RiskInput(Side.SELL, 10, new BigDecimal("500"), null, null,
                         NOW.minusSeconds(60), NOW, new BigDecimal("80000"), new BigDecimal("80000"),
                         5, 1, BigDecimal.ZERO, false),
+                new RiskInput(Side.SELL, 10, new BigDecimal("500"), null, null,
+                        NOW.minusSeconds(60), NOW, new BigDecimal("80000"), new BigDecimal("80000"),
+                        10, 1, BigDecimal.ZERO, false),
+                buy(10, null, "490", "530", "80000", 0, 0, "0", false),
                 buy(10, NOW.minusSeconds(60), "490", "530", "80000", 0, 0, "0", false));
 
-        for (RiskInput input : fixtures) {
-            assertParity(input);
-        }
+        for (RiskInput input : fixtures) assertParity(input);
     }
 
     @Test
@@ -58,8 +80,7 @@ class RiskPolicyV1ParityTest {
         RiskContext context = adapter.adapt(input);
         assertThat(adapter.toLegacyInput(context)).isEqualTo(input);
 
-        RiskPolicyEngine shadowEngine = new RiskPolicyEngine(parityRules());
-        RiskDecisionV2 newDecision = shadowEngine.evaluate(context);
+        RiskDecisionV2 newDecision = extracted.evaluate(context);
 
         assertThat(newDecision.decisionClass() == RiskDecisionClass.APPROVED)
                 .as("approval parity for %s", input)
@@ -80,57 +101,10 @@ class RiskPolicyV1ParityTest {
                 .toList();
     }
 
-    private List<RiskRule> parityRules() {
-        return Arrays.stream(RiskReason.values())
-                .map(reason -> (RiskRule) new LegacyReasonParityRule(reason))
-                .toList();
-    }
-
     private RiskInput buy(int quantity, Instant signal, String stop, String target, String cash,
                           int held, int openCount, String pnlToday, boolean halted) {
         return new RiskInput(Side.BUY, quantity, new BigDecimal("500"), new BigDecimal(stop),
                 new BigDecimal(target), signal, NOW, new BigDecimal("80000"), new BigDecimal(cash),
                 held, openCount, new BigDecimal(pnlToday), halted);
-    }
-
-    private final class LegacyReasonParityRule implements RiskRule {
-        private final RiskReason reason;
-        private final RiskRuleCode code;
-
-        private LegacyReasonParityRule(RiskReason reason) {
-            this.reason = reason;
-            this.code = switch (reason) {
-                case EMERGENCY_STOP_ACTIVE -> RiskRuleCode.EMERGENCY_STOP;
-                case SIGNAL_TIMESTAMP_INVALID -> RiskRuleCode.SIGNAL_TIMESTAMP;
-                case STALE_SIGNAL -> RiskRuleCode.SIGNAL_FRESHNESS;
-                case INVALID_PRICE_LEVELS -> RiskRuleCode.PRICE_LEVELS;
-                case RISK_BUDGET_EXCEEDED -> RiskRuleCode.PER_TRADE_RISK_BUDGET;
-                case INSUFFICIENT_CASH -> RiskRuleCode.CASH_AVAILABILITY;
-                case SYMBOL_ALREADY_HELD -> RiskRuleCode.EXISTING_SYMBOL_POSITION;
-                case MAX_OPEN_POSITIONS -> RiskRuleCode.MAX_OPEN_POSITIONS;
-                case INSUFFICIENT_HOLDINGS -> RiskRuleCode.HOLDINGS_AVAILABILITY;
-                case DAILY_LOSS_LIMIT_REACHED -> RiskRuleCode.DAILY_LOSS_LIMIT;
-            };
-        }
-
-        @Override
-        public RiskRuleCode code() {
-            return code;
-        }
-
-        @Override
-        public int sequence() {
-            return code.ordinal();
-        }
-
-        @Override
-        public RiskRuleResult evaluate(RiskContext context) {
-            boolean rejected = legacy.evaluate(adapter.toLegacyInput(context)).reasons().contains(reason);
-            return rejected
-                    ? new RiskRuleResult(code, RiskOutcome.HARD_REJECT, reason.name(), null, null, null,
-                            Map.of("parity", RiskPolicy.VERSION))
-                    : new RiskRuleResult(code, RiskOutcome.PASS, code.name() + "_PASS", null, null, null,
-                            Map.of("parity", RiskPolicy.VERSION));
-        }
     }
 }
