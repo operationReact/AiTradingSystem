@@ -1,5 +1,6 @@
 package in.aitradingsystem.research.simulation;
 
+import java.time.OffsetDateTime;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -66,6 +67,71 @@ public class ScenarioRunRepository {
         String value = jdbc.query("SELECT status FROM research_scenario_run WHERE id = ?", rs -> rs.next() ? rs.getString(1) : null, id);
         if (value == null) throw new IllegalArgumentException("scenario run not found: " + id);
         return ScenarioRunStatus.valueOf(value);
+    }
+
+    public ScenarioRunView requireView(UUID id) {
+        if (id == null) throw new IllegalArgumentException("scenario run id is required");
+        return jdbc.query("""
+                SELECT id, scan_run_id, candidate_id, instrument_id, exchange, trading_symbol, interval,
+                       strategy, strategy_config_version, entry_price, stop_price, target_price,
+                       history_from, history_to, data_cutoff_at, simulation_count, horizon_bars, block_size,
+                       seed, slippage_bps, round_trip_cost_bps, request_fingerprint, methodology, regime,
+                       historical_samples, eligible_block_count, fallback_tier,
+                       target_first_count, stop_first_count, neither_count,
+                       target_first_probability, stop_first_probability, neither_probability,
+                       expected_r, p05_r, p50_r, p95_r, status, error_code, error_message,
+                       started_at, completed_at, created_at
+                  FROM research_scenario_run
+                 WHERE id = ?
+                """, (rs, row) -> new ScenarioRunView(
+                rs.getObject("id", UUID.class),
+                rs.getObject("scan_run_id", UUID.class),
+                rs.getObject("candidate_id", Long.class),
+                rs.getLong("instrument_id"),
+                rs.getString("exchange"),
+                rs.getString("trading_symbol"),
+                rs.getString("interval"),
+                rs.getString("strategy"),
+                rs.getObject("strategy_config_version", Integer.class),
+                rs.getBigDecimal("entry_price"),
+                rs.getBigDecimal("stop_price"),
+                rs.getBigDecimal("target_price"),
+                rs.getObject("history_from", OffsetDateTime.class).toInstant(),
+                rs.getObject("history_to", OffsetDateTime.class).toInstant(),
+                rs.getObject("data_cutoff_at", OffsetDateTime.class).toInstant(),
+                rs.getInt("simulation_count"),
+                rs.getInt("horizon_bars"),
+                rs.getInt("block_size"),
+                rs.getLong("seed"),
+                rs.getInt("slippage_bps"),
+                rs.getInt("round_trip_cost_bps"),
+                rs.getString("request_fingerprint"),
+                rs.getString("methodology"),
+                rs.getString("regime"),
+                rs.getInt("historical_samples"),
+                rs.getInt("eligible_block_count"),
+                rs.getString("fallback_tier"),
+                rs.getInt("target_first_count"),
+                rs.getInt("stop_first_count"),
+                rs.getInt("neither_count"),
+                rs.getBigDecimal("target_first_probability"),
+                rs.getBigDecimal("stop_first_probability"),
+                rs.getBigDecimal("neither_probability"),
+                rs.getBigDecimal("expected_r"),
+                rs.getBigDecimal("p05_r"),
+                rs.getBigDecimal("p50_r"),
+                rs.getBigDecimal("p95_r"),
+                ScenarioRunStatus.valueOf(rs.getString("status")),
+                rs.getString("error_code"),
+                rs.getString("error_message"),
+                toInstant(rs.getObject("started_at", OffsetDateTime.class)),
+                toInstant(rs.getObject("completed_at", OffsetDateTime.class)),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant()), id).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("scenario run not found: " + id));
+    }
+
+    private static java.time.Instant toInstant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
     }
 
     private static void requireTransition(UUID id, int rows, String from, String to) {
