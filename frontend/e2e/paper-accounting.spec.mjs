@@ -114,8 +114,8 @@ async function assertCanonicalPortfolioEvidence(page) {
   await expect(page.getByText('Gross exposure')).toBeVisible();
   await expect(page.getByText('TCS', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('BUY_SETTLEMENT')).toBeVisible();
-  await expect(page.getByText('₹2,000.00')).toBeVisible();
-  await expect(page.getByText('₹750.50')).toBeVisible();
+  await expect(page.getByText('₹2,000.00').first()).toBeVisible();
+  await expect(page.getByText('₹750.50').first()).toBeVisible();
 }
 
 test('E2E-P6 Pro Terminal desktop — fills → positions → ledger → reconciliation', async ({ page }, testInfo) => {
