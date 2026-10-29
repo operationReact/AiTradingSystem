@@ -1,6 +1,5 @@
 package in.aitradingsystem.research.simulation;
 
-import java.sql.Timestamp;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -19,14 +18,14 @@ public class ScenarioRunRepository {
                     id, scan_run_id, candidate_id, instrument_id, exchange, trading_symbol, interval,
                     strategy, strategy_config_version, entry_price, stop_price, target_price,
                     history_from, history_to, data_cutoff_at, simulation_count, horizon_bars, block_size,
-                    seed, slippage_bps, round_trip_cost_bps, methodology, regime, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CREATED')
+                    seed, slippage_bps, round_trip_cost_bps, request_fingerprint, methodology, regime, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CREATED')
                 """,
                 run.id(), run.scanRunId(), run.candidateId(), run.instrumentId(), run.exchange(), run.tradingSymbol(),
                 run.interval(), run.strategy(), run.strategyConfigVersion(), run.entryPrice(), run.stopPrice(),
-                run.targetPrice(), Timestamp.from(run.historyFrom()), Timestamp.from(run.historyTo()),
-                Timestamp.from(run.dataCutoffAt()), run.simulationCount(), run.horizonBars(), run.blockSize(),
-                run.seed(), run.slippageBps(), run.roundTripCostBps(), run.methodology(), run.regime());
+                run.targetPrice(), java.sql.Timestamp.from(run.historyFrom()), java.sql.Timestamp.from(run.historyTo()),
+                java.sql.Timestamp.from(run.dataCutoffAt()), run.simulationCount(), run.horizonBars(), run.blockSize(),
+                run.seed(), run.slippageBps(), run.roundTripCostBps(), run.requestFingerprint(), run.methodology(), run.regime());
     }
 
     public void markRunning(UUID id) {
