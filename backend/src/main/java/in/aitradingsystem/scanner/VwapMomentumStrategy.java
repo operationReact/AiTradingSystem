@@ -1,12 +1,16 @@
 package in.aitradingsystem.scanner;
 
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import org.springframework.stereotype.Component;
 
 /** Long-only momentum candidate when price is sustainably above rolling VWAP with volume support. */
+@Component
 public final class VwapMomentumStrategy implements ScannerStrategy {
     public static final String NAME = "VWAP_MOMENTUM_V1";
     private static final int LOOKBACK = 20;
@@ -14,6 +18,16 @@ public final class VwapMomentumStrategy implements ScannerStrategy {
 
     @Override public String name() { return NAME; }
     @Override public int minimumCandles() { return LOOKBACK; }
+
+    @Override
+    public StrategyDescriptor descriptor() {
+        return new StrategyDescriptor(NAME, "1", "VWAP Momentum",
+                Set.of(HistoricalCandleInterval.ONE_MINUTE, HistoricalCandleInterval.THREE_MINUTE,
+                        HistoricalCandleInterval.FIVE_MINUTE, HistoricalCandleInterval.TEN_MINUTE,
+                        HistoricalCandleInterval.FIFTEEN_MINUTE, HistoricalCandleInterval.THIRTY_MINUTE,
+                        HistoricalCandleInterval.ONE_HOUR),
+                minimumCandles(), TradingStyle.INTRADAY, true, "HEALTHY", true, false);
+    }
 
     @Override
     public Optional<ScanCandidate> evaluate(ScanContext context) {
