@@ -61,9 +61,9 @@ async function mockBacktestApi(page) {
 async function unlockAndRun(page, experience) {
   await page.goto('http://127.0.0.1:4173/backtesting');
   await page.getByLabel('Appearance — Experience').selectOption(experience);
-  await page.getByLabel('Operator API key').fill('e2e-test-key');
+  await page.getByLabel('Operator API key', { exact: true }).fill('e2e-test-key');
   await page.getByRole('button', { name: 'Connect' }).click();
-  await expect(page.getByLabel('Operator API key')).toHaveCount(0);
+  await expect(page.locator('#api-key')).toHaveCount(0);
 
   await page.getByLabel('NSE cash-equity instrument').fill('RELIANCE');
   await page.getByRole('button', { name: /RELIANCE/ }).click();
