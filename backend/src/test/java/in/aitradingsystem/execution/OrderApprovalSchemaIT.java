@@ -17,21 +17,32 @@ class OrderApprovalSchemaIT extends AbstractPostgresIT {
 
     @Autowired JdbcClient jdbc;
 
-    private UUID orderId;
     private UUID policyId;
-    private UUID decisionId;
 
     @AfterEach
     void cleanup() {
-        if (orderId != null) {
-            jdbc.sql("UPDATE paper_order SET approval_id = NULL WHERE id = :id").param("id", orderId).update();
-            jdbc.sql("DELETE FROM order_approval WHERE order_id = :id").param("id", orderId).update();
-            jdbc.sql("DELETE FROM risk_decision WHERE order_id = :id").param("id", orderId).update();
-            jdbc.sql("DELETE FROM paper_order WHERE id = :id").param("id", orderId).update();
-        }
-        if (policyId != null) {
-            jdbc.sql("DELETE FROM execution_policy WHERE id = :id").param("id", policyId).update();
-        }
+        jdbc.sql("""
+                UPDATE paper_order
+                   SET approval_id = NULL
+                 WHERE idempotency_key LIKE 'p07-approval-%'
+                """).update();
+        jdbc.sql("""
+                DELETE FROM order_approval
+                 WHERE order_id IN (SELECT id FROM paper_order WHERE idempotency_key LIKE 'p07-approval-%')
+                """).update();
+        jdbc.sql("""
+                DELETE FROM risk_decision_rule
+                 WHERE risk_decision_id IN (
+                    SELECT d.id FROM risk_decision d
+                    JOIN paper_order o ON o.id = d.order_id
+                    WHERE o.idempotency_key LIKE 'p07-approval-%')
+                """).update();
+        jdbc.sql("""
+                DELETE FROM risk_decision
+                 WHERE order_id IN (SELECT id FROM paper_order WHERE idempotency_key LIKE 'p07-approval-%')
+                """).update();
+        jdbc.sql("DELETE FROM paper_order WHERE idempotency_key LIKE 'p07-approval-%'").update();
+        jdbc.sql("DELETE FROM execution_policy WHERE created_by = 'P07_PR02_TEST'").update();
     }
 
     @Test
@@ -136,8 +147,8 @@ class OrderApprovalSchemaIT extends AbstractPostgresIT {
     }
 
     private Fixture replaceOrderAndDecision(int version) {
-        orderId = UUID.randomUUID();
-        decisionId = UUID.randomUUID();
+        UUID orderId = UUID.randomUUID();
+        UUID decisionId = UUID.randomUUID();
         createOrder(orderId);
         createRiskDecision(decisionId, orderId);
         return new Fixture(orderId, policyId, version, decisionId);
