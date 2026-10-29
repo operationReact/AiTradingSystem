@@ -22,7 +22,7 @@ public class StrategyConfigRepository {
     }
 
     public void lockStrategy(String strategyCode) {
-        jdbc.queryForObject("select pg_advisory_xact_lock(hashtext(?))", Long.class, strategyCode);
+        jdbc.query("select pg_advisory_xact_lock(hashtext(?))", rs -> { rs.getObject(1); }, strategyCode);
     }
 
     public int nextVersion(String strategyCode) {
