@@ -4,17 +4,20 @@ import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.common.CorrelationIdFilter;
 import in.aitradingsystem.common.IdempotencyConflictException;
 import in.aitradingsystem.common.NotFoundException;
-import in.aitradingsystem.config.RiskProperties;
 import in.aitradingsystem.domain.OrderStatus;
 import in.aitradingsystem.domain.Side;
 import in.aitradingsystem.paper.PaperViews.DecisionView;
 import in.aitradingsystem.paper.PaperViews.FillView;
 import in.aitradingsystem.paper.PaperViews.OrderResult;
 import in.aitradingsystem.paper.PaperViews.OrderView;
-import in.aitradingsystem.risk.RiskDecision;
-import in.aitradingsystem.risk.RiskInput;
-import in.aitradingsystem.risk.RiskPolicy;
-import in.aitradingsystem.risk.RiskReason;
+import in.aitradingsystem.risk.RiskContext;
+import in.aitradingsystem.risk.RiskContextFactory;
+import in.aitradingsystem.risk.RiskDecisionClass;
+import in.aitradingsystem.risk.RiskDecisionPersistenceService;
+import in.aitradingsystem.risk.RiskDecisionV2;
+import in.aitradingsystem.risk.RiskOutcome;
+import in.aitradingsystem.risk.RiskPolicyEngine;
+import in.aitradingsystem.risk.RiskRuleResult;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Types;
@@ -35,23 +38,26 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Paper-only order execution. Every order runs in one transaction that first takes a row lock on paper_account,
- * which serializes order placement and makes cash, position and daily-loss checks race-free.
+ * Paper-only order execution. Fresh orders serialize on the paper-account row before any risk state is built or
+ * mutated. Idempotent replays return the originally persisted decision without re-evaluating current risk state.
  */
 @Service
 public class PaperTradingService {
     static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
 
     private final JdbcClient jdbc;
-    private final RiskProperties props;
-    private final RiskPolicy policy;
+    private final RiskContextFactory contextFactory;
+    private final RiskPolicyEngine riskEngine;
+    private final RiskDecisionPersistenceService decisions;
     private final AuditService audit;
     private final Clock clock;
 
-    public PaperTradingService(JdbcClient jdbc, RiskProperties props, AuditService audit, Clock clock) {
+    public PaperTradingService(JdbcClient jdbc, RiskContextFactory contextFactory, RiskPolicyEngine riskEngine,
+                               RiskDecisionPersistenceService decisions, AuditService audit, Clock clock) {
         this.jdbc = jdbc;
-        this.props = props;
-        this.policy = new RiskPolicy(props);
+        this.contextFactory = contextFactory;
+        this.riskEngine = riskEngine;
+        this.decisions = decisions;
         this.audit = audit;
         this.clock = clock;
     }
@@ -59,38 +65,32 @@ public class PaperTradingService {
     @Transactional
     public OrderResult placeOrder(OrderCommand cmd, String idempotencyKey) {
         String requestHash = cmd.canonicalHash();
+
+        // Fast replay path: completed requests do not acquire the account lock or execute risk rules again.
+        Optional<ExistingOrder> existing = findExisting(idempotencyKey);
+        if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
+
         AccountSnapshot account = lockAccount();
 
-        Optional<ExistingOrder> existing = jdbc.sql("SELECT id, request_hash FROM paper_order WHERE idempotency_key = :key")
-            .param("key", idempotencyKey)
-            .query((rs, n) -> new ExistingOrder(rs.getObject("id", UUID.class), rs.getString("request_hash")))
-            .optional();
-        if (existing.isPresent()) {
-            if (!existing.get().requestHash().equals(requestHash)) {
-                throw new IdempotencyConflictException(idempotencyKey);
-            }
-            return loadResult(existing.get().id(), true);
-        }
+        // A concurrent request may have completed while this transaction waited for the account lock.
+        existing = findExisting(idempotencyKey);
+        if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
 
         UUID orderId = UUID.randomUUID();
         Instant now = clock.instant();
         insertOrder(orderId, idempotencyKey, requestHash, cmd, now);
 
         Optional<PositionRow> held = findPosition(cmd.symbol());
-        int heldQuantity = held.map(PositionRow::quantity).orElse(0);
-        int openPositions = countOpenPositions();
-        BigDecimal realizedToday = realizedPnlSince(startOfMarketDay(now));
+        RiskContext context = contextFactory.build(orderId, cmd, now);
+        RiskDecisionV2 decision = riskEngine.evaluate(context);
+        decisions.persist(orderId, context, decision);
 
-        RiskDecision decision = policy.evaluate(new RiskInput(
-            cmd.side(), cmd.quantity(), cmd.entryPrice(), cmd.stopLoss(), cmd.target(), cmd.signalGeneratedAt(),
-            now, account.startingCapital(), account.cash(), heldQuantity, openPositions, realizedToday, isHalted()));
-        insertRiskDecision(orderId, decision, account.cash(), openPositions, realizedToday, now);
-
-        if (!decision.approved()) {
-            String reasons = reasonsText(decision.reasons());
+        if (decision.decisionClass() != RiskDecisionClass.APPROVED) {
+            String reasons = reasonsText(decision.ruleResults());
             transition(orderId, OrderStatus.NEW, OrderStatus.REJECTED, reasons, now);
             audit.record("ORDER_REJECTED", "PAPER_ORDER", orderId.toString(),
-                Map.of("symbol", cmd.symbol(), "side", cmd.side().name(), "reasons", reasons));
+                    Map.of("symbol", cmd.symbol(), "side", cmd.side().name(),
+                            "decisionClass", decision.decisionClass().name(), "reasons", reasons));
             return loadResult(orderId, false);
         }
 
@@ -98,8 +98,8 @@ public class PaperTradingService {
         applyFill(orderId, cmd, decision, account.cash(), held.orElse(null), now);
         transition(orderId, OrderStatus.RISK_APPROVED, OrderStatus.FILLED, null, now);
         audit.record("ORDER_FILLED", "PAPER_ORDER", orderId.toString(),
-            Map.of("symbol", cmd.symbol(), "side", cmd.side().name(), "quantity", cmd.quantity(),
-                "fillPrice", decision.fillPrice()));
+                Map.of("symbol", cmd.symbol(), "side", cmd.side().name(), "quantity", cmd.quantity(),
+                        "fillPrice", decision.effectiveFillPrice(), "policyVersion", decision.policyVersion()));
         return loadResult(orderId, false);
     }
 
@@ -117,6 +117,20 @@ public class PaperTradingService {
     public boolean isHalted() {
         return jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1")
             .query(Boolean.class).single();
+    }
+
+    private Optional<ExistingOrder> findExisting(String idempotencyKey) {
+        return jdbc.sql("SELECT id, request_hash FROM paper_order WHERE idempotency_key = :key")
+                .param("key", idempotencyKey)
+                .query((rs, n) -> new ExistingOrder(rs.getObject("id", UUID.class), rs.getString("request_hash")))
+                .optional();
+    }
+
+    private OrderResult replay(ExistingOrder existing, String requestHash, String idempotencyKey) {
+        if (!existing.requestHash().equals(requestHash)) {
+            throw new IdempotencyConflictException(idempotencyKey);
+        }
+        return loadResult(existing.id(), true);
     }
 
     private AccountSnapshot lockAccount() {
@@ -147,32 +161,6 @@ public class PaperTradingService {
             .update();
     }
 
-    private void insertRiskDecision(UUID orderId, RiskDecision d, BigDecimal cash, int openPositions,
-                                    BigDecimal realizedToday, Instant now) {
-        String reasonsJson = "[" + d.reasons().stream().map(r -> "\"" + r.name() + "\"").collect(Collectors.joining(",")) + "]";
-        jdbc.sql("""
-                INSERT INTO risk_decision (id, order_id, decision, reason_codes, risk_budget, estimated_risk,
-                    estimated_notional, available_cash, open_positions, realized_pnl_today, daily_loss_limit,
-                    policy_version, evaluated_at)
-                VALUES (:id, :orderId, :decision, CAST(:reasons AS jsonb), :budget, :risk, :notional, :cash, :open,
-                    :realized, :limit, :version, :now)
-                """)
-            .param("id", UUID.randomUUID())
-            .param("orderId", orderId)
-            .param("decision", d.approved() ? "APPROVED" : "REJECTED")
-            .param("reasons", reasonsJson)
-            .param("budget", d.riskBudget())
-            .param("risk", d.estimatedRisk())
-            .param("notional", d.grossAmount())
-            .param("cash", cash)
-            .param("open", openPositions)
-            .param("realized", realizedToday)
-            .param("limit", d.dailyLossLimit())
-            .param("version", RiskPolicy.VERSION)
-            .param("now", ts(now))
-            .update();
-    }
-
     private void transition(UUID orderId, OrderStatus from, OrderStatus to, String reason, Instant now) {
         from.transitionTo(to);
         int updated = jdbc.sql("UPDATE paper_order SET status = :to, rejection_reason = :reason, updated_at = :now "
@@ -188,14 +176,15 @@ public class PaperTradingService {
         }
     }
 
-    private void applyFill(UUID orderId, OrderCommand cmd, RiskDecision d, BigDecimal cashBefore,
+    private void applyFill(UUID orderId, OrderCommand cmd, RiskDecisionV2 d, BigDecimal cashBefore,
                            PositionRow held, Instant now) {
         BigDecimal cashAfter;
         BigDecimal costBasis;
         BigDecimal realized = BigDecimal.ZERO.setScale(2);
+        BigDecimal netAmount = netAmount(cmd.side(), d);
 
         if (cmd.side() == Side.BUY) {
-            costBasis = d.grossAmount().add(d.feeAmount());
+            costBasis = d.grossNotional().add(d.estimatedFee());
             cashAfter = cashBefore.subtract(costBasis);
             insertPosition(cmd, costBasis, now);
         } else {
@@ -203,8 +192,8 @@ public class PaperTradingService {
             costBasis = held.quantity() == cmd.quantity()
                 ? held.costBasis()
                 : held.costBasis().multiply(qty).divide(BigDecimal.valueOf(held.quantity()), 2, RoundingMode.HALF_UP);
-            realized = d.grossAmount().subtract(d.feeAmount()).subtract(costBasis).setScale(2, RoundingMode.HALF_UP);
-            cashAfter = cashBefore.add(d.netAmount());
+            realized = d.grossNotional().subtract(d.estimatedFee()).subtract(costBasis).setScale(2, RoundingMode.HALF_UP);
+            cashAfter = cashBefore.add(netAmount);
             reducePosition(held, cmd.quantity(), costBasis, now);
         }
 
@@ -216,7 +205,7 @@ public class PaperTradingService {
                 + "VALUES (:orderId, :type, :amount, :after, :now)")
             .param("orderId", orderId)
             .param("type", cmd.side() == Side.BUY ? "BUY_SETTLEMENT" : "SELL_SETTLEMENT")
-            .param("amount", d.netAmount())
+            .param("amount", netAmount)
             .param("after", cashAfter)
             .param("now", ts(now))
             .update();
@@ -231,15 +220,21 @@ public class PaperTradingService {
             .param("side", cmd.side().name())
             .param("qty", cmd.quantity())
             .param("ref", cmd.entryPrice())
-            .param("fill", d.fillPrice())
-            .param("gross", d.grossAmount())
-            .param("fee", d.feeAmount())
-            .param("slip", d.slippageAmount())
-            .param("net", d.netAmount())
+            .param("fill", d.effectiveFillPrice())
+            .param("gross", d.grossNotional())
+            .param("fee", d.estimatedFee())
+            .param("slip", d.estimatedSlippage())
+            .param("net", netAmount)
             .param("basis", costBasis)
             .param("pnl", realized)
             .param("now", ts(now))
             .update();
+    }
+
+    private static BigDecimal netAmount(Side side, RiskDecisionV2 decision) {
+        return side == Side.BUY
+                ? decision.grossNotional().add(decision.estimatedFee()).negate()
+                : decision.grossNotional().subtract(decision.estimatedFee());
     }
 
     private void insertPosition(OrderCommand cmd, BigDecimal costBasis, Instant now) {
@@ -272,16 +267,6 @@ public class PaperTradingService {
             .param("symbol", symbol)
             .query((rs, n) -> new PositionRow(rs.getString("symbol"), rs.getInt("quantity"), rs.getBigDecimal("cost_basis")))
             .optional();
-    }
-
-    private int countOpenPositions() {
-        return jdbc.sql("SELECT COUNT(*) FROM paper_position").query(Integer.class).single();
-    }
-
-    private BigDecimal realizedPnlSince(Instant from) {
-        return jdbc.sql("SELECT COALESCE(SUM(realized_pnl), 0) FROM paper_fill WHERE filled_at >= :from")
-            .param("from", ts(from))
-            .query(BigDecimal.class).single();
     }
 
     Instant startOfMarketDay(Instant now) {
@@ -324,8 +309,11 @@ public class PaperTradingService {
         return inner.isEmpty() ? List.of() : Arrays.stream(inner.split(",")).map(String::trim).toList();
     }
 
-    static String reasonsText(List<RiskReason> reasons) {
-        return reasons.stream().map(Enum::name).collect(Collectors.joining(","));
+    static String reasonsText(List<RiskRuleResult> results) {
+        return results.stream()
+                .filter(result -> result.outcome() != RiskOutcome.PASS)
+                .map(RiskRuleResult::reasonCode)
+                .collect(Collectors.joining(","));
     }
 
     static OffsetDateTime ts(Instant instant) {
