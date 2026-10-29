@@ -69,10 +69,10 @@ public class WalkForwardValidationService {
                 PaperBacktestDetail validation = paperBacktests.run(new PaperBacktestRequest(
                         instrument.id(), request.interval(), window.validationFrom(), window.validationTo(), request.initialCapital()));
                 repository.saveFold(new BacktestWalkForwardFold(
-                        id, window.foldNumber(), training.summary().id(), validation.summary().id(),
+                        id, window.foldNumber(), training.run().id(), validation.run().id(),
                         window.trainingFrom(), window.trainingTo(), window.validationFrom(), window.validationTo(),
-                        training.summary().totalReturnPercent(), validation.summary().totalReturnPercent(),
-                        validation.summary().maxDrawdownPercent()));
+                        training.run().totalReturnPercent(), validation.run().totalReturnPercent(),
+                        validation.run().maxDrawdownPercent()));
             }
             repository.complete(id, clock.instant());
             return get(id);
