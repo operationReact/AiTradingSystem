@@ -16,7 +16,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -86,5 +89,10 @@ public class RiskController {
             ? (request.halted() ? "Operator emergency stop" : "Operator resumed trading") : request.reason();
         trading.setNewOrdersHalted(request.halted(), reason);
         return new EmergencyStopView(trading.isHalted(), reason);
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    ProblemDetail invalidRiskRequest(IllegalArgumentException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 }
