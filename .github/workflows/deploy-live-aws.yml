@@ -131,19 +131,27 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker build -f backend/Dockerfile -t "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG" backend
-          docker push "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG"
+          if aws ecr describe-images --repository-name "$ECR_BACKEND" --image-ids imageTag="$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Backend image $IMAGE_TAG already exists; reusing immutable ECR image."
+          else
+            docker build -f backend/Dockerfile -t "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG" backend
+            docker push "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG"
+          fi
       - name: Package and push Flutter web image
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          docker build \
-            -f apps/trading_client/Dockerfile \
-            -t "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" \
-            apps/trading_client
-          docker push "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG"
+          if aws ecr describe-images --repository-name "$ECR_FRONTEND" --image-ids imageTag="$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Frontend image $IMAGE_TAG already exists; reusing immutable ECR image."
+          else
+            docker build \
+              -f apps/trading_client/Dockerfile \
+              -t "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" \
+              apps/trading_client
+            docker push "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG"
+          fi
       - name: Register backend task definition
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
