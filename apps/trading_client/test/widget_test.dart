@@ -17,12 +17,15 @@ class SmokeHealthRepository implements HealthRepository {
 }
 
 void main() {
-  testWidgets('boots into the operations-health route without implicit network activity', (tester) async {
+  testWidgets('boots into the product overview instead of operations health', (tester) async {
     final session = OperatorSession();
     await tester.pumpWidget(
       TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
     );
+
+    expect(find.text('AiTradingSystem'), findsOneWidget);
+    expect(find.text('Research. Validate. Operate with control.'), findsOneWidget);
     expect(find.text('Operations health'), findsOneWidget);
-    expect(find.text('Connect to load authoritative operational health evidence.'), findsOneWidget);
+    expect(find.text('Development operator session'), findsNothing);
   });
 }
