@@ -95,7 +95,7 @@ class Phase8ExitGateIT {
             .andExpect(status().isOk()).andExpect(jsonPath("$.materializationComplete").value(true))
             .andExpect(jsonPath("$.netPnl").value(9.69)).andExpect(jsonPath("$.exitMetrics.closedExitOrders").value(1))
             .andExpect(jsonPath("$.exitMetrics.winRatePercent").value(100))
-            .andExpect(jsonPath("$.exposureSnapshot").isEmpty());
+            .andExpect(jsonPath("$.exposureSnapshot").doesNotExist());
         mvc.perform(get("/api/analytics/equity").header("X-API-Key",KEY).param("from",DAY).param("to",DAY))
             .andExpect(status().isOk()).andExpect(jsonPath("$.equityCurve.length()").value(1));
         mvc.perform(get("/api/analytics/strategies").header("X-API-Key",KEY).param("from",DAY).param("to",DAY))
