@@ -38,6 +38,7 @@ function ApprovalCard({ approval, onDecision, clear }) {
   const countdown = useCountdown(approval.expiresAt);
   const snapshot = useMemo(() => snapshotObject(approval.requestSnapshot), [approval.requestSnapshot]);
   const pending = approval.state === 'PENDING';
+  const expired = countdown === 'Expired';
   const policyMode = snapshot.approvalMode || snapshot.policyMode || 'MANUAL';
 
   return (
@@ -88,8 +89,8 @@ function ApprovalCard({ approval, onDecision, clear }) {
 
       {pending && (
         <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-border pt-3">
-          <Button variant="danger" icon={XCircle} onClick={() => onDecision(approval, 'reject')}>Reject</Button>
-          <Button variant="primary" icon={CheckCircle2} onClick={() => onDecision(approval, 'approve')}>Approve</Button>
+          <Button variant="danger" icon={XCircle} disabled={expired} onClick={() => onDecision(approval, 'reject')}>Reject</Button>
+          <Button variant="primary" icon={CheckCircle2} disabled={expired} onClick={() => onDecision(approval, 'approve')}>Approve</Button>
         </div>
       )}
     </article>
@@ -103,6 +104,7 @@ export default function ApprovalsPage() {
   const [page, setPage] = useState(0);
   const [decision, setDecision] = useState(null);
   const [reason, setReason] = useState('');
+  const [decisionResult, setDecisionResult] = useState(null);
   const clear = experience === 'clear-invest';
 
   const approvals = useQuery({
@@ -119,16 +121,28 @@ export default function ApprovalsPage() {
     refetchInterval: 15_000,
   });
   const mutate = useMutation({
-    mutationFn: ({ approval, action, reason: decisionReason }) => apiFetch(`/approvals/${approval.id}/${action}`, {
-      apiKey,
-      method: 'POST',
-      body: {
-        expectedRowVersion: approval.rowVersion,
-        actor: 'operator-ui',
-        reason: decisionReason?.trim() || undefined,
-      },
-    }),
-    onSuccess: () => {
+    mutationFn: async ({ approval, action, reason: decisionReason }) => {
+      const result = await apiFetch(`/approvals/${approval.id}/${action}`, {
+        apiKey,
+        method: 'POST',
+        body: {
+          expectedRowVersion: approval.rowVersion,
+          actor: 'operator-ui',
+          reason: decisionReason?.trim() || undefined,
+        },
+      });
+      if (result.state === 'APPROVED' || result.state === 'AUTO_APPROVED') {
+        try {
+          const order = await apiFetch(`/paper-orders/${result.orderId}`, { apiKey });
+          return { approval: result, order: order.order };
+        } catch {
+          return { approval: result, orderUnavailable: true };
+        }
+      }
+      return { approval: result };
+    },
+    onSuccess: (result) => {
+      setDecisionResult(result);
       setDecision(null);
       setReason('');
       return Promise.all([
@@ -138,7 +152,7 @@ export default function ApprovalsPage() {
     },
   });
 
-  const openDecision = (approval, action) => { setDecision({ approval, action }); setReason(''); };
+  const openDecision = (approval, action) => { mutate.reset(); setDecision({ approval, action }); setReason(''); };
   const totalPending = pendingCount.data?.totalItems ?? pendingCount.data?.total ?? 0;
 
   return (
@@ -155,6 +169,18 @@ export default function ApprovalsPage() {
         <Notice title="Operator key required">Connect an operator key before reviewing approvals.</Notice>
       ) : (
         <>
+          {decisionResult && (
+            <Notice
+              tone={decisionResult.order?.status === 'FILLED' ? 'neutral' : 'warn'}
+              title={decisionResult.order?.status === 'FILLED' ? 'PAPER order filled'
+                : decisionResult.order?.status === 'FAILED' ? 'Approval recorded; execution blocked'
+                  : `Current approval state: ${decisionResult.approval.state}`}
+            >
+              {decisionResult.orderUnavailable ? 'The decision was recorded, but the order status could not be refreshed. Check order history before retrying.'
+                : decisionResult.order?.rejectionReason || decisionResult.approval.decisionReason
+                  || 'The server returned the current persisted decision.'}
+            </Notice>
+          )}
           <Panel title="Queue" subtitle="A decision is never permanent execution authorization; the backend revalidates immediately before execution.">
             <div className="mb-4 overflow-x-auto">
               <SegmentedControl
@@ -205,6 +231,7 @@ export default function ApprovalsPage() {
             <Button
               variant={decision?.action === 'approve' ? 'primary' : 'danger'}
               loading={mutate.isPending}
+              disabled={!decision || mutate.isPending}
               onClick={() => mutate.mutate({ ...decision, reason })}
             >
               Confirm {decision?.action}
