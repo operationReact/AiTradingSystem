@@ -1,0 +1,278 @@
+name: Flutter connected runtime gate
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - 'backend/**'
+      - '.github/workflows/flutter-connected-runtime.yml'
+      - 'docs/flutter-delivery-gate.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CONNECTED_API_KEY: test-operator-key-0123456789
+  SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aitrading
+  SPRING_DATASOURCE_USERNAME: postgres
+  SPRING_DATASOURCE_PASSWORD: postgres
+  APP_API_KEY: test-operator-key-0123456789
+  TRADING_MODE: PAPER
+  NEWS_INGESTION_ENABLED: 'false'
+  NEWS_SUMMARIZATION_ENABLED: 'false'
+
+jobs:
+  connected-repository:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: aitrading
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aitrading"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Start real Spring Boot backend
+        working-directory: backend
+        run: |
+          mvn --batch-mode --no-transfer-progress -DskipTests package
+          java -jar target/ai-trading-system-0.1.0-SNAPSHOT.jar > /tmp/aitrading-backend.log 2>&1 &
+          echo $! > /tmp/aitrading-backend.pid
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:8080/actuator/health >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/aitrading-backend.log
+          exit 1
+      - name: Prove backend auth contract directly
+        run: |
+          test "$(curl -s -o /tmp/unauth.json -w '%{http_code}' http://127.0.0.1:8080/api/operations/health)" = "401"
+          curl --fail --silent -H "X-API-Key: $CONNECTED_API_KEY" http://127.0.0.1:8080/api/operations/health | tee /tmp/health.json
+          python - <<'PY'
+          import json
+          data=json.load(open('/tmp/health.json'))
+          assert data['executionMode']=='PAPER'
+          assert data['liveAvailable'] is False
+          assert any(c['component']=='database' and c['state']=='HEALTHY' for c in data['components'])
+          assert data['state'] != 'HEALTHY'
+          PY
+      - name: Prove Flutter repository against real Spring/PostgreSQL
+        working-directory: apps/trading_client
+        run: |
+          flutter pub get
+          flutter test test/health_repository_contract_test.dart
+          flutter test test/connected_health_repository_test.dart \
+            --dart-define=CONNECTED_API_BASE_URL=http://127.0.0.1:8080 \
+            --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
+      - name: Build connected Flutter Web app
+        working-directory: apps/trading_client
+        run: flutter build web --release --dart-define=API_BASE_URL=http://127.0.0.1:4173
+      - name: Install browser runtime tooling
+        working-directory: apps/trading_client/tool
+        run: |
+          npm install --no-package-lock
+          npx playwright install --with-deps chromium
+      - name: Start same-origin Flutter Web runtime proxy
+        working-directory: apps/trading_client
+        env:
+          BACKEND_URL: http://127.0.0.1:8080
+          WEB_RUNTIME_URL: http://127.0.0.1:4173
+        run: |
+          node tool/web_runtime_server.mjs > /tmp/flutter-web-server.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4173/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/flutter-web-server.log
+          exit 1
+      - name: Web stage 1 - Flutter startup and semantics
+        working-directory: apps/trading_client
+        env:
+          WEB_RUNTIME_URL: http://127.0.0.1:4173
+          WEB_RUNTIME_STAGE: startup
+        run: node tool/web_runtime_test.mjs
+      - name: Web stage 2 - positive auth and health evidence
+        working-directory: apps/trading_client
+        env:
+          WEB_RUNTIME_URL: http://127.0.0.1:4173
+          WEB_RUNTIME_STAGE: positive
+        run: node tool/web_runtime_test.mjs
+      - name: Web stage 3 - style and theme continuity
+        working-directory: apps/trading_client
+        env:
+          WEB_RUNTIME_URL: http://127.0.0.1:4173
+          WEB_RUNTIME_STAGE: appearance
+        run: node tool/web_runtime_test.mjs
+      - name: Web stage 4 - negative auth and credential non-leakage
+        working-directory: apps/trading_client
+        env:
+          WEB_RUNTIME_URL: http://127.0.0.1:4173
+          WEB_RUNTIME_STAGE: negative
+        run: node tool/web_runtime_test.mjs
+      - name: Upload backend and web evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fc03-connected-web-backend-evidence
+          path: |
+            /tmp/aitrading-backend.log
+            /tmp/flutter-web-server.log
+            /tmp/health.json
+            /tmp/unauth.json
+            /tmp/fc03-flutter-web-runtime-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+  android-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: aitrading
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aitrading"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Start real backend
+        working-directory: backend
+        run: |
+          mvn --batch-mode --no-transfer-progress -DskipTests package
+          java -jar target/ai-trading-system-0.1.0-SNAPSHOT.jar > /tmp/aitrading-backend.log 2>&1 &
+          for attempt in {1..60}; do
+            curl --fail --silent http://127.0.0.1:8080/actuator/health >/dev/null && exit 0
+            sleep 2
+          done
+          cat /tmp/aitrading-backend.log; exit 1
+      - name: Reconcile Android wrapper
+        working-directory: apps/trading_client
+        run: |
+          rm -rf android
+          flutter create --platforms=android --project-name trading_client .
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('android/app/src/main/AndroidManifest.xml')
+          s=p.read_text()
+          s=s.replace('<application', '<application android:usesCleartextTraffic="true"', 1)
+          p.write_text(s)
+          PY
+          flutter pub get
+      - name: Connected Android emulator journey
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          script: cd apps/trading_client && flutter test integration_test/connected_health_app_test.dart -d emulator-5554 --dart-define=API_BASE_URL=http://10.0.2.2:8080 --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
+      - name: Upload Android/backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fc03-android-runtime-evidence
+          path: /tmp/aitrading-backend.log
+          retention-days: 14
+
+  ios-runtime:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aitrading
+      SPRING_DATASOURCE_USERNAME: runner
+      SPRING_DATASOURCE_PASSWORD: ''
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Start local PostgreSQL and real backend
+        run: |
+          brew install postgresql@16
+          brew services start postgresql@16
+          for attempt in {1..30}; do pg_isready -h 127.0.0.1 && break || sleep 2; done
+          createdb aitrading || true
+          cd backend
+          mvn --batch-mode --no-transfer-progress -DskipTests package
+          java -jar target/ai-trading-system-0.1.0-SNAPSHOT.jar > /tmp/aitrading-backend.log 2>&1 &
+          for attempt in {1..60}; do
+            curl --fail --silent http://127.0.0.1:8080/actuator/health >/dev/null && exit 0
+            sleep 2
+          done
+          cat /tmp/aitrading-backend.log; exit 1
+      - name: Reconcile iOS wrapper and choose simulator
+        working-directory: apps/trading_client
+        run: |
+          rm -rf ios
+          flutter create --platforms=ios --project-name trading_client .
+          /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity dict' ios/Runner/Info.plist || true
+          /usr/libexec/PlistBuddy -c 'Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true' ios/Runner/Info.plist || true
+          flutter pub get
+          python - <<'PY' > /tmp/simulator_id
+          import json, subprocess
+          data=json.loads(subprocess.check_output(['xcrun','simctl','list','devices','available','-j']))
+          for runtime, devices in data['devices'].items():
+              for device in devices:
+                  if device['name'].startswith('iPhone'):
+                      print(device['udid']); raise SystemExit
+          raise SystemExit('No available iPhone simulator')
+          PY
+          xcrun simctl boot "$(cat /tmp/simulator_id)" || true
+      - name: Connected iOS Simulator journey
+        working-directory: apps/trading_client
+        run: flutter test integration_test/connected_health_app_test.dart -d "$(cat /tmp/simulator_id)" --dart-define=API_BASE_URL=http://127.0.0.1:8080 --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
+      - name: Upload iOS/backend evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fc03-ios-runtime-evidence
+          path: /tmp/aitrading-backend.log
+          retention-days: 14

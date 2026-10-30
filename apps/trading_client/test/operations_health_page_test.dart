@@ -60,6 +60,25 @@ void main() {
     expect(find.textContaining('NO_RUN_EVIDENCE'), findsOneWidget);
   });
 
+  testWidgets('summary metrics expose stable accessibility labels', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final session = OperatorSession();
+      final repository = FakeHealthRepository(() async => degradedSnapshot());
+      await tester.pumpWidget(healthApp(repository: repository, session: session));
+      await tester.enterText(find.byKey(const ValueKey('operator-key-field')), 'development-key');
+      await tester.tap(find.byKey(const ValueKey('connect-health')));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('Overall DEGRADED'), findsOneWidget);
+      expect(find.bySemanticsLabel('Execution PAPER'), findsOneWidget);
+      expect(find.bySemanticsLabel('LIVE UNAVAILABLE'), findsOneWidget);
+      expect(find.bySemanticsLabel('Emergency stop UNKNOWN'), findsOneWidget);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('style switch does not issue another backend request', (tester) async {
     final session = OperatorSession();
     final repository = FakeHealthRepository(() async => degradedSnapshot());
