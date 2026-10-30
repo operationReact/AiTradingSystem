@@ -1,0 +1,1 @@
+This branch switches live delivery from legacy React to Flutter Web, adds automatic dev-to-live deployment, adds Terraform provisioning through the existing GitHub OIDC role, and documents the single live environment contract.
