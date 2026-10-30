@@ -8,6 +8,16 @@ import 'package:trading_client/src/data/operator_session.dart';
 const connectedApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const connectedApiKey = String.fromEnvironment('CONNECTED_API_KEY');
 
+Future<void> pumpFrames(
+  WidgetTester tester, {
+  int frames = 12,
+  Duration step = const Duration(milliseconds: 100),
+}) async {
+  for (var i = 0; i < frames; i++) {
+    await tester.pump(step);
+  }
+}
+
 Future<void> waitForFinder(
   WidgetTester tester,
   Finder finder, {
@@ -25,18 +35,18 @@ Future<void> openOperationsHealth(WidgetTester tester, OperatorSession session) 
     repositoryFactory: () => HttpHealthRepository(session: session, baseUri: Uri.parse(connectedApiBaseUrl)),
     session: session,
   ));
-  await tester.pumpAndSettle();
+  await pumpFrames(tester);
 
   if (find.byKey(const ValueKey('operator-key-field')).evaluate().isEmpty) {
     final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
     navigator.pushNamed('/operations/health');
-    await tester.pumpAndSettle();
+    await pumpFrames(tester);
   }
 
   final operatorField = find.byKey(const ValueKey('operator-key-field'));
   expect(operatorField, findsOneWidget);
   await tester.ensureVisible(operatorField);
-  await tester.pumpAndSettle();
+  await pumpFrames(tester, frames: 4);
 }
 
 Future<void> connectAndWait(
@@ -49,7 +59,7 @@ Future<void> connectAndWait(
   await tester.ensureVisible(operatorField);
   await tester.enterText(operatorField, key);
   await tester.ensureVisible(connect);
-  await tester.pumpAndSettle();
+  await pumpFrames(tester, frames: 4);
   await tester.tap(connect);
   await tester.pump();
   await waitForFinder(tester, expectedState);
@@ -78,14 +88,14 @@ void main() {
     expect(globalClean, findsOneWidget);
     await tester.ensureVisible(globalClean);
     await tester.tap(globalClean);
-    await tester.pumpAndSettle();
+    await pumpFrames(tester);
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
 
     final darkTheme = find.byKey(const ValueKey('global-theme-dark'));
     expect(darkTheme, findsOneWidget);
     await tester.ensureVisible(darkTheme);
     await tester.tap(darkTheme);
-    await tester.pumpAndSettle();
+    await pumpFrames(tester);
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
   });
 
