@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/health_repository.dart';
 import '../data/operator_session.dart';
+import 'data_state_panel.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
@@ -146,10 +147,9 @@ class OverviewPage extends StatelessWidget {
   }
 }
 
-enum _AuthoritativeDataState { empty, loading, ready, stale, degraded, unknown, error }
-
 class _DashboardPanel extends StatefulWidget {
   const _DashboardPanel({required this.session, required this.repository});
+
   final OperatorSession session;
   final DashboardRepository repository;
 
@@ -169,24 +169,24 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     super.dispose();
   }
 
-  _AuthoritativeDataState get _dataState {
+  DataStateKind get _dataState {
     final summary = _summary;
-    if (_loading && summary == null) return _AuthoritativeDataState.loading;
-    if (_error != null && summary == null) return _AuthoritativeDataState.error;
-    if (_error != null && summary != null) return _AuthoritativeDataState.stale;
-    if (summary == null) return _AuthoritativeDataState.empty;
+    if (_loading) return DataStateKind.loading;
+    if (_error != null && summary == null) return DataStateKind.error;
+    if (_error != null && summary != null) return DataStateKind.stale;
+    if (summary == null) return DataStateKind.empty;
 
     switch (summary.systemStatus.trim().toUpperCase()) {
       case 'OK':
-        return _AuthoritativeDataState.ready;
+        return DataStateKind.ready;
       case 'STALE':
-        return _AuthoritativeDataState.stale;
+        return DataStateKind.stale;
       case 'HALTED':
       case 'RECONCILIATION_FAILED':
       case 'DEGRADED':
-        return _AuthoritativeDataState.degraded;
+        return DataStateKind.degraded;
       default:
-        return _AuthoritativeDataState.unknown;
+        return DataStateKind.unknown;
     }
   }
 
@@ -234,12 +234,54 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     });
   }
 
+  DataStatePanel _statePanel() {
+    final state = _dataState;
+    final (title, message) = switch (state) {
+      DataStateKind.empty => (
+          'No authoritative data loaded',
+          'Connect explicitly to request current server evidence.',
+        ),
+      DataStateKind.loading => (
+          _summary == null ? 'Loading authoritative state' : 'Refreshing authoritative state',
+          _summary == null
+              ? 'Waiting for the server response. No inferred trading state is shown.'
+              : 'Last successful evidence remains visible while a fresh server response is requested.',
+        ),
+      DataStateKind.ready => (
+          'Authoritative state available',
+          'The values below come from the connected trading service.',
+        ),
+      DataStateKind.stale => (
+          'Last-known state only',
+          _error ?? 'The server marked this evidence as stale. Refresh before relying on it.',
+        ),
+      DataStateKind.degraded => (
+          'Degraded operating state',
+          'The server reports a halt, reconciliation failure, or degraded condition. Treat execution readiness as unavailable.',
+        ),
+      DataStateKind.unknown => (
+          'Operating state UNKNOWN',
+          'The server status is not recognized as healthy. The client fails closed and does not infer readiness.',
+        ),
+      DataStateKind.error => (
+          'Authoritative data unavailable',
+          _error ?? 'Unable to load current server evidence.',
+        ),
+    };
+
+    return DataStatePanel(
+      key: ValueKey('dashboard-state-${state.name}'),
+      kind: state,
+      title: title,
+      message: message,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final summary = _summary;
-    final state = _dataState;
 
     return Card(
       child: Padding(
@@ -268,7 +310,7 @@ class _DashboardPanelState extends State<_DashboardPanel> {
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
-            _DataStateNotice(state: state, error: _error, refreshing: _loading && summary != null),
+            _statePanel(),
             const SizedBox(height: 16),
             if (summary == null) ...[
               TextField(
@@ -320,113 +362,9 @@ class _DashboardPanelState extends State<_DashboardPanel> {
   }
 }
 
-class _DataStateNotice extends StatelessWidget {
-  const _DataStateNotice({required this.state, this.error, this.refreshing = false});
-
-  final _AuthoritativeDataState state;
-  final String? error;
-  final bool refreshing;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    final (icon, title, body, background, foreground, key) = switch (state) {
-      _AuthoritativeDataState.empty => (
-          Icons.inbox_outlined,
-          'No authoritative data loaded',
-          'Connect explicitly to request current server evidence.',
-          scheme.surfaceContainerHighest,
-          scheme.onSurfaceVariant,
-          const ValueKey('dashboard-state-empty'),
-        ),
-      _AuthoritativeDataState.loading => (
-          Icons.sync_rounded,
-          'Loading authoritative state',
-          'Waiting for the server response. No inferred trading state is shown.',
-          scheme.primaryContainer,
-          scheme.onPrimaryContainer,
-          const ValueKey('dashboard-state-loading'),
-        ),
-      _AuthoritativeDataState.ready => (
-          Icons.verified_outlined,
-          'Authoritative state available',
-          'The values below come from the connected trading service.',
-          scheme.primaryContainer,
-          scheme.onPrimaryContainer,
-          const ValueKey('dashboard-state-ready'),
-        ),
-      _AuthoritativeDataState.stale => (
-          Icons.history_rounded,
-          'Last-known state only',
-          error ?? 'The server marked this evidence as stale. Refresh before relying on it.',
-          scheme.tertiaryContainer,
-          scheme.onTertiaryContainer,
-          const ValueKey('dashboard-state-stale'),
-        ),
-      _AuthoritativeDataState.degraded => (
-          Icons.warning_amber_rounded,
-          'Degraded operating state',
-          'The server reports a halt, reconciliation failure, or degraded condition. Treat execution readiness as unavailable.',
-          scheme.errorContainer,
-          scheme.onErrorContainer,
-          const ValueKey('dashboard-state-degraded'),
-        ),
-      _AuthoritativeDataState.unknown => (
-          Icons.help_outline_rounded,
-          'Operating state UNKNOWN',
-          'The server status is not recognized as healthy. The client fails closed and does not infer readiness.',
-          scheme.errorContainer,
-          scheme.onErrorContainer,
-          const ValueKey('dashboard-state-unknown'),
-        ),
-      _AuthoritativeDataState.error => (
-          Icons.cloud_off_outlined,
-          'Authoritative data unavailable',
-          error ?? 'Unable to load current server evidence.',
-          scheme.errorContainer,
-          scheme.onErrorContainer,
-          const ValueKey('dashboard-state-error'),
-        ),
-    };
-
-    return Semantics(
-      key: key,
-      container: true,
-      liveRegion: true,
-      label: '$title. $body',
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(14)),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: foreground),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: TextStyle(color: foreground, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 4),
-                  Text(body, style: TextStyle(color: foreground)),
-                  if (refreshing) ...[
-                    const SizedBox(height: 10),
-                    LinearProgressIndicator(color: foreground),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _SummaryGrid extends StatelessWidget {
   const _SummaryGrid({required this.summary});
+
   final DashboardSummary summary;
 
   String _money(num value) => '₹${value.toStringAsFixed(2)}';
@@ -509,6 +447,7 @@ class _SummaryGrid extends StatelessWidget {
 
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.label, required this.positive});
+
   final String label;
   final bool positive;
 
@@ -574,6 +513,7 @@ class _Header extends StatelessWidget {
 
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({required this.module});
+
   final _OverviewModule module;
 
   @override
@@ -736,6 +676,7 @@ class WorkspacePage extends StatelessWidget {
 
 class _OverviewModule {
   const _OverviewModule({required this.icon, required this.title, required this.description, required this.route});
+
   final IconData icon;
   final String title;
   final String description;
