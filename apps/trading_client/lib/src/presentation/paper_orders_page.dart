@@ -23,6 +23,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
   String _side = 'BUY';
   String _productType = 'DELIVERY';
   String? _pendingIdempotencyKey;
+  String? _validationError;
   PaperOrderPage? _orders;
   ApiFailure? _listFailure;
   ApiFailure? _submitFailure;
@@ -93,7 +94,8 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
 
     if (validation != null) {
       setState(() {
-        _submitFailure = _LocalOrderValidationFailure(validation!);
+        _validationError = validation;
+        _submitFailure = null;
         _lastResult = null;
       });
       return;
@@ -103,6 +105,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     _pendingIdempotencyKey = idempotencyKey;
     setState(() {
       _submitting = true;
+      _validationError = null;
       _submitFailure = null;
       _lastResult = null;
     });
@@ -138,7 +141,10 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
 
   Future<void> _cancel(PaperOrder order) async {
     if (order.id.isEmpty) return;
-    setState(() => _submitFailure = null);
+    setState(() {
+      _validationError = null;
+      _submitFailure = null;
+    });
     try {
       final result = await widget.repository.cancelOrder(order.id);
       if (!mounted) return;
@@ -164,6 +170,13 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
             const Text('This submits only to the PAPER execution API. Backend risk rules remain authoritative. No LIVE broker route is exposed here.'),
             const SizedBox(height: 16),
             _orderForm(context),
+            if (_validationError != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                key: const ValueKey('paper-order-validation-error'),
+                child: Padding(padding: const EdgeInsets.all(16), child: Text(_validationError!)),
+              ),
+            ],
             if (_submitFailure != null) ...[
               const SizedBox(height: 12),
               _submitError(_submitFailure!),
@@ -326,8 +339,4 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               : null,
         ),
       );
-}
-
-class _LocalOrderValidationFailure extends ApiFailure {
-  const _LocalOrderValidationFailure(String message) : super(message, null);
 }
