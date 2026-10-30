@@ -32,6 +32,7 @@ env:
 
 jobs:
   provision:
+    if: ${{ github.event_name == 'workflow_dispatch' || (vars.DOMAIN_NAME != '' && vars.AWS_ROLE_ARN != '') }}
     name: Terraform apply live infrastructure
     runs-on: ubuntu-latest
     timeout-minutes: 45
