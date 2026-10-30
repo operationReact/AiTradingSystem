@@ -23,7 +23,7 @@ class BacktestFailureNotificationTest {
         assertThatThrownBy(() -> controller.run(request)).isInstanceOf(IllegalStateException.class);
         verify(incidents).backtestFailed(1);
         clearInvocations(incidents);
-        when(backtests.run(any())).thenThrow(new BacktestException("INSUFFICIENT_HISTORY","Expected data rejection"));
+        doThrow(new BacktestException("INSUFFICIENT_HISTORY","Expected data rejection")).when(backtests).run(any());
         assertThatThrownBy(() -> controller.run(request)).isInstanceOf(BacktestException.class);
         verifyNoInteractions(incidents);
     }
