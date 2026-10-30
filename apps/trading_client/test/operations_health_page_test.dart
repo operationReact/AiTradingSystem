@@ -86,7 +86,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('operator-key-field')), 'development-key');
     await tester.tap(find.byKey(const ValueKey('connect-health')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Clean'));
+    final healthStyleControl = find.byKey(const ValueKey('design-style-control'));
+    await tester.tap(find.descendant(of: healthStyleControl, matching: find.text('Clean')));
     await tester.pumpAndSettle();
     expect(repository.calls, 1);
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
