@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/health_repository.dart';
 import '../data/operator_session.dart';
+import 'data_state_panel.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
@@ -148,6 +149,7 @@ class OverviewPage extends StatelessWidget {
 
 class _DashboardPanel extends StatefulWidget {
   const _DashboardPanel({required this.session, required this.repository});
+
   final OperatorSession session;
   final DashboardRepository repository;
 
@@ -165,6 +167,27 @@ class _DashboardPanelState extends State<_DashboardPanel> {
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  DataStateKind get _dataState {
+    final summary = _summary;
+    if (_loading) return DataStateKind.loading;
+    if (_error != null && summary == null) return DataStateKind.error;
+    if (_error != null && summary != null) return DataStateKind.stale;
+    if (summary == null) return DataStateKind.empty;
+
+    switch (summary.systemStatus.trim().toUpperCase()) {
+      case 'OK':
+        return DataStateKind.ready;
+      case 'STALE':
+        return DataStateKind.stale;
+      case 'HALTED':
+      case 'RECONCILIATION_FAILED':
+      case 'DEGRADED':
+        return DataStateKind.degraded;
+      default:
+        return DataStateKind.unknown;
+    }
   }
 
   Future<void> _connect() async {
@@ -207,7 +230,51 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     setState(() {
       _summary = null;
       _error = null;
+      _loading = false;
     });
+  }
+
+  DataStatePanel _statePanel() {
+    final state = _dataState;
+    final (title, message) = switch (state) {
+      DataStateKind.empty => (
+          'No authoritative data loaded',
+          'Connect explicitly to request current server evidence.',
+        ),
+      DataStateKind.loading => (
+          _summary == null ? 'Loading authoritative state' : 'Refreshing authoritative state',
+          _summary == null
+              ? 'Waiting for the server response. No inferred trading state is shown.'
+              : 'Last successful evidence remains visible while a fresh server response is requested.',
+        ),
+      DataStateKind.ready => (
+          'Authoritative state available',
+          'The values below come from the connected trading service.',
+        ),
+      DataStateKind.stale => (
+          'Last-known state only',
+          _error ?? 'The server marked this evidence as stale. Refresh before relying on it.',
+        ),
+      DataStateKind.degraded => (
+          'Degraded operating state',
+          'The server reports a halt, reconciliation failure, or degraded condition. Treat execution readiness as unavailable.',
+        ),
+      DataStateKind.unknown => (
+          'Operating state UNKNOWN',
+          'The server status is not recognized as healthy. The client fails closed and does not infer readiness.',
+        ),
+      DataStateKind.error => (
+          'Authoritative data unavailable',
+          _error ?? 'Unable to load current server evidence.',
+        ),
+    };
+
+    return DataStatePanel(
+      key: ValueKey('dashboard-state-${state.name}'),
+      kind: state,
+      title: title,
+      message: message,
+    );
   }
 
   @override
@@ -226,21 +293,28 @@ class _DashboardPanelState extends State<_DashboardPanel> {
               children: [
                 Icon(Icons.lock_outline_rounded, color: scheme.primary),
                 const SizedBox(width: 10),
-                Expanded(child: Text('Operator access', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
-                if (summary != null)
-                  _StatusChip(label: summary.mode, positive: summary.mode == 'PAPER'),
+                Expanded(
+                  child: Text(
+                    'Operator access',
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (summary != null) _StatusChip(label: summary.mode, positive: summary.mode == 'PAPER'),
               ],
             ),
             const SizedBox(height: 8),
             Text(
               summary == null
                   ? 'Connect to load authoritative portfolio and operating state. Credentials are kept only for this session.'
-                  : 'Connected to authoritative PAPER portfolio and operating state.',
+                  : 'Server state remains authoritative. Last successful evidence stays visible during refresh failures.',
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
+            _statePanel(),
+            const SizedBox(height: 16),
             if (summary == null) ...[
               TextField(
+                key: const ValueKey('dashboard-access-key'),
                 controller: _controller,
                 obscureText: true,
                 enableSuggestions: false,
@@ -249,18 +323,13 @@ class _DashboardPanelState extends State<_DashboardPanel> {
                 onSubmitted: (_) => _loading ? null : _connect(),
               ),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  FilledButton.icon(
-                    onPressed: _loading ? null : _connect,
-                    icon: _loading
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.login_rounded),
-                    label: const Text('Connect workspace'),
-                  ),
-                ],
+              FilledButton.icon(
+                key: const ValueKey('dashboard-connect'),
+                onPressed: _loading ? null : _connect,
+                icon: _loading
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.login_rounded),
+                label: const Text('Connect workspace'),
               ),
             ] else ...[
               _SummaryGrid(summary: summary),
@@ -270,28 +339,20 @@ class _DashboardPanelState extends State<_DashboardPanel> {
                 runSpacing: 10,
                 children: [
                   OutlinedButton.icon(
+                    key: const ValueKey('dashboard-refresh'),
                     onPressed: _loading ? null : _refresh,
-                    icon: const Icon(Icons.refresh_rounded),
-                    label: const Text('Refresh'),
+                    icon: _loading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.refresh_rounded),
+                    label: Text(_loading ? 'Refreshing' : 'Refresh'),
                   ),
                   TextButton.icon(
+                    key: const ValueKey('dashboard-disconnect'),
                     onPressed: _clear,
                     icon: const Icon(Icons.logout_rounded),
                     label: const Text('Disconnect'),
                   ),
                 ],
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 14),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: scheme.errorContainer,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
               ),
             ],
           ],
@@ -303,6 +364,7 @@ class _DashboardPanelState extends State<_DashboardPanel> {
 
 class _SummaryGrid extends StatelessWidget {
   const _SummaryGrid({required this.summary});
+
   final DashboardSummary summary;
 
   String _money(num value) => '₹${value.toStringAsFixed(2)}';
@@ -327,15 +389,16 @@ class _SummaryGrid extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
                 _StatusChip(label: summary.systemStatus, positive: summary.systemStatus == 'OK'),
-                const SizedBox(width: 8),
-                _StatusChip(label: summary.cashReconciled ? 'RECONCILED' : 'NOT RECONCILED', positive: summary.cashReconciled),
-                if (summary.newOrdersHalted) ...[
-                  const SizedBox(width: 8),
-                  const _StatusChip(label: 'ORDERS HALTED', positive: false),
-                ],
+                _StatusChip(
+                  label: summary.cashReconciled ? 'RECONCILED' : 'NOT RECONCILED',
+                  positive: summary.cashReconciled,
+                ),
+                if (summary.newOrdersHalted) const _StatusChip(label: 'ORDERS HALTED', positive: false),
               ],
             ),
             const SizedBox(height: 16),
@@ -361,9 +424,15 @@ class _SummaryGrid extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(item.$1, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                      Text(
+                        item.$1,
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
                       const SizedBox(height: 4),
-                      Text(item.$2, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                      Text(
+                        item.$2,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
                     ],
                   ),
                 );
@@ -378,6 +447,7 @@ class _SummaryGrid extends StatelessWidget {
 
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.label, required this.positive});
+
   final String label;
   final bool positive;
 
@@ -422,7 +492,10 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('AiTradingSystem', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-              Text('Trading research & risk workspace', style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+              Text(
+                'Trading research & risk workspace',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
             ],
           ),
         ),
@@ -440,6 +513,7 @@ class _Header extends StatelessWidget {
 
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({required this.module});
+
   final _OverviewModule module;
 
   @override
@@ -456,11 +530,22 @@ class _ModuleCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [Icon(module.icon, color: scheme.primary, size: 28), const Spacer(), Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 20)]),
+              Row(
+                children: [
+                  Icon(module.icon, color: scheme.primary, size: 28),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 20),
+                ],
+              ),
               const Spacer(),
               Text(module.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 7),
-              Text(module.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4)),
+              Text(
+                module.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
+              ),
             ],
           ),
         ),
@@ -470,7 +555,14 @@ class _ModuleCard extends StatelessWidget {
 }
 
 class WorkspacePage extends StatelessWidget {
-  const WorkspacePage({required this.title, required this.subtitle, required this.icon, required this.emptyTitle, required this.emptyBody, super.key});
+  const WorkspacePage({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.emptyTitle,
+    required this.emptyBody,
+    super.key,
+  });
 
   const WorkspacePage.market({super.key})
       : title = 'Market intelligence',
@@ -513,7 +605,14 @@ class WorkspacePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        actions: [IconButton(tooltip: 'System health', onPressed: () => Navigator.of(context).pushNamed('/operations/health'), icon: const Icon(Icons.monitor_heart_outlined)), const SizedBox(width: 8)],
+        actions: [
+          IconButton(
+            tooltip: 'System health',
+            onPressed: () => Navigator.of(context).pushNamed('/operations/health'),
+            icon: const Icon(Icons.monitor_heart_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: Center(
@@ -525,16 +624,45 @@ class WorkspacePage extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: scheme.primary, size: 28)),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: scheme.primary, size: 28),
+                    ),
                     const SizedBox(width: 16),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))])),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 28),
                 Card(
+                  key: const ValueKey('workspace-state-empty'),
                   child: Padding(
                     padding: const EdgeInsets.all(28),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.data_usage_rounded, color: scheme.primary), const SizedBox(height: 18), Text(emptyTitle, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 8), Text(emptyBody, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.5))]),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.data_usage_rounded, color: scheme.primary),
+                        const SizedBox(height: 18),
+                        Text(emptyTitle, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        Text(
+                          emptyBody,
+                          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -548,6 +676,7 @@ class WorkspacePage extends StatelessWidget {
 
 class _OverviewModule {
   const _OverviewModule({required this.icon, required this.title, required this.description, required this.route});
+
   final IconData icon;
   final String title;
   final String description;
