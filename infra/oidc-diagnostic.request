@@ -1,1 +1,2 @@
 capture_dev_oidc_claims=true
+validate_signing_kid_against_jwks=true
