@@ -13,6 +13,9 @@ Widget host(DataStatePanel panel) => MaterialApp(
 
 void main() {
   testWidgets('loading state is explicit and accessible', (tester) async {
+    final semantics = tester.ensureSemantics();
+    addTearDown(semantics.dispose);
+
     await tester.pumpWidget(
       host(
         const DataStatePanel(
