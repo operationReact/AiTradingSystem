@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -23,6 +24,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 class RiskPolicyConfigIT extends AbstractPostgresIT {
     private static final String KEY_HEADER = "X-API-Key";
@@ -32,6 +35,7 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
     @Autowired RiskPolicyConfigService service;
     @Autowired RiskPolicyBootstrap bootstrap;
     @Autowired MockMvc mvc;
+    @Autowired PlatformTransactionManager transactions;
 
     private UUID activeId;
 
@@ -131,6 +135,39 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
                 .isEqualTo(1);
         assertThat(repository.count()).isEqualTo(3);
         assertThat(repository.requireActive().version()).isEqualTo(3);
+    }
+
+    @Test
+    void transactionThatPredatesAnotherActivationCanReadAndActivateItsSuccessorWithoutBackdating() {
+        try (ExecutorService pool = Executors.newSingleThreadExecutor()) {
+            new TransactionTemplate(transactions).executeWithoutResult(status -> {
+                // Establish an older PostgreSQL transaction timestamp before another connection activates v2.
+                OffsetDateTime began = jdbc.queryForObject("SELECT now()", OffsetDateTime.class);
+                RiskPolicyView second;
+                try {
+                    second = pool.submit(() -> service.createAndActivate(request("Newer transaction v2", "0.20"), "operator-a"))
+                            .get(10, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (Exception ex) {
+                    throw new IllegalStateException("Concurrent activation failed", ex);
+                }
+                assertThat(second.effectiveFrom()).isAfter(began.toInstant());
+                assertThat(repository.requireActive().id()).isEqualTo(second.id());
+                RiskPolicyView third = service.createAndActivate(request("Older transaction v3", "0.15"), "operator-b");
+                assertThat(third.version()).isEqualTo(3);
+                assertThat(third.effectiveFrom()).isAfter(second.effectiveFrom());
+                assertThat(repository.requireView(second.id()).effectiveTo()).isEqualTo(third.effectiveFrom());
+                assertThat(repository.requireActive().id()).isEqualTo(third.id());
+            });
+        }
+        assertThat(repository.requireActive().version()).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM risk_policy_config WHERE active=TRUE", Integer.class)).isEqualTo(1);
+    }
+
+    @Test
+    void statementTimeLookupStillRejectsAnActiveRowWithAFutureEffectiveDate() {
+        jdbc.update("UPDATE risk_policy_config SET effective_from = clock_timestamp() + interval '1 day' WHERE id = ?", activeId);
+        assertThatThrownBy(repository::requireActive).isInstanceOf(IllegalStateException.class)
+                .hasMessage("no active risk policy configured");
     }
 
     @Test
