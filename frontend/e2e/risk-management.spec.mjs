@@ -171,3 +171,29 @@ test('E2E-P5 Clear Invest mobile — same risk data with guided composition', as
   await assertAccessibility(page);
   await page.screenshot({ path: testInfo.outputPath('clear-invest-risk-390.png'), fullPage: true });
 });
+
+test('risk review reason survives a presentation change without changing stop authority', async ({ page }) => {
+  const state = await mockRiskApi(page);
+  await connect(page, 'pro-terminal', { width: 1440, height: 900 });
+  await page.getByRole('button', { name: 'Halt new orders', exact: true }).click();
+  await page.getByLabel('Reason (required, 3–200 characters)').fill('Reviewing feed freshness');
+  await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.getByLabel('Appearance — Experience').selectOption('clear-invest');
+  await page.getByRole('button', { name: 'Halt new orders', exact: true }).click();
+  await expect(page.getByLabel('Reason (required, 3–200 characters)')).toHaveValue('Reviewing feed freshness');
+  expect(state.halted()).toBe(false);
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect.poll(() => state.halted()).toBe(true);
+});
+
+test('missing control evidence is unknown and cannot be presented as accepting new orders', async ({ page }) => {
+  await mockRiskApi(page);
+  await page.route('**/api/dashboard/summary', route => route.fulfill({ contentType: 'application/json', body: '{}' }));
+  await connect(page, 'pro-terminal', { width: 1440, height: 900 });
+  await expect(page.getByText('Stop state unknown', { exact: true })).toBeVisible();
+  await expect(page.getByText('Accepting new orders', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Halt new orders', exact: true })).toBeDisabled();
+  await page.getByLabel('Appearance — Experience').selectOption('clear-invest');
+  await expect(page.getByText('Risk controls healthy', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Stop state unknown', { exact: true })).toBeVisible();
+});

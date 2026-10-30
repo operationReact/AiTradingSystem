@@ -119,3 +119,18 @@ test('recoverable decision error keeps the request version and allows retry', as
   expect(state.decisions).toHaveLength(1);
   expect(state.decisions[0].expectedRowVersion).toBe(4);
 });
+
+test('presentation change preserves the open approval review and requires the same final confirmation', async ({ page }) => {
+  const state = await fixture(page);
+  await connect(page, 'pro-terminal', 1440);
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
+  await page.getByRole('dialog').getByLabel('Decision reason').fill('Reviewed immutable request');
+  // Programmatic preference change tests context updates while the dialog keeps background controls inert.
+  await page.getByLabel('Appearance — Experience').selectOption('clear-invest', { force: true });
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await expect(page.getByRole('dialog').getByLabel('Decision reason')).toHaveValue('Reviewed immutable request');
+  expect(state.decisions).toHaveLength(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirm approve', exact: true }).click();
+  await expect(page.getByText('PAPER order filled', { exact: true })).toBeVisible();
+  expect(state.decisions).toEqual([{ expectedRowVersion: 4, actor: 'operator-ui', reason: 'Reviewed immutable request' }]);
+});
