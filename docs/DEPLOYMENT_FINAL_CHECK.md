@@ -1,1 +1,0 @@
-Pre-PR checks: Flutter Web deployment workflow added; live Terraform provisioning workflow added; remote state configured; obsolete paper deployment removed; DOMAIN_NAME remains the only unresolved owner-supplied deployment input.
