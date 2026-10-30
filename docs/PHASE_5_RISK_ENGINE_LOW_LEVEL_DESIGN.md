@@ -1,5 +1,8 @@
 # Phase 5 — Deterministic Risk Engine Completion — Replacement Low-Level Design
 
+> **FLUTTER-HARD-GATE — 2026-10-30:** The user-confirmed product client is Flutter for web, Android and iOS across Notion P0–P21 (22 workstreams). The canonical Notion plan and `docs/architecture/flutter-delivery.md` supersede conflicting 16-phase, React-only, PWA-only and native-optional delivery statements below. Historical React examples and completion records remain reference evidence only; backend evidence is assessed separately. Read `docs/FLUTTER_CORRECTION_AUDIT.md` before implementation. No Flutter/platform completion is claimed.
+
+
 > **Status:** AUTHORITATIVE PHASE-5 IMPLEMENTATION DESIGN  
 > **Supersedes:** the Phase 5 / `P05-*` section in `docs/MASTER_LOW_LEVEL_IMPLEMENTATION_DESIGN.md`  
 > **Scope authority:** `docs/MASTER_IMPLEMENTATION_PLAN.md`  

@@ -1,0 +1,107 @@
+{
+  "merges": {
+    "2": "64fbc9088e83538fb95a9f1e138eee5acb685ba6",
+    "3": "f0cd0bd8ed8ab4b1f98612596c671a96315dc920",
+    "4": "3554745b1752504d63edade7fab00b8df38625d3",
+    "6": "2502c85b8fbc1a2dd7a0e5e7a16cdf545e543abe",
+    "7": "2a264510f8f141eb6e5755dc2ab30fab8705b20e",
+    "8": "4bfe1d906b25ca5c8b23b5da7c5bf71be54850f9",
+    "9": "ec415fd391da880b9e24520913b30bf531e5f46a",
+    "43": "d6d5cd22d7f3803af0496505b33362a6fc18ea96",
+    "50": "92afaf47fdd590cdb9db5245ad4e55f40417a347",
+    "52": "f2e4523c3d828ea6dbbc77fedad8379ba6568366",
+    "54": "e5741235f89d699783c72e2a2fb9408722f047ce",
+    "91": "d4ea27a1d9f7c0cf51de67d9b3faa8e0553d77fb",
+    "102": "69ec4b26dffc2c9965075b1890d353c182d099c3",
+    "103": "db106028a9de9e8205cc21412cfc8fdd3f2dd13f",
+    "104": "2d934c4118b2356466c7ea1d75b952a430b7881f",
+    "105": "935c99dbba50a5286d81b434add8a397b4ee1b99",
+    "106": "b2c575f0a3c5022c70e4d61b1d162b911312b86a",
+    "107": "294b8ade9c7c06551ff8c79a4cb8742311f6cf38",
+    "113": "484230e7c422fe7dd5e63c8aa30232645e234ce9",
+    "114": "b218b1791a6f2e9b383b4562d81ef67e83f15046",
+    "115": "730f8231ab55c1b2cfc5851aebf72d62f26e9f8d",
+    "134": "4e8ef4a845380c2fe9072da4f479ee34d93158bc",
+    "135": "44677db2304e6aff6c67deb9c8b0d3f43c6c64f9"
+  },
+  "paths": {
+    "136": [
+      ".github/workflows/phase7-approval-gate.yml",
+      "backend/src/main/java/in/aitradingsystem/api/ApprovalController.java",
+      "backend/src/main/java/in/aitradingsystem/execution/OrderApprovalService.java",
+      "backend/src/test/java/in/aitradingsystem/api/ApprovalControllerTest.java",
+      "backend/src/test/java/in/aitradingsystem/execution/OrderApprovalConcurrencyIT.java",
+      "docs/phase7-approval-completion-contract.md"
+    ],
+    "139": [
+      ".github/workflows/phase7-approval-gate.yml",
+      "backend/src/test/java/in/aitradingsystem/paper/PaperApprovalWorkflowIT.java",
+      "docs/phase7-approval-completion-contract.md",
+      "frontend/e2e/approvals.spec.mjs",
+      "frontend/src/pages/ApprovalsPage.jsx"
+    ],
+    "140": [
+      ".github/workflows/phase8-performance-gate.yml",
+      "backend/src/main/java/in/aitradingsystem/analytics/PerformanceAggregationService.java",
+      "backend/src/main/resources/db/migration/V34__daily_performance_materialization.sql",
+      "backend/src/test/java/in/aitradingsystem/analytics/PerformanceAggregationServiceIT.java",
+      "backend/src/test/java/in/aitradingsystem/analytics/PerformanceDrawdownTest.java",
+      "docs/phase8-performance-contract.md"
+    ],
+    "146": [
+      ".github/workflows/phase8-completion-gate.yml",
+      "backend/src/test/java/in/aitradingsystem/api/Phase8ExitGateIT.java",
+      "docs/phase8-completion-contract.md"
+    ],
+    "150": [
+      ".github/workflows/phase9-frontend-gate.yml",
+      "docs/phase9-portfolio-controller.md",
+      "frontend/e2e/paper-accounting.spec.mjs",
+      "frontend/e2e/signal-identity.spec.mjs",
+      "frontend/src/components/portfolio/clear/ClearPortfolioView.jsx",
+      "frontend/src/components/portfolio/pro/ProPortfolioView.jsx",
+      "frontend/src/components/portfolio/shared/PortfolioWorkspace.jsx",
+      "frontend/src/pages/OverviewPage.jsx",
+      "frontend/src/pages/PortfolioPage.jsx",
+      "frontend/src/pages/SignalsPage.jsx"
+    ],
+    "152": [
+      ".github/workflows/phase9-frontend-gate.yml",
+      "docs/phase9-shared-controllers.md",
+      "frontend/e2e/approvals.spec.mjs",
+      "frontend/e2e/risk-management.spec.mjs",
+      "frontend/src/components/approvals/clear/ClearApprovalView.jsx",
+      "frontend/src/components/approvals/pro/ProApprovalView.jsx",
+      "frontend/src/components/approvals/shared/ApprovalCard.jsx",
+      "frontend/src/components/approvals/shared/ApprovalDecisionDialog.jsx",
+      "frontend/src/components/approvals/shared/ApprovalWorkspace.jsx",
+      "frontend/src/components/risk/clear/ClearInvestRiskView.jsx",
+      "frontend/src/components/risk/pro/ProTerminalRiskView.jsx",
+      "frontend/src/components/risk/shared/RiskEvidence.jsx",
+      "frontend/src/lib/riskPresentation.js",
+      "frontend/src/pages/ApprovalsPage.jsx",
+      "frontend/src/pages/RiskPage.jsx"
+    ],
+    "153": [
+      "backend/src/main/java/in/aitradingsystem/risk/RiskPolicyConfigRepository.java",
+      "backend/src/test/java/in/aitradingsystem/risk/RiskPolicyConfigIT.java",
+      "docs/risk-policy-activation-clock.md"
+    ],
+    "155": [
+      "docs/phase9-dashboard-controller.md",
+      "frontend/e2e/dashboard-controller.spec.mjs",
+      "frontend/src/components/dashboard/AngelOneStatusPanel.jsx",
+      "frontend/src/components/dashboard/NewsPanel.jsx",
+      "frontend/src/components/dashboard/OperationalPanels.jsx",
+      "frontend/src/components/dashboard/ProvenanceNewsPanel.jsx",
+      "frontend/src/components/dashboard/clear/ClearOverviewView.jsx",
+      "frontend/src/components/dashboard/pro/ProOverviewView.jsx",
+      "frontend/src/components/dashboard/shared/OverviewWorkspace.jsx",
+      "frontend/src/components/risk/shared/RiskEvidence.jsx",
+      "frontend/src/hooks/useApi.js",
+      "frontend/src/hooks/useDashboardWidgets.js",
+      "frontend/src/lib/dashboardPreferences.js",
+      "frontend/src/pages/OverviewPage.jsx"
+    ]
+  }
+}
