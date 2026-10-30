@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  AWS_REGION: ap-south-2
+  AWS_REGION: us-east-1
   LIVE_DOMAIN: maargglobal.com
   ECR_BACKEND: ai-trading-system-backend
   ECR_FRONTEND: ai-trading-system-frontend
