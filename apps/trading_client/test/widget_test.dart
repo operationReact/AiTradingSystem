@@ -17,7 +17,7 @@ class SmokeHealthRepository implements HealthRepository {
 }
 
 void main() {
-  testWidgets('boots into the product overview instead of operations health', (tester) async {
+  testWidgets('boots into the product workspace without framework-facing copy', (tester) async {
     final session = OperatorSession();
     await tester.pumpWidget(
       TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
@@ -25,7 +25,25 @@ void main() {
 
     expect(find.text('AiTradingSystem'), findsOneWidget);
     expect(find.text('Research. Validate. Operate with control.'), findsOneWidget);
-    expect(find.text('Operations health'), findsOneWidget);
+    expect(find.textContaining('Flutter'), findsNothing);
+    expect(find.text('Development operator session'), findsNothing);
+    expect(find.text('Market intelligence'), findsOneWidget);
+    expect(find.text('Signals'), findsOneWidget);
+    expect(find.text('Portfolio'), findsOneWidget);
+    expect(find.text('Risk controls'), findsOneWidget);
+  });
+
+  testWidgets('workspace cards navigate to product destinations', (tester) async {
+    final session = OperatorSession();
+    await tester.pumpWidget(
+      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('workspace-/signals')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Signals'), findsWidgets);
+    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
     expect(find.text('Development operator session'), findsNothing);
   });
 }
