@@ -75,6 +75,17 @@ jobs:
           case "$DOMAIN_NAME" in
             http://*|https://*|*/*) echo "::error::DOMAIN_NAME must be a bare DNS name"; exit 1 ;;
           esac
+      - name: Set up pinned Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Build live Flutter web assets
+        working-directory: apps/trading_client
+        run: |
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL="https://${{ vars.DOMAIN_NAME }}"
       - name: Configure AWS credentials with GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -94,16 +105,14 @@ jobs:
           set -euo pipefail
           docker build -f backend/Dockerfile -t "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG" backend
           docker push "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG"
-      - name: Build and push Flutter web image
+      - name: Package and push Flutter web image
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           IMAGE_TAG: ${{ github.sha }}
-          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
         run: |
           set -euo pipefail
           docker build \
             -f apps/trading_client/Dockerfile \
-            --build-arg API_BASE_URL="https://$DOMAIN_NAME" \
             -t "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" \
             apps/trading_client
           docker push "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG"
