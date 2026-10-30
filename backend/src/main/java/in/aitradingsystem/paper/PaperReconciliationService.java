@@ -2,6 +2,8 @@ package in.aitradingsystem.paper;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.notification.NotificationService;
+import in.aitradingsystem.notification.NotificationSeverity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -26,11 +28,13 @@ public class PaperReconciliationService {
     private final JdbcClient jdbc;
     private final ObjectMapper json;
     private final Clock clock;
+    private final NotificationService notifications;
 
-    public PaperReconciliationService(JdbcClient jdbc, ObjectMapper json, Clock clock) {
+    public PaperReconciliationService(JdbcClient jdbc, ObjectMapper json, Clock clock, NotificationService notifications) {
         this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
+        this.notifications = notifications;
     }
 
     @Transactional
@@ -66,6 +70,9 @@ public class PaperReconciliationService {
                 .param("differenceCount", differences.size())
                 .param("id", runId)
                 .update();
+            if (!differences.isEmpty()) notifications.raise("RECONCILIATION_DIFFERENCE", NotificationSeverity.CRITICAL,
+                "PAPER reconciliation found differences", "Review the persisted reconciliation evidence. Source accounting has not been repaired.",
+                "PAPER_RECONCILIATION", runId.toString(), "RECONCILIATION_DIFFERENCE:ACCOUNT_1");
             return new ReconciliationResult(runId, status, checks, differences.size(), List.copyOf(differences));
         } catch (RuntimeException ex) {
             jdbc.sql("""
