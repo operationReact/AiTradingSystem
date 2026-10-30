@@ -36,6 +36,16 @@ Future<void> openOperationsHealth(WidgetTester tester, OperatorSession session) 
   expect(find.byKey(const ValueKey('operator-key-field')), findsOneWidget);
 }
 
+Future<void> connectHealth(WidgetTester tester, String key) async {
+  final operatorField = find.byKey(const ValueKey('operator-key-field'));
+  final connectButton = find.byKey(const ValueKey('connect-health'));
+  await tester.ensureVisible(operatorField);
+  await tester.enterText(operatorField, key);
+  await tester.ensureVisible(connectButton);
+  await tester.pumpAndSettle();
+  await tester.tap(connectButton);
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -45,18 +55,21 @@ void main() {
     final session = OperatorSession();
     await openOperationsHealth(tester, session);
 
-    await tester.enterText(find.byKey(const ValueKey('operator-key-field')), connectedApiKey);
-    await tester.tap(find.byKey(const ValueKey('connect-health')));
+    await connectHealth(tester, connectedApiKey);
     await waitForFinder(tester, find.byKey(const ValueKey('health-summary')));
 
     expect(find.text('PAPER'), findsWidgets);
     expect(find.text('UNAVAILABLE'), findsWidgets);
 
-    await tester.tap(find.text('Clean'));
+    final styleControl = find.byKey(const ValueKey('design-style-control'));
+    await tester.ensureVisible(styleControl);
+    await tester.tap(find.descendant(of: styleControl, matching: find.text('Clean')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('theme-mode-control')));
+    final themeControl = find.byKey(const ValueKey('theme-mode-control'));
+    await tester.ensureVisible(themeControl);
+    await tester.tap(themeControl);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Dark').last);
     await tester.pumpAndSettle();
@@ -68,14 +81,10 @@ void main() {
     await openOperationsHealth(tester, session);
     final badKey = '${connectedApiKey}wrong';
     final operatorField = find.byKey(const ValueKey('operator-key-field'));
-    await tester.enterText(operatorField, badKey);
-    await tester.tap(find.byKey(const ValueKey('connect-health')));
+    await connectHealth(tester, badKey);
     await waitForFinder(tester, find.byKey(const ValueKey('health-error')));
     expect(find.text('AUTHENTICATION_REJECTED'), findsOneWidget);
 
-    // The obscured input necessarily owns the entered value in its EditableText.
-    // Prove that it is the only widget containing the credential, so the value is
-    // not echoed into error text, diagnostics, or any other rendered surface.
     final allCredentialText = find.textContaining(badKey);
     final credentialInsideInput = find.descendant(of: operatorField, matching: allCredentialText);
     expect(allCredentialText, findsOneWidget);
