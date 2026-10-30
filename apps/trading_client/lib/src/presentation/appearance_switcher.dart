@@ -25,61 +25,58 @@ class AppearanceSwitcher extends StatelessWidget {
         color: Colors.transparent,
         child: SafeArea(
           minimum: const EdgeInsets.all(12),
-          child: Align(
-            alignment: Alignment.topRight,
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    SegmentedButton<DesignStyle>(
-                      key: const ValueKey('global-design-style-control'),
-                      showSelectedIcon: false,
-                      segments: const [
-                        ButtonSegment(
-                          value: DesignStyle.neonFuturisticAi,
-                          label: Text('Neon AI'),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  SegmentedButton<DesignStyle>(
+                    key: const ValueKey('global-design-style-control'),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: DesignStyle.neonFuturisticAi,
+                        label: Text('Neon AI'),
+                      ),
+                      ButtonSegment(
+                        value: DesignStyle.cleanModern,
+                        label: Text('Clean'),
+                      ),
+                    ],
+                    selected: {designStyle},
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        onDesignStyleChanged(selection.first);
+                      }
+                    },
+                  ),
+                  DropdownButtonHideUnderline(
+                    child: DropdownButton<ThemeMode>(
+                      key: const ValueKey('global-theme-mode-control'),
+                      value: themeMode,
+                      items: const [
+                        DropdownMenuItem(
+                          value: ThemeMode.system,
+                          child: Text('System'),
                         ),
-                        ButtonSegment(
-                          value: DesignStyle.cleanModern,
-                          label: Text('Clean'),
+                        DropdownMenuItem(
+                          value: ThemeMode.light,
+                          child: Text('Light'),
+                        ),
+                        DropdownMenuItem(
+                          value: ThemeMode.dark,
+                          child: Text('Dark'),
                         ),
                       ],
-                      selected: {designStyle},
-                      onSelectionChanged: (selection) {
-                        if (selection.isNotEmpty) {
-                          onDesignStyleChanged(selection.first);
-                        }
+                      onChanged: (value) {
+                        if (value != null) onThemeModeChanged(value);
                       },
                     ),
-                    DropdownButtonHideUnderline(
-                      child: DropdownButton<ThemeMode>(
-                        key: const ValueKey('global-theme-mode-control'),
-                        value: themeMode,
-                        items: const [
-                          DropdownMenuItem(
-                            value: ThemeMode.system,
-                            child: Text('System'),
-                          ),
-                          DropdownMenuItem(
-                            value: ThemeMode.light,
-                            child: Text('Light'),
-                          ),
-                          DropdownMenuItem(
-                            value: ThemeMode.dark,
-                            child: Text('Dark'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) onThemeModeChanged(value);
-                        },
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
