@@ -22,6 +22,11 @@ public class ResearchEvaluationRepository {
     }
 
     public ResearchCandidateProvenance requireCandidate(long candidateId) {
+        return findCandidate(candidateId)
+                .orElseThrow(() -> new IllegalArgumentException("research candidate not found: " + candidateId));
+    }
+
+    public Optional<ResearchCandidateProvenance> findCandidate(long candidateId) {
         if (candidateId < 1) throw new IllegalArgumentException("candidateId must be positive");
         return jdbc.query("""
                 SELECT id, scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy,
@@ -37,8 +42,7 @@ public class ResearchEvaluationRepository {
                 rs.getObject("signal_candle_time", OffsetDateTime.class).toInstant(),
                 rs.getObject("data_cutoff_at", OffsetDateTime.class).toInstant(),
                 rs.getBigDecimal("entry_price"), rs.getBigDecimal("stop_price"), rs.getBigDecimal("target_price")),
-                candidateId).stream().findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("research candidate not found: " + candidateId));
+                candidateId).stream().findFirst();
     }
 
     /**
