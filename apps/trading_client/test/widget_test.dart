@@ -93,4 +93,33 @@ void main() {
     expect(field.controller?.text, 'local-draft-key');
     expect(session.operatorKey, isNull);
   });
+
+  testWidgets('global appearance overlay does not block underlying page controls', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final session = OperatorSession();
+    await tester.pumpWidget(
+      TradingApp(
+        repositoryFactory: SmokeHealthRepository.new,
+        session: session,
+        initialRoute: '/operations/health',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final field = find.byKey(const ValueKey('operator-key-field'));
+    final connect = find.byKey(const ValueKey('connect-health'));
+    await tester.enterText(field, 'native-test-key');
+    await tester.ensureVisible(connect);
+    await tester.tap(connect);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
+    expect(session.operatorKey, 'native-test-key');
+  });
 }
