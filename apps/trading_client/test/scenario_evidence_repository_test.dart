@@ -91,8 +91,8 @@ void main() {
       ),
     );
 
-    expect(
-      () => repository.fetch('11111111-1111-1111-1111-111111111111'),
+    await expectLater(
+      repository.fetch('11111111-1111-1111-1111-111111111111'),
       throwsA(isA<ApiTransportFailure>().having((failure) => failure.code, 'code', 'INCOMPLETE_SCENARIO_PROVENANCE')),
     );
   });
