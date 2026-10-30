@@ -10,6 +10,10 @@ on:
       - 'docs/flutter-delivery-gate.json'
   workflow_dispatch:
 
+concurrency:
+  group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -266,9 +270,26 @@ jobs:
           raise SystemExit('No available iPhone simulator')
           PY
           xcrun simctl boot "$(cat /tmp/simulator_id)" || true
+          xcrun simctl bootstatus "$(cat /tmp/simulator_id)" -b
       - name: Connected iOS Simulator journey
         working-directory: apps/trading_client
-        run: flutter test integration_test/connected_health_app_test.dart -d "$(cat /tmp/simulator_id)" --dart-define=API_BASE_URL=http://127.0.0.1:8080 --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess, sys
+          simulator_id = pathlib.Path('/tmp/simulator_id').read_text().strip()
+          cmd = [
+              'flutter', 'test', 'integration_test/connected_health_app_test.dart',
+              '-d', simulator_id,
+              '--dart-define=API_BASE_URL=http://127.0.0.1:8080',
+              f"--dart-define=CONNECTED_API_KEY={os.environ['CONNECTED_API_KEY']}",
+          ]
+          try:
+              result = subprocess.run(cmd, timeout=1200)
+          except subprocess.TimeoutExpired:
+              print('iOS connected runtime exceeded 20 minutes; failing fast instead of hanging the PR gate.')
+              sys.exit(124)
+          sys.exit(result.returncode)
+          PY
       - name: Upload iOS/backend evidence
         if: always()
         uses: actions/upload-artifact@v4
