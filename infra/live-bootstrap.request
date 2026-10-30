@@ -1,2 +1,2 @@
-enable_https=false
-# bootstrap_retry=ecs-service-linked-role-preflight
+enable_https=true
+# bootstrap_retry=https-finalization-after-route53-delegation
