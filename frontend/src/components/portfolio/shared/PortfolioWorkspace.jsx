@@ -7,7 +7,7 @@ function QueryFailure({ title, query }) {
 }
 
 // Presentation-only: queries and reconciliation authority stay in PortfolioPage.
-export default function PortfolioWorkspace({ portfolio, positions, fills, cash, reconciliation, runReconciliation }) {
+export default function PortfolioWorkspace({ portfolio, positions, fills, cash, reconciliation, runReconciliation, canReconcile }) {
   const pending = [portfolio, positions, fills, cash, reconciliation].some((query) => query.isPending);
   return (
     <div className="flex flex-col gap-5">
@@ -23,7 +23,7 @@ export default function PortfolioWorkspace({ portfolio, positions, fills, cash, 
       {pending && <div className="h-28 animate-pulse rounded-lg bg-surface-2" />}
       {portfolio.data && (
         <>
-          <ReconciliationBanner portfolio={portfolio.data} runs={reconciliation.data} mutation={runReconciliation} />
+          <ReconciliationBanner portfolio={portfolio.data} runs={reconciliation.data} mutation={canReconcile ? runReconciliation : null} />
           <PnLSummary portfolio={portfolio.data} />
           <ExposureChart portfolio={portfolio.data} />
         </>
