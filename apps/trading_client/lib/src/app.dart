@@ -6,6 +6,7 @@ import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
 import 'data/operator_session.dart';
+import 'data/paper_trading_repository.dart';
 import 'data/research_repository.dart';
 import 'presentation/appearance_switcher.dart';
 import 'presentation/backtests_page.dart';
@@ -13,6 +14,8 @@ import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
+import 'presentation/paper_orders_page.dart';
+import 'presentation/paper_portfolio_page.dart';
 import 'presentation/research_page.dart';
 import 'theme/app_theme.dart';
 
@@ -70,7 +73,9 @@ class _TradingAppState extends State<TradingApp> {
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
-        '/portfolio': (_) => const WorkspacePage.portfolio(),
+        '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api)),
+        '/orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
+        '/paper-orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
         '/risk': (_) => const WorkspacePage.risk(),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
