@@ -216,10 +216,28 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
     );
   }
 
-  Widget _metric(String label, String value) => Semantics(
-        label: '$label $value',
-        child: SizedBox(width: 150, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label), const SizedBox(height: 4), Text(value, style: const TextStyle(fontWeight: FontWeight.w700))])),
-      );
+  Widget _metric(String label, String value) {
+    final slug = label.toLowerCase().replaceAll(' ', '-');
+    return Semantics(
+      key: ValueKey('health-metric-$slug'),
+      container: true,
+      excludeSemantics: true,
+      liveRegion: true,
+      identifier: 'health-metric-$slug',
+      label: '$label $value',
+      child: SizedBox(
+        width: 150,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label),
+            const SizedBox(height: 4),
+            Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _componentCard(BuildContext context, HealthComponent component) {
     final tradingColors = Theme.of(context).extension<TradingColors>()!;

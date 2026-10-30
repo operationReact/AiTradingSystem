@@ -40,7 +40,10 @@ void main() {
       TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
     );
 
-    await tester.tap(find.byKey(const ValueKey('workspace-/signals')));
+    final signalsCard = find.byKey(const ValueKey('workspace-/signals'));
+    await tester.ensureVisible(signalsCard);
+    await tester.pumpAndSettle();
+    await tester.tap(signalsCard);
     await tester.pumpAndSettle();
 
     expect(find.text('Signals'), findsWidgets);
