@@ -36,7 +36,7 @@ class _TradingAppState extends State<TradingApp> {
       darkTheme: buildTheme(_style, Brightness.dark),
       initialRoute: widget.initialRoute,
       routes: {
-        '/': (_) => const OverviewPage(),
+        '/': (_) => _overviewPage(),
         '/market': (_) => const WorkspacePage.market(),
         '/signals': (_) => const WorkspacePage.signals(),
         '/portfolio': (_) => const WorkspacePage.portfolio(),
@@ -44,11 +44,14 @@ class _TradingAppState extends State<TradingApp> {
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
-      onUnknownRoute: (_) => MaterialPageRoute<void>(
-        builder: (_) => const OverviewPage(),
-      ),
+      onUnknownRoute: (_) => MaterialPageRoute<void>(builder: (_) => _overviewPage()),
     );
   }
+
+  Widget _overviewPage() => OverviewPage(
+        session: widget.session,
+        dashboardRepository: HttpDashboardRepository(session: widget.session),
+      );
 
   Widget _healthPage() => OperationsHealthPage(
         key: const ValueKey('operations-health-page'),
