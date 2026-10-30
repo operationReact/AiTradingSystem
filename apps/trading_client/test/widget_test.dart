@@ -4,6 +4,7 @@ import 'package:trading_client/src/app.dart';
 import 'package:trading_client/src/data/health_repository.dart';
 import 'package:trading_client/src/data/operator_session.dart';
 import 'package:trading_client/src/domain/health_snapshot.dart';
+import 'package:trading_client/src/theme/app_theme.dart';
 
 class SmokeHealthRepository implements HealthRepository {
   @override
@@ -49,5 +50,47 @@ void main() {
     expect(find.text('Signals'), findsWidgets);
     expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
     expect(find.text('Development operator session'), findsNothing);
+  });
+
+  testWidgets('appearance switching preserves current route and operator session', (tester) async {
+    final session = OperatorSession()..setOperatorKey('session-key');
+    await tester.pumpWidget(
+      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+    );
+
+    final signalsCard = find.byKey(const ValueKey('workspace-/signals'));
+    await tester.ensureVisible(signalsCard);
+    await tester.tap(signalsCard);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
+
+    await tester.tap(find.text('Clean'));
+    await tester.pumpAndSettle();
+
+    final styleControl = tester.widget<SegmentedButton<DesignStyle>>(
+      find.byKey(const ValueKey('global-design-style-control')),
+    );
+    expect(styleControl.selected, {DesignStyle.cleanModern});
+    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
+    expect(session.operatorKey, 'session-key');
+  });
+
+  testWidgets('appearance switching does not clear unsent form state', (tester) async {
+    final session = OperatorSession();
+    await tester.pumpWidget(
+      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+    );
+
+    final fieldFinder = find.byKey(const ValueKey('dashboard-access-key'));
+    await tester.ensureVisible(fieldFinder);
+    await tester.enterText(fieldFinder, 'local-draft-key');
+
+    await tester.tap(find.text('Clean'));
+    await tester.pumpAndSettle();
+
+    final field = tester.widget<TextField>(fieldFinder);
+    expect(field.controller?.text, 'local-draft-key');
+    expect(session.operatorKey, isNull);
   });
 }
