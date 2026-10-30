@@ -1,6 +1,10 @@
 name: Provision live AWS infrastructure
 
 on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/live-bootstrap.request'
   workflow_dispatch:
     inputs:
       enable_https:
@@ -33,6 +37,20 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve provisioning mode
+        id: mode
+        env:
+          DISPATCH_HTTPS: ${{ github.event.inputs.enable_https }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            ENABLE_HTTPS="${DISPATCH_HTTPS}"
+          else
+            ENABLE_HTTPS="$(sed -n 's/^enable_https=//p' infra/live-bootstrap.request | tail -n 1)"
+          fi
+          test "$ENABLE_HTTPS" = "true" -o "$ENABLE_HTTPS" = "false" || { echo "::error::enable_https must be true or false"; exit 1; }
+          echo "enable_https=$ENABLE_HTTPS" >> "$GITHUB_OUTPUT"
+          echo "Provisioning live domain $LIVE_DOMAIN with enable_https=$ENABLE_HTTPS"
       - name: Validate existing GitHub OIDC deployment role
         env:
           AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
@@ -104,12 +122,12 @@ jobs:
       - name: Terraform plan
         working-directory: infra/terraform
         env:
-          ENABLE_HTTPS_INPUT: ${{ github.event.inputs.enable_https }}
+          ENABLE_HTTPS: ${{ steps.mode.outputs.enable_https }}
         run: |
           set -euo pipefail
           terraform plan \
             -var="domain_name=${LIVE_DOMAIN}" \
-            -var="enable_https=${ENABLE_HTTPS_INPUT}" \
+            -var="enable_https=${ENABLE_HTTPS}" \
             -out=tfplan
       - name: Terraform apply reviewed plan
         working-directory: infra/terraform
@@ -117,11 +135,13 @@ jobs:
       - name: Publish infrastructure outputs
         working-directory: infra/terraform
         run: |
+          APP_URL="$(terraform output -raw application_url)"
+          echo "Application URL: $APP_URL"
+          echo "Route 53 nameservers:"
+          terraform output -json route53_nameservers | jq -r '.[]'
           echo '### Live infrastructure outputs' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
-          echo '**Application URL:**' >> "$GITHUB_STEP_SUMMARY"
-          terraform output -raw application_url >> "$GITHUB_STEP_SUMMARY"
-          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Application URL:** $APP_URL" >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo '**Route 53 nameservers:**' >> "$GITHUB_STEP_SUMMARY"
           terraform output -json route53_nameservers | jq -r '.[] | "- `\(.)`"' >> "$GITHUB_STEP_SUMMARY"
