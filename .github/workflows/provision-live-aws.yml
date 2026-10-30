@@ -22,6 +22,7 @@ concurrency:
 
 env:
   AWS_REGION: ap-south-2
+  LIVE_DOMAIN: maargglobal.com
   TF_IN_AUTOMATION: 'true'
   TF_INPUT: 'false'
 
@@ -32,17 +33,13 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Validate required repository variables
+      - name: Validate existing GitHub OIDC deployment role
         env:
-          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
         run: |
           set -euo pipefail
-          test -n "$DOMAIN_NAME" || { echo "::error::Repository variable DOMAIN_NAME is required"; exit 1; }
           test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
-          case "$DOMAIN_NAME" in
-            http://*|https://*|*/*) echo "::error::DOMAIN_NAME must be a bare DNS name"; exit 1 ;;
-          esac
+          test "$LIVE_DOMAIN" = "maargglobal.com" || { echo "::error::Unexpected live domain"; exit 1; }
       - name: Configure AWS credentials with GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -87,6 +84,18 @@ jobs:
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
+      - name: Adopt existing account-level GitHub OIDC provider if present
+        working-directory: infra/terraform
+        env:
+          ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+          if aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" >/dev/null 2>&1; then
+            if ! terraform state show aws_iam_openid_connect_provider.github >/dev/null 2>&1; then
+              terraform import -var="domain_name=${LIVE_DOMAIN}" aws_iam_openid_connect_provider.github "$OIDC_ARN"
+            fi
+          fi
       - name: Terraform format and validate
         working-directory: infra/terraform
         run: |
@@ -95,12 +104,11 @@ jobs:
       - name: Terraform plan
         working-directory: infra/terraform
         env:
-          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
           ENABLE_HTTPS_INPUT: ${{ github.event.inputs.enable_https }}
         run: |
           set -euo pipefail
           terraform plan \
-            -var="domain_name=${DOMAIN_NAME}" \
+            -var="domain_name=${LIVE_DOMAIN}" \
             -var="enable_https=${ENABLE_HTTPS_INPUT}" \
             -out=tfplan
       - name: Terraform apply reviewed plan
