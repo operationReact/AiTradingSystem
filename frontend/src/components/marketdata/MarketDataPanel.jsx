@@ -1,13 +1,4 @@
-import { useEffect, useState } from 'react';
 import { Database, RefreshCw, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
-import {
-  useCandleBackfills,
-  useCandles,
-  useInstrumentSearch,
-  useStartCandleBackfill,
-  useResumeCandleBackfill,
-} from '../../hooks/useApi.js';
 import { formatDateTime, formatInteger } from '../../lib/format.js';
 import { Badge, Button, EmptyState, ErrorState, Notice, Panel, Skeleton } from '../ui.jsx';
 
@@ -24,18 +15,6 @@ const INTERVALS = [
 const inputClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none';
 const selectClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-2 text-sm text-text focus:border-accent focus:outline-none';
 
-function todayInIndia() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
-  }).formatToParts(new Date());
-  const part = (type) => parts.find((item) => item.type === type)?.value;
-  return part('year') + '-' + part('month') + '-' + part('day');
-}
-function shiftDate(value, days) {
-  const date = new Date(value + 'T00:00:00Z');
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 function price(value) {
   return value === null || value === undefined ? '—' : Number(value).toLocaleString('en-IN', {
     minimumFractionDigits: 2, maximumFractionDigits: 4,
@@ -46,60 +25,14 @@ function StatusBadge({ status }) {
   return <Badge tone={tone}>{status || 'UNKNOWN'}</Badge>;
 }
 
-export default function MarketDataPanel() {
-  const { apiKey } = useApp();
-  const [instrumentText, setInstrumentText] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selected, setSelected] = useState(null);
-  const [interval, setInterval] = useState('FIVE_MINUTE');
-  const today = todayInIndia();
-  const [toDate, setToDate] = useState(today);
-  const [fromDate, setFromDate] = useState(shiftDate(today, -29));
-  const [page, setPage] = useState(0);
-  const [latestRun, setLatestRun] = useState(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setSearchTerm(instrumentText.trim()), 300);
-    return () => clearTimeout(timer);
-  }, [instrumentText]);
-
-  const matches = useInstrumentSearch({
-    q: searchTerm, page: 0, size: 10, enabled: !!apiKey && !selected && searchTerm.length > 0,
-  });
-  const backfills = useCandleBackfills(10);
-  const start = useStartCandleBackfill();
-  const resume = useResumeCandleBackfill();
-  const candles = useCandles({
-    instrumentId: selected?.id, interval, fromDate, toDate, page, size: 100,
-    enabled: !!selected && !!fromDate && !!toDate && fromDate <= toDate,
-  });
-
-  const submitBackfill = (event) => {
-    event.preventDefault();
-    if (!selected || !fromDate || !toDate || fromDate > toDate || start.isPending) return;
-    start.mutate({ instrumentId: selected.id, interval, fromDate, toDate }, { onSuccess: setLatestRun });
-  };
-  const resumeRun = (runId) => resume.mutate(runId, { onSuccess: setLatestRun });
-  const chooseInstrument = (instrument) => {
-    setSelected(instrument);
-    setInstrumentText(instrument.tradingSymbol);
-    setSearchTerm('');
-    setPage(0);
-    setLatestRun(null);
-  };
-  const changingInstrument = () => {
-    setSelected(null);
-    setSearchTerm('');
-    setInstrumentText('');
-    setLatestRun(null);
-  };
-  const latestError = start.error || resume.error;
-  const displayedRun = latestRun || start.data || resume.data;
-
+export default function MarketDataPanel({ controller }) {
+  const { connected, instrumentText, setInstrumentText, searchTerm, selected, interval, setInterval, today, fromDate, setFromDate,
+    toDate, setToDate, page, setPage, matches, backfills, candles, start, resume, submitBackfill, resumeRun,
+    chooseInstrument, changingInstrument, viewRun, latestError, displayedRun } = controller;
   return (
     <div className="flex flex-col gap-4">
       <Panel title="Historical candles" subtitle="Angel One OHLCV · bounded import · stored in PostgreSQL">
-        {!apiKey && <Notice tone="neutral" title="Operator key required">Connect the operator API key in the top bar to search instruments and request historical data.</Notice>}
+        {!connected && <Notice tone="neutral" title="Operator key required">Connect the operator API key in the top bar to search instruments and request historical data.</Notice>}
         <form onSubmit={submitBackfill} className="flex flex-col gap-4">
           <div>
             <label htmlFor="market-instrument" className="mb-1 block text-xs font-medium text-muted">Instrument from active catalogue</label>
@@ -117,9 +50,9 @@ export default function MarketDataPanel() {
                   <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted" aria-hidden />
                   <input id="market-instrument" className={inputClass + ' pl-9'} value={instrumentText}
                     onChange={(e) => setInstrumentText(e.target.value)} placeholder="Search symbol/name (e.g. RELIANCE)"
-                    autoComplete="off" maxLength={100} disabled={!apiKey} />
+                    autoComplete="off" maxLength={100} disabled={!connected} />
                 </div>
-                {apiKey && searchTerm.length > 0 && (
+                {connected && searchTerm.length > 0 && (
                   <div className="mt-2 overflow-hidden rounded-md border border-border">
                     {matches.isFetching && <p className="px-3 py-2 text-xs text-muted">Searching active catalogue…</p>}
                     {matches.isError && <div className="p-2"><ErrorState error={matches.error} onRetry={() => matches.refetch()} /></div>}
@@ -164,7 +97,7 @@ export default function MarketDataPanel() {
             <p className="max-w-2xl text-xs leading-5 text-muted">
               Long requests stop after a small number of chunks and can be resumed from a saved checkpoint.
             </p>
-            <Button type="submit" variant="primary" icon={Database} disabled={!apiKey || !selected || !fromDate || !toDate || fromDate > toDate || start.isPending}
+            <Button type="submit" variant="primary" icon={Database} disabled={!connected || !selected || !fromDate || !toDate || fromDate > toDate || start.isPending}
               loading={start.isPending}>
               Fetch & store candles
             </Button>
@@ -190,7 +123,7 @@ export default function MarketDataPanel() {
             {(displayedRun.status === 'PARTIAL' || displayedRun.status === 'FAILED') && (
               <div className="mt-3">
                 <Button size="sm" variant="secondary" icon={RefreshCw} loading={resume.isPending}
-                  disabled={!apiKey || resume.isPending} onClick={() => resumeRun(displayedRun.id)}>
+                  disabled={!connected || resume.isPending} onClick={() => resumeRun(displayedRun.id)}>
                   Resume from checkpoint
                 </Button>
               </div>
@@ -275,8 +208,8 @@ export default function MarketDataPanel() {
                     <td className="num px-2 py-2 text-right text-text">{formatInteger(run.chunksCompleted)} / {formatInteger(run.persistedRows)}</td>
                     <td className="px-2 py-2">
                       {(run.status === 'PARTIAL' || run.status === 'FAILED')
-                        ? <Button size="sm" disabled={!apiKey || resume.isPending} loading={resume.isPending && resume.variables === run.id} onClick={() => resumeRun(run.id)}>Resume</Button>
-                        : <Button size="sm" variant="ghost" onClick={() => { setSelected({ id: run.instrumentId, exchange: run.exchange, tradingSymbol: run.tradingSymbol, symbolToken: run.symbolToken }); setInterval(run.interval); setFromDate(run.fromDate); setToDate(run.toDate); setPage(0); setLatestRun(null); }}>View</Button>}
+                        ? <Button size="sm" disabled={!connected || resume.isPending} loading={resume.isPending && resume.variables === run.id} onClick={() => resumeRun(run.id)}>Resume</Button>
+                        : <Button size="sm" variant="ghost" onClick={() => viewRun(run)}>View</Button>}
                     </td>
                   </tr>
                 ))}

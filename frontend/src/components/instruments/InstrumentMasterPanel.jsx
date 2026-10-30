@@ -1,12 +1,4 @@
-import { useState } from 'react';
 import { Download, Search } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
-import {
-  useImportInstrumentMaster,
-  useInstrumentCatalogueStatus,
-  useInstrumentSearch,
-  useRecentInstrumentImports,
-} from '../../hooks/useApi.js';
 import { Badge, Button, EmptyState, ErrorState, Notice, Panel, Skeleton } from '../ui.jsx';
 import { formatBusinessDate, formatDateTime, formatInteger, formatInr } from '../../lib/format.js';
 
@@ -42,37 +34,9 @@ function ImportTone({ status }) {
   return <Badge tone={tone}>{status || 'UNKNOWN'}</Badge>;
 }
 
-export default function InstrumentMasterPanel() {
-  const { apiKey } = useApp();
-  const [draftQuery, setDraftQuery] = useState('');
-  const [draftExchange, setDraftExchange] = useState('');
-  const [draftType, setDraftType] = useState('');
-  const [criteria, setCriteria] = useState({ q: '', exchange: '', type: '' });
-  const [page, setPage] = useState(0);
-  const pageSize = 20;
-
-  const status = useInstrumentCatalogueStatus();
-  const search = useInstrumentSearch({ ...criteria, page, size: pageSize });
-  const imports = useRecentInstrumentImports(5);
-  const importMaster = useImportInstrumentMaster();
-
-  const submitSearch = (event) => {
-    event.preventDefault();
-    setCriteria({ q: draftQuery.trim(), exchange: draftExchange, type: draftType });
-    setPage(0);
-  };
-
-  const clearSearch = () => {
-    setDraftQuery('');
-    setDraftExchange('');
-    setDraftType('');
-    setCriteria({ q: '', exchange: '', type: '' });
-    setPage(0);
-  };
-
-  const catalogue = status.data;
-  const latestAttempt = importMaster.data;
-
+export default function InstrumentMasterPanel({ controller }) {
+  const { connected, draftQuery, setDraftQuery, draftExchange, setDraftExchange, draftType, setDraftType, criteria, page,
+    setPage, pageSize, status, search, imports, importMaster, catalogue, latestAttempt, submitSearch, clearSearch, onImport } = controller;
   return (
     <div className="flex flex-col gap-4">
       <Panel
@@ -84,19 +48,19 @@ export default function InstrumentMasterPanel() {
             size="sm"
             icon={Download}
             loading={importMaster.isPending}
-            disabled={!apiKey || importMaster.isPending}
-            onClick={() => importMaster.mutate()}
+            disabled={!connected || importMaster.isPending}
+            onClick={onImport}
           >
             Import latest master
           </Button>
         }
       >
-        {!apiKey && (
+        {!connected && (
           <Notice tone="neutral" title="Operator key required">
             Connect the operator API key in the top bar to search the catalogue or trigger an import.
           </Notice>
         )}
-        {apiKey && status.isPending && <Skeleton className="h-16 w-full" />}
+        {connected && status.isPending && <Skeleton className="h-16 w-full" />}
         {status.isError && <ErrorState error={status.error} onRetry={() => status.refetch()} />}
         {catalogue && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -162,8 +126,8 @@ export default function InstrumentMasterPanel() {
               {TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </div>
-          <Button type="submit" variant="primary" icon={Search} disabled={!apiKey}>Search</Button>
-          <Button type="button" variant="secondary" onClick={clearSearch} disabled={!apiKey}>Clear</Button>
+          <Button type="submit" variant="primary" icon={Search} disabled={!connected}>Search</Button>
+          <Button type="button" variant="secondary" onClick={clearSearch} disabled={!connected}>Clear</Button>
         </form>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
@@ -174,14 +138,14 @@ export default function InstrumentMasterPanel() {
           {criteria.q && <Badge tone="accent">{criteria.q}</Badge>}
         </div>
 
-        {apiKey && search.isPending && <Skeleton className="mt-2 h-48 w-full" />}
+        {connected && search.isPending && <Skeleton className="mt-2 h-48 w-full" />}
         {search.isError && <div className="mt-2"><ErrorState error={search.error} onRetry={() => search.refetch()} /></div>}
         {search.data && search.data.content.length === 0 && (
           <div className="mt-2">
             <EmptyState
               title={catalogue?.activeCount ? 'No matching instruments' : 'No active catalogue yet'}
               description={catalogue?.activeCount ? 'Try a shorter symbol prefix or remove an exchange/type filter.' : 'Import the latest Angel One instrument master to enable verified symbol search.'}
-              action={!catalogue?.activeCount && apiKey ? <Button size="sm" variant="secondary" onClick={() => importMaster.mutate()} loading={importMaster.isPending}>Import instrument master</Button> : undefined}
+              action={!catalogue?.activeCount && connected ? <Button size="sm" variant="secondary" onClick={onImport} loading={importMaster.isPending}>Import instrument master</Button> : undefined}
             />
           </div>
         )}
@@ -235,7 +199,7 @@ export default function InstrumentMasterPanel() {
       </Panel>
 
       <Panel title="Recent import attempts" subtitle="Failures remain visible for troubleshooting">
-        {apiKey && imports.isPending && <Skeleton className="h-24 w-full" />}
+        {connected && imports.isPending && <Skeleton className="h-24 w-full" />}
         {imports.isError && <ErrorState error={imports.error} onRetry={() => imports.refetch()} />}
         {imports.data && imports.data.length === 0 && <EmptyState title="No import attempts yet" description="Import the catalogue to record its first version." />}
         {imports.data && imports.data.length > 0 && (

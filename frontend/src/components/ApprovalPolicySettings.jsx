@@ -1,30 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiFetch } from '../lib/api.js';
-import { useApp } from '../context/AppContext.jsx';
 import { Badge, Button, EmptyState, Notice, Panel } from './ui.jsx';
-
 const MODES = ['MANUAL', 'AUTO', 'HYBRID'];
 
-export default function ApprovalPolicySettings() {
-  const { apiKey, experience } = useApp();
-  const qc = useQueryClient();
-  const policies = useQuery({
-    queryKey: ['approvals', 'policies', apiKey ? 'authed' : 'anon'],
-    queryFn: ({ signal }) => apiFetch('/approval-policies', { apiKey, signal }),
-    enabled: !!apiKey,
-    staleTime: 15_000,
-  });
-  const update = useMutation({
-    mutationFn: ({ id, approvalMode }) => apiFetch(`/approval-policies/${id}`, {
-      apiKey,
-      method: 'PUT',
-      body: { approvalMode },
-    }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals', 'policies'] }),
-  });
-
-  const clear = experience === 'clear-invest';
-
+export default function ApprovalPolicySettings({ controller, clear = false }) {
+  const { connected, policies, update, onUpdateMode } = controller;
   return (
     <Panel
       title="Approval policy settings"
@@ -32,7 +10,7 @@ export default function ApprovalPolicySettings() {
         ? 'Choose when an order needs a person to review it. Hard risk rules always remain authoritative.'
         : 'Operator approval mode by execution policy. This never overrides deterministic hard-risk rejection.'}
     >
-      {!apiKey ? (
+      {!connected ? (
         <Notice title="Operator key required">Connect an operator key to view or change approval policies.</Notice>
       ) : policies.isPending ? (
         <div className="h-28 animate-pulse rounded bg-surface-2" />
@@ -60,7 +38,7 @@ export default function ApprovalPolicySettings() {
                     size="sm"
                     variant={policy.approvalMode === mode ? 'primary' : 'secondary'}
                     disabled={update.isPending || !policy.active || policy.approvalMode === mode}
-                    onClick={() => update.mutate({ id: policy.id, approvalMode: mode })}
+                    onClick={() => onUpdateMode(policy, mode)}
                   >
                     {mode}
                   </Button>
