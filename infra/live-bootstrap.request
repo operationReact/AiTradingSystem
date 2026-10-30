@@ -1,2 +1,2 @@
 enable_https=false
-# bootstrap_retry=global-sts-endpoint
+# bootstrap_retry=us-east-1
