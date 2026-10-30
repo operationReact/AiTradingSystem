@@ -16,13 +16,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Show non-sensitive OIDC identity claims
-        env:
-          REQUEST_URL: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL }}
-          REQUEST_TOKEN: ${{ env.ACTIONS_ID_TOKEN_REQUEST_TOKEN }}
+      - name: Show non-sensitive OIDC identity and signing-key diagnostics
         run: |
           python3 - <<'PY'
           import os, json, base64, urllib.request
+
+          def decode_segment(segment):
+              return json.loads(base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4)))
+
           url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
           sep = "&" if "?" in url else "?"
           req = urllib.request.Request(url + sep + "audience=sts.amazonaws.com", headers={
@@ -30,9 +31,37 @@ jobs:
           })
           with urllib.request.urlopen(req, timeout=20) as resp:
               token = json.load(resp)["value"]
-          part = token.split(".")[1]
-          claims = json.loads(base64.urlsafe_b64decode(part + "=" * (-len(part) % 4)))
+
+          header_segment, claims_segment, _ = token.split(".")
+          header = decode_segment(header_segment)
+          claims = decode_segment(claims_segment)
+
+          print("alg: " + str(header.get("alg", "(not present)")))
+          print("kid: " + str(header.get("kid", "(not present)")))
+          print("x5t: " + str(header.get("x5t", "(not present)")))
           for field in ("iss", "aud", "sub", "repository", "ref", "event_name", "workflow_ref", "job_workflow_ref"):
               print(field + ": " + str(claims.get(field, "(not present)")))
+
+          issuer = claims["iss"].rstrip("/")
+          with urllib.request.urlopen(issuer + "/.well-known/openid-configuration", timeout=20) as resp:
+              discovery = json.load(resp)
+          jwks_uri = discovery["jwks_uri"]
+          with urllib.request.urlopen(jwks_uri, timeout=20) as resp:
+              jwks = json.load(resp)
+
+          kid = header.get("kid")
+          matching = [key for key in jwks.get("keys", []) if key.get("kid") == kid]
+          print("discovery_issuer: " + str(discovery.get("issuer")))
+          print("jwks_uri: " + str(jwks_uri))
+          print("jwks_key_count: " + str(len(jwks.get("keys", []))))
+          print("signing_kid_present_in_jwks: " + str(bool(matching)).lower())
+          if matching:
+              key = matching[0]
+              print("matching_key_kty: " + str(key.get("kty")))
+              print("matching_key_use: " + str(key.get("use")))
+              print("matching_key_alg: " + str(key.get("alg")))
+          else:
+              raise SystemExit("GitHub OIDC signing key is not present in its published JWKS")
+
           # Never print the JWT or request authorization token.
           PY
