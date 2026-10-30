@@ -8,6 +8,7 @@ import 'data/market_data_repository.dart';
 import 'data/operator_session.dart';
 import 'data/paper_trading_repository.dart';
 import 'data/research_repository.dart';
+import 'data/risk_approval_repository.dart';
 import 'presentation/appearance_switcher.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
@@ -17,6 +18,7 @@ import 'presentation/overview_page.dart';
 import 'presentation/paper_orders_page.dart';
 import 'presentation/paper_portfolio_page.dart';
 import 'presentation/research_page.dart';
+import 'presentation/risk_approvals_page.dart';
 import 'theme/app_theme.dart';
 
 class TradingApp extends StatefulWidget {
@@ -76,7 +78,8 @@ class _TradingAppState extends State<TradingApp> {
         '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api)),
         '/orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
         '/paper-orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
-        '/risk': (_) => const WorkspacePage.risk(),
+        '/risk': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
+        '/approvals': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
