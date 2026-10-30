@@ -99,7 +99,7 @@ public class ResearchScanRepository {
         requireRun(runId);
         if (limit < 1 || limit > 200) throw new IllegalArgumentException("limit must be between 1 and 200");
         return jdbc.query("""
-                SELECT scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
+                SELECT id, scan_run_id, instrument_id, trading_symbol, exchange, interval, strategy, score,
                        entry_price, stop_price, target_price, signal_candle_time, reasons,
                        candidate_fingerprint, strategy_config_version, catalogue_version, data_cutoff_at
                   FROM research_scan_candidate
@@ -113,7 +113,7 @@ public class ResearchScanRepository {
                 instant(rs.getObject("signal_candle_time", OffsetDateTime.class)), splitReasons(rs.getString("reasons")),
                 rs.getString("candidate_fingerprint"), (Integer) rs.getObject("strategy_config_version"),
                 rs.getObject("catalogue_version", UUID.class),
-                instant(rs.getObject("data_cutoff_at", OffsetDateTime.class))), runId, limit);
+                instant(rs.getObject("data_cutoff_at", OffsetDateTime.class)), rs.getLong("id")), runId, limit);
     }
 
     public void finishRun(UUID id, int scannedCount, int candidateCount) {

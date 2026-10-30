@@ -77,6 +77,14 @@ class ScenarioResearchApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void rankedCandidateApiExposesThePersistedIdentityUsedByTheDetailRoute() throws Exception {
+        mvc.perform(get("/api/research/scans/{id}/candidates", SCAN_ID)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/research/scans/{id}/candidates", SCAN_ID).header(KEY_HEADER, API_KEY))
+            .andExpect(status().isOk()).andExpect(jsonPath("$[0].candidateId").value(candidateId))
+            .andExpect(jsonPath("$[0].referencePrice").value(2500));
+    }
+
+    @Test
     void candidateEvaluationPersistsReproducibleRegimeAwareEvidenceAndExposesItThroughApis() throws Exception {
         String body = """
                 {"historyFrom":"2026-01-01T03:45:00Z","historyTo":"2026-06-30T09:55:00Z",

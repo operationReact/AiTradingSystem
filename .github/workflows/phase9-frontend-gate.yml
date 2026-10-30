@@ -1,0 +1,45 @@
+name: Phase 9 - Frontend contract regression
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/phase9-frontend-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Run dual-experience route and approval contracts
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 > /tmp/ats-phase9-vite.log 2>&1 &
+          ats_vite_pid=$!
+          trap 'kill "$ats_vite_pid" 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:4173/audit >/dev/null; then break; fi
+            sleep 1
+          done
+          npx playwright test e2e/architecture.spec.mjs e2e/approvals.spec.mjs --reporter=line
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p09-browser-contract-evidence
+          path: frontend/test-results
+          retention-days: 14

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import CandidateScoreBadge from './CandidateScoreBadge.jsx';
 import CandidateReasonList from './CandidateReasonList.jsx';
 
@@ -12,12 +13,12 @@ export default function CandidateTable({ candidates = [] }) {
         <tbody>
           {candidates.map((candidate) => (
             <tr key={candidate.candidateFingerprint ?? `${candidate.instrumentId}-${candidate.strategy}-${candidate.signalCandleTime}`} className="border-b border-border/70 last:border-0">
-              <td className="whitespace-nowrap px-3 py-3 font-medium text-text"><div>{candidate.tradingSymbol}</div><div className="text-[11px] text-muted">{candidate.exchange} · {candidate.interval}</div></td>
+              <td className="whitespace-nowrap px-3 py-3 font-medium text-text"><div>{candidate.candidateId ? <Link className="text-accent underline" to={`/research/candidates/${candidate.candidateId}`}>{candidate.tradingSymbol}</Link> : candidate.tradingSymbol}</div><div className="text-[11px] text-muted">{candidate.exchange} · {candidate.interval}</div></td>
               <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.strategy}</td>
               <td className="px-3 py-3"><CandidateScoreBadge score={candidate.score} /></td>
-              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.entryPrice}</td>
-              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.stopPrice}</td>
-              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.targetPrice}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.referencePrice}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.suggestedStop}</td>
+              <td className="whitespace-nowrap px-3 py-3 text-text">{candidate.suggestedTarget}</td>
               <td className="min-w-72 px-3 py-3"><CandidateReasonList reasons={candidate.reasons} /></td>
             </tr>
           ))}

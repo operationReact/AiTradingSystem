@@ -18,12 +18,15 @@ const NAV = [
   { to: '/market-data', label: 'Market data', icon: Activity },
   { to: '/research', label: 'Research', icon: Search },
   { to: '/backtesting', label: 'Backtesting', icon: BarChart3 },
+  { to: '/operations', label: 'Operations', icon: Activity },
+  { to: '/notifications', label: 'Notifications', icon: ClipboardCheck },
+  { to: '/audit', label: 'Audit', icon: ListOrdered },
   { to: '/settings', label: 'Settings', icon: Settings2 },
 ];
 
 const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], NAV[3]];
 
-const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', portfolio: 'Portfolio', risk: 'Risk', approvals: 'Approvals', instruments: 'Instruments', 'market-data': 'Market data', research: 'Research', backtesting: 'Backtesting', settings: 'Settings' };
+const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', portfolio: 'Portfolio', risk: 'Risk', approvals: 'Approvals', instruments: 'Instruments', 'market-data': 'Market data', research: 'Research', backtesting: 'Backtesting', settings: 'Settings', operations: 'Operations', notifications: 'Notifications', audit: 'Audit' };
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
