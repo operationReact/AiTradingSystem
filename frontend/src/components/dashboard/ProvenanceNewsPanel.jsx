@@ -1,39 +1,10 @@
-import { useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { API } from '../../lib/api.js';
 import { formatDateTime } from '../../lib/format.js';
 import { Badge, Button, EmptyState, Panel } from '../ui.jsx';
 
-/** Separate provenance-aware RSS feed; its bearer token is held in component memory only. */
-export function ProvenanceNewsPanel() {
-  const [token, setToken] = useState('');
-  const [items, setItems] = useState([]);
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  const load = async (event) => {
-    event?.preventDefault();
-    if (!token.trim()) return;
-    setLoading(true);
-    setMessage('');
-    try {
-      const response = await fetch(`${API}/news?limit=20&offset=0`, {
-        headers: { Authorization: `Bearer ${token.trim()}`, Accept: 'application/json' },
-      });
-      if (response.status === 401) {
-        throw new Error('The news-feed token was rejected. Check NEWS_API_TOKEN on the backend.');
-      }
-      if (!response.ok) throw new Error(`Unable to load news (HTTP ${response.status}).`);
-      const page = await response.json();
-      setItems(Array.isArray(page.items) ? page.items : []);
-    } catch (error) {
-      setMessage(error?.message || 'Unable to load news from the backend.');
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+/** Memory-only feed credentials and requests are owned above the presentation boundary. */
+export function ProvenanceNewsPanel({ controller }) {
+  const { token, setToken, items, message, loading, load } = controller;
   return (
     <Panel title="Provenance-aware RSS feed" subtitle="Source-linked articles and optional summaries; never trade instructions">
       <form className="mb-3 flex flex-col gap-2 sm:flex-row" onSubmit={load}>
