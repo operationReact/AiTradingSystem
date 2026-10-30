@@ -5,6 +5,9 @@ on:
     branches: [dev]
     paths:
       - 'backend/src/main/java/in/aitradingsystem/execution/**'
+      - 'backend/src/main/java/in/aitradingsystem/paper/**'
+      - 'backend/src/test/java/in/aitradingsystem/paper/**'
+      - 'backend/src/test/java/in/aitradingsystem/support/**'
       - 'backend/src/main/java/in/aitradingsystem/api/Approval*'
       - 'backend/src/test/java/in/aitradingsystem/execution/**'
       - 'backend/src/test/java/in/aitradingsystem/api/Approval*'
@@ -33,7 +36,7 @@ jobs:
       - name: Run PostgreSQL approval decision and component regressions
         run: >-
           mvn --batch-mode --no-transfer-progress
-          -Dtest=ApprovalControllerTest,ApprovalPolicyEvaluatorTest,ExecutionPolicySchemaIT,ExecutionPolicyServiceIT,OrderApprovalSchemaIT,OrderApprovalConcurrencyIT,ExecutionReadinessServiceIT
+          -Dtest=PaperApprovalWorkflowIT,PaperTradeApiIT,PaperOrderApiIT,Phase6RestartPersistenceIT,ApprovalControllerTest,ApprovalPolicyEvaluatorTest,ExecutionPolicySchemaIT,ExecutionPolicyServiceIT,OrderApprovalSchemaIT,OrderApprovalConcurrencyIT,ExecutionReadinessServiceIT
           test
       - name: Upload test evidence
         if: always()

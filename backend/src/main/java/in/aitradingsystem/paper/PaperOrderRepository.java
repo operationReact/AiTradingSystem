@@ -44,6 +44,11 @@ public class PaperOrderRepository {
             .orElseThrow(() -> new NotFoundException("Paper order not found: " + id));
     }
 
+    public Optional<UUID> approvalId(UUID id) {
+        return jdbc.sql("SELECT approval_id FROM paper_order WHERE id = :id AND approval_id IS NOT NULL")
+            .param("id", id).query(UUID.class).optional();
+    }
+
     public void insert(UUID id, String key, String hash, OrderCommand cmd, Instant now) {
         jdbc.sql("""
                 INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,

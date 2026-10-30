@@ -15,11 +15,10 @@ class OrderStatusTest {
     }
 
     @Test
-    void approvedOrdersSupportCanonicalApprovalReadyAndCompatibilityFillPaths() {
+    void approvedOrdersCannotSkipTheReadyExecutionBoundary() {
         assertThat(OrderStatus.RISK_APPROVED.canTransitionTo(OrderStatus.APPROVAL_PENDING)).isTrue();
         assertThat(OrderStatus.RISK_APPROVED.canTransitionTo(OrderStatus.READY)).isTrue();
-        // Existing /paper-trades/simulate remains an all-or-nothing compatibility path until P06-W08.
-        assertThat(OrderStatus.RISK_APPROVED.transitionTo(OrderStatus.FILLED)).isEqualTo(OrderStatus.FILLED);
+        assertThat(OrderStatus.RISK_APPROVED.canTransitionTo(OrderStatus.FILLED)).isFalse();
     }
 
     @Test

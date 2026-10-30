@@ -71,6 +71,12 @@ public class ExecutionReadinessService {
             throw notReady("EXECUTION_POLICY_CHANGED", "Approved policy is no longer the active resolved policy");
         }
 
+        // Serialize emergency-stop changes with the settlement transaction after the account lock is acquired.
+        jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1 FOR SHARE").query(Boolean.class).single();
+        if (jdbc.sql("SELECT id FROM risk_policy_config WHERE active = TRUE FOR SHARE").query(UUID.class).list().isEmpty()) {
+            throw notReady("RISK_POLICY_UNAVAILABLE", "No active hard-risk policy at execution time");
+        }
+
         OrderCommand original = order.command();
         // Build once to obtain the currently active hard-risk freshness limit from server-owned state.
         RiskContext initialContext = contextFactory.build(orderId, original, now);
@@ -113,6 +119,12 @@ public class ExecutionReadinessService {
     }
 
     private PersistedOrder loadOrder(UUID orderId) {
+        String status = jdbc.sql("SELECT status FROM paper_order WHERE id = :id")
+            .param("id", orderId).query(String.class).optional()
+            .orElseThrow(() -> notReady("ORDER_NOT_FOUND", "Order not found: " + orderId));
+        if (!"READY".equals(status)) {
+            throw notReady("ORDER_NOT_READY", "Only a READY order may be revalidated for settlement");
+        }
         return jdbc.sql("""
                 SELECT id, symbol, side, quantity, reference_price, stop_loss, target_price,
                        signal_generated_at, product_type, instrument_id, strategy, approval_id

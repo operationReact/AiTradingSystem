@@ -16,9 +16,6 @@ public class ApprovalPolicyEvaluator {
         if (input.riskDecisionClass() == RiskDecisionClass.REJECTED) {
             return result(policy, ApprovalEvaluationDecision.REJECT, List.of("HARD_RISK_REJECTED"));
         }
-        if (input.riskDecisionClass() == RiskDecisionClass.APPROVAL_REQUIRED) {
-            return result(policy, ApprovalEvaluationDecision.PENDING, List.of("HARD_RISK_APPROVAL_REQUIRED"));
-        }
 
         List<String> rejectReasons = new ArrayList<>();
         List<String> manualReasons = new ArrayList<>();
@@ -50,6 +47,11 @@ public class ApprovalPolicyEvaluator {
 
         if (!rejectReasons.isEmpty()) {
             return result(policy, ApprovalEvaluationDecision.REJECT, rejectReasons);
+        }
+
+        if (input.riskDecisionClass() == RiskDecisionClass.APPROVAL_REQUIRED) {
+            manualReasons.add(0, "HARD_RISK_APPROVAL_REQUIRED");
+            return result(policy, ApprovalEvaluationDecision.PENDING, manualReasons);
         }
 
         if (policy.approvalMode() == ApprovalMode.MANUAL) {

@@ -4,6 +4,7 @@ import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.execution.OrderApprovalService;
 import in.aitradingsystem.execution.OrderApprovalState;
 import in.aitradingsystem.execution.OrderApprovalView;
+import in.aitradingsystem.paper.PaperOrderService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -25,9 +26,11 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ApprovalController {
     private final OrderApprovalService approvals;
+    private final PaperOrderService orders;
 
-    public ApprovalController(OrderApprovalService approvals) {
+    public ApprovalController(OrderApprovalService approvals, PaperOrderService orders) {
         this.approvals = approvals;
+        this.orders = orders;
     }
 
     public record ApprovalDecisionRequest(
@@ -41,6 +44,7 @@ public class ApprovalController {
             @RequestParam(required = false) OrderApprovalState state,
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
+        orders.expirePendingApprovals();
         return approvals.list(state, page, size);
     }
 
@@ -69,7 +73,7 @@ public class ApprovalController {
 
     private OrderApprovalView decide(UUID approvalId, ApprovalDecisionRequest request,
                                      OrderApprovalState decision) {
-        return approvals.decide(
+        return orders.decideApproval(
             approvalId, request.expectedRowVersion(), decision, request.actor(), normalize(request.reason()));
     }
 
