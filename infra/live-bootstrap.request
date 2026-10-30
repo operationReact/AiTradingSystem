@@ -1,2 +1,2 @@
 enable_https=false
-# bootstrap_retry=oidc-action-v6
+# bootstrap_retry=global-sts-endpoint

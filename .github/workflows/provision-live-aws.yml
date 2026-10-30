@@ -63,6 +63,7 @@ jobs:
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+          sts-endpoint: https://sts.amazonaws.com
           role-session-name: github-live-infra-${{ github.run_id }}
           allowed-account-ids: '816344830716'
           action-timeout-s: 120
