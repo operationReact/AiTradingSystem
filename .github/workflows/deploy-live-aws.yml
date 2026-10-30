@@ -56,10 +56,41 @@ jobs:
           flutter test
           flutter build web --release --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
 
-  deploy:
+  preflight:
     if: ${{ vars.AWS_ROLE_ARN != '' }}
+    name: Check live infrastructure readiness
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.ready.outputs.ready }}
+    steps:
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-live-preflight-${{ github.run_id }}
+      - name: Check ECS cluster and services
+        id: ready
+        run: |
+          set -euo pipefail
+          if ! aws ecs describe-clusters --clusters "$ECS_CLUSTER" --query 'clusters[0].status' --output text 2>/dev/null | grep -qx ACTIVE; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Live ECS cluster is not provisioned yet; code deployment will be skipped."
+            exit 0
+          fi
+          SERVICES="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_BACKEND_SERVICE" "$ECS_FRONTEND_SERVICE" --query 'length(services)' --output text 2>/dev/null || echo 0)"
+          if [ "$SERVICES" != "2" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Live ECS services are not provisioned yet; code deployment will be skipped."
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "Live ECS infrastructure is ready for code deployment."
+
+  deploy:
+    if: ${{ needs.preflight.outputs.ready == 'true' }}
     name: Publish immutable images and deploy live services
-    needs: validate
+    needs: [validate, preflight]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
