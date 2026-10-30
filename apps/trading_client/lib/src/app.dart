@@ -6,6 +6,7 @@ import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
 import 'data/operator_session.dart';
+import 'data/operations_evidence_repository.dart';
 import 'data/paper_trading_repository.dart';
 import 'data/research_repository.dart';
 import 'data/risk_approval_repository.dart';
@@ -13,6 +14,7 @@ import 'presentation/appearance_switcher.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
+import 'presentation/operations_evidence_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
 import 'presentation/paper_orders_page.dart';
@@ -42,6 +44,7 @@ class _TradingAppState extends State<TradingApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
+  HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
 
   @override
   Widget build(BuildContext context) {
@@ -80,6 +83,10 @@ class _TradingAppState extends State<TradingApp> {
         '/paper-orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
         '/risk': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/approvals': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
+        '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
+        '/notifications': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
+        '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
+        '/settings': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.settings),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
