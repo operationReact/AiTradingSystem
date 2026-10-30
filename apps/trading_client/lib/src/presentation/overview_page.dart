@@ -7,22 +7,26 @@ class OverviewPage extends StatelessWidget {
     _OverviewModule(
       icon: Icons.auto_graph_rounded,
       title: 'Market intelligence',
-      description: 'Monitor market data, research signals, and strategy context.',
+      description: 'Monitor market context, research inputs, instruments, and data quality.',
+      route: '/market',
     ),
     _OverviewModule(
       icon: Icons.radar_rounded,
       title: 'Signals',
       description: 'Review generated candidates and supporting evidence before action.',
+      route: '/signals',
     ),
     _OverviewModule(
       icon: Icons.account_balance_wallet_outlined,
       title: 'Portfolio',
-      description: 'Track paper positions, exposure, orders, and portfolio state.',
+      description: 'Track PAPER positions, exposure, orders, and portfolio state.',
+      route: '/portfolio',
     ),
     _OverviewModule(
       icon: Icons.shield_outlined,
       title: 'Risk controls',
-      description: 'Keep risk, approvals, and safety gates visible throughout the workflow.',
+      description: 'Review risk state, approvals, and safety controls before execution.',
+      route: '/risk',
     ),
   ];
 
@@ -39,22 +43,14 @@ class OverviewPage extends StatelessWidget {
             final horizontalPadding = wide ? 56.0 : 20.0;
 
             return SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                24,
-                horizontalPadding,
-                40,
-              ),
+              padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 40),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 1180),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _Header(
-                        onOperationsHealth: () => Navigator.of(context)
-                            .pushNamed('/operations/health'),
-                      ),
+                      const _Header(),
                       const SizedBox(height: 44),
                       Container(
                         width: double.infinity,
@@ -64,23 +60,15 @@ class OverviewPage extends StatelessWidget {
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [
-                              scheme.primaryContainer,
-                              scheme.surfaceContainerHighest,
-                            ],
+                            colors: [scheme.primaryContainer, scheme.surfaceContainerHighest],
                           ),
-                          border: Border.all(
-                            color: scheme.outlineVariant.withValues(alpha: 0.7),
-                          ),
+                          border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
                         ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 7,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                               decoration: BoxDecoration(
                                 color: scheme.primary.withValues(alpha: 0.10),
                                 borderRadius: BorderRadius.circular(999),
@@ -97,19 +85,14 @@ class OverviewPage extends StatelessWidget {
                             const SizedBox(height: 20),
                             Text(
                               'Research. Validate. Operate with control.',
-                              style: (wide
-                                      ? theme.textTheme.displaySmall
-                                      : theme.textTheme.headlineMedium)
-                                  ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                height: 1.08,
-                              ),
+                              style: (wide ? theme.textTheme.displaySmall : theme.textTheme.headlineMedium)
+                                  ?.copyWith(fontWeight: FontWeight.w800, height: 1.08),
                             ),
                             const SizedBox(height: 14),
                             ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 760),
                               child: Text(
-                                'AiTradingSystem brings market intelligence, strategy research, paper execution, portfolio visibility, and risk controls into one operating surface.',
+                                'Market intelligence, signal research, PAPER execution, portfolio visibility, and risk controls in one operating workspace.',
                                 style: theme.textTheme.bodyLarge?.copyWith(
                                   color: scheme.onSurfaceVariant,
                                   height: 1.55,
@@ -117,39 +100,23 @@ class OverviewPage extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 26),
-                            Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: [
-                                FilledButton.icon(
-                                  onPressed: () {},
-                                  icon: const Icon(Icons.dashboard_rounded),
-                                  label: const Text('Overview'),
-                                ),
-                                OutlinedButton.icon(
-                                  onPressed: () => Navigator.of(context)
-                                      .pushNamed('/operations/health'),
-                                  icon: const Icon(Icons.monitor_heart_outlined),
-                                  label: const Text('Operations health'),
-                                ),
-                              ],
+                            FilledButton.icon(
+                              onPressed: () => Navigator.of(context).pushNamed('/market'),
+                              icon: const Icon(Icons.explore_rounded),
+                              label: const Text('Enter workspace'),
                             ),
                           ],
                         ),
                       ),
                       const SizedBox(height: 36),
                       Text(
-                        'Core workspace',
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        'Workspace',
+                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Flutter is the production client. Additional workspace modules will be promoted here as their Flutter implementations pass the delivery gates.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
+                        'Choose a workspace to review market evidence, trading candidates, portfolio state, or execution controls.',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
                       ),
                       const SizedBox(height: 20),
                       GridView.builder(
@@ -162,8 +129,7 @@ class OverviewPage extends StatelessWidget {
                           crossAxisSpacing: 16,
                           childAspectRatio: wide ? 1.15 : 1.75,
                         ),
-                        itemBuilder: (context, index) =>
-                            _ModuleCard(module: _modules[index]),
+                        itemBuilder: (context, index) => _ModuleCard(module: _modules[index]),
                       ),
                     ],
                   ),
@@ -178,9 +144,7 @@ class OverviewPage extends StatelessWidget {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.onOperationsHealth});
-
-  final VoidCallback onOperationsHealth;
+  const _Header();
 
   @override
   Widget build(BuildContext context) {
@@ -203,25 +167,22 @@ class _Header extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('AiTradingSystem', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
               Text(
-                'AiTradingSystem',
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              Text(
-                'Flutter production client',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
+                'Trading research & risk workspace',
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
           ),
         ),
-        IconButton.filledTonal(
-          tooltip: 'Operations health',
-          onPressed: onOperationsHealth,
-          icon: const Icon(Icons.monitor_heart_outlined),
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          onSelected: (value) {
+            if (value == 'health') Navigator.of(context).pushNamed('/operations/health');
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'health', child: Text('System health')),
+          ],
         ),
       ],
     );
@@ -230,7 +191,6 @@ class _Header extends StatelessWidget {
 
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({required this.module});
-
   final _OverviewModule module;
 
   @override
@@ -240,30 +200,148 @@ class _ModuleCard extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(module.icon, color: scheme.primary, size: 28),
-            const Spacer(),
-            Text(
-              module.title,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+      child: InkWell(
+        key: ValueKey('workspace-${module.route}'),
+        onTap: () => Navigator.of(context).pushNamed(module.route),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(module.icon, color: scheme.primary, size: 28),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 20),
+                ],
               ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              module.description,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-                height: 1.4,
+              const Spacer(),
+              Text(module.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 7),
+              Text(
+                module.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class WorkspacePage extends StatelessWidget {
+  const WorkspacePage({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.emptyTitle,
+    required this.emptyBody,
+    super.key,
+  });
+
+  const WorkspacePage.market({super.key})
+      : title = 'Market intelligence',
+        subtitle = 'Market context, instruments, research inputs, and data quality',
+        icon = Icons.auto_graph_rounded,
+        emptyTitle = 'Market evidence will appear here',
+        emptyBody = 'Connected market-data and research evidence is shown only when authoritative data is available.';
+
+  const WorkspacePage.signals({super.key})
+      : title = 'Signals',
+        subtitle = 'Candidate research, provenance, and supporting evidence',
+        icon = Icons.radar_rounded,
+        emptyTitle = 'No signal selected',
+        emptyBody = 'Generated candidates remain research evidence until explicitly reviewed and approved.';
+
+  const WorkspacePage.portfolio({super.key})
+      : title = 'Portfolio',
+        subtitle = 'PAPER positions, orders, exposure, and accounting state',
+        icon = Icons.account_balance_wallet_outlined,
+        emptyTitle = 'Portfolio state will appear here',
+        emptyBody = 'Positions and accounting are shown from authoritative PAPER execution records.';
+
+  const WorkspacePage.risk({super.key})
+      : title = 'Risk controls',
+        subtitle = 'Risk policy, approvals, emergency controls, and execution safety',
+        icon = Icons.shield_outlined,
+        emptyTitle = 'Risk evidence will appear here',
+        emptyBody = 'Unknown or unavailable control evidence is never presented as healthy.';
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final String emptyTitle;
+  final String emptyBody;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title),
+        actions: [
+          IconButton(
+            tooltip: 'System health',
+            onPressed: () => Navigator.of(context).pushNamed('/operations/health'),
+            icon: const Icon(Icons.monitor_heart_outlined),
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 1180),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Icon(icon, color: scheme.primary, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 28),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.data_usage_rounded, color: scheme.primary),
+                        const SizedBox(height: 18),
+                        Text(emptyTitle, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 8),
+                        Text(emptyBody, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.5)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -275,9 +353,11 @@ class _OverviewModule {
     required this.icon,
     required this.title,
     required this.description,
+    required this.route,
   });
 
   final IconData icon;
   final String title;
   final String description;
+  final String route;
 }
