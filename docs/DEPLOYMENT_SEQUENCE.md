@@ -1,1 +1,0 @@
-First live sequence: merge infrastructure PR -> set DOMAIN_NAME -> provision with HTTPS disabled -> delegate Route 53 nameservers -> provision with HTTPS enabled -> merge FC-03 runtime correction -> run automatic live deployment -> verify UI and /api/health -> resume feature phases.
