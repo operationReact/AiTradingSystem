@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: backend/pom.xml
       - name: Prove ledger reconciliation, point-in-time valuation and replay
         working-directory: backend
-        run: mvn --batch-mode --no-transfer-progress -Dtest=PerformanceAggregationServiceIT,PerformanceDrawdownTest test
+        run: mvn --batch-mode --no-transfer-progress -Dtest=AnalyticsServicesIT,PerformanceAggregationServiceIT,PerformanceDrawdownTest test
       - name: Upload PostgreSQL performance evidence
         if: always()
         uses: actions/upload-artifact@v4
