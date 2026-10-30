@@ -14,6 +14,7 @@ import in.aitradingsystem.backtest.WalkForwardDetail;
 import in.aitradingsystem.backtest.WalkForwardRequest;
 import in.aitradingsystem.backtest.WalkForwardValidationService;
 import in.aitradingsystem.instrument.InstrumentMasterException;
+import in.aitradingsystem.operations.OperationalIncidentRefreshService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -43,21 +44,24 @@ public class PaperBacktestController {
     private final PaperBacktestValidationService validations;
     private final WalkForwardValidationService walkForward;
     private final BacktestApiService api;
+    private final OperationalIncidentRefreshService incidents;
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(PaperBacktestController.class);
 
     public PaperBacktestController(
             PaperBacktestService backtests,
             PaperBacktestValidationService validations,
             WalkForwardValidationService walkForward,
-            BacktestApiService api) {
+            BacktestApiService api, OperationalIncidentRefreshService incidents) {
         this.backtests = backtests;
         this.validations = validations;
         this.walkForward = walkForward;
         this.api = api;
+        this.incidents = incidents;
     }
 
     @PostMapping
     public PaperBacktestDetail run(@Valid @RequestBody PaperBacktestRequest request) {
-        return backtests.run(request);
+        return observed(request.instrumentId(), () -> backtests.run(request));
     }
 
     @GetMapping("/{id}")
@@ -67,7 +71,7 @@ public class PaperBacktestController {
 
     @PostMapping("/validation")
     public PaperBacktestValidationDetail validateOutOfSample(@Valid @RequestBody PaperBacktestValidationRequest request) {
-        return validations.run(request);
+        return observed(request.instrumentId(), () -> validations.run(request));
     }
 
     @GetMapping("/validation/{id}")
@@ -101,7 +105,22 @@ public class PaperBacktestController {
 
     @PostMapping("/walk-forward")
     public WalkForwardDetail runWalkForward(@Valid @RequestBody WalkForwardRequest request) {
-        return walkForward.run(request);
+        return observed(request.instrumentId(), () -> walkForward.run(request));
+    }
+
+    private <T> T observed(long instrumentId, java.util.function.Supplier<T> work) {
+        try { return work.get(); }
+        catch (RuntimeException ex) {
+            if (!(ex instanceof BacktestException) && !(ex instanceof InstrumentMasterException)
+                    && !(ex instanceof IllegalArgumentException)) {
+                try { incidents.backtestFailed(instrumentId); }
+                catch (RuntimeException notificationFailure) {
+                    // Preserve the original API failure; diagnostic persistence may also be unavailable.
+                    log.warn("Backtest failure notification could not be persisted");
+                }
+            }
+            throw ex;
+        }
     }
 
     @GetMapping("/walk-forward/{id}")
