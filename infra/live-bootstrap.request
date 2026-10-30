@@ -1,2 +1,2 @@
 enable_https=false
-# bootstrap_retry=us-east-1-preprovisioned-state
+# bootstrap_retry=ecs-service-linked-role-preflight
