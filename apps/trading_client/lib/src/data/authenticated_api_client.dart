@@ -92,10 +92,12 @@ class AuthenticatedApiClient {
     };
     final uri = base.replace(queryParameters: queryParameters.isEmpty ? null : queryParameters);
     final requestHeaders = <String, String>{
+      ...extraHeaders,
+      // Authentication and representation headers are owned by this client and
+      // cannot be replaced by feature repositories.
       'X-API-Key': key,
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
-      ...extraHeaders,
     };
 
     try {
