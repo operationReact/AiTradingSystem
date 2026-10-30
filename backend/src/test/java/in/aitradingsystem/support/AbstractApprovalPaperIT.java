@@ -82,10 +82,29 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
 
     @AfterEach
     void restoreApprovalEnvironment() {
-        // Preserve immutable approval provenance used by historical fills; deactivate instead of deleting policies.
-        approvalJdbc.sql("UPDATE execution_policy SET active = FALSE WHERE id = :id")
-            .param("id", executionPolicyId).update();
+        // Other integration suites rebuild catalogues and risk policies. Remove only this fixture's owned order
+        // graph, in FK order, and reverse its ledger movements instead of weakening production constraints.
+        String owned = "SELECT id FROM paper_order WHERE instrument_id IN "
+            + "(SELECT instrument_id FROM instrument_master WHERE catalogue_version = :v)";
+        approvalJdbc.sql("UPDATE paper_account SET cash_balance = cash_balance - COALESCE((SELECT sum(amount) FROM paper_cash_entry WHERE order_id IN (" + owned + ")), 0) WHERE id = 1")
+            .param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM audit_event WHERE entity_id IN (SELECT id::text FROM order_approval WHERE order_id IN (" + owned + ")) OR entity_id IN (SELECT id::text FROM paper_order WHERE id IN (" + owned + "))")
+            .param("v", catalogue).update();
+        approvalJdbc.sql("UPDATE paper_order SET approval_id = NULL WHERE id IN (" + owned + ")").param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM order_approval WHERE order_id IN (" + owned + ")").param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id IN (SELECT id FROM risk_decision WHERE order_id IN (" + owned + "))")
+            .param("v", catalogue).update();
+        for (String table : java.util.List.of("risk_decision", "paper_fill", "paper_cash_entry")) {
+            approvalJdbc.sql("DELETE FROM " + table + " WHERE order_id IN (" + owned + ")").param("v", catalogue).update();
+        }
+        approvalJdbc.sql("DELETE FROM paper_position WHERE instrument_id IN (SELECT instrument_id FROM instrument_master WHERE catalogue_version = :v)")
+            .param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM paper_order WHERE id IN (" + owned + ")").param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM execution_policy WHERE id = :id").param("id", executionPolicyId).update();
         approvalJdbc.sql("UPDATE instrument_catalogue_state SET active_version = :v WHERE singleton_id = 1")
             .param("v", previousCatalogue, java.sql.Types.OTHER).update();
+        approvalJdbc.sql("DELETE FROM market_candle WHERE catalogue_version = :v").param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM instrument_master WHERE catalogue_version = :v").param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM instrument_import_run WHERE id = :v").param("v", catalogue).update();
     }
 }
