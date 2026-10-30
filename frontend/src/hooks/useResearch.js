@@ -10,13 +10,13 @@ const keys = {
   diagnostics: (id) => ['research', 'diagnostics', id],
 };
 
-function useAuthedQuery(queryKey, path, options = {}) {
+function useAuthedQuery(queryKey, path, { enabled = true, poll = false, ...options } = {}) {
   const { apiKey } = useApp();
   return useQuery({
     queryKey: [...queryKey, apiKey ? 'authed' : 'anon'],
     queryFn: ({ signal }) => apiFetch(path, { apiKey, signal }),
-    enabled: !!apiKey && (options.enabled ?? true),
-    refetchInterval: options.poll ? 5000 : false,
+    enabled: !!apiKey && enabled,
+    refetchInterval: poll ? 5000 : false,
     ...options,
   });
 }
