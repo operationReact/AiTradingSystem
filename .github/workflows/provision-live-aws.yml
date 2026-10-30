@@ -59,11 +59,13 @@ jobs:
           test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
           test "$LIVE_DOMAIN" = "maargglobal.com" || { echo "::error::Unexpected live domain"; exit 1; }
       - name: Configure AWS credentials with GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-live-infra-${{ github.run_id }}
+          allowed-account-ids: '816344830716'
+          action-timeout-s: 120
       - name: Discover AWS account
         id: account
         run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
