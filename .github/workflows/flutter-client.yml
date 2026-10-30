@@ -26,7 +26,9 @@ jobs:
           channel: stable
           cache: true
       - name: Reconcile generated platform wrappers with pinned SDK
-        run: flutter create --platforms=web,android,ios --project-name trading_client .
+        run: |
+          rm -rf android ios web
+          flutter create --platforms=web,android,ios --project-name trading_client .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
@@ -46,6 +48,8 @@ jobs:
           channel: stable
           cache: true
       - name: Reconcile generated iOS wrapper with pinned SDK
-        run: flutter create --platforms=ios --project-name trading_client .
+        run: |
+          rm -rf ios
+          flutter create --platforms=ios --project-name trading_client .
       - run: flutter pub get
       - run: flutter build ios --simulator --no-codesign --dart-define=API_BASE_URL=http://127.0.0.1:8080
