@@ -21,8 +21,8 @@ export function SignalsPanel({ query }) {
   return (
     <Panel
       title="Highest-ranked signals"
-      subtitle="Synthetic demo signals, not executable"
-      actions={<Badge tone="warn">Synthetic demo</Badge>}
+      subtitle="Persisted deterministic candidates; not executable orders"
+      actions={<Badge tone="warn">Research only</Badge>}
     >
       <DataState query={query}>
         {(signals) => {

@@ -128,17 +128,17 @@ export function usePositionSizeSuggestion() {
   });
 }
 
-export const useNewsStatus = () => useAuthedQuery(keys.newsStatus, '/news/status', { poll: false });
+export const useNewsStatus = ({ enabled = true } = {}) => useAuthedQuery(keys.newsStatus, '/news/status', { poll: false, enabled });
 
-export const useNewsArticles = ({ page = 0, size = 5 } = {}) =>
+export const useNewsArticles = ({ page = 0, size = 5, enabled = true } = {}) =>
   useAuthedQuery(keys.newsArticles({ page, size }), `/news/articles?page=${page}&size=${size}`, {
-    poll: false,
+    poll: false, enabled,
     placeholderData: keepPreviousData,
   });
 
 /** Angel One provider state from the server. Secrets and tokens never reach the browser. */
-export const useAngelOneStatus = () =>
-  useAuthedQuery(keys.angelOneStatus, '/providers/angel-one/status', { poll: false, retry: 1 });
+export const useAngelOneStatus = ({ enabled = true } = {}) =>
+  useAuthedQuery(keys.angelOneStatus, '/providers/angel-one/status', { poll: false, retry: 1, enabled });
 
 /** Runs a server-side session check against Angel One. The response replaces the cached status. */
 export function useTestAngelOneConnection() {

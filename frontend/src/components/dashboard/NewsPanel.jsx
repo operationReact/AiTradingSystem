@@ -1,6 +1,4 @@
 import { Sparkles } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
-import { useAnalyzeArticle, useNewsArticles, useNewsStatus } from '../../hooks/useApi.js';
 import { DataState } from '../DataState.jsx';
 import { Badge, Button, EmptyState, Panel } from '../ui.jsx';
 import { formatDateTime } from '../../lib/format.js';
@@ -70,11 +68,8 @@ function ArticleRow({ article, configured, onAnalyze, pending }) {
   );
 }
 
-export function NewsPanel() {
-  const status = useNewsStatus();
-  const articles = useNewsArticles({ page: 0, size: 5 });
-  const analyze = useAnalyzeArticle();
-  const { apiKey } = useApp();
+export function NewsPanel({ controller }) {
+  const { status, articles, analyze, connected, onAnalyze } = controller;
 
   return (
     <Panel title="News intelligence" subtitle="Ingested articles and advisory AI analysis">
@@ -87,13 +82,13 @@ export function NewsPanel() {
                 Analysis did not complete: {analyze.error?.message}
               </p>
             )}
-            {apiKey && (
+            {connected && (
               <DataState query={articles} skeleton={null}>
                 {(page) =>
                   page.items.length === 0 ? (
                     <EmptyState
                       title="No news articles ingested"
-                      description="Ingestion is API-driven (POST /api/news/articles). Nothing is shown until a real source supplies articles."
+                      description="Articles appear after a configured source supplies them."
                     />
                   ) : (
                     <ul className="flex flex-col">
@@ -103,7 +98,7 @@ export function NewsPanel() {
                           article={article}
                           configured={s.configured}
                           pending={analyze.isPending && analyze.variables === article.id}
-                          onAnalyze={(id) => analyze.mutate(id)}
+                          onAnalyze={onAnalyze}
                         />
                       ))}
                     </ul>

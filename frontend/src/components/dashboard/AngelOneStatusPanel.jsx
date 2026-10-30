@@ -1,10 +1,9 @@
 import { RefreshCw } from 'lucide-react';
-import { useAngelOneStatus, useTestAngelOneConnection } from '../../hooks/useApi.js';
 import { Badge, Button, ErrorState, Notice, Panel, Skeleton } from '../ui.jsx';
 import { formatDateTime } from '../../lib/format.js';
 
 const STATES = {
-  NOT_CONFIGURED: { label: 'Not configured', tone: 'neutral', note: 'Set the ANGELONE_* environment variables on the backend. Demo data is shown instead.' },
+  NOT_CONFIGURED: { label: 'Not configured', tone: 'neutral', note: 'Set the ANGELONE_* environment variables on the backend. No provider session has been verified.' },
   CONFIGURED_UNVERIFIED: { label: 'Configured, not verified', tone: 'warn', note: 'Credentials are present. Run a connection test to verify them.' },
   AUTHENTICATED: { label: 'Authenticated', tone: 'gain', note: 'Session is active on the server.' },
   SESSION_EXPIRED: { label: 'Session expired', tone: 'warn', note: 'The last provider request reported an expired session. Recovery is attempted only for that response.' },
@@ -12,20 +11,20 @@ const STATES = {
   UNAVAILABLE: { label: 'Unavailable', tone: 'loss', note: 'Angel One could not be reached. Market data is not live.' },
 };
 
-export function AngelOneStatusPanel() {
-  const status = useAngelOneStatus();
-  const test = useTestAngelOneConnection();
+export function AngelOneStatusPanel({ controller }) {
+  const { status, test, connected, onTest } = controller;
 
   const actions = (
     <Button size="sm" variant="secondary" icon={RefreshCw} loading={test.isPending}
-      disabled={test.isPending} onClick={() => test.mutate()}>
+      disabled={!connected || test.isPending} onClick={onTest}>
       Test connection
     </Button>
   );
 
   return (
     <Panel title="Angel One SmartAPI" subtitle="Primary broker and market-data provider" actions={actions}>
-      {status.isPending && <Skeleton className="h-16 w-full" />}
+      {!connected && <Notice tone="neutral" title="Operator key required">Connect the operator key to inspect provider evidence.</Notice>}
+      {connected && status.isPending && <Skeleton className="h-16 w-full" />}
       {status.isError && <ErrorState error={status.error} onRetry={() => status.refetch()} />}
       {status.data && <StatusBody health={status.data} />}
       {test.isError && (

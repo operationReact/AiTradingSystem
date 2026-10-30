@@ -47,6 +47,7 @@ export function EmergencyStopPanel({ summary, controller, clear = false }) {
           {!summary.data && summary.isPending && <span className="text-xs text-muted">Loading status…</span>}
         </div>
         <Button
+          className="transition-none"
           variant={halted ? 'secondary' : 'danger'}
           icon={halted ? PlayCircle : OctagonX}
           disabled={!connected || summary.isPending || summary.isError || stop.isPending || typeof summary.data?.newOrdersHalted !== 'boolean'}
