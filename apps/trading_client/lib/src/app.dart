@@ -37,6 +37,10 @@ class _TradingAppState extends State<TradingApp> {
       initialRoute: widget.initialRoute,
       routes: {
         '/': (_) => const OverviewPage(),
+        '/market': (_) => const WorkspacePage.market(),
+        '/signals': (_) => const WorkspacePage.signals(),
+        '/portfolio': (_) => const WorkspacePage.portfolio(),
+        '/risk': (_) => const WorkspacePage.risk(),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
