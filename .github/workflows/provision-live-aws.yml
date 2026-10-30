@@ -102,18 +102,6 @@ jobs:
             -backend-config="region=${AWS_REGION}" \
             -backend-config="encrypt=true" \
             -backend-config="use_lockfile=true"
-      - name: Adopt existing account-level GitHub OIDC provider if present
-        working-directory: infra/terraform
-        env:
-          ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
-        run: |
-          set -euo pipefail
-          OIDC_ARN="arn:aws:iam::${ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
-          if aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" >/dev/null 2>&1; then
-            if ! terraform state show aws_iam_openid_connect_provider.github >/dev/null 2>&1; then
-              terraform import -var="domain_name=${LIVE_DOMAIN}" aws_iam_openid_connect_provider.github "$OIDC_ARN"
-            fi
-          fi
       - name: Terraform format and validate
         working-directory: infra/terraform
         run: |
