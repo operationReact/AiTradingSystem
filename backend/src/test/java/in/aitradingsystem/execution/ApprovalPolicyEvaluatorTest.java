@@ -58,7 +58,7 @@ class ApprovalPolicyEvaluatorTest {
             ExecutionPolicyTradingStyle.ANY, ApprovalMode.HYBRID,
             new BigDecimal("10000"), 10, new BigDecimal("50000"), new BigDecimal("5000"),
             List.of("RELIANCE"), List.of("BLOCKED"), LocalTime.of(9, 15), LocalTime.of(15, 30),
-            OffsetDateTime.now().minusDays(1), null);
+            OffsetDateTime.now().minusDays(1), null, true);
         var result = evaluator.evaluate(policy,
             new ApprovalPolicyInput(RiskDecisionClass.APPROVED, "TCS", new BigDecimal("100"), 1,
                 new BigDecimal("1000"), BigDecimal.ZERO, LocalTime.of(10, 0)));
@@ -72,7 +72,7 @@ class ApprovalPolicyEvaluatorTest {
         var policy = new ExecutionPolicy(UUID.randomUUID(), 1, ExecutionMode.PAPER, null,
             ExecutionPolicyTradingStyle.ANY, mode, new BigDecimal("10000"), 10,
             new BigDecimal("50000"), new BigDecimal("5000"), List.of(), List.of("TCS"),
-            LocalTime.of(9, 15), LocalTime.of(15, 30), OffsetDateTime.now().minusDays(1), null);
+            LocalTime.of(9, 15), LocalTime.of(15, 30), OffsetDateTime.now().minusDays(1), null, true);
         var result = evaluator.evaluate(policy, new ApprovalPolicyInput(RiskDecisionClass.APPROVAL_REQUIRED,
             "TCS", new BigDecimal("1000"), 1, new BigDecimal("1000"), BigDecimal.ZERO, LocalTime.of(16, 0)));
         assertThat(result.decision()).isEqualTo(ApprovalEvaluationDecision.REJECT);
@@ -94,7 +94,7 @@ class ApprovalPolicyEvaluatorTest {
             ExecutionPolicyTradingStyle.ANY, mode,
             new BigDecimal("10000"), 10, new BigDecimal("50000"), new BigDecimal("5000"),
             List.of(), List.of(), LocalTime.of(9, 15), LocalTime.of(15, 30),
-            OffsetDateTime.now().minusDays(1), null);
+            OffsetDateTime.now().minusDays(1), null, true);
     }
 
     private ApprovalPolicyInput input(RiskDecisionClass decision) {

@@ -64,7 +64,7 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
             .param("version", previousCatalogueVersion, java.sql.Types.OTHER).update();
         jdbc.sql("DELETE FROM instrument_master WHERE catalogue_version = :version").param("version", catalogueVersion).update();
         jdbc.sql("DELETE FROM instrument_import_run WHERE id = :version").param("version", catalogueVersion).update();
-        jdbc.sql("DELETE FROM execution_policy WHERE id = :id").param("id", policyId).update();
+        jdbc.sql("DELETE FROM execution_policy WHERE created_by = 'P07_PR04_TEST'").update();
         jdbc.sql("UPDATE trading_control SET new_orders_halted = FALSE, reason = NULL WHERE id = 1").update();
     }
 
@@ -101,6 +101,14 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
         jdbc.sql("UPDATE execution_policy SET active = FALSE WHERE id = :id").param("id", policyId).update();
 
         assertNotReady("EXECUTION_POLICY_UNAVAILABLE");
+    }
+
+    @Test
+    void modeChangeCreatesSuccessorAndInvalidatesPriorApprovalAuthority() {
+        var replacement = policies.updateApprovalMode(policyId, ApprovalMode.MANUAL);
+        assertThat(replacement.id()).isNotEqualTo(policyId);
+        assertThat(policies.requireById(policyId).approvalMode()).isEqualTo(ApprovalMode.AUTO);
+        assertNotReady("EXECUTION_POLICY_CHANGED");
     }
 
     @Test
