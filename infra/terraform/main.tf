@@ -7,7 +7,7 @@ locals {
   azs      = slice(data.aws_availability_zones.available.names, 0, 2)
   tags = {
     Application = local.name
-    Environment = "paper"
+    Environment = "live"
     ManagedBy   = "terraform"
   }
 }
@@ -68,7 +68,7 @@ resource "aws_security_group" "alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   ingress {
-    description = "HTTP redirect"
+    description = "HTTP redirect or first-bootstrap access"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -250,7 +250,7 @@ resource "aws_iam_role" "ecs_task" {
 }
 
 resource "aws_lb" "main" {
-  name               = "aitrading-paper"
+  name               = "aitrading-live"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
@@ -329,12 +329,20 @@ resource "aws_lb_listener" "http_setup" {
   port              = 80
   protocol          = "HTTP"
   default_action {
-    type = "fixed-response"
-    fixed_response {
-      content_type = "text/plain"
-      message_body = "HTTPS setup pending. Delegate Route 53 nameservers, then apply with enable_https=true."
-      status_code  = "503"
-    }
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.frontend.arn
+  }
+}
+resource "aws_lb_listener_rule" "http_setup_api" {
+  count        = var.enable_https ? 0 : 1
+  listener_arn = aws_lb_listener.http_setup[0].arn
+  priority     = 10
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.backend.arn
+  }
+  condition {
+    path_pattern { values = ["/api/*"] }
   }
 }
 resource "aws_lb_listener" "http_redirect" {
@@ -464,6 +472,10 @@ resource "aws_ecs_service" "backend" {
   launch_type                       = "FARGATE"
   platform_version                  = "LATEST"
   health_check_grace_period_seconds = 90
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
   network_configuration {
     subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.tasks.id]
@@ -474,8 +486,15 @@ resource "aws_ecs_service" "backend" {
     container_name   = "backend"
     container_port   = 8080
   }
-  depends_on = [aws_lb_listener.https, aws_iam_role_policy_attachment.ecs_execution_managed, aws_iam_role_policy.ecs_secrets]
-  tags       = local.tags
+  depends_on = [
+    aws_lb_listener.http_setup,
+    aws_lb_listener_rule.http_setup_api,
+    aws_lb_listener.https,
+    aws_lb_listener_rule.api,
+    aws_iam_role_policy_attachment.ecs_execution_managed,
+    aws_iam_role_policy.ecs_secrets
+  ]
+  tags = local.tags
 }
 resource "aws_ecs_service" "frontend" {
   name                              = "${local.name}-frontend"
@@ -485,6 +504,10 @@ resource "aws_ecs_service" "frontend" {
   launch_type                       = "FARGATE"
   platform_version                  = "LATEST"
   health_check_grace_period_seconds = 60
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
   network_configuration {
     subnets          = aws_subnet.public[*].id
     security_groups  = [aws_security_group.tasks.id]
@@ -495,43 +518,10 @@ resource "aws_ecs_service" "frontend" {
     container_name   = "frontend"
     container_port   = 8080
   }
-  depends_on = [aws_lb_listener.https, aws_iam_role_policy_attachment.ecs_execution_managed]
-  tags       = local.tags
-}
-
-resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-  tags            = local.tags
-}
-resource "aws_iam_role" "github_deploy" {
-  name = "${local.name}-github-deploy"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect    = "Allow"
-      Principal = { Federated = aws_iam_openid_connect_provider.github.arn }
-      Action    = "sts:AssumeRoleWithWebIdentity"
-      Condition = {
-        StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
-        StringLike   = { "token.actions.githubusercontent.com:sub" = "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/${var.allowed_github_branch}" }
-      }
-    }]
-  })
+  depends_on = [
+    aws_lb_listener.http_setup,
+    aws_lb_listener.https,
+    aws_iam_role_policy_attachment.ecs_execution_managed
+  ]
   tags = local.tags
-}
-resource "aws_iam_role_policy" "github_deploy" {
-  name = "${local.name}-github-deploy"
-  role = aws_iam_role.github_deploy.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      { Effect = "Allow", Action = ["ecr:GetAuthorizationToken"], Resource = "*" },
-      { Effect = "Allow", Action = ["ecr:BatchCheckLayerAvailability", "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"], Resource = [aws_ecr_repository.backend.arn, aws_ecr_repository.frontend.arn] },
-      { Effect = "Allow", Action = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:DescribeServices", "ecs:UpdateService"], Resource = "*" },
-      { Effect = "Allow", Action = ["iam:PassRole"], Resource = [aws_iam_role.ecs_execution.arn, aws_iam_role.ecs_task.arn] }
-    ]
-  })
-  depends_on = [aws_ecs_service.backend, aws_ecs_service.frontend]
 }
