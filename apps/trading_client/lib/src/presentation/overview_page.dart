@@ -141,7 +141,7 @@ class OverviewPage extends StatelessWidget {
                       Text(
                         'Core workspace',
                         style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.w750,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 8),
