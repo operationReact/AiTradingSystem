@@ -1,4 +1,4 @@
-name: Diagnose GitHub OIDC claims (no AWS access)
+name: Diagnose GitHub OIDC claims (no persistent AWS access)
 
 on:
   push:
@@ -15,6 +15,8 @@ jobs:
   claims:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
     steps:
       - name: Show non-sensitive OIDC identity and signing-key diagnostics
         run: |
@@ -62,6 +64,54 @@ jobs:
               print("matching_key_alg: " + str(key.get("alg")))
           else:
               raise SystemExit("GitHub OIDC signing key is not present in its published JWKS")
-
-          # Never print the JWT or request authorization token.
           PY
+
+      - name: Test direct STS validation across endpoints without logging credentials
+        run: |
+          set -euo pipefail
+          test -n "$AWS_ROLE_ARN" || { echo "AWS_ROLE_ARN repository variable missing"; exit 1; }
+
+          python3 - <<'PY'
+          import os, json, urllib.request
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"]
+          sep = "&" if "?" in url else "?"
+          req = urllib.request.Request(url + sep + "audience=sts.amazonaws.com", headers={
+              "Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]
+          })
+          with urllib.request.urlopen(req, timeout=20) as resp:
+              token = json.load(resp)["value"]
+          with open("/tmp/github-oidc-token", "w") as f:
+              f.write(token)
+          os.chmod("/tmp/github-oidc-token", 0o600)
+          PY
+
+          test_sts() {
+            label="$1"
+            endpoint="$2"
+            region="$3"
+            rm -f /tmp/sts-out.json /tmp/sts-err.txt
+            set +e
+            aws sts assume-role-with-web-identity \
+              --role-arn "$AWS_ROLE_ARN" \
+              --role-session-name "oidc-diag-${GITHUB_RUN_ID}" \
+              --web-identity-token "$(cat /tmp/github-oidc-token)" \
+              --duration-seconds 900 \
+              --endpoint-url "$endpoint" \
+              --region "$region" \
+              --output json >/tmp/sts-out.json 2>/tmp/sts-err.txt
+            rc=$?
+            set -e
+            if [ "$rc" -eq 0 ]; then
+              arn="$(jq -r '.AssumedRoleUser.Arn // "(missing)"' /tmp/sts-out.json)"
+              echo "$label: SUCCESS ($arn)"
+            else
+              msg="$(tr '\n' ' ' </tmp/sts-err.txt | sed -E 's/[[:space:]]+/ /g')"
+              echo "$label: FAILED rc=$rc :: $msg"
+            fi
+          }
+
+          test_sts "ap-south-2 regional STS" "https://sts.ap-south-2.amazonaws.com" "ap-south-2"
+          test_sts "global STS" "https://sts.amazonaws.com" "us-east-1"
+          test_sts "us-east-1 regional STS" "https://sts.us-east-1.amazonaws.com" "us-east-1"
+
+          rm -f /tmp/github-oidc-token /tmp/sts-out.json /tmp/sts-err.txt
