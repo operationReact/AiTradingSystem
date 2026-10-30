@@ -10,11 +10,13 @@ class TradingApp extends StatefulWidget {
   const TradingApp({
     required this.repositoryFactory,
     required this.session,
+    this.initialRoute = '/',
     super.key,
   });
 
   final HealthRepository Function() repositoryFactory;
   final OperatorSession session;
+  final String initialRoute;
 
   @override
   State<TradingApp> createState() => _TradingAppState();
@@ -32,7 +34,7 @@ class _TradingAppState extends State<TradingApp> {
       themeMode: _themeMode,
       theme: buildTheme(_style, Brightness.light),
       darkTheme: buildTheme(_style, Brightness.dark),
-      initialRoute: '/',
+      initialRoute: widget.initialRoute,
       routes: {
         '/': (_) => const OverviewPage(),
         '/operations': (_) => _healthPage(),
