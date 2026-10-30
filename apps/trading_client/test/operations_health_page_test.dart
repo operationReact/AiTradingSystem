@@ -28,11 +28,21 @@ HealthSnapshot degradedSnapshot() => HealthSnapshot.fromJson({
       ],
     });
 
+TradingApp healthApp({
+  required HealthRepository repository,
+  required OperatorSession session,
+}) =>
+    TradingApp(
+      repositoryFactory: () => repository,
+      session: session,
+      initialRoute: '/operations/health',
+    );
+
 void main() {
   testWidgets('does not call backend before explicit credential submission', (tester) async {
     final session = OperatorSession();
     final repository = FakeHealthRepository(() async => degradedSnapshot());
-    await tester.pumpWidget(TradingApp(repositoryFactory: () => repository, session: session));
+    await tester.pumpWidget(healthApp(repository: repository, session: session));
     expect(find.byKey(const ValueKey('health-empty')), findsOneWidget);
     expect(repository.calls, 0);
   });
@@ -40,7 +50,7 @@ void main() {
   testWidgets('renders degraded and UNKNOWN evidence after explicit refresh', (tester) async {
     final session = OperatorSession();
     final repository = FakeHealthRepository(() async => degradedSnapshot());
-    await tester.pumpWidget(TradingApp(repositoryFactory: () => repository, session: session));
+    await tester.pumpWidget(healthApp(repository: repository, session: session));
     await tester.enterText(find.byKey(const ValueKey('operator-key-field')), 'development-key');
     await tester.tap(find.byKey(const ValueKey('connect-health')));
     await tester.pumpAndSettle();
@@ -53,7 +63,7 @@ void main() {
   testWidgets('style switch does not issue another backend request', (tester) async {
     final session = OperatorSession();
     final repository = FakeHealthRepository(() async => degradedSnapshot());
-    await tester.pumpWidget(TradingApp(repositoryFactory: () => repository, session: session));
+    await tester.pumpWidget(healthApp(repository: repository, session: session));
     await tester.enterText(find.byKey(const ValueKey('operator-key-field')), 'development-key');
     await tester.tap(find.byKey(const ValueKey('connect-health')));
     await tester.pumpAndSettle();
@@ -71,7 +81,7 @@ void main() {
       if (attempt == 1) throw const HealthTransportFailure('NETWORK_OR_PARSE_FAILURE', 'corr-1');
       return degradedSnapshot();
     });
-    await tester.pumpWidget(TradingApp(repositoryFactory: () => repository, session: session));
+    await tester.pumpWidget(healthApp(repository: repository, session: session));
     await tester.enterText(find.byKey(const ValueKey('operator-key-field')), 'development-key');
     await tester.tap(find.byKey(const ValueKey('connect-health')));
     await tester.pumpAndSettle();
