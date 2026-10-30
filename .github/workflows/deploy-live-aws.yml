@@ -54,7 +54,7 @@ jobs:
           flutter pub get
           flutter analyze
           flutter test
-          flutter build web --release --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
+          flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
 
   preflight:
     if: ${{ vars.AWS_ROLE_ARN != '' }}
@@ -113,7 +113,7 @@ jobs:
         working-directory: apps/trading_client
         run: |
           flutter pub get
-          flutter build web --release --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
+          flutter build web --release --pwa-strategy=none --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
       - name: Configure AWS credentials with GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
