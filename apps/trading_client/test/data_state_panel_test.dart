@@ -13,9 +13,6 @@ Widget host(DataStatePanel panel) => MaterialApp(
 
 void main() {
   testWidgets('loading state is explicit and accessible', (tester) async {
-    final semantics = tester.ensureSemantics();
-    addTearDown(semantics.dispose);
-
     await tester.pumpWidget(
       host(
         const DataStatePanel(
@@ -29,8 +26,11 @@ void main() {
     expect(find.byKey(const ValueKey('data-state-loading')), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(
-      find.bySemanticsLabel(
-        'LOADING: Loading authoritative state. Waiting for the trading service to respond.',
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label ==
+                'LOADING: Loading authoritative state. Waiting for the trading service to respond.',
       ),
       findsOneWidget,
     );
