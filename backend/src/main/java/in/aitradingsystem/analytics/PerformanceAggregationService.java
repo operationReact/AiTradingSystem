@@ -3,6 +3,7 @@ package in.aitradingsystem.analytics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.marketdata.IndianCashMarketCalendar;
+import in.aitradingsystem.audit.AuditService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -33,11 +34,13 @@ public class PerformanceAggregationService {
     private final ObjectMapper json;
     private final Clock clock;
     private final TransactionTemplate transaction;
+    private final AuditService audit;
 
-    public PerformanceAggregationService(JdbcClient jdbc, ObjectMapper json, Clock clock, PlatformTransactionManager manager) {
+    public PerformanceAggregationService(JdbcClient jdbc, ObjectMapper json, Clock clock, PlatformTransactionManager manager,AuditService audit) {
         this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
+        this.audit = audit;
         this.transaction = new TransactionTemplate(manager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_REPEATABLE_READ);
         transaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -126,6 +129,8 @@ public class PerformanceAggregationService {
                 .param("gross", money(ownNet.add(t.fees()).add(t.slippage()))).param("net", ownNet)
                 .param("trades", t.orders().size()).param("wins", t.wins()).param("losses", t.losses()).update();
         }
+        audit.record("PERFORMANCE_REBUILT","PORTFOLIO_PERFORMANCE_DAILY",day.toString(),Map.of(
+            "tradeDate",day.toString(),"netPnl",result.netPnl(),"capitalFlow",result.capitalFlow(),"tradeCount",result.tradeCount()));
         return result;
     }
 
