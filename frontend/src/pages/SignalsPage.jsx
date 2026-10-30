@@ -111,9 +111,10 @@ export default function SignalsPage() {
   const history = useSignals(25);
   const selectedInstrument = useMemo(() => {
     const list = instruments.data?.content || [];
-    return list.find((item) => String(item.id) === String(selectedId)) || list[0] || null;
+    // A selected instrument must remain in the current result set; never silently switch identity.
+    return selectedId ? list.find((item) => String(item.id) === String(selectedId)) || null : list[0] || null;
   }, [instruments.data, selectedId]);
-  const evaluation = evaluateMutation.data
+  const evaluation = apiKey && !instruments.isPending && !instruments.isError && evaluateMutation.data
     && Number(evaluateMutation.data.instrumentId) === Number(selectedInstrument?.id)
     && evaluateMutation.data.interval === interval
       ? evaluateMutation.data : null;
@@ -126,11 +127,12 @@ export default function SignalsPage() {
   };
 
   const evaluate = () => {
-    if (!selectedInstrument || !apiKey) return;
+    if (!selectedInstrument || !apiKey || instruments.isPending || instruments.isError || evaluateMutation.isPending) return;
     evaluateMutation.mutate({ instrumentId: selectedInstrument.id, interval });
   };
 
   const openSimulate = (signal) => {
+    if (!apiKey || !evaluation || !signal) return;
     setPrefill(signal);
     setDialogOpen(true);
   };
@@ -165,6 +167,7 @@ export default function SignalsPage() {
             <select id="strategy-instrument" className={inputClass} value={selectedInstrument ? String(selectedInstrument.id) : ''}
               onChange={(e) => { setSelectedId(e.target.value); evaluateMutation.reset(); }}
               disabled={!instruments.data?.content?.length}>
+              {!selectedInstrument && <option value="">Select a current instrument</option>}
               {(instruments.data?.content || []).map((item) =>
                 <option key={item.id} value={String(item.id)}>{item.tradingSymbol} · {item.exchange}</option>)}
             </select>
@@ -178,7 +181,7 @@ export default function SignalsPage() {
           <div className="flex gap-2">
             <Button type="submit" variant="secondary" icon={Search} disabled={!apiKey || !draftQuery.trim()}>Search</Button>
             <Button type="button" variant="primary" icon={Activity} loading={evaluateMutation.isPending}
-              disabled={!apiKey || !selectedInstrument || evaluateMutation.isPending} onClick={evaluate}>Evaluate</Button>
+              disabled={!apiKey || !selectedInstrument || instruments.isPending || instruments.isError || evaluateMutation.isPending} onClick={evaluate}>Evaluate</Button>
           </div>
         </form>
         {instruments.isError && <div className="mt-3"><ErrorState error={instruments.error} onRetry={() => instruments.refetch()} /></div>}
@@ -223,7 +226,7 @@ export default function SignalsPage() {
         ) : <EmptyState title="No generated signals yet" description="Search for an NSE equity, ensure candles are stored on the Market data page, and evaluate it." />}
       </Panel>
 
-      <SimulateTradeDialog open={dialogOpen} onOpenChange={setDialogOpen} prefill={prefill}
+      <SimulateTradeDialog open={!!apiKey && dialogOpen} onOpenChange={setDialogOpen} prefill={prefill}
         source={prefill ? `${prefill.symbol} · ${prefill.strategy}` : null} />
     </div>
   );

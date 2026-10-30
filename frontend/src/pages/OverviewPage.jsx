@@ -78,10 +78,14 @@ export default function OverviewPage() {
   const qc = useQueryClient();
   const fetching = useIsFetching({ queryKey: ['dashboard'] }) + useIsFetching({ queryKey: ['paper'] });
   const [days, setDays] = useState(() => {
-    const saved = Number(localStorage.getItem(RANGE_KEY));
+    let saved;
+    try { saved = Number(localStorage.getItem(RANGE_KEY)); } catch { saved = NaN; }
     return RANGES.some((r) => r.value === saved) ? saved : 30;
   });
-  const [hidden, setHidden] = useState(() => new Set(readJson(WIDGETS_KEY, [])));
+  const [hidden, setHidden] = useState(() => {
+    const stored = readJson(WIDGETS_KEY, []);
+    return new Set(Array.isArray(stored) ? stored.filter((id) => WIDGETS.some((widget) => widget.id === id)) : []);
+  });
   const [showSettings, setShowSettings] = useState(false);
 
   const summary = useDashboardSummary();
@@ -97,13 +101,15 @@ export default function OverviewPage() {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      localStorage.setItem(WIDGETS_KEY, JSON.stringify([...next]));
+      try { localStorage.setItem(WIDGETS_KEY, JSON.stringify([...next])); } catch { /* Preferences remain usable in memory when storage is unavailable. */ }
       return next;
     });
   };
   const changeRange = (value) => {
-    setDays(value);
-    localStorage.setItem(RANGE_KEY, String(value));
+    const selected = Number(value);
+    if (!RANGES.some((range) => range.value === selected)) return;
+    setDays(selected);
+    try { localStorage.setItem(RANGE_KEY, String(selected)); } catch { /* Keep the active range even without persistent storage. */ }
   };
   const refresh = () => qc.invalidateQueries({ predicate: (q) => ['dashboard', 'paper', 'signals', 'risk'].includes(q.queryKey[0]) });
 
