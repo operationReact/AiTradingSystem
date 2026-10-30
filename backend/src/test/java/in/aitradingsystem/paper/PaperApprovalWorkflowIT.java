@@ -171,6 +171,34 @@ class PaperApprovalWorkflowIT extends AbstractApprovalPaperIT {
         assertNoSettlement(expired);
     }
 
+    @Test
+    void queueReadExpiresPendingIntentAndReleasesItWithoutAnApprovalClick() throws Exception {
+        mode("MANUAL");
+        UUID order = orderId(create("p7-queue-expiry-" + UUID.randomUUID(), false));
+        UUID approval = approvalId(order);
+        approvalJdbc.sql("UPDATE order_approval SET requested_at = :from, expires_at = :to WHERE id = :id")
+            .param("from", NOW.minusSeconds(300).atOffset(java.time.ZoneOffset.UTC))
+            .param("to", NOW.atOffset(java.time.ZoneOffset.UTC)).param("id", approval).update();
+        mvc.perform(get("/api/approvals").param("state", "PENDING").header("X-API-Key", API_KEY))
+            .andExpect(status().isOk());
+        assertThat(orderStatus(order)).isEqualTo("EXPIRED");
+        assertThat(audits("APPROVAL_EXPIRED", approval)).isEqualTo(1);
+        assertNoSettlement(order);
+    }
+
+    @Test
+    void orderCancellationRevokesApprovalAndLaterApproveCannotSettle() throws Exception {
+        mode("MANUAL");
+        UUID order = orderId(create("p7-order-cancel-" + UUID.randomUUID(), false));
+        UUID approval = approvalId(order);
+        mvc.perform(post("/api/paper-orders/{id}/cancel", order).header("X-API-Key", API_KEY))
+            .andExpect(status().isOk());
+        decide(approval, "approve");
+        assertThat(orderStatus(order)).isEqualTo("CANCELLED");
+        assertThat(audits("APPROVAL_CANCELLED", approval)).isEqualTo(1);
+        assertNoSettlement(order);
+    }
+
     private void mode(String mode) {
         approvalJdbc.sql("UPDATE execution_policy SET approval_mode = :mode WHERE id = :id")
             .param("mode", mode).param("id", executionPolicyId).update();
