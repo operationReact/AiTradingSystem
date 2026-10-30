@@ -37,8 +37,8 @@ jobs:
         working-directory: backend
         run: mvn --batch-mode --no-transfer-progress test
 
-  frontend-build:
-    name: Frontend production build (Node 20)
+  legacy-frontend-build:
+    name: Legacy React reference build (non-release)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -56,11 +56,11 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Validate mobile app metadata
+      - name: Validate legacy mobile metadata
         working-directory: frontend
         run: npm run validate:mobile
 
-      - name: Build production assets
+      - name: Build legacy reference assets
         working-directory: frontend
         run: npm run build
 
@@ -74,7 +74,7 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.8.5"
+          terraform_version: '1.10.5'
       - name: Check Terraform formatting
         working-directory: infra/terraform
         run: terraform fmt -check -diff -recursive
@@ -88,14 +88,14 @@ jobs:
   container-image-build:
     name: Build production Docker images
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Build backend image
         run: docker build -f backend/Dockerfile -t ai-trading-system-backend:ci backend
-      - name: Build frontend image
-        run: docker build -f frontend/Dockerfile --build-arg VITE_API_BASE_URL=/api -t ai-trading-system-frontend:ci frontend
+      - name: Build Flutter web image
+        run: docker build -f apps/trading_client/Dockerfile --build-arg API_BASE_URL=https://example.invalid -t ai-trading-system-frontend:ci apps/trading_client
 
   budget-terraform-validation:
     name: Budget Terraform format and validation
@@ -107,7 +107,7 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.8.5"
+          terraform_version: '1.10.5'
       - name: Check budget Terraform formatting
         working-directory: infra/terraform-budget
         run: terraform fmt -check -diff -recursive
