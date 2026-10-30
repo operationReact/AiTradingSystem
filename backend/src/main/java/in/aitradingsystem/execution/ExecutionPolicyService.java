@@ -2,6 +2,7 @@ package in.aitradingsystem.execution;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.common.NotFoundException;
 import in.aitradingsystem.risk.ExecutionMode;
 import java.sql.ResultSet;
@@ -24,11 +25,13 @@ public class ExecutionPolicyService {
     private final JdbcClient jdbc;
     private final ObjectMapper json;
     private final Clock clock;
+    private final AuditService audit;
 
-    public ExecutionPolicyService(JdbcClient jdbc, ObjectMapper json, Clock clock) {
+    public ExecutionPolicyService(JdbcClient jdbc, ObjectMapper json, Clock clock, AuditService audit) {
         this.jdbc = jdbc;
         this.json = json;
         this.clock = clock;
+        this.audit = audit;
     }
 
     public List<ExecutionPolicy> listPolicies() {
@@ -41,12 +44,31 @@ public class ExecutionPolicyService {
     public ExecutionPolicy updateApprovalMode(UUID policyId, ApprovalMode approvalMode) {
         if (policyId == null) throw new IllegalArgumentException("policyId is required");
         if (approvalMode == null) throw new IllegalArgumentException("approvalMode is required");
-        int updated = jdbc.sql("UPDATE execution_policy SET approval_mode = :approvalMode WHERE id = :id")
-            .param("approvalMode", approvalMode.name())
-            .param("id", policyId)
-            .update();
-        if (updated == 0) throw new NotFoundException("Execution policy not found: " + policyId);
-        return requireById(policyId);
+        // Serial version allocation also protects simultaneous updates of the same source policy.
+        jdbc.sql("LOCK TABLE execution_policy IN SHARE ROW EXCLUSIVE MODE").update();
+        ExecutionPolicy previous = requireById(policyId);
+        if (!previous.active()) throw new IllegalArgumentException("Policy is inactive; refresh before changing approval mode");
+        if (previous.approvalMode() == approvalMode) return previous;
+        int version = jdbc.sql("SELECT COALESCE(max(policy_version), 0) + 1 FROM execution_policy")
+            .query(Integer.class).single();
+        UUID id = UUID.randomUUID();
+        OffsetDateTime now = clock.instant().atOffset(ZoneOffset.UTC);
+        jdbc.sql("UPDATE execution_policy SET active = FALSE, effective_to = :now WHERE id = :id")
+            .param("now", now).param("id", policyId).update();
+        jdbc.sql("""
+            INSERT INTO execution_policy (id, policy_version, execution_mode, strategy, trading_style,
+                approval_mode, max_order_notional, max_daily_trades, max_gross_exposure, max_daily_loss,
+                symbol_allowlist, symbol_denylist, session_start, session_end, active, effective_from, created_by)
+            SELECT :id, :version, execution_mode, strategy, trading_style, :mode,
+                max_order_notional, max_daily_trades, max_gross_exposure, max_daily_loss,
+                symbol_allowlist, symbol_denylist, session_start, session_end, TRUE, :now, created_by
+              FROM execution_policy WHERE id = :previous
+            """).param("id", id).param("version", version).param("mode", approvalMode.name())
+            .param("now", now).param("previous", policyId).update();
+        audit.record("APPROVAL_POLICY_UPDATED", "EXECUTION_POLICY", id.toString(), java.util.Map.of(
+            "previousPolicyId", policyId, "previousPolicyVersion", previous.policyVersion(),
+            "policyVersion", version, "approvalMode", approvalMode.name()));
+        return requireById(id);
     }
 
     public ExecutionPolicy requireById(UUID policyId) {
@@ -116,7 +138,7 @@ public class ExecutionPolicyService {
             rs.getObject("session_start", java.time.LocalTime.class),
             rs.getObject("session_end", java.time.LocalTime.class),
             rs.getObject("effective_from", OffsetDateTime.class),
-            rs.getObject("effective_to", OffsetDateTime.class));
+            rs.getObject("effective_to", OffsetDateTime.class), rs.getBoolean("active"));
     }
 
     private List<String> strings(String raw) {

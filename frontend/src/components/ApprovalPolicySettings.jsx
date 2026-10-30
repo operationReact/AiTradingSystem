@@ -51,7 +51,7 @@ export default function ApprovalPolicySettings() {
                   <Badge tone="accent">{policy.executionMode}</Badge>
                   <Badge>{policy.tradingStyle}</Badge>
                 </div>
-                <p className="text-xs text-muted">{policy.strategyId ? `Strategy ${String(policy.strategyId).slice(0, 8)}` : 'Default policy'} · Effective {policy.effectiveFrom ? new Date(policy.effectiveFrom).toLocaleString() : '—'}</p>
+                <p className="text-xs text-muted">{policy.strategy ? `Strategy ${policy.strategy}` : 'Default policy'} · Effective {policy.effectiveFrom ? new Date(policy.effectiveFrom).toLocaleString() : '—'}</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {MODES.map((mode) => (
@@ -59,7 +59,7 @@ export default function ApprovalPolicySettings() {
                     key={mode}
                     size="sm"
                     variant={policy.approvalMode === mode ? 'primary' : 'secondary'}
-                    disabled={update.isPending || policy.approvalMode === mode}
+                    disabled={update.isPending || !policy.active || policy.approvalMode === mode}
                     onClick={() => update.mutate({ id: policy.id, approvalMode: mode })}
                   >
                     {mode}

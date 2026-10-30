@@ -50,6 +50,38 @@ class ExecutionPolicyServiceIT extends AbstractPostgresIT {
         assertThat(resolve()).extracting(ExecutionPolicy::id).isEqualTo(eligible);
     }
 
+    @Test
+    void changingModeCreatesNewVersionAndPreservesHistoricalApprovalProvenance() {
+        UUID originalId = insert(720020, "ORB", "INTRADAY");
+        ExecutionPolicy original = policies.requireById(originalId);
+
+        ExecutionPolicy replacement = policies.updateApprovalMode(originalId, ApprovalMode.AUTO);
+
+        assertThat(replacement.id()).isNotEqualTo(originalId);
+        assertThat(replacement.policyVersion()).isGreaterThan(original.policyVersion());
+        assertThat(replacement.approvalMode()).isEqualTo(ApprovalMode.AUTO);
+        assertThat(replacement.active()).isTrue();
+        assertThat(replacement.maxOrderNotional()).isEqualByComparingTo(original.maxOrderNotional());
+        assertThat(policies.requireById(originalId).approvalMode()).isEqualTo(ApprovalMode.HYBRID);
+        assertThat(policies.requireById(originalId).active()).isFalse();
+        assertThat(policies.requireById(originalId).effectiveTo()).isNotNull();
+        assertThat(resolve().id()).isEqualTo(replacement.id());
+        assertThat(jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'APPROVAL_POLICY_UPDATED' AND entity_id = :id")
+            .param("id", replacement.id().toString()).query(Long.class).single()).isEqualTo(1);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> policies.updateApprovalMode(originalId, ApprovalMode.MANUAL))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void unchangedModeDoesNotCreateVersionOrAudit() {
+        UUID originalId = insert(720021, "ORB", "INTRADAY");
+        ExecutionPolicy unchanged = policies.updateApprovalMode(originalId, ApprovalMode.HYBRID);
+        assertThat(unchanged.id()).isEqualTo(originalId);
+        assertThat(unchanged.policyVersion()).isEqualTo(720021);
+        assertThat(jdbc.sql("SELECT count(*) FROM audit_event WHERE event_type = 'APPROVAL_POLICY_UPDATED' AND entity_id = :id")
+            .param("id", originalId.toString()).query(Long.class).single()).isZero();
+    }
+
     private ExecutionPolicy resolve() {
         return policies.requirePolicy(ExecutionMode.PAPER, "ORB", ExecutionPolicyTradingStyle.INTRADAY);
     }

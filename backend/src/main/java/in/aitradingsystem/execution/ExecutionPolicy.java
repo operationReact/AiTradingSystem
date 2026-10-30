@@ -23,5 +23,6 @@ public record ExecutionPolicy(
     LocalTime sessionStart,
     LocalTime sessionEnd,
     OffsetDateTime effectiveFrom,
-    OffsetDateTime effectiveTo
+    OffsetDateTime effectiveTo,
+    boolean active
 ) {}
