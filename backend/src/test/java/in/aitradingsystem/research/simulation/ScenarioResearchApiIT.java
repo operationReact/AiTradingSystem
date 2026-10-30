@@ -77,6 +77,27 @@ class ScenarioResearchApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void candidateDetailReturnsStoredProvenanceWithoutRunningAnEvaluation() throws Exception {
+        mvc.perform(get("/api/research/candidates/{id}", candidateId)).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/research/candidates/{id}", candidateId).header(KEY_HEADER, API_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(candidateId))
+                .andExpect(jsonPath("$.scanRunId").value(SCAN_ID.toString()))
+                .andExpect(jsonPath("$.instrumentId").value(919191))
+                .andExpect(jsonPath("$.strategy").value("OPENING_RANGE_BREAKOUT_V1"))
+                .andExpect(jsonPath("$.catalogueVersion").value(CATALOGUE_VERSION.toString()))
+                .andExpect(jsonPath("$.candidateFingerprint").value("f".repeat(64)))
+                .andExpect(jsonPath("$.entryPrice").value(2500));
+        mvc.perform(get("/api/research/candidates/{id}", Long.MAX_VALUE).header(KEY_HEADER, API_KEY))
+                .andExpect(status().isNotFound());
+        mvc.perform(get("/api/research/candidates/0").header(KEY_HEADER, API_KEY))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(simulations);
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+                jdbc.queryForObject("SELECT count(*) FROM research_evaluation", Integer.class));
+    }
+
+    @Test
     void rankedCandidateApiExposesThePersistedIdentityUsedByTheDetailRoute() throws Exception {
         mvc.perform(get("/api/research/scans/{id}/candidates", SCAN_ID)).andExpect(status().isUnauthorized());
         mvc.perform(get("/api/research/scans/{id}/candidates", SCAN_ID).header(KEY_HEADER, API_KEY))

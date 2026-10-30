@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { candidate, evaluation, scenario } from './fixtures/candidate.mjs';
 import AxeBuilder from '@axe-core/playwright';
 
 // Deterministic HTTP contracts; real PostgreSQL source identity and operator APIs run in backend CI.
@@ -16,7 +17,9 @@ async function fixture(page) {
     if (url.pathname.endsWith('/notifications')) return reply({ items: acknowledged ? [] : [{ id: 'n1', severity: 'CRITICAL', title: 'Emergency stop active', message: 'Operator review required', type: 'RISK_EMERGENCY_STOP', entityType: 'TRADING_CONTROL', entityId: '1', createdAt: '2026-10-30T05:00:00Z' }], totalPages: 1, projection: { backlogRemaining: false } });
     if (url.pathname.endsWith('/audit/export')) return route.fulfill({ contentType: 'text/csv', body: '"id","actor"\r\n"1","operator"\r\n' });
     if (url.pathname.endsWith('/audit')) return reply({ items: [{ id: 1, eventType: 'ORDER_REJECTED', actor: 'operator', actorSource: 'AUTHENTICATED', entityType: 'PAPER_ORDER', entityId: 'order-1', details: { reason: '<script>unsafe()</script>' }, createdAt: '2026-10-30T05:00:00Z' }], totalPages: 1 });
-    if (url.pathname.endsWith('/research/candidates/42/evaluations')) return reply([{ evaluationId: 'eval-1', candidateId: 42, scenarioRunId: 'scenario-1', decisionLabel: 'INSUFFICIENT_DATA', reasonCodes: ['MINIMUM_SAMPLE_NOT_MET'], createdAt: '2026-10-30T05:00:00Z' }]);
+    if (url.pathname.endsWith('/research/candidates/42')) return reply(candidate);
+    if (url.pathname.endsWith('/research/simulations/scenario-1')) return reply(scenario);
+    if (url.pathname.endsWith('/research/candidates/42/evaluations')) return reply([evaluation]);
     return reply({});
   });
   return requests;

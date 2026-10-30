@@ -1,6 +1,7 @@
 package in.aitradingsystem.api;
 
 import in.aitradingsystem.research.simulation.ResearchEvaluationRepository;
+import in.aitradingsystem.research.simulation.ResearchCandidateProvenance;
 import in.aitradingsystem.research.simulation.ResearchEvaluationRequest;
 import in.aitradingsystem.research.simulation.ResearchEvaluationResult;
 import in.aitradingsystem.research.simulation.ResearchEvaluationView;
@@ -25,6 +26,12 @@ public class ResearchEvaluationController {
             ResearchEvaluationRepository evaluations) {
         this.orchestrator = orchestrator;
         this.evaluations = evaluations;
+    }
+
+    /** Stored research identity only; this read does not establish order eligibility. */
+    @GetMapping("/{candidateId}")
+    public ResponseEntity<ResearchCandidateProvenance> candidate(@PathVariable long candidateId) {
+        return ResponseEntity.of(evaluations.findCandidate(candidateId));
     }
 
     @PostMapping("/{candidateId}/evaluate")

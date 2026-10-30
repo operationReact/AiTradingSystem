@@ -96,7 +96,7 @@ export default function AppShell() {
       {mobileOpen && <div className="fixed inset-0 z-40 md:hidden"><button type="button" aria-label="Close navigation" className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} /><aside className="relative flex h-full w-64 flex-col border-r border-border bg-surface"><div className="flex h-14 items-center justify-between border-b border-border px-4"><Brand /><button type="button" aria-label="Close navigation" onClick={() => setMobileOpen(false)} className="flex h-11 w-11 items-center justify-center rounded text-muted hover:text-text"><X className="h-4 w-4" aria-hidden /></button></div><div className="py-3"><Nav onNavigate={() => setMobileOpen(false)} /></div></aside></div>}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-1 border-b border-border bg-surface/80 px-2 backdrop-blur sm:gap-3 sm:px-4">
+        <header className="flex min-h-14 shrink-0 flex-wrap items-center gap-1 border-b border-border bg-surface/80 px-2 py-2 backdrop-blur sm:h-14 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-0">
           <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation" className="flex h-11 w-11 shrink-0 items-center justify-center rounded text-muted hover:bg-surface-2 hover:text-text md:hidden"><Menu className="h-4 w-4" aria-hidden /></button>
           <div className="hidden min-w-0 flex-1 sm:block"><Breadcrumbs /></div>
           {fetching > 0 && <span className="hidden text-xs text-muted lg:inline" aria-live="polite">Syncing…</span>}
