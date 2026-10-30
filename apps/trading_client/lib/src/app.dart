@@ -39,11 +39,15 @@ class _TradingAppState extends State<TradingApp> {
       builder: (context, child) => Stack(
         children: [
           Positioned.fill(child: child ?? const SizedBox.shrink()),
-          AppearanceSwitcher(
-            designStyle: _style,
-            themeMode: _themeMode,
-            onDesignStyleChanged: _setDesignStyle,
-            onThemeModeChanged: _setThemeMode,
+          Positioned(
+            top: 0,
+            right: 0,
+            child: AppearanceSwitcher(
+              designStyle: _style,
+              themeMode: _themeMode,
+              onDesignStyleChanged: _setDesignStyle,
+              onThemeModeChanged: _setThemeMode,
+            ),
           ),
         ],
       ),
