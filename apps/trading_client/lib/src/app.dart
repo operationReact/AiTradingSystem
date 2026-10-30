@@ -6,12 +6,14 @@ import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
 import 'data/operator_session.dart';
+import 'data/research_repository.dart';
 import 'presentation/appearance_switcher.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
+import 'presentation/research_page.dart';
 import 'theme/app_theme.dart';
 
 class TradingApp extends StatefulWidget {
@@ -66,7 +68,8 @@ class _TradingAppState extends State<TradingApp> {
         '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
         '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
-        '/signals': (_) => const WorkspacePage.signals(),
+        '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
+        '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
         '/portfolio': (_) => const WorkspacePage.portfolio(),
         '/risk': (_) => const WorkspacePage.risk(),
         '/operations': (_) => _healthPage(),
