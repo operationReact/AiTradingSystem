@@ -1,30 +1,57 @@
-# P09-W05 Flutter data states
+# P09-W05 — Flutter authoritative data states
 
 Status: IN PROGRESS
 
-This work item implements explicit Flutter presentation states without fabricated trading evidence.
+## Traceability
 
-Required states:
-- LOADING: authoritative request is in progress.
-- EMPTY: authoritative response contains no applicable records/evidence.
-- ERROR: no trustworthy state can be shown because the request failed.
-- STALE: last-known evidence remains visible only when clearly marked non-current after refresh failure.
-- DEGRADED: authoritative service/control evidence reports degraded operation.
-- UNKNOWN: required evidence is unavailable or indeterminate; safety-sensitive actions remain blocked/fail-closed.
+- Canonical Figma file: `KjBWVCtUYona0bOGb5NDov`
+- Phase 9 section: `23:4422` — `SECTION / P9 / Appearance & Interaction System`
+- Applies across Neon Futuristic / Clean Modern, light / dark, desktop / mobile variants.
+- Canonical visual rule: **Server state remains authoritative**.
 
-Rules:
-- Never convert UNKNOWN, stale, or degraded evidence into a healthy presentation.
-- Never invent market, portfolio, signal, risk, or operational values to fill an empty state.
-- Retry/refresh remains explicit; no hidden action or offline replay is introduced.
-- State semantics must remain accessible and theme/style agnostic.
+## State contract
 
-Current implementation:
-- `DataStatePanel` provides reusable visual + accessibility semantics for all six states.
-- Widget tests cover loading, stale and unknown fail-safe semantics.
+The Flutter client does not invent trading readiness or fabricate data while evidence is unavailable.
 
-Remaining in this PR:
-- Integrate the shared states into dashboard/workspace surfaces.
-- Add first-load error versus stale-refresh behavior.
-- Map authoritative DEGRADED/UNKNOWN backend evidence to explicit state presentation.
-- Extend widget coverage for empty/error/degraded and retained stale evidence.
-- Run Flutter analyze/tests and platform build gates before merge.
+| UI state | Source condition | Behavior |
+| --- | --- | --- |
+| Empty | No authoritative summary loaded | Prompt for explicit connection; no network request until user action. |
+| Loading | Initial request is in flight | Show loading state; do not infer or substitute trading values. |
+| Ready | Backend `systemStatus=OK` | Render authoritative dashboard values. |
+| Stale | Backend returns `STALE`, or a refresh fails after previously successful evidence | Keep last-known evidence visible but explicitly label it stale/last-known. |
+| Degraded | Backend returns `HALTED`, `RECONCILIATION_FAILED`, or `DEGRADED` | Surface degraded state and do not present execution readiness as healthy. |
+| UNKNOWN | Backend returns an unrecognized status | Fail closed; never treat an unrecognized value as healthy. |
+| Error | Request fails before any authoritative evidence is available | Show explicit unavailable/error state. |
+
+No client-side freshness duration is invented in P09-W05 because the current dashboard API does not publish a freshness SLA or stale threshold. When the backend adds an authoritative stale marker, the Flutter state model already recognizes it.
+
+## Stable automation semantics
+
+- `dashboard-state-empty`
+- `dashboard-state-loading`
+- `dashboard-state-ready`
+- `dashboard-state-stale`
+- `dashboard-state-degraded`
+- `dashboard-state-unknown`
+- `dashboard-state-error`
+- `dashboard-access-key`
+- `dashboard-connect`
+- `dashboard-refresh`
+- `dashboard-disconnect`
+- `workspace-state-empty`
+
+## Validation scope
+
+Focused Flutter widget coverage verifies:
+- no automatic request in the empty state;
+- loading while the first authoritative request is pending;
+- `OK` ready state;
+- explicit backend stale state;
+- halted/degraded presentation;
+- unknown-status fail-closed behavior;
+- first-load transport error;
+- last-known evidence retained but marked stale after a refresh failure.
+
+## Safety boundary
+
+This slice is presentation/read-only state handling. It performs no broker action, LIVE activation, cloud provisioning, order submission, hidden retry, or offline action replay.
