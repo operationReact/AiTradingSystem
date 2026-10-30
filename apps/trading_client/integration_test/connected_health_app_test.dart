@@ -81,12 +81,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
 
-    final globalThemeControl = find.byKey(const ValueKey('global-theme-mode-control'));
-    expect(globalThemeControl, findsOneWidget);
-    await tester.ensureVisible(globalThemeControl);
-    await tester.tap(globalThemeControl);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Dark').last);
+    final darkTheme = find.byKey(const ValueKey('global-theme-dark'));
+    expect(darkTheme, findsOneWidget);
+    await tester.ensureVisible(darkTheme);
+    await tester.tap(darkTheme);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
   });
@@ -103,9 +101,6 @@ void main() {
     );
     expect(find.text('AUTHENTICATION_REJECTED'), findsOneWidget);
 
-    // The obscured input necessarily owns the entered value in its EditableText.
-    // Prove that it is the only widget containing the credential, so the value is
-    // not echoed into error text, diagnostics, or any other rendered surface.
     final allCredentialText = find.textContaining(badKey);
     final credentialInsideInput = find.descendant(of: operatorField, matching: allCredentialText);
     expect(allCredentialText, findsOneWidget);
