@@ -26,3 +26,14 @@ test('a disappeared selected instrument cannot silently become the first new sea
   await expect(page.getByRole('button',{name:'Evaluate',exact:true})).toBeDisabled();
   expect(evaluations).toEqual([]);
 });
+
+test('signal search draft and interval survive separate Pro/Clear compositions',async({page})=>{
+  await page.route('**/api/**',route=>route.fulfill({contentType:'application/json',body:JSON.stringify(new URL(route.request().url()).pathname.endsWith('/system/execution-mode')?{activeMode:'PAPER',liveAvailable:false}:[])}));
+  await page.goto('http://127.0.0.1:4173/signals');
+  await page.getByLabel('NSE equity symbol or name').fill('RELIANCE');
+  await page.getByLabel('Candle interval',{exact:true}).selectOption('ONE_HOUR');
+  await page.getByLabel('Appearance — Experience').selectOption('clear-invest');
+  await expect(page.getByLabel('NSE equity symbol or name')).toHaveValue('RELIANCE');
+  await expect(page.getByLabel('Candle interval',{exact:true})).toHaveValue('ONE_HOUR');
+  await expect(page.getByRole('button',{name:'Evaluate',exact:true})).toBeDisabled();
+});
