@@ -1,7 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../data/health_repository.dart';
+import '../data/operator_session.dart';
+
 class OverviewPage extends StatelessWidget {
-  const OverviewPage({super.key});
+  const OverviewPage({
+    required this.session,
+    required this.dashboardRepository,
+    super.key,
+  });
+
+  final OperatorSession session;
+  final DashboardRepository dashboardRepository;
 
   static const _modules = <_OverviewModule>[
     _OverviewModule(
@@ -51,7 +61,7 @@ class OverviewPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const _Header(),
-                      const SizedBox(height: 44),
+                      const SizedBox(height: 32),
                       Container(
                         width: double.infinity,
                         padding: EdgeInsets.all(wide ? 40 : 24),
@@ -99,20 +109,13 @@ class OverviewPage extends StatelessWidget {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 26),
-                            FilledButton.icon(
-                              onPressed: () => Navigator.of(context).pushNamed('/market'),
-                              icon: const Icon(Icons.explore_rounded),
-                              label: const Text('Enter workspace'),
-                            ),
                           ],
                         ),
                       ),
+                      const SizedBox(height: 24),
+                      _DashboardPanel(session: session, repository: dashboardRepository),
                       const SizedBox(height: 36),
-                      Text(
-                        'Workspace',
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700),
-                      ),
+                      Text('Workspace', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
                       Text(
                         'Choose a workspace to review market evidence, trading candidates, portfolio state, or execution controls.',
@@ -143,6 +146,261 @@ class OverviewPage extends StatelessWidget {
   }
 }
 
+class _DashboardPanel extends StatefulWidget {
+  const _DashboardPanel({required this.session, required this.repository});
+  final OperatorSession session;
+  final DashboardRepository repository;
+
+  @override
+  State<_DashboardPanel> createState() => _DashboardPanelState();
+}
+
+class _DashboardPanelState extends State<_DashboardPanel> {
+  final _controller = TextEditingController();
+  DashboardSummary? _summary;
+  String? _error;
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connect() async {
+    widget.session.setOperatorKey(_controller.text);
+    if (!widget.session.isAuthenticated) {
+      setState(() => _error = 'Enter your access key to connect.');
+      return;
+    }
+    await _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final summary = await widget.repository.fetchSummary();
+      if (!mounted) return;
+      setState(() => _summary = summary);
+    } on DashboardAuthenticationRequired {
+      if (!mounted) return;
+      setState(() => _error = 'Operator access is required.');
+    } on DashboardHttpFailure catch (failure) {
+      if (!mounted) return;
+      setState(() => _error = failure.statusCode == 401 || failure.statusCode == 403
+          ? 'The access key was rejected.'
+          : 'Dashboard data is temporarily unavailable.');
+    } on DashboardFailure {
+      if (!mounted) return;
+      setState(() => _error = 'Unable to reach the trading service.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _clear() {
+    widget.session.clear();
+    _controller.clear();
+    setState(() {
+      _summary = null;
+      _error = null;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final summary = _summary;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.lock_outline_rounded, color: scheme.primary),
+                const SizedBox(width: 10),
+                Expanded(child: Text('Operator access', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+                if (summary != null)
+                  _StatusChip(label: summary.mode, positive: summary.mode == 'PAPER'),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              summary == null
+                  ? 'Connect to load authoritative portfolio and operating state. Credentials are kept only for this session.'
+                  : 'Connected to authoritative PAPER portfolio and operating state.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            if (summary == null) ...[
+              TextField(
+                controller: _controller,
+                obscureText: true,
+                enableSuggestions: false,
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Access key', border: OutlineInputBorder()),
+                onSubmitted: (_) => _loading ? null : _connect(),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  FilledButton.icon(
+                    onPressed: _loading ? null : _connect,
+                    icon: _loading
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.login_rounded),
+                    label: const Text('Connect workspace'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              _SummaryGrid(summary: summary),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _loading ? null : _refresh,
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Refresh'),
+                  ),
+                  TextButton.icon(
+                    onPressed: _clear,
+                    icon: const Icon(Icons.logout_rounded),
+                    label: const Text('Disconnect'),
+                  ),
+                ],
+              ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: scheme.errorContainer,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(_error!, style: TextStyle(color: scheme.onErrorContainer)),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryGrid extends StatelessWidget {
+  const _SummaryGrid({required this.summary});
+  final DashboardSummary summary;
+
+  String _money(num value) => '₹${value.toStringAsFixed(2)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 900 ? 4 : (constraints.maxWidth >= 560 ? 2 : 1);
+        final items = [
+          ('Equity', _money(summary.equity)),
+          ('Available cash', _money(summary.availableCash)),
+          ('Daily P&L', _money(summary.dailyPnl)),
+          ('Open positions', '${summary.openPositions}'),
+          ('Market value', _money(summary.marketValue)),
+          ('Unrealized P&L', _money(summary.unrealizedPnl)),
+          ('Exposure', '${summary.exposurePercent.toStringAsFixed(2)}%'),
+          ('System', summary.systemStatus),
+        ];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _StatusChip(label: summary.systemStatus, positive: summary.systemStatus == 'OK'),
+                const SizedBox(width: 8),
+                _StatusChip(label: summary.cashReconciled ? 'RECONCILED' : 'NOT RECONCILED', positive: summary.cashReconciled),
+                if (summary.newOrdersHalted) ...[
+                  const SizedBox(width: 8),
+                  const _StatusChip(label: 'ORDERS HALTED', positive: false),
+                ],
+              ],
+            ),
+            const SizedBox(height: 16),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: items.length,
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: columns,
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: columns == 1 ? 4.2 : 2.3,
+              ),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(item.$1, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                      const SizedBox(height: 4),
+                      Text(item.$2, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.label, required this.positive});
+  final String label;
+  final bool positive;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: positive ? scheme.primaryContainer : scheme.errorContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: positive ? scheme.onPrimaryContainer : scheme.onErrorContainer,
+              fontWeight: FontWeight.w700,
+            ),
+      ),
+    );
+  }
+}
+
 class _Header extends StatelessWidget {
   const _Header();
 
@@ -150,16 +408,12 @@ class _Header extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-
     return Row(
       children: [
         Container(
           width: 42,
           height: 42,
-          decoration: BoxDecoration(
-            color: scheme.primaryContainer,
-            borderRadius: BorderRadius.circular(13),
-          ),
+          decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(13)),
           child: Icon(Icons.query_stats_rounded, color: scheme.primary),
         ),
         const SizedBox(width: 12),
@@ -168,10 +422,7 @@ class _Header extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('AiTradingSystem', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-              Text(
-                'Trading research & risk workspace',
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              ),
+              Text('Trading research & risk workspace', style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
             ],
           ),
         ),
@@ -180,9 +431,7 @@ class _Header extends StatelessWidget {
           onSelected: (value) {
             if (value == 'health') Navigator.of(context).pushNamed('/operations/health');
           },
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 'health', child: Text('System health')),
-          ],
+          itemBuilder: (_) => const [PopupMenuItem(value: 'health', child: Text('System health'))],
         ),
       ],
     );
@@ -197,7 +446,6 @@ class _ModuleCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-
     return Card(
       clipBehavior: Clip.antiAlias,
       child: InkWell(
@@ -208,22 +456,11 @@ class _ModuleCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Icon(module.icon, color: scheme.primary, size: 28),
-                  const Spacer(),
-                  Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 20),
-                ],
-              ),
+              Row(children: [Icon(module.icon, color: scheme.primary, size: 28), const Spacer(), Icon(Icons.arrow_forward_rounded, color: scheme.onSurfaceVariant, size: 20)]),
               const Spacer(),
               Text(module.title, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 7),
-              Text(
-                module.description,
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
-              ),
+              Text(module.description, maxLines: 3, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4)),
             ],
           ),
         ),
@@ -233,14 +470,7 @@ class _ModuleCard extends StatelessWidget {
 }
 
 class WorkspacePage extends StatelessWidget {
-  const WorkspacePage({
-    required this.title,
-    required this.subtitle,
-    required this.icon,
-    required this.emptyTitle,
-    required this.emptyBody,
-    super.key,
-  });
+  const WorkspacePage({required this.title, required this.subtitle, required this.icon, required this.emptyTitle, required this.emptyBody, super.key});
 
   const WorkspacePage.market({super.key})
       : title = 'Market intelligence',
@@ -283,14 +513,7 @@ class WorkspacePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
-        actions: [
-          IconButton(
-            tooltip: 'System health',
-            onPressed: () => Navigator.of(context).pushNamed('/operations/health'),
-            icon: const Icon(Icons.monitor_heart_outlined),
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: [IconButton(tooltip: 'System health', onPressed: () => Navigator.of(context).pushNamed('/operations/health'), icon: const Icon(Icons.monitor_heart_outlined)), const SizedBox(width: 8)],
       ),
       body: SafeArea(
         child: Center(
@@ -302,41 +525,16 @@ class WorkspacePage extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Icon(icon, color: scheme.primary, size: 28),
-                    ),
+                    Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: scheme.primary, size: 28)),
                     const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                        ],
-                      ),
-                    ),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)), const SizedBox(height: 4), Text(subtitle, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant))])),
                   ],
                 ),
                 const SizedBox(height: 28),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Icon(Icons.data_usage_rounded, color: scheme.primary),
-                        const SizedBox(height: 18),
-                        Text(emptyTitle, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 8),
-                        Text(emptyBody, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.5)),
-                      ],
-                    ),
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.data_usage_rounded, color: scheme.primary), const SizedBox(height: 18), Text(emptyTitle, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 8), Text(emptyBody, style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.5))]),
                   ),
                 ),
               ],
@@ -349,13 +547,7 @@ class WorkspacePage extends StatelessWidget {
 }
 
 class _OverviewModule {
-  const _OverviewModule({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.route,
-  });
-
+  const _OverviewModule({required this.icon, required this.title, required this.description, required this.route});
   final IconData icon;
   final String title;
   final String description;
