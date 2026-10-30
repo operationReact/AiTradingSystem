@@ -8,7 +8,7 @@ const intervals = [
 const inputClass = 'h-10 w-full rounded-lg border border-border bg-surface-2 px-3 text-sm text-text placeholder:text-muted focus:border-accent focus:outline-none';
 
 export default function BacktestForm({
-  apiKey, form, onChange, instrumentText, onInstrumentTextChange, selectedInstrument, onSelectInstrument, onClearInstrument,
+  connected, form, onChange, instrumentText, onInstrumentTextChange, selectedInstrument, onSelectInstrument, onClearInstrument,
   matches, canRun, running, onSubmit,
 }) {
   return (
@@ -23,8 +23,8 @@ export default function BacktestForm({
         ) : (
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted" aria-hidden />
-            <input id="studio-instrument" className={`${inputClass} pl-9`} value={instrumentText} onChange={(e) => onInstrumentTextChange(e.target.value)} placeholder="Search symbol, e.g. RELIANCE" autoComplete="off" disabled={!apiKey} />
-            {apiKey && instrumentText.trim() && (
+            <input id="studio-instrument" className={`${inputClass} pl-9`} value={instrumentText} onChange={(e) => onInstrumentTextChange(e.target.value)} placeholder="Search symbol, e.g. RELIANCE" autoComplete="off" disabled={!connected} />
+            {connected && instrumentText.trim() && (
               <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
                 {matches.isFetching && <p className="px-3 py-2 text-xs text-muted">Searching catalogue…</p>}
                 {matches.isError && <div className="p-2"><ErrorState error={matches.error} onRetry={() => matches.refetch()} /></div>}
