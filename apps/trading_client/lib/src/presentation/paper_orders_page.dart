@@ -329,5 +329,5 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
 }
 
 class _LocalOrderValidationFailure extends ApiFailure {
-  const _LocalOrderValidationFailure(super.code) : super(null);
+  const _LocalOrderValidationFailure(String message) : super(message, null);
 }
