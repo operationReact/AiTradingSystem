@@ -21,7 +21,7 @@ function useEmergencyStopController(summary) {
   const haltReasonValid = !nextHalted || reason.trim().length >= 3;
 
   const submit = () => {
-    if (!apiKey || !haltReasonValid || stop.isPending || typeof summary.data?.newOrdersHalted !== 'boolean' || summary.isError) return;
+    if (!apiKey || !haltReasonValid || stop.isPending || summary.isPending || typeof summary.data?.newOrdersHalted !== 'boolean' || summary.isError) return;
     stop.mutate(
       { halted: nextHalted, reason: reason.trim() || undefined },
       {

@@ -49,7 +49,7 @@ export function EmergencyStopPanel({ summary, controller, clear = false }) {
         <Button
           variant={halted ? 'secondary' : 'danger'}
           icon={halted ? PlayCircle : OctagonX}
-          disabled={!connected || summary.isPending || summary.isError || typeof summary.data?.newOrdersHalted !== 'boolean'}
+          disabled={!connected || summary.isPending || summary.isError || stop.isPending || typeof summary.data?.newOrdersHalted !== 'boolean'}
           onClick={() => setConfirming(true)}
         >
           {halted ? 'Resume new orders' : 'Halt new orders'}
@@ -69,7 +69,7 @@ export function EmergencyStopPanel({ summary, controller, clear = false }) {
         footer={
           <>
             <Button onClick={() => setConfirming(false)}>Cancel</Button>
-            <Button variant={nextHalted ? 'danger' : 'primary'} disabled={!haltReasonValid} loading={stop.isPending} onClick={submit}>
+            <Button variant={nextHalted ? 'danger' : 'primary'} disabled={!connected || summary.isPending || summary.isError || stop.isPending || typeof summary.data?.newOrdersHalted !== 'boolean' || !haltReasonValid} loading={stop.isPending} onClick={submit}>
               Confirm
             </Button>
           </>
