@@ -10,6 +10,10 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/audit/**'
       - 'backend/src/test/java/in/aitradingsystem/audit/**'
       - 'backend/src/main/java/in/aitradingsystem/api/OperationsController.java'
+      - 'backend/src/main/java/in/aitradingsystem/api/AnalyticsController.java'
+      - 'backend/src/main/java/in/aitradingsystem/api/AuditController.java'
+      - 'backend/src/main/java/in/aitradingsystem/api/NotificationController.java'
+      - 'backend/src/test/java/in/aitradingsystem/api/Phase8ApiContractIT.java'
       - 'backend/src/main/java/in/aitradingsystem/api/PaperBacktestController.java'
       - 'backend/src/main/resources/db/migration/V35__system_notifications.sql'
       - 'backend/src/main/resources/db/migration/V36__notification_source_projection.sql'
@@ -32,7 +36,7 @@ jobs:
           cache-dependency-path: backend/pom.xml
       - name: Prove notification persistence, deduplication, acknowledgement and source integration
         working-directory: backend
-        run: mvn --batch-mode --no-transfer-progress -Dtest=AuditQueryServiceIT,AuditCsvTest,BacktestFailureNotificationTest,OperationalHealthServiceTest,OperationalEvidenceIT,NotificationServiceIT,PaperReconciliationServiceIT,PaperTradeApiIT test
+        run: mvn --batch-mode --no-transfer-progress -Dtest=Phase8ApiContractIT,AnalyticsServicesIT,PerformanceAggregationServiceIT,AuditQueryServiceIT,AuditCsvTest,BacktestFailureNotificationTest,OperationalHealthServiceTest,OperationalEvidenceIT,NotificationServiceIT,PaperReconciliationServiceIT,PaperTradeApiIT test
       - name: Upload operations evidence
         if: always()
         uses: actions/upload-artifact@v4
