@@ -1,6 +1,8 @@
 package in.aitradingsystem.paper;
 
 import in.aitradingsystem.audit.AuditService;
+import in.aitradingsystem.notification.NotificationService;
+import in.aitradingsystem.notification.NotificationSeverity;
 import in.aitradingsystem.paper.PaperViews.DecisionView;
 import in.aitradingsystem.paper.PaperViews.OrderResult;
 import in.aitradingsystem.paper.PaperViews.OrderView;
@@ -28,14 +30,16 @@ public class PaperTradingService {
     private final PaperAccountRepository accounts;
     private final AuditService audit;
     private final Clock clock;
+    private final NotificationService notifications;
 
     public PaperTradingService(PaperOrderService orders, PaperOrderRepository orderRepository,
-                               PaperAccountRepository accounts, AuditService audit, Clock clock) {
+                               PaperAccountRepository accounts, AuditService audit, Clock clock, NotificationService notifications) {
         this.orders = orders;
         this.orderRepository = orderRepository;
         this.accounts = accounts;
         this.audit = audit;
         this.clock = clock;
+        this.notifications = notifications;
     }
 
     public OrderResult placeOrder(OrderCommand command, String idempotencyKey) {
@@ -47,6 +51,9 @@ public class PaperTradingService {
         accounts.setNewOrdersHalted(halted, reason, clock.instant());
         audit.record("EMERGENCY_STOP_CHANGED", "TRADING_CONTROL", "1",
             Map.of("newOrdersHalted", halted, "reason", reason == null ? "" : reason));
+        if (halted) notifications.raise("RISK_EMERGENCY_STOP", NotificationSeverity.CRITICAL,
+            "PAPER emergency stop is active", "New PAPER orders are halted. Review the persisted trading controls.",
+            "TRADING_CONTROL", "1", "RISK_EMERGENCY_STOP:1");
     }
 
     public boolean isHalted() {
