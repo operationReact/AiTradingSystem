@@ -17,8 +17,8 @@ class ApiAuthenticationRequired extends ApiFailure {
 }
 
 class ApiHttpFailure extends ApiFailure {
-  const ApiHttpFailure(super.code, super.correlationId, int statusCode)
-      : super(statusCode: statusCode);
+  const ApiHttpFailure(String code, String? correlationId, int statusCode)
+      : super(code, correlationId, statusCode: statusCode);
 }
 
 class ApiTransportFailure extends ApiFailure {
