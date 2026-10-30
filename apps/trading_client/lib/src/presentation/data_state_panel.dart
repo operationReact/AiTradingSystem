@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 enum DataStateKind {
   loading,
   empty,
+  ready,
   error,
   stale,
   degraded,
@@ -28,6 +29,7 @@ class DataStatePanel extends StatelessWidget {
   String get _semanticState => switch (kind) {
         DataStateKind.loading => 'LOADING',
         DataStateKind.empty => 'EMPTY',
+        DataStateKind.ready => 'READY',
         DataStateKind.error => 'ERROR',
         DataStateKind.stale => 'STALE',
         DataStateKind.degraded => 'DEGRADED',
@@ -37,6 +39,7 @@ class DataStatePanel extends StatelessWidget {
   IconData get _icon => switch (kind) {
         DataStateKind.loading => Icons.sync_rounded,
         DataStateKind.empty => Icons.inbox_outlined,
+        DataStateKind.ready => Icons.verified_outlined,
         DataStateKind.error => Icons.error_outline_rounded,
         DataStateKind.stale => Icons.history_toggle_off_rounded,
         DataStateKind.degraded => Icons.warning_amber_rounded,
@@ -48,7 +51,7 @@ class DataStatePanel extends StatelessWidget {
         DataStateKind.stale ||
         DataStateKind.degraded ||
         DataStateKind.unknown => true,
-        DataStateKind.loading || DataStateKind.empty => false,
+        DataStateKind.loading || DataStateKind.empty || DataStateKind.ready => false,
       };
 
   @override
@@ -56,10 +59,16 @@ class DataStatePanel extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final foreground = _requiresAttention ? scheme.onErrorContainer : scheme.onSurfaceVariant;
-    final background = _requiresAttention ? scheme.errorContainer : scheme.surfaceContainerHighest;
+    final background = switch (kind) {
+      DataStateKind.ready => scheme.primaryContainer,
+      _ when _requiresAttention => scheme.errorContainer,
+      _ => scheme.surfaceContainerHighest,
+    };
+    final resolvedForeground = kind == DataStateKind.ready ? scheme.onPrimaryContainer : foreground;
 
     return Semantics(
       container: true,
+      liveRegion: true,
       label: '$_semanticState: $title. $message',
       child: Container(
         key: ValueKey('data-state-${kind.name}'),
@@ -84,7 +93,7 @@ class DataStatePanel extends StatelessWidget {
                 child: CircularProgressIndicator(strokeWidth: 2.2),
               )
             else
-              Icon(_icon, color: foreground),
+              Icon(_icon, color: resolvedForeground),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -93,7 +102,7 @@ class DataStatePanel extends StatelessWidget {
                   Text(
                     title,
                     style: theme.textTheme.titleMedium?.copyWith(
-                      color: foreground,
+                      color: resolvedForeground,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -101,7 +110,7 @@ class DataStatePanel extends StatelessWidget {
                   Text(
                     message,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: foreground,
+                      color: resolvedForeground,
                       height: 1.45,
                     ),
                   ),
