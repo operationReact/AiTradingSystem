@@ -116,7 +116,7 @@ export function AllocationChart({ positions, cash }) {
   const navigate = useNavigate();
   const build = useCallback(() => {
     const p = chartPalette();
-    const palette = [p.accent, p.gain, p.warn, '#a78bfa', '#38bdf8', '#f472b6', p.loss];
+    const palette = p.series;
     const data = positions
       .map((pos, i) => ({ name: pos.symbol, value: Number(pos.marketValue), itemStyle: { color: palette[i % palette.length] } }))
       .filter((d) => d.value > 0);

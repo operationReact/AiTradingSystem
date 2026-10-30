@@ -15,7 +15,7 @@ export function Panel({ title, subtitle, actions, children, className, bodyClass
           {actions && <div className="flex items-center gap-2">{actions}</div>}
         </header>
       )}
-      <div className={cn('min-w-0 flex-1 p-4', bodyClassName)}>{children}</div>
+      <div className={cn('min-w-0 flex-1 p-[var(--experience-panel-padding)]', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -37,7 +37,7 @@ export const Button = forwardRef(function Button(
       type="button"
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-150',
+        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-[var(--motion-fast)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         size === 'sm' ? 'min-h-10 px-2.5 text-xs sm:min-h-7' : 'min-h-11 px-3.5 text-sm sm:min-h-9',
         variants[variant],
