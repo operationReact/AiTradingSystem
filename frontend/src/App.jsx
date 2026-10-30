@@ -5,6 +5,8 @@ import SignalsPage from './pages/SignalsPage.jsx';
 import PaperTradesPage from './pages/PaperTradesPage.jsx';
 import PortfolioPage from './pages/PortfolioPage.jsx';
 import RiskPage from './pages/RiskPage.jsx';
+import ApprovalsPage from './pages/ApprovalsPage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 import InstrumentsPage from './pages/InstrumentsPage.jsx';
 import MarketDataPage from './pages/MarketDataPage.jsx';
 import BacktestingPage from './pages/BacktestingPage.jsx';
@@ -19,6 +21,8 @@ export default function App() {
         <Route path="trades" element={<PaperTradesPage />} />
         <Route path="portfolio" element={<PortfolioPage />} />
         <Route path="risk" element={<RiskPage />} />
+        <Route path="approvals" element={<ApprovalsPage />} />
+        <Route path="settings" element={<SettingsPage />} />
         <Route path="instruments" element={<InstrumentsPage />} />
         <Route path="market-data" element={<MarketDataPage />} />
         <Route path="backtesting" element={<BacktestingPage />} />

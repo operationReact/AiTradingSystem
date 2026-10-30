@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useQueryClient, useIsFetching } from '@tanstack/react-query';
-import { Activity, BarChart3, ChevronsLeft, ChevronsRight, Gauge, KeyRound, ListOrdered, Menu, Moon, PanelsTopLeft, PieChart, Search, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
+import { Activity, BarChart3, ChevronsLeft, ChevronsRight, ClipboardCheck, Gauge, KeyRound, ListOrdered, Menu, Moon, PanelsTopLeft, PieChart, Search, Settings2, ShieldAlert, Sun, X, LogOut } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { cn } from '../lib/cn.js';
 import { Button } from './ui.jsx';
@@ -13,15 +13,17 @@ const NAV = [
   { to: '/trades', label: 'Paper trades', icon: ListOrdered },
   { to: '/portfolio', label: 'Portfolio', icon: PieChart },
   { to: '/risk', label: 'Risk', icon: ShieldAlert },
+  { to: '/approvals', label: 'Approvals', icon: ClipboardCheck },
   { to: '/instruments', label: 'Instruments', icon: Search },
   { to: '/market-data', label: 'Market data', icon: Activity },
   { to: '/research', label: 'Research', icon: Search },
   { to: '/backtesting', label: 'Backtesting', icon: BarChart3 },
+  { to: '/settings', label: 'Settings', icon: Settings2 },
 ];
 
 const MOBILE_NAV = [NAV[0], NAV[1], NAV[2], NAV[3]];
 
-const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', portfolio: 'Portfolio', risk: 'Risk', instruments: 'Instruments', 'market-data': 'Market data', research: 'Research', backtesting: 'Backtesting' };
+const CRUMBS = { '': 'Overview', signals: 'Signals', trades: 'Paper trades', portfolio: 'Portfolio', risk: 'Risk', approvals: 'Approvals', instruments: 'Instruments', 'market-data': 'Market data', research: 'Research', backtesting: 'Backtesting', settings: 'Settings' };
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
