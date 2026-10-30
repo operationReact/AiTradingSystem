@@ -1,7 +1,3 @@
-output "github_actions_role_arn" {
-  value       = aws_iam_role.github_deploy.arn
-  description = "Set as GitHub repository variable AWS_ROLE_ARN after apply."
-}
 output "aws_region" { value = var.aws_region }
 output "ecr_backend_repository" { value = aws_ecr_repository.backend.repository_url }
 output "ecr_frontend_repository" { value = aws_ecr_repository.frontend.repository_url }

@@ -1,6 +1,10 @@
 name: Provision live AWS infrastructure
 
 on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/live-bootstrap.request'
   workflow_dispatch:
     inputs:
       enable_https:
@@ -22,6 +26,7 @@ concurrency:
 
 env:
   AWS_REGION: ap-south-2
+  LIVE_DOMAIN: maargglobal.com
   TF_IN_AUTOMATION: 'true'
   TF_INPUT: 'false'
 
@@ -32,17 +37,27 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Validate required repository variables
+      - name: Resolve provisioning mode
+        id: mode
         env:
-          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          DISPATCH_HTTPS: ${{ github.event.inputs.enable_https }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            ENABLE_HTTPS="${DISPATCH_HTTPS}"
+          else
+            ENABLE_HTTPS="$(sed -n 's/^enable_https=//p' infra/live-bootstrap.request | tail -n 1)"
+          fi
+          test "$ENABLE_HTTPS" = "true" -o "$ENABLE_HTTPS" = "false" || { echo "::error::enable_https must be true or false"; exit 1; }
+          echo "enable_https=$ENABLE_HTTPS" >> "$GITHUB_OUTPUT"
+          echo "Provisioning live domain $LIVE_DOMAIN with enable_https=$ENABLE_HTTPS"
+      - name: Validate existing GitHub OIDC deployment role
+        env:
           AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
         run: |
           set -euo pipefail
-          test -n "$DOMAIN_NAME" || { echo "::error::Repository variable DOMAIN_NAME is required"; exit 1; }
           test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
-          case "$DOMAIN_NAME" in
-            http://*|https://*|*/*) echo "::error::DOMAIN_NAME must be a bare DNS name"; exit 1 ;;
-          esac
+          test "$LIVE_DOMAIN" = "maargglobal.com" || { echo "::error::Unexpected live domain"; exit 1; }
       - name: Configure AWS credentials with GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -95,13 +110,12 @@ jobs:
       - name: Terraform plan
         working-directory: infra/terraform
         env:
-          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
-          ENABLE_HTTPS_INPUT: ${{ github.event.inputs.enable_https }}
+          ENABLE_HTTPS: ${{ steps.mode.outputs.enable_https }}
         run: |
           set -euo pipefail
           terraform plan \
-            -var="domain_name=${DOMAIN_NAME}" \
-            -var="enable_https=${ENABLE_HTTPS_INPUT}" \
+            -var="domain_name=${LIVE_DOMAIN}" \
+            -var="enable_https=${ENABLE_HTTPS}" \
             -out=tfplan
       - name: Terraform apply reviewed plan
         working-directory: infra/terraform
@@ -109,11 +123,13 @@ jobs:
       - name: Publish infrastructure outputs
         working-directory: infra/terraform
         run: |
+          APP_URL="$(terraform output -raw application_url)"
+          echo "Application URL: $APP_URL"
+          echo "Route 53 nameservers:"
+          terraform output -json route53_nameservers | jq -r '.[]'
           echo '### Live infrastructure outputs' >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
-          echo '**Application URL:**' >> "$GITHUB_STEP_SUMMARY"
-          terraform output -raw application_url >> "$GITHUB_STEP_SUMMARY"
-          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo "**Application URL:** $APP_URL" >> "$GITHUB_STEP_SUMMARY"
           echo '' >> "$GITHUB_STEP_SUMMARY"
           echo '**Route 53 nameservers:**' >> "$GITHUB_STEP_SUMMARY"
           terraform output -json route53_nameservers | jq -r '.[] | "- `\(.)`"' >> "$GITHUB_STEP_SUMMARY"
