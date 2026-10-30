@@ -7,3 +7,5 @@ News analysis and provider testing remain explicit operator actions, guarded aga
 The browser journey advances cached widget data past staleness before switching designs, then checks no duplicate status query, no implicit provider/analysis call, preserved RSS input and explicit bounded feed load. It verifies widget/range continuity, no credential in browser storage, and malformed persisted preference fallback. Existing full browser contracts run in the same P9 CI workflow.
 
 This completes overview/news/provider controller reconciliation. Instrument/market/settings controller surfaces remain before P09-W03 completion. It does not certify final Figma appearance/asset composition or the full state/viewport inventory. No schema, broker operation, deployment or LIVE activation is included by this refactor.
+
+CI also sampled an accessibility defect during the emergency-stop action's danger-to-secondary color interpolation. That safety-state button now changes colors immediately, preserving readable contrast while authority updates instead of interpolating opposing foreground/background palettes. Existing risk accessibility evidence covers the changed state.
