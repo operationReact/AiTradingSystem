@@ -6,7 +6,6 @@ import 'operator_session.dart';
 
 sealed class ApiFailure implements Exception {
   const ApiFailure(this.code, this.correlationId, {this.statusCode});
-
   final String code;
   final String? correlationId;
   final int? statusCode;
@@ -26,59 +25,26 @@ class ApiTransportFailure extends ApiFailure {
 }
 
 class AuthenticatedApiClient {
-  AuthenticatedApiClient({
-    required this.session,
-    http.Client? client,
-    Uri? baseUri,
-  })  : client = client ?? http.Client(),
-        baseUri = baseUri ??
-            Uri.parse(
-              const String.fromEnvironment(
-                'API_BASE_URL',
-                defaultValue: 'http://localhost:8080',
-              ),
-            );
+  AuthenticatedApiClient({required this.session, http.Client? client, Uri? baseUri})
+      : client = client ?? http.Client(),
+        baseUri = baseUri ?? Uri.parse(const String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost:8080'));
 
   final OperatorSession session;
   final http.Client client;
   final Uri baseUri;
 
-  Future<Object?> getJson(
-    String path, {
-    Map<String, String?> query = const {},
-    Duration timeout = const Duration(seconds: 10),
-  }) =>
-      _send(
-        method: 'GET',
-        path: path,
-        query: query,
-        timeout: timeout,
-      );
+  Future<Object?> getJson(String path, {Map<String, String?> query = const {}, Map<String, String> headers = const {}, Duration timeout = const Duration(seconds: 10)}) =>
+      _send(method: 'GET', path: path, query: query, extraHeaders: headers, timeout: timeout);
 
-  Future<Object?> postJson(
-    String path, {
-    Object? body,
-    Map<String, String?> query = const {},
-    Duration timeout = const Duration(seconds: 20),
-  }) =>
-      _send(
-        method: 'POST',
-        path: path,
-        query: query,
-        body: body,
-        timeout: timeout,
-      );
+  Future<Object?> postJson(String path, {Object? body, Map<String, String?> query = const {}, Map<String, String> headers = const {}, Duration timeout = const Duration(seconds: 20)}) =>
+      _send(method: 'POST', path: path, query: query, body: body, extraHeaders: headers, timeout: timeout);
 
-  Future<Object?> _send({
-    required String method,
-    required String path,
-    required Map<String, String?> query,
-    Object? body,
-    required Duration timeout,
-  }) async {
+  Future<Object?> putJson(String path, {Object? body, Map<String, String?> query = const {}, Map<String, String> headers = const {}, Duration timeout = const Duration(seconds: 20)}) =>
+      _send(method: 'PUT', path: path, query: query, body: body, extraHeaders: headers, timeout: timeout);
+
+  Future<Object?> _send({required String method, required String path, required Map<String, String?> query, required Map<String, String> extraHeaders, Object? body, required Duration timeout}) async {
     final key = session.operatorKey;
     if (key == null || key.isEmpty) throw const ApiAuthenticationRequired();
-
     final base = baseUri.resolve(path);
     final queryParameters = <String, String>{
       ...base.queryParameters,
@@ -90,39 +56,26 @@ class AuthenticatedApiClient {
       'X-API-Key': key,
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
+      ...extraHeaders,
     };
-
     try {
+      final encodedBody = body == null ? null : jsonEncode(body);
       final response = switch (method) {
         'GET' => await client.get(uri, headers: headers).timeout(timeout),
-        'POST' => await client
-            .post(
-              uri,
-              headers: headers,
-              body: body == null ? null : jsonEncode(body),
-            )
-            .timeout(timeout),
+        'POST' => await client.post(uri, headers: headers, body: encodedBody).timeout(timeout),
+        'PUT' => await client.put(uri, headers: headers, body: encodedBody).timeout(timeout),
         _ => throw ArgumentError.value(method, 'method', 'Unsupported HTTP method'),
       };
       final correlation = response.headers['x-correlation-id'];
-
       if (response.statusCode == 401 || response.statusCode == 403) {
-        throw ApiHttpFailure(
-          'AUTHENTICATION_REJECTED',
-          correlation,
-          response.statusCode,
-        );
+        throw ApiHttpFailure('AUTHENTICATION_REJECTED', correlation, response.statusCode);
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         String code = 'API_REQUEST_FAILED';
         try {
           final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic> && decoded['code'] != null) {
-            code = '${decoded['code']}';
-          }
-        } catch (_) {
-          // Keep the generic code when an error response is not JSON.
-        }
+          if (decoded is Map<String, dynamic> && decoded['code'] != null) code = '${decoded['code']}';
+        } catch (_) {}
         throw ApiHttpFailure(code, correlation, response.statusCode);
       }
       if (response.body.trim().isEmpty) return null;
