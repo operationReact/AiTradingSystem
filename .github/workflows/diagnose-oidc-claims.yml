@@ -1,6 +1,10 @@
 name: Diagnose GitHub OIDC claims (no AWS access)
 
 on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/oidc-diagnostic.request'
   workflow_dispatch:
 
 permissions:
