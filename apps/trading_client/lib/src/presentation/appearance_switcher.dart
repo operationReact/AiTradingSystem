@@ -53,28 +53,29 @@ class AppearanceSwitcher extends StatelessWidget {
                       }
                     },
                   ),
-                  DropdownButtonHideUnderline(
-                    child: DropdownButton<ThemeMode>(
-                      key: const ValueKey('global-theme-mode-control'),
-                      value: themeMode,
-                      items: const [
-                        DropdownMenuItem(
-                          value: ThemeMode.system,
-                          child: Text('System'),
-                        ),
-                        DropdownMenuItem(
-                          value: ThemeMode.light,
-                          child: Text('Light'),
-                        ),
-                        DropdownMenuItem(
-                          value: ThemeMode.dark,
-                          child: Text('Dark'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) onThemeModeChanged(value);
-                      },
-                    ),
+                  SegmentedButton<ThemeMode>(
+                    key: const ValueKey('global-theme-mode-control'),
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.system,
+                        label: Text('System', key: ValueKey('global-theme-system')),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        label: Text('Light', key: ValueKey('global-theme-light')),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        label: Text('Dark', key: ValueKey('global-theme-dark')),
+                      ),
+                    ],
+                    selected: {themeMode},
+                    onSelectionChanged: (selection) {
+                      if (selection.isNotEmpty) {
+                        onThemeModeChanged(selection.first);
+                      }
+                    },
                   ),
                 ],
               ),
