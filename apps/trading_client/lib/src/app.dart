@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'data/authenticated_api_client.dart';
 import 'data/backtest_repository.dart';
+import 'data/execution_repository.dart';
 import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
@@ -9,6 +10,7 @@ import 'data/operator_session.dart';
 import 'data/research_repository.dart';
 import 'presentation/appearance_switcher.dart';
 import 'presentation/backtests_page.dart';
+import 'presentation/execution_workspace_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
 import 'presentation/operations_health_page.dart';
@@ -37,6 +39,7 @@ class _TradingAppState extends State<TradingApp> {
   ThemeMode _themeMode = ThemeMode.system;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
+  ExecutionRepository get _execution => HttpExecutionRepository(_api);
 
   @override
   Widget build(BuildContext context) {
@@ -70,8 +73,10 @@ class _TradingAppState extends State<TradingApp> {
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
-        '/portfolio': (_) => const WorkspacePage.portfolio(),
-        '/risk': (_) => const WorkspacePage.risk(),
+        '/orders': (_) => ExecutionWorkspacePage(repository: _execution, initialTab: ExecutionWorkspaceTab.orders),
+        '/portfolio': (_) => ExecutionWorkspacePage(repository: _execution, initialTab: ExecutionWorkspaceTab.portfolio),
+        '/approvals': (_) => ExecutionWorkspacePage(repository: _execution, initialTab: ExecutionWorkspaceTab.approvals),
+        '/risk': (_) => ExecutionWorkspacePage(repository: _execution, initialTab: ExecutionWorkspaceTab.risk),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
