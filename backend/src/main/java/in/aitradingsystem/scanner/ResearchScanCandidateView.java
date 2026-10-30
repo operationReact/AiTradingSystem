@@ -21,4 +21,5 @@ public record ResearchScanCandidateView(
         String candidateFingerprint,
         Integer strategyConfigVersion,
         UUID catalogueVersion,
-        Instant dataCutoffAt) {}
+        Instant dataCutoffAt,
+        long candidateId) {}

@@ -11,6 +11,10 @@ import InstrumentsPage from './pages/InstrumentsPage.jsx';
 import MarketDataPage from './pages/MarketDataPage.jsx';
 import BacktestingPage from './pages/BacktestingPage.jsx';
 import ResearchPage from './pages/ResearchPage.jsx';
+import CandidateDetailPage from './pages/CandidateDetailPage.jsx';
+import OperationsPage from './pages/OperationsPage.jsx';
+import NotificationsPage from './pages/NotificationsPage.jsx';
+import AuditPage from './pages/AuditPage.jsx';
 
 export default function App() {
   return (
@@ -27,6 +31,10 @@ export default function App() {
         <Route path="market-data" element={<MarketDataPage />} />
         <Route path="backtesting" element={<BacktestingPage />} />
         <Route path="research" element={<ResearchPage />} />
+        <Route path="research/candidates/:candidateId" element={<CandidateDetailPage />} />
+        <Route path="operations" element={<OperationsPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
