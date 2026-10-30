@@ -20,10 +20,12 @@ public class RiskPolicyConfigRepository {
     }
 
     public RiskPolicyView requireActiveView() {
+        // READ COMMITTED can see a policy committed after this transaction began while it waited for a lock.
+        // PostgreSQL now() is frozen at transaction start and would incorrectly hide that current policy.
         return jdbc.query("""
                 SELECT * FROM risk_policy_config
-                WHERE active = TRUE AND effective_from <= now()
-                  AND (effective_to IS NULL OR effective_to > now())
+                WHERE active = TRUE AND effective_from <= statement_timestamp()
+                  AND (effective_to IS NULL OR effective_to > statement_timestamp())
                 ORDER BY policy_version DESC
                 LIMIT 1
                 """, (rs, row) -> mapView(rs)).stream().findFirst()
@@ -101,12 +103,15 @@ public class RiskPolicyConfigRepository {
                 (rs, row) -> mapView(rs), id).stream().findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("risk policy not found: " + id));
 
-        jdbc.update("UPDATE risk_policy_config SET active = FALSE, effective_to = now() WHERE active = TRUE");
+        // Capture a single database instant after acquiring lifecycle locks. Transaction-start now() can predate
+        // the previous activation when writers waited, producing an inverted/invalid effective interval.
+        OffsetDateTime activationAt = jdbc.queryForObject("SELECT clock_timestamp()", OffsetDateTime.class);
+        jdbc.update("UPDATE risk_policy_config SET active = FALSE, effective_to = ? WHERE active = TRUE", activationAt);
         int rows = jdbc.update("""
                 UPDATE risk_policy_config
-                   SET active = TRUE, effective_from = now(), effective_to = NULL
+                   SET active = TRUE, effective_from = ?, effective_to = NULL
                  WHERE id = ?
-                """, target.id());
+                """, activationAt, target.id());
         if (rows != 1) throw new IllegalStateException("risk policy activation failed: " + id);
         return requireActiveView();
     }

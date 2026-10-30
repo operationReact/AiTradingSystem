@@ -144,3 +144,17 @@ test('E2E-P6 Clear Invest mobile — same accounting evidence remains readable',
   await assertAccessibility(page);
   await page.screenshot({ path: testInfo.outputPath('p6-clear-portfolio-390.png'), fullPage: true });
 });
+
+test('portfolio controller preserves accounting evidence and reconciliation authority across a design switch', async ({ page }) => {
+  const state = await mockPaperApi(page);
+  await connect(page, 'pro-terminal', { width: 1440, height: 900 });
+  await assertCanonicalPortfolioEvidence(page);
+  await page.getByLabel('Appearance — Experience').selectOption('clear-invest');
+  await assertCanonicalPortfolioEvidence(page);
+  expect(state.runs).toHaveLength(1);
+  await page.getByRole('button', { name: 'Run reconciliation' }).click();
+  await expect.poll(() => state.runs.length).toBe(2);
+  await page.getByRole('button', { name: 'Clear operator API key', exact: true }).click();
+  await expect(page.getByText('Operator key required', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Run reconciliation' })).toHaveCount(0);
+});

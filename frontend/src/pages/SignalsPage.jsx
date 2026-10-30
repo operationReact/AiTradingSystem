@@ -167,6 +167,7 @@ export default function SignalsPage() {
             <select id="strategy-instrument" className={inputClass} value={selectedInstrument ? String(selectedInstrument.id) : ''}
               onChange={(e) => { setSelectedId(e.target.value); evaluateMutation.reset(); }}
               disabled={!instruments.data?.content?.length}>
+              {!selectedInstrument && <option value="">Select a current instrument</option>}
               {(instruments.data?.content || []).map((item) =>
                 <option key={item.id} value={String(item.id)}>{item.tradingSymbol} · {item.exchange}</option>)}
             </select>

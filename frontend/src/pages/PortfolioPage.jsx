@@ -1,5 +1,8 @@
 import { useApp } from '../context/AppContext.jsx';
-import PortfolioWorkspace from '../components/portfolio/shared/PortfolioWorkspace.jsx';
+import ExperienceBoundary from '../components/experience/ExperienceBoundary.jsx';
+import ProPortfolioView from '../components/portfolio/pro/ProPortfolioView.jsx';
+import ClearPortfolioView from '../components/portfolio/clear/ClearPortfolioView.jsx';
+import { requestState } from '../lib/viewModel.js';
 import {
   useCanonicalPortfolio,
   usePaperCashLedger,
@@ -19,5 +22,9 @@ export default function PortfolioPage() {
   const reconciliation = usePaperReconciliationRuns();
   const runReconciliation = useRunPaperReconciliation();
 
-  return <PortfolioWorkspace {...{ portfolio, positions, fills, cash, reconciliation, runReconciliation }} canReconcile={!!apiKey} />;
+  const project = query => ({ ...requestState(query), refetch: () => query.refetch() });
+  const props = { portfolio: project(portfolio), positions: project(positions), fills: project(fills), cash: project(cash),
+    reconciliation: project(reconciliation), canReconcile: !!apiKey,
+    runReconciliation: { ...requestState(runReconciliation), mutate: () => { if (apiKey && !runReconciliation.isPending) runReconciliation.mutate(); } } };
+  return <ExperienceBoundary pro={<ProPortfolioView {...props} />} clear={<ClearPortfolioView {...props} />} />;
 }
