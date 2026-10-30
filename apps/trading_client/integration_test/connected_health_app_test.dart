@@ -33,17 +33,26 @@ Future<void> openOperationsHealth(WidgetTester tester, OperatorSession session) 
     await tester.pumpAndSettle();
   }
 
-  expect(find.byKey(const ValueKey('operator-key-field')), findsOneWidget);
+  final operatorField = find.byKey(const ValueKey('operator-key-field'));
+  expect(operatorField, findsOneWidget);
+  await tester.ensureVisible(operatorField);
+  await tester.pumpAndSettle();
 }
 
-Future<void> connectHealth(WidgetTester tester, String key) async {
+Future<void> connectAndWait(
+  WidgetTester tester,
+  String key,
+  Finder expectedState,
+) async {
   final operatorField = find.byKey(const ValueKey('operator-key-field'));
-  final connectButton = find.byKey(const ValueKey('connect-health'));
+  final connect = find.byKey(const ValueKey('connect-health'));
   await tester.ensureVisible(operatorField);
   await tester.enterText(operatorField, key);
-  await tester.ensureVisible(connectButton);
+  await tester.ensureVisible(connect);
   await tester.pumpAndSettle();
-  await tester.tap(connectButton);
+  await tester.tap(connect);
+  await tester.pump();
+  await waitForFinder(tester, expectedState);
 }
 
 void main() {
@@ -55,23 +64,27 @@ void main() {
     final session = OperatorSession();
     await openOperationsHealth(tester, session);
 
-    await connectHealth(tester, connectedApiKey);
-    await waitForFinder(tester, find.byKey(const ValueKey('health-summary')));
+    await connectAndWait(
+      tester,
+      connectedApiKey,
+      find.byKey(const ValueKey('health-summary')),
+    );
 
     expect(find.text('PAPER'), findsWidgets);
     expect(find.text('UNAVAILABLE'), findsWidgets);
 
-    final styleControl = find.byKey(const ValueKey('design-style-control'));
-    await tester.ensureVisible(styleControl);
-    await tester.tap(find.descendant(of: styleControl, matching: find.text('Clean')));
+    final globalStyleControl = find.byKey(const ValueKey('global-design-style-control'));
+    final globalClean = find.descendant(of: globalStyleControl, matching: find.text('Clean'));
+    expect(globalClean, findsOneWidget);
+    await tester.ensureVisible(globalClean);
+    await tester.tap(globalClean);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
 
-    final themeControl = find.byKey(const ValueKey('theme-mode-control'));
-    await tester.ensureVisible(themeControl);
-    await tester.tap(themeControl);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Dark').last);
+    final darkTheme = find.byKey(const ValueKey('global-theme-dark'));
+    expect(darkTheme, findsOneWidget);
+    await tester.ensureVisible(darkTheme);
+    await tester.tap(darkTheme);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
   });
@@ -81,8 +94,11 @@ void main() {
     await openOperationsHealth(tester, session);
     final badKey = '${connectedApiKey}wrong';
     final operatorField = find.byKey(const ValueKey('operator-key-field'));
-    await connectHealth(tester, badKey);
-    await waitForFinder(tester, find.byKey(const ValueKey('health-error')));
+    await connectAndWait(
+      tester,
+      badKey,
+      find.byKey(const ValueKey('health-error')),
+    );
     expect(find.text('AUTHENTICATION_REJECTED'), findsOneWidget);
 
     final allCredentialText = find.textContaining(badKey);
