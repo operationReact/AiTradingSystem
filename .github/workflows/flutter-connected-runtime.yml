@@ -220,7 +220,7 @@ jobs:
 
   ios-runtime:
     runs-on: macos-latest
-    timeout-minutes: 60
+    timeout-minutes: 25
     env:
       SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aitrading
       SPRING_DATASOURCE_USERNAME: runner
@@ -284,9 +284,9 @@ jobs:
               f"--dart-define=CONNECTED_API_KEY={os.environ['CONNECTED_API_KEY']}",
           ]
           try:
-              result = subprocess.run(cmd, timeout=1200)
+              result = subprocess.run(cmd, timeout=480)
           except subprocess.TimeoutExpired:
-              print('iOS connected runtime exceeded 20 minutes; failing fast instead of hanging the PR gate.')
+              print('iOS connected runtime exceeded 8 minutes; failing fast instead of hanging the PR gate.')
               sys.exit(124)
           sys.exit(result.returncode)
           PY
