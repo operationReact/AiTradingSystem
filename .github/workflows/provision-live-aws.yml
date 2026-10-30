@@ -1,11 +1,6 @@
 name: Provision live AWS infrastructure
 
 on:
-  push:
-    branches: [dev]
-    paths:
-      - 'infra/terraform/**'
-      - '.github/workflows/provision-live-aws.yml'
   workflow_dispatch:
     inputs:
       enable_https:
@@ -32,7 +27,6 @@ env:
 
 jobs:
   provision:
-    if: ${{ github.event_name == 'workflow_dispatch' || (vars.DOMAIN_NAME != '' && vars.AWS_ROLE_ARN != '') }}
     name: Terraform apply live infrastructure
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -105,12 +99,11 @@ jobs:
           ENABLE_HTTPS_INPUT: ${{ github.event.inputs.enable_https }}
         run: |
           set -euo pipefail
-          ENABLE_HTTPS="${ENABLE_HTTPS_INPUT:-false}"
           terraform plan \
             -var="domain_name=${DOMAIN_NAME}" \
-            -var="enable_https=${ENABLE_HTTPS}" \
+            -var="enable_https=${ENABLE_HTTPS_INPUT}" \
             -out=tfplan
-      - name: Terraform apply
+      - name: Terraform apply reviewed plan
         working-directory: infra/terraform
         run: terraform apply -auto-approve tfplan
       - name: Publish infrastructure outputs
