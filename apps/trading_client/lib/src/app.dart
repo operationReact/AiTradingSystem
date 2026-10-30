@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'data/health_repository.dart';
 import 'data/operator_session.dart';
+import 'presentation/appearance_switcher.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
 import 'theme/app_theme.dart';
@@ -35,6 +36,17 @@ class _TradingAppState extends State<TradingApp> {
       theme: buildTheme(_style, Brightness.light),
       darkTheme: buildTheme(_style, Brightness.dark),
       initialRoute: widget.initialRoute,
+      builder: (context, child) => Stack(
+        children: [
+          Positioned.fill(child: child ?? const SizedBox.shrink()),
+          AppearanceSwitcher(
+            designStyle: _style,
+            themeMode: _themeMode,
+            onDesignStyleChanged: _setDesignStyle,
+            onThemeModeChanged: _setThemeMode,
+          ),
+        ],
+      ),
       routes: {
         '/': (_) => _overviewPage(),
         '/market': (_) => const WorkspacePage.market(),
@@ -48,6 +60,16 @@ class _TradingAppState extends State<TradingApp> {
     );
   }
 
+  void _setDesignStyle(DesignStyle value) {
+    if (_style == value) return;
+    setState(() => _style = value);
+  }
+
+  void _setThemeMode(ThemeMode value) {
+    if (_themeMode == value) return;
+    setState(() => _themeMode = value);
+  }
+
   Widget _overviewPage() => OverviewPage(
         session: widget.session,
         dashboardRepository: HttpDashboardRepository(session: widget.session),
@@ -59,7 +81,7 @@ class _TradingAppState extends State<TradingApp> {
         session: widget.session,
         designStyle: _style,
         themeMode: _themeMode,
-        onDesignStyleChanged: (value) => setState(() => _style = value),
-        onThemeModeChanged: (value) => setState(() => _themeMode = value),
+        onDesignStyleChanged: _setDesignStyle,
+        onThemeModeChanged: _setThemeMode,
       );
 }
