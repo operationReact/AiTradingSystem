@@ -54,19 +54,38 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   final panel = style == DesignStyle.neonFuturisticAi
       ? (isDark ? const Color(0xFF151225) : const Color(0xFFF1EEFF))
       : (isDark ? const Color(0xFF171A1F) : const Color(0xFFF4F6F8));
+
+  final statusColors = isDark
+      ? const (
+          healthy: Color(0xFF53D69D),
+          degraded: Color(0xFFFFB84D),
+          unknown: Color(0xFFB8C0CC),
+          halted: Color(0xFFFFB15A),
+          unsafe: Color(0xFFFF8A80),
+        )
+      : const (
+          healthy: Color(0xFF006B49),
+          degraded: Color(0xFF8A4B00),
+          unknown: Color(0xFF4B5563),
+          halted: Color(0xFF7C3E00),
+          unsafe: Color(0xFFA0120A),
+        );
+
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
+    focusColor: scheme.primary.withValues(alpha: 0.30),
+    hoverColor: scheme.primary.withValues(alpha: 0.08),
     scaffoldBackgroundColor: style == DesignStyle.neonFuturisticAi && isDark
         ? const Color(0xFF090712)
         : scheme.surface,
     extensions: <ThemeExtension<dynamic>>[
       TradingColors(
-        healthy: const Color(0xFF16865B),
-        degraded: const Color(0xFFD17B00),
-        unknown: const Color(0xFF6B7280),
-        halted: const Color(0xFFB45309),
-        unsafe: const Color(0xFFB42318),
+        healthy: statusColors.healthy,
+        degraded: statusColors.degraded,
+        unknown: statusColors.unknown,
+        halted: statusColors.halted,
+        unsafe: statusColors.unsafe,
         panel: panel,
       ),
     ],
