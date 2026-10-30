@@ -70,6 +70,24 @@ jobs:
       - name: Discover AWS account
         id: account
         run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+      - name: Ensure ECS service-linked role
+        run: |
+          set -euo pipefail
+          if aws iam get-role --role-name AWSServiceRoleForECS >/dev/null 2>&1; then
+            echo "AWSServiceRoleForECS already exists"
+          else
+            echo "Creating AWSServiceRoleForECS"
+            aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com >/dev/null
+          fi
+          for attempt in {1..12}; do
+            if aws iam get-role --role-name AWSServiceRoleForECS >/dev/null 2>&1; then
+              echo "AWSServiceRoleForECS is ready"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::AWSServiceRoleForECS was not available after creation"
+          exit 1
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v3
         with:
