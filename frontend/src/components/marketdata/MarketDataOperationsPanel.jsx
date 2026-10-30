@@ -1,12 +1,4 @@
-import { useMemo, useState } from 'react';
 import { Activity, RefreshCw, ShieldCheck } from 'lucide-react';
-import { useAngelOneStatus, useCandleBackfills } from '../../hooks/useApi.js';
-import {
-  useEvaluateMarketDataQuality,
-  useMarketCalendar,
-  useMarketDataQuality,
-  useReconcileMarketData,
-} from '../../hooks/useMarketDataOperations.js';
 import { Badge, Button, Notice, Panel } from '../ui.jsx';
 import BackfillRunDetailDrawer from './BackfillRunDetailDrawer.jsx';
 import GapRangeTable from './GapRangeTable.jsx';
@@ -17,65 +9,27 @@ import ProviderHealthBadge from './ProviderHealthBadge.jsx';
 const INTERVALS = ['ONE_MINUTE', 'THREE_MINUTE', 'FIVE_MINUTE', 'TEN_MINUTE', 'FIFTEEN_MINUTE', 'THIRTY_MINUTE', 'ONE_HOUR', 'ONE_DAY'];
 const inputClass = 'h-9 w-full rounded-md border border-border bg-surface-2 px-3 text-sm text-text focus:border-accent focus:outline-none';
 
-function todayInIndia() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-}
-function shiftDate(value, days) {
-  const date = new Date(`${value}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-function toInstant(value, end = false) {
-  const date = new Date(`${value}T00:00:00+05:30`);
-  if (end) date.setUTCDate(date.getUTCDate() + 1);
-  return date.toISOString();
-}
-
-export default function MarketDataOperationsPanel() {
-  const today = todayInIndia();
-  const [instrumentId, setInstrumentId] = useState('');
-  const [interval, setInterval] = useState('FIVE_MINUTE');
-  const [from, setFrom] = useState(shiftDate(today, -7));
-  const [to, setTo] = useState(today);
-  const [evaluation, setEvaluation] = useState(null);
-  const [reconciliation, setReconciliation] = useState(null);
-  const [selectedRun, setSelectedRun] = useState(null);
-  const validInstrument = Number(instrumentId) > 0;
-  const validRange = !!from && !!to && from <= to;
-
-  const latestQuality = useMarketDataQuality({ instrumentId: Number(instrumentId), interval, enabled: validInstrument });
-  const evaluate = useEvaluateMarketDataQuality();
-  const reconcile = useReconcileMarketData();
-  const calendar = useMarketCalendar({ from, to, enabled: validRange });
-  const provider = useAngelOneStatus();
-  const backfills = useCandleBackfills(10);
-
-  const instantRange = useMemo(() => validRange ? { from: toInstant(from), to: toInstant(to, true) } : null, [from, to, validRange]);
-  const runEvaluate = () => {
-    if (!validInstrument || !instantRange) return;
-    evaluate.mutate({ instrumentId: Number(instrumentId), interval, ...instantRange }, { onSuccess: setEvaluation });
-  };
-  const runReconcile = () => {
-    if (!validInstrument || !instantRange) return;
-    reconcile.mutate({ instrumentId: Number(instrumentId), interval, ...instantRange }, { onSuccess: setReconciliation });
-  };
-
+export default function MarketDataOperationsPanel({ controller }) {
+  const { connected, today, instrumentId, setInstrumentId, interval, setInterval, from, setFrom, to, setTo, evaluation,
+    setEvaluation, reconciliation, setReconciliation, selectedRun, setSelectedRun, validInstrument, validRange,
+    latestQuality, evaluate, reconcile, calendar, provider, backfills, runEvaluate, runReconcile } = controller;
   return (
     <div className="flex flex-col gap-4">
+      {!connected && <Notice tone="neutral" title="Operator key required">Connect the operator key to evaluate market-data quality or reconcile gaps.</Notice>}
       <Panel title="Market-data operations" subtitle="Quality gate · reconciliation · provider health · exchange calendar">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="max-w-3xl text-xs leading-5 text-muted">Operational checks are read-only except explicit reconciliation/backfill requests. They never submit broker orders.</p>
-          <ProviderHealthBadge status={provider.data} isLoading={provider.isPending} error={provider.error} />
+          <ProviderHealthBadge status={provider.data} isLoading={connected && provider.isPending} error={provider.error} />
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div><label className="mb-1 block text-xs font-medium text-muted">Instrument ID</label><input className={inputClass} inputMode="numeric" min="1" type="number" value={instrumentId} onChange={(e) => { setInstrumentId(e.target.value); setEvaluation(null); setReconciliation(null); }} placeholder="e.g. 123" /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">Interval</label><select className={inputClass} value={interval} onChange={(e) => { setInterval(e.target.value); setEvaluation(null); setReconciliation(null); }}>{INTERVALS.map((item) => <option key={item}>{item}</option>)}</select></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">From</label><input className={inputClass} type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></div>
-          <div><label className="mb-1 block text-xs font-medium text-muted">To</label><input className={inputClass} type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></div>
+          <div><label htmlFor="operations-instrument" className="mb-1 block text-xs font-medium text-muted">Instrument ID</label><input id="operations-instrument" className={inputClass} inputMode="numeric" min="1" type="number" value={instrumentId} onChange={(e) => { setInstrumentId(e.target.value); setEvaluation(null); setReconciliation(null); }} placeholder="e.g. 123" /></div>
+          <div><label htmlFor="operations-interval" className="mb-1 block text-xs font-medium text-muted">Interval</label><select id="operations-interval" className={inputClass} value={interval} onChange={(e) => { setInterval(e.target.value); setEvaluation(null); setReconciliation(null); }}>{INTERVALS.map((item) => <option key={item}>{item}</option>)}</select></div>
+          <div><label htmlFor="operations-from" className="mb-1 block text-xs font-medium text-muted">From</label><input id="operations-from" className={inputClass} type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></div>
+          <div><label htmlFor="operations-to" className="mb-1 block text-xs font-medium text-muted">To</label><input id="operations-to" className={inputClass} type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} /></div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button icon={ShieldCheck} variant="primary" disabled={!validInstrument || !validRange || evaluate.isPending} loading={evaluate.isPending} onClick={runEvaluate}>Evaluate quality</Button>
-          <Button icon={RefreshCw} variant="secondary" disabled={!validInstrument || !validRange || reconcile.isPending} loading={reconcile.isPending} onClick={runReconcile}>Reconcile gaps</Button>
+          <Button icon={ShieldCheck} variant="primary" disabled={!connected || !validInstrument || !validRange || evaluate.isPending} loading={evaluate.isPending} onClick={runEvaluate}>Evaluate quality</Button>
+          <Button icon={RefreshCw} variant="secondary" disabled={!connected || !validInstrument || !validRange || reconcile.isPending} loading={reconcile.isPending} onClick={runReconcile}>Reconcile gaps</Button>
         </div>
         {(evaluate.error || reconcile.error) && <div className="mt-3"><Notice tone="loss" title="Operation failed">{(evaluate.error || reconcile.error)?.message || 'The market-data operation failed.'}</Notice></div>}
       </Panel>
