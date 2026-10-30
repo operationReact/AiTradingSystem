@@ -89,12 +89,13 @@ class Phase8ExitGateIT {
             .andExpect(jsonPath("$.winCount").value(1));
         assertThat(jdbc.sql("SELECT count(*) FROM portfolio_performance_daily").query(Long.class).single()).isEqualTo(1);
         assertThat(jdbc.sql("SELECT count(*) FROM paper_fill").query(Long.class).single()).isEqualTo(2);
-        mvc.perform(get("/api/paper-portfolio").header("X-API-Key",KEY)).andExpect(status().isOk());
+        mvc.perform(get("/api/paper-portfolio").header("X-API-Key",KEY)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.exposurePercent").value(0));
         mvc.perform(get("/api/analytics/portfolio").header("X-API-Key",KEY).param("from",DAY).param("to",DAY))
             .andExpect(status().isOk()).andExpect(jsonPath("$.materializationComplete").value(true))
             .andExpect(jsonPath("$.netPnl").value(9.69)).andExpect(jsonPath("$.exitMetrics.closedExitOrders").value(1))
             .andExpect(jsonPath("$.exitMetrics.winRatePercent").value(100))
-            .andExpect(jsonPath("$.exposureSnapshot.grossExposure").value(0));
+            .andExpect(jsonPath("$.exposureSnapshot").isEmpty());
         mvc.perform(get("/api/analytics/equity").header("X-API-Key",KEY).param("from",DAY).param("to",DAY))
             .andExpect(status().isOk()).andExpect(jsonPath("$.equityCurve.length()").value(1));
         mvc.perform(get("/api/analytics/strategies").header("X-API-Key",KEY).param("from",DAY).param("to",DAY))

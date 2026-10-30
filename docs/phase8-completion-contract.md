@@ -6,7 +6,7 @@ P08-GATE01 verifies the six Phase 8 implementation allocations together. The ded
 | --- | --- |
 | PAPER round trip | BUY and SELL each wait for manual approval, then persist exactly two fills after real revalidation. |
 | Accounting | 100000 opening capital; 9.69 net / 10.00 gross gain; 0.10 fees / 0.21 slippage. Rebuild twice preserves a single daily row and the original fills. |
-| Supported analytics | Complete daily equity, strategy attribution, one winning exit, zero current exposure, explicitly advisory research. |
+| Supported analytics | Complete daily equity, strategy attribution, one winning exit, zero current exposure from the PAPER portfolio, explicitly advisory research. With no valuation snapshot producer invoked, analytics correctly reports a null exposure snapshot. |
 | Operational understanding | Reconciliation is CLEAN; health reports its evidence, PAPER mode and no LIVE availability. Unconfigured provider/news/scanner evidence may correctly remain UNKNOWN. |
 | Incident response | Emergency stop produces a critical notification. Repeated authenticated acknowledgement creates one audit and leaves the stop active. |
 | Auditability | Rebuild actor is authenticated operator; downloadable filtered CSV includes the orders and revalidation events. |
