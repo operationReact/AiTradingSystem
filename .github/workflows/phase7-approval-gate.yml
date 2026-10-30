@@ -1,0 +1,44 @@
+name: Phase 7 - Approval decision regression
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/execution/**'
+      - 'backend/src/main/java/in/aitradingsystem/api/Approval*'
+      - 'backend/src/test/java/in/aitradingsystem/execution/**'
+      - 'backend/src/test/java/in/aitradingsystem/api/Approval*'
+      - '.github/workflows/phase7-approval-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  approval-decision-evidence:
+    name: P7 expiry + same-decision concurrency + audit + policy + readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run PostgreSQL approval decision and component regressions
+        run: >-
+          mvn --batch-mode --no-transfer-progress
+          -Dtest=ApprovalControllerTest,ApprovalPolicyEvaluatorTest,ExecutionPolicySchemaIT,ExecutionPolicyServiceIT,OrderApprovalSchemaIT,OrderApprovalConcurrencyIT,ExecutionReadinessServiceIT
+          test
+      - name: Upload test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p07-approval-decision-evidence
+          path: backend/target/surefire-reports
+          retention-days: 14

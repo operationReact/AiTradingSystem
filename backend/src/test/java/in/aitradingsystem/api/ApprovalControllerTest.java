@@ -1,6 +1,5 @@
 package in.aitradingsystem.api;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -8,7 +7,6 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.execution.OrderApprovalService;
 import in.aitradingsystem.execution.OrderApprovalState;
@@ -24,7 +22,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ApprovalControllerTest {
     private OrderApprovalService approvals;
-    private AuditService audit;
     private MockMvc mvc;
     private UUID approvalId;
     private OrderApprovalView pending;
@@ -33,8 +30,7 @@ class ApprovalControllerTest {
     @BeforeEach
     void setup() {
         approvals = org.mockito.Mockito.mock(OrderApprovalService.class);
-        audit = org.mockito.Mockito.mock(AuditService.class);
-        mvc = MockMvcBuilders.standaloneSetup(new ApprovalController(approvals, audit)).build();
+        mvc = MockMvcBuilders.standaloneSetup(new ApprovalController(approvals)).build();
         approvalId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         UUID policyId = UUID.randomUUID();
@@ -76,7 +72,6 @@ class ApprovalControllerTest {
             .andExpect(status().isOk());
 
         verify(approvals).decide(approvalId, 0, OrderApprovalState.APPROVED, "operator", "ok");
-        verify(audit).record(eq("APPROVAL_APPROVED"), eq("ORDER_APPROVAL"), eq(approvalId.toString()), any());
     }
 
     @Test

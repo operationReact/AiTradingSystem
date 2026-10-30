@@ -1,6 +1,5 @@
 package in.aitradingsystem.api;
 
-import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.common.PageResponse;
 import in.aitradingsystem.execution.OrderApprovalService;
 import in.aitradingsystem.execution.OrderApprovalState;
@@ -11,7 +10,6 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import java.util.Map;
 import java.util.UUID;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,11 +25,9 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class ApprovalController {
     private final OrderApprovalService approvals;
-    private final AuditService audit;
 
-    public ApprovalController(OrderApprovalService approvals, AuditService audit) {
+    public ApprovalController(OrderApprovalService approvals) {
         this.approvals = approvals;
-        this.audit = audit;
     }
 
     public record ApprovalDecisionRequest(
@@ -56,37 +52,25 @@ public class ApprovalController {
     @PostMapping("/{approvalId}/approve")
     public OrderApprovalView approve(@PathVariable UUID approvalId,
                                      @Valid @RequestBody ApprovalDecisionRequest request) {
-        return decide(approvalId, request, OrderApprovalState.APPROVED, "APPROVAL_APPROVED");
+        return decide(approvalId, request, OrderApprovalState.APPROVED);
     }
 
     @PostMapping("/{approvalId}/reject")
     public OrderApprovalView reject(@PathVariable UUID approvalId,
                                     @Valid @RequestBody ApprovalDecisionRequest request) {
-        return decide(approvalId, request, OrderApprovalState.REJECTED, "APPROVAL_REJECTED");
+        return decide(approvalId, request, OrderApprovalState.REJECTED);
     }
 
     @PostMapping("/{approvalId}/cancel")
     public OrderApprovalView cancel(@PathVariable UUID approvalId,
                                     @Valid @RequestBody ApprovalDecisionRequest request) {
-        return decide(approvalId, request, OrderApprovalState.CANCELLED, "APPROVAL_CANCELLED");
+        return decide(approvalId, request, OrderApprovalState.CANCELLED);
     }
 
     private OrderApprovalView decide(UUID approvalId, ApprovalDecisionRequest request,
-                                     OrderApprovalState decision, String eventType) {
-        OrderApprovalView before = approvals.require(approvalId);
-        OrderApprovalView result = approvals.decide(
+                                     OrderApprovalState decision) {
+        return approvals.decide(
             approvalId, request.expectedRowVersion(), decision, request.actor(), normalize(request.reason()));
-        if (before.state() == OrderApprovalState.PENDING
-                && before.rowVersion() == request.expectedRowVersion()
-                && result.state() == decision
-                && result.rowVersion() == before.rowVersion() + 1) {
-            audit.record(eventType, "ORDER_APPROVAL", approvalId.toString(), Map.of(
-                "orderId", result.orderId().toString(),
-                "policyVersion", result.policyVersion(),
-                "rowVersion", result.rowVersion(),
-                "actor", result.decidedBy()));
-        }
-        return result;
     }
 
     private static String normalize(String reason) {
