@@ -5,13 +5,13 @@
   "phaseCount": 22,
   "flutterRoot": "apps/trading_client",
   "legacyFrontendReferenceOnly": true,
-  "deliveryStatus": "GAP",
+  "deliveryStatus": "IN_PROGRESS",
   "firstSlice": {
     "id": "FC-03",
     "scope": "Read-only operations health through the real backend",
-    "web": "GAP",
-    "android": "GAP",
-    "ios": "GAP"
+    "web": "UNVERIFIED",
+    "android": "UNVERIFIED",
+    "ios": "UNVERIFIED"
   },
   "releaseAcceptance": "BLOCKED_PENDING_THREE_PLATFORM_EVIDENCE"
 }
