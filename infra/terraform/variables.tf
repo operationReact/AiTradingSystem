@@ -1,7 +1,7 @@
 variable "aws_region" {
   description = "Primary live AWS region."
   type        = string
-  default     = "ap-south-2"
+  default     = "us-east-1"
 }
 
 variable "domain_name" {
