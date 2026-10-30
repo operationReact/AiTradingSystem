@@ -1,0 +1,967 @@
+[
+  {
+    "number": 157,
+    "headBranch": "phase9/p09-pr04-candidate-evidence",
+    "plannedOwners": [
+      "P09-PR04"
+    ],
+    "supplementalFor": [
+      "P04-PR05",
+      "P04-PR07"
+    ]
+  },
+  {
+    "number": 156,
+    "headBranch": "phase9/p09-pr03-setup-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 155,
+    "headBranch": "phase9/p09-pr03-dashboard-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 154,
+    "headBranch": "phase9/p09-pr03-trading-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 153,
+    "headBranch": "fix/risk-policy-activation-clock",
+    "plannedOwners": [],
+    "supplementalFor": [
+      "P05-PR02"
+    ]
+  },
+  {
+    "number": 152,
+    "headBranch": "phase9/p09-pr03-safety-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 150,
+    "headBranch": "phase9/p09-pr03b-major-page-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 149,
+    "headBranch": "phase9/p09-pr03-shared-controllers",
+    "plannedOwners": [
+      "P09-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 148,
+    "headBranch": "phase9/p09-pr02-design-tokens",
+    "plannedOwners": [
+      "P09-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 147,
+    "headBranch": "phase9/p09-pr01-frontend-architecture",
+    "plannedOwners": [
+      "P09-PR01"
+    ],
+    "supplementalFor": [
+      "P02-PR03",
+      "P04-PR05"
+    ]
+  },
+  {
+    "number": 146,
+    "headBranch": "phase8/p08-gate01-completion",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 145,
+    "headBranch": "phase8/p08-pr06-api-contracts",
+    "plannedOwners": [
+      "P08-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 144,
+    "headBranch": "phase8/p08-pr05-audit-search",
+    "plannedOwners": [
+      "P08-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 143,
+    "headBranch": "phase8/p08-pr04-operational-health",
+    "plannedOwners": [
+      "P08-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 142,
+    "headBranch": "phase8/p08-pr03-notifications",
+    "plannedOwners": [
+      "P08-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 141,
+    "headBranch": "phase8/p08-pr02-analytics-services",
+    "plannedOwners": [
+      "P08-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 140,
+    "headBranch": "phase8/p08-pr01-daily-performance",
+    "plannedOwners": [
+      "P08-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 139,
+    "headBranch": "phase7/p07-gate01-completion",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 138,
+    "headBranch": "phase7/p07-gate01-policy-provenance",
+    "plannedOwners": [],
+    "supplementalFor": [
+      "P07-PR01",
+      "P07-PR07"
+    ]
+  },
+  {
+    "number": 137,
+    "headBranch": "phase7/p07-gate01-paper-integration",
+    "plannedOwners": [],
+    "supplementalFor": [
+      "P07-PR03",
+      "P07-PR04",
+      "P06-PR07"
+    ]
+  },
+  {
+    "number": 136,
+    "headBranch": "phase7/p07-gate01-approval-corrections",
+    "plannedOwners": [],
+    "supplementalFor": [
+      "P07-PR04",
+      "P07-PR05",
+      "P07-PR06"
+    ]
+  },
+  {
+    "number": 135,
+    "headBranch": "phase7/p07-pr07-approval-ui",
+    "plannedOwners": [
+      "P07-PR07"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 134,
+    "headBranch": "phase7/p07-pr06-approval-apis",
+    "plannedOwners": [
+      "P07-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 133,
+    "headBranch": "phase7/p07-pr05-approval-concurrency",
+    "plannedOwners": [
+      "P07-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 132,
+    "headBranch": "phase7/p07-pr04-preexecution-revalidation",
+    "plannedOwners": [
+      "P07-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 131,
+    "headBranch": "phase7/p07-pr03-policy-evaluator",
+    "plannedOwners": [
+      "P07-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 130,
+    "headBranch": "phase7/p07-pr02-approval-schema",
+    "plannedOwners": [
+      "P07-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 129,
+    "headBranch": "phase7/p07-pr01-execution-policy-schema",
+    "plannedOwners": [
+      "P07-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 128,
+    "headBranch": "phase6/p06-gate01-completion-evidence",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 127,
+    "headBranch": "phase6/p06-pr09-paper-ui",
+    "plannedOwners": [
+      "P06-PR09"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 126,
+    "headBranch": "phase6/p06-pr08-paper-apis",
+    "plannedOwners": [
+      "P06-PR08"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 125,
+    "headBranch": "phase6/p06-pr07-service-decomposition",
+    "plannedOwners": [
+      "P06-PR07"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 124,
+    "headBranch": "phase6/p06-pr06-intraday-auto-close",
+    "plannedOwners": [
+      "P06-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 123,
+    "headBranch": "phase6/p06-pr05-reconciliation",
+    "plannedOwners": [
+      "P06-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 122,
+    "headBranch": "phase6/p06-pr04-portfolio-snapshots",
+    "plannedOwners": [
+      "P06-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 121,
+    "headBranch": "phase6/p06-pr03-position-model",
+    "plannedOwners": [
+      "P06-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 120,
+    "headBranch": "phase6/p06-pr02-partial-fill-safe-fill-schema",
+    "plannedOwners": [
+      "P06-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 119,
+    "headBranch": "phase6/p06-pr01-explicit-order-model",
+    "plannedOwners": [
+      "P06-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 118,
+    "headBranch": "phase5/p05-gate01-completion-evidence",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 117,
+    "headBranch": "phase5/p05-pr10-observability-hardening",
+    "plannedOwners": [
+      "P05-PR10"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 116,
+    "headBranch": "phase5/p05-pr09-dual-design-risk",
+    "plannedOwners": [
+      "P05-PR09"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 115,
+    "headBranch": "phase5/p05-pr08-risk-ui-shared-model",
+    "plannedOwners": [
+      "P05-PR08"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 114,
+    "headBranch": "phase5/p05-pr07-position-sizing",
+    "plannedOwners": [
+      "P05-PR07"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 113,
+    "headBranch": "phase5/p05-pr06-risk-context-paper-switch",
+    "plannedOwners": [
+      "P05-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 112,
+    "headBranch": "phase5/p05-pr05-decision-persistence-v2",
+    "plannedOwners": [
+      "P05-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 111,
+    "headBranch": "phase5/p05-pr04-production-risk-rules",
+    "plannedOwners": [
+      "P05-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 110,
+    "headBranch": "phase5/p05-pr03-existing-rule-extraction",
+    "plannedOwners": [
+      "P05-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 109,
+    "headBranch": "phase5/p05-pr02-persisted-risk-policy",
+    "plannedOwners": [
+      "P05-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 108,
+    "headBranch": "phase5/p05-pr01-risk-v2-parity-scaffolding",
+    "plannedOwners": [
+      "P05-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 107,
+    "headBranch": "phase4/p04-gate01-completion-evidence",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 106,
+    "headBranch": "phase4/p04-w07-ui-contract",
+    "plannedOwners": [
+      "P04-PR07"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 105,
+    "headBranch": "phase4/p04-w06-scenario-tests",
+    "plannedOwners": [
+      "P04-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 104,
+    "headBranch": "phase4/p04-w05-research-apis",
+    "plannedOwners": [
+      "P04-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 103,
+    "headBranch": "phase4/p04-w04-research-orchestration",
+    "plannedOwners": [
+      "P04-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 102,
+    "headBranch": "phase4/p04-w03-session-safe-block-sampling",
+    "plannedOwners": [
+      "P04-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 101,
+    "headBranch": "feature/P04-PR02-regime-model",
+    "plannedOwners": [
+      "P04-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 100,
+    "headBranch": "feature/P04-PR01-scenario-persistence",
+    "plannedOwners": [
+      "P04-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 99,
+    "headBranch": "gate/P03-phase-completion-e2e",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 98,
+    "headBranch": "feature/P03-PR06-backtest-studio-ui",
+    "plannedOwners": [
+      "P03-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 97,
+    "headBranch": "feature/P03-PR05-backtest-apis",
+    "plannedOwners": [
+      "P03-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 96,
+    "headBranch": "feature/P03-PR04-leakage-protections",
+    "plannedOwners": [
+      "P03-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 95,
+    "headBranch": "feature/P03-PR03-walk-forward-validation",
+    "plannedOwners": [
+      "P03-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 94,
+    "headBranch": "feature/P03-PR02-backtest-provenance-metrics",
+    "plannedOwners": [
+      "P03-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 93,
+    "headBranch": "feature/P03-PR01-strategy-neutral-backtest-spi",
+    "plannedOwners": [
+      "P03-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 92,
+    "headBranch": "feature/P02-PR07-ui-scanner-foundation",
+    "plannedOwners": [
+      "P02-PR07"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 91,
+    "headBranch": "feature/P02-PR06-strategy-scanner-apis",
+    "plannedOwners": [
+      "P02-PR06"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 90,
+    "headBranch": "feature/P02-PR05-scanner-runtime-performance",
+    "plannedOwners": [
+      "P02-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 89,
+    "headBranch": "feature/P02-PR04-strategy-hardening",
+    "plannedOwners": [
+      "P02-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 88,
+    "headBranch": "feature/P02-PR03-candidate-identity-deduplication",
+    "plannedOwners": [
+      "P02-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 87,
+    "headBranch": "feature/P02-PR02-strategy-config-versioning",
+    "plannedOwners": [
+      "P02-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 86,
+    "headBranch": "feature/P02-PR01-strategy-metadata-registry",
+    "plannedOwners": [
+      "P02-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 85,
+    "headBranch": "feature/P01-PR05-ui-market-data-operations",
+    "plannedOwners": [
+      "P01-PR05"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 84,
+    "headBranch": "feature/P01-PR04-angelone-throttling-metrics",
+    "plannedOwners": [
+      "P01-PR04"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 83,
+    "headBranch": "feature/P01-PR03-backfill-reconciliation",
+    "plannedOwners": [
+      "P01-PR03"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 82,
+    "headBranch": "feature/P01-PR02-candle-quality-gap-detection",
+    "plannedOwners": [
+      "P01-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 81,
+    "headBranch": "feature/P01-PR01-market-session-calendar",
+    "plannedOwners": [
+      "P01-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 80,
+    "headBranch": "feature/P00-PR01-correlation-errors",
+    "plannedOwners": [
+      "P00-PR01"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 74,
+    "headBranch": "coordinator/p00-w02-terraform-format-check",
+    "plannedOwners": [
+      "P00-PR02"
+    ],
+    "supplementalFor": []
+  },
+  {
+    "number": 73,
+    "headBranch": "worker/execution-p8-order-analytics",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 72,
+    "headBranch": "feature/p4-research-evidence-70",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 71,
+    "headBranch": "worker/execution-p6-reconciliation-status",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 69,
+    "headBranch": "feature/p3-backtest-spec-68",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 67,
+    "headBranch": "test/p10-api-key-auth-security-20261029",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 65,
+    "headBranch": "feat/p7-automation-policy-foundation-20261029",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 63,
+    "headBranch": "feature/p1-candle-gap-59",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 62,
+    "headBranch": "feature/p1-feed-freshness-59",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 61,
+    "headBranch": "feature/p2-strategy-catalogue-58",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 60,
+    "headBranch": "feature/p5-risk-determinism-57",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 55,
+    "headBranch": "chore/manual-phase0-ci-dev-20261029",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 54,
+    "headBranch": "chore/manual-ci-cost-policy-20261029",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 53,
+    "headBranch": "chore/aws-oidc-deployment-safety-20261028",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 52,
+    "headBranch": "chore/diagnose-oidc-claims-main",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 51,
+    "headBranch": "chore/diagnose-oidc-claims-dev",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 50,
+    "headBranch": "chore/register-oidc-workflow-main",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 49,
+    "headBranch": "chore/verify-aws-oidc-single-env",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 48,
+    "headBranch": "feature/dual-ui-reduced-motion",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 47,
+    "headBranch": "feature/research-scenario-simulator-clean",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 46,
+    "headBranch": "feature/research-scenario-simulator-v2",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 45,
+    "headBranch": "feature/research-ranking-strategies",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 44,
+    "headBranch": "feature/research-universe-provenance",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 43,
+    "headBranch": "feature/research-scanner-foundation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 42,
+    "headBranch": "feature/dual-design-phase2-dashboard",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 41,
+    "headBranch": "feature/dual-design-phase1-foundation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 39,
+    "headBranch": "feature/dual-design-system-spec",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 38,
+    "headBranch": "phase-ui/mobile-touch-targets",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 37,
+    "headBranch": "phase-ui/validate-mobile-manifest",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 36,
+    "headBranch": "phase-ui/installable-mobile-shell",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 35,
+    "headBranch": "phase-ui/compact-mobile-navigation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 31,
+    "headBranch": "phase4/paper-rejection-ledger-integrity",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 30,
+    "headBranch": "phase4/order-audit-integrity-tests",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 29,
+    "headBranch": "phase4/idempotency-audit-regressions",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 28,
+    "headBranch": "phase4/risk-boundary-regression",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 27,
+    "headBranch": "phase4/strategy-future-candle-regression",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 26,
+    "headBranch": "phase6/news-bearer-filter-tests",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 25,
+    "headBranch": "phase6/news-pagination-boundary-tests",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 24,
+    "headBranch": "phase6/gemini-disabled-regression-tests",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 23,
+    "headBranch": "phase6/news-retention-failure-isolation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 22,
+    "headBranch": "phase6/news-summary-failure-regression",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 21,
+    "headBranch": "phase6/rss-parser-input-bounds",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 20,
+    "headBranch": "phase6/news-provider-failure-isolation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 19,
+    "headBranch": "phase6/flyway-upgrade-path-tests",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 18,
+    "headBranch": "phase6/rss-fetch-guardrails",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 17,
+    "headBranch": "phase6/news-url-validation-hardening",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 16,
+    "headBranch": "copilot/fix-ci-blocker-github-actions",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 13,
+    "headBranch": "fix/phase3-news-controller-collision",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 11,
+    "headBranch": "copilot/dev-phase-3-news-ingestion",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 9,
+    "headBranch": "feature/backtesting-validation-ui",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 8,
+    "headBranch": "feature/oos-backtest-validation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 7,
+    "headBranch": "feature/paper-backtesting-engine",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 6,
+    "headBranch": "feature/phase2-market-data",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 5,
+    "headBranch": "feature/budget-25-aws-hosting",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 4,
+    "headBranch": "feature/phase4-aws-deployment",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 3,
+    "headBranch": "phase-4-deterministic-strategies-paper-fills",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 2,
+    "headBranch": "phase-3-historical-market-data",
+    "plannedOwners": [],
+    "supplementalFor": []
+  },
+  {
+    "number": 1,
+    "headBranch": "feature/news-driven-paper-trading-foundation",
+    "plannedOwners": [],
+    "supplementalFor": []
+  }
+]

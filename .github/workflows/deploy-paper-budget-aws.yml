@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce Flutter product delivery hard gate
+        run: python3 scripts/check_flutter_delivery.py --require-complete
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -60,6 +62,8 @@ jobs:
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
+      - name: Enforce Flutter product delivery hard gate
+        run: python3 scripts/check_flutter_delivery.py --require-complete
       - name: Fail closed on unapproved AWS deployment target
         env:
           CONFIGURED_REGION: ${{ vars.AWS_REGION }}

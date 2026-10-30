@@ -1,6 +1,9 @@
 # AI Trading System — Master Implementation Plan
 
-> **Status:** AUTHORITATIVE SOURCE OF TRUTH  
+> **FLUTTER-HARD-GATE — 2026-10-30:** The user-confirmed product client is Flutter for web, Android and iOS across Notion P0–P21 (22 workstreams). The canonical Notion plan and `docs/architecture/flutter-delivery.md` supersede conflicting 16-phase, React-only, PWA-only and native-optional delivery statements below. Historical React examples and completion records remain reference evidence only; backend evidence is assessed separately. Read `docs/FLUTTER_CORRECTION_AUDIT.md` before implementation. No Flutter/platform completion is claimed.
+
+
+> **Status:** HISTORICAL BASELINE — subordinate to the Flutter/P0–P21 correction
 > **Applies to:** `operationReact/AiTradingSystem`  
 > **Integration branch:** `dev`  
 > **Last reconciled:** 2026-10-28  
