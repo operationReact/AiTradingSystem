@@ -82,6 +82,7 @@ public class ExecutionPolicyService {
                  END,
                  policy_version DESC
                  LIMIT 1
+                 FOR SHARE
                 """)
             .param("mode", mode.name())
             .param("strategy", strategy, Types.VARCHAR)

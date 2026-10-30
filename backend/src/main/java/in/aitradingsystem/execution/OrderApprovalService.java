@@ -1,6 +1,10 @@
 package in.aitradingsystem.execution;
 
 import in.aitradingsystem.audit.AuditService;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.paper.OrderCommand;
+import in.aitradingsystem.risk.RiskContext;
+import in.aitradingsystem.risk.RiskDecisionV2;
 import in.aitradingsystem.common.NotFoundException;
 import in.aitradingsystem.common.PageResponse;
 import java.sql.ResultSet;
@@ -27,6 +31,55 @@ public class OrderApprovalService {
         this.jdbc = jdbc;
         this.clock = clock;
         this.audit = audit;
+    }
+
+    /** Called in the serialized order transaction, after the immutable hard-risk decision has been persisted. */
+    @Transactional
+    public OrderApprovalView request(UUID orderId, OrderCommand command, RiskContext context,
+                                     RiskDecisionV2 risk, ExecutionPolicy policy, ApprovalPolicyResult result) {
+        if (result.decision() == ApprovalEvaluationDecision.REJECT) {
+            throw new IllegalArgumentException("Rejected execution policy cannot create approval authority");
+        }
+        Instant now = clock.instant();
+        UUID id = UUID.randomUUID();
+        boolean auto = result.decision() == ApprovalEvaluationDecision.AUTO_APPROVED;
+        var snapshot = new java.util.LinkedHashMap<String, Object>();
+        snapshot.put("symbol", command.symbol());
+        snapshot.put("side", command.side());
+        snapshot.put("quantity", command.quantity());
+        snapshot.put("productType", command.productType());
+        snapshot.put("orderType", "MARKET");
+        snapshot.put("referencePrice", command.entryPrice());
+        snapshot.put("stopLoss", command.stopLoss());
+        snapshot.put("target", command.target());
+        snapshot.put("strategyId", context.strategy());
+        snapshot.put("exchange", context.exchange());
+        snapshot.put("notional", risk.grossNotional());
+        snapshot.put("approvalMode", policy.approvalMode());
+        snapshot.put("policyReasons", result.reasonCodes());
+        // Snapshot values are JSON primitives/enums; instants live in typed timestamp columns.
+        String raw;
+        try { raw = new ObjectMapper().writeValueAsString(snapshot); }
+        catch (com.fasterxml.jackson.core.JsonProcessingException ex) { throw new IllegalStateException(ex); }
+        jdbc.sql("""
+            INSERT INTO order_approval (id, order_id, policy_id, policy_version, state, decision_reason,
+                requested_at, expires_at, decided_at, decided_by, row_version, risk_decision_id, request_snapshot)
+            VALUES (:id, :orderId, :policyId, :version, :state, :reason, :now, :expiry,
+                :decidedAt, :actor, 0, :riskId, CAST(:snapshot AS jsonb))
+            """)
+            .param("id", id).param("orderId", orderId).param("policyId", policy.id())
+            .param("version", policy.policyVersion()).param("state", auto ? "AUTO_APPROVED" : "PENDING")
+            .param("reason", String.join(",", result.reasonCodes()))
+            .param("now", now.atOffset(ZoneOffset.UTC)).param("expiry", now.plusSeconds(300).atOffset(ZoneOffset.UTC))
+            .param("decidedAt", auto ? now.atOffset(ZoneOffset.UTC) : null, Types.TIMESTAMP_WITH_TIMEZONE)
+            .param("actor", auto ? "SYSTEM" : null, Types.VARCHAR)
+            .param("riskId", risk.decisionId()).param("snapshot", raw).update();
+        jdbc.sql("UPDATE paper_order SET approval_id = :approvalId WHERE id = :orderId AND approval_id IS NULL")
+            .param("approvalId", id).param("orderId", orderId).update();
+        audit.record(auto ? "AUTO_APPROVAL_GRANTED" : "APPROVAL_REQUESTED", "ORDER_APPROVAL", id.toString(),
+            Map.of("orderId", orderId.toString(), "policyId", policy.id(), "policyVersion", policy.policyVersion(),
+                "riskDecisionId", risk.decisionId(), "reasons", result.reasonCodes()));
+        return require(id);
     }
 
     public PageResponse<OrderApprovalView> list(OrderApprovalState state, int page, int size) {

@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.support.AbstractPostgresIT;
+import in.aitradingsystem.support.AbstractApprovalPaperIT;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -28,7 +28,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
-class PaperTradeApiIT extends AbstractPostgresIT {
+class PaperTradeApiIT extends AbstractApprovalPaperIT {
     private static final String KEY_HEADER = "X-API-Key";
 
     @Autowired MockMvc mvc;
@@ -43,7 +43,7 @@ class PaperTradeApiIT extends AbstractPostgresIT {
             String symbol = position.get("symbol").asText();
             int qty = position.get("quantity").asInt();
             String mark = position.get("markPrice").asText();
-            simulate(newKey(), body(symbol, "SELL", qty, mark, null, null, Instant.now()))
+            simulate(newKey(), body(symbol, "SELL", qty, mark, null, null, NOW))
                 .andExpect(status().isCreated());
         }
     }
@@ -174,14 +174,14 @@ class PaperTradeApiIT extends AbstractPostgresIT {
 
     @Test
     void staleSignalIsRejected() throws Exception {
-        String stale = body("HDFCBANK", "BUY", 10, "500", "490", "530", Instant.now().minus(2, ChronoUnit.DAYS));
+        String stale = body("HDFCBANK", "BUY", 10, "500", "490", "530", NOW.minus(2, ChronoUnit.DAYS));
         simulate(newKey(), stale).andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.reasonCodes[0]").value("STALE_SIGNAL"));
     }
 
     @Test
     void invalidBuyLevelsAreBadRequest() throws Exception {
-        simulate(newKey(), body("TCS", "BUY", 10, "500", "505", "530", Instant.now()))
+        simulate(newKey(), body("TCS", "BUY", 10, "500", "505", "530", NOW))
             .andExpect(status().isBadRequest());
     }
 
@@ -229,7 +229,7 @@ class PaperTradeApiIT extends AbstractPostgresIT {
         simulate(newKey(), buy("TCS", 10)).andExpect(status().isCreated());
         assertThat(cash()).isEqualByComparingTo(cashBefore.subtract(new BigDecimal("5007.50")));
 
-        simulate(newKey(), body("TCS", "SELL", 10, "520", null, null, Instant.now()))
+        simulate(newKey(), body("TCS", "SELL", 10, "520", null, null, NOW))
             .andExpect(status().isCreated());
         assertThat(realizedPnl().subtract(realizedBefore)).isEqualByComparingTo("184.70");
         assertThat(cash().subtract(cashBefore)).isEqualByComparingTo("184.70");
@@ -238,7 +238,7 @@ class PaperTradeApiIT extends AbstractPostgresIT {
 
     @Test
     void sellWithoutHoldingsIsRejected() throws Exception {
-        simulate(newKey(), body("ZOMATO", "SELL", 10, "200", null, null, Instant.now()))
+        simulate(newKey(), body("ZOMATO", "SELL", 10, "200", null, null, NOW))
             .andExpect(status().isUnprocessableEntity())
             .andExpect(jsonPath("$.reasonCodes[0]").value("INSUFFICIENT_HOLDINGS"));
     }
@@ -266,6 +266,8 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     }
 
     private ResultActions simulate(String key, String body) throws Exception {
+        JsonNode request = json.readTree(body);
+        market(request.get("symbol").asText(), request.get("entryPrice").decimalValue());
         return mvc.perform(post("/api/paper-trades/simulate").header(KEY_HEADER, API_KEY)
             .header("Idempotency-Key", key).contentType(MediaType.APPLICATION_JSON).content(body));
     }
@@ -298,7 +300,7 @@ class PaperTradeApiIT extends AbstractPostgresIT {
     }
 
     private static String buy(String symbol, int qty) {
-        return body(symbol, "BUY", qty, "500", "490", "530", Instant.now());
+        return body(symbol, "BUY", qty, "500", "490", "530", NOW);
     }
 
     private static String body(String symbol, String side, int qty, String entry, String stop, String target,

@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import in.aitradingsystem.common.PageResponse;
+import in.aitradingsystem.paper.PaperOrderService;
 import in.aitradingsystem.execution.OrderApprovalService;
 import in.aitradingsystem.execution.OrderApprovalState;
 import in.aitradingsystem.execution.OrderApprovalView;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class ApprovalControllerTest {
     private OrderApprovalService approvals;
+    private PaperOrderService orders;
     private MockMvc mvc;
     private UUID approvalId;
     private OrderApprovalView pending;
@@ -30,7 +32,8 @@ class ApprovalControllerTest {
     @BeforeEach
     void setup() {
         approvals = org.mockito.Mockito.mock(OrderApprovalService.class);
-        mvc = MockMvcBuilders.standaloneSetup(new ApprovalController(approvals)).build();
+        orders = org.mockito.Mockito.mock(PaperOrderService.class);
+        mvc = MockMvcBuilders.standaloneSetup(new ApprovalController(approvals, orders)).build();
         approvalId = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         UUID policyId = UUID.randomUUID();
@@ -63,7 +66,7 @@ class ApprovalControllerTest {
     @Test
     void approveDelegatesToConcurrencySafeDecision() throws Exception {
         when(approvals.require(approvalId)).thenReturn(pending);
-        when(approvals.decide(eq(approvalId), eq(0), eq(OrderApprovalState.APPROVED), eq("operator"), eq("ok")))
+        when(orders.decideApproval(eq(approvalId), eq(0), eq(OrderApprovalState.APPROVED), eq("operator"), eq("ok")))
             .thenReturn(approved);
 
         mvc.perform(post("/api/approvals/{id}/approve", approvalId)
@@ -71,7 +74,7 @@ class ApprovalControllerTest {
                 .content("{\"expectedRowVersion\":0,\"actor\":\"operator\",\"reason\":\"ok\"}"))
             .andExpect(status().isOk());
 
-        verify(approvals).decide(approvalId, 0, OrderApprovalState.APPROVED, "operator", "ok");
+        verify(orders).decideApproval(approvalId, 0, OrderApprovalState.APPROVED, "operator", "ok");
     }
 
     @Test
@@ -80,7 +83,7 @@ class ApprovalControllerTest {
             OrderApprovalState.REJECTED, "no", pending.requestedAt(), pending.expiresAt(), Instant.now(), "operator", 1,
             pending.riskDecisionId(), "{}");
         when(approvals.require(approvalId)).thenReturn(pending);
-        when(approvals.decide(eq(approvalId), eq(0), eq(OrderApprovalState.REJECTED), eq("operator"), eq("no")))
+        when(orders.decideApproval(eq(approvalId), eq(0), eq(OrderApprovalState.REJECTED), eq("operator"), eq("no")))
             .thenReturn(rejected);
         mvc.perform(post("/api/approvals/{id}/reject", approvalId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -90,14 +93,14 @@ class ApprovalControllerTest {
         OrderApprovalView cancelled = new OrderApprovalView(approvalId, pending.orderId(), pending.policyId(), 7,
             OrderApprovalState.CANCELLED, "cancel", pending.requestedAt(), pending.expiresAt(), Instant.now(), "operator", 1,
             pending.riskDecisionId(), "{}");
-        when(approvals.decide(eq(approvalId), eq(0), eq(OrderApprovalState.CANCELLED), eq("operator"), eq("cancel")))
+        when(orders.decideApproval(eq(approvalId), eq(0), eq(OrderApprovalState.CANCELLED), eq("operator"), eq("cancel")))
             .thenReturn(cancelled);
         mvc.perform(post("/api/approvals/{id}/cancel", approvalId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"expectedRowVersion\":0,\"actor\":\"operator\",\"reason\":\"cancel\"}"))
             .andExpect(status().isOk());
 
-        verify(approvals).decide(approvalId, 0, OrderApprovalState.REJECTED, "operator", "no");
-        verify(approvals).decide(approvalId, 0, OrderApprovalState.CANCELLED, "operator", "cancel");
+        verify(orders).decideApproval(approvalId, 0, OrderApprovalState.REJECTED, "operator", "no");
+        verify(orders).decideApproval(approvalId, 0, OrderApprovalState.CANCELLED, "operator", "cancel");
     }
 }

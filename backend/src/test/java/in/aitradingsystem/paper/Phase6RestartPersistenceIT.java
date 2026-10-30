@@ -5,7 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.support.AbstractPostgresIT;
+import in.aitradingsystem.support.AbstractApprovalPaperIT;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
@@ -20,7 +20,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * Restart evidence for the Phase 6 exit gate. The order is executed through the canonical API, then a fresh
  * query-service instance reconstructs fill/cash evidence exclusively from PostgreSQL rather than process memory.
  */
-class Phase6RestartPersistenceIT extends AbstractPostgresIT {
+class Phase6RestartPersistenceIT extends AbstractApprovalPaperIT {
     private static final String KEY_HEADER = "X-API-Key";
     private static final String SYMBOL = "P6RESTART";
 
@@ -32,6 +32,7 @@ class Phase6RestartPersistenceIT extends AbstractPostgresIT {
 
     @AfterEach
     void cleanup() {
+        deleteApprovals(SYMBOL);
         jdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id IN (SELECT d.id FROM risk_decision d JOIN paper_order o ON o.id = d.order_id WHERE o.symbol = :symbol)")
             .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM risk_decision WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")
@@ -52,6 +53,7 @@ class Phase6RestartPersistenceIT extends AbstractPostgresIT {
 
     @Test
     void freshServiceInstanceReconstructsPersistedSettlementAfterExecution() throws Exception {
+        market(SYMBOL, new BigDecimal("100"));
         originalCash = jdbc.sql("SELECT cash_balance FROM paper_account WHERE id = 1")
             .query(BigDecimal.class).single();
         String idempotencyKey = "p6-restart-" + UUID.randomUUID();
@@ -59,7 +61,7 @@ class Phase6RestartPersistenceIT extends AbstractPostgresIT {
             {"symbol":"%s","side":"BUY","quantity":1,"referencePrice":100.00,
              "stopLoss":95.00,"target":110.00,"signalGeneratedAt":"%s",
              "productType":"DELIVERY","orderType":"MARKET"}
-            """.formatted(SYMBOL, Instant.now());
+            """.formatted(SYMBOL, NOW);
 
         String created = mvc.perform(post("/api/paper-orders")
                 .header(KEY_HEADER, API_KEY)

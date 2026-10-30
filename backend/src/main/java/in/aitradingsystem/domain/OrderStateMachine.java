@@ -8,9 +8,9 @@ import java.util.Set;
 /**
  * Canonical Phase 6 PAPER order transition policy.
  *
- * <p>The simulator still permits the temporary compatibility edge RISK_APPROVED -> FILLED while the
- * partial-fill execution path is introduced incrementally. Canonical Phase 6 execution uses
- * RISK_APPROVED -> READY -> PARTIALLY_FILLED/FILLED. All persistence transitions remain optimistic
+ * <p>All PAPER callers must cross the approval and READY boundary before settlement.
+ * Canonical execution uses RISK_APPROVED -> APPROVAL_PENDING/READY -> PARTIALLY_FILLED/FILLED.
+ * All persistence transitions remain optimistic
  * updates constrained by both order id and expected current status.</p>
  */
 public final class OrderStateMachine {
@@ -39,7 +39,7 @@ public final class OrderStateMachine {
                 EnumSet.of(OrderStatus.RISK_APPROVED, OrderStatus.REJECTED, OrderStatus.CANCELLED,
                         OrderStatus.EXPIRED, OrderStatus.FAILED));
         transitions.put(OrderStatus.RISK_APPROVED,
-                EnumSet.of(OrderStatus.APPROVAL_PENDING, OrderStatus.READY, OrderStatus.FILLED,
+                EnumSet.of(OrderStatus.APPROVAL_PENDING, OrderStatus.READY,
                         OrderStatus.CANCELLED, OrderStatus.EXPIRED, OrderStatus.FAILED));
         transitions.put(OrderStatus.APPROVAL_PENDING,
                 EnumSet.of(OrderStatus.READY, OrderStatus.REJECTED, OrderStatus.CANCELLED,

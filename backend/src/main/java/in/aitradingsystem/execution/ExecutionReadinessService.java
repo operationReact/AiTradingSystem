@@ -113,6 +113,12 @@ public class ExecutionReadinessService {
     }
 
     private PersistedOrder loadOrder(UUID orderId) {
+        String status = jdbc.sql("SELECT status FROM paper_order WHERE id = :id")
+            .param("id", orderId).query(String.class).optional()
+            .orElseThrow(() -> notReady("ORDER_NOT_FOUND", "Order not found: " + orderId));
+        if (!"READY".equals(status)) {
+            throw notReady("ORDER_NOT_READY", "Only a READY order may be revalidated for settlement");
+        }
         return jdbc.sql("""
                 SELECT id, symbol, side, quantity, reference_price, stop_loss, target_price,
                        signal_generated_at, product_type, instrument_id, strategy, approval_id

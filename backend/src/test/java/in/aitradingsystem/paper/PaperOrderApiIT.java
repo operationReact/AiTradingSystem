@@ -8,7 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.support.AbstractPostgresIT;
+import in.aitradingsystem.support.AbstractApprovalPaperIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -20,7 +20,7 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.web.servlet.MockMvc;
 
-class PaperOrderApiIT extends AbstractPostgresIT {
+class PaperOrderApiIT extends AbstractApprovalPaperIT {
     private static final String KEY_HEADER = "X-API-Key";
     private static final String SYMBOL = "P6API";
 
@@ -30,6 +30,7 @@ class PaperOrderApiIT extends AbstractPostgresIT {
 
     @AfterEach
     void cleanup() {
+        deleteApprovals(SYMBOL);
         jdbc.sql("DELETE FROM paper_reconciliation_difference").update();
         jdbc.sql("DELETE FROM paper_reconciliation_run").update();
         jdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id IN (SELECT d.id FROM risk_decision d JOIN paper_order o ON o.id = d.order_id WHERE o.symbol = :symbol)")
@@ -59,6 +60,7 @@ class PaperOrderApiIT extends AbstractPostgresIT {
 
     @Test
     void canonicalMarketOrderCanBeCreatedAndFetched() throws Exception {
+        market(SYMBOL, new java.math.BigDecimal("100"));
         String key = "p6-api-" + UUID.randomUUID();
         String body = marketBuy("DELIVERY");
         String created = mvc.perform(post("/api/paper-orders")
@@ -171,6 +173,6 @@ class PaperOrderApiIT extends AbstractPostgresIT {
             {"symbol":"%s","side":"BUY","quantity":1,"referencePrice":100.00,
              "stopLoss":95.00,"target":110.00,"signalGeneratedAt":"%s",
              "productType":"%s","orderType":"MARKET"}
-            """.formatted(SYMBOL, Instant.now(), productType);
+            """.formatted(SYMBOL, NOW, productType);
     }
 }
