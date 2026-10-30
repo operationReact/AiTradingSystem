@@ -90,7 +90,8 @@ function EmergencyStopPanel({ summary, clear = false }) {
   const haltReasonValid = !nextHalted || reason.trim().length >= 3;
 
   const submit = () => {
-    if (!haltReasonValid) return;
+    // Never submit against an unknown/stale UI state or duplicate an in-flight stop request.
+    if (!apiKey || !summary.data || summary.isPending || summary.isError || stop.isPending || !haltReasonValid) return;
     stop.mutate(
       { halted: nextHalted, reason: reason.trim() || undefined },
       {
@@ -115,7 +116,7 @@ function EmergencyStopPanel({ summary, clear = false }) {
         <Button
           variant={halted ? 'secondary' : 'danger'}
           icon={halted ? PlayCircle : OctagonX}
-          disabled={!apiKey || summary.isPending}
+          disabled={!apiKey || !summary.data || summary.isPending || summary.isError || stop.isPending}
           onClick={() => setConfirming(true)}
         >
           {halted ? 'Resume new orders' : 'Halt new orders'}
@@ -135,7 +136,7 @@ function EmergencyStopPanel({ summary, clear = false }) {
         footer={
           <>
             <Button onClick={() => setConfirming(false)}>Cancel</Button>
-            <Button variant={nextHalted ? 'danger' : 'primary'} disabled={!haltReasonValid} loading={stop.isPending} onClick={submit}>
+            <Button variant={nextHalted ? 'danger' : 'primary'} disabled={!apiKey || !summary.data || summary.isPending || summary.isError || stop.isPending || !haltReasonValid} loading={stop.isPending} onClick={submit}>
               Confirm
             </Button>
           </>
