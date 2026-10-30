@@ -1,5 +1,6 @@
 package in.aitradingsystem.execution;
 
+import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.common.NotFoundException;
 import in.aitradingsystem.common.PageResponse;
 import java.sql.ResultSet;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -19,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderApprovalService {
     private final JdbcClient jdbc;
     private final Clock clock;
+    private final AuditService audit;
 
-    public OrderApprovalService(JdbcClient jdbc, Clock clock) {
+    public OrderApprovalService(JdbcClient jdbc, Clock clock, AuditService audit) {
         this.jdbc = jdbc;
         this.clock = clock;
+        this.audit = audit;
     }
 
     public PageResponse<OrderApprovalView> list(OrderApprovalState state, int page, int size) {
@@ -77,12 +81,12 @@ public class OrderApprovalService {
         }
 
         Instant now = clock.instant();
-        jdbc.sql("""
+        int updated = jdbc.sql("""
                 UPDATE order_approval
-                   SET state = :state,
-                       decision_reason = :reason,
+                   SET state = CASE WHEN expires_at <= :now THEN 'EXPIRED' ELSE :state END,
+                       decision_reason = CASE WHEN expires_at <= :now THEN 'APPROVAL_EXPIRED' ELSE :reason END,
                        decided_at = :now,
-                       decided_by = :actor,
+                       decided_by = CASE WHEN expires_at <= :now THEN 'SYSTEM' ELSE :actor END,
                        row_version = row_version + 1
                  WHERE id = :id
                    AND state = 'PENDING'
@@ -96,9 +100,17 @@ public class OrderApprovalService {
             .param("expected", expectedRowVersion)
             .update();
 
-        // Winner and losers both read the same authoritative persisted state. This is what makes duplicate UI clicks
-        // idempotent at the approval boundary instead of creating duplicate execution authority.
-        return require(approvalId);
+        OrderApprovalView result = require(approvalId);
+        // Only the transaction that changed the row owns the audit event. Comparing before/after snapshots in a
+        // controller cannot distinguish two concurrent identical decisions and can emit the same event twice.
+        if (updated == 1) {
+            audit.record("APPROVAL_" + result.state().name(), "ORDER_APPROVAL", approvalId.toString(), Map.of(
+                "orderId", result.orderId().toString(),
+                "policyVersion", result.policyVersion(),
+                "rowVersion", result.rowVersion(),
+                "actor", result.decidedBy()));
+        }
+        return result;
     }
 
     private static OrderApprovalView map(ResultSet rs) throws SQLException {

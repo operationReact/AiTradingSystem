@@ -2,7 +2,10 @@ package in.aitradingsystem.execution;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import in.aitradingsystem.audit.AuditService;
 import in.aitradingsystem.support.AbstractPostgresIT;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -22,6 +25,7 @@ class OrderApprovalConcurrencyIT extends AbstractPostgresIT {
 
     @Autowired JdbcClient jdbc;
     @Autowired OrderApprovalService approvals;
+    @Autowired AuditService audit;
 
     private UUID policyId;
     private UUID orderId;
@@ -80,6 +84,8 @@ class OrderApprovalConcurrencyIT extends AbstractPostgresIT {
 
     @AfterEach
     void cleanup() {
+        jdbc.sql("DELETE FROM audit_event WHERE entity_type = 'ORDER_APPROVAL' AND entity_id = :id")
+            .param("id", approvalId.toString()).update();
         jdbc.sql("UPDATE paper_order SET approval_id = NULL WHERE id = :id").param("id", orderId).update();
         jdbc.sql("DELETE FROM order_approval WHERE id = :id").param("id", approvalId).update();
         jdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id = :id").param("id", riskDecisionId).update();
@@ -108,6 +114,7 @@ class OrderApprovalConcurrencyIT extends AbstractPostgresIT {
             assertThat(second.state()).isEqualTo(persisted.state());
             assertThat(first.rowVersion()).isEqualTo(1);
             assertThat(second.rowVersion()).isEqualTo(1);
+            assertThat(auditCount(null)).isEqualTo(1);
         }
     }
 
@@ -122,5 +129,60 @@ class OrderApprovalConcurrencyIT extends AbstractPostgresIT {
         assertThat(duplicate.state()).isEqualTo(OrderApprovalState.APPROVED);
         assertThat(duplicate.rowVersion()).isEqualTo(1);
         assertThat(duplicate.decisionReason()).isEqualTo("approve");
+        assertThat(auditCount("APPROVAL_APPROVED")).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentIdenticalDecisionsEmitExactlyOneAuditEvent() throws Exception {
+        try (ExecutorService pool = Executors.newFixedThreadPool(2)) {
+            var start = new java.util.concurrent.CyclicBarrier(2);
+            Callable<OrderApprovalView> approve = () -> {
+                start.await();
+                return approvals.decide(approvalId, 0, OrderApprovalState.APPROVED, "same-operator", "same-decision");
+            };
+            for (Future<OrderApprovalView> result : pool.invokeAll(List.of(approve, approve))) {
+                assertThat(result.get().state()).isEqualTo(OrderApprovalState.APPROVED);
+                assertThat(result.get().rowVersion()).isEqualTo(1);
+            }
+        }
+        assertThat(auditCount("APPROVAL_APPROVED")).isEqualTo(1);
+    }
+
+    @Test
+    void expiryAtExactDecisionTimeWinsOverApproveAndIsAuditedOnce() {
+        Instant expires = Instant.parse("2026-10-30T10:00:00Z");
+        jdbc.sql("UPDATE order_approval SET requested_at = :requested, expires_at = :expires WHERE id = :id")
+            .param("requested", expires.minusSeconds(300).atOffset(ZoneOffset.UTC))
+            .param("expires", expires.atOffset(ZoneOffset.UTC)).param("id", approvalId).update();
+        var service = new OrderApprovalService(jdbc, Clock.fixed(expires, ZoneOffset.UTC), audit);
+
+        OrderApprovalView result = service.decide(approvalId, 0, OrderApprovalState.APPROVED, "operator", "approve");
+        OrderApprovalView retry = service.decide(approvalId, 0, OrderApprovalState.APPROVED, "operator", "retry");
+
+        assertThat(result.state()).isEqualTo(OrderApprovalState.EXPIRED);
+        assertThat(result.decidedBy()).isEqualTo("SYSTEM");
+        assertThat(result.decisionReason()).isEqualTo("APPROVAL_EXPIRED");
+        assertThat(result.rowVersion()).isEqualTo(1);
+        assertThat(retry).isEqualTo(result);
+        assertThat(auditCount("APPROVAL_EXPIRED")).isEqualTo(1);
+        assertThat(auditCount("APPROVAL_APPROVED")).isZero();
+    }
+
+    @Test
+    void staleRowVersionCannotDecideOrEmitAudit() {
+        OrderApprovalView result = approvals.decide(approvalId, 99, OrderApprovalState.APPROVED, "operator", "stale");
+        assertThat(result.state()).isEqualTo(OrderApprovalState.PENDING);
+        assertThat(result.rowVersion()).isZero();
+        assertThat(auditCount(null)).isZero();
+    }
+
+    private long auditCount(String eventType) {
+        return jdbc.sql("""
+            SELECT count(*) FROM audit_event
+             WHERE entity_type = 'ORDER_APPROVAL' AND entity_id = :id
+               AND (:eventType IS NULL OR event_type = :eventType)
+            """)
+            .param("id", approvalId.toString()).param("eventType", eventType, java.sql.Types.VARCHAR)
+            .query(Long.class).single();
     }
 }
