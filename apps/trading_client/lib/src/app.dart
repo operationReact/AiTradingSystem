@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'data/health_repository.dart';
 import 'data/operator_session.dart';
 import 'presentation/operations_health_page.dart';
+import 'presentation/overview_page.dart';
 import 'theme/app_theme.dart';
 
 class TradingApp extends StatefulWidget {
@@ -31,12 +32,15 @@ class _TradingAppState extends State<TradingApp> {
       themeMode: _themeMode,
       theme: buildTheme(_style, Brightness.light),
       darkTheme: buildTheme(_style, Brightness.dark),
-      initialRoute: '/operations/health',
+      initialRoute: '/',
       routes: {
-        '/': (_) => _healthPage(),
+        '/': (_) => const OverviewPage(),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
       },
+      onUnknownRoute: (_) => MaterialPageRoute<void>(
+        builder: (_) => const OverviewPage(),
+      ),
     );
   }
 
