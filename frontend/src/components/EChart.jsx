@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as echarts from 'echarts/core';
 import { LineChart, BarChart, PieChart, ScatterChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, MarkLineComponent } from 'echarts/components';
@@ -15,7 +15,15 @@ echarts.use([LineChart, BarChart, PieChart, ScatterChart, GridComponent, Tooltip
 export default function EChart({ buildOption, onClick, className, label }) {
   const ref = useRef(null);
   const chartRef = useRef(null);
-  const { theme } = useApp();
+  const { theme, experience } = useApp();
+  const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReducedMotion(media.matches);
+    media.addEventListener('change', update);
+    update();
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     const chart = echarts.init(ref.current, null, { renderer: 'canvas' });
@@ -32,8 +40,8 @@ export default function EChart({ buildOption, onClick, className, label }) {
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    chart.setOption(buildOption(), true);
-  }, [buildOption, theme]);
+    chart.setOption({ ...buildOption(), animation: !reducedMotion }, true);
+  }, [buildOption, theme, experience, reducedMotion]);
 
   useEffect(() => {
     const chart = chartRef.current;

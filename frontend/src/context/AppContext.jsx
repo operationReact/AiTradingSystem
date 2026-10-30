@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 
 const AppContext = createContext(null);
-const EXPERIENCE_KEY = 'sf-experience';
-const EXPERIENCES = ['pro-terminal', 'clear-invest'];
+import { EXPERIENCE_KEY, isExperience, normalizeExperience } from '../lib/experience.js';
 function storedExperience() {
   try {
     const value = localStorage.getItem(EXPERIENCE_KEY);
-    return EXPERIENCES.includes(value) ? value : 'pro-terminal';
+    return normalizeExperience(value);
   } catch {
     return 'pro-terminal';
   }
@@ -40,7 +39,7 @@ export function AppProvider({ children }) {
 
   const setApiKey = useCallback((key) => setApiKeyState(key.trim()), []);
   const setExperience = useCallback((next) => {
-    if (EXPERIENCES.includes(next)) setExperienceState(next);
+    if (isExperience(next)) setExperienceState(next);
   }, []);
   const toggleTheme = useCallback(() => setTheme((t) => (t === 'dark' ? 'light' : 'dark')), []);
   const toggleCollapsed = useCallback(() => setCollapsed((c) => !c), []);

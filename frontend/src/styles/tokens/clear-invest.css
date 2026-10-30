@@ -1,0 +1,27 @@
+/* Clean Modern uses restrained surfaces/elevation and a blue action hierarchy. */
+:root[data-experience='clear-invest'] {
+  --bg: 15 20 28;
+  --surface: 23 30 40;
+  --surface-2: 31 40 53;
+  --border: 55 68 86;
+  --text: 237 242 248;
+  --muted: 160 173 193;
+  --accent: 147 197 253;
+  --accent-contrast: 15 20 28;
+  --radius-panel: 1rem;
+  --experience-panel-gap: 1.25rem;
+  --experience-panel-padding: 1.25rem;
+  --elevation-panel: none;
+}
+:root[data-experience='clear-invest'].light {
+  --bg: 247 248 250;
+  --surface: 255 255 255;
+  --surface-2: 241 244 247;
+  --border: 225 230 237;
+  --text: 24 27 34;
+  --muted: 98 107 122;
+  --accent: 37 99 235;
+  --accent-contrast: 255 255 255;
+  --gain: 22 120 80;
+  --elevation-panel: none;
+}

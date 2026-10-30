@@ -35,7 +35,7 @@ jobs:
             if curl -fsS http://127.0.0.1:4173/audit >/dev/null; then break; fi
             sleep 1
           done
-          npx playwright test e2e/architecture.spec.mjs e2e/approvals.spec.mjs --reporter=line
+          npx playwright test e2e/architecture.spec.mjs e2e/approvals.spec.mjs e2e/tokens.spec.mjs --reporter=line
       - name: Upload browser evidence
         if: always()
         uses: actions/upload-artifact@v4
