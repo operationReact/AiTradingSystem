@@ -1,0 +1,119 @@
+name: Provision live AWS infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_https:
+        description: 'Enable HTTPS after Route 53 nameservers are delegated'
+        required: true
+        type: choice
+        default: 'false'
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: provision-live-aws
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-2
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+
+jobs:
+  provision:
+    name: Terraform apply live infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate required repository variables
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test -n "$DOMAIN_NAME" || { echo "::error::Repository variable DOMAIN_NAME is required"; exit 1; }
+          test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
+          case "$DOMAIN_NAME" in
+            http://*|https://*|*/*) echo "::error::DOMAIN_NAME must be a bare DNS name"; exit 1 ;;
+          esac
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-live-infra-${{ github.run_id }}
+      - name: Discover AWS account
+        id: account
+        run: echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_OUTPUT"
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Ensure encrypted remote state bucket
+        env:
+          ACCOUNT_ID: ${{ steps.account.outputs.account_id }}
+        run: |
+          set -euo pipefail
+          STATE_BUCKET="aitradingsystem-tfstate-${ACCOUNT_ID}-${AWS_REGION}"
+          echo "STATE_BUCKET=$STATE_BUCKET" >> "$GITHUB_ENV"
+          if ! aws s3api head-bucket --bucket "$STATE_BUCKET" 2>/dev/null; then
+            aws s3api create-bucket \
+              --bucket "$STATE_BUCKET" \
+              --region "$AWS_REGION" \
+              --create-bucket-configuration LocationConstraint="$AWS_REGION"
+          fi
+          aws s3api put-public-access-block \
+            --bucket "$STATE_BUCKET" \
+            --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+          aws s3api put-bucket-versioning \
+            --bucket "$STATE_BUCKET" \
+            --versioning-configuration Status=Enabled
+          aws s3api put-bucket-encryption \
+            --bucket "$STATE_BUCKET" \
+            --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"},"BucketKeyEnabled":true}]}'
+      - name: Terraform init
+        working-directory: infra/terraform
+        run: |
+          terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=live/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="use_lockfile=true"
+      - name: Terraform format and validate
+        working-directory: infra/terraform
+        run: |
+          terraform fmt -check
+          terraform validate
+      - name: Terraform plan
+        working-directory: infra/terraform
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          ENABLE_HTTPS_INPUT: ${{ github.event.inputs.enable_https }}
+        run: |
+          set -euo pipefail
+          terraform plan \
+            -var="domain_name=${DOMAIN_NAME}" \
+            -var="enable_https=${ENABLE_HTTPS_INPUT}" \
+            -out=tfplan
+      - name: Terraform apply reviewed plan
+        working-directory: infra/terraform
+        run: terraform apply -auto-approve tfplan
+      - name: Publish infrastructure outputs
+        working-directory: infra/terraform
+        run: |
+          echo '### Live infrastructure outputs' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '**Application URL:**' >> "$GITHUB_STEP_SUMMARY"
+          terraform output -raw application_url >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '**Route 53 nameservers:**' >> "$GITHUB_STEP_SUMMARY"
+          terraform output -json route53_nameservers | jq -r '.[] | "- `\(.)`"' >> "$GITHUB_STEP_SUMMARY"

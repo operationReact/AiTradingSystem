@@ -1,0 +1,176 @@
+name: Deploy AiTradingSystem to live AWS
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-live-aws
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-south-2
+  ECR_BACKEND: ai-trading-system-backend
+  ECR_FRONTEND: ai-trading-system-frontend
+  ECS_CLUSTER: ai-trading-system
+  ECS_BACKEND_SERVICE: ai-trading-system-backend
+  ECS_FRONTEND_SERVICE: ai-trading-system-frontend
+  BACKEND_TASK_FAMILY: ai-trading-system-backend
+  FRONTEND_TASK_FAMILY: ai-trading-system-frontend
+
+jobs:
+  validate:
+    if: ${{ github.event_name == 'workflow_dispatch' || (vars.DOMAIN_NAME != '' && vars.AWS_ROLE_ARN != '') }}
+    name: Validate backend and Flutter web
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce Flutter delivery authority
+        run: python3 scripts/check_flutter_delivery.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Run backend tests
+        working-directory: backend
+        run: mvn --batch-mode --no-transfer-progress test
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Validate Flutter client
+        working-directory: apps/trading_client
+        run: |
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build web --release --dart-define=API_BASE_URL="https://${{ vars.DOMAIN_NAME }}"
+
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || (vars.DOMAIN_NAME != '' && vars.AWS_ROLE_ARN != '') }}
+    name: Publish immutable images and deploy live services
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate live deployment configuration
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/dev" || { echo "::error::Live deployment is allowed only from dev"; exit 1; }
+          test -n "$DOMAIN_NAME" || { echo "::error::Repository variable DOMAIN_NAME is required"; exit 1; }
+          test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
+          case "$DOMAIN_NAME" in
+            http://*|https://*|*/*) echo "::error::DOMAIN_NAME must be a bare DNS name"; exit 1 ;;
+          esac
+      - name: Set up pinned Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Build live Flutter web assets
+        working-directory: apps/trading_client
+        run: |
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL="https://${{ vars.DOMAIN_NAME }}"
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-live-deploy-${{ github.run_id }}
+      - name: Verify AWS account and identity
+        run: aws sts get-caller-identity
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push backend image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build -f backend/Dockerfile -t "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG" backend
+          docker push "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG"
+      - name: Package and push Flutter web image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build \
+            -f apps/trading_client/Dockerfile \
+            -t "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" \
+            apps/trading_client
+          docker push "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG"
+      - name: Register backend task definition
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition --task-definition "$BACKEND_TASK_FAMILY" --query taskDefinition > /tmp/backend-task.json
+          jq --arg image "$REGISTRY/$ECR_BACKEND:$IMAGE_TAG" '
+            .containerDefinitions |= map(if .name == "backend" then .image = $image else . end)
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
+          ' /tmp/backend-task.json > /tmp/backend-task-new.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/backend-task-new.json > /tmp/backend-registered.json
+      - name: Register Flutter web task definition
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          aws ecs describe-task-definition --task-definition "$FRONTEND_TASK_FAMILY" --query taskDefinition > /tmp/frontend-task.json
+          jq --arg image "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" '
+            .containerDefinitions |= map(if .name == "frontend" then .image = $image else . end)
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
+          ' /tmp/frontend-task.json > /tmp/frontend-task-new.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/frontend-task-new.json > /tmp/frontend-registered.json
+      - name: Deploy live ECS services
+        run: |
+          set -euo pipefail
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_BACKEND_SERVICE" \
+            --task-definition "$(jq -r '.taskDefinition.taskDefinitionArn' /tmp/backend-registered.json)" \
+            --desired-count 1 \
+            --force-new-deployment
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_FRONTEND_SERVICE" \
+            --task-definition "$(jq -r '.taskDefinition.taskDefinitionArn' /tmp/frontend-registered.json)" \
+            --desired-count 1 \
+            --force-new-deployment
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_BACKEND_SERVICE" "$ECS_FRONTEND_SERVICE"
+      - name: Smoke test live domain
+        env:
+          DOMAIN_NAME: ${{ vars.DOMAIN_NAME }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 18); do
+            UI_OK=0
+            API_OK=0
+            curl --fail --silent --show-error --location "https://$DOMAIN_NAME/" >/dev/null && UI_OK=1 || true
+            curl --fail --silent --show-error "https://$DOMAIN_NAME/api/health" >/dev/null && API_OK=1 || true
+            if [ "$UI_OK" -eq 1 ] && [ "$API_OK" -eq 1 ]; then
+              echo "Live Flutter UI and backend health are reachable at https://$DOMAIN_NAME"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Live smoke test failed. Inspect ECS service events, target health and CloudWatch logs."
+          exit 1
