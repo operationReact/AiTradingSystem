@@ -26,6 +26,8 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
     void seedApprovalEnvironment() {
         when(approvalClock.instant()).thenReturn(NOW);
         when(approvalClock.getZone()).thenReturn(ZoneOffset.UTC);
+        when(approvalClock.withZone(org.mockito.ArgumentMatchers.any(java.time.ZoneId.class)))
+            .thenAnswer(invocation -> Clock.fixed(NOW, invocation.getArgument(0)));
         executionPolicyId = UUID.randomUUID();
         int version = approvalJdbc.sql("SELECT COALESCE(max(policy_version),0) + 1 FROM execution_policy")
             .query(Integer.class).single();
@@ -49,7 +51,7 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
             .param("id", catalogue).update();
     }
 
-    protected void market(String symbol, BigDecimal price) {
+    protected synchronized void market(String symbol, BigDecimal price) {
         Long instrument = approvalJdbc.sql("SELECT instrument_id FROM instrument_master WHERE catalogue_version = :v AND trading_symbol = :s")
             .param("v", catalogue).param("s", symbol).query(Long.class).optional().orElse(null);
         if (instrument == null) {
@@ -57,7 +59,7 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
                 INSERT INTO instrument_master (exchange_segment, exchange, symbol_token, trading_symbol,
                     instrument_name, instrument_type, lot_size, tick_size, active, catalogue_version)
                 VALUES ('NSE', 'NSE', :token, :s, :s, 'EQ', 1, 0.05, TRUE, :v) RETURNING instrument_id
-                """).param("token", UUID.randomUUID().toString()).param("s", symbol).param("v", catalogue)
+                """).param("token", UUID.randomUUID().toString().replace("-", "")).param("s", symbol).param("v", catalogue)
                 .query(Long.class).single();
         }
         // Refresh the persisted mark when a test deliberately changes price (e.g. BUY then SELL accounting).

@@ -114,6 +114,14 @@ public class OrderApprovalService {
             .orElseThrow(() -> new NotFoundException("Order approval not found: " + approvalId));
     }
 
+    public List<UUID> duePending() {
+        return jdbc.sql("""
+            SELECT a.id FROM order_approval a JOIN paper_order o ON o.id = a.order_id
+             WHERE a.state = 'PENDING' AND a.expires_at <= :now AND o.status = 'APPROVAL_PENDING'
+             ORDER BY a.expires_at, a.id LIMIT 100
+            """).param("now", clock.instant().atOffset(ZoneOffset.UTC)).query(UUID.class).list();
+    }
+
     /**
      * Compare-and-set approval transition. Exactly one concurrent PENDING decision with the same expected row version
      * can mutate the row. A losing/duplicate click returns the current persisted state without a second transition.

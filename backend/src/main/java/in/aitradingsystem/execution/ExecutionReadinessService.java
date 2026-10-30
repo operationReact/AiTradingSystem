@@ -71,6 +71,12 @@ public class ExecutionReadinessService {
             throw notReady("EXECUTION_POLICY_CHANGED", "Approved policy is no longer the active resolved policy");
         }
 
+        // Serialize emergency-stop changes with the settlement transaction after the account lock is acquired.
+        jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1 FOR SHARE").query(Boolean.class).single();
+        if (jdbc.sql("SELECT id FROM risk_policy_config WHERE active = TRUE FOR SHARE").query(UUID.class).list().isEmpty()) {
+            throw notReady("RISK_POLICY_UNAVAILABLE", "No active hard-risk policy at execution time");
+        }
+
         OrderCommand original = order.command();
         // Build once to obtain the currently active hard-risk freshness limit from server-owned state.
         RiskContext initialContext = contextFactory.build(orderId, original, now);

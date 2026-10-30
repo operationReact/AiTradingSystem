@@ -80,6 +80,7 @@ public class PaperOrderService {
         if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
 
         AccountSnapshot account = accounts.lock();
+        expireDue();
         existing = orders.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);
 
@@ -156,6 +157,19 @@ public class PaperOrderService {
         audit.record("ORDER_REJECTED", "PAPER_ORDER", orderId.toString(), Map.of("reasons", reason));
     }
 
+    @Transactional
+    public void expirePendingApprovals() {
+        accounts.lock();
+        expireDue();
+    }
+
+    private void expireDue() {
+        for (UUID id : approvals.duePending()) {
+            var current = approvals.require(id);
+            decideApproval(id, current.rowVersion(), OrderApprovalState.REJECTED, "SYSTEM", "APPROVAL_EXPIRED");
+        }
+    }
+
     private void settle(UUID orderId, AccountSnapshot account) {
         ExecutionReadinessResult fresh;
         try {
@@ -190,7 +204,11 @@ public class PaperOrderService {
             var approvalId = orders.approvalId(orderId);
             if (approvalId.isPresent()) {
                 var approval = approvals.require(approvalId.get());
-                approvals.decide(approval.id(), approval.rowVersion(), OrderApprovalState.CANCELLED, "operator", "ORDER_CANCELLED");
+                var result = approvals.decide(approval.id(), approval.rowVersion(), OrderApprovalState.CANCELLED, "operator", "ORDER_CANCELLED");
+                if (result.state() == OrderApprovalState.EXPIRED) {
+                    orders.transition(orderId, current, OrderStatus.EXPIRED, result.decisionReason(), now);
+                    return orders.loadResult(orderId, false);
+                }
             }
         }
         orders.transition(orderId, current, OrderStatus.CANCELLED, null, now);
