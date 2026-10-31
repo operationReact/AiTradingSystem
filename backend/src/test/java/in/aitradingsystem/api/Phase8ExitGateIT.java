@@ -1,8 +1,6 @@
 package in.aitradingsystem.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -16,36 +14,74 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.containers.PostgreSQLContainer;
 
 /** A fresh database proves the full operator story without inheriting another suite's ledger fixtures. */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Import(Phase8ExitGateIT.TestClockConfiguration.class)
 @TestPropertySource(properties = {"app.security.api-key=test-operator-key-0123456789", "app.risk.default-capital=100000"})
 class Phase8ExitGateIT {
     private static final String KEY="test-operator-key-0123456789";
     private static final String DAY="2026-10-30";
     private static final Instant OPEN=Instant.parse("2026-10-30T04:30:00Z");
-    @ServiceConnection static final PostgreSQLContainer<?> POSTGRES=new PostgreSQLContainer<>("postgres:16-alpine");
-    static { POSTGRES.start(); }
+    private static final AtomicReference<Instant> NOW=new AtomicReference<>(OPEN);
+
+    private static final String EXTERNAL_JDBC_URL=System.getenv("ATS_PHASE8_EXIT_POSTGRES_JDBC_URL");
+    private static final String EXTERNAL_USERNAME=System.getenv().getOrDefault("ATS_TEST_POSTGRES_USERNAME","aitrading");
+    private static final String EXTERNAL_PASSWORD=System.getenv().getOrDefault("ATS_TEST_POSTGRES_PASSWORD","aitrading");
+    private static final PostgreSQLContainer<?> POSTGRES=EXTERNAL_JDBC_URL==null || EXTERNAL_JDBC_URL.isBlank()
+        ? new PostgreSQLContainer<>("postgres:16-alpine")
+        : null;
+
+    static {
+        if (POSTGRES!=null) POSTGRES.start();
+    }
+
+    @DynamicPropertySource
+    static void postgresProperties(DynamicPropertyRegistry registry) {
+        if (POSTGRES!=null) {
+            registry.add("spring.datasource.url",POSTGRES::getJdbcUrl);
+            registry.add("spring.datasource.username",POSTGRES::getUsername);
+            registry.add("spring.datasource.password",POSTGRES::getPassword);
+            return;
+        }
+        registry.add("spring.datasource.url",()->EXTERNAL_JDBC_URL);
+        registry.add("spring.datasource.username",()->EXTERNAL_USERNAME);
+        registry.add("spring.datasource.password",()->EXTERNAL_PASSWORD);
+    }
+
+    @TestConfiguration(proxyBeanMethods=false)
+    static class TestClockConfiguration {
+        @Bean
+        @Primary
+        Clock phase8ExitClock() {
+            return new Clock() {
+                @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+                @Override public Clock withZone(ZoneId zone) { return Clock.fixed(NOW.get(),zone); }
+                @Override public Instant instant() { return NOW.get(); }
+            };
+        }
+    }
+
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired JdbcClient jdbc;
-    @MockitoBean Clock clock;
-    private final AtomicReference<Instant> now=new AtomicReference<>(OPEN);
     private UUID catalogue;
 
     @BeforeEach
     void prepareMarketEvidence() {
-        when(clock.instant()).thenAnswer(invocation -> now.get());
-        when(clock.getZone()).thenReturn(ZoneOffset.UTC);
-        when(clock.withZone(any(ZoneId.class))).thenAnswer(invocation -> Clock.fixed(now.get(),invocation.getArgument(0)));
+        NOW.set(OPEN);
         // Align bootstrap lifecycle/funding evidence with the deterministic scenario; policy values stay immutable.
         jdbc.sql("UPDATE risk_policy_config SET effective_from=:at WHERE active=TRUE")
             .param("at",OPEN.minusSeconds(86400).atOffset(ZoneOffset.UTC)).update();
@@ -74,11 +110,11 @@ class Phase8ExitGateIT {
     @Test
     void operatorCanExplainARealPaperRoundTripAndRespondToAnIncidentThroughSupportedApis() throws Exception {
         UUID buy=placeAndApprove("BUY",100);
-        now.set(OPEN.plusSeconds(60));
+        NOW.set(OPEN.plusSeconds(60));
         mark(110);
         UUID sell=placeAndApprove("SELL",110);
         assertThat(jdbc.sql("SELECT count(*) FROM paper_fill").query(Long.class).single()).isEqualTo(2);
-        now.set(OPEN.plusSeconds(86400)); // Completed IST day; the API must not publish an unfinished day.
+        NOW.set(OPEN.plusSeconds(86400)); // Completed IST day; the API must not publish an unfinished day.
         String dateBody="{\"tradeDate\":\""+DAY+"\"}";
         for (int i=0;i<2;i++) mvc.perform(post("/api/analytics/portfolio/recalculate").header("X-API-Key",KEY)
             .contentType(MediaType.APPLICATION_JSON).content(dateBody))
@@ -137,7 +173,7 @@ class Phase8ExitGateIT {
         String body="""
             {"symbol":"P8GATE","side":"%s","quantity":1,"referencePrice":%d,"stopLoss":95,
              "target":120,"signalGeneratedAt":"%s","productType":"DELIVERY","orderType":"MARKET"}
-            """.formatted(side,price,now.get());
+            """.formatted(side,price,NOW.get());
         JsonNode created=json.readTree(mvc.perform(post("/api/paper-orders").header("X-API-Key",KEY)
             .header("Idempotency-Key",UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated()).andExpect(jsonPath("$.order.status").value("APPROVAL_PENDING"))
@@ -152,16 +188,18 @@ class Phase8ExitGateIT {
             .andExpect(status().isOk()).andExpect(jsonPath("$.order.status").value("FILLED"));
         return order;
     }
+
     private JsonNode read(String path) throws Exception {
         return json.readTree(mvc.perform(get(path).header("X-API-Key",KEY)).andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString());
     }
+
     private void mark(int price) {
         jdbc.sql("""
             INSERT INTO market_candle(instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,
                 interval,candle_time,open_price,high_price,low_price,close_price,volume)
             SELECT instrument_id,exchange,trading_symbol,symbol_token,catalogue_version,'ONE_MINUTE',:at,:p,:p,:p,:p,10000
               FROM instrument_master WHERE catalogue_version=:v
-            """).param("v",catalogue).param("p",price).param("at",now.get().minusSeconds(10).atOffset(ZoneOffset.UTC)).update();
+            """).param("v",catalogue).param("p",price).param("at",NOW.get().minusSeconds(10).atOffset(ZoneOffset.UTC)).update();
     }
 }

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'data/authenticated_api_client.dart';
 import 'data/health_repository.dart';
+import 'data/instrument_repository.dart';
+import 'data/market_data_repository.dart';
 import 'data/operator_session.dart';
 import 'presentation/appearance_switcher.dart';
+import 'presentation/instruments_page.dart';
+import 'presentation/market_data_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
 import 'theme/app_theme.dart';
@@ -26,6 +31,8 @@ class TradingApp extends StatefulWidget {
 class _TradingAppState extends State<TradingApp> {
   DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.system;
+
+  AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
 
   @override
   Widget build(BuildContext context) {
@@ -53,7 +60,9 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
-        '/market': (_) => const WorkspacePage.market(),
+        '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
+        '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
+        '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
         '/signals': (_) => const WorkspacePage.signals(),
         '/portfolio': (_) => const WorkspacePage.portfolio(),
         '/risk': (_) => const WorkspacePage.risk(),
