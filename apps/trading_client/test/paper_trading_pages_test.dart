@@ -85,6 +85,12 @@ PaperOrder _order({String status = 'RISK_APPROVED'}) => PaperOrder(
       correlationId: 'corr-2',
     );
 
+Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target, {double delta = 200}) => tester.scrollUntilVisible(
+      target,
+      delta,
+      scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)).first,
+    );
+
 void main() {
   testWidgets('PAPER portfolio renders backend mode, reconciliation and position evidence', (tester) async {
     final repository = _FakePaperRepository(
@@ -99,6 +105,7 @@ void main() {
     expect(find.text('Mode PAPER'), findsOneWidget);
     expect(find.text('LIVE DISABLED'), findsOneWidget);
     expect(find.text('CASH RECONCILED'), findsOneWidget);
+    await _scrollPageTo(tester, 'paper-portfolio-list', find.byKey(const ValueKey('paper-position-42')));
     expect(find.byKey(const ValueKey('paper-position-42')), findsOneWidget);
     expect(find.textContaining('INFY-EQ'), findsOneWidget);
   });
@@ -153,6 +160,7 @@ void main() {
     expect(find.byKey(const ValueKey('paper-order-result')), findsOneWidget);
     expect(find.text('Backend result: RISK_APPROVED'), findsOneWidget);
     expect(find.text('Risk reasons: WITHIN_POLICY'), findsOneWidget);
+    await _scrollPageTo(tester, 'paper-orders-list', find.textContaining('No LIVE broker route'), delta: -200);
     expect(find.textContaining('No LIVE broker route'), findsOneWidget);
   });
 }
