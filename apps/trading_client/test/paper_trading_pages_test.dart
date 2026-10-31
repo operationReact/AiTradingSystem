@@ -85,11 +85,19 @@ PaperOrder _order({String status = 'RISK_APPROVED'}) => PaperOrder(
       correlationId: 'corr-2',
     );
 
-Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target) => tester.scrollUntilVisible(
-      target,
-      200,
-      scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)).first,
-    );
+// scrollUntilVisible stops once the finder matches, even when the widget is built but off-screen.
+// Drag until the target rect is inside the page list viewport instead.
+Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target) async {
+  final list = find.byKey(ValueKey(listKey));
+  final viewport = tester.getRect(list);
+  for (var attempt = 0; attempt < 30; attempt++) {
+    final rect = tester.getRect(target);
+    if (rect.top >= viewport.top && rect.bottom <= viewport.bottom) return;
+    await tester.dragFrom(Offset(viewport.left + 2, viewport.center.dy), const Offset(0, -150));
+    await tester.pumpAndSettle();
+  }
+  fail('Target did not become visible inside $listKey');
+}
 
 void main() {
   testWidgets('PAPER portfolio renders backend mode, reconciliation and position evidence', (tester) async {
