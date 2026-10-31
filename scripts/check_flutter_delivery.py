@@ -29,18 +29,29 @@ def validate(root, changed=(), require_complete=False):
     legacy = [p for p in changed if p.startswith(('frontend/src/', 'frontend/e2e/'))]
     if legacy:
         errors.append('New React product UI work is stopped by FLUTTER-HARD-GATE: ' + ', '.join(legacy))
-    if any(p.startswith('apps/trading_client/') for p in changed):
+    if any(p.startswith('apps/trading_client/') or p.startswith('.github/workflows/flutter-') for p in changed):
         for required in ('pubspec.yaml', 'lib/main.dart', 'web/index.html', 'ios/Runner.xcodeproj/project.pbxproj'):
             if not (root / 'apps/trading_client' / required).is_file():
                 errors.append('Flutter foundation is missing ' + required)
         android = root / 'apps/trading_client/android/app'
         if not any((android / name).is_file() for name in ('build.gradle.kts', 'build.gradle')):
             errors.append('Flutter foundation is missing the Android app build file')
-        workflow = root / '.github/workflows/flutter-client.yml'
-        text = workflow.read_text() if workflow.is_file() else ''
-        for command in ('flutter analyze', 'flutter test', 'flutter build web', 'flutter build apk', 'flutter build ios'):
-            if command not in text:
-                errors.append('Flutter foundation must introduce mandatory CI command: ' + command)
+
+        fast_workflow = root / '.github/workflows/flutter-client.yml'
+        fast_text = fast_workflow.read_text() if fast_workflow.is_file() else ''
+        for command in ('flutter analyze', 'flutter test', 'flutter build web'):
+            if command not in fast_text:
+                errors.append('Fast Flutter CI must retain mandatory command: ' + command)
+        if 'cancel-in-progress: true' not in fast_text:
+            errors.append('Fast Flutter CI must cancel superseded PR runs to control Actions cost.')
+
+        native_workflow = root / '.github/workflows/flutter-connected-runtime.yml'
+        native_text = native_workflow.read_text() if native_workflow.is_file() else ''
+        for marker in ('types: [ready_for_review]', 'android-runtime:', 'ios-runtime:', 'reactivecircus/android-emulator-runner@v2', 'Connected iOS Simulator journey', 'integration_test/connected_health_app_test.dart'):
+            if marker not in native_text:
+                errors.append('Merge-candidate native CI is missing required evidence marker: ' + marker)
+        if 'workflow_dispatch:' not in native_text:
+            errors.append('Merge-candidate native CI must retain explicit manual dispatch support.')
     if require_complete:
         errors.append('FLUTTER-HARD-GATE: product deployment is blocked. Flutter web/Android/iOS implementation and runtime acceptance are not verified. React CI cannot release this gate.')
     return errors
@@ -64,7 +75,7 @@ def main():
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print('Flutter delivery policy is consistent. Flutter product/platform delivery remains unverified; this is NOT a build or runtime acceptance pass.')
+    print('Flutter delivery policy is consistent. Fast development CI is separated from exact-head native merge-candidate acceptance; this is NOT itself a runtime acceptance pass.')
     return 0
 
 
