@@ -59,6 +59,14 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Restore modern Android v2 scaffold
+        run: |
+          flutter create --platforms=android --project-name trading_client --org in.aitradingsystem .
+          test -f android/gradlew
+          test -f android/settings.gradle.kts
+          grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+          grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
+
       - name: Resolve dependencies
         run: flutter pub get
 
