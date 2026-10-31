@@ -55,9 +55,15 @@ Future<void> connectAndWait(
   Finder expectedState,
 ) async {
   final operatorField = find.byKey(const ValueKey('operator-key-field'));
-  final connect = find.byKey(const ValueKey('connect-health'));
+  await waitForFinder(tester, operatorField);
   await tester.ensureVisible(operatorField);
   await tester.enterText(operatorField, key);
+  await pumpFrames(tester, frames: 2);
+
+  // Entering the operator key can rebuild the native form. Resolve and wait for
+  // the post-rebuild control before attempting to scroll or tap it.
+  final connect = find.byKey(const ValueKey('connect-health'));
+  await waitForFinder(tester, connect);
   await tester.ensureVisible(connect);
   await pumpFrames(tester, frames: 4);
   await tester.tap(connect);
