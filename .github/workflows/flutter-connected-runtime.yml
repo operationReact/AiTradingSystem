@@ -3,6 +3,7 @@ name: Flutter connected runtime gate
 on:
   pull_request:
     branches: [dev]
+    types: [ready_for_review]
     paths:
       - 'apps/trading_client/**'
       - 'backend/**'
@@ -10,6 +11,11 @@ on:
       - 'docs/flutter-delivery-gate.json'
   workflow_dispatch:
 
+# Native Android/iOS connected-runtime evidence is intentionally a merge-candidate
+# gate, not a per-commit development gate. Keep PRs draft while iterating; mark
+# ready for review only when the exact head is a merge candidate. If a native
+# gate fails and code changes are needed, convert back to draft before pushing,
+# then mark ready again after the fast gates are green.
 concurrency:
   group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -251,7 +257,7 @@ jobs:
           cache: true
       - name: Start local PostgreSQL and real backend
         run: |
-          brew install postgresql@16
+          brew list postgresql@16 >/dev/null 2>&1 || brew install postgresql@16
           brew services start postgresql@16
           for attempt in {1..30}; do pg_isready -h 127.0.0.1 && break || sleep 2; done
           createdb aitrading || true
