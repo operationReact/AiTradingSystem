@@ -8,6 +8,9 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: phase8-completion-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   operator-journey:
     runs-on: ubuntu-latest
@@ -20,8 +23,32 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
+      - name: Prepare runner-local PostgreSQL databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-client
+          fi
+          sudo systemctl start postgresql
+          if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='aitrading'" | grep -qx 1; then
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE aitrading LOGIN PASSWORD 'aitrading';"
+          else
+            sudo -u postgres psql -v ON_ERROR_STOP=1 -c "ALTER ROLE aitrading WITH LOGIN PASSWORD 'aitrading';"
+          fi
+          for db in aitrading_test aitrading_phase8_exit; do
+            sudo -u postgres dropdb --if-exists "$db"
+            sudo -u postgres createdb --owner=aitrading "$db"
+            pg_isready -h 127.0.0.1 -p 5432 -d "$db"
+          done
       - name: Prove isolated PostgreSQL PAPER operator journey and Phase 8 regressions
         working-directory: backend
+        env:
+          ATS_TEST_POSTGRES_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/aitrading_test
+          ATS_PHASE8_EXIT_POSTGRES_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/aitrading_phase8_exit
+          ATS_TEST_POSTGRES_USERNAME: aitrading
+          ATS_TEST_POSTGRES_PASSWORD: aitrading
         run: mvn --batch-mode --no-transfer-progress -Dtest=Phase8ExitGateIT,Phase8ApiContractIT,AnalyticsServicesIT,PerformanceAggregationServiceIT,PerformanceDrawdownTest,AuditQueryServiceIT,AuditCsvTest,OperationalHealthServiceTest,OperationalEvidenceIT,NotificationServiceIT,BacktestFailureNotificationTest test
       - name: Upload exit evidence
         if: always()
