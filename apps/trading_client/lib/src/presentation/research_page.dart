@@ -170,7 +170,7 @@ class _ResearchPageState extends State<ResearchPage> {
                 width: 190,
                 child: DropdownButtonFormField<String>(
                   key: const ValueKey('research-scan-interval'),
-                  value: _interval,
+                  initialValue: _interval,
                   decoration: const InputDecoration(labelText: 'Interval'),
                   items: const [
                     DropdownMenuItem(value: 'FIVE_MINUTE', child: Text('5 minutes')),
@@ -187,7 +187,7 @@ class _ResearchPageState extends State<ResearchPage> {
                 width: 150,
                 child: DropdownButtonFormField<int>(
                   key: const ValueKey('research-scan-limit'),
-                  value: _limit,
+                  initialValue: _limit,
                   decoration: const InputDecoration(labelText: 'Universe limit'),
                   items: const [
                     DropdownMenuItem(value: 50, child: Text('50')),
