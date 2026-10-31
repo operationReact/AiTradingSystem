@@ -21,8 +21,12 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyAuthenticationFilter apiKeyFilter,
-                                            CorsConfigurationSource corsSource) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            ApiKeyAuthenticationFilter apiKeyFilter,
+            SessionAuthenticationFilter sessionFilter,
+            SessionCsrfFilter sessionCsrfFilter,
+            CorsConfigurationSource corsSource) throws Exception {
         http.csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsSource))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -36,7 +40,9 @@ public class SecurityConfig {
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/**").hasRole("OPERATOR")
                 .anyRequest().denyAll())
-            .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class);
+            .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(sessionFilter, ApiKeyAuthenticationFilter.class)
+            .addFilterAfter(sessionCsrfFilter, ApiKeyAuthenticationFilter.class);
         return http.build();
     }
 
@@ -44,9 +50,12 @@ public class SecurityConfig {
     CorsConfigurationSource corsSource(@Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(allowedOrigins);
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Content-Type", ApiKeyAuthenticationFilter.HEADER, "Idempotency-Key", "X-Correlation-Id"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of(
+            "Content-Type", ApiKeyAuthenticationFilter.HEADER, SessionAuthenticationFilter.CSRF_HEADER,
+            "Idempotency-Key", "X-Correlation-Id"));
         config.setExposedHeaders(List.of("X-Correlation-Id"));
+        config.setAllowCredentials(true);
         config.setMaxAge(600L);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
