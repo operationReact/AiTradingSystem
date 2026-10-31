@@ -1,17 +1,26 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "target": "Flutter",
   "requiredPlatforms": ["web", "android", "ios"],
   "phaseCount": 22,
   "flutterRoot": "apps/trading_client",
   "legacyFrontendReferenceOnly": true,
-  "deliveryStatus": "IN_PROGRESS",
+  "deliveryStatus": "PLATFORM_ACCEPTED",
   "firstSlice": {
     "id": "FC-03",
     "scope": "Read-only operations health through the real backend",
-    "web": "UNVERIFIED",
-    "android": "UNVERIFIED",
-    "ios": "UNVERIFIED"
+    "web": "VERIFIED",
+    "android": "VERIFIED",
+    "ios": "VERIFIED"
   },
-  "releaseAcceptance": "BLOCKED_PENDING_THREE_PLATFORM_EVIDENCE"
+  "phase9Acceptance": {
+    "exactHead": "013b671b1a0d0ffa2c97d97bc3cb20f5c94b9fac",
+    "connectedRuntimeRunId": 41207555696,
+    "web": "VERIFIED",
+    "android": "VERIFIED",
+    "ios": "VERIFIED",
+    "figmaFidelity": "GAP"
+  },
+  "releaseAcceptance": "BLOCKED_PENDING_PHASE10_SECURITY",
+  "releaseBlocker": "Phase 10 authentication/authorization/security hardening must replace the shared browser/operator API-key baseline before public production release."
 }
