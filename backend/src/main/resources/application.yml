@@ -1,5 +1,9 @@
 server:
   port: 8080
+  max-http-request-header-size: ${SERVER_MAX_HTTP_REQUEST_HEADER_SIZE:16384}
+  tomcat:
+    max-http-form-post-size: ${SERVER_MAX_HTTP_FORM_POST_SIZE:1048576}
+    max-swallow-size: ${SERVER_MAX_SWALLOW_SIZE:1048576}
 spring:
   application:
     name: ai-trading-system
@@ -42,6 +46,12 @@ app:
     api-key: ${APP_API_KEY:}
     # Disabled by default. This temporary bridge converts a valid legacy key into a server-side session for local/dev testing.
     dev-session-bootstrap-enabled: ${APP_DEV_SESSION_BOOTSTRAP_ENABLED:false}
+    # Reject declared request bodies larger than 1 MiB before controller processing.
+    max-request-bytes: ${APP_SECURITY_MAX_REQUEST_BYTES:1048576}
+    rate-limit:
+      window-seconds: ${APP_SECURITY_RATE_LIMIT_WINDOW_SECONDS:60}
+      auth-requests-per-window: ${APP_SECURITY_AUTH_REQUESTS_PER_WINDOW:10}
+      sensitive-requests-per-window: ${APP_SECURITY_SENSITIVE_REQUESTS_PER_WINDOW:60}
     session:
       # Server-side opaque sessions expire after 8h by default and never persist raw tokens.
       ttl-seconds: ${APP_SESSION_TTL_SECONDS:28800}
@@ -51,7 +61,6 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   paper:
     intraday-close:
-      # Fail-safe default: no automatic end-of-session orders unless explicitly enabled.
       enabled: ${PAPER_INTRADAY_CLOSE_ENABLED:false}
       cutoff: ${PAPER_INTRADAY_CLOSE_CUTOFF:15:10}
       poll-ms: ${PAPER_INTRADAY_CLOSE_POLL_MS:60000}
@@ -60,21 +69,17 @@ app:
     risk-per-trade-percent: 0.25
     max-daily-drawdown-percent: 1.0
     max-open-positions: 3
-    # Assumed flat per-side cost model for paper fills. Not an Angel One fee schedule.
     fee-rate: 0.0005
     slippage-rate: 0.001
     signal-max-age-minutes: 30
   strategy:
-    # Deterministic SMA trend + prior-volume confirmation. All generated signals are paper candidates.
     fast-period: ${STRATEGY_FAST_PERIOD:5}
     slow-period: ${STRATEGY_SLOW_PERIOD:20}
     target-risk-reward: ${STRATEGY_TARGET_RISK_REWARD:2}
     stop-buffer-percent: ${STRATEGY_STOP_BUFFER_PERCENT:0.5}
     max-signal-age-minutes: ${STRATEGY_MAX_SIGNAL_AGE_MINUTES:1440}
   market-data:
-    # Strict app-level cap; requests may be split into provider-supported chunks.
     max-range-days: 366
-    # Bounds synchronous operator work; partial runs remain resumable.
     max-chunks-per-run: 5
   news:
     retention-days: ${NEWS_RETENTION_DAYS:90}
@@ -108,13 +113,10 @@ app:
       base-url: ${ANGELONE_BASE_URL:https://apiconnect.angelone.in}
       connect-timeout-ms: 5000
       read-timeout-ms: 10000
-      # Conservative local ceiling; the provider's own session lifetime is not verified in the SDK source.
       session-max-age-seconds: 21600
       login-min-interval-ms: 5000
       quote-min-interval-ms: 1000
-      # Bounded wait used only for session recovery; normal requests remain fail-fast.
       session-retry-max-wait-ms: 6000
-      # Angel One publishes a daily public instrument JSON file; never follow redirects or accept oversized input.
       instrument-master-url: ${ANGELONE_INSTRUMENT_MASTER_URL:https://margincalculator.angelone.in/OpenAPI_File/files/OpenAPIScripMaster.json}
       instrument-master-max-bytes: 52428800
       instrument-master-max-rows: 500000
