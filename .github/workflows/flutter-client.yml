@@ -16,10 +16,13 @@ concurrency:
 permissions:
   contents: read
 
+# Development feedback must stay cheap and fast. Native Android/iOS acceptance
+# is phase-boundary/release evidence, with automatic escalation only for
+# native-sensitive changes in flutter-connected-runtime.yml.
 jobs:
   analyze-test-web:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: apps/trading_client
@@ -33,4 +36,4 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build web --release --dart-define=API_BASE_URL=/
+      - run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
