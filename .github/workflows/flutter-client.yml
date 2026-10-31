@@ -17,8 +17,9 @@ permissions:
   contents: read
 
 # Development feedback must stay cheap and fast. Native Android/iOS acceptance
-# is phase-boundary/release evidence, with automatic escalation only for
-# native-sensitive changes in flutter-connected-runtime.yml.
+# is intentionally manual-only in flutter-connected-runtime.yml on this private
+# repository and should run only for truly native-sensitive changes, the final
+# phase head, release candidates, or explicit investigation.
 jobs:
   analyze-test-web:
     runs-on: ubuntu-latest
