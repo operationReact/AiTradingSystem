@@ -111,8 +111,16 @@ RiskApprovalSnapshot _snapshot() => RiskApprovalSnapshot(
       ],
     );
 
+void _useTallViewport(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 2400);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+}
+
 void main() {
   testWidgets('risk screen renders PAPER authority and version-aware pending approval', (tester) async {
+    _useTallViewport(tester);
     final repository = _FakeRiskRepository(_snapshot());
     await tester.pumpWidget(MaterialApp(home: RiskApprovalsPage(repository: repository)));
     await tester.pumpAndSettle();
@@ -127,6 +135,7 @@ void main() {
   });
 
   testWidgets('emergency halt requires explicit reason before mutation', (tester) async {
+    _useTallViewport(tester);
     final repository = _FakeRiskRepository(_snapshot());
     await tester.pumpWidget(MaterialApp(home: RiskApprovalsPage(repository: repository)));
     await tester.pumpAndSettle();
@@ -140,6 +149,7 @@ void main() {
   });
 
   testWidgets('approval confirmation carries actor and original row version', (tester) async {
+    _useTallViewport(tester);
     final repository = _FakeRiskRepository(_snapshot());
     await tester.pumpWidget(MaterialApp(home: RiskApprovalsPage(repository: repository)));
     await tester.pumpAndSettle();
