@@ -306,12 +306,13 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
       HealthState.unsafe => tradingColors.unsafe,
       HealthState.unknown => tradingColors.unknown,
     };
+    final freshness = component.ageSeconds == null ? 'Status updated' : 'Updated ${component.ageSeconds}s ago';
     return Card(
       key: ValueKey('health-component-${component.component}'),
       child: ListTile(
         leading: Icon(Icons.circle, size: 14, color: color, semanticLabel: component.state.name),
         title: Text(component.component),
-        subtitle: Text('${component.reasonCode}${component.ageSeconds == null ? '' : ' • ${component.ageSeconds}s old'}'),
+        subtitle: Text(freshness),
         trailing: Text(component.state.name.toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.w700)),
       ),
     );
