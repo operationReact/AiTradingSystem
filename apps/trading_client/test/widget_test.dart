@@ -18,90 +18,88 @@ class SmokeHealthRepository implements HealthRepository {
       });
 }
 
+void _phoneViewport(WidgetTester tester) {
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(390, 844);
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+}
+
 void main() {
-  testWidgets('boots into the product workspace without framework-facing copy', (tester) async {
-    final session = OperatorSession();
+  testWidgets('boots into the mobile product shell without operator chrome', (tester) async {
+    _phoneViewport(tester);
     await tester.pumpWidget(
-      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+      TradingApp(
+        repositoryFactory: SmokeHealthRepository.new,
+        session: OperatorSession(),
+      ),
     );
+    await tester.pump();
 
-    expect(find.text('AiTradingSystem'), findsOneWidget);
-    expect(find.text('Research. Validate. Operate with control.'), findsOneWidget);
-    expect(find.textContaining('Flutter'), findsNothing);
-    expect(find.text('Development operator session'), findsNothing);
-    expect(find.text('Market intelligence'), findsOneWidget);
-    expect(find.text('Signals'), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Markets'), findsOneWidget);
+    expect(find.text('Research'), findsOneWidget);
     expect(find.text('Portfolio'), findsOneWidget);
-    expect(find.text('Risk controls'), findsOneWidget);
-  });
+    expect(find.text('More'), findsOneWidget);
 
-  testWidgets('workspace cards navigate to product destinations', (tester) async {
-    final session = OperatorSession();
-    await tester.pumpWidget(
-      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
-    );
-
-    final signalsCard = find.byKey(const ValueKey('workspace-/signals'));
-    await tester.ensureVisible(signalsCard);
-    await tester.pumpAndSettle();
-    await tester.tap(signalsCard);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Signals & research'), findsOneWidget);
     expect(find.text('Development operator session'), findsNothing);
+    expect(find.text('Operator key'), findsNothing);
+    expect(find.text('Backend execution-mode authority'), findsNothing);
+    expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
+    expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
   });
 
-  testWidgets('appearance switching preserves current route and operator session', (tester) async {
-    final session = OperatorSession()..setOperatorKey('session-key');
+  testWidgets('appearance is a product setting and profile is separate from color mode', (tester) async {
+    _phoneViewport(tester);
     await tester.pumpWidget(
-      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+      TradingApp(
+        repositoryFactory: SmokeHealthRepository.new,
+        session: OperatorSession(),
+        initialRoute: '/settings',
+      ),
     );
-
-    final signalsCard = find.byKey(const ValueKey('workspace-/signals'));
-    await tester.ensureVisible(signalsCard);
-    await tester.tap(signalsCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Signals & research'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Neon Futuristic AI'), findsOneWidget);
+    expect(find.text('Clean Modern'), findsOneWidget);
+    expect(find.text('Color mode'), findsOneWidget);
 
-    await tester.tap(find.text('Clean'));
+    await tester.tap(find.byKey(const ValueKey('profile-Clean Modern')));
     await tester.pumpAndSettle();
 
-    final styleControl = tester.widget<SegmentedButton<DesignStyle>>(
-      find.byKey(const ValueKey('global-design-style-control')),
+    final themeControl = tester.widget<SegmentedButton<ThemeMode>>(
+      find.byKey(const ValueKey('settings-theme-mode-control')),
     );
-    expect(styleControl.selected, {DesignStyle.cleanModern});
-    expect(find.text('Signals & research'), findsOneWidget);
-    expect(session.operatorKey, 'session-key');
+    expect(themeControl.selected, {ThemeMode.system});
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
   });
 
-  testWidgets('appearance switching does not clear unsent form state', (tester) async {
-    final session = OperatorSession();
+  testWidgets('system health never exposes development credentials or raw auth codes', (tester) async {
+    _phoneViewport(tester);
     await tester.pumpWidget(
-      TradingApp(repositoryFactory: SmokeHealthRepository.new, session: session),
+      TradingApp(
+        repositoryFactory: SmokeHealthRepository.new,
+        session: OperatorSession(),
+        initialRoute: '/operations/health',
+      ),
     );
-
-    final fieldFinder = find.byKey(const ValueKey('dashboard-access-key'));
-    await tester.ensureVisible(fieldFinder);
-    await tester.enterText(fieldFinder, 'local-draft-key');
-
-    await tester.tap(find.text('Clean'));
     await tester.pumpAndSettle();
 
-    final field = tester.widget<TextField>(fieldFinder);
-    expect(field.controller?.text, 'local-draft-key');
-    expect(session.operatorKey, isNull);
+    expect(find.text('System health'), findsOneWidget);
+    expect(find.byKey(const ValueKey('health-sign-in-required')), findsOneWidget);
+    expect(find.text('Sign in to view system health'), findsOneWidget);
+    expect(find.text('Development operator session'), findsNothing);
+    expect(find.byKey(const ValueKey('operator-key-field')), findsNothing);
+    expect(find.text('AUTHENTICATION_REQUIRED'), findsNothing);
   });
 
-  testWidgets('global appearance overlay does not block underlying page controls', (tester) async {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = const Size(390, 844);
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    final session = OperatorSession();
+  testWidgets('authenticated system health renders PAPER safety evidence', (tester) async {
+    _phoneViewport(tester);
+    final session = OperatorSession()..setOperatorKey('test-session');
     await tester.pumpWidget(
       TradingApp(
         repositoryFactory: SmokeHealthRepository.new,
@@ -111,14 +109,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final field = find.byKey(const ValueKey('operator-key-field'));
-    final connect = find.byKey(const ValueKey('connect-health'));
-    await tester.enterText(field, 'native-test-key');
-    await tester.ensureVisible(connect);
-    await tester.tap(connect);
-    await tester.pumpAndSettle();
-
     expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
-    expect(session.operatorKey, 'native-test-key');
+    expect(find.text('PAPER'), findsOneWidget);
+    expect(find.text('Live trading'), findsOneWidget);
+    expect(find.text('LOCKED'), findsOneWidget);
   });
 }
