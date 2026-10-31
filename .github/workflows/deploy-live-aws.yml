@@ -1,8 +1,6 @@
 name: Deploy AiTradingSystem to live AWS
 
 on:
-  push:
-    branches: [dev]
   workflow_dispatch:
 
 permissions:
