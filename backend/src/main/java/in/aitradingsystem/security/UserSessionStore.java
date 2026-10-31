@@ -59,7 +59,7 @@ public class UserSessionStore {
         }
         return jdbc.sql("""
                 SELECT s.id, s.user_id, s.csrf_token_hash, s.created_at, s.expires_at, s.last_seen_at,
-                       u.external_subject, u.display_name, u.email, u.status
+                       u.external_subject, u.display_name, u.email, u.status, u.role
                 FROM user_session s
                 JOIN app_user u ON u.id = s.user_id
                 WHERE s.token_hash = :tokenHash
@@ -74,6 +74,7 @@ public class UserSessionStore {
                 rs.getString("external_subject"),
                 rs.getString("display_name"),
                 rs.getString("email"),
+                rs.getString("role"),
                 rs.getString("csrf_token_hash"),
                 rs.getObject("created_at", OffsetDateTime.class),
                 rs.getObject("expires_at", OffsetDateTime.class),
@@ -150,6 +151,7 @@ public class UserSessionStore {
         String externalSubject,
         String displayName,
         String email,
+        String role,
         String csrfTokenHash,
         OffsetDateTime createdAt,
         OffsetDateTime expiresAt,
