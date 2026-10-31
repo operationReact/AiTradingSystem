@@ -4,7 +4,6 @@ import 'package:trading_client/src/app.dart';
 import 'package:trading_client/src/data/health_repository.dart';
 import 'package:trading_client/src/data/operator_session.dart';
 import 'package:trading_client/src/domain/health_snapshot.dart';
-import 'package:trading_client/src/theme/app_theme.dart';
 
 class SmokeHealthRepository implements HealthRepository {
   @override
