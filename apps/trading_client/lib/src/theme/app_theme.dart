@@ -20,6 +20,11 @@ class TradingColors extends ThemeExtension<TradingColors> {
   final Color unsafe;
   final Color panel;
 
+  Color get neonCyan => const Color(0xFF0DEBFF);
+  Color get neonViolet => const Color(0xFF6E40FF);
+  Color get neonMagenta => const Color(0xFFFF24C7);
+  Color get neonNavy => const Color(0xFF050D20);
+
   @override
   TradingColors copyWith({Color? healthy, Color? degraded, Color? unknown, Color? halted, Color? unsafe, Color? panel}) =>
       TradingColors(
@@ -47,12 +52,31 @@ class TradingColors extends ThemeExtension<TradingColors> {
 
 ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   final isDark = brightness == Brightness.dark;
-  final seed = style == DesignStyle.neonFuturisticAi
-      ? const Color(0xFF7C5CFC)
-      : const Color(0xFF1E6FD9);
-  final scheme = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-  final panel = style == DesignStyle.neonFuturisticAi
-      ? (isDark ? const Color(0xFF151225) : const Color(0xFFF1EEFF))
+  final neon = style == DesignStyle.neonFuturisticAi;
+  const cyan = Color(0xFF0DEBFF);
+  const violet = Color(0xFF6E40FF);
+  const magenta = Color(0xFFFF24C7);
+
+  final seed = neon ? violet : const Color(0xFF1E6FD9);
+  final generated = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
+  final scheme = neon
+      ? generated.copyWith(
+          primary: isDark ? cyan : const Color(0xFF006A75),
+          secondary: isDark ? magenta : const Color(0xFF8B176D),
+          tertiary: violet,
+          surface: isDark ? const Color(0xFF030817) : const Color(0xFFF8FAFF),
+          surfaceContainer: isDark ? const Color(0xFF071326) : const Color(0xFFF1F4FC),
+          surfaceContainerHigh: isDark ? const Color(0xFF09172C) : const Color(0xFFE9EEF9),
+          surfaceContainerHighest: isDark ? const Color(0xFF0C1C35) : const Color(0xFFE2E8F4),
+          onSurface: isDark ? const Color(0xFFF3F7FF) : const Color(0xFF101828),
+          onSurfaceVariant: isDark ? const Color(0xFF8FA8CC) : const Color(0xFF52627A),
+          outline: isDark ? cyan.withValues(alpha: 0.58) : const Color(0xFF7EA6B7),
+          outlineVariant: isDark ? cyan.withValues(alpha: 0.22) : const Color(0xFFC6D3DE),
+        )
+      : generated;
+
+  final panel = neon
+      ? (isDark ? const Color(0xE8071326) : const Color(0xFFF4F7FC))
       : (isDark ? const Color(0xFF171A1F) : const Color(0xFFF4F6F8));
 
   final statusColors = isDark
@@ -61,7 +85,7 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
           degraded: Color(0xFFFFB84D),
           unknown: Color(0xFFB8C0CC),
           halted: Color(0xFFFFB15A),
-          unsafe: Color(0xFFFF8A80),
+          unsafe: Color(0xFFFF6B7A),
         )
       : const (
           healthy: Color(0xFF006B49),
@@ -74,11 +98,10 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    focusColor: scheme.primary.withValues(alpha: 0.30),
+    scaffoldBackgroundColor: scheme.surface,
+    canvasColor: scheme.surface,
+    focusColor: scheme.primary.withValues(alpha: 0.28),
     hoverColor: scheme.primary.withValues(alpha: 0.08),
-    scaffoldBackgroundColor: style == DesignStyle.neonFuturisticAi && isDark
-        ? const Color(0xFF090712)
-        : scheme.surface,
     extensions: <ThemeExtension<dynamic>>[
       TradingColors(
         healthy: statusColors.healthy,
@@ -89,11 +112,60 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
         panel: panel,
       ),
     ],
-    cardTheme: CardThemeData(
-      elevation: style == DesignStyle.neonFuturisticAi ? 1 : 0,
-      color: panel,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    appBarTheme: AppBarTheme(
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      backgroundColor: scheme.surface.withValues(alpha: 0.96),
+      foregroundColor: scheme.onSurface,
+      centerTitle: false,
+      titleTextStyle: TextStyle(
+        color: scheme.onSurface,
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.2,
+      ),
     ),
-    inputDecorationTheme: const InputDecorationTheme(border: OutlineInputBorder()),
+    cardTheme: CardThemeData(
+      elevation: 0,
+      color: panel,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(neon ? 20 : 16),
+        side: BorderSide(
+          color: neon && isDark ? cyan.withValues(alpha: 0.28) : scheme.outlineVariant.withValues(alpha: 0.72),
+        ),
+      ),
+    ),
+    navigationBarTheme: NavigationBarThemeData(
+      height: 72,
+      elevation: 0,
+      backgroundColor: neon && isDark ? const Color(0xF2071020) : scheme.surfaceContainer,
+      indicatorColor: neon ? cyan.withValues(alpha: isDark ? 0.16 : 0.12) : scheme.primaryContainer,
+      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+            color: states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
+          )),
+      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+            color: states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
+            fontSize: 11,
+            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
+          )),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceContainerHigh.withValues(alpha: 0.72),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.outlineVariant)),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.outlineVariant)),
+      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: scheme.primary, width: 1.5)),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      ),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)))),
+    ),
+    dividerColor: scheme.outlineVariant.withValues(alpha: 0.55),
   );
 }
