@@ -74,12 +74,12 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path('android/app/build.gradle.kts')
-          text = path.read_text()
+          gradle_path = Path('android/app/build.gradle.kts')
+          gradle_text = gradle_path.read_text()
           updated, count = re.subn(
               r'\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*JavaVersion\.VERSION_17\.toString\(\)\s*\}\s*',
               '\n',
-              text,
+              gradle_text,
               count=1,
           )
           if count != 1:
@@ -90,11 +90,19 @@ jobs:
           if marker not in updated:
               raise SystemExit('Expected generated Flutter Gradle block was not found')
           updated = updated.replace(marker, modern_kotlin + marker, 1)
-          path.write_text(updated)
+          gradle_path.write_text(updated)
+
+          activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
+          activity_text = activity_path.read_text()
+          expected = 'package in.aitradingsystem.trading_client'
+          if expected not in activity_text:
+              raise SystemExit('Expected generated MainActivity package declaration was not found')
+          activity_path.write_text(activity_text.replace(expected, 'package `in`.aitradingsystem.trading_client', 1))
           PY
           grep -q '^android.newDsl=false$' android/gradle.properties
           grep -q 'compilerOptions' android/app/build.gradle.kts
           ! grep -q 'kotlinOptions' android/app/build.gradle.kts
+          grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
 
       - name: Resolve dependencies
         run: flutter pub get
