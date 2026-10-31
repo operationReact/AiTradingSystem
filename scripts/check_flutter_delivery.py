@@ -44,14 +44,32 @@ def validate(root, changed=(), require_complete=False):
                 errors.append('Fast Flutter CI must retain mandatory command: ' + command)
         if 'cancel-in-progress: true' not in fast_text:
             errors.append('Fast Flutter CI must cancel superseded PR runs to control Actions cost.')
+        if 'timeout-minutes: 5' not in fast_text:
+            errors.append('Fast Flutter CI must enforce the five-minute development feedback budget.')
+        if '--no-wasm-dry-run' not in fast_text:
+            errors.append('Fast Flutter Web build must skip the redundant Wasm dry run.')
 
         native_workflow = root / '.github/workflows/flutter-connected-runtime.yml'
         native_text = native_workflow.read_text() if native_workflow.is_file() else ''
-        for marker in ('types: [ready_for_review]', 'android-runtime:', 'ios-runtime:', 'reactivecircus/android-emulator-runner@v2', 'Connected iOS Simulator journey', 'integration_test/connected_health_app_test.dart'):
+        for marker in (
+            'phase-completion',
+            'release-candidate',
+            "apps/trading_client/android/**",
+            "apps/trading_client/ios/**",
+            "apps/trading_client/pubspec.yaml",
+            "apps/trading_client/integration_test/**",
+            'android-runtime:',
+            'ios-runtime:',
+            'reactivecircus/android-emulator-runner@v2',
+            'Connected iOS Simulator journey',
+            'integration_test/connected_health_app_test.dart',
+        ):
             if marker not in native_text:
-                errors.append('Merge-candidate native CI is missing required evidence marker: ' + marker)
+                errors.append('Phase-boundary/native-sensitive CI is missing required evidence marker: ' + marker)
         if 'workflow_dispatch:' not in native_text:
-            errors.append('Merge-candidate native CI must retain explicit manual dispatch support.')
+            errors.append('Phase-boundary native CI must retain explicit dispatch support.')
+        if 'types: [ready_for_review]' in native_text:
+            errors.append('Native CI must not run merely because every ordinary PR becomes ready for review.')
     if require_complete:
         errors.append('FLUTTER-HARD-GATE: product deployment is blocked. Flutter web/Android/iOS implementation and runtime acceptance are not verified. React CI cannot release this gate.')
     return errors
@@ -75,7 +93,7 @@ def main():
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print('Flutter delivery policy is consistent. Fast development CI is separated from exact-head native merge-candidate acceptance; this is NOT itself a runtime acceptance pass.')
+    print('Flutter delivery policy is consistent. Development CI is fast; full native acceptance is phase-boundary/release evidence with automatic native-sensitive escalation. This is NOT itself a runtime acceptance pass.')
     return 0
 
 
