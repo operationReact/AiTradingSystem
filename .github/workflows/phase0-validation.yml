@@ -62,6 +62,16 @@ jobs:
           ATS_TEST_POSTGRES_PASSWORD: aitrading
         run: mvn --batch-mode --no-transfer-progress test
 
+      - name: Upload backend failure reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-failure-reports
+          path: |
+            backend/target/surefire-reports/**
+          if-no-files-found: ignore
+          retention-days: 7
+
   legacy-frontend-build:
     name: Legacy React reference build (non-release)
     runs-on: ubuntu-latest
