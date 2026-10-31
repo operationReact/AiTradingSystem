@@ -49,7 +49,13 @@ class AuthenticatedApiClient {
     Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 10),
   }) =>
-      _send(method: 'GET', path: path, query: query, extraHeaders: headers, timeout: timeout);
+      _send(
+        method: 'GET',
+        path: path,
+        query: query,
+        extraHeaders: headers,
+        timeout: timeout,
+      );
 
   Future<Object?> postJson(
     String path, {
@@ -58,7 +64,14 @@ class AuthenticatedApiClient {
     Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 20),
   }) =>
-      _send(method: 'POST', path: path, query: query, extraHeaders: headers, body: body, timeout: timeout);
+      _send(
+        method: 'POST',
+        path: path,
+        query: query,
+        extraHeaders: headers,
+        body: body,
+        timeout: timeout,
+      );
 
   Future<Object?> putJson(
     String path, {
@@ -67,7 +80,14 @@ class AuthenticatedApiClient {
     Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 20),
   }) =>
-      _send(method: 'PUT', path: path, query: query, extraHeaders: headers, body: body, timeout: timeout);
+      _send(
+        method: 'PUT',
+        path: path,
+        query: query,
+        extraHeaders: headers,
+        body: body,
+        timeout: timeout,
+      );
 
   Future<Object?> _send({
     required String method,
@@ -89,6 +109,8 @@ class AuthenticatedApiClient {
     final uri = base.replace(queryParameters: queryParameters.isEmpty ? null : queryParameters);
     final requestHeaders = <String, String>{
       ...extraHeaders,
+      // Authentication and representation headers are owned by this client and
+      // cannot be replaced by feature repositories.
       'X-API-Key': key,
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
@@ -98,17 +120,29 @@ class AuthenticatedApiClient {
       final response = switch (method) {
         'GET' => await client.get(uri, headers: requestHeaders).timeout(timeout),
         'POST' => await client
-            .post(uri, headers: requestHeaders, body: body == null ? null : jsonEncode(body))
+            .post(
+              uri,
+              headers: requestHeaders,
+              body: body == null ? null : jsonEncode(body),
+            )
             .timeout(timeout),
         'PUT' => await client
-            .put(uri, headers: requestHeaders, body: body == null ? null : jsonEncode(body))
+            .put(
+              uri,
+              headers: requestHeaders,
+              body: body == null ? null : jsonEncode(body),
+            )
             .timeout(timeout),
         _ => throw ArgumentError.value(method, 'method', 'Unsupported HTTP method'),
       };
       final correlation = response.headers['x-correlation-id'];
 
       if (response.statusCode == 401 || response.statusCode == 403) {
-        throw ApiHttpFailure('AUTHENTICATION_REJECTED', correlation, response.statusCode);
+        throw ApiHttpFailure(
+          'AUTHENTICATION_REJECTED',
+          correlation,
+          response.statusCode,
+        );
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         String code = 'API_REQUEST_FAILED';
