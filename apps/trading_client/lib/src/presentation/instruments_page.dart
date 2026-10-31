@@ -140,7 +140,7 @@ class _InstrumentsPageState extends State<InstrumentsPage> {
                   width: 150,
                   child: DropdownButtonFormField<String?>(
                     key: const ValueKey('instrument-exchange-filter'),
-                    value: _exchange,
+                    initialValue: _exchange,
                     decoration: const InputDecoration(labelText: 'Exchange'),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('All')),
