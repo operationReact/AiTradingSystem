@@ -29,9 +29,11 @@ Future<void> _pumpGolden(
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = viewport;
+  tester.binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
   addTearDown(() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
+    tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
   });
 
   await tester.pumpWidget(
