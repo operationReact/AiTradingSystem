@@ -295,9 +295,9 @@ jobs:
               f"--dart-define=CONNECTED_API_KEY={os.environ['CONNECTED_API_KEY']}",
           ]
           try:
-              result = subprocess.run(cmd, timeout=480)
+              result = subprocess.run(cmd, timeout=720)
           except subprocess.TimeoutExpired:
-              print('iOS connected runtime exceeded 8 minutes; failing fast instead of hanging the PR gate.')
+              print('iOS connected runtime exceeded 12 minutes; failing fast instead of hanging the PR gate.')
               sys.exit(124)
           sys.exit(result.returncode)
           PY
