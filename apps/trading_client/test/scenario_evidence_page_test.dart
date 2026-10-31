@@ -78,7 +78,7 @@ void main() {
     expect(find.byKey(const ValueKey('scenario-identity')), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-methodology')), findsOneWidget);
     // Cards below the fold are lazily built by the page's ListView, so scroll them into the tree first.
-    final pageScrollable = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable));
+    final pageScrollable = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-outcomes')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-outcomes')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-r-distribution')), 200, scrollable: pageScrollable);

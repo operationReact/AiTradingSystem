@@ -27,7 +27,7 @@ void main() {
     final sheetScrollable = find.descendant(
       of: find.byKey(const ValueKey('workspace-navigation-sheet')),
       matching: find.byType(Scrollable),
-    );
+    ).first;
     for (final label in [
       'Overview',
       'Instruments',
@@ -50,6 +50,7 @@ void main() {
     }
 
     await tester.scrollUntilVisible(find.text('Scenario & regime evidence'), -200, scrollable: sheetScrollable);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Scenario & regime evidence'));
     await tester.pumpAndSettle();
     expect(find.text('Scenario evidence lookup'), findsOneWidget);
