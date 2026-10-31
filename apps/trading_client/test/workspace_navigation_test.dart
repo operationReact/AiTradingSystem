@@ -49,9 +49,10 @@ void main() {
       expect(find.text(label), findsOneWidget, reason: 'missing workspace destination $label');
     }
 
-    await tester.scrollUntilVisible(find.text('Scenario & regime evidence'), -200, scrollable: sheetScrollable);
+    final scenarioTile = find.byKey(const ValueKey('workspace-nav-/scenarios'));
+    await tester.scrollUntilVisible(scenarioTile, -200, scrollable: sheetScrollable);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Scenario & regime evidence'));
+    await tester.tap(scenarioTile);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('workspace-navigation-sheet')), findsNothing, reason: 'destination tap did not close the sheet');
     expect(find.text('Scenario evidence lookup'), findsOneWidget);

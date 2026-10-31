@@ -80,17 +80,17 @@ void main() {
     expect(repository.requestedId, '11111111-1111-1111-1111-111111111111');
     expect(find.byKey(const ValueKey('scenario-identity')), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-methodology')), findsOneWidget);
+    expect(_selectableText('Regime: TRENDING_UP'), findsOneWidget);
+    expect(_selectableText('Fallback tier: EXACT_REGIME'), findsOneWidget);
+    expect(_selectableText('Methodology: BLOCK_BOOTSTRAP_V1'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is SelectableText && (w.data ?? '').startsWith('Candidate: 42')), findsOneWidget);
+    expect(_selectableText('Data cutoff: 2026-10-01T00:00:00.000Z'), findsOneWidget);
     // Cards below the fold are lazily built by the page's ListView, so scroll them into the tree first.
     final pageScrollable = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-outcomes')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-outcomes')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-r-distribution')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-r-distribution')), findsOneWidget);
-    expect(_selectableText('Regime: TRENDING_UP'), findsOneWidget);
-    expect(_selectableText('Fallback tier: EXACT_REGIME'), findsOneWidget);
-    expect(_selectableText('Methodology: BLOCK_BOOTSTRAP_V1'), findsOneWidget);
-    expect(find.byWidgetPredicate((w) => w is SelectableText && (w.data ?? '').startsWith('Candidate: 42')), findsOneWidget);
-    expect(_selectableText('Data cutoff: 2026-10-01T00:00:00.000Z'), findsOneWidget);
     expect(_selectableText('Expected R: 0.42'), findsOneWidget);
   });
 }
