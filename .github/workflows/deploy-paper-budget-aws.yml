@@ -17,6 +17,10 @@ on:
         type: choice
         options:
           - "yes-paper-only"
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/deploy-paper-budget-aws.yml'
 
 permissions:
   contents: read
@@ -33,13 +37,21 @@ env:
 
 jobs:
   validate:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-paper-once]')) }}
     name: Validate backend and build production Flutter Web
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Confirm PAPER-only intent
-        run: test "${{ inputs.confirm_paper_only }}" = "yes-paper-only"
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "${{ inputs.confirm_paper_only }}" = "yes-paper-only"
+          else
+            test "$GITHUB_REF" = "refs/heads/dev"
+            [[ "${{ github.event.head_commit.message }}" == *"[deploy-paper-once]"* ]]
+          fi
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -77,7 +89,7 @@ jobs:
 
   deploy:
     name: Build ARM64 images and deploy PAPER via SSM
-    if: ${{ inputs.action == 'deploy-paper' }}
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.action == 'deploy-paper') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-paper-once]')) }}
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -93,7 +105,11 @@ jobs:
         run: |
           set -euo pipefail
           test "${GITHUB_REF}" = "refs/heads/dev" || { echo "::error::Deployment allowed only from dev"; exit 1; }
-          test "${{ inputs.confirm_paper_only }}" = "yes-paper-only" || { echo "::error::PAPER-only confirmation missing"; exit 1; }
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            test "${{ inputs.confirm_paper_only }}" = "yes-paper-only" || { echo "::error::PAPER-only confirmation missing"; exit 1; }
+          else
+            [[ "${{ github.event.head_commit.message }}" == *"[deploy-paper-once]"* ]] || { echo "::error::One-shot deploy marker missing"; exit 1; }
+          fi
           test "$CONFIGURED_REGION" = "us-east-1" || { echo "::error::AWS_REGION must be us-east-1"; exit 1; }
           test "$WORKFLOW_REGION" = "$CONFIGURED_REGION" || { echo "::error::Workflow region differs from verified OIDC region"; exit 1; }
           test "$CONFIGURED_ROLE" = "arn:aws:iam::816344830716:role/aitradingsystem-github-deploy" || { echo "::error::Unexpected AWS role"; exit 1; }
