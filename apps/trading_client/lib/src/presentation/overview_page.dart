@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/health_repository.dart';
 import '../data/operator_session.dart';
 import 'data_state_panel.dart';
+import 'responsive_layout.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
@@ -50,8 +51,9 @@ class OverviewPage extends StatelessWidget {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 900;
-            final horizontalPadding = wide ? 56.0 : 20.0;
+            final layout = ResponsiveLayout.classify(constraints.maxWidth);
+            final desktop = layout == ResponsiveClass.desktop;
+            final horizontalPadding = ResponsiveLayout.horizontalPadding(constraints.maxWidth);
 
             return SingleChildScrollView(
               padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 40),
@@ -65,7 +67,7 @@ class OverviewPage extends StatelessWidget {
                       const SizedBox(height: 32),
                       Container(
                         width: double.infinity,
-                        padding: EdgeInsets.all(wide ? 40 : 24),
+                        padding: EdgeInsets.all(ResponsiveLayout.heroPadding(constraints.maxWidth)),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(28),
                           gradient: LinearGradient(
@@ -96,7 +98,7 @@ class OverviewPage extends StatelessWidget {
                             const SizedBox(height: 20),
                             Text(
                               'Research. Validate. Operate with control.',
-                              style: (wide ? theme.textTheme.displaySmall : theme.textTheme.headlineMedium)
+                              style: (desktop ? theme.textTheme.displaySmall : theme.textTheme.headlineMedium)
                                   ?.copyWith(fontWeight: FontWeight.w800, height: 1.08),
                             ),
                             const SizedBox(height: 14),
@@ -124,14 +126,19 @@ class OverviewPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 20),
                       GridView.builder(
+                        key: ValueKey('workspace-grid-${layout.name}'),
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _modules.length,
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: wide ? 4 : (constraints.maxWidth >= 600 ? 2 : 1),
+                          crossAxisCount: ResponsiveLayout.workspaceColumns(constraints.maxWidth),
                           mainAxisSpacing: 16,
                           crossAxisSpacing: 16,
-                          childAspectRatio: wide ? 1.15 : 1.75,
+                          childAspectRatio: switch (layout) {
+                            ResponsiveClass.mobile => 1.75,
+                            ResponsiveClass.adaptive => 1.45,
+                            ResponsiveClass.desktop => 1.15,
+                          },
                         ),
                         itemBuilder: (context, index) => _ModuleCard(module: _modules[index]),
                       ),
@@ -372,9 +379,10 @@ class _SummaryGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final viewportWidth = MediaQuery.sizeOf(context).width;
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = constraints.maxWidth >= 900 ? 4 : (constraints.maxWidth >= 560 ? 2 : 1);
+        final columns = ResponsiveLayout.metricColumns(viewportWidth);
         final items = [
           ('Equity', _money(summary.equity)),
           ('Available cash', _money(summary.availableCash)),
@@ -403,6 +411,7 @@ class _SummaryGrid extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             GridView.builder(
+              key: ValueKey('summary-grid-${ResponsiveLayout.classify(viewportWidth).name}'),
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: items.length,
@@ -602,6 +611,8 @@ class WorkspacePage extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final width = MediaQuery.sizeOf(context).width;
+    final padding = ResponsiveLayout.horizontalPadding(width);
     return Scaffold(
       appBar: AppBar(
         title: Text(title),
@@ -619,7 +630,7 @@ class WorkspacePage extends StatelessWidget {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1180),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
+              padding: EdgeInsets.fromLTRB(padding, 24, padding, 40),
               children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,

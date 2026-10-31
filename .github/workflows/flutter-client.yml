@@ -9,12 +9,20 @@ on:
       - 'docs/flutter-delivery-gate.json'
   workflow_dispatch:
 
+concurrency:
+  group: flutter-client-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
+# Development feedback must stay cheap and fast. Native Android/iOS acceptance
+# is phase-boundary/release evidence, with automatic escalation only for
+# native-sensitive changes in flutter-connected-runtime.yml.
 jobs:
-  analyze-test-web-android:
+  analyze-test-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     defaults:
       run:
         working-directory: apps/trading_client
@@ -25,31 +33,7 @@ jobs:
           flutter-version: '3.47.0'
           channel: stable
           cache: true
-      - name: Reconcile generated platform wrappers with pinned SDK
-        run: |
-          rm -rf android ios web
-          flutter create --platforms=web,android,ios --project-name trading_client .
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build web --release --dart-define=API_BASE_URL=/
-      - run: flutter build apk --debug --dart-define=API_BASE_URL=http://10.0.2.2:8080
-
-  ios-build:
-    runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: apps/trading_client
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: '3.47.0'
-          channel: stable
-          cache: true
-      - name: Reconcile generated iOS wrapper with pinned SDK
-        run: |
-          rm -rf ios
-          flutter create --platforms=ios --project-name trading_client .
-      - run: flutter pub get
-      - run: flutter build ios --simulator --no-codesign --dart-define=API_BASE_URL=http://127.0.0.1:8080
+      - run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/

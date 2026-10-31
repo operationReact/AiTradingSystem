@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import 'responsive_layout.dart';
 
 class AppearanceSwitcher extends StatelessWidget {
   const AppearanceSwitcher({
@@ -18,63 +19,67 @@ class AppearanceSwitcher extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final compact = ResponsiveLayout.classify(width) == ResponsiveClass.mobile;
+
     return Semantics(
       container: true,
       label: 'Appearance controls',
       child: Material(
         color: Colors.transparent,
         child: SafeArea(
-          minimum: const EdgeInsets.all(12),
+          minimum: const EdgeInsets.all(8),
           child: Card(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: compact ? 6 : 10, vertical: 6),
               child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   SegmentedButton<DesignStyle>(
                     key: const ValueKey('global-design-style-control'),
                     showSelectedIcon: false,
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: DesignStyle.neonFuturisticAi,
-                        label: Text('Neon AI'),
+                        icon: compact ? const Icon(Icons.auto_awesome_outlined, size: 18) : null,
+                        label: Text(compact ? 'Neon' : 'Neon AI'),
                       ),
                       ButtonSegment(
                         value: DesignStyle.cleanModern,
-                        label: Text('Clean'),
+                        icon: compact ? const Icon(Icons.crop_square_rounded, size: 18) : null,
+                        label: const Text('Clean'),
                       ),
                     ],
                     selected: {designStyle},
                     onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        onDesignStyleChanged(selection.first);
-                      }
+                      if (selection.isNotEmpty) onDesignStyleChanged(selection.first);
                     },
                   ),
                   SegmentedButton<ThemeMode>(
                     key: const ValueKey('global-theme-mode-control'),
                     showSelectedIcon: false,
-                    segments: const [
+                    segments: [
                       ButtonSegment(
                         value: ThemeMode.system,
-                        label: Text('System', key: ValueKey('global-theme-system')),
+                        icon: compact ? const Icon(Icons.settings_brightness_outlined, size: 18) : null,
+                        label: Text('System', key: const ValueKey('global-theme-system')),
                       ),
                       ButtonSegment(
                         value: ThemeMode.light,
-                        label: Text('Light', key: ValueKey('global-theme-light')),
+                        icon: compact ? const Icon(Icons.light_mode_outlined, size: 18) : null,
+                        label: Text('Light', key: const ValueKey('global-theme-light')),
                       ),
                       ButtonSegment(
                         value: ThemeMode.dark,
-                        label: Text('Dark', key: ValueKey('global-theme-dark')),
+                        icon: compact ? const Icon(Icons.dark_mode_outlined, size: 18) : null,
+                        label: Text('Dark', key: const ValueKey('global-theme-dark')),
                       ),
                     ],
                     selected: {themeMode},
                     onSelectionChanged: (selection) {
-                      if (selection.isNotEmpty) {
-                        onThemeModeChanged(selection.first);
-                      }
+                      if (selection.isNotEmpty) onThemeModeChanged(selection.first);
                     },
                   ),
                 ],

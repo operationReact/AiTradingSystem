@@ -35,10 +35,10 @@ class FlutterDeliveryPolicyTest(unittest.TestCase):
     def test_release_cannot_pass_just_because_policy_and_react_checks_pass(self):
         self.assertTrue(validate(self.root, require_complete=True))
 
-    def test_flutter_foundation_cannot_omit_platform_projects_or_ci(self):
+    def test_flutter_foundation_cannot_omit_platform_projects_or_phase_native_gate(self):
         errors = validate(self.root, ['apps/trading_client/lib/main.dart'])
         self.assertTrue(any('ios/' in error for error in errors))
-        self.assertTrue(any('flutter build ios' in error for error in errors))
+        self.assertTrue(any('Phase-boundary/native-sensitive CI' in error for error in errors))
 
 
 if __name__ == '__main__':

@@ -29,18 +29,47 @@ def validate(root, changed=(), require_complete=False):
     legacy = [p for p in changed if p.startswith(('frontend/src/', 'frontend/e2e/'))]
     if legacy:
         errors.append('New React product UI work is stopped by FLUTTER-HARD-GATE: ' + ', '.join(legacy))
-    if any(p.startswith('apps/trading_client/') for p in changed):
+    if any(p.startswith('apps/trading_client/') or p.startswith('.github/workflows/flutter-') for p in changed):
         for required in ('pubspec.yaml', 'lib/main.dart', 'web/index.html', 'ios/Runner.xcodeproj/project.pbxproj'):
             if not (root / 'apps/trading_client' / required).is_file():
                 errors.append('Flutter foundation is missing ' + required)
         android = root / 'apps/trading_client/android/app'
         if not any((android / name).is_file() for name in ('build.gradle.kts', 'build.gradle')):
             errors.append('Flutter foundation is missing the Android app build file')
-        workflow = root / '.github/workflows/flutter-client.yml'
-        text = workflow.read_text() if workflow.is_file() else ''
-        for command in ('flutter analyze', 'flutter test', 'flutter build web', 'flutter build apk', 'flutter build ios'):
-            if command not in text:
-                errors.append('Flutter foundation must introduce mandatory CI command: ' + command)
+
+        fast_workflow = root / '.github/workflows/flutter-client.yml'
+        fast_text = fast_workflow.read_text() if fast_workflow.is_file() else ''
+        for command in ('flutter analyze', 'flutter test', 'flutter build web'):
+            if command not in fast_text:
+                errors.append('Fast Flutter CI must retain mandatory command: ' + command)
+        if 'cancel-in-progress: true' not in fast_text:
+            errors.append('Fast Flutter CI must cancel superseded PR runs to control Actions cost.')
+        if 'timeout-minutes: 5' not in fast_text:
+            errors.append('Fast Flutter CI must enforce the five-minute development feedback budget.')
+        if '--no-wasm-dry-run' not in fast_text:
+            errors.append('Fast Flutter Web build must skip the redundant Wasm dry run.')
+
+        native_workflow = root / '.github/workflows/flutter-connected-runtime.yml'
+        native_text = native_workflow.read_text() if native_workflow.is_file() else ''
+        for marker in (
+            'phase-completion',
+            'release-candidate',
+            "apps/trading_client/android/**",
+            "apps/trading_client/ios/**",
+            "apps/trading_client/pubspec.yaml",
+            "apps/trading_client/integration_test/**",
+            'android-runtime:',
+            'ios-runtime:',
+            'reactivecircus/android-emulator-runner@v2',
+            'Connected iOS Simulator journey',
+            'integration_test/connected_health_app_test.dart',
+        ):
+            if marker not in native_text:
+                errors.append('Phase-boundary/native-sensitive CI is missing required evidence marker: ' + marker)
+        if 'workflow_dispatch:' not in native_text:
+            errors.append('Phase-boundary native CI must retain explicit dispatch support.')
+        if 'types: [ready_for_review]' in native_text:
+            errors.append('Native CI must not run merely because every ordinary PR becomes ready for review.')
     if require_complete:
         errors.append('FLUTTER-HARD-GATE: product deployment is blocked. Flutter web/Android/iOS implementation and runtime acceptance are not verified. React CI cannot release this gate.')
     return errors
@@ -64,7 +93,7 @@ def main():
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print('Flutter delivery policy is consistent. Flutter product/platform delivery remains unverified; this is NOT a build or runtime acceptance pass.')
+    print('Flutter delivery policy is consistent. Development CI is fast; full native acceptance is phase-boundary/release evidence with automatic native-sensitive escalation. This is NOT itself a runtime acceptance pass.')
     return 0
 
 

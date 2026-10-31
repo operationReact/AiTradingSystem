@@ -5,6 +5,7 @@ import '../data/operator_session.dart';
 import '../domain/health_snapshot.dart';
 import '../theme/app_theme.dart';
 import 'health_controller.dart';
+import 'responsive_layout.dart';
 
 class OperationsHealthPage extends StatefulWidget {
   const OperationsHealthPage({
@@ -55,13 +56,19 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
   @override
   Widget build(BuildContext context) {
     final body = LayoutBuilder(builder: (context, constraints) {
-      final maxWidth = constraints.maxWidth >= 1024 ? 1120.0 : 760.0;
+      final layout = ResponsiveLayout.classify(constraints.maxWidth);
+      final maxWidth = switch (layout) {
+        ResponsiveClass.mobile => constraints.maxWidth,
+        ResponsiveClass.adaptive => 760.0,
+        ResponsiveClass.desktop => 1120.0,
+      };
+      final padding = ResponsiveLayout.horizontalPadding(constraints.maxWidth);
       return Center(
         child: ConstrainedBox(
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: ListView(
             key: const ValueKey('health-list'),
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.fromLTRB(padding, 16, padding, 32),
             children: [
               _header(context),
               const SizedBox(height: 16),
