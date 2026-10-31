@@ -4,13 +4,16 @@ Production UI authority for AiTradingSystem across Web, Android and iOS.
 
 ## Architecture
 
-- `lib/src/domain`: typed backend evidence; unknown or incomplete authority fails closed.
-- `lib/src/data`: authenticated repositories for health, instruments, market data, research, scenarios, backtests, PAPER trading, risk/approvals and operational evidence.
-- `lib/src/presentation`: production workspaces for Overview, Instruments, Market Data, Research, Scenario/Regime, Backtests, Portfolio, Orders, Risk/Approvals, News, Notifications, Audit, Settings and System Health.
-- `lib/src/theme`: `neonFuturisticAi` and `cleanModern`, with System/Light/Dark support.
-- operator credentials remain memory-only in the Phase 9 client; execution authority remains server-side.
+The client is being migrated to a feature-first layout without regressing the newer product/UI work already on `dev`.
 
-The application is PAPER-only. It does not authorize LIVE broker execution, and UI state never replaces backend risk/readiness evidence.
+- `lib/src/core/session`: shared account/session state used across features.
+- `lib/src/core/widgets`: shared presentation primitives such as responsive layout, appearance controls and data-state panels.
+- `lib/src/features/operations_health`: health domain/data/presentation slice. Unknown or incomplete authority fails closed.
+- `lib/src/features/overview`: feature entry point for the product overview; compatibility exports remain temporarily while older callsites are migrated.
+- `lib/src/data` and `lib/src/presentation`: remaining authenticated repositories and workspaces are migrated feature-by-feature rather than by a destructive bulk rename.
+- `lib/src/theme`: `neonFuturisticAi` and `cleanModern`, with System/Light/Dark support.
+
+The application remains PAPER-only. It does not authorize LIVE broker execution, and UI state never replaces backend risk/readiness evidence.
 
 ## Local bootstrap
 
@@ -23,12 +26,12 @@ flutter test
 flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
-For an Android emulator use the host mapping expected by the emulator environment; for iOS Simulator/local Web use an address reachable from that runtime.
+For Android, use an API base address reachable from the device/emulator. For iOS Simulator/local Web, use an address reachable from that runtime.
 
 ## Validation model
 
-Development pushes use the inexpensive Flutter fast gate: analyze, tests and release Web build. Full connected acceptance runs against a real Spring Boot + PostgreSQL backend on Web, Android emulator and iOS Simulator only at native-sensitive or phase/release boundaries.
+Every structural migration must preserve the production behavior already present on `dev`. Exact-head validation requires Flutter analyze/tests and the repository delivery gates; Android APK packaging and visual regression run at release-sensitive boundaries.
 
-Phase 9 acceptance additionally covers responsive behavior, accessibility, state-preserving appearance switching, research evaluation, PAPER order/risk evidence, emergency stop, backtest history and degraded-data behavior. Visual goldens are regression snapshots; they must not be described as design-fidelity proof without separate Figma evidence.
+Visual goldens are regression snapshots, not design-fidelity proof. Customer UI acceptance additionally requires phone-size review against the canonical Figma product direction.
 
 Platform wrappers may be reconciled by CI from the pinned Flutter stable line. Product Dart sources, routing, authority boundaries and tests remain repository-owned.
