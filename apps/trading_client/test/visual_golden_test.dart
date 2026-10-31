@@ -43,7 +43,10 @@ Future<void> _pumpGolden(
   await tester.pumpAndSettle();
 
   expect(find.text('AiTradingSystem'), findsOneWidget, reason: designLabel);
-  expect(find.byKey(const ValueKey('dashboard-state-empty')), findsOneWidget);
+  expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
+  expect(find.text('Sign in to continue'), findsOneWidget);
+  expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
+  expect(find.text('Operator access'), findsNothing);
 }
 
 void main() {
