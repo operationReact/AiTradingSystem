@@ -34,9 +34,10 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
             String rawToken = cookieValue(request, COOKIE_NAME);
             sessions.findActiveByToken(rawToken).ifPresent(session -> {
                 SessionPrincipal principal = new SessionPrincipal(
-                    session.userId(), session.externalSubject(), session.displayName(), session.email(), session.id());
+                    session.userId(), session.externalSubject(), session.displayName(), session.email(),
+                    session.role(), session.id());
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                    principal, null, List.of(new SimpleGrantedAuthority("ROLE_OPERATOR")));
+                    principal, null, List.of(new SimpleGrantedAuthority("ROLE_" + session.role())));
                 authentication.setDetails(session);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
 
@@ -66,6 +67,7 @@ public class SessionAuthenticationFilter extends OncePerRequestFilter {
         String externalSubject,
         String displayName,
         String email,
+        String role,
         java.util.UUID sessionId
     ) {
         @Override
