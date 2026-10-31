@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:trading_client/src/presentation/data_state_panel.dart';
+import 'package:trading_client/src/core/widgets/data_state_panel.dart';
 
 Widget host(DataStatePanel panel) => MaterialApp(
       home: Scaffold(

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:trading_client/src/presentation/responsive_layout.dart';
+import 'package:trading_client/src/core/widgets/responsive_layout.dart';
 
 void main() {
   test('canonical responsive classes cover every mandatory viewport width', () {

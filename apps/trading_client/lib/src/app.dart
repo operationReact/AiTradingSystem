@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import 'data/health_repository.dart';
-import 'data/operator_session.dart';
-import 'presentation/appearance_switcher.dart';
-import 'presentation/operations_health_page.dart';
-import 'presentation/overview_page.dart';
+import 'core/session/operator_session.dart';
+import 'core/widgets/appearance_switcher.dart';
+import 'features/operations_health/data/health_repository.dart';
+import 'features/operations_health/presentation/operations_health_page.dart';
+import 'features/overview/presentation/overview_page.dart';
 import 'theme/app_theme.dart';
 
 class TradingApp extends StatefulWidget {

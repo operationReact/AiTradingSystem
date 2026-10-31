@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:trading_client/src/data/health_repository.dart';
-import 'package:trading_client/src/data/operator_session.dart';
+import 'package:trading_client/src/core/session/operator_session.dart';
+import 'package:trading_client/src/features/operations_health/data/health_repository.dart';
 
 void main() {
   test('uses the backend X-API-Key contract and only the health GET surface', () async {

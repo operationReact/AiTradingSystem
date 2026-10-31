@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../domain/health_snapshot.dart';
-import 'operator_session.dart';
+import '../../../core/session/operator_session.dart';
 
 sealed class HealthFailure implements Exception {
   const HealthFailure(this.code, this.correlationId);

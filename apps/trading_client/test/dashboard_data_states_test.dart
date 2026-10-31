@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:trading_client/src/data/health_repository.dart';
-import 'package:trading_client/src/data/operator_session.dart';
-import 'package:trading_client/src/presentation/overview_page.dart';
+import 'package:trading_client/src/core/session/operator_session.dart';
+import 'package:trading_client/src/features/operations_health/data/health_repository.dart';
+import 'package:trading_client/src/features/overview/presentation/overview_page.dart';
 
 class QueueDashboardRepository implements DashboardRepository {
   QueueDashboardRepository(this.responses);

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/app.dart';
-import 'package:trading_client/src/data/health_repository.dart';
-import 'package:trading_client/src/data/operator_session.dart';
-import 'package:trading_client/src/domain/health_snapshot.dart';
+import 'package:trading_client/src/core/session/operator_session.dart';
+import 'package:trading_client/src/features/operations_health/data/health_repository.dart';
+import 'package:trading_client/src/features/operations_health/domain/health_snapshot.dart';
 
 class FakeHealthRepository implements HealthRepository {
   FakeHealthRepository(this.result);

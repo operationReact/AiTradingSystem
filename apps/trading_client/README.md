@@ -4,9 +4,10 @@ FC-02/FC-03 foundation for Flutter web, Android and iOS.
 
 ## Architecture
 
-- `lib/src/domain`: typed server evidence; unknown enum values fail closed to `HealthState.unknown`.
-- `lib/src/data`: read-only HTTP repository and memory-only development operator session.
-- `lib/src/presentation`: controller above presentation and the operations-health surface.
+- `lib/src/core/session`: memory-only development operator session shared by features.
+- `lib/src/core/widgets`: shared presentation widgets (data state panel, responsive layout, appearance switcher).
+- `lib/src/features/operations_health`: `domain` typed server evidence (unknown enum values fail closed to `HealthState.unknown`), `data` read-only HTTP repository, `presentation` controller and operations-health page.
+- `lib/src/features/overview/presentation`: overview page.
 - `lib/src/theme`: `neonFuturisticAi` and `cleanModern` using semantic `ThemeExtension` values plus light/dark/system.
 
 The first slice only calls `GET /api/operations/health`. It never queues/replays a mutation and does not authorize trading.

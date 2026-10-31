@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:trading_client/src/app.dart';
-import 'package:trading_client/src/data/health_repository.dart';
-import 'package:trading_client/src/data/operator_session.dart';
+import 'package:trading_client/src/core/session/operator_session.dart';
+import 'package:trading_client/src/features/operations_health/data/health_repository.dart';
 
 const connectedApiBaseUrl = String.fromEnvironment('API_BASE_URL');
 const connectedApiKey = String.fromEnvironment('CONNECTED_API_KEY');

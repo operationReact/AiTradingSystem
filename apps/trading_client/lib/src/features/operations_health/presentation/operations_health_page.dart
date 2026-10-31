@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../data/health_repository.dart';
-import '../data/operator_session.dart';
+import '../../../core/session/operator_session.dart';
+import '../../../core/widgets/responsive_layout.dart';
+import '../../../theme/app_theme.dart';
 import '../domain/health_snapshot.dart';
-import '../theme/app_theme.dart';
 import 'health_controller.dart';
-import 'responsive_layout.dart';
 
 class OperationsHealthPage extends StatefulWidget {
   const OperationsHealthPage({

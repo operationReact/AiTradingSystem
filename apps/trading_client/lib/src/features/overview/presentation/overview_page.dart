@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../data/health_repository.dart';
-import '../data/operator_session.dart';
-import 'data_state_panel.dart';
-import 'responsive_layout.dart';
+import '../../../core/session/operator_session.dart';
+import '../../../core/widgets/data_state_panel.dart';
+import '../../../core/widgets/responsive_layout.dart';
+import '../../operations_health/data/health_repository.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({

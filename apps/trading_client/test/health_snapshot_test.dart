@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:trading_client/src/domain/health_snapshot.dart';
+import 'package:trading_client/src/features/operations_health/domain/health_snapshot.dart';
 
 void main() {
   test('unknown server states fail closed to UNKNOWN', () {
