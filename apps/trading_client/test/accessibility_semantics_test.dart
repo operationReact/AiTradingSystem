@@ -55,12 +55,18 @@ void main() {
       ),
     );
 
-    await tester.enterText(find.byKey(const ValueKey('dashboard-access-key')), 'wrong-key');
-    await tester.tap(find.byKey(const ValueKey('dashboard-connect')));
+    final accessKey = find.byKey(const ValueKey('dashboard-access-key'));
+    final connect = find.byKey(const ValueKey('dashboard-connect'));
+
+    await tester.ensureVisible(accessKey);
+    await tester.enterText(accessKey, 'wrong-key');
+    await tester.ensureVisible(connect);
+    await tester.pumpAndSettle();
+    await tester.tap(connect);
     await tester.pumpAndSettle();
 
     expect(find.text('The access key was rejected.'), findsWidgets);
-    final field = tester.widget<TextField>(find.byKey(const ValueKey('dashboard-access-key')));
+    final field = tester.widget<TextField>(accessKey);
     expect(field.decoration?.errorText, 'The access key was rejected.');
   });
 }
