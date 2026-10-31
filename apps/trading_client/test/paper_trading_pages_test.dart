@@ -85,6 +85,12 @@ PaperOrder _order({String status = 'RISK_APPROVED'}) => PaperOrder(
       correlationId: 'corr-2',
     );
 
+Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target) => tester.scrollUntilVisible(
+      target,
+      200,
+      scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)),
+    );
+
 void main() {
   testWidgets('PAPER portfolio renders backend mode, reconciliation and position evidence', (tester) async {
     final repository = _FakePaperRepository(
@@ -99,6 +105,7 @@ void main() {
     expect(find.text('Mode PAPER'), findsOneWidget);
     expect(find.text('LIVE DISABLED'), findsOneWidget);
     expect(find.text('CASH RECONCILED'), findsOneWidget);
+    await _scrollPageTo(tester, 'paper-portfolio-list', find.byKey(const ValueKey('paper-position-42')));
     expect(find.byKey(const ValueKey('paper-position-42')), findsOneWidget);
     expect(find.textContaining('INFY-EQ'), findsOneWidget);
   });
@@ -115,7 +122,7 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-symbol')), 'INFY-EQ');
     await tester.enterText(find.byKey(const ValueKey('paper-order-reference-price')), '2500');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
+    await _scrollPageTo(tester, 'paper-orders-list', find.byKey(const ValueKey('paper-order-submit')));
     await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
     await tester.pumpAndSettle();
 
@@ -141,7 +148,7 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-stop-loss')), '2400');
     await tester.enterText(find.byKey(const ValueKey('paper-order-target')), '2800');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
+    await _scrollPageTo(tester, 'paper-orders-list', find.byKey(const ValueKey('paper-order-submit')));
     await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
     await tester.pumpAndSettle();
 
