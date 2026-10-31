@@ -47,8 +47,7 @@ void main() {
     await tester.tap(signalsCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Signals'), findsWidgets);
-    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
+    expect(find.text('Signals & research'), findsOneWidget);
     expect(find.text('Development operator session'), findsNothing);
   });
 
@@ -63,7 +62,7 @@ void main() {
     await tester.tap(signalsCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
+    expect(find.text('Signals & research'), findsOneWidget);
 
     await tester.tap(find.text('Clean'));
     await tester.pumpAndSettle();
@@ -72,7 +71,7 @@ void main() {
       find.byKey(const ValueKey('global-design-style-control')),
     );
     expect(styleControl.selected, {DesignStyle.cleanModern});
-    expect(find.text('Candidate research, provenance, and supporting evidence'), findsOneWidget);
+    expect(find.text('Signals & research'), findsOneWidget);
     expect(session.operatorKey, 'session-key');
   });
 
