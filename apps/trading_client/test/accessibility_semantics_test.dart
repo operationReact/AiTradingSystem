@@ -36,16 +36,16 @@ void main() {
 
       final hero = tester.getSemantics(find.text('Research. Validate. Operate with control.'));
       final workspace = tester.getSemantics(find.text('Workspace'));
-      final operator = tester.getSemantics(find.text('Operator access'));
+      final signIn = tester.getSemantics(find.text('Sign in required'));
       expect(hero.getSemanticsData().flagsCollection.isHeader, isTrue);
       expect(workspace.getSemanticsData().flagsCollection.isHeader, isTrue);
-      expect(operator.getSemanticsData().flagsCollection.isHeader, isTrue);
+      expect(signIn.getSemanticsData().flagsCollection.isHeader, isTrue);
     } finally {
       semantics.dispose();
     }
   });
 
-  testWidgets('access-key authentication error is associated with the input', (tester) async {
+  testWidgets('unauthenticated overview exposes secure sign-in state without credential input', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: OverviewPage(
@@ -54,19 +54,12 @@ void main() {
         ),
       ),
     );
-
-    final accessKey = find.byKey(const ValueKey('dashboard-access-key'));
-    final connect = find.byKey(const ValueKey('dashboard-connect'));
-
-    await tester.ensureVisible(accessKey);
-    await tester.enterText(accessKey, 'wrong-key');
-    await tester.ensureVisible(connect);
-    await tester.pumpAndSettle();
-    await tester.tap(connect);
     await tester.pumpAndSettle();
 
-    expect(find.text('The access key was rejected.'), findsWidgets);
-    final field = tester.widget<TextField>(accessKey);
-    expect(field.decoration?.errorText, 'The access key was rejected.');
+    expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
+    expect(find.text('Secure sign-in is required'), findsOneWidget);
+    expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
+    expect(find.byKey(const ValueKey('dashboard-connect')), findsNothing);
+    expect(find.textContaining('operator access-key'), findsOneWidget);
   });
 }
