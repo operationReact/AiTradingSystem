@@ -1,0 +1,23 @@
+name: Dependency security review
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/pom.xml'
+      - '.github/workflows/dependency-security.yml'
+      - 'apps/trading_client/pubspec.yaml'
+      - 'apps/trading_client/pubspec.lock'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  dependency-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
