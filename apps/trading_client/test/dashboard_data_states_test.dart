@@ -45,6 +45,8 @@ DashboardSummary summaryWith({
       asOf: DateTime.utc(2026, 10, 30, 12),
     );
 
+OperatorSession authenticatedSession() => OperatorSession()..setOperatorKey('test-session');
+
 Future<void> pumpOverview(
   WidgetTester tester,
   DashboardRepository repository, {
@@ -53,7 +55,7 @@ Future<void> pumpOverview(
   await tester.pumpWidget(
     MaterialApp(
       home: OverviewPage(
-        session: session ?? OperatorSession(),
+        session: session ?? authenticatedSession(),
         dashboardRepository: repository,
       ),
     ),
@@ -61,30 +63,23 @@ Future<void> pumpOverview(
   await tester.pump();
 }
 
-Future<void> connect(WidgetTester tester) async {
-  final field = find.byKey(const ValueKey('dashboard-access-key'));
-  final button = find.byKey(const ValueKey('dashboard-connect'));
-  await tester.ensureVisible(field);
-  await tester.enterText(field, 'test-key');
-  await tester.ensureVisible(button);
-  await tester.tap(button);
-}
-
 void main() {
-  testWidgets('starts in an explicit empty state without requesting data', (tester) async {
+  testWidgets('unauthenticated overview requires secure sign-in without requesting data', (tester) async {
     final repository = QueueDashboardRepository([() async => summaryWith()]);
-    await pumpOverview(tester, repository);
+    await pumpOverview(tester, repository, session: OperatorSession());
+    await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('dashboard-state-empty')), findsOneWidget);
+    expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
+    expect(find.text('Secure sign-in is required'), findsOneWidget);
+    expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
+    expect(find.byKey(const ValueKey('dashboard-connect')), findsNothing);
     expect(repository.calls, 0);
   });
 
-  testWidgets('shows loading while the authoritative request is pending', (tester) async {
+  testWidgets('shows loading while authenticated authoritative request is pending', (tester) async {
     final pending = Completer<DashboardSummary>();
     final repository = QueueDashboardRepository([() => pending.future]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pump();
 
     expect(find.byKey(const ValueKey('dashboard-state-loading')), findsOneWidget);
@@ -99,8 +94,6 @@ void main() {
       () async => summaryWith(systemStatus: 'STALE'),
     ]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('dashboard-state-ready')), findsOneWidget);
 
@@ -116,8 +109,6 @@ void main() {
       () async => summaryWith(systemStatus: 'HALTED', newOrdersHalted: true),
     ]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('dashboard-state-degraded')), findsOneWidget);
@@ -129,8 +120,6 @@ void main() {
       () async => summaryWith(systemStatus: 'UNRECOGNIZED_SERVER_STATUS'),
     ]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('dashboard-state-unknown')), findsOneWidget);
@@ -142,8 +131,6 @@ void main() {
       () async => throw const DashboardTransportFailure('NETWORK_OR_PARSE_FAILURE', 'corr-1'),
     ]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('dashboard-state-error')), findsOneWidget);
@@ -156,8 +143,6 @@ void main() {
       () async => throw const DashboardTransportFailure('NETWORK_OR_PARSE_FAILURE', 'corr-2'),
     ]);
     await pumpOverview(tester, repository);
-
-    await connect(tester);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('dashboard-state-ready')), findsOneWidget);
     expect(find.text('₹100000.00'), findsOneWidget);
