@@ -244,7 +244,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               key: const ValueKey('market-data-interval'),
-              value: _interval,
+              initialValue: _interval,
               decoration: const InputDecoration(labelText: 'Interval'),
               items: const [
                 DropdownMenuItem(value: 'ONE_DAY', child: Text('1 day')),
