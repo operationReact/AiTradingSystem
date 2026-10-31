@@ -14,8 +14,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
     private static final UUID SCAN_ID = UUID.fromString("81000000-0000-0000-0000-000000000001");
@@ -26,7 +26,7 @@ class ScenarioResearchOrchestratorIT extends AbstractPostgresIT {
     @Autowired ScenarioRunRepository scenarioRuns;
     @Autowired ResearchEvaluationRepository evaluations;
     @Autowired JdbcTemplate jdbc;
-    @MockBean ScenarioSimulationService simulations;
+    @MockitoBean ScenarioSimulationService simulations;
 
     private long candidateId;
 
