@@ -88,7 +88,7 @@ PaperOrder _order({String status = 'RISK_APPROVED'}) => PaperOrder(
 Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target) => tester.scrollUntilVisible(
       target,
       200,
-      scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)),
+      scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)).first,
     );
 
 void main() {
