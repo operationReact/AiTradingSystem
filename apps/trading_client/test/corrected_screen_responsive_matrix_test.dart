@@ -7,7 +7,7 @@ import 'package:trading_client/src/domain/health_snapshot.dart';
 
 class _UnusedHealthRepository implements HealthRepository {
   @override
-  Future<HealthSnapshot> fetch() => throw StateError('health fetch not expected without explicit connect');
+  Future<HealthSnapshot> fetch() => throw StateError('health fetch not expected without authentication');
 }
 
 const _mandatoryWidths = <double>[320, 375, 411, 768, 1024, 1440];
@@ -41,12 +41,7 @@ Future<void> _pumpRoute(WidgetTester tester, String route, double width) async {
 }
 
 void main() {
-  tearDown(() {
-    // Per-test view overrides are also reset by the binding, but keep the
-    // contract explicit because this file exercises many viewport changes.
-  });
-
-  testWidgets('all corrected routes render without Flutter overflow exceptions at the mandatory Notion widths', (tester) async {
+  testWidgets('all corrected routes render without overflow at mandatory widths', (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -61,21 +56,20 @@ void main() {
           isNull,
           reason: 'Flutter exception/overflow at width $width on route $route',
         );
-        expect(
-          find.byKey(const ValueKey('global-design-style-control')),
-          findsOneWidget,
-          reason: 'appearance style control missing at width $width on $route',
-        );
-        expect(
-          find.byKey(const ValueKey('global-theme-mode-control')),
-          findsOneWidget,
-          reason: 'theme control missing at width $width on $route',
-        );
-        expect(
-          find.byKey(const ValueKey('global-workspace-navigation')),
-          findsOneWidget,
-          reason: 'workspace navigation missing at width $width on $route',
-        );
+        expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
+        expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
+        expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
+
+        if (width < 900) {
+          expect(
+            find.byKey(const ValueKey('product-mobile-navigation')),
+            findsOneWidget,
+            reason: 'mobile product navigation missing at width $width on $route',
+          );
+        } else {
+          expect(find.text('Control Center'), findsOneWidget);
+          expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
+        }
 
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump();
