@@ -5,19 +5,41 @@ on:
     branches: [dev]
     paths:
       - 'backend/pom.xml'
+      - 'backend/src/**'
       - '.github/workflows/dependency-security.yml'
       - 'apps/trading_client/pubspec.yaml'
       - 'apps/trading_client/pubspec.lock'
+  push:
+    branches: [dev]
 
 permissions:
   contents: read
-  pull-requests: read
 
 jobs:
-  dependency-review:
+  vulnerability-scan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
+
+      - uses: actions/setup-java@v4
         with:
-          fail-on-severity: high
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Package backend dependency graph
+        working-directory: backend
+        run: mvn --batch-mode --no-transfer-progress -DskipTests package
+
+      - name: Scan repository and packaged dependencies for HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: '1'
+          format: table
