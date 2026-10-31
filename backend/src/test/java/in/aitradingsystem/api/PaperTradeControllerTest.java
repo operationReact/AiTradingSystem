@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import in.aitradingsystem.common.ApiExceptionHandler;
 import in.aitradingsystem.paper.PaperQueryService;
 import in.aitradingsystem.paper.PaperTradingService;
+import in.aitradingsystem.security.UserSessionStore;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -22,6 +23,7 @@ class PaperTradeControllerTest {
     @Autowired MockMvc mvc;
     @MockitoBean PaperTradingService trading;
     @MockitoBean PaperQueryService queries;
+    @MockitoBean UserSessionStore sessions;
 
     @Test
     void rejectsMissingIdempotencyKey() throws Exception {
