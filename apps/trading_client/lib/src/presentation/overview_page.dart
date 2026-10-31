@@ -171,15 +171,18 @@ class _DashboardPanel extends StatefulWidget {
 }
 
 class _DashboardPanelState extends State<_DashboardPanel> {
-  final _controller = TextEditingController();
   DashboardSummary? _summary;
   String? _error;
   bool _loading = false;
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    if (widget.session.isAuthenticated) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    }
   }
 
   DataStateKind get _dataState {
@@ -203,23 +206,8 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     }
   }
 
-  String? get _accessKeyError => switch (_error) {
-        'Enter your access key to connect.' ||
-        'Operator access is required.' ||
-        'The access key was rejected.' => _error,
-        _ => null,
-      };
-
-  Future<void> _connect() async {
-    widget.session.setOperatorKey(_controller.text);
-    if (!widget.session.isAuthenticated) {
-      setState(() => _error = 'Enter your access key to connect.');
-      return;
-    }
-    await _refresh();
-  }
-
   Future<void> _refresh() async {
+    if (!widget.session.isAuthenticated) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -230,12 +218,16 @@ class _DashboardPanelState extends State<_DashboardPanel> {
       setState(() => _summary = summary);
     } on DashboardAuthenticationRequired {
       if (!mounted) return;
-      setState(() => _error = 'Operator access is required.');
+      widget.session.clear();
+      setState(() => _error = 'Your session has expired. Sign in again.');
     } on DashboardHttpFailure catch (failure) {
       if (!mounted) return;
-      setState(() => _error = failure.statusCode == 401 || failure.statusCode == 403
-          ? 'The access key was rejected.'
-          : 'Dashboard data is temporarily unavailable.');
+      if (failure.statusCode == 401 || failure.statusCode == 403) {
+        widget.session.clear();
+        setState(() => _error = 'Your session has expired. Sign in again.');
+      } else {
+        setState(() => _error = 'Dashboard data is temporarily unavailable.');
+      }
     } on DashboardFailure {
       if (!mounted) return;
       setState(() => _error = 'Unable to reach the trading service.');
@@ -244,9 +236,8 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     }
   }
 
-  void _clear() {
+  void _disconnect() {
     widget.session.clear();
-    _controller.clear();
     setState(() {
       _summary = null;
       _error = null;
@@ -257,7 +248,7 @@ class _DashboardPanelState extends State<_DashboardPanel> {
   DataStatePanel _statePanel() {
     final state = _dataState;
     final (title, message) = switch (state) {
-      DataStateKind.empty => ('No authoritative data loaded', 'Connect explicitly to request current server evidence.'),
+      DataStateKind.empty => ('No authoritative data loaded', 'Sign in to request current account and trading evidence.'),
       DataStateKind.loading => (
           _summary == null ? 'Loading authoritative state' : 'Refreshing authoritative state',
           _summary == null
@@ -284,6 +275,7 @@ class _DashboardPanelState extends State<_DashboardPanel> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final summary = _summary;
+    final signedIn = widget.session.isAuthenticated;
 
     return Card(
       child: Padding(
@@ -293,12 +285,15 @@ class _DashboardPanelState extends State<_DashboardPanel> {
           children: [
             Row(
               children: [
-                Icon(Icons.lock_outline_rounded, color: scheme.primary),
+                Icon(signedIn ? Icons.verified_user_rounded : Icons.person_outline_rounded, color: scheme.primary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Semantics(
                     header: true,
-                    child: Text('Operator access', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                    child: Text(
+                      signedIn ? 'Trading account' : 'Sign in required',
+                      style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
                 if (summary != null) _StatusChip(label: summary.mode, positive: summary.mode == 'PAPER'),
@@ -306,40 +301,49 @@ class _DashboardPanelState extends State<_DashboardPanel> {
             ),
             const SizedBox(height: 8),
             Text(
-              summary == null
-                  ? 'Connect to load authoritative portfolio and operating state. Credentials are kept only for this session.'
-                  : 'Server state remains authoritative. Last successful evidence stays visible during refresh failures.',
+              signedIn
+                  ? 'Your authenticated session loads authoritative portfolio and operating state automatically.'
+                  : 'Sign in to view account-scoped portfolio, market, and risk evidence. No developer credentials are accepted here.',
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 16),
-            _statePanel(),
-            const SizedBox(height: 16),
-            if (summary == null) ...[
-              TextField(
-                key: const ValueKey('dashboard-access-key'),
-                controller: _controller,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: InputDecoration(
-                  labelText: 'Access key',
-                  helperText: 'Credential is stored in memory only for this session.',
-                  errorText: _accessKeyError,
-                  border: const OutlineInputBorder(),
+            if (!signedIn)
+              Container(
+                key: const ValueKey('dashboard-sign-in-required'),
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: scheme.primaryContainer.withValues(alpha: 0.35),
+                  border: Border.all(color: scheme.outlineVariant),
                 ),
-                onSubmitted: (_) => _loading ? null : _connect(),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                key: const ValueKey('dashboard-connect'),
-                onPressed: _loading ? null : _connect,
-                icon: _loading
-                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.login_rounded),
-                label: const Text('Connect workspace'),
-              ),
-            ] else ...[
-              _SummaryGrid(summary: summary),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.lock_person_rounded, color: scheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Secure sign-in is required', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Production authentication is handled through your account session. The previous operator access-key flow has been removed.',
+                            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else ...[
+              _statePanel(),
+              if (summary != null) ...[
+                const SizedBox(height: 16),
+                _SummaryGrid(summary: summary),
+              ],
               const SizedBox(height: 16),
               Wrap(
                 spacing: 10,
@@ -355,9 +359,9 @@ class _DashboardPanelState extends State<_DashboardPanel> {
                   ),
                   TextButton.icon(
                     key: const ValueKey('dashboard-disconnect'),
-                    onPressed: _clear,
+                    onPressed: _disconnect,
                     icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Disconnect'),
+                    label: const Text('Sign out'),
                   ),
                 ],
               ),
@@ -371,83 +375,82 @@ class _DashboardPanelState extends State<_DashboardPanel> {
 
 class _SummaryGrid extends StatelessWidget {
   const _SummaryGrid({required this.summary});
+
   final DashboardSummary summary;
+
   String _money(num value) => '₹${value.toStringAsFixed(2)}';
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final viewportWidth = MediaQuery.sizeOf(context).width;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = ResponsiveLayout.metricColumns(viewportWidth);
-        final items = [
-          ('Equity', _money(summary.equity)),
-          ('Available cash', _money(summary.availableCash)),
-          ('Daily P&L', _money(summary.dailyPnl)),
-          ('Open positions', '${summary.openPositions}'),
-          ('Market value', _money(summary.marketValue)),
-          ('Unrealized P&L', _money(summary.unrealizedPnl)),
-          ('Exposure', '${summary.exposurePercent.toStringAsFixed(2)}%'),
-          ('System', summary.systemStatus),
-        ];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    final columns = ResponsiveLayout.metricColumns(viewportWidth);
+    final items = [
+      ('Equity', _money(summary.equity)),
+      ('Available cash', _money(summary.availableCash)),
+      ('Daily P&L', _money(summary.dailyPnl)),
+      ('Open positions', '${summary.openPositions}'),
+      ('Market value', _money(summary.marketValue)),
+      ('Unrealized P&L', _money(summary.unrealizedPnl)),
+      ('Exposure', '${summary.exposurePercent.toStringAsFixed(2)}%'),
+      ('System', summary.systemStatus),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StatusChip(label: summary.systemStatus, positive: summary.systemStatus == 'OK'),
-                _StatusChip(label: summary.cashReconciled ? 'RECONCILED' : 'NOT RECONCILED', positive: summary.cashReconciled),
-                if (summary.newOrdersHalted) const _StatusChip(label: 'ORDERS HALTED', positive: false),
-              ],
-            ),
-            const SizedBox(height: 16),
-            GridView.builder(
-              key: ValueKey('summary-grid-${ResponsiveLayout.classify(viewportWidth).name}'),
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: items.length,
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                mainAxisSpacing: 10,
-                crossAxisSpacing: 10,
-                childAspectRatio: columns == 1 ? 4.2 : 2.3,
-              ),
-              itemBuilder: (context, index) {
-                final item = items[index];
-                return Semantics(
-                  label: '${item.$1}: ${item.$2}',
-                  child: Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(item.$1, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
-                        const SizedBox(height: 4),
-                        Text(item.$2, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
+            _StatusChip(label: summary.systemStatus, positive: summary.systemStatus == 'OK'),
+            _StatusChip(label: summary.cashReconciled ? 'RECONCILED' : 'NOT RECONCILED', positive: summary.cashReconciled),
+            if (summary.newOrdersHalted) const _StatusChip(label: 'ORDERS HALTED', positive: false),
           ],
-        );
-      },
+        ),
+        const SizedBox(height: 16),
+        GridView.builder(
+          key: ValueKey('summary-grid-${ResponsiveLayout.classify(viewportWidth).name}'),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 10,
+            crossAxisSpacing: 10,
+            childAspectRatio: columns == 1 ? 4.2 : 2.3,
+          ),
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return Semantics(
+              label: '${item.$1}: ${item.$2}',
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(item.$1, style: Theme.of(context).textTheme.labelMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 4),
+                    Text(item.$2, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }
 
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.label, required this.positive});
+
   final String label;
   final bool positive;
 
@@ -516,6 +519,7 @@ class _Header extends StatelessWidget {
 
 class _ModuleCard extends StatelessWidget {
   const _ModuleCard({required this.module});
+
   final _OverviewModule module;
 
   @override
@@ -571,13 +575,32 @@ class WorkspacePage extends StatelessWidget {
   });
 
   const WorkspacePage.market({super.key})
-      : title = 'Market intelligence', subtitle = 'Market context, instruments, research inputs, and data quality', icon = Icons.auto_graph_rounded, emptyTitle = 'Market evidence will appear here', emptyBody = 'Connected market-data and research evidence is shown only when authoritative data is available.';
+      : title = 'Market intelligence',
+        subtitle = 'Market context, instruments, research inputs, and data quality',
+        icon = Icons.auto_graph_rounded,
+        emptyTitle = 'Market evidence will appear here',
+        emptyBody = 'Connected market-data and research evidence is shown only when authoritative data is available.';
+
   const WorkspacePage.signals({super.key})
-      : title = 'Signals', subtitle = 'Candidate research, provenance, and supporting evidence', icon = Icons.radar_rounded, emptyTitle = 'No signal selected', emptyBody = 'Generated candidates remain research evidence until explicitly reviewed and approved.';
+      : title = 'Signals',
+        subtitle = 'Candidate research, provenance, and supporting evidence',
+        icon = Icons.radar_rounded,
+        emptyTitle = 'No signal selected',
+        emptyBody = 'Generated candidates remain research evidence until explicitly reviewed and approved.';
+
   const WorkspacePage.portfolio({super.key})
-      : title = 'Portfolio', subtitle = 'PAPER positions, orders, exposure, and accounting state', icon = Icons.account_balance_wallet_outlined, emptyTitle = 'Portfolio state will appear here', emptyBody = 'Positions and accounting are shown from authoritative PAPER execution records.';
+      : title = 'Portfolio',
+        subtitle = 'PAPER positions, orders, exposure, and accounting state',
+        icon = Icons.account_balance_wallet_outlined,
+        emptyTitle = 'Portfolio state will appear here',
+        emptyBody = 'Positions and accounting are shown from authoritative PAPER execution records.';
+
   const WorkspacePage.risk({super.key})
-      : title = 'Risk controls', subtitle = 'Risk policy, approvals, emergency controls, and execution safety', icon = Icons.shield_outlined, emptyTitle = 'Risk evidence will appear here', emptyBody = 'Unknown or unavailable control evidence is never presented as healthy.';
+      : title = 'Risk controls',
+        subtitle = 'Risk policy, approvals, emergency controls, and execution safety',
+        icon = Icons.shield_outlined,
+        emptyTitle = 'Risk evidence will appear here',
+        emptyBody = 'Unknown or unavailable control evidence is never presented as healthy.';
 
   final String title;
   final String subtitle;
@@ -665,6 +688,7 @@ class WorkspacePage extends StatelessWidget {
 
 class _OverviewModule {
   const _OverviewModule({required this.icon, required this.title, required this.description, required this.route});
+
   final IconData icon;
   final String title;
   final String description;
