@@ -20,6 +20,8 @@ jobs:
           python-version: '3.12'
       - name: Test fail-closed policy
         run: python scripts/test_flutter_delivery.py
+      - name: Test PWA cache and offline safety policy
+        run: python scripts/test_pwa_cache_policy.py
       - name: Enforce target and changed-code boundaries
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
