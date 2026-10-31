@@ -1,10 +1,13 @@
 name: Flutter connected runtime gate
 
 on:
-  # Cost guard: full connected Web/Android/iOS acceptance is intentionally
-  # manual-only on private repositories. Run it on the exact head only for
-  # native-sensitive changes that truly require it, phase completion, release
-  # candidates, or explicit investigation.
+  # Cost guard: full connected Web/Android/iOS acceptance remains manual by
+  # default. The Phase 9 finalization branch has a one-shot push trigger so
+  # the connected GitHub integration can launch the exact-head phase boundary
+  # gate without requiring a human workflow_dispatch click.
+  push:
+    branches:
+      - finalize/p09-w09-acceptance
   workflow_dispatch:
     inputs:
       validation_scope:
