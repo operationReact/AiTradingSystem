@@ -1,6 +1,6 @@
 package in.aitradingsystem.config;
 
-import org.springframework.context.annotation.DependsOn;
+import org.springframework.boot.sql.init.dependency.DependsOnDatabaseInitialization;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 
@@ -9,7 +9,7 @@ import org.springframework.stereotype.Component;
  * so paper-only remains the only safe execution mode until that capability is implemented and reviewed.
  */
 @Component
-@DependsOn("flywayInitializer")
+@DependsOnDatabaseInitialization
 public class TradingModeGuard {
     public TradingModeGuard(JdbcClient jdbc) {
         String activeMode = jdbc.sql("SELECT active_mode FROM trading_execution_mode WHERE id = 1")
