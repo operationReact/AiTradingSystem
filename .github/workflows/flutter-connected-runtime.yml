@@ -1,21 +1,39 @@
 name: Flutter connected runtime gate
 
 on:
+  # Full connected Web/Android/iOS acceptance is intentionally NOT a normal
+  # per-PR gate. Dispatch this workflow on the exact final head of each phase,
+  # and again for release candidates.
+  workflow_dispatch:
+    inputs:
+      validation_scope:
+        description: Why the expensive native gate is being run
+        required: true
+        default: phase-completion
+        type: choice
+        options:
+          - phase-completion
+          - release-candidate
+          - manual-investigation
+      phase:
+        description: Phase identifier, for example P09
+        required: false
+        type: string
+
+  # Escalate automatically only when a PR changes native-sensitive surfaces.
+  # Ordinary Dart/UI work is validated by the fast Ubuntu workflow and receives
+  # full native acceptance at the phase boundary.
   pull_request:
     branches: [dev]
-    types: [ready_for_review]
+    types: [opened, synchronize, reopened]
     paths:
-      - 'apps/trading_client/**'
-      - 'backend/**'
+      - 'apps/trading_client/android/**'
+      - 'apps/trading_client/ios/**'
+      - 'apps/trading_client/pubspec.yaml'
+      - 'apps/trading_client/pubspec.lock'
+      - 'apps/trading_client/integration_test/**'
       - '.github/workflows/flutter-connected-runtime.yml'
-      - 'docs/flutter-delivery-gate.json'
-  workflow_dispatch:
 
-# Native Android/iOS connected-runtime evidence is intentionally a merge-candidate
-# gate, not a per-commit development gate. Keep PRs draft while iterating; mark
-# ready for review only when the exact head is a merge candidate. If a native
-# gate fails and code changes are needed, convert back to draft before pushing,
-# then mark ready again after the fast gates are green.
 concurrency:
   group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -100,7 +118,7 @@ jobs:
             --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
       - name: Build connected Flutter Web app
         working-directory: apps/trading_client
-        run: flutter build web --release --dart-define=API_BASE_URL=http://127.0.0.1:4173
+        run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=http://127.0.0.1:4173
       - name: Install browser runtime tooling
         working-directory: apps/trading_client/tool
         run: |
@@ -155,7 +173,7 @@ jobs:
             /tmp/unauth.json
             /tmp/fc03-flutter-web-runtime-*.png
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 7
 
   android-runtime:
     runs-on: ubuntu-latest
@@ -233,7 +251,7 @@ jobs:
         with:
           name: fc03-android-runtime-evidence
           path: /tmp/aitrading-backend.log
-          retention-days: 14
+          retention-days: 7
 
   ios-runtime:
     runs-on: macos-latest
@@ -303,7 +321,7 @@ jobs:
           try:
               result = subprocess.run(cmd, timeout=720)
           except subprocess.TimeoutExpired:
-              print('iOS connected runtime exceeded 12 minutes; failing fast instead of hanging the PR gate.')
+              print('iOS connected runtime exceeded 12 minutes; failing fast instead of hanging the phase gate.')
               sys.exit(124)
           sys.exit(result.returncode)
           PY
@@ -313,4 +331,4 @@ jobs:
         with:
           name: fc03-ios-runtime-evidence
           path: /tmp/aitrading-backend.log
-          retention-days: 14
+          retention-days: 7
