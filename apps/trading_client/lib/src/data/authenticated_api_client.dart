@@ -73,6 +73,22 @@ class AuthenticatedApiClient {
         timeout: timeout,
       );
 
+  Future<Object?> putJson(
+    String path, {
+    Object? body,
+    Map<String, String?> query = const {},
+    Map<String, String> headers = const {},
+    Duration timeout = const Duration(seconds: 20),
+  }) =>
+      _send(
+        method: 'PUT',
+        path: path,
+        query: query,
+        extraHeaders: headers,
+        body: body,
+        timeout: timeout,
+      );
+
   Future<Object?> _send({
     required String method,
     required String path,
@@ -105,6 +121,13 @@ class AuthenticatedApiClient {
         'GET' => await client.get(uri, headers: requestHeaders).timeout(timeout),
         'POST' => await client
             .post(
+              uri,
+              headers: requestHeaders,
+              body: body == null ? null : jsonEncode(body),
+            )
+            .timeout(timeout),
+        'PUT' => await client
+            .put(
               uri,
               headers: requestHeaders,
               body: body == null ? null : jsonEncode(body),
