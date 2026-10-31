@@ -53,6 +53,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Scenario & regime evidence'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('workspace-navigation-sheet')), findsNothing, reason: 'destination tap did not close the sheet');
     expect(find.text('Scenario evidence lookup'), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-run-id')), findsOneWidget);
   });

@@ -61,6 +61,9 @@ ScenarioRunEvidence _evidence() => ScenarioRunEvidence(
       createdAt: DateTime.parse('2026-10-01T00:00:00Z'),
     );
 
+// Evidence lines use SelectableText, which find.text does not match.
+Finder _selectableText(String text) => find.byWidgetPredicate((w) => w is SelectableText && w.data == text);
+
 void main() {
   testWidgets('renders candidate-bound regime, methodology and outcome evidence', (tester) async {
     final repository = _FakeScenarioRepository(_evidence());
@@ -83,11 +86,11 @@ void main() {
     expect(find.byKey(const ValueKey('scenario-outcomes')), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-r-distribution')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-r-distribution')), findsOneWidget);
-    expect(find.text('Regime: TRENDING_UP'), findsOneWidget);
-    expect(find.text('Fallback tier: EXACT_REGIME'), findsOneWidget);
-    expect(find.text('Methodology: BLOCK_BOOTSTRAP_V1'), findsOneWidget);
-    expect(find.textContaining('Candidate: 42'), findsOneWidget);
-    expect(find.textContaining('Data cutoff: 2026-10-01T00:00:00.000Z'), findsOneWidget);
-    expect(find.text('Expected R: 0.42'), findsOneWidget);
+    expect(_selectableText('Regime: TRENDING_UP'), findsOneWidget);
+    expect(_selectableText('Fallback tier: EXACT_REGIME'), findsOneWidget);
+    expect(_selectableText('Methodology: BLOCK_BOOTSTRAP_V1'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is SelectableText && (w.data ?? '').startsWith('Candidate: 42')), findsOneWidget);
+    expect(_selectableText('Data cutoff: 2026-10-01T00:00:00.000Z'), findsOneWidget);
+    expect(_selectableText('Expected R: 0.42'), findsOneWidget);
   });
 }
