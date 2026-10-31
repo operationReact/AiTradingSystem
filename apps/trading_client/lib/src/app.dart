@@ -45,10 +45,16 @@ class _TradingAppState extends State<TradingApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.system;
-  late String _selectedRoute = widget.initialRoute;
+  String _selectedRoute = '/';
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRoute = widget.initialRoute;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -65,21 +71,14 @@ class _TradingAppState extends State<TradingApp> {
           if (constraints.maxWidth >= 900) {
             return Row(
               children: [
-                _DesktopProductRail(
-                  selectedRoute: _selectedRoute,
-                  onNavigate: _navigate,
-                ),
+                _DesktopProductRail(selectedRoute: _selectedRoute, onNavigate: _navigate),
                 Expanded(child: child ?? const SizedBox.shrink()),
               ],
             );
           }
-
           return Stack(
             children: [
-              Positioned.fill(
-                bottom: 72,
-                child: child ?? const SizedBox.shrink(),
-              ),
+              Positioned.fill(bottom: 72, child: child ?? const SizedBox.shrink()),
               Positioned(
                 left: 0,
                 right: 0,
@@ -169,11 +168,7 @@ class _TradingAppState extends State<TradingApp> {
 }
 
 class _MobileProductNavigation extends StatelessWidget {
-  const _MobileProductNavigation({
-    required this.selectedRoute,
-    required this.onNavigate,
-    required this.onMore,
-  });
+  const _MobileProductNavigation({required this.selectedRoute, required this.onNavigate, required this.onMore});
 
   final String selectedRoute;
   final ValueChanged<String> onNavigate;
@@ -195,14 +190,19 @@ class _MobileProductNavigation extends StatelessWidget {
           switch (index) {
             case 0:
               onNavigate('/');
+              break;
             case 1:
               onNavigate('/market');
+              break;
             case 2:
               onNavigate('/research');
+              break;
             case 3:
               onNavigate('/portfolio');
+              break;
             case 4:
               onMore();
+              break;
           }
         },
         destinations: const [
