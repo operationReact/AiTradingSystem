@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Policy consistency check, deliberately NOT Flutter build/runtime certification."""
+"""Validate Flutter delivery authority without manufacturing release approval."""
 import argparse
 import json
 from pathlib import Path
 import subprocess
 import sys
+
+
+PLATFORM_ACCEPTED = 'PLATFORM_ACCEPTED'
+RELEASE_AUTHORIZED = 'RELEASE_AUTHORIZED'
+PHASE10_BLOCK = 'BLOCKED_PENDING_PHASE10_SECURITY'
 
 
 def validate(root, changed=(), require_complete=False):
@@ -13,22 +18,47 @@ def validate(root, changed=(), require_complete=False):
         gate = json.loads((root / 'docs/flutter-delivery-gate.json').read_text())
     except (OSError, ValueError) as exc:
         return [f'Flutter delivery policy is missing or invalid: {exc}']
+
     if gate.get('target') != 'Flutter' or gate.get('phaseCount') != 22:
         errors.append('The target must remain Flutter across all 22 Notion workstreams.')
     if gate.get('requiredPlatforms') != ['web', 'android', 'ios']:
         errors.append('Web, Android and iOS are all mandatory; no platform may be silently removed.')
     if gate.get('flutterRoot') != 'apps/trading_client' or gate.get('legacyFrontendReferenceOnly') is not True:
         errors.append('Preserve the Flutter client root and legacy React reference-only boundary.')
-    if gate.get('deliveryStatus') not in ('GAP', 'IN_PROGRESS', 'BLOCKED'):
-        errors.append('No Flutter VERIFIED delivery claim is permitted by this initial correction gate.')
+
+    delivery_status = gate.get('deliveryStatus')
+    if delivery_status not in ('GAP', 'IN_PROGRESS', 'BLOCKED', PLATFORM_ACCEPTED):
+        errors.append('Unknown Flutter delivery status; platform acceptance must be backed by recorded exact-head evidence.')
+
     first = gate.get('firstSlice', {})
-    if first.get('id') != 'FC-03' or any(first.get(p) not in ('GAP', 'UNVERIFIED', 'IN_PROGRESS', 'BLOCKED') for p in ('web', 'android', 'ios')):
-        errors.append('The three-platform vertical slice has no verified acceptance yet; do not manufacture a pass.')
-    if gate.get('releaseAcceptance') != 'BLOCKED_PENDING_THREE_PLATFORM_EVIDENCE':
-        errors.append('Release acceptance remains blocked until a reviewed platform-evidence gate replaces this initial lock.')
+    allowed_platform_states = ('GAP', 'UNVERIFIED', 'IN_PROGRESS', 'BLOCKED', 'VERIFIED')
+    if first.get('id') != 'FC-03' or any(first.get(p) not in allowed_platform_states for p in ('web', 'android', 'ios')):
+        errors.append('The FC-03 three-platform evidence state is invalid.')
+
+    phase9 = gate.get('phase9Acceptance', {})
+    if delivery_status == PLATFORM_ACCEPTED:
+        if any(first.get(p) != 'VERIFIED' for p in ('web', 'android', 'ios')):
+            errors.append('PLATFORM_ACCEPTED requires FC-03 Web, Android and iOS to be VERIFIED.')
+        if any(phase9.get(p) != 'VERIFIED' for p in ('web', 'android', 'ios')):
+            errors.append('PLATFORM_ACCEPTED requires Phase 9 exact-head Web, Android and iOS evidence.')
+        head = phase9.get('exactHead', '')
+        if len(head) != 40 or any(c not in '0123456789abcdef' for c in head):
+            errors.append('Phase 9 platform acceptance must record a full lowercase exact-head SHA.')
+        if not isinstance(phase9.get('connectedRuntimeRunId'), int):
+            errors.append('Phase 9 platform acceptance must record the connected runtime run ID.')
+
+    release_acceptance = gate.get('releaseAcceptance')
+    if release_acceptance not in ('BLOCKED_PENDING_THREE_PLATFORM_EVIDENCE', PHASE10_BLOCK, RELEASE_AUTHORIZED):
+        errors.append('Unknown release acceptance state.')
+    if delivery_status == PLATFORM_ACCEPTED and release_acceptance == 'BLOCKED_PENDING_THREE_PLATFORM_EVIDENCE':
+        errors.append('Three-platform evidence is recorded; release blocking must now name the remaining authority gate.')
+    if release_acceptance == RELEASE_AUTHORIZED and delivery_status != PLATFORM_ACCEPTED:
+        errors.append('Release cannot be authorized without accepted Flutter platform evidence.')
+
     legacy = [p for p in changed if p.startswith(('frontend/src/', 'frontend/e2e/'))]
     if legacy:
         errors.append('New React product UI work is stopped by FLUTTER-HARD-GATE: ' + ', '.join(legacy))
+
     if any(p.startswith('apps/trading_client/') or p.startswith('.github/workflows/flutter-') for p in changed):
         for required in ('pubspec.yaml', 'lib/main.dart', 'web/index.html', 'ios/Runner.xcodeproj/project.pbxproj'):
             if not (root / 'apps/trading_client' / required).is_file():
@@ -68,8 +98,12 @@ def validate(root, changed=(), require_complete=False):
             errors.append('Phase-boundary native CI must retain explicit dispatch support.')
         if 'types: [ready_for_review]' in native_text:
             errors.append('Native CI must not run merely because every ordinary PR becomes ready for review.')
-    if require_complete:
-        errors.append('FLUTTER-HARD-GATE: product deployment is blocked. Flutter web/Android/iOS implementation and runtime acceptance are not verified. React CI cannot release this gate.')
+
+    if require_complete and release_acceptance != RELEASE_AUTHORIZED:
+        if release_acceptance == PHASE10_BLOCK:
+            errors.append('RELEASE-HARD-GATE: public deployment is blocked pending Phase 10 authentication/authorization/security hardening. Three-platform Flutter evidence is green, but the shared browser/operator API-key baseline is not production release authority.')
+        else:
+            errors.append('FLUTTER-HARD-GATE: product deployment is blocked pending required three-platform evidence and release authority.')
     return errors
 
 
@@ -81,17 +115,22 @@ def main():
     root = Path(__file__).resolve().parents[1]
     changed = []
     if args.base_sha:
-        # argv array, not a shell; reject non-commit inputs before constructing a revision range.
         if len(args.base_sha) != 40 or any(c not in '0123456789abcdef' for c in args.base_sha):
             parser.error('--base-sha must be a full lowercase commit SHA')
-        result = subprocess.run(['git', 'diff', '--name-only', '--diff-filter=ACMRT', args.base_sha + '...HEAD', '--'], cwd=root, capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            ['git', 'diff', '--name-only', '--diff-filter=ACMRT', args.base_sha + '...HEAD', '--'],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
         changed = result.stdout.splitlines()
     errors = validate(root, changed, args.require_complete)
     if errors:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print('Flutter delivery policy is consistent. Development CI is fast; full native acceptance is manual-only phase-boundary/release/native-sensitive evidence. This is NOT itself a runtime acceptance pass.')
+    print('Flutter delivery authority is consistent. Platform acceptance and public-release authorization are separate gates.')
     return 0
 
 
