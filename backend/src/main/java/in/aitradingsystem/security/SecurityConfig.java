@@ -38,7 +38,18 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/actuator/health/**", "/actuator/info", "/error",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .requestMatchers("/api/**").hasRole("OPERATOR")
+                // Phase 10 authorization baseline: reads are available to every authenticated app role.
+                .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                // ADMIN owns security/risk/execution policy and emergency controls.
+                .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
+                    .hasAnyRole("ADMIN", "OPERATOR")
+                // TRADER may perform PAPER/research/approval mutations; ADMIN inherits that capability.
+                .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
+                    .hasAnyRole("TRADER", "ADMIN", "OPERATOR")
+                // Session lifecycle is available to any authenticated application role.
+                .requestMatchers("/api/auth/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                // Any mutation not explicitly classified above fails closed to ADMIN only.
+                .requestMatchers("/api/**").hasAnyRole("ADMIN", "OPERATOR")
                 .anyRequest().denyAll())
             .addFilterBefore(apiKeyFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(sessionFilter, ApiKeyAuthenticationFilter.class)
