@@ -106,44 +106,17 @@ class _RiskApprovalsPageState extends State<RiskApprovalsPage> {
 
   Future<void> _decide(ApprovalView approval, String decision) async {
     if (_mutating || !approval.isPending) return;
-    final actorController = TextEditingController();
-    final reasonController = TextEditingController();
     try {
-      final submitted = await showDialog<bool>(
+      final input = await showDialog<_ApprovalInput>(
         context: context,
-        builder: (context) => AlertDialog(
-          title: Text('${_decisionLabel(decision)} approval'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('Order ${approval.orderId}\nPolicy v${approval.policyVersion} • row v${approval.rowVersion}'),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('approval-actor'),
-                controller: actorController,
-                decoration: const InputDecoration(labelText: 'Actor'),
-                autofocus: true,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('approval-reason'),
-                controller: reasonController,
-                decoration: const InputDecoration(labelText: 'Reason (optional)'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-            FilledButton(
-              key: const ValueKey('confirm-approval-decision'),
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(_decisionLabel(decision)),
-            ),
-          ],
+        builder: (context) => _ApprovalDecisionDialog(
+          approval: approval,
+          title: '${_decisionLabel(decision)} approval',
+          confirmLabel: _decisionLabel(decision),
         ),
       );
-      if (submitted != true || !mounted) return;
-      final actor = actorController.text.trim();
+      if (input == null || !mounted) return;
+      final actor = input.actor;
       if (actor.isEmpty) {
         setState(() => _localError = 'Approval actor is required.');
         return;
@@ -158,7 +131,7 @@ class _RiskApprovalsPageState extends State<RiskApprovalsPage> {
         approval: approval,
         decision: decision,
         actor: actor,
-        reason: reasonController.text.trim().isEmpty ? null : reasonController.text.trim(),
+        reason: input.reason,
       );
       if (!mounted) return;
       await _refresh();
@@ -166,8 +139,6 @@ class _RiskApprovalsPageState extends State<RiskApprovalsPage> {
       if (!mounted) return;
       setState(() => _failure = failure);
     } finally {
-      actorController.dispose();
-      reasonController.dispose();
       if (mounted) setState(() => _mutating = false);
     }
   }
@@ -359,4 +330,81 @@ class _RiskApprovalsPageState extends State<RiskApprovalsPage> {
         'CANCELLED' => 'Cancel',
         _ => decision,
       };
+}
+
+class _ApprovalInput {
+  const _ApprovalInput({required this.actor, this.reason});
+
+  final String actor;
+  final String? reason;
+}
+
+class _ApprovalDecisionDialog extends StatefulWidget {
+  const _ApprovalDecisionDialog({
+    required this.approval,
+    required this.title,
+    required this.confirmLabel,
+  });
+
+  final ApprovalView approval;
+  final String title;
+  final String confirmLabel;
+
+  @override
+  State<_ApprovalDecisionDialog> createState() => _ApprovalDecisionDialogState();
+}
+
+// Controllers live in the dialog state so they are disposed only after the
+// dialog route has finished animating out.
+class _ApprovalDecisionDialogState extends State<_ApprovalDecisionDialog> {
+  final _actorController = TextEditingController();
+  final _reasonController = TextEditingController();
+
+  @override
+  void dispose() {
+    _actorController.dispose();
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final approval = widget.approval;
+    return AlertDialog(
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('Order ${approval.orderId}\nPolicy v${approval.policyVersion} • row v${approval.rowVersion}'),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('approval-actor'),
+            controller: _actorController,
+            decoration: const InputDecoration(labelText: 'Actor'),
+            autofocus: true,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('approval-reason'),
+            controller: _reasonController,
+            decoration: const InputDecoration(labelText: 'Reason (optional)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          key: const ValueKey('confirm-approval-decision'),
+          onPressed: () {
+            final reason = _reasonController.text.trim();
+            Navigator.pop(
+              context,
+              _ApprovalInput(actor: _actorController.text.trim(), reason: reason.isEmpty ? null : reason),
+            );
+          },
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
 }
