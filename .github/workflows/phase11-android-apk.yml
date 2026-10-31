@@ -1,0 +1,77 @@
+name: Phase 11 - Android APK delivery
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'HTTPS base URL reachable from the physical Android device (for example https://api.example.com)'
+        required: true
+        type: string
+
+concurrency:
+  group: phase11-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate physical-device API endpoint
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          raw = os.environ['API_BASE_URL'].strip()
+          parsed = urlparse(raw)
+          blocked = {'localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2', '::1'}
+          if parsed.scheme != 'https' or not parsed.hostname:
+              raise SystemExit('api_base_url must be an absolute HTTPS URL reachable from the Android phone')
+          if parsed.hostname.lower() in blocked:
+              raise SystemExit('api_base_url cannot target localhost or the Android-emulator host alias')
+          print(f'Validated physical-device endpoint: {parsed.scheme}://{parsed.hostname}')
+          PY
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build sideloadable release APK
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url }}
+        run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+
+      - name: Record APK checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-trading-android-${{ github.sha }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
