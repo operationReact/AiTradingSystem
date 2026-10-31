@@ -30,6 +30,14 @@ Future<void> waitForFinder(
   expect(finder, findsOneWidget);
 }
 
+Future<void> disposeConnectedApp(WidgetTester tester) async {
+  // The production shell owns animated/global controls. Explicitly dispose the
+  // mounted app after each native journey so iOS integration-test teardown does
+  // not keep animation/timer work alive after assertions have completed.
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+}
+
 Future<void> openOperationsHealth(WidgetTester tester, OperatorSession session) async {
   await tester.pumpWidget(TradingApp(
     repositoryFactory: () => HttpHealthRepository(session: session, baseUri: Uri.parse(connectedApiBaseUrl)),
@@ -75,6 +83,7 @@ void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('connected native runtime shows degraded/UNKNOWN-safe real backend evidence and survives theme/style rebuilds', (tester) async {
+    addTearDown(() => disposeConnectedApp(tester));
     expect(connectedApiBaseUrl, isNotEmpty);
     expect(connectedApiKey, isNotEmpty);
     final session = OperatorSession();
@@ -106,6 +115,7 @@ void main() {
   });
 
   testWidgets('connected native runtime renders authentication rejection without leaking credential text', (tester) async {
+    addTearDown(() => disposeConnectedApp(tester));
     final session = OperatorSession();
     await openOperationsHealth(tester, session);
     final badKey = '${connectedApiKey}wrong';
