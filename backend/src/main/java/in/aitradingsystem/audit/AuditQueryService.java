@@ -71,7 +71,9 @@ public class AuditQueryService {
     }
     private Filter resolve(Filter input) {
         if (input==null) input=new Filter(null,null,null,null,null,null,null);
-        Instant to=input.to()==null?clock.instant():input.to();
+        // Keep explicit windows half-open [from,to), but make the implicit "through now" window
+        // read-your-write safe for events persisted at exactly the injected clock instant.
+        Instant to=input.to()==null?clock.instant().plusNanos(1):input.to();
         Instant from=input.from()==null?to.minus(Duration.ofDays(7)):input.from();
         if (!to.isAfter(from) || Duration.between(from,to).compareTo(Duration.ofDays(31))>0)
             throw new IllegalArgumentException("Audit window must be ordered and at most 31 days");
