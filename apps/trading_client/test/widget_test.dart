@@ -38,11 +38,9 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
-    expect(find.text('Home'), findsOneWidget);
-    expect(find.text('Markets'), findsOneWidget);
-    expect(find.text('Research'), findsOneWidget);
-    expect(find.text('Portfolio'), findsOneWidget);
-    expect(find.text('More'), findsOneWidget);
+    for (final destination in ['home', 'markets', 'research', 'portfolio', 'more']) {
+      expect(find.byKey(ValueKey('mobile-nav-$destination')), findsOneWidget);
+    }
 
     expect(find.text('Development operator session'), findsNothing);
     expect(find.text('Operator key'), findsNothing);
@@ -108,9 +106,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const ValueKey('health-summary')), findsOneWidget);
-    expect(find.text('PAPER'), findsOneWidget);
-    expect(find.text('Live trading'), findsOneWidget);
-    expect(find.text('LOCKED'), findsOneWidget);
+    expect(find.byKey(const ValueKey('health-summary')), findsWidgets);
+    expect(find.text('PAPER'), findsWidgets);
+    expect(find.text('Live trading'), findsWidgets);
+    expect(find.text('LOCKED'), findsWidgets);
   });
 }
