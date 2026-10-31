@@ -10,6 +10,10 @@ on:
       - 'docs/flutter-delivery-gate.json'
   workflow_dispatch:
 
+concurrency:
+  group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -149,7 +153,7 @@ jobs:
 
   android-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:16-alpine
@@ -199,12 +203,23 @@ jobs:
           p.write_text(s)
           PY
           flutter pub get
+      - name: Enable Android emulator hardware acceleration
+        run: |
+          if [ ! -e /dev/kvm ]; then
+            echo '::error::/dev/kvm is unavailable on this runner; refusing a slow software-emulated Android gate.'
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          test -r /dev/kvm -a -w /dev/kvm
+          ls -l /dev/kvm
       - name: Connected Android emulator journey
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_6
+          emulator-boot-timeout: 300
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
           script: cd apps/trading_client && flutter test integration_test/connected_health_app_test.dart -d emulator-5554 --dart-define=API_BASE_URL=http://10.0.2.2:8080 --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
       - name: Upload Android/backend evidence
         if: always()
@@ -216,7 +231,7 @@ jobs:
 
   ios-runtime:
     runs-on: macos-latest
-    timeout-minutes: 40
+    timeout-minutes: 25
     env:
       SPRING_DATASOURCE_URL: jdbc:postgresql://127.0.0.1:5432/aitrading
       SPRING_DATASOURCE_USERNAME: runner
@@ -266,9 +281,26 @@ jobs:
           raise SystemExit('No available iPhone simulator')
           PY
           xcrun simctl boot "$(cat /tmp/simulator_id)" || true
+          xcrun simctl bootstatus "$(cat /tmp/simulator_id)" -b
       - name: Connected iOS Simulator journey
         working-directory: apps/trading_client
-        run: flutter test integration_test/connected_health_app_test.dart -d "$(cat /tmp/simulator_id)" --dart-define=API_BASE_URL=http://127.0.0.1:8080 --dart-define=CONNECTED_API_KEY=$CONNECTED_API_KEY
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, subprocess, sys
+          simulator_id = pathlib.Path('/tmp/simulator_id').read_text().strip()
+          cmd = [
+              'flutter', 'test', 'integration_test/connected_health_app_test.dart',
+              '-d', simulator_id,
+              '--dart-define=API_BASE_URL=http://127.0.0.1:8080',
+              f"--dart-define=CONNECTED_API_KEY={os.environ['CONNECTED_API_KEY']}",
+          ]
+          try:
+              result = subprocess.run(cmd, timeout=720)
+          except subprocess.TimeoutExpired:
+              print('iOS connected runtime exceeded 12 minutes; failing fast instead of hanging the PR gate.')
+              sys.exit(124)
+          sys.exit(result.returncode)
+          PY
       - name: Upload iOS/backend evidence
         if: always()
         uses: actions/upload-artifact@v4
