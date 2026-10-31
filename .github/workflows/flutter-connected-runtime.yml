@@ -1,9 +1,10 @@
 name: Flutter connected runtime gate
 
 on:
-  # Full connected Web/Android/iOS acceptance is intentionally NOT a normal
-  # per-PR gate. Dispatch this workflow on the exact final head of each phase,
-  # and again for release candidates.
+  # Cost guard: full connected Web/Android/iOS acceptance is intentionally
+  # manual-only on private repositories. Run it on the exact head only for
+  # native-sensitive changes that truly require it, phase completion, release
+  # candidates, or explicit investigation.
   workflow_dispatch:
     inputs:
       validation_scope:
@@ -12,6 +13,7 @@ on:
         default: phase-completion
         type: choice
         options:
+          - native-sensitive
           - phase-completion
           - release-candidate
           - manual-investigation
@@ -20,22 +22,8 @@ on:
         required: false
         type: string
 
-  # Escalate automatically only when a PR changes native-sensitive surfaces.
-  # Ordinary Dart/UI work is validated by the fast Ubuntu workflow and receives
-  # full native acceptance at the phase boundary. Editing this workflow alone
-  # does not justify burning a native run.
-  pull_request:
-    branches: [dev]
-    types: [opened, synchronize, reopened]
-    paths:
-      - 'apps/trading_client/android/**'
-      - 'apps/trading_client/ios/**'
-      - 'apps/trading_client/pubspec.yaml'
-      - 'apps/trading_client/pubspec.lock'
-      - 'apps/trading_client/integration_test/**'
-
 concurrency:
-  group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
+  group: flutter-connected-runtime-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
