@@ -52,7 +52,7 @@ class SecurityExitGateIT extends AbstractPostgresIT {
     void secureResponsesCarryRequiredBrowserSecurityHeaders() throws Exception {
         mvc.perform(get("/api/health").secure(true))
             .andExpect(status().isOk())
-            .andExpect(header().exists(HttpHeaders.STRICT_TRANSPORT_SECURITY))
+            .andExpect(header().exists("Strict-Transport-Security"))
             .andExpect(header().string("Content-Security-Policy", containsString("default-src 'none'")))
             .andExpect(header().string("X-Frame-Options", "DENY"))
             .andExpect(header().string("Referrer-Policy", "no-referrer"))
