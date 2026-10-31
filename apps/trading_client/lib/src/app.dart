@@ -80,11 +80,15 @@ class _TradingAppState extends State<TradingApp> {
               child: Material(
                 elevation: 3,
                 borderRadius: BorderRadius.circular(16),
-                child: IconButton(
-                  key: const ValueKey('global-workspace-navigation'),
-                  tooltip: 'Open workspace navigation',
-                  onPressed: _openWorkspaceNavigation,
-                  icon: const Icon(Icons.apps_rounded),
+                // Tooltip needs an Overlay, which sits below this builder, so use a Semantics label instead.
+                child: Semantics(
+                  button: true,
+                  label: 'Open workspace navigation',
+                  child: IconButton(
+                    key: const ValueKey('global-workspace-navigation'),
+                    onPressed: _openWorkspaceNavigation,
+                    icon: const Icon(Icons.apps_rounded),
+                  ),
                 ),
               ),
             ),
