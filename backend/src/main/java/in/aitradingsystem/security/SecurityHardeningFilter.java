@@ -22,13 +22,15 @@ public class SecurityHardeningFilter extends OncePerRequestFilter {
     private final int authRequestsPerWindow;
     private final int sensitiveRequestsPerWindow;
     private final long windowSeconds;
+    private final boolean trustForwardedFor;
     private final ConcurrentHashMap<String, WindowCounter> counters = new ConcurrentHashMap<>();
 
     public SecurityHardeningFilter(
             @Value("${app.security.max-request-bytes:1048576}") long maxRequestBytes,
             @Value("${app.security.rate-limit.auth-requests-per-window:10}") int authRequestsPerWindow,
             @Value("${app.security.rate-limit.sensitive-requests-per-window:60}") int sensitiveRequestsPerWindow,
-            @Value("${app.security.rate-limit.window-seconds:60}") long windowSeconds) {
+            @Value("${app.security.rate-limit.window-seconds:60}") long windowSeconds,
+            @Value("${app.security.trust-forwarded-for:false}") boolean trustForwardedFor) {
         if (maxRequestBytes < 1024 || authRequestsPerWindow < 1 || sensitiveRequestsPerWindow < 1 || windowSeconds < 1) {
             throw new IllegalArgumentException("Invalid security hardening limits");
         }
@@ -36,6 +38,7 @@ public class SecurityHardeningFilter extends OncePerRequestFilter {
         this.authRequestsPerWindow = authRequestsPerWindow;
         this.sensitiveRequestsPerWindow = sensitiveRequestsPerWindow;
         this.windowSeconds = windowSeconds;
+        this.trustForwardedFor = trustForwardedFor;
     }
 
     @Override
@@ -89,9 +92,11 @@ public class SecurityHardeningFilter extends OncePerRequestFilter {
     }
 
     private String clientAddress(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",", 2)[0].trim();
+        if (trustForwardedFor) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",", 2)[0].trim();
+            }
         }
         return request.getRemoteAddr();
     }
