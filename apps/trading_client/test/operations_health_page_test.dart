@@ -61,7 +61,7 @@ void main() {
     expect(repository.calls, 0);
   });
 
-  testWidgets('authenticated session renders degraded and UNKNOWN backend evidence', (tester) async {
+  testWidgets('authenticated session renders health state without raw backend reason codes', (tester) async {
     final session = OperatorSession()..setOperatorKey('test-session');
     final repository = FakeHealthRepository(() async => degradedSnapshot());
     await tester.pumpWidget(healthApp(repository: repository, session: session));
@@ -70,7 +70,10 @@ void main() {
     expect(repository.calls, 1);
     expect(find.text('DEGRADED'), findsWidgets);
     expect(find.text('UNKNOWN'), findsWidgets);
-    expect(find.textContaining('NO_RUN_EVIDENCE'), findsOneWidget);
+    expect(find.text('Updated 0s ago'), findsOneWidget);
+    expect(find.text('Status updated'), findsOneWidget);
+    expect(find.textContaining('NO_RUN_EVIDENCE'), findsNothing);
+    expect(find.textContaining('READ_SUCCEEDED'), findsNothing);
   });
 
   testWidgets('summary metrics expose stable product accessibility labels', (tester) async {
