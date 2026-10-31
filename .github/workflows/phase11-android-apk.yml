@@ -67,6 +67,35 @@ jobs:
           grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
 
+      - name: Normalize generated Android Gradle compatibility
+        run: |
+          grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('android/app/build.gradle.kts')
+          text = path.read_text()
+          updated, count = re.subn(
+              r'\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*JavaVersion\.VERSION_17\.toString\(\)\s*\}\s*',
+              '\n',
+              text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('Expected generated kotlinOptions JVM target block was not found')
+
+          modern_kotlin = '''\nkotlin {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n\n'''
+          marker = 'flutter {'
+          if marker not in updated:
+              raise SystemExit('Expected generated Flutter Gradle block was not found')
+          updated = updated.replace(marker, modern_kotlin + marker, 1)
+          path.write_text(updated)
+          PY
+          grep -q '^android.newDsl=false$' android/gradle.properties
+          grep -q 'compilerOptions' android/app/build.gradle.kts
+          ! grep -q 'kotlinOptions' android/app/build.gradle.kts
+
       - name: Resolve dependencies
         run: flutter pub get
 
