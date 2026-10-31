@@ -46,12 +46,14 @@ class AuthenticatedApiClient {
   Future<Object?> getJson(
     String path, {
     Map<String, String?> query = const {},
+    Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 10),
   }) =>
       _send(
         method: 'GET',
         path: path,
         query: query,
+        extraHeaders: headers,
         timeout: timeout,
       );
 
@@ -59,12 +61,14 @@ class AuthenticatedApiClient {
     String path, {
     Object? body,
     Map<String, String?> query = const {},
+    Map<String, String> headers = const {},
     Duration timeout = const Duration(seconds: 20),
   }) =>
       _send(
         method: 'POST',
         path: path,
         query: query,
+        extraHeaders: headers,
         body: body,
         timeout: timeout,
       );
@@ -73,6 +77,7 @@ class AuthenticatedApiClient {
     required String method,
     required String path,
     required Map<String, String?> query,
+    required Map<String, String> extraHeaders,
     Object? body,
     required Duration timeout,
   }) async {
@@ -86,7 +91,10 @@ class AuthenticatedApiClient {
         if (entry.value != null && entry.value!.isNotEmpty) entry.key: entry.value!,
     };
     final uri = base.replace(queryParameters: queryParameters.isEmpty ? null : queryParameters);
-    final headers = <String, String>{
+    final requestHeaders = <String, String>{
+      ...extraHeaders,
+      // Authentication and representation headers are owned by this client and
+      // cannot be replaced by feature repositories.
       'X-API-Key': key,
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
@@ -94,11 +102,11 @@ class AuthenticatedApiClient {
 
     try {
       final response = switch (method) {
-        'GET' => await client.get(uri, headers: headers).timeout(timeout),
+        'GET' => await client.get(uri, headers: requestHeaders).timeout(timeout),
         'POST' => await client
             .post(
               uri,
-              headers: headers,
+              headers: requestHeaders,
               body: body == null ? null : jsonEncode(body),
             )
             .timeout(timeout),
@@ -117,8 +125,12 @@ class AuthenticatedApiClient {
         String code = 'API_REQUEST_FAILED';
         try {
           final decoded = jsonDecode(response.body);
-          if (decoded is Map<String, dynamic> && decoded['code'] != null) {
-            code = '${decoded['code']}';
+          if (decoded is Map<String, dynamic>) {
+            if (decoded['code'] != null) {
+              code = '${decoded['code']}';
+            } else if (decoded['title'] != null) {
+              code = '${decoded['title']}';
+            }
           }
         } catch (_) {
           // Keep the generic code when an error response is not JSON.
