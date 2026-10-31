@@ -18,8 +18,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Authenticates the single operator with a server-side key. The key is never logged or echoed.
- * An empty configured key authenticates nobody (fail closed).
+ * Legacy operator-key authentication retained for local/dev and automation compatibility while
+ * Phase 10 migrates untrusted Web/Android/iOS clients to server-side sessions. The key is never
+ * logged or echoed. An empty configured key authenticates nobody (fail closed).
  */
 @Component
 public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
@@ -31,18 +32,20 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     public ApiKeyAuthenticationFilter(@Value("${app.security.api-key:}") String apiKey) {
         this.expectedKey = apiKey == null ? new byte[0] : apiKey.getBytes(StandardCharsets.UTF_8);
         if (expectedKey.length == 0) {
-            log.warn("app.security.api-key is not set: protected API endpoints will reject all requests");
+            log.warn("app.security.api-key is not set: legacy API-key authentication is disabled");
         }
     }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
             throws ServletException, IOException {
-        String presented = request.getHeader(HEADER);
-        if (expectedKey.length > 0 && presented != null
-                && MessageDigest.isEqual(expectedKey, presented.getBytes(StandardCharsets.UTF_8))) {
-            SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
-                "operator", null, List.of(new SimpleGrantedAuthority("ROLE_OPERATOR"))));
+        if (SecurityContextHolder.getContext().getAuthentication() == null) {
+            String presented = request.getHeader(HEADER);
+            if (expectedKey.length > 0 && presented != null
+                    && MessageDigest.isEqual(expectedKey, presented.getBytes(StandardCharsets.UTF_8))) {
+                SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(
+                    "operator", null, List.of(new SimpleGrantedAuthority("ROLE_OPERATOR"))));
+            }
         }
         chain.doFilter(request, response);
     }

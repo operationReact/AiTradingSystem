@@ -38,8 +38,15 @@ management:
 app:
   trading-mode: ${TRADING_MODE:PAPER}
   security:
-    # Operator key for protected /api calls. Empty value means every protected call is rejected (fail closed).
+    # Legacy operator key for local/dev and automation compatibility only. Empty rejects all API-key auth.
     api-key: ${APP_API_KEY:}
+    # Disabled by default. This temporary bridge converts a valid legacy key into a server-side session for local/dev testing.
+    dev-session-bootstrap-enabled: ${APP_DEV_SESSION_BOOTSTRAP_ENABLED:false}
+    session:
+      # Server-side opaque sessions expire after 8h by default and never persist raw tokens.
+      ttl-seconds: ${APP_SESSION_TTL_SECONDS:28800}
+      # Production default is Secure; local HTTP development may explicitly override to false.
+      cookie-secure: ${APP_SESSION_COOKIE_SECURE:true}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
   paper:
