@@ -16,6 +16,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 @Component
 public class SecurityHardeningFilter extends OncePerRequestFilter {
+    private static final int HTTP_TOO_MANY_REQUESTS = 429;
+
     private final long maxRequestBytes;
     private final int authRequestsPerWindow;
     private final int sensitiveRequestsPerWindow;
@@ -49,7 +51,7 @@ public class SecurityHardeningFilter extends OncePerRequestFilter {
         if (rateClass != RateClass.NONE && exceeded(request, rateClass)) {
             long retryAfter = secondsUntilNextWindow();
             response.setHeader("Retry-After", Long.toString(retryAfter));
-            reject(response, HttpServletResponse.SC_TOO_MANY_REQUESTS, "RATE_LIMITED", retryAfter);
+            reject(response, HTTP_TOO_MANY_REQUESTS, "RATE_LIMITED", retryAfter);
             return;
         }
 
