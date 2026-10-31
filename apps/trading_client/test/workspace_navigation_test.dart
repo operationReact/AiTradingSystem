@@ -11,51 +11,51 @@ class _UnusedHealthRepository implements HealthRepository {
 }
 
 void main() {
-  testWidgets('global workspace navigation exposes corrected production Flutter screens', (tester) async {
+  testWidgets('mobile product navigation exposes the approved trading workspaces', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     await tester.pumpWidget(
       TradingApp(
         repositoryFactory: _UnusedHealthRepository.new,
         session: OperatorSession(),
       ),
     );
+    await tester.pump();
+
+    final navigation = find.byKey(const ValueKey('product-mobile-navigation'));
+    expect(navigation, findsOneWidget);
+    for (final label in ['Home', 'Markets', 'Research', 'Portfolio', 'More']) {
+      expect(find.text(label), findsOneWidget, reason: 'missing primary destination $label');
+    }
+
+    await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const ValueKey('global-workspace-navigation')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const ValueKey('workspace-navigation-sheet')), findsOneWidget);
-    final sheetScrollable = find.descendant(
-      of: find.byKey(const ValueKey('workspace-navigation-sheet')),
-      matching: find.byType(Scrollable),
-    ).first;
+    expect(find.text('Workspace'), findsOneWidget);
     for (final label in [
-      'Overview',
       'Instruments',
-      'Market data',
-      'Research',
-      'Scenario & regime evidence',
+      'Scenario & regime',
       'PAPER backtests',
-      'PAPER portfolio',
       'PAPER orders',
       'Risk & approvals',
       'News evidence',
       'Notifications',
       'Audit trail',
-      'Trading settings',
       'System health',
+      'Appearance',
     ]) {
-      // The sheet is a lazily built ListView, so lower destinations must be scrolled into the build.
-      await tester.scrollUntilVisible(find.text(label), 200, scrollable: sheetScrollable);
       expect(find.text(label), findsOneWidget, reason: 'missing workspace destination $label');
     }
 
-    final scenarioTile = find.byKey(const ValueKey('workspace-nav-/scenarios'));
-    await tester.scrollUntilVisible(scenarioTile, -200, scrollable: sheetScrollable);
-    await tester.pumpAndSettle();
-    // Invoke the destination's onTap directly: the global overlay controls sit above the sheet and intercept hit tests.
-    tester.widget<ListTile>(scenarioTile).onTap!();
+    await tester.tap(find.text('Scenario & regime'));
     await tester.pumpAndSettle();
     expect(find.text('Scenario evidence lookup'), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-run-id')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
   });
 }
