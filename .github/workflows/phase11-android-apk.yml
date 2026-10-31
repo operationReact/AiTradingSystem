@@ -1,0 +1,130 @@
+name: Phase 11 - Android APK delivery
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/phase11-android-apk.yml'
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'HTTPS base URL reachable from the physical Android device (for example https://api.example.com)'
+        required: true
+        type: string
+
+concurrency:
+  group: phase11-android-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    env:
+      API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://apk-ci.invalid' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate physical-device API endpoint
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          raw = os.environ['API_BASE_URL'].strip()
+          parsed = urlparse(raw)
+          blocked = {'localhost', '127.0.0.1', '0.0.0.0', '10.0.2.2', '::1'}
+          if parsed.scheme != 'https' or not parsed.hostname:
+              raise SystemExit('api_base_url must be an absolute HTTPS URL reachable from the Android phone')
+          if parsed.hostname.lower() in blocked:
+              raise SystemExit('api_base_url cannot target localhost or the Android-emulator host alias')
+          print(f'Validated physical-device endpoint: {parsed.scheme}://{parsed.hostname}')
+          PY
+
+      - name: Mark CI-only endpoint
+        if: github.event_name == 'pull_request'
+        run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Restore modern Android v2 scaffold
+        run: |
+          flutter create --platforms=android --project-name trading_client --org in.aitradingsystem .
+          test -f android/gradlew
+          test -f android/settings.gradle.kts
+          grep -q 'io.flutter.embedding.android.FlutterActivity' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+          grep -q 'android:value="2"' android/app/src/main/AndroidManifest.xml
+
+      - name: Normalize generated Android Gradle compatibility
+        run: |
+          grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_path = Path('android/app/build.gradle.kts')
+          gradle_text = gradle_path.read_text()
+          updated, count = re.subn(
+              r'\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*JavaVersion\.VERSION_17\.toString\(\)\s*\}\s*',
+              '\n',
+              gradle_text,
+              count=1,
+          )
+          if count != 1:
+              raise SystemExit('Expected generated kotlinOptions JVM target block was not found')
+
+          modern_kotlin = '''\nkotlin {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n\n'''
+          marker = 'flutter {'
+          if marker not in updated:
+              raise SystemExit('Expected generated Flutter Gradle block was not found')
+          updated = updated.replace(marker, modern_kotlin + marker, 1)
+          gradle_path.write_text(updated)
+
+          activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
+          activity_text = activity_path.read_text()
+          expected = 'package in.aitradingsystem.trading_client'
+          if expected not in activity_text:
+              raise SystemExit('Expected generated MainActivity package declaration was not found')
+          activity_path.write_text(activity_text.replace(expected, 'package `in`.aitradingsystem.trading_client', 1))
+          PY
+          grep -q '^android.newDsl=false$' android/gradle.properties
+          grep -q 'compilerOptions' android/app/build.gradle.kts
+          ! grep -q 'kotlinOptions' android/app/build.gradle.kts
+          grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build sideloadable release APK
+        run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+
+      - name: Record APK checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-trading-android-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
