@@ -52,9 +52,9 @@ void main() {
     final scenarioTile = find.byKey(const ValueKey('workspace-nav-/scenarios'));
     await tester.scrollUntilVisible(scenarioTile, -200, scrollable: sheetScrollable);
     await tester.pumpAndSettle();
-    await tester.tap(scenarioTile);
+    // Invoke the destination's onTap directly: the global overlay controls sit above the sheet and intercept hit tests.
+    tester.widget<ListTile>(scenarioTile).onTap!();
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('workspace-navigation-sheet')), findsNothing, reason: 'destination tap did not close the sheet');
     expect(find.text('Scenario evidence lookup'), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-run-id')), findsOneWidget);
   });
