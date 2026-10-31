@@ -23,7 +23,7 @@ abstract final class ResponsiveLayout {
       };
 
   static double horizontalPadding(double width) => switch (classify(width)) {
-        ResponsiveClass.mobile => 16,
+        ResponsiveClass.mobile => width <= 320 ? 0 : 16,
         ResponsiveClass.adaptive => 24,
         ResponsiveClass.desktop => 56,
       };
