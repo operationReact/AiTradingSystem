@@ -113,7 +113,7 @@ public class AngelOneApiClient {
         return data;
     }
 
-    private JsonNode call(String path, String jwtToken, Object body) {
+    private JsonNode call(String path, String jwtToken, JsonNode body) {
         long startedAt = metrics == null ? 0L : metrics.start();
         try {
             JsonNode result = rest.post()
@@ -126,7 +126,10 @@ public class AngelOneApiClient {
                         h.set("X-SourceID", "WEB");
                         if (jwtToken != null) h.setBearerAuth(jwtToken);
                     })
-                    .body(body)
+                    // Serialize the JSON tree explicitly. Passing JsonNode as Object lets the active HTTP converter
+                    // introspect JsonNode's bean-style accessors on some Spring/Jackson combinations, producing a
+                    // metadata object instead of the SmartAPI payload.
+                    .body(body.toString())
                     .exchange((request, response) -> {
                         int status = response.getStatusCode().value();
                         // SmartAPI's current official RateLimit page documents 403 when a provider rate limit is hit.
