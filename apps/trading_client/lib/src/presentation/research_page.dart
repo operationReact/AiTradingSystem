@@ -166,10 +166,11 @@ class _ResearchPageState extends State<ResearchPage> {
             runSpacing: 12,
             crossAxisAlignment: WrapCrossAlignment.end,
             children: [
-              SizedBox(
-                width: 190,
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 140, maxWidth: 190),
                 child: DropdownButtonFormField<String>(
                   key: const ValueKey('research-scan-interval'),
+                  isExpanded: true,
                   initialValue: _interval,
                   decoration: const InputDecoration(labelText: 'Interval'),
                   items: const [
@@ -183,10 +184,11 @@ class _ResearchPageState extends State<ResearchPage> {
                   },
                 ),
               ),
-              SizedBox(
-                width: 150,
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 120, maxWidth: 150),
                 child: DropdownButtonFormField<int>(
                   key: const ValueKey('research-scan-limit'),
+                  isExpanded: true,
                   initialValue: _limit,
                   decoration: const InputDecoration(labelText: 'Universe limit'),
                   items: const [

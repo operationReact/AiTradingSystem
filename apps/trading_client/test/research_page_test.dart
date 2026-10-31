@@ -109,12 +109,16 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('research-candidate-7')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Entry'), 200, scrollable: find.byType(Scrollable).first);
+    final list = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(find.text('Entry'), 200, scrollable: list);
     expect(find.text('Entry'), findsOneWidget);
     expect(find.text('No stored evaluations for this candidate.'), findsOneWidget);
 
-    await tester.scrollUntilVisible(find.byKey(const ValueKey('research-evaluate-candidate')), 200, scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.byKey(const ValueKey('research-evaluate-candidate')));
+    final evaluate = find.byKey(const ValueKey('research-evaluate-candidate'));
+    await tester.scrollUntilVisible(evaluate, 200, scrollable: list);
+    await tester.ensureVisible(evaluate);
+    await tester.pumpAndSettle();
+    await tester.tap(evaluate);
     await tester.pumpAndSettle();
 
     expect(find.text('RESEARCH_SUPPORTED'), findsOneWidget);

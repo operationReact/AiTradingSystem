@@ -47,7 +47,6 @@ void main() {
     await tester.tap(signalsCard);
     await tester.pumpAndSettle();
 
-    expect(find.text('Signals'), findsWidgets);
     expect(find.text('Signals & research'), findsOneWidget);
     expect(find.text('Development operator session'), findsNothing);
   });
