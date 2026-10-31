@@ -27,13 +27,12 @@ void main() {
     );
     await tester.pump();
 
-    final navigation = find.byKey(const ValueKey('product-mobile-navigation'));
-    expect(navigation, findsOneWidget);
-    for (final label in ['Home', 'Markets', 'Research', 'Portfolio', 'More']) {
-      expect(find.text(label), findsOneWidget, reason: 'missing primary destination $label');
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+    for (final destination in ['home', 'markets', 'research', 'portfolio', 'more']) {
+      expect(find.byKey(ValueKey('mobile-nav-$destination')), findsOneWidget);
     }
 
-    await tester.tap(find.text('More'));
+    await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
     await tester.pumpAndSettle();
 
     expect(find.text('Workspace'), findsOneWidget);
