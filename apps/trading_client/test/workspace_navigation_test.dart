@@ -24,6 +24,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('workspace-navigation-sheet')), findsOneWidget);
+    final sheetScrollable = find.descendant(
+      of: find.byKey(const ValueKey('workspace-navigation-sheet')),
+      matching: find.byType(Scrollable),
+    );
     for (final label in [
       'Overview',
       'Instruments',
@@ -40,9 +44,12 @@ void main() {
       'Trading settings',
       'System health',
     ]) {
+      // The sheet is a lazily built ListView, so lower destinations must be scrolled into the build.
+      await tester.scrollUntilVisible(find.text(label), 200, scrollable: sheetScrollable);
       expect(find.text(label), findsOneWidget, reason: 'missing workspace destination $label');
     }
 
+    await tester.scrollUntilVisible(find.text('Scenario & regime evidence'), -200, scrollable: sheetScrollable);
     await tester.tap(find.text('Scenario & regime evidence'));
     await tester.pumpAndSettle();
     expect(find.text('Scenario evidence lookup'), findsOneWidget);

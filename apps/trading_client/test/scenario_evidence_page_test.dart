@@ -77,7 +77,11 @@ void main() {
     expect(repository.requestedId, '11111111-1111-1111-1111-111111111111');
     expect(find.byKey(const ValueKey('scenario-identity')), findsOneWidget);
     expect(find.byKey(const ValueKey('scenario-methodology')), findsOneWidget);
+    // Cards below the fold are lazily built by the page's ListView, so scroll them into the tree first.
+    final pageScrollable = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-outcomes')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-outcomes')), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const ValueKey('scenario-r-distribution')), 200, scrollable: pageScrollable);
     expect(find.byKey(const ValueKey('scenario-r-distribution')), findsOneWidget);
     expect(find.text('Regime: TRENDING_UP'), findsOneWidget);
     expect(find.text('Fallback tier: EXACT_REGIME'), findsOneWidget);
