@@ -85,20 +85,6 @@ PaperOrder _order({String status = 'RISK_APPROVED'}) => PaperOrder(
       correlationId: 'corr-2',
     );
 
-// scrollUntilVisible stops once the finder matches, even when the widget is built but off-screen.
-// Drag until the target rect is inside the page list viewport instead.
-Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target) async {
-  final list = find.byKey(ValueKey(listKey));
-  final viewport = tester.getRect(list);
-  for (var attempt = 0; attempt < 30; attempt++) {
-    final rect = tester.getRect(target);
-    if (rect.top >= viewport.top && rect.bottom <= viewport.bottom) return;
-    await tester.dragFrom(Offset(viewport.left + 2, viewport.center.dy), const Offset(0, -150));
-    await tester.pumpAndSettle();
-  }
-  fail('Target did not become visible inside $listKey');
-}
-
 void main() {
   testWidgets('PAPER portfolio renders backend mode, reconciliation and position evidence', (tester) async {
     final repository = _FakePaperRepository(
@@ -113,7 +99,6 @@ void main() {
     expect(find.text('Mode PAPER'), findsOneWidget);
     expect(find.text('LIVE DISABLED'), findsOneWidget);
     expect(find.text('CASH RECONCILED'), findsOneWidget);
-    await _scrollPageTo(tester, 'paper-portfolio-list', find.byKey(const ValueKey('paper-position-42')));
     expect(find.byKey(const ValueKey('paper-position-42')), findsOneWidget);
     expect(find.textContaining('INFY-EQ'), findsOneWidget);
   });
@@ -130,7 +115,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-symbol')), 'INFY-EQ');
     await tester.enterText(find.byKey(const ValueKey('paper-order-reference-price')), '2500');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await _scrollPageTo(tester, 'paper-orders-list', find.byKey(const ValueKey('paper-order-submit')));
+    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
     await tester.pumpAndSettle();
 
@@ -156,7 +142,8 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-stop-loss')), '2400');
     await tester.enterText(find.byKey(const ValueKey('paper-order-target')), '2800');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await _scrollPageTo(tester, 'paper-orders-list', find.byKey(const ValueKey('paper-order-submit')));
+    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
     await tester.pumpAndSettle();
 
