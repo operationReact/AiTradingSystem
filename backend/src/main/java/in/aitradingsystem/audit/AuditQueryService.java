@@ -73,7 +73,9 @@ public class AuditQueryService {
         if (input==null) input=new Filter(null,null,null,null,null,null,null);
         // Keep explicit windows half-open [from,to), but make the implicit "through now" window
         // read-your-write safe for events persisted at exactly the injected clock instant.
-        Instant to=input.to()==null?clock.instant().plusNanos(1):input.to();
+        // PostgreSQL timestamptz has microsecond precision, so adding only 1ns is rounded back to
+        // the same persisted boundary and still excludes an event written at clock.instant().
+        Instant to=input.to()==null?clock.instant().plusNanos(1_000):input.to();
         Instant from=input.from()==null?to.minus(Duration.ofDays(7)):input.from();
         if (!to.isAfter(from) || Duration.between(from,to).compareTo(Duration.ofDays(31))>0)
             throw new IllegalArgumentException("Audit window must be ordered and at most 31 days");
