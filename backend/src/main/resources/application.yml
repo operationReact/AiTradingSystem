@@ -46,6 +46,8 @@ app:
     api-key: ${APP_API_KEY:}
     # Disabled by default. This temporary bridge converts a valid legacy key into a server-side session for local/dev testing.
     dev-session-bootstrap-enabled: ${APP_DEV_SESSION_BOOTSTRAP_ENABLED:false}
+    # Trust X-Forwarded-For only behind a controlled reverse proxy that overwrites the header.
+    trust-forwarded-for: ${APP_SECURITY_TRUST_FORWARDED_FOR:false}
     # Reject declared request bodies larger than 1 MiB before controller processing.
     max-request-bytes: ${APP_SECURITY_MAX_REQUEST_BYTES:1048576}
     rate-limit:
