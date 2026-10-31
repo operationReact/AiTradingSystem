@@ -22,7 +22,8 @@ on:
 
   # Escalate automatically only when a PR changes native-sensitive surfaces.
   # Ordinary Dart/UI work is validated by the fast Ubuntu workflow and receives
-  # full native acceptance at the phase boundary.
+  # full native acceptance at the phase boundary. Editing this workflow alone
+  # does not justify burning a native run.
   pull_request:
     branches: [dev]
     types: [opened, synchronize, reopened]
@@ -32,7 +33,6 @@ on:
       - 'apps/trading_client/pubspec.yaml'
       - 'apps/trading_client/pubspec.lock'
       - 'apps/trading_client/integration_test/**'
-      - '.github/workflows/flutter-connected-runtime.yml'
 
 concurrency:
   group: flutter-connected-runtime-${{ github.event.pull_request.number || github.ref }}
