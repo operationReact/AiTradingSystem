@@ -7,8 +7,36 @@
   <meta name="description" content="AiTradingSystem operations client">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AiTradingSystem</title>
+  <style>
+    #ats-offline-guard {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(4, 8, 18, 0.96);
+      color: white;
+      font: 600 18px/1.4 system-ui, sans-serif;
+      text-align: center;
+    }
+    html.ats-offline #ats-offline-guard { display: flex; }
+  </style>
 </head>
 <body>
+  <div id="ats-offline-guard" role="alert" aria-live="assertive">
+    Offline — trading actions unavailable
+  </div>
+  <script>
+    // Fail closed while offline: the overlay intercepts all interaction with the trading client.
+    const syncConnectivityState = () => {
+      document.documentElement.classList.toggle('ats-offline', !navigator.onLine);
+    };
+    window.addEventListener('online', syncConnectivityState);
+    window.addEventListener('offline', syncConnectivityState);
+    syncConnectivityState();
+  </script>
   <script>
     {{flutter_bootstrap_js}}
   </script>
