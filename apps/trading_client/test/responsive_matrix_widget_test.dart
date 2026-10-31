@@ -32,10 +32,12 @@ void main() {
     testWidgets('${width.toInt()}px mandatory mobile viewport remains usable', (tester) async {
       await _pumpAt(tester, Size(width, 844));
 
-      expect(find.byKey(const ValueKey('workspace-grid-mobile')), findsOneWidget);
-      expect(find.byKey(const ValueKey('global-design-style-control')), findsOneWidget);
-      expect(find.byKey(const ValueKey('dashboard-state-empty')), findsOneWidget);
-      expect(find.byKey(const ValueKey('dashboard-access-key')), findsOneWidget);
+      expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+      for (final destination in ['home', 'markets', 'research', 'portfolio', 'more']) {
+        expect(find.byKey(ValueKey('mobile-nav-$destination')), findsOneWidget);
+      }
+      expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
+      expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
@@ -43,27 +45,29 @@ void main() {
   testWidgets('768px mandatory adaptive viewport remains usable', (tester) async {
     await _pumpAt(tester, const Size(768, 1024));
 
-    expect(find.byKey(const ValueKey('workspace-grid-adaptive')), findsOneWidget);
-    expect(find.byKey(const ValueKey('workspace-grid-mobile')), findsNothing);
-    expect(find.byKey(const ValueKey('dashboard-access-key')), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mobile-nav-more')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('1024px mandatory viewport enters desktop layout', (tester) async {
+  testWidgets('1024px mandatory viewport enters desktop product layout', (tester) async {
     await _pumpAt(tester, const Size(1024, 900));
 
-    expect(find.byKey(const ValueKey('workspace-grid-desktop')), findsOneWidget);
-    expect(find.byKey(const ValueKey('workspace-grid-adaptive')), findsNothing);
+    expect(find.text('AI Trading System'), findsOneWidget);
+    expect(find.text('Control Center'), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('1440px mandatory desktop viewport keeps primary controls reachable', (tester) async {
+  testWidgets('1440px mandatory desktop viewport keeps product navigation reachable', (tester) async {
     await _pumpAt(tester, const Size(1440, 900));
 
-    expect(find.byKey(const ValueKey('workspace-grid-desktop')), findsOneWidget);
-    expect(find.byKey(const ValueKey('dashboard-access-key')), findsOneWidget);
-    expect(find.byKey(const ValueKey('dashboard-connect')), findsOneWidget);
-    expect(find.byKey(const ValueKey('global-theme-mode-control')), findsOneWidget);
+    expect(find.text('Control Center'), findsOneWidget);
+    expect(find.text('Strategies & Research'), findsOneWidget);
+    expect(find.text('Portfolio & Orders'), findsOneWidget);
+    expect(find.text('Learning & Operations'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

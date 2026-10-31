@@ -29,9 +29,11 @@ Future<void> _pumpGolden(
 }) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = viewport;
+  tester.binding.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
   addTearDown(() {
     tester.view.resetPhysicalSize();
     tester.view.resetDevicePixelRatio();
+    tester.binding.platformDispatcher.clearPlatformBrightnessTestValue();
   });
 
   await tester.pumpWidget(
@@ -43,7 +45,11 @@ Future<void> _pumpGolden(
   await tester.pumpAndSettle();
 
   expect(find.text('AiTradingSystem'), findsOneWidget, reason: designLabel);
-  expect(find.byKey(const ValueKey('dashboard-state-empty')), findsOneWidget);
+  expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
+  expect(find.text('Sign in required'), findsOneWidget);
+  expect(find.text('Secure sign-in is required'), findsOneWidget);
+  expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
+  expect(find.text('Operator access'), findsNothing);
 }
 
 void main() {

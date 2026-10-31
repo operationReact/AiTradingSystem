@@ -31,13 +31,11 @@ class OperationsHealthPage extends StatefulWidget {
 
 class _OperationsHealthPageState extends State<OperationsHealthPage> {
   late final HealthController _controller;
-  late final TextEditingController _keyController;
 
   @override
   void initState() {
     super.initState();
     _controller = HealthController(widget.repository)..addListener(_changed);
-    _keyController = TextEditingController(text: widget.session.operatorKey ?? '');
     if (widget.session.isAuthenticated) _controller.refresh();
   }
 
@@ -45,7 +43,6 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
   void dispose() {
     _controller.removeListener(_changed);
     _controller.dispose();
-    _keyController.dispose();
     super.dispose();
   }
 
@@ -68,13 +65,15 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
           constraints: BoxConstraints(maxWidth: maxWidth),
           child: ListView(
             key: const ValueKey('health-list'),
-            padding: EdgeInsets.fromLTRB(padding, 16, padding, 32),
+            padding: EdgeInsets.fromLTRB(padding, 16, padding, 112),
             children: [
-              _header(context),
-              const SizedBox(height: 16),
-              _authCard(context),
-              const SizedBox(height: 16),
-              _statusBody(context),
+              _productHeader(context),
+              const SizedBox(height: 18),
+              if (!widget.session.isAuthenticated) ...[
+                _signInRequiredCard(context),
+              ] else ...[
+                _statusBody(context),
+              ],
             ],
           ),
         ),
@@ -82,126 +81,171 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
     });
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Operations health')),
+      appBar: AppBar(title: const Text('System health')),
       body: SafeArea(child: body),
     );
   }
 
-  Widget _header(BuildContext context) {
-    return Wrap(
-      spacing: 12,
-      runSpacing: 12,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        SegmentedButton<DesignStyle>(
-          key: const ValueKey('design-style-control'),
-          segments: const [
-            ButtonSegment(value: DesignStyle.neonFuturisticAi, label: Text('Neon AI')),
-            ButtonSegment(value: DesignStyle.cleanModern, label: Text('Clean')),
+  Widget _productHeader(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<TradingColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: LinearGradient(
+          colors: [
+            colors.neonCyan.withValues(alpha: 0.10),
+            colors.neonViolet.withValues(alpha: 0.08),
+            colors.neonMagenta.withValues(alpha: 0.05),
           ],
-          selected: {widget.designStyle},
-          onSelectionChanged: (value) => widget.onDesignStyleChanged(value.first),
         ),
-        DropdownButton<ThemeMode>(
-          key: const ValueKey('theme-mode-control'),
-          value: widget.themeMode,
-          items: const [
-            DropdownMenuItem(value: ThemeMode.system, child: Text('System theme')),
-            DropdownMenuItem(value: ThemeMode.light, child: Text('Light')),
-            DropdownMenuItem(value: ThemeMode.dark, child: Text('Dark')),
-          ],
-          onChanged: (value) {
-            if (value != null) widget.onThemeModeChanged(value);
-          },
-        ),
-      ],
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: colors.neonCyan.withValues(alpha: 0.12),
+            ),
+            child: Icon(Icons.monitor_heart_rounded, color: colors.neonCyan),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Platform status', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                Text(
+                  'Live service health, execution safety and market-data readiness.',
+                  style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _authCard(BuildContext context) {
+  Widget _signInRequiredCard(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
+      key: const ValueKey('health-sign-in-required'),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Development operator session', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            const Text('Credential is held in memory only and is never persisted by this Flutter slice.'),
-            const SizedBox(height: 12),
-            TextField(
-              key: const ValueKey('operator-key-field'),
-              controller: _keyController,
-              obscureText: true,
-              enableSuggestions: false,
-              autocorrect: false,
-              decoration: const InputDecoration(labelText: 'Operator key'),
-              onSubmitted: (_) => _connect(),
+            Icon(Icons.lock_outline_rounded, color: theme.colorScheme.primary, size: 28),
+            const SizedBox(height: 14),
+            Text('Sign in to view system health', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            Text(
+              'Your account session is required before operational and trading-safety details can be displayed.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.4),
             ),
-            const SizedBox(height: 12),
-            Wrap(spacing: 8, runSpacing: 8, children: [
-              FilledButton(
-                key: const ValueKey('connect-health'),
-                onPressed: _controller.loading ? null : _connect,
-                child: const Text('Connect and refresh'),
-              ),
-              OutlinedButton(
-                key: const ValueKey('clear-session'),
-                onPressed: () {
-                  widget.session.clear();
-                  _keyController.clear();
-                  _controller.clearEvidence();
-                },
-                child: const Text('Clear session'),
-              ),
-            ]),
           ],
         ),
       ),
     );
   }
 
-  void _connect() {
-    widget.session.setOperatorKey(_keyController.text);
-    _controller.refresh();
-  }
-
   Widget _statusBody(BuildContext context) {
     if (_controller.loading && _controller.snapshot == null) {
-      return const Center(key: ValueKey('health-loading'), child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()));
+      return const Center(
+        key: ValueKey('health-loading'),
+        child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
+      );
     }
+
     final failure = _controller.failure;
     if (failure != null) {
+      final needsAuth = failure.code == 'AUTHENTICATION_REQUIRED' || failure.code == 'UNAUTHORIZED';
       return Card(
         key: const ValueKey('health-error'),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Health evidence unavailable', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(failure.code),
-            if (failure.correlationId != null) Text('Correlation: ${failure.correlationId}'),
-            const SizedBox(height: 12),
-            FilledButton.tonal(key: const ValueKey('health-retry'), onPressed: _controller.refresh, child: const Text('Retry')),
-          ]),
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                needsAuth ? Icons.lock_outline_rounded : Icons.cloud_off_rounded,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                needsAuth ? 'Your session has expired' : 'System health is temporarily unavailable',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                needsAuth
+                    ? 'Sign in again to continue.'
+                    : 'We could not refresh platform status. Your trading controls remain fail-closed until health is confirmed.',
+              ),
+              if (!needsAuth) ...[
+                const SizedBox(height: 14),
+                FilledButton.tonal(
+                  key: const ValueKey('health-retry'),
+                  onPressed: _controller.refresh,
+                  child: const Text('Try again'),
+                ),
+              ],
+              if (failure.correlationId != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Reference ${failure.correlationId}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                ),
+              ],
+            ],
+          ),
         ),
       );
     }
+
     final snapshot = _controller.snapshot;
     if (snapshot == null) {
-      return const Card(
-        key: ValueKey('health-empty'),
-        child: Padding(padding: EdgeInsets.all(20), child: Text('Connect to load authoritative operational health evidence.')),
+      return Card(
+        key: const ValueKey('health-empty'),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              const Icon(Icons.sync_rounded),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Platform status has not loaded yet.',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              TextButton(onPressed: _controller.refresh, child: const Text('Refresh')),
+            ],
+          ),
+        ),
       );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      _summaryCard(context, snapshot),
-      const SizedBox(height: 12),
-      ...snapshot.components.map((component) => Padding(
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _summaryCard(context, snapshot),
+        const SizedBox(height: 12),
+        ...snapshot.components.map(
+          (component) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: _componentCard(context, component),
-          )),
-    ]);
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _summaryCard(BuildContext context, HealthSnapshot snapshot) {
@@ -215,8 +259,15 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
           children: [
             _metric('Overall', snapshot.state.name.toUpperCase()),
             _metric('Execution', snapshot.executionMode),
-            _metric('LIVE', snapshot.liveAvailable ? 'AVAILABLE' : 'UNAVAILABLE'),
-            _metric('Emergency stop', switch (snapshot.emergencyStopActive) { true => 'ACTIVE', false => 'CLEAR', null => 'UNKNOWN' }),
+            _metric('Live trading', snapshot.liveAvailable ? 'AVAILABLE' : 'LOCKED'),
+            _metric(
+              'Emergency stop',
+              switch (snapshot.emergencyStopActive) {
+                true => 'ACTIVE',
+                false => 'CLEAR',
+                null => 'UNKNOWN',
+              },
+            ),
           ],
         ),
       ),
@@ -255,12 +306,13 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
       HealthState.unsafe => tradingColors.unsafe,
       HealthState.unknown => tradingColors.unknown,
     };
+    final freshness = component.ageSeconds == null ? 'Status updated' : 'Updated ${component.ageSeconds}s ago';
     return Card(
       key: ValueKey('health-component-${component.component}'),
       child: ListTile(
         leading: Icon(Icons.circle, size: 14, color: color, semanticLabel: component.state.name),
         title: Text(component.component),
-        subtitle: Text('${component.reasonCode}${component.ageSeconds == null ? '' : ' • ${component.ageSeconds}s old'}'),
+        subtitle: Text(freshness),
         trailing: Text(component.state.name.toUpperCase(), style: TextStyle(color: color, fontWeight: FontWeight.w700)),
       ),
     );
