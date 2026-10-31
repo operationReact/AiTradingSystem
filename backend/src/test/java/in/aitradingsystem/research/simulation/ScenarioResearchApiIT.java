@@ -18,9 +18,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 class ScenarioResearchApiIT extends AbstractPostgresIT {
@@ -32,7 +32,7 @@ class ScenarioResearchApiIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
     @Autowired ObjectMapper objectMapper;
-    @MockBean ScenarioSimulationService simulations;
+    @MockitoBean ScenarioSimulationService simulations;
 
     private long candidateId;
 

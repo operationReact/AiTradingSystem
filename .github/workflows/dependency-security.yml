@@ -31,7 +31,19 @@ jobs:
 
       - name: Package backend dependency graph
         working-directory: backend
-        run: mvn --batch-mode --no-transfer-progress -DskipTests package
+        shell: bash
+        run: |
+          set -o pipefail
+          mvn --batch-mode --no-transfer-progress -DskipTests package 2>&1 | tee backend-build.log
+
+      - name: Upload backend package failure log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-security-backend-build-log
+          path: backend/backend-build.log
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Scan repository and packaged dependencies for HIGH/CRITICAL vulnerabilities
         uses: aquasecurity/trivy-action@v0.36.0
