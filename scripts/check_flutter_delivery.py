@@ -52,12 +52,10 @@ def validate(root, changed=(), require_complete=False):
         native_workflow = root / '.github/workflows/flutter-connected-runtime.yml'
         native_text = native_workflow.read_text() if native_workflow.is_file() else ''
         for marker in (
+            'native-sensitive',
             'phase-completion',
             'release-candidate',
-            "apps/trading_client/android/**",
-            "apps/trading_client/ios/**",
-            "apps/trading_client/pubspec.yaml",
-            "apps/trading_client/integration_test/**",
+            'manual-investigation',
             'android-runtime:',
             'ios-runtime:',
             'reactivecircus/android-emulator-runner@v2',
@@ -93,7 +91,7 @@ def main():
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print('Flutter delivery policy is consistent. Development CI is fast; full native acceptance is phase-boundary/release evidence with automatic native-sensitive escalation. This is NOT itself a runtime acceptance pass.')
+    print('Flutter delivery policy is consistent. Development CI is fast; full native acceptance is manual-only phase-boundary/release/native-sensitive evidence. This is NOT itself a runtime acceptance pass.')
     return 0
 
 
