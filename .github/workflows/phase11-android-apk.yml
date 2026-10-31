@@ -1,6 +1,11 @@
 name: Phase 11 - Android APK delivery
 
 on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/phase11-android-apk.yml'
   workflow_dispatch:
     inputs:
       api_base_url:
@@ -9,7 +14,7 @@ on:
         type: string
 
 concurrency:
-  group: phase11-android-apk-${{ github.ref }}
+  group: phase11-android-apk-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -22,12 +27,13 @@ jobs:
     defaults:
       run:
         working-directory: apps/trading_client
+    env:
+      API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://apk-ci.invalid' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate physical-device API endpoint
-        env:
-          API_BASE_URL: ${{ inputs.api_base_url }}
+        if: github.event_name == 'workflow_dispatch'
         run: |
           python3 - <<'PY'
           import os
@@ -42,6 +48,10 @@ jobs:
               raise SystemExit('api_base_url cannot target localhost or the Android-emulator host alias')
           print(f'Validated physical-device endpoint: {parsed.scheme}://{parsed.hostname}')
           PY
+
+      - name: Mark CI-only endpoint
+        if: github.event_name == 'pull_request'
+        run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
 
       - uses: subosito/flutter-action@v2
         with:
@@ -59,8 +69,6 @@ jobs:
         run: flutter test
 
       - name: Build sideloadable release APK
-        env:
-          API_BASE_URL: ${{ inputs.api_base_url }}
         run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
 
       - name: Record APK checksum
@@ -69,7 +77,7 @@ jobs:
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: ai-trading-android-${{ github.sha }}
+          name: ai-trading-android-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
           path: |
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
