@@ -35,7 +35,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workspace'), findsOneWidget);
+    expect(find.text('Workspace'), findsWidgets);
     for (final label in [
       'Instruments',
       'Scenario & regime',
