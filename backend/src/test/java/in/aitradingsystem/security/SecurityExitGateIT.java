@@ -69,7 +69,10 @@ class SecurityExitGateIT extends AbstractPostgresIT {
         mvc.perform(get("/api/auth/session").cookie(cookie))
             .andExpect(status().isOk());
 
-        jdbc.sql("UPDATE user_session SET expires_at = now() - interval '1 second' WHERE id = :id")
+        // Preserve the database invariant expires_at > created_at while making the
+        // session unambiguously expired. Moving both timestamps into the past tests
+        // authentication expiry rather than bypassing the schema constraint.
+        jdbc.sql("UPDATE user_session SET created_at = now() - interval '10 minutes', expires_at = now() - interval '1 second' WHERE id = :id")
             .param("id", issued.id())
             .update();
 
