@@ -183,36 +183,82 @@ class _MobileProductNavigation extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) => NavigationBar(
-        key: const ValueKey('product-mobile-navigation'),
-        selectedIndex: _index,
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0:
-              onNavigate('/');
-              break;
-            case 1:
-              onNavigate('/market');
-              break;
-            case 2:
-              onNavigate('/research');
-              break;
-            case 3:
-              onNavigate('/portfolio');
-              break;
-            case 4:
-              onMore();
-              break;
-          }
-        },
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.space_dashboard_outlined), selectedIcon: Icon(Icons.space_dashboard_rounded), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.candlestick_chart_outlined), selectedIcon: Icon(Icons.candlestick_chart_rounded), label: 'Markets'),
-          NavigationDestination(icon: Icon(Icons.radar_outlined), selectedIcon: Icon(Icons.radar_rounded), label: 'Research'),
-          NavigationDestination(icon: Icon(Icons.account_balance_wallet_outlined), selectedIcon: Icon(Icons.account_balance_wallet_rounded), label: 'Portfolio'),
-          NavigationDestination(icon: Icon(Icons.grid_view_rounded), label: 'More'),
-        ],
-      );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<TradingColors>()!;
+    final items = <(IconData, IconData, String)>[
+      (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
+      (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
+      (Icons.radar_outlined, Icons.radar_rounded, 'Research'),
+      (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Portfolio'),
+      (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
+    ];
+
+    return Material(
+      key: const ValueKey('product-mobile-navigation'),
+      color: theme.brightness == Brightness.dark ? const Color(0xF2071020) : theme.colorScheme.surfaceContainer,
+      elevation: 0,
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          height: 72,
+          child: Row(
+            children: List.generate(items.length, (index) {
+              final item = items[index];
+              final selected = _index == index;
+              return Expanded(
+                child: InkWell(
+                  key: ValueKey('mobile-nav-${item.$3.toLowerCase()}'),
+                  onTap: () {
+                    if (index == 4) {
+                      onMore();
+                    } else {
+                      onNavigate(switch (index) {
+                        0 => '/',
+                        1 => '/market',
+                        2 => '/research',
+                        3 => '/portfolio',
+                        _ => '/',
+                      });
+                    }
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: selected ? colors.neonCyan.withValues(alpha: 0.10) : Colors.transparent,
+                      border: selected ? Border.all(color: colors.neonCyan.withValues(alpha: 0.24)) : null,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          selected ? item.$2 : item.$1,
+                          size: 21,
+                          color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.$3,
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                            color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _DesktopProductRail extends StatelessWidget {
@@ -267,6 +313,7 @@ class _DesktopProductRail extends StatelessWidget {
 
 class _RailAction extends StatelessWidget {
   const _RailAction({required this.label, required this.icon, required this.active, required this.onTap});
+
   final String label;
   final IconData icon;
   final bool active;
@@ -274,19 +321,36 @@ class _RailAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<TradingColors>()!;
-    final foreground = active ? colors.neonCyan : Theme.of(context).colorScheme.onSurfaceVariant;
+    final theme = Theme.of(context);
+    final colors = theme.extension<TradingColors>()!;
+    final foreground = active ? colors.neonCyan : theme.colorScheme.onSurfaceVariant;
+
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: ListTile(
-        dense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        selected: active,
-        selectedTileColor: colors.neonCyan.withValues(alpha: 0.07),
-        leading: Icon(icon, size: 19, color: foreground),
-        title: Text(label, style: TextStyle(color: foreground, fontSize: 13, fontWeight: FontWeight.w700)),
-        onTap: onTap,
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: active ? colors.neonCyan.withValues(alpha: 0.07) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            child: Row(
+              children: [
+                Icon(icon, size: 19, color: foreground),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: foreground, fontSize: 12.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
