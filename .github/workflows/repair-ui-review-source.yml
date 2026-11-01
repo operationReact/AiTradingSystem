@@ -9,6 +9,7 @@ on:
       - 'apps/trading_client/tool/fix_trade_intelligence_layout.py'
       - 'apps/trading_client/tool/enhance_trade_intelligence_transparency.py'
       - 'apps/trading_client/tool/fix_trade_intelligence_tabs.py'
+      - 'apps/trading_client/tool/add_transparency_completion.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -31,6 +32,7 @@ jobs:
           python3 tool/fix_trade_intelligence_layout.py
           python3 tool/enhance_trade_intelligence_transparency.py
           python3 tool/fix_trade_intelligence_tabs.py
+          python3 tool/add_transparency_completion.py
 
       - name: Commit repaired source
         run: |
@@ -44,5 +46,5 @@ jobs:
                   apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart \
                   apps/trading_client/lib/src/presentation/review/mock_trade_intelligence_model.dart \
                   apps/trading_client/lib/src/presentation/review/mock_trade_intelligence_report.dart
-          git commit -m 'Finalize phone-visible trade intelligence report'
+          git commit -m 'Finalize complete trading transparency UI'
           git push origin HEAD:ui/post-login-mock-review
