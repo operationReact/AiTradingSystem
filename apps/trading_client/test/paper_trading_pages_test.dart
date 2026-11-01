@@ -117,7 +117,8 @@ void main() {
     expect(repository.submitted?.side, 'BUY');
     expect(repository.submittedIdempotencyKey, startsWith('flutter-paper-'));
     expect(find.byKey(const ValueKey('paper-order-result')), findsOneWidget);
-    expect(find.text('PAPER order RISK_APPROVED'), findsOneWidget);
+    expect(find.text('PAPER order Risk approved'), findsOneWidget);
+    expect(find.text('Risk approved'), findsWidgets);
     // Guard against an actual LIVE execution control. Do not substring-match
     // "LIVE" because legitimate words such as DELIVERY contain those letters.
     expect(find.widgetWithText(FilledButton, 'Place LIVE order'), findsNothing);

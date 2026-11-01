@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/authenticated_api_client.dart';
 import '../data/paper_trading_repository.dart';
+import 'customer_lifecycle_state.dart';
 
 class PaperPortfolioPage extends StatefulWidget {
   const PaperPortfolioPage({required this.repository, super.key});
@@ -205,7 +206,13 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
   Widget _positionCard(PaperPosition position) => Card(
         key: ValueKey('paper-position-${position.instrumentId ?? position.symbol}'),
         child: ListTile(
-          title: Text('${position.exchange} ${position.symbol}'),
+          title: Row(
+            children: [
+              Expanded(child: Text('${position.exchange} ${position.symbol}')),
+              const SizedBox(width: 8),
+              const CustomerLifecycleBadge(state: CustomerLifecycleState.openPosition),
+            ],
+          ),
           subtitle: Text(
             '${position.productType} • ${position.quantity} shares • Avg ${position.averageCost ?? '—'} • Last ${position.markPrice ?? '—'}\n'
             'P&L ${position.unrealizedPnl ?? '—'}',

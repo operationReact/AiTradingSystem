@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/authenticated_api_client.dart';
 import '../data/research_repository.dart';
+import 'customer_lifecycle_state.dart';
 
 class ResearchPage extends StatefulWidget {
   const ResearchPage({required this.repository, super.key});
@@ -268,7 +269,13 @@ class _ResearchPageState extends State<ResearchPage> {
                   (candidate) => ListTile(
                     key: ValueKey('research-candidate-${candidate.candidateId}'),
                     selected: _selected?.id == candidate.candidateId,
-                    title: Text(candidate.tradingSymbol.isEmpty ? 'Instrument ${candidate.instrumentId}' : candidate.tradingSymbol),
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(candidate.tradingSymbol.isEmpty ? 'Instrument ${candidate.instrumentId}' : candidate.tradingSymbol)),
+                        const SizedBox(width: 8),
+                        const CustomerLifecycleBadge(state: CustomerLifecycleState.watching),
+                      ],
+                    ),
                     subtitle: Text('${candidate.exchange} • ${candidate.strategy}\nAI score ${candidate.score.toStringAsFixed(3)} • ${candidate.reasons.join(', ')}'),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right_rounded),
@@ -328,7 +335,13 @@ class _ResearchPageState extends State<ResearchPage> {
                 ..._evaluations.map(
                   (evaluation) => ListTile(
                     dense: true,
-                    title: Text(evaluation.decisionLabel),
+                    title: Row(
+                      children: [
+                        Expanded(child: Text(CustomerLifecycleState.forEvaluation(evaluation.decisionLabel).label)),
+                        const SizedBox(width: 8),
+                        CustomerLifecycleBadge(state: CustomerLifecycleState.forEvaluation(evaluation.decisionLabel)),
+                      ],
+                    ),
                     subtitle: Text(evaluation.reasonCodes.join(', ')),
                     trailing: Text(evaluation.createdAt?.toLocal().toString() ?? ''),
                   ),
