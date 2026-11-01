@@ -17,23 +17,39 @@ public record OrderCommand(
     BigDecimal stopLoss,
     BigDecimal target,
     Instant signalGeneratedAt,
-    ProductType productType
+    ProductType productType,
+    BigDecimal trailingPercent
 ) {
-    /** Backward-compatible PAPER simulation command: legacy callers remain DELIVERY by default. */
+    /** Backward-compatible PAPER simulation command: legacy callers remain DELIVERY with no trailing protection. */
     public OrderCommand(String symbol, Side side, int quantity, BigDecimal entryPrice,
                         BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt) {
-        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, ProductType.DELIVERY);
+        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, ProductType.DELIVERY, null);
+    }
+
+    /** Backward-compatible explicit product command with trailing protection disabled. */
+    public OrderCommand(String symbol, Side side, int quantity, BigDecimal entryPrice,
+                        BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt,
+                        ProductType productType) {
+        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, productType, null);
     }
 
     public OrderCommand {
         if (productType == null) productType = ProductType.DELIVERY;
+        if (trailingPercent != null) {
+            if (side != Side.BUY) {
+                throw new IllegalArgumentException("Trailing protection is supported only for PAPER BUY positions");
+            }
+            if (trailingPercent.signum() <= 0 || trailingPercent.compareTo(new BigDecimal("100")) >= 0) {
+                throw new IllegalArgumentException("trailingPercent must be greater than 0 and less than 100");
+            }
+        }
     }
 
     /** Hash of the normalized payload, used to detect Idempotency-Key reuse with different content. */
     public String canonicalHash() {
         String canonical = String.join("|",
             symbol, side.name(), Integer.toString(quantity), productType.name(),
-            normalize(entryPrice), normalize(stopLoss), normalize(target),
+            normalize(entryPrice), normalize(stopLoss), normalize(target), normalize(trailingPercent),
             signalGeneratedAt == null ? "" : signalGeneratedAt.toString());
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
