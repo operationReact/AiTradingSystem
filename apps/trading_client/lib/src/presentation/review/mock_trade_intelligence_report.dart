@@ -74,21 +74,23 @@ class _MockTradeIntelligenceReportState extends State<MockTradeIntelligenceRepor
   Widget _tabBar() {
     return SizedBox(
       height: 44,
-      child: ListView(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         scrollDirection: Axis.horizontal,
-        children: ['Decision', 'Evidence', 'Confidence', 'Outcome', 'Audit']
-            .map(
-              (tab) => Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(tab),
-                  selected: _tab == tab,
-                  onSelected: (_) => setState(() => _tab = tab),
+        child: Row(
+          children: ['Decision', 'Evidence', 'Confidence', 'Outcome', 'Audit']
+              .map(
+                (tab) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(tab),
+                    selected: _tab == tab,
+                    onSelected: (_) => setState(() => _tab = tab),
+                  ),
                 ),
-              ),
-            )
-            .toList(),
+              )
+              .toList(),
+        ),
       ),
     );
   }
@@ -145,7 +147,7 @@ class _MockTradeIntelligenceReportState extends State<MockTradeIntelligenceRepor
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(children: [Icon(Icons.verified_user_outlined, color: _C.green, size: 18), SizedBox(width: 8), Text('Mandatory risk boundary', style: TextStyle(fontWeight: FontWeight.w900))]),
+              const Row(children: [Icon(Icons.verified_user_outlined, color: _C.green, size: 18), SizedBox(width: 8), Expanded(child: Text('Mandatory risk boundary', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900)))]),
               const SizedBox(height: 8),
               Text(record.riskSummary, style: const TextStyle(color: _C.muted, height: 1.45)),
             ],
