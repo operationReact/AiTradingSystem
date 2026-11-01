@@ -4,6 +4,41 @@ import 'package:flutter/material.dart';
 
 import 'mock_review_data.dart';
 import 'mock_trade_journey.dart';
+import 'mock_trade_intelligence_model.dart';
+import 'mock_trade_intelligence_report.dart';
+
+
+void _openTradeIntelligence(
+  BuildContext context,
+  MockReviewStore store,
+  String symbol, {
+  String side = 'BUY',
+  double? entryPrice,
+  double? exitPrice,
+  double? realizedPnl,
+  bool executed = true,
+  bool closed = false,
+  bool cancelled = false,
+  String exitReason = 'Position still open',
+}) {
+  final record = MockTradeIntelligenceRecord.fromStore(
+    store: store,
+    symbol: symbol,
+    side: side,
+    entryPrice: entryPrice,
+    exitPrice: exitPrice,
+    realizedPnl: realizedPnl,
+    executed: executed,
+    closed: closed,
+    cancelled: cancelled,
+    exitReason: exitReason,
+  );
+  Navigator.of(context).push(
+    MaterialPageRoute<void>(
+      builder: (_) => MockTradeIntelligenceReport(record: record),
+    ),
+  );
+}
 
 enum MockReviewScreen {
   home,
@@ -588,7 +623,21 @@ class _PortfolioReviewPageState extends State<_PortfolioReviewPage> {
           if (widget.store.positions.isEmpty)
             const _EmptyCard(icon: Icons.account_balance_wallet_outlined, title: 'No PAPER positions', message: 'Add a mock PAPER trade from AI Research to populate this view.')
           else
-            ...widget.store.positions.map((position) => Padding(padding: const EdgeInsets.only(bottom: 8), child: _PositionTile(position: position))),
+            ...widget.store.positions.map((position) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: _PositionTile(
+                    position: position,
+                    onTap: () => _openTradeIntelligence(
+                      context,
+                      widget.store,
+                      position.symbol,
+                      entryPrice: position.averagePrice,
+                      executed: true,
+                      closed: false,
+                      exitReason: position.pnl < 0 ? 'Open · thesis under pressure' : 'Open · thesis active',
+                    ),
+                  ),
+                )),
         ],
       ),
     );
@@ -625,7 +674,33 @@ class _OrdersReviewPageState extends State<_OrdersReviewPage> {
           if (_orders.isEmpty)
             const _EmptyCard(icon: Icons.receipt_long_outlined, title: 'No orders in this filter', message: 'Your review-mode PAPER orders will appear here.')
           else
-            ..._orders.map((order) => Padding(padding: const EdgeInsets.only(bottom: 9), child: _OrderTile(order: order))),
+            ..._orders.map((order) {
+              final isClosedExit = order.status == 'Completed' && order.side == 'SELL';
+              final pnl = isClosedExit ? (order.symbol == 'TCS' ? 620.0 : -410.0) : null;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 9),
+                child: _OrderTile(
+                  order: order,
+                  onTap: () => _openTradeIntelligence(
+                    context,
+                    widget.store,
+                    order.symbol,
+                    side: order.side,
+                    entryPrice: order.averagePrice,
+                    exitPrice: isClosedExit ? order.averagePrice : null,
+                    realizedPnl: pnl,
+                    executed: order.status == 'Completed',
+                    closed: isClosedExit,
+                    cancelled: order.status == 'Cancelled',
+                    exitReason: order.status == 'Cancelled'
+                        ? 'Order cancelled before execution'
+                        : isClosedExit
+                            ? 'Mock strategy exit completed'
+                            : 'Order executed · position/audit record available',
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -1228,19 +1303,57 @@ class _MoneyLine extends StatelessWidget {
 }
 
 class _PositionTile extends StatelessWidget {
-  const _PositionTile({required this.position});
+  const _PositionTile({required this.position, required this.onTap});
   final MockPosition position;
+  final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) => _ReviewCard(child: Row(children: [_SymbolAvatar(position.symbol), const SizedBox(width: 10), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(position.symbol, style: const TextStyle(fontWeight: FontWeight.w900)), Text('${position.quantity} qty · Avg ₹${position.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: _Ui.muted, fontSize: 11))])), Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text('₹${position.marketValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900)), Text('${position.pnl >= 0 ? '+' : ''}₹${position.pnl.toStringAsFixed(0)} (${position.pnlPercent.toStringAsFixed(1)}%)', style: TextStyle(color: position.pnl >= 0 ? _Ui.green : _Ui.red, fontSize: 11, fontWeight: FontWeight.w800))])]));
+  Widget build(BuildContext context) => _ReviewCard(
+        onTap: onTap,
+        child: Row(
+          children: [
+            _SymbolAvatar(position.symbol),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(position.symbol, style: const TextStyle(fontWeight: FontWeight.w900)),
+                  Text('${position.quantity} qty · Avg ₹${position.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: _Ui.muted, fontSize: 11)),
+                  const SizedBox(height: 4),
+                  const Text('Tap for full trade analysis', style: TextStyle(color: _Ui.cyan, fontSize: 9, fontWeight: FontWeight.w800)),
+                ],
+              ),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text('₹${position.marketValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w900)), Text('${position.pnl >= 0 ? '+' : ''}₹${position.pnl.toStringAsFixed(0)} (${position.pnlPercent.toStringAsFixed(1)}%)', style: TextStyle(color: position.pnl >= 0 ? _Ui.green : _Ui.red, fontSize: 11, fontWeight: FontWeight.w800))]),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right_rounded, color: _Ui.muted, size: 18),
+          ],
+        ),
+      );
 }
 
 class _OrderTile extends StatelessWidget {
-  const _OrderTile({required this.order});
+  const _OrderTile({required this.order, required this.onTap});
   final MockOrder order;
+  final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final statusColor = order.status == 'Completed' ? _Ui.green : order.status == 'Cancelled' ? _Ui.red : _Ui.cyan;
-    return _ReviewCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Text(order.symbol, style: const TextStyle(fontWeight: FontWeight.w900)), const Spacer(), _Pill(text: order.status, color: statusColor)]), const SizedBox(height: 5), Text('${order.side} · PAPER', style: TextStyle(color: order.side == 'BUY' ? _Ui.cyan : _Ui.magenta, fontSize: 11, fontWeight: FontWeight.w800)), const SizedBox(height: 5), Row(children: [Expanded(child: Text('Qty: ${order.quantity} · Avg: ₹${order.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: _Ui.muted, fontSize: 11))), Text(order.time, style: const TextStyle(color: _Ui.muted, fontSize: 10))])]));
+    return _ReviewCard(
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [Text(order.symbol, style: const TextStyle(fontWeight: FontWeight.w900)), const Spacer(), _Pill(text: order.status, color: statusColor)]),
+          const SizedBox(height: 5),
+          Text('${order.side} · PAPER', style: TextStyle(color: order.side == 'BUY' ? _Ui.cyan : _Ui.magenta, fontSize: 11, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          Row(children: [Expanded(child: Text('Qty: ${order.quantity} · Avg: ₹${order.averagePrice.toStringAsFixed(2)}', style: const TextStyle(color: _Ui.muted, fontSize: 11))), Text(order.time, style: const TextStyle(color: _Ui.muted, fontSize: 10))]),
+          const SizedBox(height: 6),
+          const Row(children: [Icon(Icons.fact_check_outlined, color: _Ui.cyan, size: 14), SizedBox(width: 5), Text('Full trade analysis', style: TextStyle(color: _Ui.cyan, fontSize: 9, fontWeight: FontWeight.w800)), Spacer(), Icon(Icons.chevron_right_rounded, color: _Ui.muted, size: 16)]),
+        ],
+      ),
+    );
   }
 }
 

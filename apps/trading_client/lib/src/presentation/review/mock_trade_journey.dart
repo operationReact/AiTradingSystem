@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import 'mock_review_data.dart';
 import 'mock_transparency_journey.dart';
+import 'mock_trade_intelligence_model.dart';
+import 'mock_trade_intelligence_report.dart';
 
 enum MockTradeJourneyStart { stock, analysis }
 
@@ -272,6 +274,25 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
     );
   }
 
+  void _openFullTradeAnalysis(BuildContext context) {
+    final record = MockTradeIntelligenceRecord.fromStore(
+      store: widget.store,
+      symbol: _quote.symbol,
+      side: _side,
+      entryPrice: _entryPrice,
+      exitPrice: _closed ? _exitPrice : null,
+      realizedPnl: _closed ? _realizedPnl : null,
+      executed: _executed,
+      closed: _closed,
+      exitReason: _closed ? _exitReason : (_executed ? 'Open · AI thesis monitoring active' : 'Pre-trade review'),
+    );
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MockTradeIntelligenceReport(record: record),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -290,6 +311,17 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: _C.cyan,
                 side: const BorderSide(color: Color(0xFF24557A)),
+                minimumSize: const Size.fromHeight(42),
+              ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => _openFullTradeAnalysis(context),
+              icon: const Icon(Icons.fact_check_outlined, size: 18),
+              label: const Text('Full Trade Intelligence Report'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _C.green,
+                side: const BorderSide(color: Color(0xFF245B4C)),
                 minimumSize: const Size.fromHeight(42),
               ),
             ),
