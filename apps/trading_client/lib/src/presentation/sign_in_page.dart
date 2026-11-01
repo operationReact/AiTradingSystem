@@ -10,7 +10,6 @@ class SignInPage extends StatelessWidget {
   );
 
   static const _background = Color(0xFF030817);
-  static const _surface = Color(0xFF081326);
   static const _cyan = Color(0xFF0DEBFF);
   static const _violet = Color(0xFF6E40FF);
   static const _magenta = Color(0xFFFF24C7);
@@ -31,7 +30,9 @@ class SignInPage extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: (constraints.maxHeight - 48).clamp(0, double.infinity),
+                      minHeight: (constraints.maxHeight - 48)
+                          .clamp(0.0, double.infinity)
+                          .toDouble(),
                     ),
                     child: Center(
                       child: ConstrainedBox(
