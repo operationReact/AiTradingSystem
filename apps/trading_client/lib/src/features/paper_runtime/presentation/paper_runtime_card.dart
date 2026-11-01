@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
-import '../../../theme/app_theme.dart';
 import '../data/paper_runtime_repository.dart';
 
 class PaperRuntimeCard extends StatefulWidget {
@@ -28,13 +27,23 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
     try {
       final state = await widget.repository.fetch();
       if (!mounted) return;
-      setState(() { _state = state; _loading = false; _message = null; });
+      setState(() {
+        _state = state;
+        _loading = false;
+        _message = null;
+      });
     } on ApiAuthenticationRequired {
       if (!mounted) return;
-      setState(() { _loading = false; _message = 'Sign in to view PAPER automation.'; });
+      setState(() {
+        _loading = false;
+        _message = 'Sign in to view PAPER automation.';
+      });
     } on ApiFailure {
       if (!mounted) return;
-      setState(() { _loading = false; _message = 'Trading status is temporarily unavailable.'; });
+      setState(() {
+        _loading = false;
+        _message = 'Trading status is temporarily unavailable.';
+      });
     }
   }
 
@@ -46,9 +55,11 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(halt ? 'Stop automated PAPER trading?' : 'Resume automated PAPER trading?'),
-        content: Text(halt
-            ? 'New automated PAPER actions will pause. Existing positions remain visible and can still be managed manually.'
-            : 'Automation can resume, but every trade will still pass the Risk Engine.'),
+        content: Text(
+          halt
+              ? 'New automated PAPER actions will pause. Existing positions remain visible and can still be managed manually.'
+              : 'Automation can resume, but every trade will still pass the Risk Engine.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
           FilledButton(
@@ -71,14 +82,19 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
       });
     } on ApiFailure {
       if (!mounted) return;
-      setState(() { _saving = false; _message = 'Could not update Emergency Stop.'; });
+      setState(() {
+        _saving = false;
+        _message = 'Could not update Emergency Stop.';
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<TradingColors>()!;
+    final scheme = theme.colorScheme;
+    final accent = scheme.primary;
+
     if (_loading) {
       return const SizedBox(height: 112, child: Center(child: CircularProgressIndicator()));
     }
@@ -86,7 +102,10 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
     if (state == null) {
       return Card(
         key: const ValueKey('paper-runtime-sign-in'),
-        child: Padding(padding: const EdgeInsets.all(16), child: Text(_message ?? 'Sign in to view trading status.')),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(_message ?? 'Sign in to view trading status.'),
+        ),
       );
     }
 
@@ -97,42 +116,66 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
             ? 'Auto Trading: Running'
             : 'Manual Trading';
 
+    final panelStart = Color.alphaBlend(accent.withValues(alpha: 0.10), scheme.surface);
+    final panelEnd = Color.alphaBlend(scheme.secondary.withValues(alpha: 0.08), scheme.surface);
+
     return Container(
       key: const ValueKey('paper-runtime-card'),
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: const LinearGradient(
+        gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF061728), Color(0xFF120B2B)],
+          colors: [panelStart, panelEnd],
         ),
-        border: Border.all(color: colors.neonCyan.withValues(alpha: 0.38)),
-        boxShadow: [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.10), blurRadius: 28)],
+        border: Border.all(color: accent.withValues(alpha: 0.38)),
+        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.10), blurRadius: 28)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), color: colors.neonCyan.withValues(alpha: 0.11)),
-              child: Icon(Icons.shield_rounded, color: colors.neonCyan),
-            ),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${state.tradingMode} · ${state.automated ? 'AUTOMATED' : 'MANUAL'}', key: const ValueKey('paper-runtime-mode'), style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 2),
-              Text('Risk Engine: ${state.riskEngineActive ? 'Active' : 'Unavailable'}', style: theme.textTheme.bodySmall?.copyWith(color: colors.neonCyan, fontWeight: FontWeight.w800)),
-            ])),
-          ]),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  color: accent.withValues(alpha: 0.11),
+                ),
+                child: Icon(Icons.shield_rounded, color: accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${state.tradingMode} · ${state.automated ? 'AUTOMATED' : 'MANUAL'}',
+                      key: const ValueKey('paper-runtime-mode'),
+                      style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Risk Engine: ${state.riskEngineActive ? 'Active' : 'Unavailable'}',
+                      style: theme.textTheme.bodySmall?.copyWith(color: accent, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 14),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            _Pill(icon: running ? Icons.bolt_rounded : Icons.pause_circle_outline_rounded, label: statusText),
-            _Pill(icon: Icons.lock_outline_rounded, label: state.liveAvailable ? 'LIVE available' : 'LIVE locked'),
-          ]),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _Pill(icon: running ? Icons.bolt_rounded : Icons.pause_circle_outline_rounded, label: statusText),
+              _Pill(icon: Icons.lock_outline_rounded, label: state.liveAvailable ? 'LIVE available' : 'LIVE locked'),
+            ],
+          ),
           const SizedBox(height: 14),
           Text(
             state.emergencyStopped
@@ -140,7 +183,7 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
                 : state.automated
                     ? 'AI opportunities can enter and exit PAPER positions automatically after mandatory risk checks.'
                     : 'AI can recommend trades; you remain in control of PAPER order submission.',
-            style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.4),
+            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
           ),
           const SizedBox(height: 14),
           SizedBox(
@@ -155,7 +198,10 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
                 : FilledButton.icon(
                     key: const ValueKey('paper-runtime-emergency-stop'),
                     onPressed: _saving ? null : _toggleEmergencyStop,
-                    style: FilledButton.styleFrom(backgroundColor: theme.colorScheme.error, foregroundColor: theme.colorScheme.onError),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: scheme.error,
+                      foregroundColor: scheme.onError,
+                    ),
                     icon: const Icon(Icons.stop_circle_outlined),
                     label: const Text('Emergency Stop'),
                   ),
@@ -175,19 +221,26 @@ class _Pill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<TradingColors>()!;
+    final scheme = Theme.of(context).colorScheme;
+    final accent = scheme.primary;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: colors.neonCyan.withValues(alpha: 0.08),
-        border: Border.all(color: colors.neonCyan.withValues(alpha: 0.22)),
+        color: accent.withValues(alpha: 0.08),
+        border: Border.all(color: accent.withValues(alpha: 0.22)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, size: 14, color: colors.neonCyan),
-        const SizedBox(width: 5),
-        Text(label, style: TextStyle(color: colors.neonCyan, fontSize: 11, fontWeight: FontWeight.w800)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: accent),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(color: accent, fontSize: 11, fontWeight: FontWeight.w800),
+          ),
+        ],
+      ),
     );
   }
 }
