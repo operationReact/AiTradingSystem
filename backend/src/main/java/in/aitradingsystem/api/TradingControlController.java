@@ -4,6 +4,8 @@ import in.aitradingsystem.execution.OrderExecutionMode;
 import in.aitradingsystem.execution.TradingExecutionAuthority;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -29,14 +31,32 @@ public class TradingControlController {
         @Size(max = 40) String confirmation
     ) {}
 
+    public record TradingControlView(
+        String tradingMode,
+        OrderExecutionMode executionMode,
+        boolean liveAvailable,
+        List<String> liveBlockers,
+        Instant checkedAt
+    ) {
+        static TradingControlView from(TradingExecutionAuthority.Snapshot snapshot) {
+            return new TradingControlView(
+                snapshot.tradingMode(),
+                snapshot.orderExecutionMode(),
+                false,
+                TradingExecutionAuthority.LIVE_BLOCKERS,
+                Instant.now());
+        }
+    }
+
     @GetMapping
-    public TradingExecutionAuthority.Snapshot current() {
-        return authority.current();
+    public TradingControlView current() {
+        return TradingControlView.from(authority.current());
     }
 
     @PutMapping
-    public TradingExecutionAuthority.Snapshot change(@Valid @RequestBody ChangeRequest request) {
-        return authority.change(request.tradingMode(), request.executionMode(), request.confirmation());
+    public TradingControlView change(@Valid @RequestBody ChangeRequest request) {
+        return TradingControlView.from(
+            authority.change(request.tradingMode(), request.executionMode(), request.confirmation()));
     }
 
     @ExceptionHandler(TradingExecutionAuthority.LiveModeUnavailableException.class)
