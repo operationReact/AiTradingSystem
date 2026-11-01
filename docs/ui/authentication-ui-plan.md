@@ -19,7 +19,7 @@ Google and Apple authentication are explicitly out of scope. The customer signs 
 - [x] 7. **Sign-in Success** — success confirmation and workspace-loading transition surface.
 - [x] 8. **Home handoff** — existing product Home remains the destination after production authentication is wired; Home itself is not redesigned as part of this auth slice.
 
-Implementation status above means the UI surface and flow are present on the review branch. Final visual acceptance remains pending CI and physical-device review.
+Implementation status above means the UI surface and flow are present on the review branch. Final visual acceptance remains pending physical-device review.
 
 ## Implementation checkpoints
 
@@ -30,8 +30,8 @@ Implementation status above means the UI surface and flow are present on the rev
 - [x] App-level fingerprint enablement preference persisted without storing biometric data.
 - [x] Android biometric permission and `FlutterFragmentActivity` packaging support added.
 - [x] Dedicated widget coverage rewritten for the new auth contract.
-- [ ] Exact-head Flutter analyzer/tests/web build green.
-- [ ] Exact-head Android APK build green with biometric configuration preserved.
+- [x] Exact-head Flutter analyzer/tests/web build green — head `9855012231e39ec29e49303765d04afa541ab3a3`; mobile quality run `41304110811`; Flutter foundation run `41304110806`; visual golden run `41304110817`; dependency review run `41304110812`.
+- [x] Exact-head Android APK build green with biometric configuration preserved — run `41304110843`.
 - [ ] Physical Android visual review approved by user.
 
 ## Functional boundaries
@@ -50,4 +50,4 @@ Each screen must pass Flutter analyzer/tests, render without overflow at 390x844
 
 ## Review state
 
-The screen sequence and mockup alignment are implemented. Do not merge until exact-head CI and the user’s physical-device visual review are both complete.
+The 7-screen auth journey plus Home handoff is implemented and exact-head Flutter/Android validation is green. PR #220 remains draft. The remaining UI acceptance gate is the user’s physical Android review against the locked mockup; production customer-session/token integration remains a separate backend/auth integration gate.
