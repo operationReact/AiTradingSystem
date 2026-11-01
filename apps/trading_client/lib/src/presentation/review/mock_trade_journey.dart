@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'mock_review_data.dart';
+import 'mock_transparency_journey.dart';
 
 enum MockTradeJourneyStart { stock, analysis }
 
@@ -238,6 +239,39 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
     _closed = true;
   }
 
+  MockTransparencyStart get _transparencyStart {
+    if (!_executed) return MockTransparencyStart.preTrade;
+    if (!_closed) return MockTransparencyStart.live;
+    return MockTransparencyStart.outcome;
+  }
+
+  String get _whyLabel {
+    if (!_executed) return 'Why this trade?';
+    if (!_closed) return 'Why are we still holding?';
+    return _realizedPnl >= 0 ? 'Why did this trade profit?' : 'Why did this trade lose?';
+  }
+
+  void _openTransparency(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MockTransparencyJourney(
+          quote: _quote,
+          opportunity: _opportunity,
+          side: _side,
+          quantity: _quantity,
+          entryPrice: _entryPrice,
+          exitPrice: _exitPrice,
+          realizedPnl: _realizedPnl,
+          executed: _executed,
+          closed: _closed,
+          monitorStage: _monitorStage,
+          exitReason: _exitReason,
+          start: _transparencyStart,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ColoredBox(
@@ -246,7 +280,23 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
         title: _title,
         subtitle: _subtitle,
         onBack: _back,
-        child: _screen(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            OutlinedButton.icon(
+              onPressed: () => _openTransparency(context),
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              label: Text(_whyLabel),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _C.cyan,
+                side: const BorderSide(color: Color(0xFF24557A)),
+                minimumSize: const Size.fromHeight(42),
+              ),
+            ),
+            const SizedBox(height: 12),
+            _screen(),
+          ],
+        ),
       ),
     );
   }
@@ -1178,6 +1228,64 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Expanded(child: Text('Prediction vs outcome', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900)))]),
+              const SizedBox(height: 10),
+              const _CheckLine(text: 'Trend prediction was correct', good: true),
+              const _CheckLine(text: 'Volume confirmation remained valid', good: true),
+              const _CheckLine(text: 'Entry timing was inside the planned zone', good: true),
+              _CheckLine(text: _realizedPnl >= 0 ? 'Outcome supported the bullish thesis' : 'Outcome contradicted the bullish thesis', good: _realizedPnl >= 0),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Original confidence', value: '${_opportunity.confidence}%'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Realized P&L', value: '${_realizedPnl >= 0 ? '+' : '-'}₹${_realizedPnl.abs().toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Max favorable excursion', value: '₹${favorableMove.toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Max adverse excursion', value: '₹${adverseMove.toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              const _InfoRow(label: 'Mock slippage', value: '₹3.40'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Exit reason', value: _exitReason),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Governed learning', style: TextStyle(fontWeight: FontWeight.w900)),
+              SizedBox(height: 8),
+              Text('Prediction snapshot, model versions, Gemini evidence, risk decision, execution details and outcome metrics are added to the mock evaluation dataset.', style: TextStyle(color: _C.muted, height: 1.45)),
+              SizedBox(height: 8),
+              Text('This does not trigger automatic retraining or model promotion from one trade.', style: TextStyle(color: _C.green, fontWeight: FontWeight.w800, height: 1.4)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('Production model changes require batch evaluation, walk-forward evidence, calibration/risk gates and controlled promotion.'),
+        const SizedBox(height: 16),
+        _PrimaryButton(label: 'Done', icon: Icons.home_outlined, onTap: widget.onExit),
+      ],
+    );
+  }
+
+  Widget _postTradeLearning() {
+    final favorableMove = (_opportunity.target - _entryPrice).abs() * _quantity;
+    final adverseMove = (_entryPrice - _opportunity.stop).abs() * _quantity * .34;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Glow(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Text('Prediction vs outcome', style: TextStyle(fontWeight: FontWeight.w900))]),
               const SizedBox(height: 10),
               const _CheckLine(text: 'Trend prediction was correct', good: true),
               const _CheckLine(text: 'Volume confirmation remained valid', good: true),
