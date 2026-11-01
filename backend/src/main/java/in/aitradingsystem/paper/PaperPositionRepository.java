@@ -122,5 +122,13 @@ public class PaperPositionRepository {
                               int quantity, BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
                               BigDecimal stopLoss, BigDecimal targetPrice, BigDecimal trailingPercent,
                               BigDecimal highWaterMark, Instant highWaterAt, BigDecimal effectiveProtectiveStop,
-                              long trailingVersion) {}
+                              long trailingVersion) {
+        /** Compatibility constructor for pre-trailing accounting tests/callers. */
+        public PositionRow(Long instrumentId, String exchange, String symbol, ProductType productType,
+                           int quantity, BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
+                           BigDecimal stopLoss, BigDecimal targetPrice) {
+            this(instrumentId, exchange, symbol, productType, quantity, costBasis, averagePrice, realizedPnl,
+                stopLoss, targetPrice, null, null, null, null, 0L);
+        }
+    }
 }
