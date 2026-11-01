@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/presentation/review/mock_review_data.dart';
 import 'package:trading_client/src/presentation/review/mock_transparency_journey.dart';
 
-// Exact-head acceptance for the contextual 10-screen Decision Audit.
+// Exact-head acceptance for the contextual Decision Audit.
 void _phoneViewport(WidgetTester tester) {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(390, 844);
@@ -48,7 +48,7 @@ Future<void> _tap(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets('10-screen decision audit explains placement, holding and outcome at 390x844', (tester) async {
+  testWidgets('11-screen decision audit explains placement, holding, outcome and improvement at 390x844', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
@@ -94,6 +94,12 @@ void main() {
     expect(find.text('Execution Quality'), findsOneWidget);
     expect(find.text('Signal reference price'), findsOneWidget);
 
+    await _tap(tester, 'Next: What Could Improve?');
+    expect(find.text('What Could Improve?'), findsOneWidget);
+    expect(find.text('Post-trade improvement analysis'), findsOneWidget);
+    expect(find.text('BACKTEST FIRST'), findsOneWidget);
+    expect(find.text('BATCH EVALUATE'), findsOneWidget);
+
     await _tap(tester, 'Next: Learning Record');
     expect(find.text('Learning Record'), findsOneWidget);
     expect(find.text('Automatic retraining'), findsOneWidget);
@@ -110,6 +116,10 @@ void main() {
     await _tap(tester, 'Next: Outcome Attribution');
     expect(find.text('Loss Attribution'), findsOneWidget);
     expect(find.text('Why this trade likely failed'), findsOneWidget);
+    await _tap(tester, 'Next: Execution Quality');
+    await _tap(tester, 'Next: What Could Improve?');
+    expect(find.textContaining('second volume confirmation'), findsOneWidget);
+    expect(find.textContaining('One loss does not justify lowering'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
