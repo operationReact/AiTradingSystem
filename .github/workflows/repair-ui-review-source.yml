@@ -31,6 +31,8 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart apps/trading_client/lib/src/presentation/review/mock_review_data.dart
-          git commit -m 'Repair mock review source and state mutations'
+          git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart \
+                  apps/trading_client/lib/src/presentation/review/mock_review_data.dart \
+                  apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart
+          git commit -m 'Repair mock review source and trading journey'
           git push origin HEAD:ui/post-login-mock-review
