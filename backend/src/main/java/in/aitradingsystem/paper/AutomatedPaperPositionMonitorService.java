@@ -117,7 +117,10 @@ public class AutomatedPaperPositionMonitorService {
                 null,
                 null,
                 position.markAt(),
-                position.productType());
+                position.productType(),
+                null,
+                "AUTOMATED",
+                reason.name());
 
             try {
                 PaperViews.OrderResult result = trading.placeOrder(command, key);
