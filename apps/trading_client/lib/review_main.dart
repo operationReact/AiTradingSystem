@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'src/presentation/review/mock_live_trading.dart';
 import 'src/presentation/review/mock_review_app.dart';
 import 'src/presentation/sign_in_page.dart';
 
@@ -62,7 +63,10 @@ class _AiTradingUiReviewAppState extends State<AiTradingUiReviewApp> {
       home: AnimatedSwitcher(
         duration: const Duration(milliseconds: 260),
         child: _authenticated
-            ? const MockReviewApp(key: ValueKey('mock-review-app'))
+            ? const MockLiveReviewHost(
+                key: ValueKey('mock-live-review-host'),
+                paperApp: MockReviewApp(key: ValueKey('mock-review-app')),
+              )
             : SignInPage(
                 key: const ValueKey('mock-review-auth'),
                 onAuthenticated: () => setState(() => _authenticated = true),
