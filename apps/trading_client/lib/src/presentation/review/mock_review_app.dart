@@ -181,8 +181,15 @@ class _HomeReviewPage extends StatelessWidget {
                   children: [
                     const Icon(Icons.auto_awesome_rounded, color: _Ui.cyan, size: 18),
                     const SizedBox(width: 8),
-                    const Text('AI Market Pulse', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
-                    const Spacer(),
+                    const Expanded(
+                      child: Text(
+                        'AI Market Pulse',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
                     Container(
                       width: 8,
                       height: 8,
