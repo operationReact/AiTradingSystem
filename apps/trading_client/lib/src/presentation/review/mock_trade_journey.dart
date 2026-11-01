@@ -936,15 +936,17 @@ class _Card extends StatelessWidget {
   const _Card({required this.child});
   final Widget child;
   @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: const Color(0xFF08162A),
+  Widget build(BuildContext context) => Material(
+        color: const Color(0xFF08162A),
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFF183050)),
+          side: const BorderSide(color: Color(0xFF183050)),
         ),
-        child: child,
+        clipBehavior: Clip.antiAlias,
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: child,
+        ),
       );
 }
 
