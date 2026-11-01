@@ -28,7 +28,6 @@ public class AutomatedPaperPositionMonitorService {
     private final PaperTradingService trading;
     private final RiskPolicyConfigRepository riskPolicies;
     private final AuditService audit;
-    private final TrailingProtectionPolicy trailingPolicy;
     private final Clock clock;
 
     public AutomatedPaperPositionMonitorService(
@@ -36,20 +35,8 @@ public class AutomatedPaperPositionMonitorService {
             AutomatedPaperPositionRepository positions,
             PaperTradingService trading,
             RiskPolicyConfigRepository riskPolicies,
-            AuditService audit,
-            TrailingProtectionPolicy trailingPolicy) {
-        this(authority, positions, trading, riskPolicies, audit, trailingPolicy, Clock.systemUTC());
-    }
-
-    /** Backward-compatible deterministic test seam retained for the existing monitor acceptance suite. */
-    AutomatedPaperPositionMonitorService(
-            TradingExecutionAuthority authority,
-            AutomatedPaperPositionRepository positions,
-            PaperTradingService trading,
-            RiskPolicyConfigRepository riskPolicies,
-            AuditService audit,
-            Clock clock) {
-        this(authority, positions, trading, riskPolicies, audit, new TrailingProtectionPolicy(), clock);
+            AuditService audit) {
+        this(authority, positions, trading, riskPolicies, audit, Clock.systemUTC());
     }
 
     AutomatedPaperPositionMonitorService(
@@ -58,14 +45,12 @@ public class AutomatedPaperPositionMonitorService {
             PaperTradingService trading,
             RiskPolicyConfigRepository riskPolicies,
             AuditService audit,
-            TrailingProtectionPolicy trailingPolicy,
             Clock clock) {
         this.authority = authority;
         this.positions = positions;
         this.trading = trading;
         this.riskPolicies = riskPolicies;
         this.audit = audit;
-        this.trailingPolicy = trailingPolicy;
         this.clock = clock;
     }
 
@@ -173,7 +158,7 @@ public class AutomatedPaperPositionMonitorService {
             throw new IllegalStateException("Persisted trailing state is incomplete");
         }
         BigDecimal nextHigh = currentHigh.max(position.markPrice());
-        BigDecimal nextStop = trailingPolicy.effectiveStop(
+        BigDecimal nextStop = TrailingProtectionPolicy.effectiveStop(
             position.stopLoss(), nextHigh, position.trailingStopPercent());
         if (position.effectiveProtectiveStop().compareTo(nextStop) > 0) {
             nextStop = position.effectiveProtectiveStop();
