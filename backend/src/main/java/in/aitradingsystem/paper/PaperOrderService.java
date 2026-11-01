@@ -171,20 +171,49 @@ public class PaperOrderService {
         }
     }
 
+    private void settle(UUID orderId, AccountSnapshot account) {
+        ExecutionReadinessResult fresh;
+        try {
+            fresh = readiness.revalidate(orderId);
+        } catch (ExecutionNotReadyException ex) {
+            orders.transition(orderId, OrderStatus.READY, OrderStatus.FAILED, ex.reasonCode(), clock.instant());
+            audit.record("ORDER_EXECUTION_BLOCKED", "PAPER_ORDER", orderId.toString(), Map.of("reason", ex.reasonCode()));
+            return;
+        }
+        Instant now = clock.instant();
+        audit.record("EXECUTION_REVALIDATED", "PAPER_ORDER", orderId.toString(), Map.of(
+            "riskDecision", fresh.riskDecision(), "riskPolicy", fresh.riskContext().policy(),
+            "executionPolicy", fresh.executionPolicy(), "policyResult", fresh.policyResult(),
+            "command", fresh.command()));
+        execution.execute(orderId, fresh.command(), fresh.riskContext(), fresh.riskDecision(), account, now);
+        orders.transition(orderId, OrderStatus.READY, OrderStatus.FILLED, null, now);
+        audit.record("ORDER_FILLED", "PAPER_ORDER", orderId.toString(), Map.of(
+            "symbol", fresh.command().symbol(), "side", fresh.command().side().name(),
+            "quantity", fresh.command().quantity(), "productType", fresh.command().productType().name(),
+            "fillPrice", fresh.riskDecision().effectiveFillPrice(), "policyVersion", fresh.riskDecision().policyVersion()));
+    }
+
     @Transactional
     public OrderResult cancel(UUID orderId) {
         accounts.lock();
-        OrderStatus status = orders.statusForUpdate(orderId);
-        if (status == OrderStatus.CANCELLED || status == OrderStatus.REJECTED || status == OrderStatus.EXPIRED
-                || status == OrderStatus.FILLED) return orders.loadResult(orderId, false);
-        Instant now = clock.instant();
-        if (status == OrderStatus.APPROVAL_PENDING) {
-            orders.approvalId(orderId).ifPresent(id -> {
-                var current = approvals.require(id);
-                approvals.decide(id, current.rowVersion(), OrderApprovalState.CANCELLED, "SYSTEM", "ORDER_CANCELLED");
-            });
+        OrderStatus current = orders.statusForUpdate(orderId);
+        if (!current.canTransitionTo(OrderStatus.CANCELLED)) {
+            throw new IllegalStateException("Order " + orderId + " cannot be cancelled from state " + current);
         }
-        orders.transition(orderId, status, OrderStatus.CANCELLED, "ORDER_CANCELLED", now);
+        Instant now = clock.instant();
+        if (current == OrderStatus.APPROVAL_PENDING) {
+            var approvalId = orders.approvalId(orderId);
+            if (approvalId.isPresent()) {
+                var approval = approvals.require(approvalId.get());
+                var result = approvals.decide(approval.id(), approval.rowVersion(), OrderApprovalState.CANCELLED, "operator", "ORDER_CANCELLED");
+                if (result.state() == OrderApprovalState.EXPIRED) {
+                    orders.transition(orderId, current, OrderStatus.EXPIRED, result.decisionReason(), now);
+                    return orders.loadResult(orderId, false);
+                }
+            }
+        }
+        orders.transition(orderId, current, OrderStatus.CANCELLED, null, now);
+        audit.record("ORDER_CANCELLED", "PAPER_ORDER", orderId.toString(), Map.of("previousStatus", current.name()));
         return orders.loadResult(orderId, false);
     }
 
@@ -194,41 +223,15 @@ public class PaperOrderService {
 
     private OrderResult replay(ExistingOrder existing, String requestHash, String idempotencyKey) {
         if (!existing.requestHash().equals(requestHash)) {
-            throw new IdempotencyConflictException("Idempotency-Key already used with a different PAPER order payload: " + idempotencyKey);
+            throw new IdempotencyConflictException(idempotencyKey);
         }
         return orders.loadResult(existing.id(), true);
     }
 
-    private void settle(UUID orderId, AccountSnapshot account) {
-        var result = orders.loadResult(orderId, false);
-        if (result.order() == null) return;
-        OrderStatus current = OrderStatus.valueOf(result.order().status());
-        if (current != OrderStatus.READY) return;
-        OrderCommand command = new OrderCommand(
-            result.order().symbol(),
-            in.aitradingsystem.domain.Side.valueOf(result.order().side()),
-            result.order().quantity(),
-            result.order().entryPrice(),
-            result.order().stopLoss(),
-            result.order().target(),
-            result.order().signalGeneratedAt(),
-            ProductType.valueOf(result.order().productType()),
-            result.order().trailingStopPercent());
-        RiskContext context = contextFactory.build(orderId, command, clock.instant());
-        ExecutionReadinessResult readinessResult = readiness.evaluate(context, clock.instant());
-        if (!readinessResult.ready()) {
-            throw new ExecutionNotReadyException(readinessResult.reasonCodes());
-        }
-        RiskDecisionV2 decision = riskEngine.evaluate(context);
-        if (decision.outcome() != RiskOutcome.APPROVED) {
-            throw new ExecutionNotReadyException(
-                decision.ruleResults().stream().filter(r -> !r.passed()).map(RiskRuleResult::reasonCode).toList());
-        }
-        execution.execute(orderId, command, context, decision, account, clock.instant());
-        orders.transition(orderId, current, OrderStatus.FILLED, null, clock.instant());
-    }
-
-    private static String reasonsText(java.util.List<RiskRuleResult> results) {
-        return results.stream().filter(r -> !r.passed()).map(RiskRuleResult::reasonCode).collect(Collectors.joining(","));
+    static String reasonsText(java.util.List<RiskRuleResult> results) {
+        return results.stream()
+            .filter(result -> result.outcome() != RiskOutcome.PASS)
+            .map(RiskRuleResult::reasonCode)
+            .collect(Collectors.joining(","));
     }
 }
