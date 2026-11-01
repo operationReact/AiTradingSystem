@@ -4,8 +4,7 @@ on:
   push:
     branches: [ui/post-login-mock-review]
     paths:
-      - 'apps/trading_client/tool/add_improvement_analysis.py'
-      - 'apps/trading_client/tool/fix_improvement_step_title.py'
+      - 'apps/trading_client/tool/add_trade_intelligence_report.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -20,11 +19,9 @@ jobs:
         with:
           ref: ui/post-login-mock-review
 
-      - name: Apply additive decision-audit patch
+      - name: Wire persistent trade intelligence report
         working-directory: apps/trading_client
-        run: |
-          python3 tool/add_improvement_analysis.py
-          python3 tool/fix_improvement_step_title.py
+        run: python3 tool/add_trade_intelligence_report.py
 
       - name: Commit repaired source
         run: |
@@ -34,6 +31,7 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/trading_client/lib/src/presentation/review/mock_transparency_journey.dart
-          git commit -m 'Complete post-trade improvement analysis navigation'
+          git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart \
+                  apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart
+          git commit -m 'Wire persistent trade intelligence report'
           git push origin HEAD:ui/post-login-mock-review
