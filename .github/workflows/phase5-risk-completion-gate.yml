@@ -93,7 +93,8 @@ jobs:
       - name: Install locked application dependencies
         run: npm ci
       - name: Install pinned gate-only Playwright and axe tooling
-        run: npm install --no-save --package-lock=false @playwright/test@1.55.0 @axe-core/playwright@4.10.2
+        # Keep the transient gate install reproducible instead of letting npm resolve a just-published/nonexistent Rollup edge.
+        run: npm install --no-save --package-lock=false rollup@4.67.3 @playwright/test@1.55.0 @axe-core/playwright@4.10.2
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Build application
