@@ -11,11 +11,11 @@ void _phoneViewport(WidgetTester tester) {
   });
 }
 
-Widget _app() => const MaterialApp(
+Widget _app() => MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: ThemeData.dark(),
-      home: MockReviewApp(),
+      home: const MockReviewApp(),
     );
 
 Future<void> _tapBottomLabel(WidgetTester tester, String label) async {
