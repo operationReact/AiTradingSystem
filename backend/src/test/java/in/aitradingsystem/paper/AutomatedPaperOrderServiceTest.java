@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -35,7 +36,7 @@ class AutomatedPaperOrderServiceTest {
 
         assertFalse(result.automationEnabled());
         assertEquals(0, result.submitted());
-        verify(signals, never()).recent(any(Integer.class));
+        verify(signals, never()).recent(anyInt());
         verify(orders, never()).placeOrder(any(), any());
     }
 
