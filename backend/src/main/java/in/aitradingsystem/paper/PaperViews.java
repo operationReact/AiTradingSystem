@@ -32,7 +32,9 @@ public final class PaperViews {
         Instant signalGeneratedAt,
         Instant createdAt,
         Instant updatedAt,
-        String correlationId) {
+        String correlationId,
+        String executionOrigin,
+        String lifecycleReason) {
         public OrderView(UUID id, Long instrumentId, String exchange, String symbol, String side, int quantity,
                          int submittedQuantity, int filledQuantity, String orderType, BigDecimal limitPrice,
                          String productType, String strategy, Long candidateId, BigDecimal averageFillPrice,
@@ -41,7 +43,20 @@ public final class PaperViews {
                          String correlationId) {
             this(id, instrumentId, exchange, symbol, side, quantity, submittedQuantity, filledQuantity, orderType,
                 limitPrice, productType, strategy, candidateId, averageFillPrice, entryPrice, stopLoss, target, null,
-                status, rejectionReason, signalGeneratedAt, createdAt, updatedAt, correlationId);
+                status, rejectionReason, signalGeneratedAt, createdAt, updatedAt, correlationId,
+                "MANUAL", "CUSTOMER_ORDER");
+        }
+
+        public OrderView(UUID id, Long instrumentId, String exchange, String symbol, String side, int quantity,
+                         int submittedQuantity, int filledQuantity, String orderType, BigDecimal limitPrice,
+                         String productType, String strategy, Long candidateId, BigDecimal averageFillPrice,
+                         BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target, BigDecimal trailingStopPercent,
+                         String status, String rejectionReason, Instant signalGeneratedAt, Instant createdAt,
+                         Instant updatedAt, String correlationId) {
+            this(id, instrumentId, exchange, symbol, side, quantity, submittedQuantity, filledQuantity, orderType,
+                limitPrice, productType, strategy, candidateId, averageFillPrice, entryPrice, stopLoss, target,
+                trailingStopPercent, status, rejectionReason, signalGeneratedAt, createdAt, updatedAt, correlationId,
+                "MANUAL", "CUSTOMER_ORDER");
         }
     }
 
