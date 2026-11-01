@@ -12,7 +12,7 @@ class _RejectingDashboardRepository implements DashboardRepository {
 }
 
 void main() {
-  testWidgets('overview exposes semantic headings and labelled workspace actions', (tester) async {
+  testWidgets('customer Home exposes semantic headings and labelled product actions', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
       await tester.pumpWidget(
@@ -26,26 +26,26 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.bySemanticsLabel('Market intelligence. Monitor market context, research inputs, instruments, and data quality.'),
+        find.bySemanticsLabel('Markets. Search stocks and explore recent price action.'),
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel('Signals. Review generated candidates and supporting evidence before action.'),
+        find.bySemanticsLabel('AI Research. Discover ranked opportunities with entry, stop and target levels.'),
         findsOneWidget,
       );
 
-      final hero = tester.getSemantics(find.text('Research. Validate. Operate with control.'));
-      final workspace = tester.getSemantics(find.text('Workspace'));
+      final hero = tester.getSemantics(find.text('See the market. Find the setup. Test it safely.'));
+      final quickAccess = tester.getSemantics(find.text('Quick access'));
       final signIn = tester.getSemantics(find.text('Sign in required'));
       expect(hero.getSemanticsData().flagsCollection.isHeader, isTrue);
-      expect(workspace.getSemanticsData().flagsCollection.isHeader, isTrue);
+      expect(quickAccess.getSemanticsData().flagsCollection.isHeader, isTrue);
       expect(signIn.getSemanticsData().flagsCollection.isHeader, isTrue);
     } finally {
       semantics.dispose();
     }
   });
 
-  testWidgets('unauthenticated overview exposes secure sign-in state without credential input', (tester) async {
+  testWidgets('unauthenticated Home exposes secure sign-in without developer credentials', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: OverviewPage(
@@ -60,6 +60,6 @@ void main() {
     expect(find.text('Secure sign-in is required'), findsOneWidget);
     expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
     expect(find.byKey(const ValueKey('dashboard-connect')), findsNothing);
-    expect(find.textContaining('operator access-key'), findsOneWidget);
+    expect(find.textContaining('operator access-key'), findsNothing);
   });
 }
