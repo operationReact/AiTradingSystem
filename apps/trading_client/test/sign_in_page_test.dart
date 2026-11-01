@@ -118,7 +118,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('auth-verify-email-otp')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Enable Fingerprint'), findsOneWidget);
+    expect(find.byKey(const ValueKey('auth-enable-fingerprint')), findsOneWidget);
     expect(find.textContaining('No enrolled fingerprint'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('auth-skip-fingerprint')));
     await tester.pump();
