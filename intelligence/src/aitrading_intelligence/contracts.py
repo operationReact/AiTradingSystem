@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -58,8 +58,8 @@ class EvidenceContractRequest(BaseModel):
     def point_in_time_guards(self) -> EvidenceContractRequest:
         if self.data_cutoff > self.as_of:
             raise ValueError("data_cutoff cannot be later than as_of")
-        now = datetime.now(timezone.utc)
-        if self.as_of.astimezone(timezone.utc) > now.replace(microsecond=0):
+        now = datetime.now(UTC)
+        if self.as_of.astimezone(UTC) > now.replace(microsecond=0):
             raise ValueError("as_of cannot be in the future")
         for ref in self.provenance:
             if ref.observed_at > self.data_cutoff:
