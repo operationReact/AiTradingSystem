@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/presentation/review/mock_live_trading.dart';
 
 // Exact-head acceptance coverage for the backend-free LIVE review experience.
+// This suite intentionally runs at a compact Android viewport to catch clipping
+// while exercising the complete review-only LIVE safety and broker lifecycle.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
