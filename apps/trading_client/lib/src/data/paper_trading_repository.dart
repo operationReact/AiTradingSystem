@@ -229,6 +229,7 @@ class CreatePaperOrderCommand {
     required this.signalGeneratedAt,
     this.stopLoss,
     this.target,
+    this.trailingPercent,
   });
 
   final String symbol;
@@ -239,6 +240,7 @@ class CreatePaperOrderCommand {
   final DateTime signalGeneratedAt;
   final num? stopLoss;
   final num? target;
+  final num? trailingPercent;
 
   Map<String, Object?> toJson() => {
         'symbol': symbol,
@@ -247,6 +249,7 @@ class CreatePaperOrderCommand {
         'referencePrice': referencePrice,
         'stopLoss': stopLoss,
         'target': target,
+        'trailingPercent': trailingPercent,
         'signalGeneratedAt': signalGeneratedAt.toUtc().toIso8601String(),
         'productType': productType,
         'orderType': 'MARKET',
