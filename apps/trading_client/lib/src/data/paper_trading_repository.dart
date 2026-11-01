@@ -254,19 +254,24 @@ class CreatePaperOrderCommand {
   final num? target;
   final num? trailingStopPercent;
 
-  Map<String, Object?> toJson() => {
-        'symbol': symbol,
-        'side': side,
-        'quantity': quantity,
-        'referencePrice': referencePrice,
-        'stopLoss': stopLoss,
-        'target': target,
-        'trailingStopPercent': trailingStopPercent,
-        'signalGeneratedAt': signalGeneratedAt.toUtc().toIso8601String(),
-        'productType': productType,
-        'orderType': 'MARKET',
-        'limitPrice': null,
-      };
+  Map<String, Object?> toJson() {
+    final json = <String, Object?>{
+      'symbol': symbol,
+      'side': side,
+      'quantity': quantity,
+      'referencePrice': referencePrice,
+      'stopLoss': stopLoss,
+      'target': target,
+      'signalGeneratedAt': signalGeneratedAt.toUtc().toIso8601String(),
+      'productType': productType,
+      'orderType': 'MARKET',
+      'limitPrice': null,
+    };
+    if (trailingStopPercent != null) {
+      json['trailingStopPercent'] = trailingStopPercent;
+    }
+    return json;
+  }
 }
 
 abstract interface class PaperTradingRepository {
