@@ -70,17 +70,26 @@ class _TradingAppState extends State<TradingApp> {
       initialRoute: widget.initialRoute,
       builder: (context, child) => LayoutBuilder(
         builder: (context, constraints) {
+          final content = child ?? const SizedBox.shrink();
+
+          // Authentication is a dedicated customer journey. Product navigation
+          // appears only after sign-in so the screen stays faithful to the
+          // canonical mobile mockup and does not expose unrelated destinations.
+          if (_selectedRoute == '/sign-in') {
+            return content;
+          }
+
           if (constraints.maxWidth >= 900) {
             return Row(
               children: [
                 _DesktopProductRail(selectedRoute: _selectedRoute, onNavigate: _navigate),
-                Expanded(child: child ?? const SizedBox.shrink()),
+                Expanded(child: content),
               ],
             );
           }
           return Stack(
             children: [
-              Positioned.fill(bottom: 64, child: child ?? const SizedBox.shrink()),
+              Positioned.fill(bottom: 64, child: content),
               Positioned(
                 left: 0,
                 right: 0,
