@@ -92,7 +92,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('INFY-EQ • 1 points'), findsOneWidget);
-    expect(find.textContaining('Open 1500'), findsOneWidget);
+    expect(find.textContaining('O 1500'), findsOneWidget);
     expect(find.textContaining('12345 vol'), findsOneWidget);
   });
 }
