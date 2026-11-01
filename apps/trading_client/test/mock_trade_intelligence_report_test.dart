@@ -51,6 +51,16 @@ void main() {
     expect(find.text('PAPER'), findsOneWidget);
     expect(find.text('MANUAL'), findsOneWidget);
     expect(find.text('User-confirmed AI opportunity'), findsOneWidget);
+    expect(find.text('Open Transparency 360'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Open Transparency 360'));
+    await tester.tap(find.text('Open Transparency 360'));
+    await tester.pumpAndSettle();
+    expect(find.text('Transparency 360'), findsOneWidget);
+    expect(find.text('Portfolio Risk'), findsOneWidget);
+    expect(find.text('Model Health'), findsOneWidget);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
 
     await _tapTab(tester, 'Evidence');
     expect(find.text('Evidence used before / during the decision'), findsOneWidget);
