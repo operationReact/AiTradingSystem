@@ -6,6 +6,7 @@ import 'package:trading_client/src/theme/app_theme.dart';
 
 class _FakePaperRepository implements PaperTradingRepository {
   bool submitted = false;
+  CreatePaperOrderCommand? submittedCommand;
 
   @override
   Future<PaperPortfolio> fetchPortfolio() => throw UnimplementedError();
@@ -15,9 +16,31 @@ class _FakePaperRepository implements PaperTradingRepository {
       const PaperOrderPage(items: [], page: 0, totalPages: 0, totalItems: 0);
 
   @override
-  Future<PaperOrderResult> createOrder(CreatePaperOrderCommand command, {required String idempotencyKey}) {
+  Future<PaperOrderResult> createOrder(CreatePaperOrderCommand command, {required String idempotencyKey}) async {
     submitted = true;
-    throw StateError('Trailing preview must never submit an unsupported PAPER command.');
+    submittedCommand = command;
+    return PaperOrderResult(
+      order: PaperOrder(
+        id: 'paper-1',
+        symbol: command.symbol,
+        side: command.side,
+        quantity: command.quantity,
+        filledQuantity: command.quantity,
+        orderType: 'MARKET',
+        productType: command.productType,
+        averageFillPrice: command.referencePrice,
+        entryPrice: command.referencePrice,
+        stopLoss: command.stopLoss,
+        target: command.target,
+        status: 'FILLED',
+        rejectionReason: null,
+        createdAt: command.signalGeneratedAt,
+        updatedAt: command.signalGeneratedAt,
+        correlationId: 'test',
+      ),
+      replayed: false,
+      reasonCodes: const [],
+    );
   }
 
   @override
@@ -48,10 +71,7 @@ void main() {
     final repository = _FakePaperRepository();
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(DesignStyle.neonFuturisticAi, Brightness.dark),
-      home: PaperOrdersPage(
-        repository: repository,
-        trailingProtectionPreviewEnabled: true,
-      ),
+      home: PaperOrdersPage(repository: repository),
     ));
     await tester.pumpAndSettle();
 
@@ -76,14 +96,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('trailing preview cannot silently submit before backend support exists', (tester) async {
+  testWidgets('explicit trailing percentage is submitted in the supported PAPER order command', (tester) async {
     final repository = _FakePaperRepository();
-    await tester.pumpWidget(MaterialApp(
-      home: PaperOrdersPage(
-        repository: repository,
-        trailingProtectionPreviewEnabled: true,
-      ),
-    ));
+    await tester.pumpWidget(MaterialApp(home: PaperOrdersPage(repository: repository)));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byKey(const ValueKey('paper-order-symbol')), 'INFY-EQ');
@@ -107,20 +122,16 @@ void main() {
     await tester.tap(submit);
     await tester.pumpAndSettle();
 
-    expect(repository.submitted, isFalse);
-    expect(find.byKey(const ValueKey('paper-order-validation-error')), findsOneWidget);
-    expect(find.text('Trailing protection is not available for order placement yet.'), findsOneWidget);
+    expect(repository.submitted, isTrue);
+    expect(repository.submittedCommand?.trailingPercent, 2.5);
+    expect(find.byKey(const ValueKey('paper-order-validation-error')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-order-result')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('trailing protection is scoped to BUY and clears when side changes', (tester) async {
     final repository = _FakePaperRepository();
-    await tester.pumpWidget(MaterialApp(
-      home: PaperOrdersPage(
-        repository: repository,
-        trailingProtectionPreviewEnabled: true,
-      ),
-    ));
+    await tester.pumpWidget(MaterialApp(home: PaperOrdersPage(repository: repository)));
     await tester.pumpAndSettle();
 
     final editor = find.byKey(const ValueKey('paper-trailing-protection-editor'));
