@@ -39,7 +39,7 @@ Future<void> _tap(WidgetTester tester, String text) async {
 }
 
 void main() {
-  testWidgets('11-screen mock trading journey is complete and stateful', (tester) async {
+  testWidgets('17-screen explainable mock trading journey is complete and stateful', (tester) async {
     _phoneViewport(tester);
     final store = MockReviewStore();
     addTearDown(store.dispose);
@@ -62,6 +62,20 @@ void main() {
     expect(find.text('AI Opportunity'), findsOneWidget);
     expect(find.text('Why AI picked this'), findsOneWidget);
 
+    await _tap(tester, 'Why this trade?');
+    expect(find.text('Trade Decision'), findsOneWidget);
+    expect(find.text('System Decision'), findsOneWidget);
+
+    await _tap(tester, 'View Signal Breakdown');
+    expect(find.text('Signal Breakdown'), findsOneWidget);
+    expect(find.text('Weighted decision evidence'), findsOneWidget);
+    expect(find.text('Final fused score'), findsOneWidget);
+
+    await _tap(tester, 'View AI / Model Evidence');
+    expect(find.text('AI / Model Evidence'), findsOneWidget);
+    expect(find.text('PyTorch probability'), findsOneWidget);
+    expect(find.text('Gemini sentiment'), findsOneWidget);
+
     await _tap(tester, 'Build PAPER Trade');
     expect(find.text('PAPER Trade'), findsOneWidget);
     expect(find.text('Estimated capital'), findsOneWidget);
@@ -74,11 +88,21 @@ void main() {
     expect(find.text('Risk Check'), findsOneWidget);
     expect(find.text('Risk Approved'), findsOneWidget);
 
+    await _tap(tester, 'View Detailed Risk Decision');
+    expect(find.text('Risk Engine Decision'), findsOneWidget);
+    expect(find.text('Risk Engine — APPROVED'), findsOneWidget);
+    expect(find.text('Approved quantity'), findsOneWidget);
+
     await _tap(tester, 'Place PAPER Order');
     expect(find.text('Order Executed'), findsOneWidget);
     expect(store.orders.length, initialOrders + 1);
     expect(store.positions.length, initialPositions + 1);
     expect(store.notifications.length, initialNotifications + 1);
+
+    await _tap(tester, 'View Decision Timeline');
+    expect(find.text('Decision Timeline'), findsOneWidget);
+    expect(find.text('Order provenance'), findsOneWidget);
+    expect(find.text('Risk Engine APPROVED'), findsOneWidget);
 
     await _tap(tester, 'View Position');
     expect(find.text('Position Detail'), findsOneWidget);
@@ -99,6 +123,12 @@ void main() {
     expect(store.orders.length, initialOrders + 2);
     expect(store.positions.length, initialPositions);
     expect(store.notifications.length, initialNotifications + 2);
+
+    await _tap(tester, 'What happened?');
+    expect(find.text('Post-Trade Review'), findsOneWidget);
+    expect(find.text('Prediction vs outcome'), findsOneWidget);
+    expect(find.text('Governed learning'), findsOneWidget);
+    expect(find.text('This does not trigger automatic retraining or model promotion from one trade.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
