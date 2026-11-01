@@ -686,7 +686,7 @@ class _PaperTradingReviewPage extends StatelessWidget {
         children: [
           _BackTitle(title: 'Paper Trading', onBack: onBack),
           const SizedBox(height: 18),
-          _ToggleCard(title: 'PAPER Mode', subtitle: 'Practice trading with virtual money.', value: store.paperMode, onChanged: (value) { store.paperMode = value; store.notifyListeners(); }),
+          _ToggleCard(title: 'PAPER Mode', subtitle: 'Practice trading with virtual money.', value: store.paperMode, onChanged: (value) { store.paperMode = value; store.refresh(); }),
           const SizedBox(height: 10),
           _ReviewCard(
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -739,18 +739,18 @@ class _RiskReviewPage extends StatelessWidget {
           _BackTitle(title: 'Risk Controls', onBack: onBack),
           const SizedBox(height: 18),
           _ReviewCard(child: Column(children: [
-            _SelectField(label: 'Per Trade Risk', value: store.perTradeRisk, values: const ['0.5% of capital', '1.0% of capital', '1.5% of capital', '2.0% of capital'], onChanged: (value) { store.perTradeRisk = value; store.notifyListeners(); }),
+            _SelectField(label: 'Per Trade Risk', value: store.perTradeRisk, values: const ['0.5% of capital', '1.0% of capital', '1.5% of capital', '2.0% of capital'], onChanged: (value) { store.perTradeRisk = value; store.refresh(); }),
             const SizedBox(height: 12),
-            _SelectField(label: 'Daily Loss Limit', value: store.dailyLossLimit, values: const ['2.0% of capital', '3.0% of capital', '5.0% of capital'], onChanged: (value) { store.dailyLossLimit = value; store.notifyListeners(); }),
+            _SelectField(label: 'Daily Loss Limit', value: store.dailyLossLimit, values: const ['2.0% of capital', '3.0% of capital', '5.0% of capital'], onChanged: (value) { store.dailyLossLimit = value; store.refresh(); }),
             const SizedBox(height: 12),
-            _SelectField(label: 'Max Open Positions', value: '${store.maxOpenPositions}', values: const ['3', '5', '8', '10'], onChanged: (value) { store.maxOpenPositions = int.parse(value); store.notifyListeners(); }),
+            _SelectField(label: 'Max Open Positions', value: '${store.maxOpenPositions}', values: const ['3', '5', '8', '10'], onChanged: (value) { store.maxOpenPositions = int.parse(value); store.refresh(); }),
           ])),
           const SizedBox(height: 10),
-          _ToggleCard(title: 'Stop Loss (SL)', subtitle: 'Apply configured stop protection.', value: store.stopLossEnabled, onChanged: (value) { store.stopLossEnabled = value; store.notifyListeners(); }),
+          _ToggleCard(title: 'Stop Loss (SL)', subtitle: 'Apply configured stop protection.', value: store.stopLossEnabled, onChanged: (value) { store.stopLossEnabled = value; store.refresh(); }),
           const SizedBox(height: 8),
-          _ToggleCard(title: 'Take Profit (TP)', subtitle: 'Use profit targets on mock orders.', value: store.takeProfitEnabled, onChanged: (value) { store.takeProfitEnabled = value; store.notifyListeners(); }),
+          _ToggleCard(title: 'Take Profit (TP)', subtitle: 'Use profit targets on mock orders.', value: store.takeProfitEnabled, onChanged: (value) { store.takeProfitEnabled = value; store.refresh(); }),
           const SizedBox(height: 8),
-          _ToggleCard(title: 'Auto Square-off (EOD)', subtitle: 'Close intraday mock positions at end of day.', value: store.autoSquareOff, onChanged: (value) { store.autoSquareOff = value; store.notifyListeners(); }),
+          _ToggleCard(title: 'Auto Square-off (EOD)', subtitle: 'Close intraday mock positions at end of day.', value: store.autoSquareOff, onChanged: (value) { store.autoSquareOff = value; store.refresh(); }),
         ],
       ),
     );
@@ -829,11 +829,11 @@ class _SettingsReviewPage extends StatelessWidget {
           const _SectionHeader(title: 'App & Security'),
           const SizedBox(height: 8),
           _ReviewCard(child: Column(children: [
-            _SettingsSwitch(icon: Icons.fingerprint_rounded, title: 'Biometric Sign-in', value: store.biometricSignIn, onChanged: (value) { store.biometricSignIn = value; store.notifyListeners(); }),
+            _SettingsSwitch(icon: Icons.fingerprint_rounded, title: 'Biometric Sign-in', value: store.biometricSignIn, onChanged: (value) { store.biometricSignIn = value; store.refresh(); }),
             const Divider(height: 1),
             _SettingsRow(icon: Icons.lock_reset_rounded, title: 'Change Password', onTap: () => _message(context, 'Password change UI will use the same secure auth style.')),
             const Divider(height: 1),
-            _SettingsSwitch(icon: Icons.lock_outline_rounded, title: 'App Lock', value: store.appLock, onChanged: (value) { store.appLock = value; store.notifyListeners(); }),
+            _SettingsSwitch(icon: Icons.lock_outline_rounded, title: 'App Lock', value: store.appLock, onChanged: (value) { store.appLock = value; store.refresh(); }),
           ])),
           const SizedBox(height: 18),
           const _SectionHeader(title: 'Preferences'),
@@ -841,7 +841,7 @@ class _SettingsReviewPage extends StatelessWidget {
           _ReviewCard(child: Column(children: [
             _SettingsRow(icon: Icons.dark_mode_outlined, title: 'Theme', trailing: store.theme, onTap: () => _chooseTheme(context)),
             const Divider(height: 1),
-            _SettingsSwitch(icon: Icons.notifications_active_outlined, title: 'Market Hours Alerts', value: store.marketHoursAlerts, onChanged: (value) { store.marketHoursAlerts = value; store.notifyListeners(); }),
+            _SettingsSwitch(icon: Icons.notifications_active_outlined, title: 'Market Hours Alerts', value: store.marketHoursAlerts, onChanged: (value) { store.marketHoursAlerts = value; store.refresh(); }),
             const Divider(height: 1),
             _SettingsRow(icon: Icons.language_rounded, title: 'Language', trailing: store.language, onTap: () => _chooseLanguage(context)),
           ])),
@@ -854,12 +854,12 @@ class _SettingsReviewPage extends StatelessWidget {
 
   Future<void> _chooseTheme(BuildContext context) async {
     final result = await showModalBottomSheet<String>(context: context, builder: (context) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: ['Dark (Default)', 'Neon High Contrast'].map((value) => ListTile(title: Text(value), trailing: store.theme == value ? const Icon(Icons.check_rounded, color: _Ui.cyan) : null, onTap: () => Navigator.pop(context, value))).toList())));
-    if (result != null) { store.theme = result; store.notifyListeners(); }
+    if (result != null) { store.theme = result; store.refresh(); }
   }
 
   Future<void> _chooseLanguage(BuildContext context) async {
     final result = await showModalBottomSheet<String>(context: context, builder: (context) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: ['English', 'हिन्दी', 'తెలుగు'].map((value) => ListTile(title: Text(value), trailing: store.language == value ? const Icon(Icons.check_rounded, color: _Ui.cyan) : null, onTap: () => Navigator.pop(context, value))).toList())));
-    if (result != null) { store.language = result; store.notifyListeners(); }
+    if (result != null) { store.language = result; store.refresh(); }
   }
 }
 
@@ -1049,7 +1049,11 @@ class _SparkPainter extends CustomPainter {
     for (var i = 0; i < values.length; i++) {
       final x = size.width * i / (values.length - 1);
       final y = size.height - ((values[i] - minValue) / span * (size.height * .8)) - size.height * .1;
-      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
     }
     if (glow) canvas.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = 8..color = color.withValues(alpha: .16)..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
     canvas.drawPath(path, Paint()..style = PaintingStyle.stroke..strokeWidth = glow ? 2.3 : 1.7..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round..color = color);
@@ -1065,19 +1069,54 @@ class _SelectField extends StatelessWidget {
   final List<String> values;
   final ValueChanged<String> onChanged;
   @override
-  Widget build(BuildContext context) => DropdownButtonFormField<String>(value: value, decoration: _Ui.input(label), dropdownColor: const Color(0xFF0B1930), items: values.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (v) { if (v != null) onChanged(v); });
+  Widget build(BuildContext context) => DropdownButtonFormField<String>(initialValue: value, decoration: _Ui.input(label), dropdownColor: const Color(0xFF0B1930), items: values.map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(), onChanged: (v) { if (v != null) onChanged(v); });
 }
 
 class _GradientButton extends StatelessWidget {
   const _GradientButton({required this.label, required this.onTap, this.icon});
+
   final String label;
   final VoidCallback onTap;
   final IconData? icon;
+
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(13), gradient: const LinearGradient(colors: [_Ui.cyan, Color(0xFF5DE1FF), _Ui.violet, _Ui.magenta])),
-        child: Material(color: Colors.transparent, child: InkWell(onTap: onTap, borderRadius: BorderRadius.circular(13), child: SizedBox(height: 50, width: double.infinity, child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [if (icon != null) ...[Icon(icon, color: const Color(0xFF03111F), size: 20), const SizedBox(width: 8)], Text(label, style: const TextStyle(color: Color(0xFF03111F), fontWeight: FontWeight.w900))]))),
-      );
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(13),
+        gradient: const LinearGradient(
+          colors: [_Ui.cyan, Color(0xFF5DE1FF), _Ui.violet, _Ui.magenta],
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(13),
+          child: SizedBox(
+            height: 50,
+            width: double.infinity,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, color: const Color(0xFF03111F), size: 20),
+                  const SizedBox(width: 8),
+                ],
+                Text(
+                  label,
+                  style: const TextStyle(
+                    color: Color(0xFF03111F),
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _ScanRow extends StatelessWidget {

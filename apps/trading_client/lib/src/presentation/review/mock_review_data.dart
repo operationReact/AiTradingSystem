@@ -131,6 +131,10 @@ class MockBacktest {
 class MockReviewStore extends ChangeNotifier {
   MockReviewStore();
 
+  /// Notifies review-mode widgets after an intentionally local mock setting
+  /// changes. Production repositories are not involved in this review store.
+  void refresh() => notifyListeners();
+
   final List<MockQuote> quotes = const [
     MockQuote(symbol: 'NIFTY', name: 'NIFTY 50', price: 22543.90, changePercent: 0.68, sparkline: [40, 42, 41, 46, 49, 48, 54, 58, 61]),
     MockQuote(symbol: 'BANKNIFTY', name: 'NIFTY Bank', price: 48912.30, changePercent: 0.79, sparkline: [34, 37, 39, 38, 44, 49, 47, 52, 57]),
