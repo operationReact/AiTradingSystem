@@ -73,7 +73,7 @@ public class IntradayPaperCloseService {
             String idempotencyKey = idempotencyKey(tradeDate, position);
             OrderCommand command = new OrderCommand(
                 position.symbol(), Side.SELL, position.quantity(), position.referencePrice(),
-                null, null, now, ProductType.INTRADAY);
+                null, null, now, ProductType.INTRADAY, null, "AUTOMATED", "INTRADAY_CUTOFF");
             var result = trading.placeOrder(command, idempotencyKey);
             orderIds.add(result.order().id().toString());
             if (result.replayed()) {

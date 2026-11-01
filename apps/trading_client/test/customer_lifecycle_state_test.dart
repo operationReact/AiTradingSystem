@@ -21,8 +21,29 @@ void main() {
         'Position opened',
       );
       expect(
+        CustomerLifecycleState.forOrder(
+          status: 'FILLED',
+          side: 'BUY',
+          executionOrigin: 'AUTOMATED',
+          lifecycleReason: 'STRATEGY_SIGNAL',
+        ).label,
+        'Auto executed',
+      );
+      expect(
         CustomerLifecycleState.forOrder(status: 'FILLED', side: 'SELL').label,
         'Position closed',
+      );
+    });
+
+    test('manual fills never claim automated execution', () {
+      expect(
+        CustomerLifecycleState.forOrder(
+          status: 'FILLED',
+          side: 'BUY',
+          executionOrigin: 'MANUAL',
+          lifecycleReason: 'CUSTOMER_ORDER',
+        ).label,
+        'Position opened',
       );
     });
 

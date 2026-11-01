@@ -94,6 +94,8 @@ void main() {
                   'stopLoss': 2400,
                   'target': 2800,
                   'status': 'FILLED',
+                  'executionOrigin': 'AUTOMATED',
+                  'lifecycleReason': 'STRATEGY_SIGNAL',
                   'rejectionReason': null,
                   'createdAt': '2026-10-30T10:00:00Z',
                   'updatedAt': '2026-10-30T10:00:01Z',
@@ -117,6 +119,8 @@ void main() {
     expect(page.totalItems, 1);
     expect(page.items.single.status, 'FILLED');
     expect(page.items.single.averageFillPrice, 2501);
+    expect(page.items.single.executionOrigin, 'AUTOMATED');
+    expect(page.items.single.lifecycleReason, 'STRATEGY_SIGNAL');
   });
 
   test('submits exact PAPER order payload with explicit idempotency header', () async {

@@ -10,6 +10,7 @@ enum CustomerLifecycleKind {
   riskApproved,
   rejectedByRisk,
   positionOpened,
+  autoExecuted,
   positionClosed,
   openPosition,
   cancelled,
@@ -44,6 +45,11 @@ class CustomerLifecycleState {
     'Position opened',
     'The PAPER buy was filled and is now being monitored.',
   );
+  static const autoExecuted = CustomerLifecycleState(
+    CustomerLifecycleKind.autoExecuted,
+    'Auto executed',
+    'Automation opened this PAPER position after Risk Engine approval.',
+  );
   static const positionClosed = CustomerLifecycleState(
     CustomerLifecycleKind.positionClosed,
     'Position closed',
@@ -70,7 +76,12 @@ class CustomerLifecycleState {
     'Check the latest details before taking any action.',
   );
 
-  static CustomerLifecycleState forOrder({required String status, required String side}) {
+  static CustomerLifecycleState forOrder({
+    required String status,
+    required String side,
+    String? executionOrigin,
+    String? lifecycleReason,
+  }) {
     switch (status.trim().toUpperCase()) {
       case 'NEW':
       case 'RECEIVED':
@@ -83,7 +94,8 @@ class CustomerLifecycleState {
       case 'RISK_REJECTED':
         return rejectedByRisk;
       case 'FILLED':
-        return side.trim().toUpperCase() == 'SELL' ? positionClosed : positionOpened;
+        if (side.trim().toUpperCase() == 'SELL') return positionClosed;
+        return executionOrigin?.trim().toUpperCase() == 'AUTOMATED' ? autoExecuted : positionOpened;
       case 'CANCELLED':
       case 'CANCELED':
         return cancelled;
@@ -116,7 +128,7 @@ class CustomerLifecycleBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final (Color background, Color foreground, IconData icon) = switch (state.kind) {
       CustomerLifecycleKind.rejectedByRisk => (scheme.errorContainer, scheme.onErrorContainer, Icons.shield_outlined),
-      CustomerLifecycleKind.positionOpened || CustomerLifecycleKind.openPosition =>
+      CustomerLifecycleKind.positionOpened || CustomerLifecycleKind.autoExecuted || CustomerLifecycleKind.openPosition =>
         (scheme.primaryContainer, scheme.onPrimaryContainer, Icons.monitor_heart_outlined),
       CustomerLifecycleKind.positionClosed =>
         (scheme.secondaryContainer, scheme.onSecondaryContainer, Icons.task_alt_rounded),
