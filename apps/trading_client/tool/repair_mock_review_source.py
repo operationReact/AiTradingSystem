@@ -64,6 +64,7 @@ app = app.replace(
     '      if (i == 0) path.moveTo(x, y); else path.lineTo(x, y);',
     '      if (i == 0) {\n        path.moveTo(x, y);\n      } else {\n        path.lineTo(x, y);\n      }',
 )
+app = app.replace('if (trailing != null) trailing!', '?trailing')
 app_path.write_text(app)
 
 data = data_path.read_text()
