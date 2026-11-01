@@ -48,6 +48,7 @@ void main() {
     expect(find.text('Activate LIVE Trading'), findsOneWidget);
     expectNoFlutterError(tester);
 
+    await tester.ensureVisible(find.byKey(const Key('live-acknowledgement')));
     await tester.tap(find.byKey(const Key('live-acknowledgement')));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('enable-live-button')));
