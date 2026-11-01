@@ -9,6 +9,24 @@
 backend/target/
 *.class
 
+# Flutter (apps/trading_client) build output and generated platform files
+# pubspec.lock is intentionally tracked for reproducible app builds
+apps/trading_client/.dart_tool/
+apps/trading_client/build/
+apps/trading_client/.flutter-plugins
+apps/trading_client/.flutter-plugins-dependencies
+apps/trading_client/.packages
+apps/trading_client/android/local.properties
+apps/trading_client/android/.gradle/
+apps/trading_client/android/app/src/main/java/io/flutter/plugins/GeneratedPluginRegistrant.java
+apps/trading_client/ios/Flutter/Generated.xcconfig
+apps/trading_client/ios/Flutter/flutter_export_environment.sh
+apps/trading_client/ios/Flutter/ephemeral/
+apps/trading_client/ios/Runner/GeneratedPluginRegistrant.h
+apps/trading_client/ios/Runner/GeneratedPluginRegistrant.m
+apps/trading_client/ios/Pods/
+apps/trading_client/ios/.symlinks/
+
 # Node
 frontend/node_modules/
 frontend/dist/
