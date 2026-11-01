@@ -35,7 +35,6 @@ class _SignInPageState extends State<SignInPage> {
 
   _AuthStage _stage = _AuthStage.signIn;
   bool _fingerprintReady = false;
-  String _fullName = '';
   String _email = '';
   String _phone = '';
 
@@ -54,6 +53,11 @@ class _SignInPageState extends State<SignInPage> {
 
   void _go(_AuthStage stage) => setState(() => _stage = stage);
 
+  void _handlePasswordSignIn(String identifier, String password) {
+    if (identifier.trim().isEmpty || password.isEmpty) return;
+    _go(_AuthStage.success);
+  }
+
   @override
   Widget build(BuildContext context) {
     final page = switch (_stage) {
@@ -61,12 +65,12 @@ class _SignInPageState extends State<SignInPage> {
           biometricEnrolled: _fingerprintReady,
           onSignUp: () => _go(_AuthStage.signUp),
           onFingerprintSignIn: () => _go(_AuthStage.fingerprintSignIn),
-          onPasswordSignIn: (_, __) => _go(_AuthStage.success),
+          onPasswordSignIn: _handlePasswordSignIn,
         ),
       _AuthStage.signUp => SignUpPage(
           onBack: () => _go(_AuthStage.signIn),
           onCreateAccount: ({required fullName, required email, required phone}) {
-            _fullName = fullName;
+            if (fullName.trim().isEmpty) return;
             _email = email;
             _phone = phone;
             _go(_AuthStage.verifyPhone);
