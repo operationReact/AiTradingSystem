@@ -70,12 +70,16 @@ class PaperOrderApiIT extends AbstractApprovalPaperIT {
             .andExpect(jsonPath("$.order.symbol").value(SYMBOL))
             .andExpect(jsonPath("$.order.productType").value("DELIVERY"))
             .andExpect(jsonPath("$.order.orderType").value("MARKET"))
+            .andExpect(jsonPath("$.order.executionOrigin").value("MANUAL"))
+            .andExpect(jsonPath("$.order.lifecycleReason").value("CUSTOMER_ORDER"))
             .andReturn().getResponse().getContentAsString();
 
         UUID orderId = UUID.fromString(json.readTree(created).path("order").path("id").asText());
         mvc.perform(get("/api/paper-orders/{id}", orderId).header(KEY_HEADER, API_KEY))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.order.id").value(orderId.toString()));
+            .andExpect(jsonPath("$.order.id").value(orderId.toString()))
+            .andExpect(jsonPath("$.order.executionOrigin").value("MANUAL"))
+            .andExpect(jsonPath("$.order.lifecycleReason").value("CUSTOMER_ORDER"));
     }
 
     @Test
