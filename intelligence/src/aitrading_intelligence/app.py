@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import FastAPI
 
@@ -27,5 +27,5 @@ def validate_contract(request: EvidenceContractRequest) -> EvidenceContractRespo
         evidence=[],
         warnings=["Contract validated; no model inference is configured in V2-03."],
         can_authorize_capital=False,
-        generated_at=datetime.now(timezone.utc),
+        generated_at=datetime.now(UTC),
     )
