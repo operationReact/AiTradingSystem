@@ -41,6 +41,22 @@ class AutomatedPaperOrderServiceTest {
     }
 
     @Test
+    void liveAutomatedModeNeverRoutesIntoPaperAutomation() {
+        TradingExecutionAuthority authority = mock(TradingExecutionAuthority.class);
+        StrategySignalRepository signals = mock(StrategySignalRepository.class);
+        PaperOrderService orders = mock(PaperOrderService.class);
+        AuditService audit = mock(AuditService.class);
+        when(authority.current()).thenReturn(new TradingExecutionAuthority.Snapshot("LIVE", OrderExecutionMode.AUTOMATED));
+
+        var service = new AutomatedPaperOrderService(authority, signals, orders, audit, 1, 20);
+        var result = service.runOnce();
+
+        assertFalse(result.automationEnabled());
+        verify(signals, never()).recent(anyInt());
+        verify(orders, never()).placeOrder(any(), any());
+    }
+
+    @Test
     void automatedPaperSubmitsEligibleBuyCandidateThroughPaperOrderService() {
         TradingExecutionAuthority authority = mock(TradingExecutionAuthority.class);
         StrategySignalRepository signals = mock(StrategySignalRepository.class);
