@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/trading_client/tool/repair_mock_review_source.py'
       - 'apps/trading_client/tool/repair_trade_journey.py'
+      - 'apps/trading_client/tool/repair_live_review.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -25,6 +26,7 @@ jobs:
         run: |
           python3 tool/repair_mock_review_source.py
           python3 tool/repair_trade_journey.py
+          python3 tool/repair_live_review.py
 
       - name: Commit repaired source
         run: |
@@ -36,6 +38,7 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart \
                   apps/trading_client/lib/src/presentation/review/mock_review_data.dart \
-                  apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart
-          git commit -m 'Repair mock review source and trading journey'
+                  apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart \
+                  apps/trading_client/lib/src/presentation/review/mock_live_trading.dart
+          git commit -m 'Repair mock review source and trading journeys'
           git push origin HEAD:ui/post-login-mock-review
