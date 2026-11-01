@@ -18,7 +18,8 @@ public class PaperPositionRepository {
     public PositionRow lock(Long instrumentId, String symbol, ProductType productType) {
         return jdbc.sql("""
                 SELECT instrument_id, exchange, symbol, product_type, quantity, cost_basis, average_price, realized_pnl,
-                       stop_loss, target_price
+                       stop_loss, target_price, trailing_percent, high_water_mark, high_water_at,
+                       effective_protective_stop, trailing_version
                   FROM paper_position
                  WHERE product_type = :productType
                    AND ((:instrumentId IS NOT NULL AND instrument_id = :instrumentId)
@@ -30,25 +31,42 @@ public class PaperPositionRepository {
             .query((rs, row) -> new PositionRow(rs.getObject("instrument_id", Long.class), rs.getString("exchange"),
                 rs.getString("symbol"), ProductType.valueOf(rs.getString("product_type")), rs.getInt("quantity"),
                 rs.getBigDecimal("cost_basis"), rs.getBigDecimal("average_price"), rs.getBigDecimal("realized_pnl"),
-                rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price")))
+                rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price"), rs.getBigDecimal("trailing_percent"),
+                rs.getBigDecimal("high_water_mark"), PaperOrderRepository.instant(rs, "high_water_at"),
+                rs.getBigDecimal("effective_protective_stop"), rs.getLong("trailing_version")))
             .optional().orElse(null);
     }
 
     public void insert(Long instrumentId, String exchange, String symbol, ProductType productType, int quantity,
                        BigDecimal costBasis, BigDecimal averagePrice, BigDecimal stopLoss, BigDecimal targetPrice,
-                       Instant now) {
+                       BigDecimal trailingPercent, BigDecimal highWaterMark, Instant highWaterAt,
+                       BigDecimal effectiveProtectiveStop, Instant now) {
         jdbc.sql("""
                 INSERT INTO paper_position (
                     instrument_id, exchange, symbol, product_type, quantity, cost_basis, average_price,
-                    stop_loss, target_price, realized_pnl, opened_at, updated_at)
+                    stop_loss, target_price, trailing_percent, high_water_mark, high_water_at,
+                    effective_protective_stop, trailing_version, realized_pnl, opened_at, updated_at)
                 VALUES (:instrumentId, :exchange, :symbol, :productType, :quantity, :costBasis, :averagePrice,
-                    :stopLoss, :targetPrice, 0, :now, :now)
+                    :stopLoss, :targetPrice, :trailingPercent, :highWaterMark, :highWaterAt,
+                    :effectiveProtectiveStop, 0, 0, :now, :now)
                 """)
             .param("instrumentId", instrumentId, Types.BIGINT).param("exchange", exchange, Types.VARCHAR)
             .param("symbol", symbol).param("productType", productType.name()).param("quantity", quantity)
             .param("costBasis", costBasis).param("averagePrice", averagePrice)
             .param("stopLoss", stopLoss, Types.NUMERIC).param("targetPrice", targetPrice, Types.NUMERIC)
+            .param("trailingPercent", trailingPercent, Types.NUMERIC)
+            .param("highWaterMark", highWaterMark, Types.NUMERIC)
+            .param("highWaterAt", highWaterAt == null ? null : PaperOrderRepository.ts(highWaterAt), Types.TIMESTAMP_WITH_TIMEZONE)
+            .param("effectiveProtectiveStop", effectiveProtectiveStop, Types.NUMERIC)
             .param("now", PaperOrderRepository.ts(now)).update();
+    }
+
+    /** Compatibility insert used by non-trailing accounting tests/callers. */
+    public void insert(Long instrumentId, String exchange, String symbol, ProductType productType, int quantity,
+                       BigDecimal costBasis, BigDecimal averagePrice, BigDecimal stopLoss, BigDecimal targetPrice,
+                       Instant now) {
+        insert(instrumentId, exchange, symbol, productType, quantity, costBasis, averagePrice, stopLoss, targetPrice,
+            null, null, null, null, now);
     }
 
     public boolean update(PositionRow expected, Long instrumentId, String exchange, int quantity,
@@ -77,5 +95,7 @@ public class PaperPositionRepository {
 
     public record PositionRow(Long instrumentId, String exchange, String symbol, ProductType productType,
                               int quantity, BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
-                              BigDecimal stopLoss, BigDecimal targetPrice) {}
+                              BigDecimal stopLoss, BigDecimal targetPrice, BigDecimal trailingPercent,
+                              BigDecimal highWaterMark, Instant highWaterAt, BigDecimal effectiveProtectiveStop,
+                              long trailingVersion) {}
 }
