@@ -48,11 +48,17 @@ void main() {
     expect(find.text('Trade Intelligence Report'), findsOneWidget);
     expect(find.text('Why the system made this decision'), findsOneWidget);
     expect(find.text('Risk Engine justification'), findsOneWidget);
+    expect(find.text('PAPER'), findsOneWidget);
+    expect(find.text('MANUAL'), findsOneWidget);
+    expect(find.text('User-confirmed AI opportunity'), findsOneWidget);
 
     await _tapTab(tester, 'Evidence');
     expect(find.text('Evidence used before / during the decision'), findsOneWidget);
     expect(find.text('Learned model'), findsOneWidget);
     expect(find.text('News / event intelligence'), findsOneWidget);
+    expect(find.text('Fundamental / session context'), findsOneWidget);
+    expect(find.text('Decision influence: 16% of fused evidence'), findsOneWidget);
+    expect(find.text('Decision role: mandatory gate (not part of fused score)'), findsOneWidget);
 
     await _tapTab(tester, 'Confidence');
     expect(find.text('Confidence evolution'), findsOneWidget);
@@ -66,7 +72,11 @@ void main() {
     await _tapTab(tester, 'Audit');
     expect(find.text('Immutable provenance'), findsOneWidget);
     expect(find.text('Pre-trade snapshot'), findsOneWidget);
+    expect(find.text('Feature schema'), findsOneWidget);
+    expect(find.text('PyTorch model'), findsOneWidget);
+    expect(find.text('Gemini evidence'), findsOneWidget);
     expect(find.text('Risk decision'), findsOneWidget);
+    expect(find.text('Data cutoff'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -108,6 +118,7 @@ void main() {
 
     await tester.pumpWidget(_app(record));
     await tester.pumpAndSettle();
+    expect(find.text('User cancelled before execution'), findsOneWidget);
     await _tapTab(tester, 'Outcome');
 
     expect(find.text('Why the trade did not execute'), findsOneWidget);
