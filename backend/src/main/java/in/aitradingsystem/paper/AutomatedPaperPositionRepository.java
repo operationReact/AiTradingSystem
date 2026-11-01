@@ -102,5 +102,13 @@ public class AutomatedPaperPositionRepository {
         BigDecimal markPrice,
         Instant markAt,
         Instant positionUpdatedAt
-    ) {}
+    ) {
+        /** Compatibility constructor for fixed stop/target monitor tests/callers. */
+        public MonitoredPosition(Long instrumentId, String exchange, String symbol, ProductType productType,
+                                 int quantity, BigDecimal stopLoss, BigDecimal targetPrice,
+                                 BigDecimal markPrice, Instant markAt, Instant positionUpdatedAt) {
+            this(instrumentId, exchange, symbol, productType, quantity, stopLoss, targetPrice,
+                null, null, null, null, 0L, markPrice, markAt, positionUpdatedAt);
+        }
+    }
 }
