@@ -105,10 +105,10 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
       validation = 'Stop loss must be below the reference price.';
     } else if (_side == 'BUY' && target! <= referencePrice) {
       validation = 'Target must be above the reference price.';
-    } else if (widget.trailingProtectionPreviewEnabled && _trailingEnabled &&
+    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled &&
         (trailingDistance == null || trailingDistance <= 0 || trailingDistance >= 100)) {
       validation = 'Trail distance must be greater than 0% and less than 100%.';
-    } else if (widget.trailingProtectionPreviewEnabled && _trailingEnabled) {
+    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled) {
       // PAPER-04 proves the customer contract without silently dropping a
       // protection setting that the current backend cannot yet persist.
       validation = 'Trailing protection is not available for order placement yet.';
@@ -289,7 +289,13 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
                     key: const ValueKey('paper-order-side'),
                     value: _side,
                     items: const [DropdownMenuItem(value: 'BUY', child: Text('BUY')), DropdownMenuItem(value: 'SELL', child: Text('SELL'))],
-                    onChanged: (value) => value == null ? null : setState(() => _side = value),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _side = value;
+                        if (value != 'BUY') _trailingEnabled = false;
+                      });
+                    },
                   ),
                   DropdownButton<String>(
                     key: const ValueKey('paper-order-product'),
@@ -310,7 +316,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               TextField(key: const ValueKey('paper-order-stop-loss'), controller: _stopLoss, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Stop loss')),
               const SizedBox(height: 12),
               TextField(key: const ValueKey('paper-order-target'), controller: _target, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
-              if (widget.trailingProtectionPreviewEnabled) ...[
+              if (widget.trailingProtectionPreviewEnabled && _side == 'BUY') ...[
                 const SizedBox(height: 16),
                 TrailingProtectionEditor(
                   enabled: _trailingEnabled,
