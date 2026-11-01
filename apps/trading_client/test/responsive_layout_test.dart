@@ -14,12 +14,11 @@ void main() {
     expect(ResponsiveLayout.classify(1440), ResponsiveClass.desktop);
   });
 
-  test('workspace and metric matrices follow 1/2/4 columns at mandatory widths', () {
-    for (final width in [320.0, 375.0, 411.0, 599.0]) {
-      expect(ResponsiveLayout.workspaceColumns(width), 1);
-      expect(ResponsiveLayout.metricColumns(width), 1);
-    }
-    for (final width in [600.0, 768.0, 1023.0]) {
+  test('workspace and metric matrices use dense phone columns without crowding 320px', () {
+    expect(ResponsiveLayout.workspaceColumns(320), 1);
+    expect(ResponsiveLayout.metricColumns(320), 1);
+
+    for (final width in [375.0, 411.0, 599.0, 600.0, 768.0, 1023.0]) {
       expect(ResponsiveLayout.workspaceColumns(width), 2);
       expect(ResponsiveLayout.metricColumns(width), 2);
     }
