@@ -27,7 +27,7 @@ void _phoneViewport(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('boots into the mobile product shell without operator chrome', (tester) async {
+  testWidgets('boots into the customer mobile shell without operator chrome', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(
       TradingApp(
@@ -49,7 +49,7 @@ void main() {
     expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
   });
 
-  testWidgets('appearance is a product setting and profile is separate from color mode', (tester) async {
+  testWidgets('Neon launches dark and appearance keeps profile separate from color mode', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(
       TradingApp(
@@ -65,13 +65,18 @@ void main() {
     expect(find.text('Clean Modern'), findsOneWidget);
     expect(find.text('Color mode'), findsOneWidget);
 
+    final initialThemeControl = tester.widget<SegmentedButton<ThemeMode>>(
+      find.byKey(const ValueKey('settings-theme-mode-control')),
+    );
+    expect(initialThemeControl.selected, {ThemeMode.dark});
+
     await tester.tap(find.byKey(const ValueKey('profile-Clean Modern')));
     await tester.pumpAndSettle();
 
     final themeControl = tester.widget<SegmentedButton<ThemeMode>>(
       find.byKey(const ValueKey('settings-theme-mode-control')),
     );
-    expect(themeControl.selected, {ThemeMode.system});
+    expect(themeControl.selected, {ThemeMode.dark});
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
   });
 

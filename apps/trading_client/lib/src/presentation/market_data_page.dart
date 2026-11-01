@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
+import '../theme/app_theme.dart';
 
 class MarketDataPage extends StatefulWidget {
   const MarketDataPage({required this.repository, super.key});
@@ -22,7 +23,6 @@ class _MarketDataPageState extends State<MarketDataPage> {
   String _interval = 'ONE_DAY';
   String? _error;
   bool _loading = false;
-  bool _syncing = false;
 
   @override
   void initState() {
@@ -59,9 +59,9 @@ class _MarketDataPageState extends State<MarketDataPage> {
           _candles = null;
         }
       });
-    } on ApiFailure catch (failure) {
+    } on ApiFailure {
       if (!mounted) return;
-      setState(() => _error = failure.code);
+      setState(() => _error = 'Market data is temporarily unavailable.');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -85,60 +85,73 @@ class _MarketDataPageState extends State<MarketDataPage> {
       );
       if (!mounted) return;
       setState(() => _candles = page);
-    } on ApiFailure catch (failure) {
+    } on ApiFailure {
       if (!mounted) return;
-      setState(() => _error = failure.code);
+      setState(() => _error = 'Price history could not be loaded.');
     } finally {
       if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _sync() async {
-    setState(() {
-      _syncing = true;
-      _error = null;
-    });
-    try {
-      await widget.repository.syncInstruments();
-      await _loadInstruments();
-    } on ApiFailure catch (failure) {
-      if (!mounted) return;
-      setState(() => _error = failure.code);
-    } finally {
-      if (mounted) setState(() => _syncing = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<TradingColors>();
     final status = _status;
     final instruments = _instruments;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Market data')),
+      appBar: AppBar(title: const Text('Markets')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 900;
             final searchPane = _buildInstrumentPane(context, status, instruments);
-            final evidencePane = _buildCandlePane(context);
+            final chartPane = _buildCandlePane(context);
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
               children: [
-                Semantics(
-                  header: true,
-                  child: Text('Authoritative market data', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: LinearGradient(
+                      colors: [
+                        theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
+                        theme.colorScheme.surfaceContainerHighest,
+                      ],
+                    ),
+                    border: Border.all(color: colors?.neonCyan.withValues(alpha: 0.35) ?? theme.colorScheme.outlineVariant),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: Text('Explore the market', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Search stocks, review recent price action, and move from market context into AI research.',
+                        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                const Text('Search the active catalogue and inspect backend candle evidence. No client-generated prices are shown.'),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Card(
                     key: const ValueKey('market-data-error'),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text('Market data unavailable: $_error'),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.cloud_off_rounded),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(_error!)),
+                          TextButton(onPressed: _loadInstruments, child: const Text('Try again')),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -149,13 +162,13 @@ class _MarketDataPageState extends State<MarketDataPage> {
                     children: [
                       Expanded(child: searchPane),
                       const SizedBox(width: 16),
-                      Expanded(child: evidencePane),
+                      Expanded(child: chartPane),
                     ],
                   )
                 else ...[
                   searchPane,
                   const SizedBox(height: 16),
-                  evidencePane,
+                  chartPane,
                 ],
               ],
             );
@@ -165,11 +178,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
     );
   }
 
-  Widget _buildInstrumentPane(
-    BuildContext context,
-    InstrumentCatalogueStatus? status,
-    InstrumentSearchPage? instruments,
-  ) {
+  Widget _buildInstrumentPane(BuildContext context, InstrumentCatalogueStatus? status, InstrumentSearchPage? instruments) {
     return Card(
       key: const ValueKey('market-data-instruments'),
       child: Padding(
@@ -177,42 +186,28 @@ class _MarketDataPageState extends State<MarketDataPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Instrument source', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            if (status != null)
-              Text('${status.activeCount} active • catalogue ${status.version ?? 'NONE'}'),
+            Text('Find a stock', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            if (status != null) Text('${status.activeCount} tradable instruments available', style: Theme.of(context).textTheme.bodySmall),
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('market-instrument-search'),
               controller: _instrumentQuery,
-              decoration: const InputDecoration(labelText: 'Symbol or name', prefixIcon: Icon(Icons.search)),
+              decoration: const InputDecoration(labelText: 'Symbol or company', prefixIcon: Icon(Icons.search_rounded)),
               onSubmitted: (_) => _loadInstruments(),
             ),
             const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                FilledButton(
-                  key: const ValueKey('market-instrument-search-button'),
-                  onPressed: _loading ? null : _loadInstruments,
-                  child: const Text('Search'),
-                ),
-                OutlinedButton.icon(
-                  key: const ValueKey('market-instrument-sync'),
-                  onPressed: _syncing ? null : _sync,
-                  icon: _syncing
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.sync),
-                  label: const Text('Sync catalogue'),
-                ),
-              ],
+            FilledButton.icon(
+              key: const ValueKey('market-instrument-search-button'),
+              onPressed: _loading ? null : _loadInstruments,
+              icon: const Icon(Icons.search_rounded),
+              label: const Text('Search market'),
             ),
             const SizedBox(height: 12),
             if (_loading && instruments == null)
               const Center(child: CircularProgressIndicator())
             else if (instruments == null || instruments.content.isEmpty)
-              const Text('No instruments available for the current search.')
+              const Text('No matching stocks found.')
             else
               ...instruments.content.take(12).map(
                     (instrument) => ListTile(
@@ -220,7 +215,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
                       selected: _selected?.id == instrument.id,
                       title: Text(instrument.tradingSymbol),
                       subtitle: Text('${instrument.exchange} • ${instrument.instrumentType}'),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => _loadCandles(instrument),
                     ),
                   ),
@@ -240,12 +235,12 @@ class _MarketDataPageState extends State<MarketDataPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Candle evidence', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+            Text('Price action', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               key: const ValueKey('market-data-interval'),
               initialValue: _interval,
-              decoration: const InputDecoration(labelText: 'Interval'),
+              decoration: const InputDecoration(labelText: 'Timeframe'),
               items: const [
                 DropdownMenuItem(value: 'ONE_DAY', child: Text('1 day')),
                 DropdownMenuItem(value: 'ONE_HOUR', child: Text('1 hour')),
@@ -260,19 +255,19 @@ class _MarketDataPageState extends State<MarketDataPage> {
             ),
             const SizedBox(height: 12),
             if (selected == null)
-              const Text('Select an instrument to request candle evidence.')
+              const Text('Choose a stock to view recent price action.')
             else if (_loading && candles == null)
               const Center(child: CircularProgressIndicator())
             else if (candles == null || candles.items.isEmpty)
-              Text('No ${_interval.toLowerCase()} candles returned for ${selected.tradingSymbol} in the last 30 days.')
+              Text('No price history is available for ${selected.tradingSymbol} in this timeframe.')
             else ...[
-              Text('${selected.tradingSymbol} • ${candles.totalItems} candles', style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text('${selected.tradingSymbol} • ${candles.totalItems} points', style: const TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 10),
               ...candles.items.take(20).map(
                     (candle) => ListTile(
                       dense: true,
-                      title: Text('${candle.candleTime?.toLocal() ?? 'UNKNOWN'}'),
-                      subtitle: Text('O ${candle.open}  H ${candle.high}  L ${candle.low}  C ${candle.close}'),
+                      title: Text('${candle.candleTime?.toLocal() ?? '—'}'),
+                      subtitle: Text('Open ${candle.open}  High ${candle.high}  Low ${candle.low}  Close ${candle.close}'),
                       trailing: Text('${candle.volume} vol'),
                     ),
                   ),

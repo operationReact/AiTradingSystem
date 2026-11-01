@@ -36,5 +36,14 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
+      - name: Run Flutter tests with diagnostics
+        run: flutter test --file-reporter json:test-results.json
+      - name: Upload Flutter test diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-diagnostics
+          path: apps/trading_client/test-results.json
+          if-no-files-found: ignore
+          retention-days: 3
       - run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/

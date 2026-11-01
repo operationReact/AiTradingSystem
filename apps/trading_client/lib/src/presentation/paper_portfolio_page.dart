@@ -41,10 +41,18 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
     }
   }
 
+  String _failureMessage(ApiFailure failure) {
+    final code = failure.code.toUpperCase();
+    if (code.contains('AUTH')) return 'Sign in to view your PAPER portfolio.';
+    if (code.contains('NETWORK') || code.contains('TIMEOUT')) return 'We could not reach the trading service. Try again.';
+    return 'Your PAPER portfolio is temporarily unavailable.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('PAPER portfolio')),
+      appBar: AppBar(title: const Text('Portfolio')),
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: _refresh,
@@ -52,12 +60,29 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
             key: const ValueKey('paper-portfolio-list'),
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
             children: [
-              Semantics(
-                header: true,
-                child: Text('Authoritative PAPER account', style: Theme.of(context).textTheme.headlineSmall),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(24),
+                  gradient: LinearGradient(
+                    colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Semantics(
+                      header: true,
+                      child: Text('PAPER portfolio', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Practice with simulated money while tracking positions, cash, exposure, and profit or loss in one place.',
+                      style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-              const Text('Read-only portfolio evidence from the Spring/PostgreSQL PAPER accounting service. This screen cannot submit LIVE orders.'),
               const SizedBox(height: 16),
               if (_loading && _portfolio == null)
                 const Center(
@@ -67,22 +92,22 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
               else if (_failure != null && _portfolio == null)
                 _errorCard(_failure!)
               else if (_portfolio != null) ...[
-                if (_failure != null) _staleCard(_failure!),
+                if (_failure != null) _staleCard(),
                 _summary(_portfolio!),
                 const SizedBox(height: 16),
-                Semantics(header: true, child: Text('Positions', style: Theme.of(context).textTheme.titleLarge)),
+                Semantics(header: true, child: Text('Open positions', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
                 const SizedBox(height: 8),
                 if (_portfolio!.positions.isEmpty)
                   const Card(
                     key: ValueKey('paper-portfolio-empty-positions'),
-                    child: Padding(padding: EdgeInsets.all(16), child: Text('No open PAPER positions are reported by the backend.')),
+                    child: Padding(padding: EdgeInsets.all(16), child: Text('No PAPER positions are open yet.')),
                   )
                 else
                   ..._portfolio!.positions.map(_positionCard),
               ] else
                 const Card(
                   key: ValueKey('paper-portfolio-empty'),
-                  child: Padding(padding: EdgeInsets.all(16), child: Text('No authoritative PAPER portfolio evidence is available.')),
+                  child: Padding(padding: EdgeInsets.all(16), child: Text('Your PAPER portfolio is not available yet.')),
                 ),
             ],
           ),
@@ -91,7 +116,7 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
       floatingActionButton: FloatingActionButton.extended(
         key: const ValueKey('paper-portfolio-refresh'),
         onPressed: _loading ? null : _refresh,
-        icon: const Icon(Icons.refresh),
+        icon: const Icon(Icons.refresh_rounded),
         label: const Text('Refresh'),
       ),
     );
@@ -104,22 +129,21 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Portfolio unavailable', style: Theme.of(context).textTheme.titleMedium),
+              Text('Portfolio unavailable', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
-              Text(failure.code),
-              if (failure.correlationId != null) Text('Correlation: ${failure.correlationId}'),
+              Text(_failureMessage(failure)),
               const SizedBox(height: 12),
-              FilledButton(onPressed: _refresh, child: const Text('Retry')),
+              FilledButton(onPressed: _refresh, child: const Text('Try again')),
             ],
           ),
         ),
       );
 
-  Widget _staleCard(ApiFailure failure) => Card(
-        key: const ValueKey('paper-portfolio-stale'),
+  Widget _staleCard() => const Card(
+        key: ValueKey('paper-portfolio-stale'),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text('Refresh failed (${failure.code}). Values below are last-known evidence and must not be treated as current.'),
+          padding: EdgeInsets.all(16),
+          child: Text('Could not refresh. Showing your last loaded PAPER portfolio.'),
         ),
       );
 
@@ -132,39 +156,34 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
+            Row(
               children: [
-                Chip(label: Text('Mode ${portfolio.mode}')),
-                Chip(label: Text(portfolio.liveTradingEnabled ? 'LIVE ENABLED' : 'LIVE DISABLED')),
-                Chip(label: Text(portfolio.newOrdersHalted ? 'NEW ORDERS HALTED' : 'NEW ORDERS ALLOWED')),
-                Chip(label: Text(portfolio.cashReconciled ? 'CASH RECONCILED' : 'CASH NOT RECONCILED')),
+                Expanded(child: Text('Account overview', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+                Chip(label: Text(safeMode ? 'PAPER' : portfolio.mode)),
               ],
             ),
-            if (!safeMode) ...[
-              const SizedBox(height: 12),
-              const Text('Fail-safe warning: backend mode evidence is not a confirmed PAPER-only state. Do not infer order eligibility from this screen.'),
-            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 24,
               runSpacing: 16,
               children: [
                 _metric('Equity', portfolio.equity),
-                _metric('Cash', portfolio.cash),
+                _metric('Available cash', portfolio.cash),
                 _metric('Invested', portfolio.invested),
                 _metric('Market value', portfolio.marketValue),
                 _metric('Realized P&L', portfolio.realizedPnl),
                 _metric('Unrealized P&L', portfolio.unrealizedPnl),
-                _metric('Today realized P&L', portfolio.realizedPnlToday),
-                _metric('Exposure %', portfolio.exposurePercent),
+                _metric('Today P&L', portfolio.realizedPnlToday),
+                _metric('Exposure', '${portfolio.exposurePercent}%'),
                 _metric('Open positions', portfolio.openPositions),
               ],
             ),
+            if (portfolio.newOrdersHalted) ...[
+              const SizedBox(height: 14),
+              const Text('New PAPER orders are currently paused.', style: TextStyle(fontWeight: FontWeight.w700)),
+            ],
             const SizedBox(height: 12),
-            Text('Mark source: ${portfolio.markPriceSource ?? 'UNKNOWN'}'),
-            Text('As of: ${portfolio.asOf?.toIso8601String() ?? 'UNKNOWN'}'),
+            Text('Updated ${portfolio.asOf?.toLocal().toString() ?? 'recently'}', style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
       ),
@@ -176,9 +195,9 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label),
+            Text(label, style: Theme.of(context).textTheme.labelMedium),
             const SizedBox(height: 4),
-            Text(value?.toString() ?? 'UNKNOWN', style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(value?.toString() ?? '—', style: const TextStyle(fontWeight: FontWeight.w800)),
           ],
         ),
       );
@@ -188,8 +207,8 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
         child: ListTile(
           title: Text('${position.exchange} ${position.symbol}'),
           subtitle: Text(
-            '${position.productType} • qty ${position.quantity} • avg ${position.averageCost ?? 'UNKNOWN'} • mark ${position.markPrice ?? 'UNKNOWN'}\n'
-            'Unrealized P&L ${position.unrealizedPnl ?? 'UNKNOWN'} • opened ${position.openedAt?.toIso8601String() ?? 'UNKNOWN'}',
+            '${position.productType} • ${position.quantity} shares • Avg ${position.averageCost ?? '—'} • Last ${position.markPrice ?? '—'}\n'
+            'P&L ${position.unrealizedPnl ?? '—'}',
           ),
           isThreeLine: true,
         ),

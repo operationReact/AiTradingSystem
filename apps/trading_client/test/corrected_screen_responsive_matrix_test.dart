@@ -12,19 +12,7 @@ class _UnusedHealthRepository implements HealthRepository {
 
 const _mandatoryWidths = <double>[320, 375, 411, 768, 1024, 1440];
 const _correctedRoutes = <String>[
-  '/instruments',
-  '/market',
-  '/research',
-  '/scenarios',
-  '/backtests',
-  '/portfolio',
-  '/orders',
-  '/risk',
-  '/news',
-  '/notifications',
-  '/audit',
-  '/settings',
-  '/operations/health',
+  '/instruments', '/market', '/research', '/scenarios', '/backtests', '/portfolio', '/orders', '/risk', '/news', '/notifications', '/audit', '/settings', '/operations/health',
 ];
 
 Future<void> _pumpRoute(WidgetTester tester, String route, double width) async {
@@ -41,7 +29,7 @@ Future<void> _pumpRoute(WidgetTester tester, String route, double width) async {
 }
 
 void main() {
-  testWidgets('all corrected routes render without overflow at mandatory widths', (tester) async {
+  testWidgets('all routes render without overflow at mandatory widths', (tester) async {
     addTearDown(() {
       tester.view.resetPhysicalSize();
       tester.view.resetDevicePixelRatio();
@@ -51,23 +39,16 @@ void main() {
       for (final route in _correctedRoutes) {
         await _pumpRoute(tester, route, width);
 
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: 'Flutter exception/overflow at width $width on route $route',
-        );
+        expect(tester.takeException(), isNull, reason: 'Flutter exception/overflow at width $width on route $route');
         expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
         expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
         expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
 
         if (width < 900) {
-          expect(
-            find.byKey(const ValueKey('product-mobile-navigation')),
-            findsOneWidget,
-            reason: 'mobile product navigation missing at width $width on $route',
-          );
+          expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget, reason: 'mobile product navigation missing at width $width on $route');
         } else {
-          expect(find.text('Control Center'), findsOneWidget);
+          expect(find.text('Home'), findsOneWidget);
+          expect(find.text('AI Research'), findsWidgets);
           expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
         }
 

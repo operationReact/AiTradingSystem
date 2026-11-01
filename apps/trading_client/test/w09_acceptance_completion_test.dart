@@ -14,23 +14,10 @@ class _BacktestFake implements BacktestRepository {
   int runCalls = 0;
 
   BacktestRunSummary _summary() => BacktestRunSummary(
-        id: 'run-1',
-        instrumentId: 42,
-        exchange: 'NSE',
-        tradingSymbol: 'INFY-EQ',
-        interval: 'ONE_DAY',
-        fromDate: DateTime.utc(2026, 1, 1),
-        toDate: DateTime.utc(2026, 6, 1),
-        initialCapital: 100000,
-        tradeCount: 12,
-        winningTrades: 7,
-        losingTrades: 5,
-        winRatePercent: 58.33,
-        netPnl: 3250,
-        finalEquity: 103250,
-        totalReturnPercent: 3.25,
-        maxDrawdownPercent: 1.8,
-        profitFactor: 1.4,
+        id: 'run-1', instrumentId: 42, exchange: 'NSE', tradingSymbol: 'INFY-EQ', interval: 'ONE_DAY',
+        fromDate: DateTime.utc(2026, 1, 1), toDate: DateTime.utc(2026, 6, 1), initialCapital: 100000,
+        tradeCount: 12, winningTrades: 7, losingTrades: 5, winRatePercent: 58.33, netPnl: 3250,
+        finalEquity: 103250, totalReturnPercent: 3.25, maxDrawdownPercent: 1.8, profitFactor: 1.4,
         createdAt: DateTime.utc(2026, 10, 31),
       );
 
@@ -38,60 +25,26 @@ class _BacktestFake implements BacktestRepository {
   Future<List<BacktestRunSummary>> recent({int limit = 20}) async => List.unmodifiable(_runs);
 
   @override
-  Future<BacktestRunSummary> run({
-    required int instrumentId,
-    required String interval,
-    required DateTime fromDate,
-    required DateTime toDate,
-    required num initialCapital,
-  }) async {
+  Future<BacktestRunSummary> run({required int instrumentId, required String interval, required DateTime fromDate, required DateTime toDate, required num initialCapital}) async {
     runCalls += 1;
     final summary = _summary();
-    _runs
-      ..clear()
-      ..add(summary);
+    _runs..clear()..add(summary);
     return summary;
   }
 }
 
 class _DegradedMarketFake implements MarketDataRepository {
   @override
-  Future<InstrumentCatalogueStatus> instrumentStatus() async =>
-      throw const ApiTransportFailure('MARKET_DATA_DEGRADED', 'corr-market');
+  Future<InstrumentCatalogueStatus> instrumentStatus() async => throw const ApiTransportFailure('MARKET_DATA_DEGRADED', 'corr-market');
 
   @override
-  Future<InstrumentSearchPage> searchInstruments({
-    String? query,
-    String? exchange,
-    String? type,
-    int page = 0,
-    int size = 20,
-  }) async => const InstrumentSearchPage(
-        content: [],
-        page: 0,
-        size: 20,
-        totalElements: 0,
-        totalPages: 0,
-        hasNext: false,
-        catalogueVersion: null,
-        activatedAt: null,
+  Future<InstrumentSearchPage> searchInstruments({String? query, String? exchange, String? type, int page = 0, int size = 20}) async => const InstrumentSearchPage(
+        content: [], page: 0, size: 20, totalElements: 0, totalPages: 0, hasNext: false, catalogueVersion: null, activatedAt: null,
       );
 
   @override
-  Future<MarketCandlePage> candles({
-    required int instrumentId,
-    required String interval,
-    required DateTime fromDate,
-    required DateTime toDate,
-    int page = 0,
-    int size = 100,
-  }) async => const MarketCandlePage(
-        items: [],
-        page: 0,
-        size: 100,
-        totalItems: 0,
-        totalPages: 0,
-        hasNext: false,
+  Future<MarketCandlePage> candles({required int instrumentId, required String interval, required DateTime fromDate, required DateTime toDate, int page = 0, int size = 100}) async => const MarketCandlePage(
+        items: [], page: 0, size: 100, totalItems: 0, totalPages: 0, hasNext: false,
       );
 
   @override
@@ -107,19 +60,8 @@ class _HaltRiskFake implements RiskApprovalRepository {
   String? reason;
 
   static RiskApprovalSnapshot _snapshot(bool halted) => RiskApprovalSnapshot(
-        config: RiskConfig(
-          tradingMode: 'PAPER',
-          liveTradingEnabled: false,
-          policyVersion: 'v2',
-          startingCapital: 100000,
-          riskPerTradePercent: 1,
-          maxDailyDrawdownPercent: 3,
-          maxOpenPositions: 5,
-          signalMaxAgeMinutes: 15,
-          newOrdersHalted: halted,
-        ),
-        decisions: const [],
-        approvals: const [],
+        config: RiskConfig(tradingMode: 'PAPER', liveTradingEnabled: false, policyVersion: 'v2', startingCapital: 100000, riskPerTradePercent: 1, maxDailyDrawdownPercent: 3, maxOpenPositions: 5, signalMaxAgeMinutes: 15, newOrdersHalted: halted),
+        decisions: const [], approvals: const [],
       );
 
   @override
@@ -137,12 +79,7 @@ class _HaltRiskFake implements RiskApprovalRepository {
   }
 
   @override
-  Future<ApprovalView> decideApproval({
-    required ApprovalView approval,
-    required String decision,
-    required String actor,
-    String? reason,
-  }) async => approval;
+  Future<ApprovalView> decideApproval({required ApprovalView approval, required String decision, required String actor, String? reason}) async => approval;
 }
 
 void _tallViewport(WidgetTester tester) {
@@ -172,13 +109,14 @@ void main() {
     expect(find.textContaining('12 trades'), findsOneWidget);
   });
 
-  testWidgets('W09 degraded market-data journey fails closed with explicit evidence state', (tester) async {
+  testWidgets('W09 degraded market-data journey fails closed with customer-safe evidence state', (tester) async {
     await tester.pumpWidget(MaterialApp(home: MarketDataPage(repository: _DegradedMarketFake())));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('market-data-error')), findsOneWidget);
-    expect(find.text('Market data unavailable: MARKET_DATA_DEGRADED'), findsOneWidget);
-    expect(find.textContaining('client-generated prices'), findsOneWidget);
+    expect(find.text('Market data is temporarily unavailable.'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.textContaining('MARKET_DATA_DEGRADED'), findsNothing);
   });
 
   testWidgets('W09 emergency stop confirms mutation then rereads authoritative backend state', (tester) async {

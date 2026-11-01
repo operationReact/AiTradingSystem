@@ -36,6 +36,7 @@ void main() {
       for (final destination in ['home', 'markets', 'research', 'portfolio', 'more']) {
         expect(find.byKey(ValueKey('mobile-nav-$destination')), findsOneWidget);
       }
+      expect(find.text('See the market. Find the setup. Test it safely.'), findsOneWidget);
       expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
       expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
       expect(tester.takeException(), isNull);
@@ -50,23 +51,25 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('1024px mandatory viewport enters desktop product layout', (tester) async {
+  testWidgets('1024px mandatory viewport enters customer desktop layout', (tester) async {
     await _pumpAt(tester, const Size(1024, 900));
 
     expect(find.text('AI Trading System'), findsOneWidget);
-    expect(find.text('Control Center'), findsOneWidget);
+    expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Markets'), findsWidgets);
+    expect(find.text('AI Research'), findsWidgets);
+    expect(find.text('Portfolio'), findsWidgets);
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('1440px mandatory desktop viewport keeps product navigation reachable', (tester) async {
+  testWidgets('1440px mandatory desktop viewport keeps customer navigation reachable', (tester) async {
     await _pumpAt(tester, const Size(1440, 900));
 
-    expect(find.text('Control Center'), findsOneWidget);
-    expect(find.text('Strategies & Research'), findsOneWidget);
-    expect(find.text('Portfolio & Orders'), findsOneWidget);
-    expect(find.text('Learning & Operations'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
+    for (final label in ['Home', 'Markets', 'AI Research', 'Portfolio', 'Settings']) {
+      expect(find.text(label), findsWidgets);
+    }
+    expect(find.text('Learning & Operations'), findsNothing);
     expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
     expect(tester.takeException(), isNull);
   });

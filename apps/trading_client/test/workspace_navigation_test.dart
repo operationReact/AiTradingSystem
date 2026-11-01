@@ -11,7 +11,7 @@ class _UnusedHealthRepository implements HealthRepository {
 }
 
 void main() {
-  testWidgets('mobile product navigation exposes the approved trading workspaces', (tester) async {
+  testWidgets('mobile product navigation exposes customer trading destinations', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(() {
@@ -35,26 +35,18 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Workspace'), findsWidgets);
-    for (final label in [
-      'Instruments',
-      'Scenario & regime',
-      'PAPER backtests',
-      'PAPER orders',
-      'Risk & approvals',
-      'News evidence',
-      'Notifications',
-      'Audit trail',
-      'System health',
-      'Appearance',
-    ]) {
-      expect(find.text(label), findsOneWidget, reason: 'missing workspace destination $label');
+    expect(find.text('More'), findsWidgets);
+    for (final label in ['PAPER orders', 'Risk controls', 'Backtests', 'Notifications', 'Appearance']) {
+      expect(find.text(label), findsWidgets, reason: 'missing customer destination $label');
     }
 
-    await tester.tap(find.text('Scenario & regime'));
+    for (final internalLabel in ['Scenario & regime', 'Audit trail', 'System health', 'News evidence']) {
+      expect(find.text(internalLabel), findsNothing, reason: 'internal destination leaked into customer More sheet: $internalLabel');
+    }
+
+    await tester.tap(find.text('PAPER orders'));
     await tester.pumpAndSettle();
-    expect(find.text('Scenario evidence lookup'), findsOneWidget);
-    expect(find.byKey(const ValueKey('scenario-run-id')), findsOneWidget);
+    expect(find.text('Practice a trade'), findsOneWidget);
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
   });
 }
