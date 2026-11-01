@@ -6,6 +6,7 @@ import in.aitradingsystem.execution.TradingExecutionAuthority;
 import in.aitradingsystem.paper.AutomatedPaperPositionRepository.MonitoredPosition;
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ public class AutomatedPaperPositionMonitorService {
     private final PaperTradingService trading;
     private final RiskPolicyConfigRepository riskPolicies;
     private final AuditService audit;
+    private final Clock clock;
 
     public AutomatedPaperPositionMonitorService(
             TradingExecutionAuthority authority,
@@ -34,15 +36,26 @@ public class AutomatedPaperPositionMonitorService {
             PaperTradingService trading,
             RiskPolicyConfigRepository riskPolicies,
             AuditService audit) {
+        this(authority, positions, trading, riskPolicies, audit, Clock.systemUTC());
+    }
+
+    AutomatedPaperPositionMonitorService(
+            TradingExecutionAuthority authority,
+            AutomatedPaperPositionRepository positions,
+            PaperTradingService trading,
+            RiskPolicyConfigRepository riskPolicies,
+            AuditService audit,
+            Clock clock) {
         this.authority = authority;
         this.positions = positions;
         this.trading = trading;
         this.riskPolicies = riskPolicies;
         this.audit = audit;
+        this.clock = clock;
     }
 
     public MonitorRun runOnce() {
-        return runOnce(Instant.now());
+        return runOnce(clock.instant());
     }
 
     MonitorRun runOnce(Instant now) {
