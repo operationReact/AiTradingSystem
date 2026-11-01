@@ -73,7 +73,7 @@ void main() {
     await tester.tap(evaluate);
     await tester.pumpAndSettle();
 
-    expect(find.text('RESEARCH_SUPPORTED'), findsOneWidget);
+    expect(find.text('Research supported'), findsWidgets);
     expect(find.text('SCENARIO_POSITIVE'), findsOneWidget);
   });
 }
