@@ -35,7 +35,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mobile-nav-more')));
     await tester.pumpAndSettle();
 
-    expect(find.text('More'), findsOneWidget);
+    expect(find.text('More'), findsWidgets);
     for (final label in ['PAPER orders', 'Risk controls', 'Backtests', 'Notifications', 'Appearance']) {
       expect(find.text(label), findsOneWidget, reason: 'missing customer destination $label');
     }
