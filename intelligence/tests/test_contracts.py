@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from aitrading_intelligence.contracts import EvidenceContractRequest, ProvenanceRef
 from aitrading_intelligence.fingerprints import request_fingerprint
 
-NOW = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=5)
+NOW = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=5)
 
 
 def valid_request() -> EvidenceContractRequest:
