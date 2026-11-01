@@ -47,3 +47,7 @@ Implementation status above means the UI surface and flow are present on the rev
 ## Acceptance
 
 Each screen must pass Flutter analyzer/tests, render without overflow at 390x844, preserve the approved visual hierarchy, and remain usable at the existing mobile responsive test widths. The PR stays draft until the user visually approves the auth flow on a physical Android build.
+
+## Review state
+
+The screen sequence and mockup alignment are implemented. Do not merge until exact-head CI and the user’s physical-device visual review are both complete.
