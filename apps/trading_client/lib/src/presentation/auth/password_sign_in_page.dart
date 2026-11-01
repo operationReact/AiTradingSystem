@@ -123,10 +123,13 @@ class _PasswordSignInPageState extends State<PasswordSignInPage> {
               FingerprintOutlineButton(key: const ValueKey('auth-fingerprint-sign-in'), onPressed: widget.onFingerprintSignIn),
             ],
             const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 3,
+              runSpacing: 2,
               children: [
-                const Text("Don't have an account? ", style: TextStyle(color: AuthPalette.muted, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                const Text("Don't have an account?", style: TextStyle(color: AuthPalette.muted, fontSize: 11.5, fontWeight: FontWeight.w600)),
                 TextButton(
                   key: const ValueKey('auth-open-sign-up'),
                   onPressed: widget.onSignUp,
