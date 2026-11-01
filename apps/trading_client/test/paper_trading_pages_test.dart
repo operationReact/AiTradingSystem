@@ -50,6 +50,11 @@ Future<void> _scrollPageTo(WidgetTester tester, String listKey, Finder target, {
       scrollable: find.descendant(of: find.byKey(ValueKey(listKey)), matching: find.byType(Scrollable)).first,
     );
 
+Future<void> _bringIntoView(WidgetTester tester, Finder target) async {
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('PAPER portfolio presents customer account metrics and positions', (tester) async {
     final repository = _FakePaperRepository(portfolio: _portfolio(), orders: const PaperOrderPage(items: [], page: 0, totalPages: 0, totalItems: 0));
@@ -76,8 +81,9 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-symbol')), 'INFY-EQ');
     await tester.enterText(find.byKey(const ValueKey('paper-order-reference-price')), '2500');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
-    await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
+    final submit = find.byKey(const ValueKey('paper-order-submit'));
+    await _bringIntoView(tester, submit);
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('paper-order-validation-error')), findsOneWidget);
@@ -102,8 +108,9 @@ void main() {
     await tester.enterText(find.byKey(const ValueKey('paper-order-stop-loss')), '2400');
     await tester.enterText(find.byKey(const ValueKey('paper-order-target')), '2800');
     await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
-    await tester.ensureVisible(find.byKey(const ValueKey('paper-order-submit')));
-    await tester.tap(find.byKey(const ValueKey('paper-order-submit')));
+    final submit = find.byKey(const ValueKey('paper-order-submit'));
+    await _bringIntoView(tester, submit);
+    await tester.tap(submit);
     await tester.pumpAndSettle();
 
     expect(repository.submitted?.symbol, 'INFY-EQ');
