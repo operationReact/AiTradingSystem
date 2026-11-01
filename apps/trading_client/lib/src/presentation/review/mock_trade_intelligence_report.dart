@@ -72,25 +72,46 @@ class _MockTradeIntelligenceReportState extends State<MockTradeIntelligenceRepor
   }
 
   Widget _tabBar() {
-    return SizedBox(
+    const tabs = ['Decision', 'Evidence', 'Confidence', 'Outcome', 'Audit'];
+    return Container(
       height: 44,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: ['Decision', 'Evidence', 'Confidence', 'Outcome', 'Audit']
-              .map(
-                (tab) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(tab),
-                    selected: _tab == tab,
-                    onSelected: (_) => setState(() => _tab = tab),
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: const Color(0xFF071529),
+        borderRadius: BorderRadius.circular(13),
+        border: Border.all(color: const Color(0xFF183050)),
+      ),
+      child: Row(
+        children: tabs
+            .map(
+              (tab) => Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Material(
+                    color: _tab == tab ? _C.cyan.withValues(alpha: .12) : Colors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                    child: InkWell(
+                      onTap: () => setState(() => _tab = tab),
+                      borderRadius: BorderRadius.circular(9),
+                      child: Center(
+                        child: Text(
+                          tab,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: _tab == tab ? _C.cyan : _C.muted,
+                            fontSize: 9,
+                            fontWeight: _tab == tab ? FontWeight.w900 : FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              )
-              .toList(),
-        ),
+              ),
+            )
+            .toList(),
       ),
     );
   }
