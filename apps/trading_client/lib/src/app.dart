@@ -45,6 +45,7 @@ class TradingApp extends StatefulWidget {
 
 class _TradingAppState extends State<TradingApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  late final NavigatorObserver _routeObserver;
   DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
@@ -56,12 +57,14 @@ class _TradingAppState extends State<TradingApp> {
   void initState() {
     super.initState();
     _selectedRoute = widget.initialRoute;
+    _routeObserver = _ProductRouteObserver(_handleRouteChanged);
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [_routeObserver],
       title: 'AI Trading System',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
@@ -142,6 +145,11 @@ class _TradingAppState extends State<TradingApp> {
     );
   }
 
+  void _handleRouteChanged(String route) {
+    if (!mounted || _selectedRoute == route) return;
+    setState(() => _selectedRoute = route);
+  }
+
   void _navigate(String route) {
     setState(() => _selectedRoute = route);
     _navigatorKey.currentState?.pushNamedAndRemoveUntil(route, (candidate) => false);
@@ -192,6 +200,35 @@ class _TradingAppState extends State<TradingApp> {
         onDesignStyleChanged: _setDesignStyle,
         onThemeModeChanged: _setThemeMode,
       );
+}
+
+class _ProductRouteObserver extends NavigatorObserver {
+  _ProductRouteObserver(this.onRouteChanged);
+
+  final ValueChanged<String> onRouteChanged;
+
+  void _emit(Route<dynamic>? route) {
+    final name = route?.settings.name;
+    if (name != null) onRouteChanged(name);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _emit(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _emit(previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _emit(newRoute);
+  }
 }
 
 class _MobileProductNavigation extends StatelessWidget {
