@@ -92,6 +92,13 @@ public class TradingControlService {
             .orElse(OrderExecutionMode.MANUAL);
     }
 
+    public void requireExecutionMode(OrderExecutionMode requestedOrigin) {
+        OrderExecutionMode active = currentExecutionMode();
+        if (active != requestedOrigin) {
+            throw new ExecutionModeMismatchException(active, requestedOrigin);
+        }
+    }
+
     private ControlRow currentForUpdate() {
         return jdbc.sql("SELECT active_mode, order_execution_mode FROM trading_execution_mode WHERE id = 1 FOR UPDATE")
             .query((rs, row) -> new ControlRow(
@@ -117,5 +124,19 @@ public class TradingControlService {
         public LiveModeUnavailableException() {
             super("LIVE trading is unavailable until broker order submission and live safety requirements are verified.");
         }
+    }
+
+    public static final class ExecutionModeMismatchException extends RuntimeException {
+        private final OrderExecutionMode activeMode;
+        private final OrderExecutionMode requestedOrigin;
+
+        public ExecutionModeMismatchException(OrderExecutionMode activeMode, OrderExecutionMode requestedOrigin) {
+            super("Order origin " + requestedOrigin + " is disabled while execution mode is " + activeMode + ".");
+            this.activeMode = activeMode;
+            this.requestedOrigin = requestedOrigin;
+        }
+
+        public OrderExecutionMode activeMode() { return activeMode; }
+        public OrderExecutionMode requestedOrigin() { return requestedOrigin; }
     }
 }
