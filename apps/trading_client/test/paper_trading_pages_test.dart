@@ -91,6 +91,40 @@ void main() {
     expect(repository.submitted, isNull);
   });
 
+  testWidgets('trailing-stop UI is explicit preview and cannot imply active protection', (tester) async {
+    final repository = _FakePaperRepository(portfolio: _portfolio(), orders: const PaperOrderPage(items: [], page: 0, totalPages: 0, totalItems: 0));
+
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(home: PaperOrdersPage(repository: repository)));
+    await tester.pumpAndSettle();
+
+    final toggle = find.byKey(const ValueKey('paper-order-trailing-toggle'));
+    await _scrollPageTo(tester, 'paper-orders-list', toggle);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('paper-order-trailing-percent')), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-order-trailing-preview-warning')), findsOneWidget);
+    expect(find.textContaining('Preview only'), findsOneWidget);
+    expect(find.textContaining('0.5% to 20.0%'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('paper-order-symbol')), 'INFY-EQ');
+    await tester.enterText(find.byKey(const ValueKey('paper-order-quantity')), '2');
+    await tester.enterText(find.byKey(const ValueKey('paper-order-reference-price')), '2500');
+    await tester.enterText(find.byKey(const ValueKey('paper-order-stop-loss')), '2400');
+    await tester.enterText(find.byKey(const ValueKey('paper-order-target')), '2800');
+    await tester.enterText(find.byKey(const ValueKey('paper-order-signal-time')), '2026-10-31T00:00:00Z');
+
+    final submit = find.byKey(const ValueKey('paper-order-submit'));
+    await _bringIntoView(tester, submit);
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trailing stop is a preview and is not active yet. Turn it off to place this PAPER order.'), findsOneWidget);
+    expect(repository.submitted, isNull);
+  });
+
   testWidgets('PAPER order submits simulated intent and never exposes a LIVE action', (tester) async {
     final result = PaperOrderResult(order: _order(), replayed: false, reasonCodes: const ['WITHIN_POLICY']);
     final repository = _FakePaperRepository(
