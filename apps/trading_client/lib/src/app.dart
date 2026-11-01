@@ -80,7 +80,7 @@ class _TradingAppState extends State<TradingApp> {
           }
           return Stack(
             children: [
-              Positioned.fill(bottom: 72, child: child ?? const SizedBox.shrink()),
+              Positioned.fill(bottom: 64, child: child ?? const SizedBox.shrink()),
               Positioned(
                 left: 0,
                 right: 0,
@@ -141,14 +141,22 @@ class _TradingAppState extends State<TradingApp> {
   Future<void> _openMoreNavigation() async {
     final navContext = _navigatorKey.currentContext;
     if (navContext == null) return;
+    final previousRoute = _selectedRoute;
+    setState(() => _selectedRoute = '/more');
     final route = await showModalBottomSheet<String>(
       context: navContext,
       showDragHandle: true,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
       builder: (context) => const _MoreProductSheet(),
     );
-    if (route != null && mounted) _navigate(route);
+    if (!mounted) return;
+    if (route != null) {
+      _navigate(route);
+    } else {
+      setState(() => _selectedRoute = previousRoute);
+    }
   }
 
   void _setDesignStyle(DesignStyle value) {
@@ -211,7 +219,7 @@ class _MobileProductNavigation extends StatelessWidget {
       child: SafeArea(
         top: false,
         child: SizedBox(
-          height: 72,
+          height: 64,
           child: Row(
             children: List.generate(items.length, (index) {
               final item = items[index];
@@ -234,19 +242,19 @@ class _MobileProductNavigation extends StatelessWidget {
                   },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+                    margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
+                      borderRadius: BorderRadius.circular(16),
                       color: selected ? colors.neonCyan.withValues(alpha: 0.11) : Colors.transparent,
                       border: selected ? Border.all(color: colors.neonCyan.withValues(alpha: 0.30)) : null,
-                      boxShadow: selected ? [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.10), blurRadius: 18)] : null,
+                      boxShadow: selected ? [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.10), blurRadius: 14)] : null,
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(selected ? item.$2 : item.$1, size: 21, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant),
-                        const SizedBox(height: 4),
-                        Text(item.$3, maxLines: 1, style: TextStyle(fontSize: 10.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant)),
+                        Icon(selected ? item.$2 : item.$1, size: 20, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant),
+                        const SizedBox(height: 2),
+                        Text(item.$3, maxLines: 1, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -347,58 +355,62 @@ class _MoreProductSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<TradingColors>()!;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 2, 20, 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(colors: [colors.neonCyan, colors.neonViolet, colors.neonMagenta]).createShader(bounds),
-            child: const Text('More', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
-          ),
-          const SizedBox(height: 6),
-          Text('Trading tools and app settings', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const SizedBox(height: 18),
-          ..._destinations.map(
-            (destination) => Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Material(
-                color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.72),
-                borderRadius: BorderRadius.circular(18),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () => Navigator.of(context).pop(destination.$1),
-                  child: Padding(
-                    padding: const EdgeInsets.all(15),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(13), color: colors.neonCyan.withValues(alpha: 0.10)),
-                          child: Icon(destination.$2, color: colors.neonCyan, size: 21),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(destination.$3, style: const TextStyle(fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 2),
-                              Text(destination.$4, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-                            ],
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ShaderMask(
+              shaderCallback: (bounds) => LinearGradient(colors: [colors.neonCyan, colors.neonViolet, colors.neonMagenta]).createShader(bounds),
+              child: const Text('More', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+            ),
+            const SizedBox(height: 3),
+            Text('Trading tools and settings', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 10),
+            ..._destinations.map(
+              (destination) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Material(
+                  color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.72),
+                  borderRadius: BorderRadius.circular(14),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () => Navigator.of(context).pop(destination.$1),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(borderRadius: BorderRadius.circular(11), color: colors.neonCyan.withValues(alpha: 0.10)),
+                            child: Icon(destination.$2, color: colors.neonCyan, size: 19),
                           ),
-                        ),
-                        const Icon(Icons.chevron_right_rounded),
-                      ],
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(destination.$3, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                                const SizedBox(height: 1),
+                                Text(destination.$4, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, size: 20),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
