@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
+import '../theme/app_theme.dart';
 
 class MarketDataPage extends StatefulWidget {
   const MarketDataPage({required this.repository, super.key});
