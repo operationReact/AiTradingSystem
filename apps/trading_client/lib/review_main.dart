@@ -35,19 +35,28 @@ class _AiTradingUiReviewAppState extends State<AiTradingUiReviewApp> {
           behavior: SnackBarBehavior.floating,
         ),
         switchTheme: SwitchThemeData(
-          thumbColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF03111F) : null),
-          trackColor: WidgetStateProperty.resolveWith((states) => states.contains(WidgetState.selected) ? const Color(0xFF13DFF3) : null),
+          thumbColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? const Color(0xFF03111F)
+                : null,
+          ),
+          trackColor: WidgetStateProperty.resolveWith(
+            (states) => states.contains(WidgetState.selected)
+                ? const Color(0xFF13DFF3)
+                : null,
+          ),
         ),
         inputDecorationTheme: InputDecorationTheme(
           filled: true,
           fillColor: const Color(0xFF071529),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         ),
-        choiceChipTheme: ChoiceChipThemeData(
+        chipTheme: ChipThemeData(
           selectedColor: const Color(0xFF13DFF3),
           backgroundColor: const Color(0xFF0A172A),
           labelStyle: const TextStyle(fontSize: 11),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+          side: const BorderSide(color: Color(0xFF183050)),
         ),
       ),
       home: AnimatedSwitcher(
