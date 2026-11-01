@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/widgets/responsive_layout.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
@@ -105,16 +106,20 @@ class _MarketDataPageState extends State<MarketDataPage> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final wide = constraints.maxWidth >= 900;
-            final searchPane = _buildInstrumentPane(context, status, instruments);
-            final chartPane = _buildCandlePane(context);
+            final width = constraints.maxWidth;
+            final wide = width >= 900;
+            final mobile = width < ResponsiveLayout.mobileBreakpoint;
+            final pagePadding = ResponsiveLayout.horizontalPadding(width);
+            final sectionGap = ResponsiveLayout.sectionGap(width);
+            final searchPane = _buildInstrumentPane(context, status, instruments, mobile: mobile);
+            final chartPane = _buildCandlePane(context, mobile: mobile);
             return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+              padding: EdgeInsets.fromLTRB(pagePadding, ResponsiveLayout.topPadding(width), pagePadding, 24),
               children: [
                 Container(
-                  padding: const EdgeInsets.all(20),
+                  padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
+                    borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
                     gradient: LinearGradient(
                       colors: [
                         theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
@@ -128,25 +133,31 @@ class _MarketDataPageState extends State<MarketDataPage> {
                     children: [
                       Semantics(
                         header: true,
-                        child: Text('Explore the market', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                        child: Text(
+                          'Explore the market',
+                          style: (mobile ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.w900),
+                        ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Text(
-                        'Search stocks, review recent price action, and move from market context into AI research.',
-                        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                        'Search stocks, review price action, then move into AI research.',
+                        style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: mobile ? 1.3 : 1.45,
+                        ),
                       ),
                     ],
                   ),
                 ),
                 if (_error != null) ...[
-                  const SizedBox(height: 16),
+                  SizedBox(height: mobile ? 10 : 16),
                   Card(
                     key: const ValueKey('market-data-error'),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.all(mobile ? 12 : 16),
                       child: Row(
                         children: [
-                          const Icon(Icons.cloud_off_rounded),
+                          const Icon(Icons.cloud_off_rounded, size: 20),
                           const SizedBox(width: 10),
                           Expanded(child: Text(_error!)),
                           TextButton(onPressed: _loadInstruments, child: const Text('Try again')),
@@ -155,7 +166,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
                     ),
                   ),
                 ],
-                const SizedBox(height: 18),
+                SizedBox(height: sectionGap),
                 if (wide)
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,7 +178,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
                   )
                 else ...[
                   searchPane,
-                  const SizedBox(height: 16),
+                  SizedBox(height: sectionGap),
                   chartPane,
                 ],
               ],
@@ -178,40 +189,53 @@ class _MarketDataPageState extends State<MarketDataPage> {
     );
   }
 
-  Widget _buildInstrumentPane(BuildContext context, InstrumentCatalogueStatus? status, InstrumentSearchPage? instruments) {
+  Widget _buildInstrumentPane(
+    BuildContext context,
+    InstrumentCatalogueStatus? status,
+    InstrumentSearchPage? instruments, {
+    required bool mobile,
+  }) {
+    final theme = Theme.of(context);
     return Card(
       key: const ValueKey('market-data-instruments'),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(mobile ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Find a stock', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            if (status != null) Text('${status.activeCount} tradable instruments available', style: Theme.of(context).textTheme.bodySmall),
-            const SizedBox(height: 12),
+            Text('Find a stock', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w800)),
+            if (status != null) ...[
+              const SizedBox(height: 3),
+              Text('${status.activeCount} tradable instruments', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+            SizedBox(height: mobile ? 8 : 12),
             TextField(
               key: const ValueKey('market-instrument-search'),
               controller: _instrumentQuery,
+              textInputAction: TextInputAction.search,
               decoration: const InputDecoration(labelText: 'Symbol or company', prefixIcon: Icon(Icons.search_rounded)),
               onSubmitted: (_) => _loadInstruments(),
             ),
-            const SizedBox(height: 10),
-            FilledButton.icon(
-              key: const ValueKey('market-instrument-search-button'),
-              onPressed: _loading ? null : _loadInstruments,
-              icon: const Icon(Icons.search_rounded),
-              label: const Text('Search market'),
+            const SizedBox(height: 8),
+            SizedBox(
+              width: mobile ? double.infinity : null,
+              child: FilledButton.icon(
+                key: const ValueKey('market-instrument-search-button'),
+                onPressed: _loading ? null : _loadInstruments,
+                icon: const Icon(Icons.search_rounded, size: 19),
+                label: const Text('Search market'),
+              ),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: mobile ? 8 : 12),
             if (_loading && instruments == null)
-              const Center(child: CircularProgressIndicator())
+              const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
             else if (instruments == null || instruments.content.isEmpty)
-              const Text('No matching stocks found.')
+              Text('No matching stocks found.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))
             else
-              ...instruments.content.take(12).map(
+              ...instruments.content.take(mobile ? 6 : 12).map(
                     (instrument) => ListTile(
                       key: ValueKey('market-instrument-${instrument.id}'),
+                      dense: true,
                       selected: _selected?.id == instrument.id,
                       title: Text(instrument.tradingSymbol),
                       subtitle: Text('${instrument.exchange} • ${instrument.instrumentType}'),
@@ -225,17 +249,18 @@ class _MarketDataPageState extends State<MarketDataPage> {
     );
   }
 
-  Widget _buildCandlePane(BuildContext context) {
+  Widget _buildCandlePane(BuildContext context, {required bool mobile}) {
     final selected = _selected;
     final candles = _candles;
+    final theme = Theme.of(context);
     return Card(
       key: const ValueKey('market-data-candles'),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(mobile ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Price action', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+            Text('Price action', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               key: const ValueKey('market-data-interval'),
@@ -253,21 +278,21 @@ class _MarketDataPageState extends State<MarketDataPage> {
                 if (selected != null) _loadCandles(selected);
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             if (selected == null)
-              const Text('Choose a stock to view recent price action.')
+              Text('Choose a stock to view recent price action.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))
             else if (_loading && candles == null)
               const Center(child: CircularProgressIndicator())
             else if (candles == null || candles.items.isEmpty)
               Text('No price history is available for ${selected.tradingSymbol} in this timeframe.')
             else ...[
               Text('${selected.tradingSymbol} • ${candles.totalItems} points', style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 10),
-              ...candles.items.take(20).map(
+              const SizedBox(height: 8),
+              ...candles.items.take(mobile ? 10 : 20).map(
                     (candle) => ListTile(
                       dense: true,
                       title: Text('${candle.candleTime?.toLocal() ?? '—'}'),
-                      subtitle: Text('Open ${candle.open}  High ${candle.high}  Low ${candle.low}  Close ${candle.close}'),
+                      subtitle: Text('O ${candle.open}  H ${candle.high}  L ${candle.low}  C ${candle.close}'),
                       trailing: Text('${candle.volume} vol'),
                     ),
                   ),
