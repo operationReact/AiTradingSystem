@@ -2,6 +2,8 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.domain.ProductType;
 import in.aitradingsystem.domain.Side;
+import in.aitradingsystem.execution.PaperOrderPlacementService;
+import in.aitradingsystem.execution.TradingControlService;
 import in.aitradingsystem.paper.OrderCommand;
 import in.aitradingsystem.paper.PaperOrderService;
 import in.aitradingsystem.paper.PaperViews.OrderResult;
@@ -17,8 +19,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -27,15 +31,17 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Canonical Phase 6 PAPER order API. No LIVE submission path exists here. */
+/** Canonical PAPER order API. No LIVE submission path exists here. */
 @RestController
 @RequestMapping("/api/paper-orders")
 @Validated
 public class PaperOrderController {
     private final PaperOrderService orders;
+    private final PaperOrderPlacementService placement;
 
-    public PaperOrderController(PaperOrderService orders) {
+    public PaperOrderController(PaperOrderService orders, PaperOrderPlacementService placement) {
         this.orders = orders;
+        this.placement = placement;
     }
 
     public record CreateOrderRequest(
@@ -58,7 +64,7 @@ public class PaperOrderController {
         OrderCommand command = new OrderCommand(
             request.symbol(), Side.valueOf(request.side()), request.quantity(), request.referencePrice(),
             request.stopLoss(), request.target(), request.signalGeneratedAt(), ProductType.valueOf(request.productType()));
-        OrderResult result = orders.placeOrder(command, idempotencyKey);
+        OrderResult result = placement.placeManual(command, idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(result);
     }
 
@@ -70,6 +76,15 @@ public class PaperOrderController {
     @PostMapping("/{id}/cancel")
     public OrderResult cancel(@PathVariable UUID id) {
         return orders.cancel(id);
+    }
+
+    @ExceptionHandler(TradingControlService.ExecutionModeMismatchException.class)
+    ProblemDetail executionModeMismatch(TradingControlService.ExecutionModeMismatchException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+            "Manual order placement is unavailable while automated execution is enabled.");
+        pd.setTitle("Execution mode changed");
+        pd.setProperty("activeExecutionMode", ex.activeMode().name());
+        return pd;
     }
 
     private static void validateSupportedOrder(CreateOrderRequest request) {
