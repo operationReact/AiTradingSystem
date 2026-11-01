@@ -1,0 +1,7 @@
+# Notion checkpoint update — PAPER automation
+
+**PAPER automation / risk-controls slice IN PROGRESS.** Started from `dev` merge `700d026e9265c2be48d7ecafc1ef3afc0cb20801` after PR #206. New Draft branch `product/paper-automation-risk-controls` establishes PAPER/LIVE × Manual/Automated semantics, fail-closed LIVE/broker-submission policy, shared manual/automated PAPER risk boundary, explicit Automated account opt-in, AI opportunity eligibility, idempotent simulated fill, position/mark-to-market P&L, capital accounting, target/stop/emergency exits, realized P&L/history foundations, account isolation, and customer-safe lifecycle/API/UI acceptance contracts. Full-journey tests prove the intended AI opportunity → risk → simulated fill → position → P&L → exit → history behavior while broker submission remains false.
+
+**Important acceptance boundary:** this is an executable foundation, not merge-ready production integration. Temporary in-process adapters must be reconciled with existing persisted Phase 10 account/session/preferences and Phase 7/8/9 risk/PAPER order/fill/position/portfolio/history services; actual Flutter controls/lifecycle screens, canonical Figma phone evidence, exact-head gates and Android APK packaging remain required. Keep Draft. No production/cloud deployment and no LIVE broker submission.
+
+**Next cursor:** authoritative persistence integration first, then actual Flutter PAPER + Manual/Automated controls/lifecycle UI, exact-head CI, visual acceptance and APK/device evidence.
