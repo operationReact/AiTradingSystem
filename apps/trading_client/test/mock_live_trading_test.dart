@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/presentation/review/mock_live_trading.dart';
 
+// Exact-head acceptance coverage for the backend-free LIVE review experience.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
