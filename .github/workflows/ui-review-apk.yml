@@ -62,6 +62,13 @@ jobs:
         run: |
           grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
           python3 - <<'PY'
+          from pathlib import import Path
+          PY
+        continue-on-error: true
+
+      - name: Normalize Android Gradle compatibility (actual)
+        run: |
+          python3 - <<'PY'
           from pathlib import Path
           import re
 
@@ -96,7 +103,7 @@ jobs:
         run: flutter analyze --no-fatal-warnings lib
 
       - name: Test review UI at phone viewport
-        run: flutter test test/ui_review_mock_test.dart test/mock_trade_journey_test.dart test/mock_transparency_journey_test.dart test/mock_live_trading_test.dart test/sign_in_page_test.dart
+        run: flutter test test/ui_review_mock_test.dart test/mock_trade_journey_test.dart test/mock_transparency_journey_test.dart test/mock_trade_intelligence_report_test.dart test/mock_live_trading_test.dart test/sign_in_page_test.dart
 
       - name: Build standalone review APK
         run: flutter build apk --release -t lib/review_main.dart
