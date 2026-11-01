@@ -5,6 +5,7 @@ on:
     branches: [ui/post-login-mock-review]
     paths:
       - 'apps/trading_client/tool/repair_mock_review_source.py'
+      - 'apps/trading_client/tool/repair_trade_journey.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -21,7 +22,9 @@ jobs:
 
       - name: Apply deterministic source repair
         working-directory: apps/trading_client
-        run: python3 tool/repair_mock_review_source.py
+        run: |
+          python3 tool/repair_mock_review_source.py
+          python3 tool/repair_trade_journey.py
 
       - name: Commit repaired source
         run: |
