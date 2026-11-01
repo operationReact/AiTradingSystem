@@ -10,7 +10,7 @@ class SettingsPage extends StatelessWidget {
     required this.themeMode,
     required this.onDesignStyleChanged,
     required this.onThemeModeChanged,
-    required this.tradingControlRepository,
+    this.tradingControlRepository,
     super.key,
   });
 
@@ -18,7 +18,7 @@ class SettingsPage extends StatelessWidget {
   final ThemeMode themeMode;
   final ValueChanged<DesignStyle> onDesignStyleChanged;
   final ValueChanged<ThemeMode> onThemeModeChanged;
-  final TradingControlRepository tradingControlRepository;
+  final TradingControlRepository? tradingControlRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -43,8 +43,10 @@ class SettingsPage extends StatelessWidget {
               'Use PAPER mode while strategies are validated. Manual and automated execution both remain protected by the same risk engine.',
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
             ),
-            const SizedBox(height: 24),
-            TradingControlCard(repository: tradingControlRepository),
+            if (tradingControlRepository != null) ...[
+              const SizedBox(height: 24),
+              TradingControlCard(repository: tradingControlRepository!),
+            ],
             const SizedBox(height: 16),
             _SectionCard(
               title: 'Interface profile',
