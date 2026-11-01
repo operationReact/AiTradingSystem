@@ -20,7 +20,8 @@ Future<void> _visibleBack(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Widget _hub(MockTradeIntelligenceRecord record) => MaterialApp(
+Widget _hub(MockTradeIntelligenceRecord record, {Key? key}) => MaterialApp(
+      key: key,
       theme: ThemeData.dark(useMaterial3: true),
       home: MockTransparencyCompletionHub(record: record),
     );
@@ -52,7 +53,7 @@ void main() {
     ];
 
     for (final page in pages) {
-      await tester.pumpWidget(_hub(record));
+      await tester.pumpWidget(_hub(record, key: UniqueKey()));
       await tester.pumpAndSettle();
       expect(find.text('Transparency 360'), findsOneWidget);
       expect(find.textContaining('frozen pre-trade snapshot'), findsOneWidget);
