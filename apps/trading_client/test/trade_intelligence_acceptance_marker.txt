@@ -1,0 +1,2 @@
+Trade Intelligence Report acceptance marker.
+Validates the exact branch head after deterministic phone-layout repair.
