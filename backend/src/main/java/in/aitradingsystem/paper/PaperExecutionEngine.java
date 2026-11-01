@@ -41,7 +41,8 @@ public class PaperExecutionEngine {
         if (command.side() == Side.BUY) {
             BigDecimal fillCostBasis = money(decision.grossNotional().add(decision.estimatedFee()));
             accounting = positionAccounting.applyBuy(instrumentId, context.exchange(), command.symbol(),
-                command.productType(), command.quantity(), fillCostBasis, command.stopLoss(), command.target(), now);
+                command.productType(), command.quantity(), fillCostBasis, command.stopLoss(), command.target(),
+                command.trailingPercent(), decision.effectiveFillPrice(), now);
             cashAfter = money(account.cash().subtract(fillCostBasis));
             netAmount = fillCostBasis.negate();
         } else {
