@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -91,23 +93,86 @@ class AutomatedPaperPositionMonitorServiceTest {
         verify(f.trading, never()).placeOrder(any(), anyString());
     }
 
+    @Test
+    void freshNewHighAdvancesPersistedTrailingStateWithoutExiting() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        MonitoredPosition position = trailingPosition("120.00", "90.00", "150.00", "10.00",
+            "100.00", "90.00", 3L, NOW.minusSeconds(4));
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.positionState.advanceTrailingState(anyString(), any(), anyLong(), any(), any(), any()))
+            .thenReturn(true);
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(0, run.triggered());
+        verify(f.positionState).advanceTrailingState(
+            eq("RELIANCE-EQ"), eq(ProductType.DELIVERY), eq(3L),
+            eq(new BigDecimal("120.000000")), eq(NOW.minusSeconds(4)), eq(new BigDecimal("108.000000")));
+        verify(f.trading, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
+    void fallingBelowTightenedTrailingStopSubmitsNormalProtectiveSell() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        MonitoredPosition position = trailingPosition("107.00", "90.00", "150.00", "10.00",
+            "120.00", "108.00", 4L, NOW.minusSeconds(4));
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.trading.placeOrder(any(OrderCommand.class), anyString()))
+            .thenReturn(new PaperViews.OrderResult(null, null, null, false));
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(1, run.triggered());
+        assertEquals(1, run.submitted());
+        assertEquals("TRAILING_STOP", run.attempts().getFirst().reason());
+        assertTrue(run.attempts().getFirst().idempotencyKey().contains(":tv4:"));
+        verify(f.trading).placeOrder(any(OrderCommand.class), anyString());
+    }
+
+    @Test
+    void concurrentTrailingAdvanceFailsClosedWithoutSubmittingExit() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        MonitoredPosition position = trailingPosition("120.00", "90.00", "150.00", "10.00",
+            "100.00", "90.00", 3L, NOW.minusSeconds(4));
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.positionState.advanceTrailingState(anyString(), any(), anyLong(), any(), any(), any()))
+            .thenReturn(false);
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(1, run.rejectedOrFailed());
+        assertEquals("TRAILING_STATE_CONFLICT", run.attempts().getFirst().status());
+        verify(f.trading, never()).placeOrder(any(), anyString());
+    }
+
     private static Fixture fixture(OrderExecutionMode mode, boolean halted) {
         TradingExecutionAuthority authority = mock(TradingExecutionAuthority.class);
         AutomatedPaperPositionRepository positions = mock(AutomatedPaperPositionRepository.class);
+        PaperPositionRepository positionState = mock(PaperPositionRepository.class);
         PaperTradingService trading = mock(PaperTradingService.class);
         RiskPolicyConfigRepository policies = mock(RiskPolicyConfigRepository.class);
         AuditService audit = mock(AuditService.class);
         when(authority.current()).thenReturn(new TradingExecutionAuthority.Snapshot("PAPER", mode));
         when(trading.isHalted()).thenReturn(halted);
         when(policies.requireActive()).thenReturn(policy(60));
-        return new Fixture(positions, trading,
-            new AutomatedPaperPositionMonitorService(authority, positions, trading, policies, audit));
+        return new Fixture(positions, positionState, trading,
+            new AutomatedPaperPositionMonitorService(authority, positions, positionState, trading, policies, audit));
     }
 
     private static MonitoredPosition position(String mark, String stop, String target, Instant markAt) {
         return new MonitoredPosition(
             101L, "NSE", "RELIANCE-EQ", ProductType.DELIVERY, 3,
             new BigDecimal(stop), new BigDecimal(target), new BigDecimal(mark), markAt, NOW.minusSeconds(120));
+    }
+
+    private static MonitoredPosition trailingPosition(String mark, String stop, String target, String trailing,
+                                                       String highWater, String effectiveStop, long version,
+                                                       Instant markAt) {
+        return new MonitoredPosition(
+            101L, "NSE", "RELIANCE-EQ", ProductType.DELIVERY, 3,
+            new BigDecimal(stop), new BigDecimal(target), new BigDecimal(trailing),
+            new BigDecimal(highWater), NOW.minusSeconds(120), new BigDecimal(effectiveStop), version,
+            new BigDecimal(mark), markAt, NOW.minusSeconds(180));
     }
 
     private static RiskPolicySnapshot policy(int marketAgeSeconds) {
@@ -121,6 +186,7 @@ class AutomatedPaperPositionMonitorServiceTest {
 
     private record Fixture(
         AutomatedPaperPositionRepository positions,
+        PaperPositionRepository positionState,
         PaperTradingService trading,
         AutomatedPaperPositionMonitorService service
     ) {}
