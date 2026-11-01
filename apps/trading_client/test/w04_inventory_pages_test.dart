@@ -24,8 +24,7 @@ class _FakeInstrumentRepository implements InstrumentRepository {
   Future<void> importLatest() async {}
 
   @override
-  Future<InstrumentSearchPage> search({String? query, String? exchange, String? type, int page = 0, int size = 20}) async =>
-      InstrumentSearchPage(
+  Future<InstrumentSearchPage> search({String? query, String? exchange, String? type, int page = 0, int size = 20}) async => InstrumentSearchPage(
         content: const [_instrument],
         page: 0,
         size: size,
@@ -37,37 +36,13 @@ class _FakeInstrumentRepository implements InstrumentRepository {
       );
 
   @override
-  Future<InstrumentCatalogueStatus> status() async =>
-      InstrumentCatalogueStatus(version: 'v1', activatedAt: DateTime.utc(2026, 10, 31), activeCount: 1);
+  Future<InstrumentCatalogueStatus> status() async => InstrumentCatalogueStatus(version: 'v1', activatedAt: DateTime.utc(2026, 10, 31), activeCount: 1);
 }
 
 class _FakeMarketDataRepository implements MarketDataRepository {
   @override
-  Future<MarketCandlePage> candles({
-    required int instrumentId,
-    required String interval,
-    required DateTime fromDate,
-    required DateTime toDate,
-    int page = 0,
-    int size = 100,
-  }) async =>
-      MarketCandlePage(
-        items: [
-          MarketCandleRecord(
-            id: 1,
-            instrumentId: instrumentId,
-            exchange: 'NSE',
-            tradingSymbol: 'INFY-EQ',
-            interval: interval,
-            candleTime: DateTime.utc(2026, 10, 30, 3, 45),
-            open: 1500,
-            high: 1520,
-            low: 1490,
-            close: 1515,
-            volume: 12345,
-            source: 'ANGEL_ONE',
-          ),
-        ],
+  Future<MarketCandlePage> candles({required int instrumentId, required String interval, required DateTime fromDate, required DateTime toDate, int page = 0, int size = 100}) async => MarketCandlePage(
+        items: [MarketCandleRecord(id: 1, instrumentId: instrumentId, exchange: 'NSE', tradingSymbol: 'INFY-EQ', interval: interval, candleTime: DateTime.utc(2026, 10, 30, 3, 45), open: 1500, high: 1520, low: 1490, close: 1515, volume: 12345, source: 'ANGEL_ONE')],
         page: 0,
         size: size,
         totalItems: 1,
@@ -76,12 +51,10 @@ class _FakeMarketDataRepository implements MarketDataRepository {
       );
 
   @override
-  Future<InstrumentCatalogueStatus> instrumentStatus() async =>
-      InstrumentCatalogueStatus(version: 'v1', activatedAt: DateTime.utc(2026, 10, 31), activeCount: 1);
+  Future<InstrumentCatalogueStatus> instrumentStatus() async => InstrumentCatalogueStatus(version: 'v1', activatedAt: DateTime.utc(2026, 10, 31), activeCount: 1);
 
   @override
-  Future<InstrumentSearchPage> searchInstruments({String? query, String? exchange, String? type, int page = 0, int size = 20}) async =>
-      InstrumentSearchPage(
+  Future<InstrumentSearchPage> searchInstruments({String? query, String? exchange, String? type, int page = 0, int size = 20}) async => InstrumentSearchPage(
         content: const [_instrument],
         page: 0,
         size: size,
@@ -97,7 +70,7 @@ class _FakeMarketDataRepository implements MarketDataRepository {
 }
 
 void main() {
-  testWidgets('instruments page renders authoritative catalogue evidence', (tester) async {
+  testWidgets('instruments page renders catalogue inventory', (tester) async {
     await tester.pumpWidget(MaterialApp(home: InstrumentsPage(repository: _FakeInstrumentRepository())));
     await tester.pumpAndSettle();
 
@@ -107,16 +80,19 @@ void main() {
     expect(find.textContaining('INFOSYS LIMITED'), findsOneWidget);
   });
 
-  testWidgets('market data page loads candle evidence only after instrument selection', (tester) async {
+  testWidgets('Markets loads price action after stock selection', (tester) async {
     await tester.pumpWidget(MaterialApp(home: MarketDataPage(repository: _FakeMarketDataRepository())));
     await tester.pumpAndSettle();
 
-    expect(find.text('Select an instrument to request candle evidence.'), findsOneWidget);
+    expect(find.text('Explore the market'), findsOneWidget);
+    expect(find.text('Choose a stock to view recent price action.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market-instrument-sync')), findsNothing);
+
     await tester.tap(find.byKey(const ValueKey('market-instrument-42')));
     await tester.pumpAndSettle();
 
-    expect(find.text('INFY-EQ • 1 candles'), findsOneWidget);
-    expect(find.textContaining('O 1500'), findsOneWidget);
+    expect(find.text('INFY-EQ • 1 points'), findsOneWidget);
+    expect(find.textContaining('Open 1500'), findsOneWidget);
     expect(find.textContaining('12345 vol'), findsOneWidget);
   });
 }
