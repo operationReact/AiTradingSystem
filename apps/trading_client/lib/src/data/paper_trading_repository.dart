@@ -15,6 +15,9 @@ class PaperPosition {
     required this.stopLoss,
     required this.target,
     required this.openedAt,
+    this.trailingStopPercent,
+    this.highWaterMark,
+    this.effectiveProtectiveStop,
   });
 
   final int? instrumentId;
@@ -29,6 +32,9 @@ class PaperPosition {
   final num? unrealizedPnl;
   final num? stopLoss;
   final num? target;
+  final num? trailingStopPercent;
+  final num? highWaterMark;
+  final num? effectiveProtectiveStop;
   final DateTime? openedAt;
 
   factory PaperPosition.fromJson(Map<String, dynamic> json) => PaperPosition(
@@ -44,6 +50,9 @@ class PaperPosition {
         unrealizedPnl: json['unrealizedPnl'] as num?,
         stopLoss: json['stopLoss'] as num?,
         target: json['target'] as num?,
+        trailingStopPercent: json['trailingStopPercent'] as num?,
+        highWaterMark: json['highWaterMark'] as num?,
+        effectiveProtectiveStop: json['effectiveProtectiveStop'] as num?,
         openedAt: DateTime.tryParse('${json['openedAt'] ?? ''}'),
       );
 }
@@ -134,6 +143,7 @@ class PaperOrder {
     required this.createdAt,
     required this.updatedAt,
     required this.correlationId,
+    this.trailingStopPercent,
   });
 
   final String id;
@@ -147,6 +157,7 @@ class PaperOrder {
   final num? entryPrice;
   final num? stopLoss;
   final num? target;
+  final num? trailingStopPercent;
   final String status;
   final String? rejectionReason;
   final DateTime? createdAt;
@@ -165,6 +176,7 @@ class PaperOrder {
         entryPrice: json['entryPrice'] as num?,
         stopLoss: json['stopLoss'] as num?,
         target: json['target'] as num?,
+        trailingStopPercent: json['trailingStopPercent'] as num?,
         status: '${json['status'] ?? 'UNKNOWN'}',
         rejectionReason: json['rejectionReason']?.toString(),
         createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
@@ -229,6 +241,7 @@ class CreatePaperOrderCommand {
     required this.signalGeneratedAt,
     this.stopLoss,
     this.target,
+    this.trailingStopPercent,
   });
 
   final String symbol;
@@ -239,6 +252,7 @@ class CreatePaperOrderCommand {
   final DateTime signalGeneratedAt;
   final num? stopLoss;
   final num? target;
+  final num? trailingStopPercent;
 
   Map<String, Object?> toJson() => {
         'symbol': symbol,
@@ -247,6 +261,7 @@ class CreatePaperOrderCommand {
         'referencePrice': referencePrice,
         'stopLoss': stopLoss,
         'target': target,
+        'trailingStopPercent': trailingStopPercent,
         'signalGeneratedAt': signalGeneratedAt.toUtc().toIso8601String(),
         'productType': productType,
         'orderType': 'MARKET',
