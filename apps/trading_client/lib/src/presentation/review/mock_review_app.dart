@@ -522,7 +522,20 @@ class _PortfolioReviewPageState extends State<_PortfolioReviewPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(children: [const Text('PAPER Portfolio', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), _Pill(text: 'PAPER MODE', color: _Ui.magenta)]),
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'PAPER Portfolio',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const _Pill(text: 'PAPER MODE', color: _Ui.magenta),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   _MoneyLine(label: 'Virtual Capital', value: widget.store.virtualCapital),
                   const SizedBox(height: 10),
@@ -649,7 +662,24 @@ class _BrokerReviewPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [const _AngelOneMark(), const SizedBox(width: 12), const Text('Angel One', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), if (store.brokerConnected) const _Pill(text: 'CONNECTED', color: _Ui.green)]),
+                Row(
+                  children: [
+                    const _AngelOneMark(),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Angel One',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    if (store.brokerConnected) ...[
+                      const SizedBox(width: 8),
+                      const _Pill(text: 'CONNECTED', color: _Ui.green),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 14),
                 Text(store.brokerConnected ? 'Mock broker connection is active for UI review.' : 'Connect your Angel One account to review the future live-trading experience.', style: const TextStyle(color: _Ui.muted, height: 1.4)),
                 const SizedBox(height: 16),
@@ -1103,11 +1133,15 @@ class _GradientButton extends StatelessWidget {
                   Icon(icon, color: const Color(0xFF03111F), size: 20),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF03111F),
-                    fontWeight: FontWeight.w900,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF03111F),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
