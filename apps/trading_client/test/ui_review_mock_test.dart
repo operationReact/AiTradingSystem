@@ -58,7 +58,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mock interactions update the shared review state', (tester) async {
+  testWidgets('AI opportunity enters the extended trading journey', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
@@ -72,13 +72,21 @@ void main() {
     expect(find.text('Opportunity Details'), findsOneWidget);
     expect(find.text('Strong Buy'), findsWidgets);
 
-    final trade = find.text('Add to Paper Trade');
+    final trade = find.text('Review PAPER Trade');
     await tester.ensureVisible(trade);
     await tester.tap(trade);
     await tester.pumpAndSettle();
 
-    expect(find.text('Portfolio'), findsWidgets);
-    expect(find.text('PAPER Portfolio'), findsOneWidget);
+    expect(find.text('AI Analysis'), findsOneWidget);
+    expect(find.text('Model signals'), findsOneWidget);
+    expect(find.text('MOCK DATA'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('broker mock connection remains interactive', (tester) async {
+    _phoneViewport(tester);
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
 
     await _tapBottomLabel(tester, 'More');
     final broker = find.text('Broker Connect');
