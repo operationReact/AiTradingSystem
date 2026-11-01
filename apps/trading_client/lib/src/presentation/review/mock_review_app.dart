@@ -6,6 +6,7 @@ import 'mock_review_data.dart';
 import 'mock_trade_journey.dart';
 import 'mock_trade_intelligence_model.dart';
 import 'mock_trade_intelligence_report.dart';
+import 'mock_transparency_completion.dart';
 
 
 void _openTradeIntelligence(
@@ -55,6 +56,7 @@ enum MockReviewScreen {
   notifications,
   settings,
   tradeJourney,
+  transparencyCenter,
 }
 
 class MockReviewApp extends StatefulWidget {
@@ -175,6 +177,17 @@ class _MockReviewAppState extends State<MockReviewApp> {
                 ? MockTradeJourneyStart.analysis
                 : MockTradeJourneyStart.stock,
             onExit: () => _open(_journeyReturn),
+          ),
+        MockReviewScreen.transparencyCenter => MockTransparencyCompletionHub(
+            record: MockTradeIntelligenceRecord.fromStore(
+              store: _store,
+              symbol: 'RELIANCE',
+              entryPrice: 2948,
+              executed: true,
+              closed: false,
+              exitReason: 'Position still open',
+            ),
+            onBack: () => _open(MockReviewScreen.more),
           ),
         MockReviewScreen.portfolio => _PortfolioReviewPage(
             store: _store,
@@ -720,6 +733,7 @@ class _MoreReviewPage extends StatelessWidget {
       (Icons.layers_rounded, 'Paper Trading', 'Practice with virtual money', MockReviewScreen.paperTrading),
       (Icons.shield_outlined, 'Risk Controls', 'Limits, stop loss, exposure', MockReviewScreen.risk),
       (Icons.science_outlined, 'Backtests', 'Test and validate strategies', MockReviewScreen.backtests),
+      (Icons.visibility_outlined, 'Transparency 360', 'Portfolio, model, event and audit transparency', MockReviewScreen.transparencyCenter),
       (Icons.receipt_long_outlined, 'Orders', 'Review PAPER orders', MockReviewScreen.orders),
       (Icons.notifications_none_rounded, 'Notifications', 'Alerts and updates', MockReviewScreen.notifications),
       (Icons.tune_rounded, 'Settings', 'Security and preferences', MockReviewScreen.settings),

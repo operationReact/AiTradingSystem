@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'mock_trade_intelligence_model.dart';
+import 'mock_transparency_completion.dart';
 
 class MockTradeIntelligenceReport extends StatefulWidget {
   const MockTradeIntelligenceReport({super.key, required this.record});
@@ -184,6 +185,19 @@ class _MockTradeIntelligenceReportState extends State<MockTradeIntelligenceRepor
               const SizedBox(height: 8),
               Text(record.riskSummary, style: const TextStyle(color: _C.muted, height: 1.45)),
             ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            key: const Key('trade-intelligence-transparency-360'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(builder: (_) => MockTransparencyCompletionHub(record: record)),
+            ),
+            icon: const Icon(Icons.visibility_outlined),
+            label: const Text('Open Transparency 360'),
+            style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           ),
         ),
         const SizedBox(height: 10),
