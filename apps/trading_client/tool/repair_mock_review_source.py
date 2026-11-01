@@ -143,6 +143,145 @@ broker_header_responsive = """                Row(
                 ),"""
 app = app.replace(broker_header, broker_header_responsive)
 
+# Add the extended 11-screen mock trading journey.
+if "import 'mock_trade_journey.dart';" not in app:
+    app = app.replace(
+        "import 'mock_review_data.dart';",
+        "import 'mock_review_data.dart';\nimport 'mock_trade_journey.dart';",
+        1,
+    )
+
+if '  tradeJourney,\n}' not in app:
+    app = app.replace('  settings,\n}', '  settings,\n  tradeJourney,\n}', 1)
+
+state_fields = '''  MockOpportunity? _selectedOpportunity;
+  MockQuote? _journeyQuote;
+  MockOpportunity? _journeyOpportunity;
+  MockReviewScreen _journeyReturn = MockReviewScreen.markets;'''
+if 'MockQuote? _journeyQuote;' not in app:
+    app = app.replace('  MockOpportunity? _selectedOpportunity;', state_fields, 1)
+
+journey_methods = '''
+  void _openTradeJourneyForQuote(MockQuote quote) {
+    final matches = _store.opportunities.where((item) => item.symbol == quote.symbol).toList(growable: false);
+    setState(() {
+      _journeyQuote = quote;
+      _journeyOpportunity = matches.isEmpty ? null : matches.first;
+      _journeyReturn = MockReviewScreen.markets;
+      _screen = MockReviewScreen.tradeJourney;
+    });
+  }
+
+  void _openTradeJourneyForOpportunity(MockOpportunity opportunity) {
+    final matches = _store.quotes.where((item) => item.symbol == opportunity.symbol).toList(growable: false);
+    setState(() {
+      _journeyOpportunity = opportunity;
+      _journeyQuote = matches.isEmpty ? null : matches.first;
+      _journeyReturn = MockReviewScreen.research;
+      _screen = MockReviewScreen.tradeJourney;
+    });
+  }
+'''
+if 'void _openTradeJourneyForQuote' not in app:
+    app = app.replace('  void _openOpportunity(MockOpportunity opportunity) {', journey_methods + '\n  void _openOpportunity(MockOpportunity opportunity) {', 1)
+
+app = app.replace(
+    '''        MockReviewScreen.markets => _MarketsReviewPage(
+            store: _store,
+            onOpportunity: _openOpportunity,
+          ),''',
+    '''        MockReviewScreen.markets => _MarketsReviewPage(
+            store: _store,
+            onStock: _openTradeJourneyForQuote,
+          ),''',
+    1,
+)
+
+app = app.replace(
+    '''        MockReviewScreen.opportunity => _OpportunityReviewPage(
+            store: _store,
+            opportunity: _selectedOpportunity ?? _store.opportunities.first,
+            onBack: () => _open(MockReviewScreen.research),
+            onPortfolio: () => _open(MockReviewScreen.portfolio),
+          ),''',
+    '''        MockReviewScreen.opportunity => _OpportunityReviewPage(
+            store: _store,
+            opportunity: _selectedOpportunity ?? _store.opportunities.first,
+            onBack: () => _open(MockReviewScreen.research),
+            onTrade: _openTradeJourneyForOpportunity,
+          ),
+        MockReviewScreen.tradeJourney => MockTradeJourney(
+            store: _store,
+            quote: _journeyQuote,
+            opportunity: _journeyOpportunity,
+            start: _journeyReturn == MockReviewScreen.research
+                ? MockTradeJourneyStart.analysis
+                : MockTradeJourneyStart.stock,
+            onExit: () => _open(_journeyReturn),
+          ),''',
+    1,
+)
+
+app = app.replace(
+    '''class _MarketsReviewPage extends StatefulWidget {
+  const _MarketsReviewPage({required this.store, required this.onOpportunity});
+
+  final MockReviewStore store;
+  final ValueChanged<MockOpportunity> onOpportunity;''',
+    '''class _MarketsReviewPage extends StatefulWidget {
+  const _MarketsReviewPage({required this.store, required this.onStock});
+
+  final MockReviewStore store;
+  final ValueChanged<MockQuote> onStock;''',
+    1,
+)
+
+market_tap = '''                  onTap: () {
+                    final matches = widget.store.opportunities.where((item) => item.symbol == quote.symbol);
+                    if (matches.isNotEmpty) {
+                      widget.onOpportunity(matches.first);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${quote.symbol} added to market review.')));
+                    }
+                  },'''
+app = app.replace(market_tap, '                  onTap: () => widget.onStock(quote),', 1)
+
+app = app.replace(
+    '''    required this.onBack,
+    required this.onPortfolio,
+  });
+
+  final MockReviewStore store;
+  final MockOpportunity opportunity;
+  final VoidCallback onBack;
+  final VoidCallback onPortfolio;''',
+    '''    required this.onBack,
+    required this.onTrade,
+  });
+
+  final MockReviewStore store;
+  final MockOpportunity opportunity;
+  final VoidCallback onBack;
+  final ValueChanged<MockOpportunity> onTrade;''',
+    1,
+)
+
+old_trade_button = '''          _GradientButton(
+            label: 'Add to Paper Trade',
+            icon: Icons.play_arrow_rounded,
+            onTap: () {
+              store.executePaperTrade(opportunity);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${opportunity.symbol} PAPER trade executed with mock data.')));
+              onPortfolio();
+            },
+          ),'''
+new_trade_button = '''          _GradientButton(
+            label: 'Review PAPER Trade',
+            icon: Icons.arrow_forward_rounded,
+            onTap: () => onTrade(opportunity),
+          ),'''
+app = app.replace(old_trade_button, new_trade_button, 1)
+
 app_path.write_text(app)
 
 data = data_path.read_text()
