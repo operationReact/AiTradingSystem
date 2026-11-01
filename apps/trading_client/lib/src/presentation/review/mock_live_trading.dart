@@ -776,14 +776,17 @@ class _LiveCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: _LiveUi.card,
+    return Material(
+      color: _LiveUi.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: _LiveUi.border),
+        side: const BorderSide(color: _LiveUi.border),
       ),
-      child: child,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: child,
+      ),
     );
   }
 }
