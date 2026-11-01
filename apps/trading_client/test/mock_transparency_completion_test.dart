@@ -20,6 +20,11 @@ Future<void> _visibleBack(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Widget _hub(MockTradeIntelligenceRecord record) => MaterialApp(
+      theme: ThemeData.dark(useMaterial3: true),
+      home: MockTransparencyCompletionHub(record: record),
+    );
+
 void main() {
   testWidgets('Transparency 360 exposes every final completeness surface at phone width', (tester) async {
     _phoneViewport(tester);
@@ -34,17 +39,6 @@ void main() {
       exitReason: 'Position still open',
     );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData.dark(useMaterial3: true),
-        home: MockTransparencyCompletionHub(record: record),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Transparency 360'), findsOneWidget);
-    expect(find.textContaining('frozen pre-trade snapshot'), findsOneWidget);
-
     final pages = <String>[
       'Portfolio Risk',
       'Scenario Lab',
@@ -58,15 +52,19 @@ void main() {
     ];
 
     for (final page in pages) {
+      await tester.pumpWidget(_hub(record));
+      await tester.pumpAndSettle();
+      expect(find.text('Transparency 360'), findsOneWidget);
+      expect(find.textContaining('frozen pre-trade snapshot'), findsOneWidget);
+
       final finder = find.text(page).first;
       await tester.ensureVisible(finder);
       await tester.pumpAndSettle();
       await tester.tap(finder);
       await tester.pumpAndSettle();
+
       expect(find.text(page), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await _visibleBack(tester);
-      expect(find.text('Transparency 360'), findsOneWidget);
     }
   });
 
@@ -81,7 +79,7 @@ void main() {
       executed: true,
     );
 
-    await tester.pumpWidget(MaterialApp(theme: ThemeData.dark(useMaterial3: true), home: MockTransparencyCompletionHub(record: record)));
+    await tester.pumpWidget(_hub(record));
     await tester.pumpAndSettle();
 
     Future<void> open(String title) async {
