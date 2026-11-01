@@ -21,6 +21,19 @@ class MockEvidenceFact {
   final String detail;
   final String provenance;
   final bool supportsTrade;
+
+  int get influenceWeightPercent => switch (title) {
+        'Trend / structure' => 18,
+        'Momentum' => 12,
+        'Volume confirmation' => 10,
+        'Quantitative baseline' => 18,
+        'Learned model' => 16,
+        'News / event intelligence' => 10,
+        'Fundamental / session context' => 6,
+        'Market regime' => 10,
+        'Risk Engine' => 0,
+        _ => 0,
+      };
 }
 
 @immutable
@@ -129,6 +142,13 @@ class MockTradeIntelligenceRecord {
   bool get isLoss => closed && (realizedPnl ?? 0) < 0;
   bool get isProfit => closed && (realizedPnl ?? 0) > 0;
   bool get isOpen => executed && !closed;
+  String get tradingMode => 'PAPER';
+  String get executionMode => 'MANUAL';
+  String get initiatedBy => cancelled
+      ? 'User cancelled before execution'
+      : executed
+          ? 'User-confirmed AI opportunity'
+          : 'User reviewing AI opportunity';
 
   factory MockTradeIntelligenceRecord.fromStore({
     required MockReviewStore store,
@@ -280,6 +300,15 @@ class MockTradeIntelligenceRecord {
         detail: 'The mock structured Gemini evidence contained no adverse high-materiality event and modestly supported the directional thesis.',
         provenance: 'gemini-review-v1 · sources G-104,G-118',
         supportsTrade: true,
+      ),
+      const MockEvidenceFact(
+        category: 'FUNDAMENTAL',
+        title: 'Fundamental / session context',
+        verdict: 'Neutral',
+        score: 55,
+        detail: 'No short-horizon fundamental catalyst was strong enough to drive the trade by itself. The intraday setup therefore relied more heavily on price, volume and model evidence.',
+        provenance: 'fundamental-context-review-v1 · no material contradiction',
+        supportsTrade: false,
       ),
       MockEvidenceFact(
         category: 'REGIME',

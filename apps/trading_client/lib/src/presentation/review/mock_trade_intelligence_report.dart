@@ -141,6 +141,18 @@ class _MockTradeIntelligenceReportState extends State<MockTradeIntelligenceRepor
         const SizedBox(height: 8),
         _Card(child: Text(record.decisionSummary, style: const TextStyle(color: _C.muted, height: 1.5))),
         const SizedBox(height: 10),
+        _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Trading mode', value: record.tradingMode),
+              const Divider(height: 18),
+              _InfoRow(label: 'Execution mode', value: record.executionMode),
+              const Divider(height: 18),
+              _InfoRow(label: 'Initiated by', value: record.initiatedBy),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
         const _Section('Risk Engine justification'),
         const SizedBox(height: 8),
         _Card(
@@ -364,6 +376,13 @@ class _EvidenceCard extends StatelessWidget {
           Row(children: [Icon(fact.supportsTrade ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded, color: tone, size: 16), const SizedBox(width: 6), Text(fact.verdict, style: TextStyle(color: tone, fontWeight: FontWeight.w800, fontSize: 11))]),
           const SizedBox(height: 7),
           Text(fact.detail, style: const TextStyle(color: _C.muted, fontSize: 11, height: 1.45)),
+          const SizedBox(height: 7),
+          Text(
+            fact.influenceWeightPercent == 0
+                ? 'Decision role: mandatory gate (not part of fused score)'
+                : 'Decision influence: ${fact.influenceWeightPercent}% of fused evidence',
+            style: const TextStyle(color: _C.cyan, fontSize: 10, fontWeight: FontWeight.w800),
+          ),
           const SizedBox(height: 8),
           Text(fact.provenance, style: const TextStyle(color: Color(0xFF6F86AA), fontSize: 9, fontFamily: 'monospace')),
         ],
