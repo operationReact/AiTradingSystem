@@ -26,6 +26,13 @@ Future<void> _tapTab(WidgetTester tester, String label) async {
   expect(tester.takeException(), isNull);
 }
 
+Future<void> _visibleBack(WidgetTester tester) async {
+  final back = find.byIcon(Icons.arrow_back_rounded).first;
+  expect(back, findsOneWidget);
+  await tester.tap(back);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('closed losing trade explains decision evidence failure and provenance', (tester) async {
     _phoneViewport(tester);
@@ -59,8 +66,7 @@ void main() {
     expect(find.text('Transparency 360'), findsOneWidget);
     expect(find.text('Portfolio Risk'), findsOneWidget);
     expect(find.text('Model Health'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _visibleBack(tester);
 
     await _tapTab(tester, 'Evidence');
     expect(find.text('Evidence used before / during the decision'), findsOneWidget);
