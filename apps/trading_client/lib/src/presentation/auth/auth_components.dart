@@ -11,7 +11,7 @@ abstract final class AuthPalette {
 }
 
 class AuthShell extends StatelessWidget {
-  const AuthShell({required this.child, this.padding = const EdgeInsets.fromLTRB(20, 18, 20, 24), super.key});
+  const AuthShell({required this.child, this.padding = const EdgeInsets.fromLTRB(20, 14, 20, 18), super.key});
   final Widget child;
   final EdgeInsets padding;
 
@@ -25,6 +25,7 @@ class AuthShell extends StatelessWidget {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, constraints) => SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
                 padding: padding,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
@@ -71,7 +72,7 @@ class TradingBrand extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = compact ? 44.0 : 50.0;
+    final size = compact ? 42.0 : 48.0;
     return Column(
       children: [
         Container(
@@ -84,16 +85,16 @@ class TradingBrand extends StatelessWidget {
               end: Alignment.topRight,
               colors: [AuthPalette.cyan, AuthPalette.violet, AuthPalette.magenta],
             ),
-            boxShadow: const [BoxShadow(color: Color(0x5536D9FF), blurRadius: 22)],
+            boxShadow: const [BoxShadow(color: Color(0x5536D9FF), blurRadius: 20)],
           ),
-          child: Icon(Icons.query_stats_rounded, color: Colors.white, size: compact ? 25 : 28),
+          child: Icon(Icons.query_stats_rounded, color: Colors.white, size: compact ? 24 : 27),
         ),
-        SizedBox(height: compact ? 7 : 9),
+        SizedBox(height: compact ? 6 : 8),
         Text(
           'AiTradingSystem',
           style: TextStyle(
             color: Colors.white,
-            fontSize: compact ? 16 : 17,
+            fontSize: compact ? 15.5 : 16.5,
             fontWeight: FontWeight.w900,
             letterSpacing: -0.3,
           ),
@@ -133,15 +134,15 @@ class AuthTextField extends StatelessWidget {
       obscureText: obscureText,
       validator: validator,
       textInputAction: textInputAction,
-      style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(color: Color(0xFF91A7C7), fontSize: 13.5),
+        hintStyle: const TextStyle(color: Color(0xFF91A7C7), fontSize: 13),
         prefixIcon: Icon(prefixIcon, color: const Color(0xFFD5E3F7), size: 20),
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: AuthPalette.surface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AuthPalette.border)),
         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AuthPalette.border)),
         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AuthPalette.cyan, width: 1.3)),
@@ -162,7 +163,7 @@ class GradientAuthButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 48,
+      height: 46,
       width: double.infinity,
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -172,7 +173,7 @@ class GradientAuthButton extends StatelessWidget {
                 ? const [AuthPalette.cyan, Color(0xFF31D6FF), AuthPalette.violet, AuthPalette.magenta]
                 : const [Color(0xFF30445A), Color(0xFF263548)],
           ),
-          boxShadow: enabled ? const [BoxShadow(color: Color(0x403BD9FF), blurRadius: 20, offset: Offset(0, 7))] : null,
+          boxShadow: enabled ? const [BoxShadow(color: Color(0x403BD9FF), blurRadius: 18, offset: Offset(0, 6))] : null,
         ),
         child: Material(
           color: Colors.transparent,
@@ -182,8 +183,8 @@ class GradientAuthButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text(label, style: const TextStyle(color: Color(0xFF04111D), fontSize: 14, fontWeight: FontWeight.w900)),
-                if (icon != null) ...[const SizedBox(width: 8), Icon(icon, color: const Color(0xFF04111D), size: 18)],
+                Text(label, style: const TextStyle(color: Color(0xFF04111D), fontSize: 13.5, fontWeight: FontWeight.w900)),
+                if (icon != null) ...[const SizedBox(width: 7), Icon(icon, color: const Color(0xFF04111D), size: 17)],
               ],
             ),
           ),
@@ -202,16 +203,16 @@ class FingerprintOutlineButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 48,
+      height: 46,
       child: OutlinedButton.icon(
         onPressed: onPressed,
-        icon: const Icon(Icons.fingerprint_rounded, color: AuthPalette.cyan, size: 25),
+        icon: const Icon(Icons.fingerprint_rounded, color: AuthPalette.cyan, size: 24),
         label: Text(label),
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.white,
           side: const BorderSide(color: AuthPalette.cyan, width: 1.1),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+          textStyle: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -238,7 +239,7 @@ class AuthBackdrop extends StatelessWidget {
 }
 
 class MarketWave extends StatelessWidget {
-  const MarketWave({this.height = 126, super.key});
+  const MarketWave({this.height = 116, super.key});
   final double height;
 
   @override
@@ -255,7 +256,7 @@ class AuthInfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AuthPalette.surface,
         border: Border.all(color: AuthPalette.border.withValues(alpha: .7)),
@@ -263,9 +264,9 @@ class AuthInfoRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, color: AuthPalette.cyan, size: 20),
-          const SizedBox(width: 11),
-          Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w700))),
+          Icon(icon, color: AuthPalette.cyan, size: 19),
+          const SizedBox(width: 10),
+          Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700))),
         ],
       ),
     );
@@ -294,9 +295,9 @@ class _MarketWavePainter extends CustomPainter {
 
     final glow = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 11
+      ..strokeWidth = 10
       ..strokeCap = StrokeCap.round
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 13)
       ..shader = const LinearGradient(colors: [AuthPalette.magenta, AuthPalette.violet, AuthPalette.cyan]).createShader(Offset.zero & size);
     canvas.drawPath(path, glow);
 
@@ -309,7 +310,7 @@ class _MarketWavePainter extends CustomPainter {
 
     final candlePaint = Paint()..strokeWidth = 2;
     final candleXs = <double>[.11, .17, .24, .31, .43, .49, .58, .67, .74, .83, .91];
-    final candleHeights = <double>[20, 32, 24, 42, 34, 26, 48, 39, 55, 44, 61];
+    final candleHeights = <double>[18, 29, 22, 38, 31, 24, 44, 35, 49, 40, 55];
     for (var i = 0; i < candleXs.length; i++) {
       final x = size.width * candleXs[i];
       final base = size.height * (0.88 - candleXs[i] * .45);
