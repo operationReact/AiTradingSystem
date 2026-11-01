@@ -4,14 +4,7 @@ on:
   push:
     branches: [ui/post-login-mock-review]
     paths:
-      - 'apps/trading_client/tool/repair_mock_review_source.py'
-      - 'apps/trading_client/tool/repair_trade_journey.py'
-      - 'apps/trading_client/tool/repair_live_review.py'
-      - 'apps/trading_client/tool/add_explainability_review.py'
-      - 'apps/trading_client/tool/fix_explainability_overflow.py'
-      - 'apps/trading_client/tool/add_transparency_journey.py'
       - 'apps/trading_client/tool/add_improvement_analysis.py'
-      - 'apps/trading_client/tool/fix_duplicate_post_trade_learning.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -26,17 +19,9 @@ jobs:
         with:
           ref: ui/post-login-mock-review
 
-      - name: Apply deterministic source repair
+      - name: Apply additive decision-audit patch
         working-directory: apps/trading_client
-        run: |
-          python3 tool/repair_mock_review_source.py
-          python3 tool/repair_trade_journey.py
-          python3 tool/repair_live_review.py
-          python3 tool/add_explainability_review.py
-          python3 tool/fix_explainability_overflow.py
-          python3 tool/add_transparency_journey.py
-          python3 tool/add_improvement_analysis.py
-          python3 tool/fix_duplicate_post_trade_learning.py
+        run: python3 tool/add_improvement_analysis.py
 
       - name: Commit repaired source
         run: |
@@ -46,10 +31,6 @@ jobs:
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart \
-                  apps/trading_client/lib/src/presentation/review/mock_review_data.dart \
-                  apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart \
-                  apps/trading_client/lib/src/presentation/review/mock_transparency_journey.dart \
-                  apps/trading_client/lib/src/presentation/review/mock_live_trading.dart
-          git commit -m 'Repair review source and decision audit wiring'
+          git add apps/trading_client/lib/src/presentation/review/mock_transparency_journey.dart
+          git commit -m 'Add post-trade improvement analysis screen'
           git push origin HEAD:ui/post-login-mock-review
