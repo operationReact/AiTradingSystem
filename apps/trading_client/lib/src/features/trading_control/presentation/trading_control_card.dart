@@ -138,6 +138,8 @@ class _TradingControlCardState extends State<TradingControlCard> {
                   children: [
                     Text(
                       '${state.tradingMode == TradingMode.paper ? 'PAPER' : 'LIVE'} · ${state.executionMode == OrderExecutionMode.automated ? 'AUTOMATED' : 'MANUAL'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
                     ),
                     const SizedBox(height: 2),
@@ -145,24 +147,28 @@ class _TradingControlCardState extends State<TradingControlCard> {
                   ],
                 ),
               ),
-              _StatusPill(
-                label: state.automatedPaper ? 'Auto Trading: Running' : 'Manual Trading',
-                icon: state.automatedPaper ? Icons.bolt_rounded : Icons.touch_app_rounded,
-              ),
             ],
+          ),
+          const SizedBox(height: 12),
+          _StatusPill(
+            label: state.automatedPaper ? 'Auto Trading: Running' : 'Manual Trading',
+            icon: state.automatedPaper ? Icons.bolt_rounded : Icons.touch_app_rounded,
           ),
           const SizedBox(height: 20),
           Text('Trading mode', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          SegmentedButton<TradingMode>(
-            key: const ValueKey('trading-mode-control'),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: TradingMode.paper, icon: Icon(Icons.science_outlined), label: Text('Paper')),
-              ButtonSegment(value: TradingMode.live, icon: Icon(Icons.lock_outline_rounded), label: Text('Live')),
-            ],
-            selected: {state.tradingMode},
-            onSelectionChanged: null,
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<TradingMode>(
+              key: const ValueKey('trading-mode-control'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: TradingMode.paper, icon: Icon(Icons.science_outlined), label: Text('Paper')),
+                ButtonSegment(value: TradingMode.live, icon: Icon(Icons.lock_outline_rounded), label: Text('Live')),
+              ],
+              selected: {state.tradingMode},
+              onSelectionChanged: null,
+            ),
           ),
           const SizedBox(height: 7),
           Text(
@@ -174,19 +180,22 @@ class _TradingControlCardState extends State<TradingControlCard> {
           const SizedBox(height: 18),
           Text('Execution mode', style: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          SegmentedButton<OrderExecutionMode>(
-            key: const ValueKey('execution-mode-control'),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: OrderExecutionMode.manual, icon: Icon(Icons.touch_app_outlined), label: Text('Manual')),
-              ButtonSegment(value: OrderExecutionMode.automated, icon: Icon(Icons.auto_awesome_outlined), label: Text('Automated')),
-            ],
-            selected: {state.executionMode},
-            onSelectionChanged: _saving
-                ? null
-                : (selection) {
-                    if (selection.isNotEmpty) _setExecutionMode(selection.first);
-                  },
+          SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<OrderExecutionMode>(
+              key: const ValueKey('execution-mode-control'),
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(value: OrderExecutionMode.manual, icon: Icon(Icons.touch_app_outlined), label: Text('Manual')),
+                ButtonSegment(value: OrderExecutionMode.automated, icon: Icon(Icons.auto_awesome_outlined), label: Text('Automated')),
+              ],
+              selected: {state.executionMode},
+              onSelectionChanged: _saving
+                  ? null
+                  : (selection) {
+                      if (selection.isNotEmpty) _setExecutionMode(selection.first);
+                    },
+            ),
           ),
           if (_saving) ...[
             const SizedBox(height: 10),
@@ -223,7 +232,7 @@ class _StatusPill extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: colors.neonCyan),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: colors.neonCyan)),
+          Flexible(child: Text(label, style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: colors.neonCyan))),
         ],
       ),
     );
