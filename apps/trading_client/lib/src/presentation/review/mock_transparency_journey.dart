@@ -804,6 +804,7 @@ class _MockTransparencyJourneyState extends State<MockTransparencyJourney> {
         _AuditStep.expectedVsActual => 'Expected vs Actual',
         _AuditStep.outcomeAttribution => 'Outcome Attribution',
         _AuditStep.executionQuality => 'Execution Quality',
+        _AuditStep.improvementAnalysis => 'What Could Improve?',
         _AuditStep.learningRecord => 'Learning Record',
       };
 }
