@@ -1,3 +1,4 @@
 Trade Intelligence Report acceptance marker.
 Validates the exact branch head after deterministic phone-layout repair.
 Final acceptance includes evidence influence weights, neutral/disagreeing evidence, mandatory risk gating, and trade initiation context.
+All five report sections must remain visible and tappable at 390x844 without horizontal discovery gestures.
