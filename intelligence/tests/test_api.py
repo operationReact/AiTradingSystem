@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -14,7 +14,7 @@ def test_health_exposes_contract_version() -> None:
 
 
 def test_contract_validation_never_authorizes_capital() -> None:
-    now = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(seconds=5)
+    now = datetime.now(UTC).replace(microsecond=0) - timedelta(seconds=5)
     response = client.post(
         "/v1/contracts/validate",
         json={
