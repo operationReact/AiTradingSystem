@@ -106,8 +106,14 @@ class _TradingAppState extends State<TradingApp> {
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
         '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api)),
-        '/orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
-        '/paper-orders': (_) => PaperOrdersPage(repository: HttpPaperTradingRepository(_api)),
+        '/orders': (_) => PaperOrdersPage(
+              repository: HttpPaperTradingRepository(_api),
+              trailingProtectionPreviewEnabled: true,
+            ),
+        '/paper-orders': (_) => PaperOrdersPage(
+              repository: HttpPaperTradingRepository(_api),
+              trailingProtectionPreviewEnabled: true,
+            ),
         '/risk': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/approvals': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
