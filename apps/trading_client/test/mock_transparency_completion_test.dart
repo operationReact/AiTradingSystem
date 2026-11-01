@@ -13,6 +13,13 @@ void _phoneViewport(WidgetTester tester) {
   });
 }
 
+Future<void> _visibleBack(WidgetTester tester) async {
+  final back = find.byIcon(Icons.arrow_back_rounded).first;
+  expect(back, findsOneWidget);
+  await tester.tap(back);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   testWidgets('Transparency 360 exposes every final completeness surface at phone width', (tester) async {
     _phoneViewport(tester);
@@ -58,8 +65,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(page), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await tester.pageBack();
-      await tester.pumpAndSettle();
+      await _visibleBack(tester);
       expect(find.text('Transparency 360'), findsOneWidget);
     }
   });
@@ -91,20 +97,17 @@ void main() {
     await tester.tap(find.text('Gap -2%'));
     await tester.pumpAndSettle();
     expect(find.text('STOP / GAP RISK'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _visibleBack(tester);
 
     await open('Position Sizing');
     expect(find.textContaining('Quantity comes from'), findsOneWidget);
     expect(find.textContaining('Calculated quantity'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _visibleBack(tester);
 
     await open('Evidence Alerts');
     expect(find.textContaining('Confidence 81% → 72%'), findsOneWidget);
     expect(find.textContaining('Regime turned adverse'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
+    await _visibleBack(tester);
 
     await open('Audit Export');
     await tester.ensureVisible(find.text('Generate review report'));
