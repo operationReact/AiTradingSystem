@@ -49,7 +49,7 @@ void main() {
     expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
   });
 
-  testWidgets('Neon launches dark and appearance keeps profile separate from color mode', (tester) async {
+  testWidgets('Neon launches dark and settings keep profile separate from color mode', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(
       TradingApp(
@@ -60,7 +60,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
     expect(find.text('Neon Futuristic AI'), findsOneWidget);
     expect(find.text('Clean Modern'), findsOneWidget);
     expect(find.text('Color mode'), findsOneWidget);

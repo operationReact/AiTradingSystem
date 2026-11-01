@@ -36,7 +36,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('More'), findsWidgets);
-    for (final label in ['PAPER orders', 'Risk controls', 'Backtests', 'Notifications', 'Appearance']) {
+    for (final label in ['PAPER orders', 'Risk controls', 'Backtests', 'Notifications', 'Settings']) {
       expect(find.text(label), findsWidgets, reason: 'missing customer destination $label');
     }
 
