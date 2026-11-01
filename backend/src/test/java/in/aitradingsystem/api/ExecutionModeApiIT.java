@@ -20,8 +20,9 @@ class ExecutionModeApiIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
 
     @BeforeEach
-    void resetModeToPaper() {
-        jdbc.sql("UPDATE trading_execution_mode SET active_mode = 'PAPER', updated_by = 'test' WHERE id = 1").update();
+    void resetModes() {
+        jdbc.sql("UPDATE trading_execution_mode SET active_mode = 'PAPER', order_execution_mode = 'MANUAL', updated_by = 'test' WHERE id = 1")
+            .update();
     }
 
     @Test
@@ -30,12 +31,42 @@ class ExecutionModeApiIT extends AbstractPostgresIT {
     }
 
     @Test
-    void reportsPaperAsActiveAndLiveAsUnavailable() throws Exception {
+    void reportsSafeDefaults() throws Exception {
         mvc.perform(get("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.activeMode").value("PAPER"))
+            .andExpect(jsonPath("$.orderExecutionMode").value("MANUAL"))
             .andExpect(jsonPath("$.liveAvailable").value(false))
             .andExpect(jsonPath("$.liveBlockers").isArray());
+    }
+
+    @Test
+    void automatedModeCanBeSelectedWithoutChangingPaperTradingMode() throws Exception {
+        mvc.perform(put("/api/system/execution-mode/order-execution").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"AUTOMATED\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activeMode").value("PAPER"))
+            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"));
+
+        mvc.perform(get("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.activeMode").value("PAPER"))
+            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"));
+    }
+
+    @Test
+    void executionModeSwitchIsIdempotentAndCanReturnToManual() throws Exception {
+        mvc.perform(put("/api/system/execution-mode/order-execution").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"MANUAL\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.orderExecutionMode").value("MANUAL"));
+    }
+
+    @Test
+    void invalidOrderExecutionModeIsRejected() throws Exception {
+        mvc.perform(put("/api/system/execution-mode/order-execution").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"ROBOT\"}"))
+            .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -46,7 +77,11 @@ class ExecutionModeApiIT extends AbstractPostgresIT {
     }
 
     @Test
-    void liveSwitchWithConfirmationIsRefusedAndModeUnchanged() throws Exception {
+    void liveSwitchWithConfirmationIsRefusedAndModesRemainSafe() throws Exception {
+        mvc.perform(put("/api/system/execution-mode/order-execution").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"AUTOMATED\"}"))
+            .andExpect(status().isOk());
+
         mvc.perform(put("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"mode\":\"LIVE\",\"confirmation\":\"SWITCH TO LIVE\"}"))
@@ -56,30 +91,25 @@ class ExecutionModeApiIT extends AbstractPostgresIT {
 
         mvc.perform(get("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
             .andExpect(jsonPath("$.activeMode").value("PAPER"))
+            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"))
             .andExpect(jsonPath("$.liveAvailable").value(false));
     }
 
     @Test
-    void paperRequestIsIdempotent() throws Exception {
+    void paperRequestIsIdempotentAndDoesNotChangeOrderExecutionMode() throws Exception {
+        mvc.perform(put("/api/system/execution-mode/order-execution").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"AUTOMATED\"}"))
+            .andExpect(status().isOk());
+
         mvc.perform(put("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"PAPER\"}"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.activeMode").value("PAPER"));
+            .andExpect(jsonPath("$.activeMode").value("PAPER"))
+            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"));
     }
 
     @Test
-    void selectedModeRemainsPaperWhenReadAgain() throws Exception {
-        mvc.perform(put("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
-                .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"PAPER\"}"))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.activeMode").value("PAPER"));
-        mvc.perform(get("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.activeMode").value("PAPER"));
-    }
-
-    @Test
-    void invalidModeIsRejected() throws Exception {
+    void invalidTradingModeIsRejected() throws Exception {
         mvc.perform(put("/api/system/execution-mode").header(KEY_HEADER, AbstractPostgresIT.API_KEY)
                 .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"AUTO\"}"))
             .andExpect(status().isBadRequest());
