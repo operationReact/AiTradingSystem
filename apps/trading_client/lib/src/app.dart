@@ -45,9 +45,12 @@ class TradingApp extends StatefulWidget {
 
 class _TradingAppState extends State<TradingApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  late final NavigatorObserver _routeObserver;
   DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
+  String? _pendingObservedRoute;
+  bool _routeSyncScheduled = false;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
@@ -56,12 +59,14 @@ class _TradingAppState extends State<TradingApp> {
   void initState() {
     super.initState();
     _selectedRoute = widget.initialRoute;
+    _routeObserver = _ProductRouteObserver(_handleRouteChanged);
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [_routeObserver],
       title: 'AI Trading System',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
@@ -70,17 +75,26 @@ class _TradingAppState extends State<TradingApp> {
       initialRoute: widget.initialRoute,
       builder: (context, child) => LayoutBuilder(
         builder: (context, constraints) {
+          final content = child ?? const SizedBox.shrink();
+
+          // Authentication is a dedicated customer journey. Product navigation
+          // appears only after sign-in so the screen stays faithful to the
+          // canonical mobile mockup and does not expose unrelated destinations.
+          if (_selectedRoute == '/sign-in') {
+            return content;
+          }
+
           if (constraints.maxWidth >= 900) {
             return Row(
               children: [
                 _DesktopProductRail(selectedRoute: _selectedRoute, onNavigate: _navigate),
-                Expanded(child: child ?? const SizedBox.shrink()),
+                Expanded(child: content),
               ],
             );
           }
           return Stack(
             children: [
-              Positioned.fill(bottom: 64, child: child ?? const SizedBox.shrink()),
+              Positioned.fill(bottom: 64, child: content),
               Positioned(
                 left: 0,
                 right: 0,
@@ -133,6 +147,20 @@ class _TradingAppState extends State<TradingApp> {
     );
   }
 
+  void _handleRouteChanged(String route) {
+    _pendingObservedRoute = route;
+    if (_routeSyncScheduled) return;
+
+    _routeSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _routeSyncScheduled = false;
+      final pendingRoute = _pendingObservedRoute;
+      _pendingObservedRoute = null;
+      if (!mounted || pendingRoute == null || _selectedRoute == pendingRoute) return;
+      setState(() => _selectedRoute = pendingRoute);
+    });
+  }
+
   void _navigate(String route) {
     setState(() => _selectedRoute = route);
     _navigatorKey.currentState?.pushNamedAndRemoveUntil(route, (candidate) => false);
@@ -183,6 +211,35 @@ class _TradingAppState extends State<TradingApp> {
         onDesignStyleChanged: _setDesignStyle,
         onThemeModeChanged: _setThemeMode,
       );
+}
+
+class _ProductRouteObserver extends NavigatorObserver {
+  _ProductRouteObserver(this.onRouteChanged);
+
+  final ValueChanged<String> onRouteChanged;
+
+  void _emit(Route<dynamic>? route) {
+    final name = route?.settings.name;
+    if (name != null) onRouteChanged(name);
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _emit(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _emit(previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _emit(newRoute);
+  }
 }
 
 class _MobileProductNavigation extends StatelessWidget {

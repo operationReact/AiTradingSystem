@@ -9,5 +9,6 @@ void main() {
   runApp(TradingApp(
     repositoryFactory: () => HttpHealthRepository(session: session),
     session: session,
+    initialRoute: '/sign-in',
   ));
 }
