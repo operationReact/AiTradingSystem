@@ -306,7 +306,7 @@ class MockTradeIntelligenceRecord {
     final confidenceTimeline = <MockConfidenceEvent>[
       const MockConfidenceEvent(stage: 'Initial scan', confidence: 58, reason: 'Candidate detected from price structure and liquidity filters.'),
       MockConfidenceEvent(stage: 'Signal fusion', confidence: opportunity.confidence, reason: 'Technical, quant, model and event evidence combined into the trade score.'),
-      MockConfidenceEvent(stage: 'Risk validation', confidence: (opportunity.confidence - 3).clamp(0, 100), reason: 'Risk Engine approved exposure but reduced effective conviction for downside and execution uncertainty.'),
+      MockConfidenceEvent(stage: 'Risk validation', confidence: (opportunity.confidence - 3).clamp(0, 100).toInt(), reason: 'Risk Engine approved exposure but reduced effective conviction for downside and execution uncertainty.'),
       if (executed)
         MockConfidenceEvent(
           stage: closed ? 'Before exit' : 'Live thesis',
@@ -358,13 +358,13 @@ class MockTradeIntelligenceRecord {
       const MockAuditReference(label: 'PyTorch model', value: 'pytorch-fusion-review-v0.9', detail: 'Synthetic UI-review model version; production must use real registry lineage.'),
       const MockAuditReference(label: 'Gemini evidence', value: 'GEM-1042 · G-104,G-118', detail: 'Structured evidence snapshot and supporting source IDs.'),
       const MockAuditReference(label: 'Risk decision', value: 'RSK-1042 · policy-v5', detail: 'Mandatory Risk Engine decision and policy version.'),
-      MockAuditReference(label: 'Trade decision', value: 'TRD-${symbol.toUpperCase()}-1042', detail: 'Immutable decision identifier linking evidence, risk, execution and outcome.'),
+      MockAuditReference(label: 'Trade decision', value: 'TRD-${symbol.toUpperCase()}-${side.substring(0, 1)}-${entry.toStringAsFixed(0)}-1042', detail: 'Immutable decision identifier linking evidence, risk, execution and outcome.'),
       const MockAuditReference(label: 'Decision hash', value: 'sha256:review-7d4c…91af', detail: 'Illustrative integrity fingerprint for UI review.'),
       const MockAuditReference(label: 'Data cutoff', value: '2026-11-01 10:31:02 IST', detail: 'No later information may be inserted into the pre-trade explanation.'),
     ];
 
     return MockTradeIntelligenceRecord(
-      tradeId: 'TRD-${symbol.toUpperCase()}-1042',
+      tradeId: 'TRD-${symbol.toUpperCase()}-${side.substring(0, 1)}-${entry.toStringAsFixed(0)}-1042',
       symbol: symbol,
       company: opportunity.company,
       side: side,
