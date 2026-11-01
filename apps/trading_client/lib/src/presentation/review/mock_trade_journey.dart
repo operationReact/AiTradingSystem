@@ -1177,7 +1177,7 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Text('Prediction vs outcome', style: TextStyle(fontWeight: FontWeight.w900))]),
+              const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Expanded(child: Text('Prediction vs outcome', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontWeight: FontWeight.w900)))]),
               const SizedBox(height: 10),
               const _CheckLine(text: 'Trend prediction was correct', good: true),
               const _CheckLine(text: 'Volume confirmation remained valid', good: true),
