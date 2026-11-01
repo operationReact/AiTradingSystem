@@ -57,7 +57,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sign-in route is full screen without product navigation', (tester) async {
+  testWidgets('Home secure sign-in opens a full-screen auth journey', (tester) async {
+    _phoneViewport(tester);
+
+    await tester.pumpWidget(
+      TradingApp(
+        repositoryFactory: _SignInHealthRepository.new,
+        session: OperatorSession(),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+    final signIn = find.byKey(const ValueKey('dashboard-secure-sign-in'));
+    expect(signIn, findsOneWidget);
+    await tester.ensureVisible(signIn);
+    await tester.tap(signIn);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trade Smarter\nwith AI'), findsOneWidget);
+    expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
+    expect(find.text('Home'), findsNothing);
+    expect(find.text('Markets'), findsNothing);
+    expect(find.text('Portfolio'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('direct sign-in route is full screen without product navigation', (tester) async {
     _phoneViewport(tester);
 
     await tester.pumpWidget(
@@ -71,9 +97,6 @@ void main() {
 
     expect(find.text('Trade Smarter\nwith AI'), findsOneWidget);
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
-    expect(find.text('Home'), findsNothing);
-    expect(find.text('Markets'), findsNothing);
-    expect(find.text('Portfolio'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
