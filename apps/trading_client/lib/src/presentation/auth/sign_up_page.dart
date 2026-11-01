@@ -146,10 +146,13 @@ class _SignUpPageState extends State<SignUpPage> {
               onPressed: _submit,
             ),
             const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            Wrap(
+              alignment: WrapAlignment.center,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 3,
+              runSpacing: 2,
               children: [
-                const Text('Already have an account? ', style: TextStyle(color: AuthPalette.muted, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                const Text('Already have an account?', style: TextStyle(color: AuthPalette.muted, fontSize: 11.5, fontWeight: FontWeight.w600)),
                 TextButton(
                   key: const ValueKey('auth-sign-up-back-to-sign-in'),
                   onPressed: widget.onBack,
