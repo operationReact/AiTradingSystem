@@ -38,6 +38,13 @@ class _FakeResearchRepository implements ResearchRepository {
 
 void main() {
   testWidgets('AI opportunity scan flows into setup review and evaluation', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(800, 900);
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
     final repository = _FakeResearchRepository();
     await tester.pumpWidget(MaterialApp(home: ResearchPage(repository: repository)));
 
@@ -50,9 +57,13 @@ void main() {
     expect(find.text('INFY-EQ'), findsOneWidget);
     expect(find.textContaining('AI score 0.820'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('research-candidate-7')));
+    final candidate = find.byKey(const ValueKey('research-candidate-7'));
+    await tester.ensureVisible(candidate);
     await tester.pumpAndSettle();
-    final list = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable));
+    await tester.tap(candidate);
+    await tester.pumpAndSettle();
+
+    final list = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
     await tester.scrollUntilVisible(find.text('Entry'), 200, scrollable: list);
     expect(find.text('Entry'), findsOneWidget);
     expect(find.text('No previous evaluation is available for this setup.'), findsOneWidget);
