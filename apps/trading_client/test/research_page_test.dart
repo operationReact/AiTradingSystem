@@ -48,14 +48,14 @@ void main() {
     final repository = _FakeResearchRepository();
     await tester.pumpWidget(MaterialApp(home: ResearchPage(repository: repository)));
 
-    expect(find.text('Run an AI scan to discover ranked trade ideas.'), findsOneWidget);
+    expect(find.text('Run a scan to discover ranked trade ideas.'), findsOneWidget);
     expect(find.text('Find opportunities'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('research-run-scan')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('research-scan-summary')), findsOneWidget);
     expect(find.text('INFY-EQ'), findsOneWidget);
-    expect(find.textContaining('AI score 0.820'), findsOneWidget);
+    expect(find.textContaining('AI 0.820'), findsOneWidget);
 
     final candidate = find.byKey(const ValueKey('research-candidate-7'));
     await tester.ensureVisible(candidate);
