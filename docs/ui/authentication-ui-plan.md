@@ -10,23 +10,25 @@ Google and Apple authentication are explicitly out of scope. The customer signs 
 
 ## Screen sequence
 
-- [ ] 1. **Sign In** — email or phone number, password, remember me, forgot password, primary Sign In, conditional Sign in with Fingerprint, Sign Up entry.
-- [ ] 2. **Sign Up** — full name, email, phone number, password, confirm password, password-quality checklist, Create Account, Sign In return.
-- [ ] 3. **Verify Phone** — six-digit OTP, resend countdown, Verify & Continue.
-- [ ] 4. **Verify Email** — six-digit OTP, resend countdown, Verify & Continue.
-- [ ] 5. **Enable Fingerprint** — benefit cards, device-only explanation, Enable Fingerprint, Maybe Later.
-- [ ] 6. **Fingerprint Sign In** — fingerprint hero, biometric prompt, Use Password Instead fallback.
-- [ ] 7. **Sign-in Success** — success confirmation and workspace-loading transition surface.
+- [x] 1. **Sign In** — email or phone number, password, remember me, forgot password, primary Sign In, conditional Sign in with Fingerprint, Sign Up entry.
+- [x] 2. **Sign Up** — full name, email, phone number, password, confirm password, password-quality checklist, Create Account, Sign In return.
+- [x] 3. **Verify Phone** — six-digit OTP, resend countdown, Verify & Continue.
+- [x] 4. **Verify Email** — six-digit OTP, resend countdown, Verify & Continue.
+- [x] 5. **Enable Fingerprint** — benefit cards, device-only explanation, Enable Fingerprint, Maybe Later.
+- [x] 6. **Fingerprint Sign In** — fingerprint hero, biometric prompt, Use Password Instead fallback.
+- [x] 7. **Sign-in Success** — success confirmation and workspace-loading transition surface.
 - [x] 8. **Home handoff** — existing product Home remains the destination after production authentication is wired; Home itself is not redesigned as part of this auth slice.
+
+Implementation status above means the UI surface and flow are present on the review branch. Final visual acceptance remains pending CI and physical-device review.
 
 ## Functional boundaries
 
-- Application must open on Sign In when there is no authenticated customer session.
+- Application opens on Sign In in the real app entry point while there is no authenticated customer session.
 - Sign In username accepts either email address or phone number.
 - Registration collects both email and phone so both contact channels can be verified and either may later be used to sign in.
-- Fingerprint UI must use the device biometric API; the app never stores fingerprint data.
+- Fingerprint UI uses the device biometric API; the app never stores fingerprint data.
 - Enabling fingerprint means opting this app into device biometric re-authentication. It does not enroll a fingerprint into Android/iOS itself.
-- A successful fingerprint challenge is not by itself a server session. Production implementation must bind it to a securely stored/revocable auth token; the UI slice must not fabricate a real trading session.
+- A successful fingerprint challenge is not by itself a server session. Production implementation must bind it to a securely stored/revocable auth token; the UI slice does not fabricate a real trading session.
 - PAPER/LIVE trading behavior, Angel One connectivity, market data, and trading execution are not changed by this UI work.
 
 ## Acceptance
