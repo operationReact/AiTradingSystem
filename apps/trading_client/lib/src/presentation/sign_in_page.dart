@@ -125,8 +125,6 @@ class SignInPage extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            const _SecurityFootnote(),
                           ],
                         ),
                       ),
@@ -340,32 +338,6 @@ class _EmailSignInButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SecurityFootnote extends StatelessWidget {
-  const _SecurityFootnote();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(Icons.lock_outline_rounded, color: Color(0xFF5F769A), size: 13),
-        SizedBox(width: 6),
-        Flexible(
-          child: Text(
-            'Account-scoped secure sessions',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF5F769A),
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
