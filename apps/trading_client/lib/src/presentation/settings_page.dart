@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../features/trading_control/data/trading_control_repository.dart';
+import '../features/trading_control/presentation/trading_control_card.dart';
 import '../theme/app_theme.dart';
 
 class SettingsPage extends StatelessWidget {
@@ -8,6 +10,7 @@ class SettingsPage extends StatelessWidget {
     required this.themeMode,
     required this.onDesignStyleChanged,
     required this.onThemeModeChanged,
+    this.tradingControlRepository,
     super.key,
   });
 
@@ -15,6 +18,7 @@ class SettingsPage extends StatelessWidget {
   final ThemeMode themeMode;
   final ValueChanged<DesignStyle> onDesignStyleChanged;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final TradingControlRepository? tradingControlRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -23,7 +27,7 @@ class SettingsPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Appearance'),
+        title: const Text('Settings'),
         centerTitle: false,
       ),
       body: SafeArea(
@@ -31,15 +35,19 @@ class SettingsPage extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
           children: [
             Text(
-              'Make the workspace yours',
-              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800),
+              'Trading & app settings',
+              style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
             ),
             const SizedBox(height: 8),
             Text(
-              'Neon Futuristic is the default product experience. Clean Modern is available when you want a quieter, denser workspace.',
+              'Keep execution in PAPER while strategies are validated. Manual and automated execution remain behind the same risk engine.',
               style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
             ),
-            const SizedBox(height: 24),
+            if (tradingControlRepository != null) ...[
+              const SizedBox(height: 24),
+              TradingControlCard(repository: tradingControlRepository!),
+            ],
+            const SizedBox(height: 18),
             _SectionCard(
               title: 'Interface profile',
               subtitle: 'Visual language, surfaces and emphasis',
