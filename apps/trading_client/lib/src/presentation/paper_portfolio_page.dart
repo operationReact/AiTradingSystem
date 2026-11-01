@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/widgets/responsive_layout.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/paper_trading_repository.dart';
 import 'customer_lifecycle_state.dart';
@@ -53,137 +54,163 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Portfolio')),
+      appBar: AppBar(
+        title: const Text('Portfolio'),
+        actions: [
+          IconButton(
+            key: const ValueKey('paper-portfolio-refresh'),
+            tooltip: 'Refresh portfolio',
+            onPressed: _loading ? null : _refresh,
+            icon: _loading
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.refresh_rounded),
+          ),
+          const SizedBox(width: 4),
+        ],
+      ),
       body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _refresh,
-          child: ListView(
-            key: const ValueKey('paper-portfolio-list'),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: LinearGradient(
-                    colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final mobile = width < ResponsiveLayout.mobileBreakpoint;
+            final pagePadding = ResponsiveLayout.horizontalPadding(width);
+            return RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                key: const ValueKey('paper-portfolio-list'),
+                padding: EdgeInsets.fromLTRB(pagePadding, ResponsiveLayout.topPadding(width), pagePadding, 24),
+                children: [
+                  Container(
+                    padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
+                      gradient: LinearGradient(
+                        colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Semantics(
+                          header: true,
+                          child: Text(
+                            'PAPER portfolio',
+                            style: (mobile ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.w900),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Track simulated cash, positions, exposure, and profit or loss in one place.',
+                          style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                            height: mobile ? 1.3 : 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  SizedBox(height: mobile ? 10 : 16),
+                  if (_loading && _portfolio == null)
+                    const Center(
+                      key: ValueKey('paper-portfolio-loading'),
+                      child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()),
+                    )
+                  else if (_failure != null && _portfolio == null)
+                    _errorCard(_failure!, compact: mobile)
+                  else if (_portfolio != null) ...[
+                    if (_failure != null) _staleCard(compact: mobile),
+                    _summary(_portfolio!, compact: mobile),
+                    SizedBox(height: mobile ? 12 : 16),
                     Semantics(
                       header: true,
-                      child: Text('PAPER portfolio', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                      child: Text('Open positions', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w800)),
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Practice with simulated money while tracking positions, cash, exposure, and profit or loss in one place.',
-                      style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                    if (_portfolio!.positions.isEmpty)
+                      Card(
+                        key: const ValueKey('paper-portfolio-empty-positions'),
+                        child: Padding(padding: EdgeInsets.all(mobile ? 12 : 16), child: const Text('No PAPER positions are open yet.')),
+                      )
+                    else
+                      ..._portfolio!.positions.map(_positionCard),
+                  ] else
+                    Card(
+                      key: const ValueKey('paper-portfolio-empty'),
+                      child: Padding(padding: EdgeInsets.all(mobile ? 12 : 16), child: const Text('Your PAPER portfolio is not available yet.')),
                     ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(height: 16),
-              if (_loading && _portfolio == null)
-                const Center(
-                  key: ValueKey('paper-portfolio-loading'),
-                  child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()),
-                )
-              else if (_failure != null && _portfolio == null)
-                _errorCard(_failure!)
-              else if (_portfolio != null) ...[
-                if (_failure != null) _staleCard(),
-                _summary(_portfolio!),
-                const SizedBox(height: 16),
-                Semantics(header: true, child: Text('Open positions', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
-                const SizedBox(height: 8),
-                if (_portfolio!.positions.isEmpty)
-                  const Card(
-                    key: ValueKey('paper-portfolio-empty-positions'),
-                    child: Padding(padding: EdgeInsets.all(16), child: Text('No PAPER positions are open yet.')),
-                  )
-                else
-                  ..._portfolio!.positions.map(_positionCard),
-              ] else
-                const Card(
-                  key: ValueKey('paper-portfolio-empty'),
-                  child: Padding(padding: EdgeInsets.all(16), child: Text('Your PAPER portfolio is not available yet.')),
-                ),
-            ],
-          ),
+            );
+          },
         ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const ValueKey('paper-portfolio-refresh'),
-        onPressed: _loading ? null : _refresh,
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('Refresh'),
       ),
     );
   }
 
-  Widget _errorCard(ApiFailure failure) => Card(
+  Widget _errorCard(ApiFailure failure, {required bool compact}) => Card(
         key: const ValueKey('paper-portfolio-error'),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(compact ? 12 : 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Portfolio unavailable', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              Text(_failureMessage(failure)),
-              const SizedBox(height: 12),
-              FilledButton(onPressed: _refresh, child: const Text('Try again')),
+              const SizedBox(height: 6),
+              Text(_failureMessage(failure), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: compact ? double.infinity : null,
+                child: FilledButton(onPressed: _refresh, child: const Text('Try again')),
+              ),
             ],
           ),
         ),
       );
 
-  Widget _staleCard() => const Card(
-        key: ValueKey('paper-portfolio-stale'),
+  Widget _staleCard({required bool compact}) => Card(
+        key: const ValueKey('paper-portfolio-stale'),
         child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Text('Could not refresh. Showing your last loaded PAPER portfolio.'),
+          padding: EdgeInsets.all(compact ? 12 : 16),
+          child: const Text('Could not refresh. Showing your last loaded PAPER portfolio.'),
         ),
       );
 
-  Widget _summary(PaperPortfolio portfolio) {
+  Widget _summary(PaperPortfolio portfolio, {required bool compact}) {
     final safeMode = portfolio.mode == 'PAPER' && !portfolio.liveTradingEnabled;
     return Card(
       key: const ValueKey('paper-portfolio-summary'),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(compact ? 12 : 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Expanded(child: Text('Account overview', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+                Expanded(child: Text('Account overview', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
                 Chip(label: Text(safeMode ? 'PAPER' : portfolio.mode)),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: compact ? 10 : 16),
             Wrap(
-              spacing: 24,
-              runSpacing: 16,
+              spacing: compact ? 16 : 24,
+              runSpacing: compact ? 10 : 16,
               children: [
-                _metric('Equity', portfolio.equity),
-                _metric('Available cash', portfolio.cash),
-                _metric('Invested', portfolio.invested),
-                _metric('Market value', portfolio.marketValue),
-                _metric('Realized P&L', portfolio.realizedPnl),
-                _metric('Unrealized P&L', portfolio.unrealizedPnl),
-                _metric('Today P&L', portfolio.realizedPnlToday),
-                _metric('Exposure', '${portfolio.exposurePercent}%'),
-                _metric('Open positions', portfolio.openPositions),
+                _metric('Equity', portfolio.equity, compact: compact),
+                _metric('Available cash', portfolio.cash, compact: compact),
+                _metric('Invested', portfolio.invested, compact: compact),
+                _metric('Market value', portfolio.marketValue, compact: compact),
+                _metric('Realized P&L', portfolio.realizedPnl, compact: compact),
+                _metric('Unrealized P&L', portfolio.unrealizedPnl, compact: compact),
+                _metric('Today P&L', portfolio.realizedPnlToday, compact: compact),
+                _metric('Exposure', '${portfolio.exposurePercent}%', compact: compact),
+                _metric('Open positions', portfolio.openPositions, compact: compact),
               ],
             ),
             if (portfolio.newOrdersHalted) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
               const Text('New PAPER orders are currently paused.', style: TextStyle(fontWeight: FontWeight.w700)),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text('Updated ${portfolio.asOf?.toLocal().toString() ?? 'recently'}', style: Theme.of(context).textTheme.bodySmall),
           ],
         ),
@@ -191,13 +218,13 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
     );
   }
 
-  Widget _metric(String label, Object? value) => SizedBox(
-        width: 150,
+  Widget _metric(String label, Object? value, {required bool compact}) => SizedBox(
+        width: compact ? 136 : 150,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(label, style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 4),
+            const SizedBox(height: 2),
             Text(value?.toString() ?? '—', style: const TextStyle(fontWeight: FontWeight.w800)),
           ],
         ),
@@ -206,6 +233,7 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
   Widget _positionCard(PaperPosition position) => Card(
         key: ValueKey('paper-position-${position.instrumentId ?? position.symbol}'),
         child: ListTile(
+          dense: true,
           title: Row(
             children: [
               Expanded(child: Text('${position.exchange} ${position.symbol}')),
