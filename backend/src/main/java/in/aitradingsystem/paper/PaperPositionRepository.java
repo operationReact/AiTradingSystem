@@ -4,6 +4,7 @@ import in.aitradingsystem.domain.ProductType;
 import java.math.BigDecimal;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -18,7 +19,8 @@ public class PaperPositionRepository {
     public PositionRow lock(Long instrumentId, String symbol, ProductType productType) {
         return jdbc.sql("""
                 SELECT instrument_id, exchange, symbol, product_type, quantity, cost_basis, average_price, realized_pnl,
-                       stop_loss, target_price
+                       stop_loss, target_price, trailing_stop_percent, high_water_mark, high_water_at,
+                       effective_protective_stop
                   FROM paper_position
                  WHERE product_type = :productType
                    AND ((:instrumentId IS NOT NULL AND instrument_id = :instrumentId)
@@ -30,40 +32,75 @@ public class PaperPositionRepository {
             .query((rs, row) -> new PositionRow(rs.getObject("instrument_id", Long.class), rs.getString("exchange"),
                 rs.getString("symbol"), ProductType.valueOf(rs.getString("product_type")), rs.getInt("quantity"),
                 rs.getBigDecimal("cost_basis"), rs.getBigDecimal("average_price"), rs.getBigDecimal("realized_pnl"),
-                rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price")))
+                rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price"), rs.getBigDecimal("trailing_stop_percent"),
+                rs.getBigDecimal("high_water_mark"), instant(rs.getObject("high_water_at", OffsetDateTime.class)),
+                rs.getBigDecimal("effective_protective_stop")))
             .optional().orElse(null);
     }
 
     public void insert(Long instrumentId, String exchange, String symbol, ProductType productType, int quantity,
                        BigDecimal costBasis, BigDecimal averagePrice, BigDecimal stopLoss, BigDecimal targetPrice,
                        Instant now) {
+        insert(instrumentId, exchange, symbol, productType, quantity, costBasis, averagePrice, stopLoss, targetPrice,
+            null, null, null, null, now);
+    }
+
+    public void insert(Long instrumentId, String exchange, String symbol, ProductType productType, int quantity,
+                       BigDecimal costBasis, BigDecimal averagePrice, BigDecimal stopLoss, BigDecimal targetPrice,
+                       BigDecimal trailingStopPercent, BigDecimal highWaterMark, Instant highWaterAt,
+                       BigDecimal effectiveProtectiveStop, Instant now) {
         jdbc.sql("""
                 INSERT INTO paper_position (
                     instrument_id, exchange, symbol, product_type, quantity, cost_basis, average_price,
-                    stop_loss, target_price, realized_pnl, opened_at, updated_at)
+                    stop_loss, target_price, trailing_stop_percent, high_water_mark, high_water_at,
+                    effective_protective_stop, realized_pnl, opened_at, updated_at)
                 VALUES (:instrumentId, :exchange, :symbol, :productType, :quantity, :costBasis, :averagePrice,
-                    :stopLoss, :targetPrice, 0, :now, :now)
+                    :stopLoss, :targetPrice, :trailingStopPercent, :highWaterMark, :highWaterAt,
+                    :effectiveProtectiveStop, 0, :now, :now)
                 """)
             .param("instrumentId", instrumentId, Types.BIGINT).param("exchange", exchange, Types.VARCHAR)
             .param("symbol", symbol).param("productType", productType.name()).param("quantity", quantity)
             .param("costBasis", costBasis).param("averagePrice", averagePrice)
             .param("stopLoss", stopLoss, Types.NUMERIC).param("targetPrice", targetPrice, Types.NUMERIC)
+            .param("trailingStopPercent", trailingStopPercent, Types.NUMERIC)
+            .param("highWaterMark", highWaterMark, Types.NUMERIC)
+            .param("highWaterAt", highWaterAt == null ? null : PaperOrderRepository.ts(highWaterAt), Types.TIMESTAMP_WITH_TIMEZONE)
+            .param("effectiveProtectiveStop", effectiveProtectiveStop, Types.NUMERIC)
             .param("now", PaperOrderRepository.ts(now)).update();
     }
 
     public boolean update(PositionRow expected, Long instrumentId, String exchange, int quantity,
                           BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl, Instant now) {
+        return update(expected, instrumentId, exchange, quantity, costBasis, averagePrice, realizedPnl,
+            expected.trailingStopPercent(), expected.highWaterMark(), expected.highWaterAt(),
+            expected.effectiveProtectiveStop(), now);
+    }
+
+    public boolean update(PositionRow expected, Long instrumentId, String exchange, int quantity,
+                          BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
+                          BigDecimal trailingStopPercent, BigDecimal highWaterMark, Instant highWaterAt,
+                          BigDecimal effectiveProtectiveStop, Instant now) {
         int updated = jdbc.sql("""
                 UPDATE paper_position
                    SET instrument_id = COALESCE(:instrumentId, instrument_id),
                        exchange = COALESCE(:exchange, exchange), quantity = :quantity,
                        cost_basis = :costBasis, average_price = :averagePrice,
-                       realized_pnl = :realizedPnl, updated_at = :now
+                       realized_pnl = :realizedPnl,
+                       trailing_stop_percent = :trailingStopPercent,
+                       high_water_mark = :highWaterMark,
+                       high_water_at = :highWaterAt,
+                       effective_protective_stop = :effectiveProtectiveStop,
+                       updated_at = :now
                  WHERE symbol = :symbol AND product_type = :productType AND quantity = :expectedQuantity
                 """)
             .param("instrumentId", instrumentId, Types.BIGINT).param("exchange", exchange, Types.VARCHAR)
             .param("quantity", quantity).param("costBasis", costBasis).param("averagePrice", averagePrice, Types.NUMERIC)
-            .param("realizedPnl", realizedPnl).param("now", PaperOrderRepository.ts(now))
+            .param("realizedPnl", realizedPnl)
+            .param("trailingStopPercent", trailingStopPercent, Types.NUMERIC)
+            .param("highWaterMark", highWaterMark, Types.NUMERIC)
+            .param("highWaterAt", highWaterAt == null ? null : PaperOrderRepository.ts(highWaterAt), Types.TIMESTAMP_WITH_TIMEZONE)
+            .param("effectiveProtectiveStop", effectiveProtectiveStop, Types.NUMERIC)
+            .param("now", PaperOrderRepository.ts(now))
             .param("symbol", expected.symbol()).param("productType", expected.productType().name())
             .param("expectedQuantity", expected.quantity()).update();
         return updated == 1;
@@ -75,7 +112,19 @@ public class PaperPositionRepository {
             .param("expectedQuantity", expected.quantity()).update() == 1;
     }
 
+    private static Instant instant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
+    }
+
     public record PositionRow(Long instrumentId, String exchange, String symbol, ProductType productType,
                               int quantity, BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
-                              BigDecimal stopLoss, BigDecimal targetPrice) {}
+                              BigDecimal stopLoss, BigDecimal targetPrice, BigDecimal trailingStopPercent,
+                              BigDecimal highWaterMark, Instant highWaterAt, BigDecimal effectiveProtectiveStop) {
+        public PositionRow(Long instrumentId, String exchange, String symbol, ProductType productType,
+                           int quantity, BigDecimal costBasis, BigDecimal averagePrice, BigDecimal realizedPnl,
+                           BigDecimal stopLoss, BigDecimal targetPrice) {
+            this(instrumentId, exchange, symbol, productType, quantity, costBasis, averagePrice, realizedPnl,
+                stopLoss, targetPrice, null, null, null, null);
+        }
+    }
 }
