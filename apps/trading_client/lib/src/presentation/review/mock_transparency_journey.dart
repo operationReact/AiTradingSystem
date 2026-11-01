@@ -14,6 +14,7 @@ enum _AuditStep {
   expectedVsActual,
   outcomeAttribution,
   executionQuality,
+  improvementAnalysis,
   learningRecord,
 }
 
@@ -179,6 +180,7 @@ class _MockTransparencyJourneyState extends State<MockTransparencyJourney> {
         _AuditStep.expectedVsActual => 'Expected vs Actual',
         _AuditStep.outcomeAttribution => _isProfit ? 'Profit Attribution' : 'Loss Attribution',
         _AuditStep.executionQuality => 'Execution Quality',
+        _AuditStep.improvementAnalysis => 'What Could Improve?',
         _AuditStep.learningRecord => 'Learning Record',
       };
 
@@ -192,6 +194,7 @@ class _MockTransparencyJourneyState extends State<MockTransparencyJourney> {
         _AuditStep.expectedVsActual => 'Original forecast compared with realized behavior',
         _AuditStep.outcomeAttribution => 'Likely contributors, not a claim of certain causality',
         _AuditStep.executionQuality => 'Separate idea quality from broker/execution quality',
+        _AuditStep.improvementAnalysis => 'Hindsight analysis without pretending the future was knowable',
         _AuditStep.learningRecord => 'What is stored, evaluated and never auto-promoted',
       };
 
@@ -205,6 +208,7 @@ class _MockTransparencyJourneyState extends State<MockTransparencyJourney> {
         _AuditStep.expectedVsActual => _expectedVsActual(),
         _AuditStep.outcomeAttribution => _outcomeAttribution(),
         _AuditStep.executionQuality => _executionQuality(),
+        _AuditStep.improvementAnalysis => _improvementAnalysis(),
         _AuditStep.learningRecord => _learningRecord(),
       };
 
@@ -642,6 +646,79 @@ class _MockTransparencyJourneyState extends State<MockTransparencyJourney> {
     );
   }
 
+  Widget _improvementAnalysis() {
+    final losing = _showLossScenario;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _AuditGlow(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.tune_rounded, color: _AuditC.cyan),
+                  SizedBox(width: 9),
+                  Expanded(child: Text('Post-trade improvement analysis', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                losing
+                    ? 'The review asks which filters, sizing or execution choices might have reduced the loss — without claiming those changes were obvious before entry.'
+                    : 'The review checks whether the same profit could have been achieved with better risk efficiency — without rewriting the original decision using hindsight.',
+                style: const TextStyle(color: _AuditC.muted, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _AuditCard(
+          child: Column(
+            children: [
+              _ImprovementRow(
+                title: losing ? 'Wait for stronger confirmation' : 'Entry timing',
+                observation: losing ? 'A second volume confirmation could have filtered this failed breakout.' : 'The original entry was already inside the planned zone.',
+                verdict: losing ? 'RESEARCH' : 'NO CHANGE',
+                tone: losing ? _AuditC.amber : _AuditC.green,
+              ),
+              const Divider(height: 18),
+              _ImprovementRow(
+                title: 'Position sizing',
+                observation: losing ? 'A lower size would reduce absolute loss but would not make the thesis correct.' : 'Risk stayed inside the configured budget; increasing size is not justified by one profitable result.',
+                verdict: 'KEEP RISK RULE',
+                tone: _AuditC.cyan,
+              ),
+              const Divider(height: 18),
+              _ImprovementRow(
+                title: 'Stop placement',
+                observation: losing ? 'A materially tighter stop would have reduced this loss but may increase false exits across similar setups.' : 'A tighter stop would have risked premature exit before the favorable move.',
+                verdict: 'BACKTEST FIRST',
+                tone: _AuditC.amber,
+              ),
+              const Divider(height: 18),
+              _ImprovementRow(
+                title: 'Execution quality',
+                observation: 'Lower latency/slippage would improve realized P&L independently of model accuracy.',
+                verdict: 'OPTIMIZE',
+                tone: _AuditC.green,
+              ),
+              const Divider(height: 18),
+              _ImprovementRow(
+                title: 'Model confidence',
+                observation: losing ? 'One loss does not justify lowering the model threshold; calibration must be evaluated over a large out-of-sample set.' : 'One profit does not justify raising confidence or loosening thresholds.',
+                verdict: 'BATCH EVALUATE',
+                tone: _AuditC.violet,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _AuditNotice('Improvement ideas are hypotheses for replay/backtest and batch evaluation. The app must never present hindsight optimization as something the system definitely should have known before the trade.'),
+      ],
+    );
+  }
+
   Widget _learningRecord() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -909,6 +986,32 @@ class _ComparisonRow extends StatelessWidget {
               Expanded(child: Text('Actual\n$actual', textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w800, height: 1.35))),
             ],
           ),
+        ],
+      );
+}
+
+class _ImprovementRow extends StatelessWidget {
+  const _ImprovementRow({required this.title, required this.observation, required this.verdict, required this.tone});
+
+  final String title;
+  final String observation;
+  final String verdict;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800))),
+              const SizedBox(width: 8),
+              Flexible(child: Text(verdict, textAlign: TextAlign.right, style: TextStyle(color: tone, fontSize: 10, fontWeight: FontWeight.w900))),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(observation, style: const TextStyle(color: _AuditC.muted, fontSize: 11, height: 1.4)),
         ],
       );
 }
