@@ -41,12 +41,12 @@ class _ResearchPageState extends State<ResearchPage> {
         _scan = scan;
         _candidates = candidates;
       });
-    } on ApiFailure catch (failure) {
+    } on ApiFailure {
       if (!mounted) return;
-      setState(() => _error = failure.code);
+      setState(() => _error = 'AI opportunities are temporarily unavailable.');
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = 'RESEARCH_SCAN_FAILED');
+      setState(() => _error = 'The AI scan could not complete.');
     } finally {
       if (mounted) setState(() => _runningScan = false);
     }
@@ -67,9 +67,9 @@ class _ResearchPageState extends State<ResearchPage> {
         _selected = detail;
         _evaluations = evaluations;
       });
-    } on ApiFailure catch (failure) {
+    } on ApiFailure {
       if (!mounted) return;
-      setState(() => _error = failure.code);
+      setState(() => _error = 'This opportunity could not be loaded.');
     } finally {
       if (mounted) setState(() => _loadingCandidate = false);
     }
@@ -93,9 +93,9 @@ class _ResearchPageState extends State<ResearchPage> {
       final evaluations = await widget.repository.evaluations(selected.id);
       if (!mounted) return;
       setState(() => _evaluations = evaluations);
-    } on ApiFailure catch (failure) {
+    } on ApiFailure {
       if (!mounted) return;
-      setState(() => _error = failure.code);
+      setState(() => _error = 'The opportunity review could not complete.');
     } finally {
       if (mounted) setState(() => _evaluating = false);
     }
@@ -105,7 +105,7 @@ class _ResearchPageState extends State<ResearchPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Signals & research')),
+      appBar: AppBar(title: const Text('AI Research')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -113,19 +113,36 @@ class _ResearchPageState extends State<ResearchPage> {
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
               children: [
-                Semantics(
-                  header: true,
-                  child: Text('Research scanner', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    gradient: LinearGradient(
+                      colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Semantics(
+                        header: true,
+                        child: Text('AI opportunity scanner', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Let the research engine rank potential setups, then inspect the idea, risk levels, and evaluation history before taking any PAPER action.',
+                        style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 6),
-                const Text('Run the backend research scanner, inspect ranked candidates, and evaluate stored candidate provenance. Research evidence is not order eligibility.'),
                 if (_error != null) ...[
                   const SizedBox(height: 16),
                   Card(
                     key: const ValueKey('research-error'),
                     child: Padding(
                       padding: const EdgeInsets.all(16),
-                      child: Text('Research evidence unavailable: $_error'),
+                      child: Text(_error!),
                     ),
                   ),
                 ],
@@ -172,7 +189,7 @@ class _ResearchPageState extends State<ResearchPage> {
                   key: const ValueKey('research-scan-interval'),
                   isExpanded: true,
                   initialValue: _interval,
-                  decoration: const InputDecoration(labelText: 'Interval'),
+                  decoration: const InputDecoration(labelText: 'Timeframe'),
                   items: const [
                     DropdownMenuItem(value: 'FIVE_MINUTE', child: Text('5 minutes')),
                     DropdownMenuItem(value: 'FIFTEEN_MINUTE', child: Text('15 minutes')),
@@ -185,12 +202,12 @@ class _ResearchPageState extends State<ResearchPage> {
                 ),
               ),
               ConstrainedBox(
-                constraints: const BoxConstraints(minWidth: 120, maxWidth: 150),
+                constraints: const BoxConstraints(minWidth: 120, maxWidth: 170),
                 child: DropdownButtonFormField<int>(
                   key: const ValueKey('research-scan-limit'),
                   isExpanded: true,
                   initialValue: _limit,
-                  decoration: const InputDecoration(labelText: 'Universe limit'),
+                  decoration: const InputDecoration(labelText: 'Stocks to analyze'),
                   items: const [
                     DropdownMenuItem(value: 50, child: Text('50')),
                     DropdownMenuItem(value: 100, child: Text('100')),
@@ -206,8 +223,8 @@ class _ResearchPageState extends State<ResearchPage> {
                 onPressed: _runningScan ? null : _runScan,
                 icon: _runningScan
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.radar_rounded),
-                label: Text(_runningScan ? 'Scanning' : 'Run research scan'),
+                    : const Icon(Icons.auto_awesome_rounded),
+                label: Text(_runningScan ? 'Analyzing market…' : 'Find opportunities'),
               ),
             ],
           ),
@@ -222,11 +239,10 @@ class _ResearchPageState extends State<ResearchPage> {
             spacing: 24,
             runSpacing: 12,
             children: [
-              _Metric(label: 'Status', value: scan.status),
-              _Metric(label: 'Scanned', value: '${scan.scannedCount}'),
-              _Metric(label: 'Candidates', value: '${scan.candidateCount}'),
-              _Metric(label: 'Strategy set', value: scan.strategySet.isEmpty ? 'UNKNOWN' : scan.strategySet),
-              if (scan.errorCode != null) _Metric(label: 'Error', value: scan.errorCode!),
+              _Metric(label: 'Scan status', value: scan.status),
+              _Metric(label: 'Stocks analyzed', value: '${scan.scannedCount}'),
+              _Metric(label: 'Opportunities', value: '${scan.candidateCount}'),
+              _Metric(label: 'Strategy set', value: scan.strategySet.isEmpty ? '—' : scan.strategySet),
             ],
           ),
         ),
@@ -239,23 +255,23 @@ class _ResearchPageState extends State<ResearchPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Semantics(header: true, child: Text('Ranked candidates', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+              Semantics(header: true, child: Text('Top opportunities', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
               const SizedBox(height: 10),
               if (_runningScan)
                 const Center(child: CircularProgressIndicator())
               else if (_scan == null)
-                const Text('Run a research scan to request backend candidates.')
+                const Text('Run an AI scan to discover ranked trade ideas.')
               else if (_candidates.isEmpty)
-                const Text('The completed scan returned no ranked candidates.')
+                const Text('No setups met the current research criteria.')
               else
                 ..._candidates.map(
                   (candidate) => ListTile(
                     key: ValueKey('research-candidate-${candidate.candidateId}'),
                     selected: _selected?.id == candidate.candidateId,
                     title: Text(candidate.tradingSymbol.isEmpty ? 'Instrument ${candidate.instrumentId}' : candidate.tradingSymbol),
-                    subtitle: Text('${candidate.exchange} • ${candidate.strategy}\nScore ${candidate.score.toStringAsFixed(3)} • ${candidate.reasons.join(', ')}'),
+                    subtitle: Text('${candidate.exchange} • ${candidate.strategy}\nAI score ${candidate.score.toStringAsFixed(3)} • ${candidate.reasons.join(', ')}'),
                     isThreeLine: true,
-                    trailing: const Icon(Icons.chevron_right),
+                    trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _selectCandidate(candidate),
                   ),
                 ),
@@ -273,14 +289,14 @@ class _ResearchPageState extends State<ResearchPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Semantics(header: true, child: Text('Candidate evaluation', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700))),
+            Semantics(header: true, child: Text('Opportunity details', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
             const SizedBox(height: 10),
             if (_loadingCandidate)
               const Center(child: CircularProgressIndicator())
             else if (selected == null)
-              const Text('Select a ranked candidate to load stored provenance and evaluation history.')
+              const Text('Select an opportunity to review its setup, risk levels, and evaluation history.')
             else ...[
-              Text(selected.tradingSymbol.isEmpty ? 'Candidate ${selected.id}' : selected.tradingSymbol, style: const TextStyle(fontWeight: FontWeight.w700)),
+              Text(selected.tradingSymbol.isEmpty ? 'Trade idea ${selected.id}' : selected.tradingSymbol, style: const TextStyle(fontWeight: FontWeight.w800)),
               const SizedBox(height: 8),
               Text('${selected.exchange} • ${selected.interval} • ${selected.strategy}'),
               const SizedBox(height: 12),
@@ -289,9 +305,9 @@ class _ResearchPageState extends State<ResearchPage> {
                 runSpacing: 8,
                 children: [
                   _Metric(label: 'Entry', value: '${selected.entryPrice}'),
-                  _Metric(label: 'Stop', value: '${selected.stopPrice}'),
+                  _Metric(label: 'Stop loss', value: '${selected.stopPrice}'),
                   _Metric(label: 'Target', value: '${selected.targetPrice}'),
-                  _Metric(label: 'Data cutoff', value: selected.dataCutoffAt?.toLocal().toString() ?? 'UNKNOWN'),
+                  _Metric(label: 'Analyzed through', value: selected.dataCutoffAt?.toLocal().toString() ?? '—'),
                 ],
               ),
               const SizedBox(height: 14),
@@ -300,14 +316,14 @@ class _ResearchPageState extends State<ResearchPage> {
                 onPressed: _evaluating ? null : _evaluate,
                 icon: _evaluating
                     ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.science_outlined),
-                label: Text(_evaluating ? 'Evaluating' : 'Evaluate candidate'),
+                    : const Icon(Icons.insights_rounded),
+                label: Text(_evaluating ? 'Reviewing…' : 'Review this setup'),
               ),
               const SizedBox(height: 16),
-              Text('Evaluation history', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Past evaluations', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: 8),
               if (_evaluations.isEmpty)
-                const Text('No stored evaluations for this candidate.')
+                const Text('No previous evaluation is available for this setup.')
               else
                 ..._evaluations.map(
                   (evaluation) => ListTile(
