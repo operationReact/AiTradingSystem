@@ -39,7 +39,7 @@ class TradingControlApiIT extends AbstractPostgresIT {
         mvc.perform(get("/api/system/trading-control").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.tradingMode").value("PAPER"))
-            .andExpect(jsonPath("$.orderExecutionMode").value("MANUAL"))
+            .andExpect(jsonPath("$.executionMode").value("MANUAL"))
             .andExpect(jsonPath("$.liveAvailable").value(false));
     }
 
@@ -50,12 +50,12 @@ class TradingControlApiIT extends AbstractPostgresIT {
                 .content("{\"tradingMode\":\"PAPER\",\"executionMode\":\"AUTOMATED\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.tradingMode").value("PAPER"))
-            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"))
+            .andExpect(jsonPath("$.executionMode").value("AUTOMATED"))
             .andExpect(jsonPath("$.liveAvailable").value(false));
 
         mvc.perform(get("/api/system/trading-control").header(KEY_HEADER, AbstractPostgresIT.API_KEY))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.orderExecutionMode").value("AUTOMATED"));
+            .andExpect(jsonPath("$.executionMode").value("AUTOMATED"));
     }
 
     @Test
