@@ -5,7 +5,6 @@ import in.aitradingsystem.domain.Side;
 import in.aitradingsystem.execution.TradingExecutionAuthority;
 import in.aitradingsystem.paper.AutomatedPaperPositionRepository.MonitoredPosition;
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
-import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -27,25 +26,26 @@ public class AutomatedPaperPositionMonitorService {
     private final PaperTradingService trading;
     private final RiskPolicyConfigRepository riskPolicies;
     private final AuditService audit;
-    private final Clock clock;
 
     public AutomatedPaperPositionMonitorService(
             TradingExecutionAuthority authority,
             AutomatedPaperPositionRepository positions,
             PaperTradingService trading,
             RiskPolicyConfigRepository riskPolicies,
-            AuditService audit,
-            Clock clock) {
+            AuditService audit) {
         this.authority = authority;
         this.positions = positions;
         this.trading = trading;
         this.riskPolicies = riskPolicies;
         this.audit = audit;
-        this.clock = clock;
     }
 
     public MonitorRun runOnce() {
-        Instant now = clock.instant();
+        return runOnce(Instant.now());
+    }
+
+    MonitorRun runOnce(Instant now) {
+        if (now == null) throw new IllegalArgumentException("now is required");
         if (!authority.current().automatedPaper()) {
             return MonitorRun.disabled(now);
         }
