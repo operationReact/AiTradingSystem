@@ -82,6 +82,8 @@ enum MockLiveScreen {
 }
 
 class MockLiveTradingStore extends ChangeNotifier {
+  void refresh() => notifyListeners();
+
   bool acknowledgementAccepted = false;
   bool liveEnabled = false;
   bool brokerConnected = true;
@@ -107,10 +109,10 @@ class MockLiveTradingStore extends ChangeNotifier {
   double holdingsValue = 642380;
   double unrealizedPnl = 3840;
 
-  final List<_MockLiveHolding> holdings = const [
-    _MockLiveHolding(symbol: 'RELIANCE', quantity: 40, value: 118256, pnl: 2840),
-    _MockLiveHolding(symbol: 'TCS', quantity: 25, value: 96905, pnl: 1960),
-    _MockLiveHolding(symbol: 'HDFCBANK', quantity: 55, value: 90327, pnl: -620),
+  final List<MockLiveHolding> holdings = const [
+    MockLiveHolding(symbol: 'RELIANCE', quantity: 40, value: 118256, pnl: 2840),
+    MockLiveHolding(symbol: 'TCS', quantity: 25, value: 96905, pnl: 1960),
+    MockLiveHolding(symbol: 'HDFCBANK', quantity: 55, value: 90327, pnl: -620),
   ];
 
   double get estimatedValue => quantity * orderPrice;
@@ -180,8 +182,8 @@ class MockLiveTradingStore extends ChangeNotifier {
   }
 }
 
-class _MockLiveHolding {
-  const _MockLiveHolding({
+class MockLiveHolding {
+  const MockLiveHolding({
     required this.symbol,
     required this.quantity,
     required this.value,
@@ -618,8 +620,8 @@ class _LivePositionPage extends StatelessWidget {
         const SizedBox(height: 12),
         _LiveCard(
           child: Column(children: [
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Stop Loss'), subtitle: Text('₹${_LiveUi.money(store.stopLoss)}', style: _LiveUi.muted), value: store.stopLossEnabled, onChanged: (v) { store.stopLossEnabled = v; store.notifyListeners(); }),
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Target'), subtitle: Text('₹${_LiveUi.money(store.target)}', style: _LiveUi.muted), value: store.targetEnabled, onChanged: (v) { store.targetEnabled = v; store.notifyListeners(); }),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Stop Loss'), subtitle: Text('₹${_LiveUi.money(store.stopLoss)}', style: _LiveUi.muted), value: store.stopLossEnabled, onChanged: (v) { store.stopLossEnabled = v; store.refresh(); }),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Target'), subtitle: Text('₹${_LiveUi.money(store.target)}', style: _LiveUi.muted), value: store.targetEnabled, onChanged: (v) { store.targetEnabled = v; store.refresh(); }),
           ]),
         ),
         const SizedBox(height: 12),
@@ -653,8 +655,8 @@ class _LiveEmergencyPage extends StatelessWidget {
         const SizedBox(height: 12),
         _LiveCard(
           child: Column(children: [
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Cancel pending LIVE orders'), value: store.cancelPendingOnKill, onChanged: (v) { store.cancelPendingOnKill = v; store.notifyListeners(); }),
-            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Exit all open LIVE positions'), subtitle: const Text('Mock UI only', style: _LiveUi.muted), value: store.exitPositionsOnKill, onChanged: (v) { store.exitPositionsOnKill = v; store.notifyListeners(); }),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Cancel pending LIVE orders'), value: store.cancelPendingOnKill, onChanged: (v) { store.cancelPendingOnKill = v; store.refresh(); }),
+            SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('Exit all open LIVE positions'), subtitle: const Text('Mock UI only', style: _LiveUi.muted), value: store.exitPositionsOnKill, onChanged: (v) { store.exitPositionsOnKill = v; store.refresh(); }),
           ]),
         ),
         const SizedBox(height: 12),
@@ -761,7 +763,7 @@ class _LiveHero extends StatelessWidget {
         const SizedBox(height: 12),
         Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900)),
         const SizedBox(height: 5),
-        Text(subtitle, style: const TextStyle(color: _LiveUi.muted, height: 1.4)),
+        Text(subtitle, style: _LiveUi.muted.copyWith(height: 1.4)),
       ]),
     );
   }
@@ -819,7 +821,7 @@ class _LivePrimaryButton extends StatelessWidget {
 }
 
 class _LiveOutlineButton extends StatelessWidget {
-  const _LiveOutlineButton({required this.label, required this.icon, required this.onTap, this.danger = false});
+  const _LiveOutlineButton({super.key, required this.label, required this.icon, required this.onTap, this.danger = false});
 
   final String label;
   final IconData icon;
@@ -875,7 +877,7 @@ class _CheckLine extends StatelessWidget {
   const _CheckLine({required this.text});
   final String text;
   @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.check_circle_outline_rounded, size: 17, color: _LiveUi.green), const SizedBox(width: 8), Expanded(child: Text(text, style: const TextStyle(color: _LiveUi.muted, height: 1.35)))]));
+  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 9), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.check_circle_outline_rounded, size: 17, color: _LiveUi.green), const SizedBox(width: 8), Expanded(child: Text(text, style: _LiveUi.muted.copyWith(height: 1.35)))]));
 }
 
 class _MoneyRow extends StatelessWidget {
