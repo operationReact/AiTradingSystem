@@ -77,19 +77,19 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
 
     String? validation;
     if (!RegExp(r'^[A-Z0-9&-]{1,20}$').hasMatch(symbol)) {
-      validation = 'Enter a valid backend-supported symbol.';
+      validation = 'Enter a valid stock symbol.';
     } else if (quantity == null || quantity < 1 || quantity > 10000) {
       validation = 'Quantity must be between 1 and 10000.';
     } else if (referencePrice == null || referencePrice <= 0) {
       validation = 'Reference price must be greater than zero.';
     } else if (signalGeneratedAt == null) {
-      validation = 'Signal generated time must be a valid ISO-8601 timestamp.';
+      validation = 'Choose a valid signal time.';
     } else if (_side == 'BUY' && (stopLoss == null || target == null)) {
-      validation = 'BUY requires both stop loss and target.';
+      validation = 'A PAPER buy needs both a stop loss and target.';
     } else if (_side == 'BUY' && stopLoss! >= referencePrice) {
-      validation = 'BUY stop loss must be below reference price.';
+      validation = 'Stop loss must be below the reference price.';
     } else if (_side == 'BUY' && target! <= referencePrice) {
-      validation = 'BUY target must be above reference price.';
+      validation = 'Target must be above the reference price.';
     }
 
     if (validation != null) {
@@ -133,7 +133,6 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     } on ApiFailure catch (failure) {
       if (!mounted) return;
       setState(() => _submitFailure = failure);
-      // Keep the same idempotency key. A retry must never create a second intent.
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -156,18 +155,47 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     }
   }
 
+  String _friendlyFailure(ApiFailure failure) {
+    final code = failure.code.toUpperCase();
+    if (code.contains('AUTH')) return 'Sign in again to continue.';
+    if (code.contains('RISK')) return 'This PAPER trade did not pass the current risk rules.';
+    if (code.contains('NETWORK') || code.contains('TIMEOUT')) return 'We could not reach the trading service. Try again.';
+    return 'The PAPER order could not be completed.';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('PAPER orders')),
+      appBar: AppBar(title: const Text('PAPER Orders')),
       body: SafeArea(
         child: ListView(
           key: const ValueKey('paper-orders-list'),
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
           children: [
-            Semantics(header: true, child: Text('Create PAPER order intent', style: Theme.of(context).textTheme.headlineSmall)),
-            const SizedBox(height: 8),
-            const Text('This submits only to the PAPER execution API. Backend risk rules remain authoritative. No LIVE broker route is exposed here.'),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(24),
+                gradient: LinearGradient(
+                  colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text('Practice a trade', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900)),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Create a simulated order with virtual money. PAPER mode lets you test entries, stops, targets and risk controls without sending a real broker order.',
+                    style: theme.textTheme.bodyLarge?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: 1.45),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             _orderForm(context),
             if (_validationError != null) ...[
@@ -186,7 +214,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               _resultCard(_lastResult!),
             ],
             const SizedBox(height: 24),
-            Semantics(header: true, child: Text('Recent PAPER orders', style: Theme.of(context).textTheme.titleLarge)),
+            Semantics(header: true, child: Text('Recent PAPER orders', style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
             const SizedBox(height: 8),
             if (_loading && _orders == null)
               const Center(key: ValueKey('paper-orders-loading'), child: Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator()))
@@ -194,17 +222,17 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               _listError(_listFailure!)
             else if (_orders != null) ...[
               if (_listFailure != null)
-                Card(
-                  key: const ValueKey('paper-orders-stale'),
+                const Card(
+                  key: ValueKey('paper-orders-stale'),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('Refresh failed (${_listFailure!.code}). Orders below are last-known evidence.'),
+                    padding: EdgeInsets.all(16),
+                    child: Text('Could not refresh. Showing your last loaded PAPER orders.'),
                   ),
                 ),
               if (_orders!.items.isEmpty)
                 const Card(
                   key: ValueKey('paper-orders-empty'),
-                  child: Padding(padding: EdgeInsets.all(16), child: Text('No PAPER orders are reported by the backend.')),
+                  child: Padding(padding: EdgeInsets.all(16), child: Text('No PAPER orders yet.')),
                 )
               else
                 ..._orders!.items.map(_orderCard),
@@ -215,7 +243,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
       floatingActionButton: FloatingActionButton.extended(
         key: const ValueKey('paper-orders-refresh'),
         onPressed: _loading ? null : _refresh,
-        icon: const Icon(Icons.refresh),
+        icon: const Icon(Icons.refresh_rounded),
         label: const Text('Refresh'),
       ),
     );
@@ -227,7 +255,9 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextField(key: const ValueKey('paper-order-symbol'), controller: _symbol, decoration: const InputDecoration(labelText: 'Symbol')),
+              Text('Trade setup', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 14),
+              TextField(key: const ValueKey('paper-order-symbol'), controller: _symbol, decoration: const InputDecoration(labelText: 'Stock symbol')),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 12,
@@ -255,28 +285,28 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               const SizedBox(height: 12),
               TextField(key: const ValueKey('paper-order-reference-price'), controller: _referencePrice, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Reference price')),
               const SizedBox(height: 12),
-              TextField(key: const ValueKey('paper-order-stop-loss'), controller: _stopLoss, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Stop loss (required for BUY)')),
+              TextField(key: const ValueKey('paper-order-stop-loss'), controller: _stopLoss, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Stop loss')),
               const SizedBox(height: 12),
-              TextField(key: const ValueKey('paper-order-target'), controller: _target, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target (required for BUY)')),
+              TextField(key: const ValueKey('paper-order-target'), controller: _target, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
               const SizedBox(height: 12),
               TextField(
                 key: const ValueKey('paper-order-signal-time'),
                 controller: _signalGeneratedAt,
                 decoration: const InputDecoration(
-                  labelText: 'Signal generated at (ISO-8601)',
-                  helperText: 'Enter authoritative signal time; the client does not invent it.',
+                  labelText: 'Signal time',
+                  helperText: 'Use the time shown on the AI opportunity or trade idea.',
                 ),
               ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 key: const ValueKey('paper-order-submit'),
                 onPressed: _submitting ? null : _submit,
-                icon: _submitting ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.science_outlined),
-                label: Text(_submitting ? 'Submitting PAPER intent…' : 'Submit PAPER intent'),
+                icon: _submitting ? const SizedBox.square(dimension: 18, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.play_arrow_rounded),
+                label: Text(_submitting ? 'Placing PAPER order…' : 'Place PAPER order'),
               ),
               if (_pendingIdempotencyKey != null) ...[
                 const SizedBox(height: 8),
-                const Text('A retry will reuse the same idempotency key until this intent reaches a confirmed response.'),
+                const Text('Retrying will safely reuse the same order request.'),
               ],
             ],
           ),
@@ -287,7 +317,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
         key: const ValueKey('paper-order-submit-error'),
         child: Padding(
           padding: const EdgeInsets.all(16),
-          child: Text('Order not confirmed: ${failure.code}${failure.correlationId == null ? '' : ' • correlation ${failure.correlationId}'}'),
+          child: Text(_friendlyFailure(failure)),
         ),
       );
 
@@ -298,11 +328,13 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Backend result: ${result.order.status}', style: Theme.of(context).textTheme.titleMedium),
+              Text('PAPER order ${result.order.status}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
               Text('${result.order.side} ${result.order.quantity} ${result.order.symbol} • ${result.order.productType}'),
-              if (result.reasonCodes.isNotEmpty) Text('Risk reasons: ${result.reasonCodes.join(', ')}'),
-              if (result.order.rejectionReason != null) Text('Rejection: ${result.order.rejectionReason}'),
-              Text(result.replayed ? 'Idempotent replay confirmed.' : 'New PAPER intent response.'),
+              if (result.order.rejectionReason != null) ...[
+                const SizedBox(height: 6),
+                Text('Why: ${result.order.rejectionReason}'),
+              ],
             ],
           ),
         ),
@@ -313,9 +345,9 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Orders unavailable: ${failure.code}'),
+            Text(_friendlyFailure(failure)),
             const SizedBox(height: 12),
-            FilledButton(onPressed: _refresh, child: const Text('Retry')),
+            FilledButton(onPressed: _refresh, child: const Text('Try again')),
           ]),
         ),
       );
@@ -326,7 +358,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           title: Text('${order.side} ${order.quantity} ${order.symbol}'),
           subtitle: Text(
             '${order.productType} • ${order.status} • filled ${order.filledQuantity}/${order.quantity}\n'
-            'Entry ${order.entryPrice ?? 'UNKNOWN'} • avg fill ${order.averageFillPrice ?? 'UNKNOWN'} • updated ${order.updatedAt?.toIso8601String() ?? 'UNKNOWN'}',
+            'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}',
           ),
           isThreeLine: true,
           trailing: order.status == 'NEW' || order.status == 'RISK_APPROVED'
