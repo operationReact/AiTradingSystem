@@ -120,7 +120,7 @@ class ConnectedAutomatedPaperLifecycleIT extends AbstractApprovalPaperIT {
         assertThat(approvalJdbc.sql("""
                 SELECT COUNT(*) FROM risk_decision d
                 JOIN paper_order o ON o.id = d.order_id
-                WHERE o.symbol = :symbol AND d.decision = 'APPROVE'
+                WHERE o.symbol = :symbol AND d.decision = 'APPROVED'
                 """).param("symbol", SYMBOL).query(Integer.class).single()).isEqualTo(1);
         assertThat(approvalJdbc.sql("""
                 SELECT quantity FROM paper_position
@@ -158,7 +158,7 @@ class ConnectedAutomatedPaperLifecycleIT extends AbstractApprovalPaperIT {
         assertThat(approvalJdbc.sql("""
                 SELECT COUNT(*) FROM risk_decision d
                 JOIN paper_order o ON o.id = d.order_id
-                WHERE o.symbol = :symbol AND d.decision = 'APPROVE'
+                WHERE o.symbol = :symbol AND d.decision = 'APPROVED'
                 """).param("symbol", SYMBOL).query(Integer.class).single()).isEqualTo(2);
         assertThat(approvalJdbc.sql("SELECT COUNT(*) FROM paper_position WHERE symbol = :symbol")
             .param("symbol", SYMBOL).query(Integer.class).single()).isZero();
