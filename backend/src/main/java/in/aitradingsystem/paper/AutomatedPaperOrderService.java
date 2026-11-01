@@ -64,7 +64,10 @@ public class AutomatedPaperOrderService {
                     signal.stopLoss(),
                     signal.target(),
                     signal.createdAt(),
-                    ProductType.INTRADAY);
+                    ProductType.INTRADAY,
+                    null,
+                    "AUTOMATED",
+                    "STRATEGY_SIGNAL");
                 var result = orders.placeOrder(command, idempotencyKey(signal));
                 submitted++;
                 audit.record("AUTOMATED_PAPER_SIGNAL_SUBMITTED", "STRATEGY_SIGNAL", signal.id(), Map.of(
