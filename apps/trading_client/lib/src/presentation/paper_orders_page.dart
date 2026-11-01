@@ -7,14 +7,14 @@ import 'trailing_protection_editor.dart';
 class PaperOrdersPage extends StatefulWidget {
   const PaperOrdersPage({
     required this.repository,
-    this.trailingProtectionPreviewEnabled = false,
+    this.trailingProtectionPreviewEnabled = true,
     super.key,
   });
 
   final PaperTradingRepository repository;
 
-  /// UI-first feature seam. PAPER-05 enables the customer flow only after the
-  /// server persists trailing policy and the automated monitor can honor it.
+  /// Feature seam retained for focused compatibility tests; PAPER-05 enables
+  /// trailing protection in the production customer flow by default.
   final bool trailingProtectionPreviewEnabled;
 
   @override
@@ -108,10 +108,6 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled &&
         (trailingDistance == null || trailingDistance <= 0 || trailingDistance >= 100)) {
       validation = 'Trail distance must be greater than 0% and less than 100%.';
-    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled) {
-      // PAPER-04 proves the customer contract without silently dropping a
-      // protection setting that the current backend cannot yet persist.
-      validation = 'Trailing protection is not available for order placement yet.';
     }
 
     if (validation != null) {
@@ -141,6 +137,9 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           referencePrice: referencePrice!,
           stopLoss: stopLoss,
           target: target,
+          trailingPercent: widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled
+              ? trailingDistance
+              : null,
           signalGeneratedAt: signalGeneratedAt!,
           productType: _productType,
         ),
