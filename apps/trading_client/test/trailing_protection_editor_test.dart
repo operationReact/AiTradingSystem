@@ -112,4 +112,32 @@ void main() {
     expect(find.text('Trailing protection is not available for order placement yet.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('trailing protection is scoped to BUY and clears when side changes', (tester) async {
+    final repository = _FakePaperRepository();
+    await tester.pumpWidget(MaterialApp(
+      home: PaperOrdersPage(
+        repository: repository,
+        trailingProtectionPreviewEnabled: true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final editor = find.byKey(const ValueKey('paper-trailing-protection-editor'));
+    await _scrollTo(tester, editor);
+    await tester.tap(find.byKey(const ValueKey('paper-trailing-protection-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-trailing-distance-percent')), findsOneWidget);
+
+    final side = find.byKey(const ValueKey('paper-order-side'));
+    await _scrollTo(tester, side);
+    await tester.tap(side);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SELL').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('paper-trailing-protection-editor')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-trailing-distance-percent')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
