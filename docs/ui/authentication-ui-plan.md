@@ -21,6 +21,19 @@ Google and Apple authentication are explicitly out of scope. The customer signs 
 
 Implementation status above means the UI surface and flow are present on the review branch. Final visual acceptance remains pending CI and physical-device review.
 
+## Implementation checkpoints
+
+- [x] Shared auth visual primitives created so all screens use one locked color/spacing/component system.
+- [x] Real app launch changed to `/sign-in`.
+- [x] Google and Apple UI removed.
+- [x] Local device fingerprint capability wired with `local_auth`.
+- [x] App-level fingerprint enablement preference persisted without storing biometric data.
+- [x] Android biometric permission and `FlutterFragmentActivity` packaging support added.
+- [x] Dedicated widget coverage rewritten for the new auth contract.
+- [ ] Exact-head Flutter analyzer/tests/web build green.
+- [ ] Exact-head Android APK build green with biometric configuration preserved.
+- [ ] Physical Android visual review approved by user.
+
 ## Functional boundaries
 
 - Application opens on Sign In in the real app entry point while there is no authenticated customer session.
