@@ -20,6 +20,24 @@ Future<void> _visibleBack(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<Finder> _materializeHubItem(WidgetTester tester, String title) async {
+  final finder = find.text(title);
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(
+      finder,
+      260,
+      scrollable: find.byType(Scrollable).first,
+      maxScrolls: 20,
+    );
+    await tester.pumpAndSettle();
+  } else {
+    await tester.ensureVisible(finder.first);
+    await tester.pumpAndSettle();
+  }
+  expect(finder, findsOneWidget);
+  return finder.first;
+}
+
 Widget _hub(MockTradeIntelligenceRecord record, {Key? key}) => MaterialApp(
       key: key,
       theme: ThemeData.dark(useMaterial3: true),
@@ -58,9 +76,7 @@ void main() {
       expect(find.text('Transparency 360'), findsOneWidget);
       expect(find.textContaining('frozen pre-trade snapshot'), findsOneWidget);
 
-      final finder = find.text(page).first;
-      await tester.ensureVisible(finder);
-      await tester.pumpAndSettle();
+      final finder = await _materializeHubItem(tester, page);
       await tester.tap(finder);
       await tester.pumpAndSettle();
 
@@ -84,9 +100,7 @@ void main() {
     await tester.pumpAndSettle();
 
     Future<void> open(String title) async {
-      final finder = find.text(title).first;
-      await tester.ensureVisible(finder);
-      await tester.pumpAndSettle();
+      final finder = await _materializeHubItem(tester, title);
       await tester.tap(finder);
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
