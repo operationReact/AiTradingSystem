@@ -27,4 +27,47 @@ text = text.replace(
     "Text(text, style: _LiveUi.muted.copyWith(height: 1.35))",
 )
 
+old_live_card = '''class _LiveCard extends StatelessWidget {
+  const _LiveCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: _LiveUi.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: _LiveUi.border),
+      ),
+      child: child,
+    );
+  }
+}
+'''
+new_live_card = '''class _LiveCard extends StatelessWidget {
+  const _LiveCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _LiveUi.card,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: _LiveUi.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: child,
+      ),
+    );
+  }
+}
+'''
+text = text.replace(old_live_card, new_live_card)
+
 path.write_text(text)
