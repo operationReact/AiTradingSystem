@@ -1275,63 +1275,6 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
     );
   }
 
-  Widget _postTradeLearning() {
-    final favorableMove = (_opportunity.target - _entryPrice).abs() * _quantity;
-    final adverseMove = (_entryPrice - _opportunity.stop).abs() * _quantity * .34;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Glow(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Text('Prediction vs outcome', style: TextStyle(fontWeight: FontWeight.w900))]),
-              const SizedBox(height: 10),
-              const _CheckLine(text: 'Trend prediction was correct', good: true),
-              const _CheckLine(text: 'Volume confirmation remained valid', good: true),
-              const _CheckLine(text: 'Entry timing was inside the planned zone', good: true),
-              _CheckLine(text: _realizedPnl >= 0 ? 'Outcome supported the bullish thesis' : 'Outcome contradicted the bullish thesis', good: _realizedPnl >= 0),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        _Card(
-          child: Column(
-            children: [
-              _InfoRow(label: 'Original confidence', value: '${_opportunity.confidence}%'),
-              const Divider(height: 18),
-              _InfoRow(label: 'Realized P&L', value: '${_realizedPnl >= 0 ? '+' : '-'}₹${_realizedPnl.abs().toStringAsFixed(0)}'),
-              const Divider(height: 18),
-              _InfoRow(label: 'Max favorable excursion', value: '₹${favorableMove.toStringAsFixed(0)}'),
-              const Divider(height: 18),
-              _InfoRow(label: 'Max adverse excursion', value: '₹${adverseMove.toStringAsFixed(0)}'),
-              const Divider(height: 18),
-              const _InfoRow(label: 'Mock slippage', value: '₹3.40'),
-              const Divider(height: 18),
-              _InfoRow(label: 'Exit reason', value: _exitReason),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        const _Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Governed learning', style: TextStyle(fontWeight: FontWeight.w900)),
-              SizedBox(height: 8),
-              Text('Prediction snapshot, model versions, Gemini evidence, risk decision, execution details and outcome metrics are added to the mock evaluation dataset.', style: TextStyle(color: _C.muted, height: 1.45)),
-              SizedBox(height: 8),
-              Text('This does not trigger automatic retraining or model promotion from one trade.', style: TextStyle(color: _C.green, fontWeight: FontWeight.w800, height: 1.4)),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        const _Notice('Production model changes require batch evaluation, walk-forward evidence, calibration/risk gates and controlled promotion.'),
-        const SizedBox(height: 16),
-        _PrimaryButton(label: 'Done', icon: Icons.home_outlined, onTap: widget.onExit),
-      ],
-    );
-  }
 }
 
 class _TradePage extends StatelessWidget {
