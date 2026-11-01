@@ -1,0 +1,86 @@
+name: Flutter mobile quality gate
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/flutter-mobile-quality.yml'
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/flutter-mobile-quality.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-mobile-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Analyze, test and build Flutter client
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Static analysis
+        run: flutter analyze
+      - name: Functional and responsive tests
+        run: |
+          set -euo pipefail
+          mapfile -d '' tests < <(find test -type f -name '*_test.dart' ! -name 'visual_golden_test.dart' -print0)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo 'No Flutter tests found.' >&2
+            exit 1
+          fi
+          flutter test "${tests[@]}" --file-reporter json:test-results.json
+      - name: Explicit 390x844 density acceptance
+        run: flutter test test/mobile_density_acceptance_test.dart
+      - name: Build Flutter web release
+        run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-mobile-quality-diagnostics
+          path: apps/trading_client/test-results.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  mobile-visual-evidence:
+    name: Render 390x844 Home visual evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Render current visual evidence without accepting baselines
+        run: flutter test test/visual_golden_test.dart --update-goldens
+      - name: Upload rendered visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-mobile-current-visuals
+          path: apps/trading_client/test/goldens/*.png
+          if-no-files-found: error
+          retention-days: 14
