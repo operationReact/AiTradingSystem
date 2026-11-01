@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'mock_review_data.dart';
+import 'mock_trade_journey.dart';
 
 enum MockReviewScreen {
   home,
@@ -18,6 +19,7 @@ enum MockReviewScreen {
   backtests,
   notifications,
   settings,
+  tradeJourney,
 }
 
 class MockReviewApp extends StatefulWidget {
@@ -31,6 +33,9 @@ class _MockReviewAppState extends State<MockReviewApp> {
   final MockReviewStore _store = MockReviewStore();
   MockReviewScreen _screen = MockReviewScreen.home;
   MockOpportunity? _selectedOpportunity;
+  MockQuote? _journeyQuote;
+  MockOpportunity? _journeyOpportunity;
+  MockReviewScreen _journeyReturn = MockReviewScreen.markets;
 
   @override
   void dispose() {
@@ -39,6 +44,27 @@ class _MockReviewAppState extends State<MockReviewApp> {
   }
 
   void _open(MockReviewScreen screen) => setState(() => _screen = screen);
+
+
+  void _openTradeJourneyForQuote(MockQuote quote) {
+    final matches = _store.opportunities.where((item) => item.symbol == quote.symbol).toList(growable: false);
+    setState(() {
+      _journeyQuote = quote;
+      _journeyOpportunity = matches.isEmpty ? null : matches.first;
+      _journeyReturn = MockReviewScreen.markets;
+      _screen = MockReviewScreen.tradeJourney;
+    });
+  }
+
+  void _openTradeJourneyForOpportunity(MockOpportunity opportunity) {
+    final matches = _store.quotes.where((item) => item.symbol == opportunity.symbol).toList(growable: false);
+    setState(() {
+      _journeyOpportunity = opportunity;
+      _journeyQuote = matches.isEmpty ? null : matches.first;
+      _journeyReturn = MockReviewScreen.research;
+      _screen = MockReviewScreen.tradeJourney;
+    });
+  }
 
   void _openOpportunity(MockOpportunity opportunity) {
     setState(() {
@@ -94,7 +120,7 @@ class _MockReviewAppState extends State<MockReviewApp> {
         MockReviewScreen.home => _HomeReviewPage(store: _store, open: _open),
         MockReviewScreen.markets => _MarketsReviewPage(
             store: _store,
-            onOpportunity: _openOpportunity,
+            onStock: _openTradeJourneyForQuote,
           ),
         MockReviewScreen.research => _ResearchReviewPage(
             store: _store,
@@ -104,7 +130,16 @@ class _MockReviewAppState extends State<MockReviewApp> {
             store: _store,
             opportunity: _selectedOpportunity ?? _store.opportunities.first,
             onBack: () => _open(MockReviewScreen.research),
-            onPortfolio: () => _open(MockReviewScreen.portfolio),
+            onTrade: _openTradeJourneyForOpportunity,
+          ),
+        MockReviewScreen.tradeJourney => MockTradeJourney(
+            store: _store,
+            quote: _journeyQuote,
+            opportunity: _journeyOpportunity,
+            start: _journeyReturn == MockReviewScreen.research
+                ? MockTradeJourneyStart.analysis
+                : MockTradeJourneyStart.stock,
+            onExit: () => _open(_journeyReturn),
           ),
         MockReviewScreen.portfolio => _PortfolioReviewPage(
             store: _store,
@@ -243,10 +278,10 @@ class _HomeReviewPage extends StatelessWidget {
 }
 
 class _MarketsReviewPage extends StatefulWidget {
-  const _MarketsReviewPage({required this.store, required this.onOpportunity});
+  const _MarketsReviewPage({required this.store, required this.onStock});
 
   final MockReviewStore store;
-  final ValueChanged<MockOpportunity> onOpportunity;
+  final ValueChanged<MockQuote> onStock;
 
   @override
   State<_MarketsReviewPage> createState() => _MarketsReviewPageState();
@@ -317,14 +352,7 @@ class _MarketsReviewPageState extends State<_MarketsReviewPage> {
               (quote) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _ReviewCard(
-                  onTap: () {
-                    final matches = widget.store.opportunities.where((item) => item.symbol == quote.symbol);
-                    if (matches.isNotEmpty) {
-                      widget.onOpportunity(matches.first);
-                    } else {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${quote.symbol} added to market review.')));
-                    }
-                  },
+                  onTap: () => widget.onStock(quote),
                   child: _QuoteRow(quote: quote, showName: true),
                 ),
               ),
@@ -424,13 +452,13 @@ class _OpportunityReviewPage extends StatelessWidget {
     required this.store,
     required this.opportunity,
     required this.onBack,
-    required this.onPortfolio,
+    required this.onTrade,
   });
 
   final MockReviewStore store;
   final MockOpportunity opportunity;
   final VoidCallback onBack;
-  final VoidCallback onPortfolio;
+  final ValueChanged<MockOpportunity> onTrade;
 
   @override
   Widget build(BuildContext context) {
@@ -481,13 +509,9 @@ class _OpportunityReviewPage extends StatelessWidget {
           Row(children: [Expanded(child: _PriceLevel(label: 'Entry', value: opportunity.entry, color: _Ui.cyan)), const SizedBox(width: 8), Expanded(child: _PriceLevel(label: 'Stop', value: opportunity.stop, color: _Ui.red)), const SizedBox(width: 8), Expanded(child: _PriceLevel(label: 'Target', value: opportunity.target, color: _Ui.green))]),
           const SizedBox(height: 16),
           _GradientButton(
-            label: 'Add to Paper Trade',
-            icon: Icons.play_arrow_rounded,
-            onTap: () {
-              store.executePaperTrade(opportunity);
-              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${opportunity.symbol} PAPER trade executed with mock data.')));
-              onPortfolio();
-            },
+            label: 'Review PAPER Trade',
+            icon: Icons.arrow_forward_rounded,
+            onTap: () => onTrade(opportunity),
           ),
           const SizedBox(height: 10),
           OutlinedButton.icon(
