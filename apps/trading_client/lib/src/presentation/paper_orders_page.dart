@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/authenticated_api_client.dart';
 import '../data/paper_trading_repository.dart';
+import 'customer_lifecycle_state.dart';
 import 'trailing_protection_editor.dart';
 
 class PaperOrdersPage extends StatefulWidget {
@@ -363,7 +364,14 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('PAPER order ${result.order.status}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text(
+                'PAPER order ${CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side).label}',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 8),
+              CustomerLifecycleBadge(
+                state: CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side),
+              ),
               const SizedBox(height: 4),
               Text('${result.order.side} ${result.order.quantity} ${result.order.symbol} • ${result.order.productType}'),
               if (result.order.trailingStopPercent != null) ...[
@@ -394,7 +402,15 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
   Widget _orderCard(PaperOrder order) => Card(
         key: ValueKey('paper-order-${order.id}'),
         child: ListTile(
-          title: Text('${order.side} ${order.quantity} ${order.symbol}'),
+          title: Row(
+            children: [
+              Expanded(child: Text('${order.side} ${order.quantity} ${order.symbol}')),
+              const SizedBox(width: 8),
+              CustomerLifecycleBadge(
+                state: CustomerLifecycleState.forOrder(status: order.status, side: order.side),
+              ),
+            ],
+          ),
           subtitle: Text(
             '${order.productType} • ${order.status} • filled ${order.filledQuantity}/${order.quantity}\n'
             'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}'
