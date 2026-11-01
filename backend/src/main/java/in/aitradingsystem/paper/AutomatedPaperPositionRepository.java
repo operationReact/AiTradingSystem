@@ -22,7 +22,8 @@ public class AutomatedPaperPositionRepository {
         OffsetDateTime timestamp = OffsetDateTime.ofInstant(asOf, java.time.ZoneOffset.UTC);
         return jdbc.sql("""
                 SELECT p.instrument_id, p.exchange, p.symbol, p.product_type, p.quantity,
-                       p.stop_loss, p.target_price, p.updated_at,
+                       p.stop_loss, p.target_price, p.trailing_percent, p.high_water_mark,
+                       p.high_water_at, p.effective_protective_stop, p.trailing_version, p.updated_at,
                        COALESCE(
                            (SELECT mc.close_price
                               FROM market_candle mc
@@ -58,7 +59,7 @@ public class AutomatedPaperPositionRepository {
                        ) AS mark_at
                   FROM paper_position p
                  WHERE p.quantity > 0
-                   AND (p.stop_loss IS NOT NULL OR p.target_price IS NOT NULL)
+                   AND (p.stop_loss IS NOT NULL OR p.target_price IS NOT NULL OR p.trailing_percent IS NOT NULL)
                  ORDER BY p.symbol, p.product_type
                 """)
             .param("asOf", timestamp)
@@ -70,10 +71,19 @@ public class AutomatedPaperPositionRepository {
                 rs.getInt("quantity"),
                 rs.getBigDecimal("stop_loss"),
                 rs.getBigDecimal("target_price"),
+                rs.getBigDecimal("trailing_percent"),
+                rs.getBigDecimal("high_water_mark"),
+                nullableInstant(rs.getObject("high_water_at", OffsetDateTime.class)),
+                rs.getBigDecimal("effective_protective_stop"),
+                rs.getLong("trailing_version"),
                 rs.getBigDecimal("mark_price"),
                 rs.getObject("mark_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("updated_at", OffsetDateTime.class).toInstant()))
             .list();
+    }
+
+    private static Instant nullableInstant(OffsetDateTime value) {
+        return value == null ? null : value.toInstant();
     }
 
     public record MonitoredPosition(
@@ -84,6 +94,11 @@ public class AutomatedPaperPositionRepository {
         int quantity,
         BigDecimal stopLoss,
         BigDecimal targetPrice,
+        BigDecimal trailingPercent,
+        BigDecimal highWaterMark,
+        Instant highWaterAt,
+        BigDecimal effectiveProtectiveStop,
+        long trailingVersion,
         BigDecimal markPrice,
         Instant markAt,
         Instant positionUpdatedAt
