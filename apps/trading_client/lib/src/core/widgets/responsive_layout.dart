@@ -13,7 +13,7 @@ abstract final class ResponsiveLayout {
   static bool isCompactPhone(double width, double height) => width < mobileBreakpoint && height <= 920;
 
   static int workspaceColumns(double width) => switch (classify(width)) {
-        ResponsiveClass.mobile => 1,
+        ResponsiveClass.mobile => width >= 360 ? 2 : 1,
         ResponsiveClass.adaptive => 2,
         ResponsiveClass.desktop => 4,
       };
