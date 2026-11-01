@@ -144,6 +144,8 @@ class PaperOrder {
     required this.updatedAt,
     required this.correlationId,
     this.trailingStopPercent,
+    this.executionOrigin = 'MANUAL',
+    this.lifecycleReason,
   });
 
   final String id;
@@ -158,6 +160,8 @@ class PaperOrder {
   final num? stopLoss;
   final num? target;
   final num? trailingStopPercent;
+  final String executionOrigin;
+  final String? lifecycleReason;
   final String status;
   final String? rejectionReason;
   final DateTime? createdAt;
@@ -177,6 +181,8 @@ class PaperOrder {
         stopLoss: json['stopLoss'] as num?,
         target: json['target'] as num?,
         trailingStopPercent: json['trailingStopPercent'] as num?,
+        executionOrigin: '${json['executionOrigin'] ?? 'MANUAL'}',
+        lifecycleReason: json['lifecycleReason']?.toString(),
         status: '${json['status'] ?? 'UNKNOWN'}',
         rejectionReason: json['rejectionReason']?.toString(),
         createdAt: DateTime.tryParse('${json['createdAt'] ?? ''}'),
