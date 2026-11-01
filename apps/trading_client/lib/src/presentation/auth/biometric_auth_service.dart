@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,19 +16,28 @@ class BiometricAuthService {
       if (!supported || !await _localAuthentication.canCheckBiometrics) return false;
       final available = await _localAuthentication.getAvailableBiometrics();
       return available.contains(BiometricType.fingerprint);
-    } on PlatformException {
+    } catch (_) {
       return false;
     }
   }
 
   Future<bool> isFingerprintEnabledForApp() async {
-    final preferences = await SharedPreferences.getInstance();
-    return preferences.getBool(_enabledKey) ?? false;
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      return preferences.getBool(_enabledKey) ?? false;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<void> setFingerprintEnabledForApp(bool enabled) async {
-    final preferences = await SharedPreferences.getInstance();
-    await preferences.setBool(_enabledKey, enabled);
+    try {
+      final preferences = await SharedPreferences.getInstance();
+      await preferences.setBool(_enabledKey, enabled);
+    } catch (_) {
+      // Preference persistence is non-secret convenience state only. If the
+      // platform store is unavailable, fingerprint sign-in simply stays off.
+    }
   }
 
   Future<bool> authenticateFingerprint({required String reason}) async {
@@ -44,7 +52,7 @@ class BiometricAuthService {
           useErrorDialogs: true,
         ),
       );
-    } on PlatformException {
+    } catch (_) {
       return false;
     }
   }
