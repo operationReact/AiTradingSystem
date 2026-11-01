@@ -1,0 +1,115 @@
+name: UI review - mock data APK
+
+on:
+  pull_request:
+    paths:
+      - 'apps/trading_client/**'
+      - '.github/workflows/ui-review-apk.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ui-review-apk-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-ui-review-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Restore Android scaffold with biometric support
+        run: |
+          flutter create --platforms=android --project-name trading_client --org in.aitradingsystem .
+          python3 - <<'PY'
+          from pathlib import Path
+
+          activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
+          activity = activity_path.read_text().replace(
+              'import io.flutter.embedding.android.FlutterActivity',
+              'import io.flutter.embedding.android.FlutterFragmentActivity',
+          ).replace(
+              'class MainActivity: FlutterActivity()',
+              'class MainActivity: FlutterFragmentActivity()',
+          )
+          activity_path.write_text(activity)
+
+          manifest_path = Path('android/app/src/main/AndroidManifest.xml')
+          manifest = manifest_path.read_text()
+          permission = '    <uses-permission android:name="android.permission.USE_BIOMETRIC" />\n'
+          if 'android.permission.USE_BIOMETRIC' not in manifest:
+              manifest = manifest.replace(
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n',
+                  '<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n' + permission,
+                  1,
+              )
+          manifest_path.write_text(manifest)
+          PY
+
+      - name: Normalize Android Gradle compatibility
+        run: |
+          grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_path = Path('android/app/build.gradle.kts')
+          text = gradle_path.read_text()
+          text, count = re.subn(
+              r'\n\s*kotlinOptions\s*\{\s*jvmTarget\s*=\s*JavaVersion\.VERSION_17\.toString\(\)\s*\}\s*',
+              '\n',
+              text,
+              count=1,
+          )
+          if count == 1 and 'compilerOptions' not in text:
+              text = text.replace(
+                  'flutter {',
+                  'kotlin {\n    compilerOptions {\n        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)\n    }\n}\n\nflutter {',
+                  1,
+              )
+          gradle_path.write_text(text)
+
+          activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
+          activity = activity_path.read_text().replace(
+              'package in.aitradingsystem.trading_client',
+              'package `in`.aitradingsystem.trading_client',
+          )
+          activity_path.write_text(activity)
+          PY
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze review UI
+        run: flutter analyze --no-fatal-warnings lib/review_main.dart lib/src/presentation/review lib/src/presentation/auth lib/src/presentation/sign_in_page.dart
+
+      - name: Test review UI at phone viewport
+        run: flutter test test/ui_review_mock_test.dart test/auth_ui_flow_test.dart
+
+      - name: Build standalone review APK
+        run: flutter build apk --release -t lib/review_main.dart
+
+      - name: Record checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload review APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-trading-ui-review-${{ github.sha }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
