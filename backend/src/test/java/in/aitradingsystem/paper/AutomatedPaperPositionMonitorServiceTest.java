@@ -18,22 +18,19 @@ import in.aitradingsystem.paper.AutomatedPaperPositionRepository.MonitoredPositi
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
 import in.aitradingsystem.risk.RiskPolicySnapshot;
 import java.math.BigDecimal;
-import java.time.Clock;
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class AutomatedPaperPositionMonitorServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-01T05:00:00Z");
-    private static final Clock CLOCK = Clock.fixed(NOW, ZoneOffset.UTC);
 
     @Test
     void manualModeDoesNotReadOrSubmitPositions() {
         Fixture f = fixture(OrderExecutionMode.MANUAL, false);
 
-        var run = f.service.runOnce();
+        var run = f.service.runOnce(NOW);
 
         assertFalse(run.automationEnabled());
         verify(f.positions, never()).openPositions(any());
@@ -44,7 +41,7 @@ class AutomatedPaperPositionMonitorServiceTest {
     void emergencyStopPausesAutomatedPositionExecution() {
         Fixture f = fixture(OrderExecutionMode.AUTOMATED, true);
 
-        var run = f.service.runOnce();
+        var run = f.service.runOnce(NOW);
 
         assertTrue(run.automationEnabled());
         assertTrue(run.emergencyStopped());
@@ -60,7 +57,7 @@ class AutomatedPaperPositionMonitorServiceTest {
         when(f.trading.placeOrder(any(OrderCommand.class), anyString()))
             .thenReturn(new PaperViews.OrderResult(null, null, null, false));
 
-        var run = f.service.runOnce();
+        var run = f.service.runOnce(NOW);
 
         assertEquals(1, run.triggered());
         assertEquals(1, run.submitted());
@@ -76,7 +73,7 @@ class AutomatedPaperPositionMonitorServiceTest {
         when(f.trading.placeOrder(any(OrderCommand.class), anyString()))
             .thenReturn(new PaperViews.OrderResult(null, null, null, false));
 
-        var run = f.service.runOnce();
+        var run = f.service.runOnce(NOW);
 
         assertEquals(1, run.triggered());
         assertEquals("TARGET", run.attempts().getFirst().reason());
@@ -87,7 +84,7 @@ class AutomatedPaperPositionMonitorServiceTest {
         Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
         when(f.positions.openPositions(NOW)).thenReturn(List.of(position("99.00", "100.00", "110.00", NOW.minusSeconds(61))));
 
-        var run = f.service.runOnce();
+        var run = f.service.runOnce(NOW);
 
         assertEquals(1, run.staleSkipped());
         assertEquals(0, run.triggered());
@@ -104,7 +101,7 @@ class AutomatedPaperPositionMonitorServiceTest {
         when(trading.isHalted()).thenReturn(halted);
         when(policies.requireActive()).thenReturn(policy(60));
         return new Fixture(positions, trading,
-            new AutomatedPaperPositionMonitorService(authority, positions, trading, policies, audit, CLOCK));
+            new AutomatedPaperPositionMonitorService(authority, positions, trading, policies, audit));
     }
 
     private static MonitoredPosition position(String mark, String stop, String target, Instant markAt) {
