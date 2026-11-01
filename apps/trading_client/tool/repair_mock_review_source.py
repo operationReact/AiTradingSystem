@@ -37,11 +37,15 @@ correct_gradient_button = '''class _GradientButton extends StatelessWidget {
                   Icon(icon, color: const Color(0xFF03111F), size: 20),
                   const SizedBox(width: 8),
                 ],
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF03111F),
-                    fontWeight: FontWeight.w900,
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF03111F),
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
                 ),
               ],
@@ -65,6 +69,45 @@ app = app.replace(
     '      if (i == 0) {\n        path.moveTo(x, y);\n      } else {\n        path.lineTo(x, y);\n      }',
 )
 app = app.replace('if (trailing != null) trailing!', '?trailing')
+
+portfolio_header = "                  Row(children: [const Text('PAPER Portfolio', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), _Pill(text: 'PAPER MODE', color: _Ui.magenta)]),"
+portfolio_header_responsive = """                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'PAPER Portfolio',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const _Pill(text: 'PAPER MODE', color: _Ui.magenta),
+                    ],
+                  ),"""
+app = app.replace(portfolio_header, portfolio_header_responsive)
+
+broker_header = "                Row(children: [const _AngelOneMark(), const SizedBox(width: 12), const Text('Angel One', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), if (store.brokerConnected) const _Pill(text: 'CONNECTED', color: _Ui.green)]),"
+broker_header_responsive = """                Row(
+                  children: [
+                    const _AngelOneMark(),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Angel One',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    if (store.brokerConnected) ...[
+                      const SizedBox(width: 8),
+                      const _Pill(text: 'CONNECTED', color: _Ui.green),
+                    ],
+                  ],
+                ),"""
+app = app.replace(broker_header, broker_header_responsive)
+
 app_path.write_text(app)
 
 data = data_path.read_text()
