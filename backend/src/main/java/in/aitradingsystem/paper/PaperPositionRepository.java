@@ -87,6 +87,31 @@ public class PaperPositionRepository {
         return updated == 1;
     }
 
+    /** Advances trailing state monotonically without mutating the accounting timestamp/version. */
+    public boolean advanceTrailingState(String symbol, ProductType productType, long expectedTrailingVersion,
+                                        BigDecimal highWaterMark, Instant highWaterAt,
+                                        BigDecimal effectiveProtectiveStop) {
+        int updated = jdbc.sql("""
+                UPDATE paper_position
+                   SET high_water_mark = :highWaterMark,
+                       high_water_at = :highWaterAt,
+                       effective_protective_stop = :effectiveProtectiveStop,
+                       trailing_version = trailing_version + 1
+                 WHERE symbol = :symbol
+                   AND product_type = :productType
+                   AND trailing_percent IS NOT NULL
+                   AND trailing_version = :expectedTrailingVersion
+                """)
+            .param("highWaterMark", highWaterMark)
+            .param("highWaterAt", PaperOrderRepository.ts(highWaterAt))
+            .param("effectiveProtectiveStop", effectiveProtectiveStop)
+            .param("symbol", symbol)
+            .param("productType", productType.name())
+            .param("expectedTrailingVersion", expectedTrailingVersion)
+            .update();
+        return updated == 1;
+    }
+
     public boolean delete(PositionRow expected) {
         return jdbc.sql("DELETE FROM paper_position WHERE symbol = :symbol AND product_type = :productType AND quantity = :expectedQuantity")
             .param("symbol", expected.symbol()).param("productType", expected.productType().name())
