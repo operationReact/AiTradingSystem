@@ -49,6 +49,8 @@ class _TradingAppState extends State<TradingApp> {
   DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
+  String? _pendingObservedRoute;
+  bool _routeSyncScheduled = false;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
@@ -146,8 +148,17 @@ class _TradingAppState extends State<TradingApp> {
   }
 
   void _handleRouteChanged(String route) {
-    if (!mounted || _selectedRoute == route) return;
-    setState(() => _selectedRoute = route);
+    _pendingObservedRoute = route;
+    if (_routeSyncScheduled) return;
+
+    _routeSyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _routeSyncScheduled = false;
+      final pendingRoute = _pendingObservedRoute;
+      _pendingObservedRoute = null;
+      if (!mounted || pendingRoute == null || _selectedRoute == pendingRoute) return;
+      setState(() => _selectedRoute = pendingRoute);
+    });
   }
 
   void _navigate(String route) {
