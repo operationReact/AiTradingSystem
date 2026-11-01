@@ -1,0 +1,36 @@
+name: Repair UI review source
+
+on:
+  push:
+    branches: [ui/post-login-mock-review]
+    paths:
+      - 'apps/trading_client/tool/repair_mock_review_source.py'
+      - '.github/workflows/repair-ui-review-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui/post-login-mock-review
+
+      - name: Apply deterministic source repair
+        working-directory: apps/trading_client
+        run: python3 tool/repair_mock_review_source.py
+
+      - name: Commit repaired source
+        run: |
+          if git diff --quiet; then
+            echo 'Source already clean.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart apps/trading_client/lib/src/presentation/review/mock_review_data.dart
+          git commit -m 'Repair mock review source and state mutations'
+          git push origin HEAD:ui/post-login-mock-review
