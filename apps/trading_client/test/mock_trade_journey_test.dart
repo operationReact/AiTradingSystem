@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/presentation/review/mock_review_data.dart';
 import 'package:trading_client/src/presentation/review/mock_trade_journey.dart';
 
+// Exact-head 390x844 acceptance for the explainable PAPER trading journey.
 void _phoneViewport(WidgetTester tester) {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(390, 844);
