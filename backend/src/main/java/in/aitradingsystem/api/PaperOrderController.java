@@ -6,6 +6,7 @@ import in.aitradingsystem.paper.OrderCommand;
 import in.aitradingsystem.paper.PaperOrderService;
 import in.aitradingsystem.paper.PaperViews.OrderResult;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -45,6 +46,8 @@ public class PaperOrderController {
         @NotNull @DecimalMin("0.01") BigDecimal referencePrice,
         @DecimalMin("0.01") BigDecimal stopLoss,
         @DecimalMin("0.01") BigDecimal target,
+        @DecimalMin(value = "0", inclusive = false) @DecimalMax(value = "100", inclusive = false)
+        BigDecimal trailingPercent,
         @NotNull Instant signalGeneratedAt,
         @NotNull @Pattern(regexp = "DELIVERY|INTRADAY") String productType,
         @NotNull @Pattern(regexp = "MARKET|LIMIT") String orderType,
@@ -57,7 +60,8 @@ public class PaperOrderController {
         validateSupportedOrder(request);
         OrderCommand command = new OrderCommand(
             request.symbol(), Side.valueOf(request.side()), request.quantity(), request.referencePrice(),
-            request.stopLoss(), request.target(), request.signalGeneratedAt(), ProductType.valueOf(request.productType()));
+            request.stopLoss(), request.target(), request.signalGeneratedAt(), ProductType.valueOf(request.productType()),
+            request.trailingPercent());
         OrderResult result = orders.placeOrder(command, idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(result);
     }
@@ -91,6 +95,8 @@ public class PaperOrderController {
             if (request.target().compareTo(request.referencePrice()) <= 0) {
                 throw new IllegalArgumentException("For BUY orders, target must be above referencePrice");
             }
+        } else if (request.trailingPercent() != null) {
+            throw new IllegalArgumentException("Trailing protection is supported only for PAPER BUY positions");
         }
     }
 }
