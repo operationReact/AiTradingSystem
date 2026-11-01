@@ -10,6 +10,7 @@ on:
       - 'apps/trading_client/tool/add_explainability_review.py'
       - 'apps/trading_client/tool/fix_explainability_overflow.py'
       - 'apps/trading_client/tool/add_transparency_journey.py'
+      - 'apps/trading_client/tool/add_improvement_analysis.py'
       - 'apps/trading_client/tool/fix_duplicate_post_trade_learning.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
@@ -34,6 +35,7 @@ jobs:
           python3 tool/add_explainability_review.py
           python3 tool/fix_explainability_overflow.py
           python3 tool/add_transparency_journey.py
+          python3 tool/add_improvement_analysis.py
           python3 tool/fix_duplicate_post_trade_learning.py
 
       - name: Commit repaired source
@@ -47,6 +49,7 @@ jobs:
           git add apps/trading_client/lib/src/presentation/review/mock_review_app.dart \
                   apps/trading_client/lib/src/presentation/review/mock_review_data.dart \
                   apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart \
+                  apps/trading_client/lib/src/presentation/review/mock_transparency_journey.dart \
                   apps/trading_client/lib/src/presentation/review/mock_live_trading.dart
           git commit -m 'Repair review source and decision audit wiring'
           git push origin HEAD:ui/post-login-mock-review
