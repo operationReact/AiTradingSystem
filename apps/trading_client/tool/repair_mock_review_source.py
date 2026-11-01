@@ -70,6 +70,41 @@ app = app.replace(
 )
 app = app.replace('if (trailing != null) trailing!', '?trailing')
 
+pulse_header = '''                Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, color: _Ui.cyan, size: 18),
+                    const SizedBox(width: 8),
+                    const Text('AI Market Pulse', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                    const Spacer(),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Color(0xFF60FFB1), shape: BoxShape.circle),
+                    ),
+                  ],
+                ),'''
+pulse_header_responsive = '''                Row(
+                  children: [
+                    const Icon(Icons.auto_awesome_rounded, color: _Ui.cyan, size: 18),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'AI Market Pulse',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(color: Color(0xFF60FFB1), shape: BoxShape.circle),
+                    ),
+                  ],
+                ),'''
+app = app.replace(pulse_header, pulse_header_responsive)
+
 portfolio_header = "                  Row(children: [const Text('PAPER Portfolio', style: TextStyle(fontSize: 21, fontWeight: FontWeight.w900)), const Spacer(), _Pill(text: 'PAPER MODE', color: _Ui.magenta)]),"
 portfolio_header_responsive = """                  Row(
                     children: [
