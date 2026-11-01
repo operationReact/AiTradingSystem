@@ -62,13 +62,6 @@ jobs:
         run: |
           grep -q '^android.newDsl=' android/gradle.properties || echo 'android.newDsl=false' >> android/gradle.properties
           python3 - <<'PY'
-          from pathlib import import Path
-          PY
-        continue-on-error: true
-
-      - name: Normalize Android Gradle compatibility (actual)
-        run: |
-          python3 - <<'PY'
           from pathlib import Path
           import re
 
