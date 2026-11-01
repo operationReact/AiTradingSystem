@@ -365,12 +365,12 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'PAPER order ${CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side).label}',
+                'PAPER order ${CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side, executionOrigin: result.order.executionOrigin, lifecycleReason: result.order.lifecycleReason).label}',
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
               ),
               const SizedBox(height: 8),
               CustomerLifecycleBadge(
-                state: CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side),
+                state: CustomerLifecycleState.forOrder(status: result.order.status, side: result.order.side, executionOrigin: result.order.executionOrigin, lifecycleReason: result.order.lifecycleReason),
               ),
               const SizedBox(height: 4),
               Text('${result.order.side} ${result.order.quantity} ${result.order.symbol} • ${result.order.productType}'),
@@ -407,7 +407,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               Expanded(child: Text('${order.side} ${order.quantity} ${order.symbol}')),
               const SizedBox(width: 8),
               CustomerLifecycleBadge(
-                state: CustomerLifecycleState.forOrder(status: order.status, side: order.side),
+                state: CustomerLifecycleState.forOrder(status: order.status, side: order.side, executionOrigin: order.executionOrigin, lifecycleReason: order.lifecycleReason),
               ),
             ],
           ),
