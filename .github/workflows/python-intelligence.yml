@@ -1,0 +1,38 @@
+name: Python intelligence
+
+on:
+  pull_request:
+    paths:
+      - 'intelligence/**'
+      - '.github/workflows/python-intelligence.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/**'
+      - '.github/workflows/python-intelligence.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: intelligence/pyproject.toml
+      - name: Install
+        working-directory: intelligence
+        run: pip install -e '.[dev]'
+      - name: Lint
+        working-directory: intelligence
+        run: ruff check src tests
+      - name: Test
+        working-directory: intelligence
+        run: pytest -q
+      - name: OpenAPI smoke test
+        working-directory: intelligence
+        run: python -c "from aitrading_intelligence.app import app; assert '/v1/contracts/validate' in app.openapi()['paths']"
