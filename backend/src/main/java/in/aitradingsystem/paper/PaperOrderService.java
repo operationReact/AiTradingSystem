@@ -75,6 +75,7 @@ public class PaperOrderService {
 
     @Transactional
     public OrderResult placeOrder(OrderCommand command, String idempotencyKey) {
+        TrailingProtectionPolicy.validate(command.side(), command.trailingStopPercent());
         String requestHash = command.canonicalHash();
         Optional<ExistingOrder> existing = orders.findByIdempotencyKey(idempotencyKey);
         if (existing.isPresent()) return replay(existing.get(), requestHash, idempotencyKey);

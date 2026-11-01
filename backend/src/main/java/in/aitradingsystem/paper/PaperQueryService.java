@@ -72,7 +72,8 @@ public class PaperQueryService {
     public List<PositionView> positions() {
         return jdbc.sql("""
                 SELECT p.instrument_id, p.exchange, p.symbol, p.product_type, p.quantity, p.cost_basis,
-                       p.average_price, p.stop_loss, p.target_price, p.opened_at,
+                       p.average_price, p.stop_loss, p.target_price, p.trailing_stop_percent,
+                       p.high_water_mark, p.effective_protective_stop, p.opened_at,
                        (SELECT f.fill_price
                           FROM paper_fill f
                           JOIN paper_order o ON o.id = f.order_id
@@ -94,7 +95,9 @@ public class PaperQueryService {
                         rs.getString("symbol"), rs.getString("product_type"), qty,
                         PaperExecutionModel.money(average), cost, mark, value,
                         PaperExecutionModel.money(value.subtract(cost)), rs.getBigDecimal("stop_loss"),
-                        rs.getBigDecimal("target_price"), PaperTradingService.instant(rs, "opened_at"));
+                        rs.getBigDecimal("target_price"), rs.getBigDecimal("trailing_stop_percent"),
+                        rs.getBigDecimal("high_water_mark"), rs.getBigDecimal("effective_protective_stop"),
+                        PaperTradingService.instant(rs, "opened_at"));
                 }).list();
     }
 

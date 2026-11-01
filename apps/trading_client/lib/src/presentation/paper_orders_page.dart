@@ -13,8 +13,8 @@ class PaperOrdersPage extends StatefulWidget {
 
   final PaperTradingRepository repository;
 
-  /// UI-first feature seam. PAPER-05 enables the customer flow only after the
-  /// server persists trailing policy and the automated monitor can honor it.
+  /// Compatibility seam retained from PAPER-04. PAPER-05 enables it in the
+  /// production routes now that the server persists and supervises trailing state.
   final bool trailingProtectionPreviewEnabled;
 
   @override
@@ -108,10 +108,6 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled &&
         (trailingDistance == null || trailingDistance <= 0 || trailingDistance >= 100)) {
       validation = 'Trail distance must be greater than 0% and less than 100%.';
-    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled) {
-      // PAPER-04 proves the customer contract without silently dropping a
-      // protection setting that the current backend cannot yet persist.
-      validation = 'Trailing protection is not available for order placement yet.';
     }
 
     if (validation != null) {
@@ -141,6 +137,9 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           referencePrice: referencePrice!,
           stopLoss: stopLoss,
           target: target,
+          trailingStopPercent: widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled
+              ? trailingDistance
+              : null,
           signalGeneratedAt: signalGeneratedAt!,
           productType: _productType,
         ),
@@ -367,6 +366,10 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               Text('PAPER order ${result.order.status}', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
               Text('${result.order.side} ${result.order.quantity} ${result.order.symbol} • ${result.order.productType}'),
+              if (result.order.trailingStopPercent != null) ...[
+                const SizedBox(height: 4),
+                Text('Trailing protection ${result.order.trailingStopPercent}%'),
+              ],
               if (result.order.rejectionReason != null) ...[
                 const SizedBox(height: 6),
                 Text('Why: ${result.order.rejectionReason}'),
@@ -394,7 +397,8 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
           title: Text('${order.side} ${order.quantity} ${order.symbol}'),
           subtitle: Text(
             '${order.productType} • ${order.status} • filled ${order.filledQuantity}/${order.quantity}\n'
-            'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}',
+            'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}'
+            '${order.trailingStopPercent == null ? '' : ' • Trail ${order.trailingStopPercent}%'}',
           ),
           isThreeLine: true,
           trailing: order.status == 'NEW' || order.status == 'RISK_APPROVED'

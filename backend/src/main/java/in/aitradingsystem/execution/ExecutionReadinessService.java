@@ -82,7 +82,8 @@ public class ExecutionReadinessService {
         RiskContext initialContext = contextFactory.build(orderId, original, now);
         Quote quote = latestQuote(order, now, initialContext.policy().marketStateMaxAgeSeconds());
         OrderCommand freshCommand = new OrderCommand(original.symbol(), original.side(), original.quantity(),
-            quote.price(), original.stopLoss(), original.target(), original.signalGeneratedAt(), original.productType());
+            quote.price(), original.stopLoss(), original.target(), original.signalGeneratedAt(), original.productType(),
+            original.trailingStopPercent());
         RiskContext context = contextFactory.build(orderId, freshCommand, now);
         RiskDecisionV2 risk = riskEngine.evaluate(context);
 
@@ -127,7 +128,7 @@ public class ExecutionReadinessService {
         }
         return jdbc.sql("""
                 SELECT id, symbol, side, quantity, reference_price, stop_loss, target_price,
-                       signal_generated_at, product_type, instrument_id, strategy, approval_id
+                       trailing_stop_percent, signal_generated_at, product_type, instrument_id, strategy, approval_id
                   FROM paper_order
                  WHERE id = :id
                 """)
@@ -140,6 +141,7 @@ public class ExecutionReadinessService {
                 rs.getBigDecimal("reference_price"),
                 rs.getBigDecimal("stop_loss"),
                 rs.getBigDecimal("target_price"),
+                rs.getBigDecimal("trailing_stop_percent"),
                 rs.getObject("signal_generated_at", OffsetDateTime.class) == null ? null
                     : rs.getObject("signal_generated_at", OffsetDateTime.class).toInstant(),
                 ProductType.valueOf(rs.getString("product_type")),
@@ -203,11 +205,12 @@ public class ExecutionReadinessService {
     private record Quote(BigDecimal price, Instant asOf) {}
 
     private record PersistedOrder(UUID id, String symbol, Side side, int quantity, BigDecimal referencePrice,
-                                  BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt,
-                                  ProductType productType, Long instrumentId, String strategy, UUID approvalId) {
+                                  BigDecimal stopLoss, BigDecimal target, BigDecimal trailingStopPercent,
+                                  Instant signalGeneratedAt, ProductType productType, Long instrumentId,
+                                  String strategy, UUID approvalId) {
         OrderCommand command() {
             return new OrderCommand(symbol, side, quantity, referencePrice, stopLoss, target,
-                signalGeneratedAt, productType);
+                signalGeneratedAt, productType, trailingStopPercent);
         }
     }
 }

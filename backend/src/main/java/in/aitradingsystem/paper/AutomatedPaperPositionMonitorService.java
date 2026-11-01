@@ -5,11 +5,14 @@ import in.aitradingsystem.domain.Side;
 import in.aitradingsystem.execution.TradingExecutionAuthority;
 import in.aitradingsystem.paper.AutomatedPaperPositionRepository.MonitoredPosition;
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
+import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -26,22 +29,35 @@ public class AutomatedPaperPositionMonitorService {
     private final PaperTradingService trading;
     private final RiskPolicyConfigRepository riskPolicies;
     private final AuditService audit;
+    private final Clock clock;
 
+    @Autowired
     public AutomatedPaperPositionMonitorService(
             TradingExecutionAuthority authority,
             AutomatedPaperPositionRepository positions,
             PaperTradingService trading,
             RiskPolicyConfigRepository riskPolicies,
             AuditService audit) {
+        this(authority, positions, trading, riskPolicies, audit, Clock.systemUTC());
+    }
+
+    AutomatedPaperPositionMonitorService(
+            TradingExecutionAuthority authority,
+            AutomatedPaperPositionRepository positions,
+            PaperTradingService trading,
+            RiskPolicyConfigRepository riskPolicies,
+            AuditService audit,
+            Clock clock) {
         this.authority = authority;
         this.positions = positions;
         this.trading = trading;
         this.riskPolicies = riskPolicies;
         this.audit = audit;
+        this.clock = clock;
     }
 
     public MonitorRun runOnce() {
-        return runOnce(Instant.now());
+        return runOnce(clock.instant());
     }
 
     MonitorRun runOnce(Instant now) {
@@ -62,11 +78,30 @@ public class AutomatedPaperPositionMonitorService {
         int stale = 0;
         List<ExitAttempt> attempts = new ArrayList<>();
 
-        for (MonitoredPosition position : open) {
-            if (stale(position, now, maxMarkAgeSeconds)) {
+        for (MonitoredPosition persisted : open) {
+            if (stale(persisted, now, maxMarkAgeSeconds)) {
                 stale++;
-                attempts.add(new ExitAttempt(position.symbol(), null, "STALE_MARK", null));
+                attempts.add(new ExitAttempt(persisted.symbol(), null, "STALE_MARK", null));
                 continue;
+            }
+
+            MonitoredPosition position = persisted;
+            if (persisted.trailingStopPercent() != null) {
+                try {
+                    position = refreshTrailingState(persisted, now);
+                    if (position == null) {
+                        rejected++;
+                        attempts.add(new ExitAttempt(persisted.symbol(), null, "TRAILING_STATE_CONCURRENT", null));
+                        continue;
+                    }
+                } catch (RuntimeException ex) {
+                    rejected++;
+                    attempts.add(new ExitAttempt(persisted.symbol(), null, "TRAILING_STATE_INVALID", null));
+                    audit.record("AUTOMATED_PAPER_TRAILING_STATE_FAILED", "PAPER_POSITION", positionIdentity(persisted),
+                        Map.of("symbol", persisted.symbol(), "productType", persisted.productType().name(),
+                            "failure", ex.getClass().getSimpleName()));
+                    continue;
+                }
             }
 
             ExitReason reason = trigger(position);
@@ -119,12 +154,36 @@ public class AutomatedPaperPositionMonitorService {
             List.copyOf(attempts));
     }
 
+    private MonitoredPosition refreshTrailingState(MonitoredPosition position, Instant now) {
+        BigDecimal currentHigh = position.highWaterMark();
+        if (currentHigh == null || position.highWaterAt() == null || position.effectiveProtectiveStop() == null) {
+            throw new IllegalStateException("Persisted trailing state is incomplete");
+        }
+        BigDecimal nextHigh = currentHigh.max(position.markPrice());
+        BigDecimal nextStop = TrailingProtectionPolicy.effectiveStop(
+            position.stopLoss(), nextHigh, position.trailingStopPercent());
+        if (position.effectiveProtectiveStop().compareTo(nextStop) > 0) {
+            nextStop = position.effectiveProtectiveStop();
+        }
+        if (nextHigh.compareTo(currentHigh) <= 0) {
+            return position.withTrailingState(currentHigh, position.highWaterAt(), nextStop, position.positionUpdatedAt());
+        }
+        if (!positions.advanceTrailingState(position, nextHigh, position.markAt(), nextStop, now)) {
+            return null;
+        }
+        return position.withTrailingState(nextHigh, position.markAt(), nextStop, now);
+    }
+
     static ExitReason trigger(MonitoredPosition position) {
         if (position.stopLoss() != null && position.markPrice().compareTo(position.stopLoss()) <= 0) {
             return ExitReason.STOP_LOSS;
         }
         if (position.targetPrice() != null && position.markPrice().compareTo(position.targetPrice()) >= 0) {
             return ExitReason.TARGET;
+        }
+        if (position.trailingStopPercent() != null && position.effectiveProtectiveStop() != null
+                && position.markPrice().compareTo(position.effectiveProtectiveStop()) <= 0) {
+            return ExitReason.TRAILING_STOP;
         }
         return null;
     }
@@ -135,10 +194,13 @@ public class AutomatedPaperPositionMonitorService {
     }
 
     static String idempotencyKey(MonitoredPosition position, ExitReason reason) {
+        long protectionVersion = reason == ExitReason.TRAILING_STOP && position.highWaterAt() != null
+            ? position.highWaterAt().toEpochMilli()
+            : position.positionUpdatedAt().toEpochMilli();
         return "auto-paper-exit:"
             + reason.name().toLowerCase(java.util.Locale.ROOT)
             + ":" + positionIdentity(position)
-            + ":" + position.positionUpdatedAt().toEpochMilli()
+            + ":" + protectionVersion
             + ":" + position.markAt().toEpochMilli();
     }
 
@@ -147,7 +209,7 @@ public class AutomatedPaperPositionMonitorService {
         return instrument + ":" + position.productType().name();
     }
 
-    enum ExitReason { STOP_LOSS, TARGET }
+    enum ExitReason { STOP_LOSS, TARGET, TRAILING_STOP }
 
     public record ExitAttempt(String symbol, String reason, String status, String idempotencyKey) {}
 

@@ -5,6 +5,7 @@ import in.aitradingsystem.domain.Side;
 import in.aitradingsystem.paper.OrderCommand;
 import in.aitradingsystem.paper.PaperOrderService;
 import in.aitradingsystem.paper.PaperViews.OrderResult;
+import in.aitradingsystem.paper.TrailingProtectionPolicy;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -27,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Canonical Phase 6 PAPER order API. No LIVE submission path exists here. */
+/** Canonical PAPER order API. No LIVE submission path exists here. */
 @RestController
 @RequestMapping("/api/paper-orders")
 @Validated
@@ -45,10 +46,16 @@ public class PaperOrderController {
         @NotNull @DecimalMin("0.01") BigDecimal referencePrice,
         @DecimalMin("0.01") BigDecimal stopLoss,
         @DecimalMin("0.01") BigDecimal target,
+        BigDecimal trailingStopPercent,
         @NotNull Instant signalGeneratedAt,
         @NotNull @Pattern(regexp = "DELIVERY|INTRADAY") String productType,
         @NotNull @Pattern(regexp = "MARKET|LIMIT") String orderType,
         @DecimalMin("0.01") BigDecimal limitPrice) {}
+
+    @GetMapping("/trailing-policy")
+    public TrailingProtectionPolicy.PolicyView trailingPolicy() {
+        return TrailingProtectionPolicy.view();
+    }
 
     @PostMapping
     public ResponseEntity<OrderResult> create(
@@ -57,7 +64,8 @@ public class PaperOrderController {
         validateSupportedOrder(request);
         OrderCommand command = new OrderCommand(
             request.symbol(), Side.valueOf(request.side()), request.quantity(), request.referencePrice(),
-            request.stopLoss(), request.target(), request.signalGeneratedAt(), ProductType.valueOf(request.productType()));
+            request.stopLoss(), request.target(), request.signalGeneratedAt(), ProductType.valueOf(request.productType()),
+            request.trailingStopPercent());
         OrderResult result = orders.placeOrder(command, idempotencyKey);
         return ResponseEntity.status(result.replayed() ? HttpStatus.OK : HttpStatus.CREATED).body(result);
     }

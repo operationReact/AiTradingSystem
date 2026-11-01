@@ -79,6 +79,17 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void preservesPersistedTrailingProtectionThroughFreshQuoteRevalidation() {
+        jdbc.sql("UPDATE paper_order SET trailing_stop_percent = 2.5000 WHERE id = :id")
+            .param("id", orderId).update();
+
+        ExecutionReadinessResult result = service.revalidate(orderId);
+
+        assertThat(result.command().trailingStopPercent()).isEqualByComparingTo("2.5000");
+        assertThat(result.command().entryPrice()).isEqualByComparingTo("101.25");
+    }
+
+    @Test
     void failsClosedWhenApprovalExpired() {
         jdbc.sql("UPDATE order_approval SET expires_at = :expired WHERE id = :id")
             .param("expired", OffsetDateTime.ofInstant(NOW.minusSeconds(1), ZoneOffset.UTC))

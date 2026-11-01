@@ -26,12 +26,24 @@ public final class PaperViews {
         BigDecimal entryPrice,
         BigDecimal stopLoss,
         BigDecimal target,
+        BigDecimal trailingStopPercent,
         String status,
         String rejectionReason,
         Instant signalGeneratedAt,
         Instant createdAt,
         Instant updatedAt,
-        String correlationId) {}
+        String correlationId) {
+        public OrderView(UUID id, Long instrumentId, String exchange, String symbol, String side, int quantity,
+                         int submittedQuantity, int filledQuantity, String orderType, BigDecimal limitPrice,
+                         String productType, String strategy, Long candidateId, BigDecimal averageFillPrice,
+                         BigDecimal entryPrice, BigDecimal stopLoss, BigDecimal target, String status,
+                         String rejectionReason, Instant signalGeneratedAt, Instant createdAt, Instant updatedAt,
+                         String correlationId) {
+            this(id, instrumentId, exchange, symbol, side, quantity, submittedQuantity, filledQuantity, orderType,
+                limitPrice, productType, strategy, candidateId, averageFillPrice, entryPrice, stopLoss, target, null,
+                status, rejectionReason, signalGeneratedAt, createdAt, updatedAt, correlationId);
+        }
+    }
 
     public record DecisionView(UUID id, UUID orderId, String decision, List<String> reasonCodes, BigDecimal riskBudget,
         BigDecimal estimatedRisk, BigDecimal availableCash, int openPositions,
@@ -46,7 +58,16 @@ public final class PaperViews {
     public record PositionView(Long instrumentId, String exchange, String symbol, String productType,
         int quantity, BigDecimal averageCost, BigDecimal costBasis, BigDecimal markPrice,
         BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal stopLoss,
-        BigDecimal target, Instant openedAt) {}
+        BigDecimal target, BigDecimal trailingStopPercent, BigDecimal highWaterMark,
+        BigDecimal effectiveProtectiveStop, Instant openedAt) {
+        public PositionView(Long instrumentId, String exchange, String symbol, String productType, int quantity,
+                            BigDecimal averageCost, BigDecimal costBasis, BigDecimal markPrice,
+                            BigDecimal marketValue, BigDecimal unrealizedPnl, BigDecimal stopLoss,
+                            BigDecimal target, Instant openedAt) {
+            this(instrumentId, exchange, symbol, productType, quantity, averageCost, costBasis, markPrice,
+                marketValue, unrealizedPnl, stopLoss, target, null, null, null, openedAt);
+        }
+    }
 
     public record PortfolioView(String mode, boolean liveTradingEnabled, boolean newOrdersHalted,
         BigDecimal startingCapital, BigDecimal cash, BigDecimal invested, BigDecimal marketValue,

@@ -53,14 +53,15 @@ public class PaperOrderRepository {
         jdbc.sql("""
                 INSERT INTO paper_order (id, idempotency_key, request_hash, symbol, side, quantity, submitted_quantity,
                     filled_quantity, order_type, product_type, reference_price, stop_loss, target_price,
-                    signal_generated_at, status, correlation_id, created_at, updated_at)
+                    trailing_stop_percent, signal_generated_at, status, correlation_id, created_at, updated_at)
                 VALUES (:id, :key, :hash, :symbol, :side, :qty, :qty, 0, 'MARKET', :productType,
-                    :ref, :stop, :target, :signal, 'NEW', :cid, :now, :now)
+                    :ref, :stop, :target, :trailingStopPercent, :signal, 'NEW', :cid, :now, :now)
                 """)
             .param("id", id).param("key", key).param("hash", hash)
             .param("symbol", cmd.symbol()).param("side", cmd.side().name()).param("qty", cmd.quantity())
             .param("productType", cmd.productType().name()).param("ref", cmd.entryPrice())
             .param("stop", cmd.stopLoss(), Types.NUMERIC).param("target", cmd.target(), Types.NUMERIC)
+            .param("trailingStopPercent", cmd.trailingStopPercent(), Types.NUMERIC)
             .param("signal", cmd.signalGeneratedAt() == null ? null : ts(cmd.signalGeneratedAt()), Types.TIMESTAMP_WITH_TIMEZONE)
             .param("cid", MDC.get(CorrelationIdFilter.MDC_KEY), Types.VARCHAR).param("now", ts(now)).update();
     }
@@ -113,8 +114,9 @@ public class PaperOrderRepository {
             rs.getBigDecimal("limit_price"), rs.getString("product_type"), rs.getString("strategy"),
             rs.getObject("candidate_id", Long.class), rs.getBigDecimal("average_fill_price"),
             rs.getBigDecimal("reference_price"), rs.getBigDecimal("stop_loss"), rs.getBigDecimal("target_price"),
-            rs.getString("status"), rs.getString("rejection_reason"), instant(rs, "signal_generated_at"),
-            instant(rs, "created_at"), instant(rs, "updated_at"), rs.getString("correlation_id"));
+            rs.getBigDecimal("trailing_stop_percent"), rs.getString("status"), rs.getString("rejection_reason"),
+            instant(rs, "signal_generated_at"), instant(rs, "created_at"), instant(rs, "updated_at"),
+            rs.getString("correlation_id"));
     }
 
     public static DecisionView toDecisionView(java.sql.ResultSet rs) throws java.sql.SQLException {

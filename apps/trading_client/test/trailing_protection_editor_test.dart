@@ -5,7 +5,7 @@ import 'package:trading_client/src/presentation/paper_orders_page.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
 class _FakePaperRepository implements PaperTradingRepository {
-  bool submitted = false;
+  CreatePaperOrderCommand? submittedCommand;
 
   @override
   Future<PaperPortfolio> fetchPortfolio() => throw UnimplementedError();
@@ -15,9 +15,31 @@ class _FakePaperRepository implements PaperTradingRepository {
       const PaperOrderPage(items: [], page: 0, totalPages: 0, totalItems: 0);
 
   @override
-  Future<PaperOrderResult> createOrder(CreatePaperOrderCommand command, {required String idempotencyKey}) {
-    submitted = true;
-    throw StateError('Trailing preview must never submit an unsupported PAPER command.');
+  Future<PaperOrderResult> createOrder(CreatePaperOrderCommand command, {required String idempotencyKey}) async {
+    submittedCommand = command;
+    return PaperOrderResult(
+      order: PaperOrder(
+        id: '00000000-0000-0000-0000-000000000005',
+        symbol: command.symbol,
+        side: command.side,
+        quantity: command.quantity,
+        filledQuantity: command.quantity,
+        orderType: 'MARKET',
+        productType: command.productType,
+        averageFillPrice: command.referencePrice,
+        entryPrice: command.referencePrice,
+        stopLoss: command.stopLoss,
+        target: command.target,
+        trailingStopPercent: command.trailingStopPercent,
+        status: 'FILLED',
+        rejectionReason: null,
+        createdAt: DateTime.parse('2026-11-01T04:00:00Z'),
+        updatedAt: DateTime.parse('2026-11-01T04:00:00Z'),
+        correlationId: 'paper-05-test',
+      ),
+      replayed: false,
+      reasonCodes: const [],
+    );
   }
 
   @override
@@ -68,15 +90,15 @@ void main() {
     expect(distance, findsOneWidget);
     final field = tester.widget<TextField>(distance);
     expect(field.controller?.text, isEmpty);
-    expect(find.text('No value is selected for you.'), findsOneWidget);
+    expect(find.textContaining('No value is selected for you.'), findsOneWidget);
     expect(
-      find.textContaining('It can move up, never down, and it never loosens your original stop loss.'),
+      find.textContaining('can move up but never down'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('trailing preview cannot silently submit before backend support exists', (tester) async {
+  testWidgets('enabled trailing protection submits the explicit PAPER percentage', (tester) async {
     final repository = _FakePaperRepository();
     await tester.pumpWidget(MaterialApp(
       home: PaperOrdersPage(
@@ -107,9 +129,10 @@ void main() {
     await tester.tap(submit);
     await tester.pumpAndSettle();
 
-    expect(repository.submitted, isFalse);
-    expect(find.byKey(const ValueKey('paper-order-validation-error')), findsOneWidget);
-    expect(find.text('Trailing protection is not available for order placement yet.'), findsOneWidget);
+    expect(repository.submittedCommand, isNotNull);
+    expect(repository.submittedCommand!.trailingStopPercent, 2.5);
+    expect(find.byKey(const ValueKey('paper-order-result')), findsOneWidget);
+    expect(find.text('Trailing protection 2.5%'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

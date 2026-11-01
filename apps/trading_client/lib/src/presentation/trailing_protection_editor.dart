@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 
-/// UI contract for optional trailing protection.
+/// Customer editor for optional persisted PAPER trailing protection.
 ///
-/// This editor deliberately has no default percentage. A customer must opt in
-/// and explicitly enter the trail distance. Backend persistence/high-water
-/// monitoring is wired in the following PAPER story before this control is
-/// enabled in the production order flow.
+/// There is intentionally no default percentage. The customer must opt in and
+/// explicitly choose the trail distance; the backend remains authoritative for
+/// the allowed operational range and for high-water/effective-stop state.
 class TrailingProtectionEditor extends StatelessWidget {
   const TrailingProtectionEditor({
     required this.enabled,
@@ -86,7 +85,7 @@ class TrailingProtectionEditor extends StatelessWidget {
                           decoration: const InputDecoration(
                             labelText: 'Trail distance (%)',
                             hintText: 'Enter a percentage',
-                            helperText: 'No value is selected for you.',
+                            helperText: 'No value is selected for you. The server validates the permitted range.',
                             suffixText: '%',
                           ),
                         ),
@@ -107,7 +106,7 @@ class TrailingProtectionEditor extends StatelessWidget {
                               ),
                               const SizedBox(height: 5),
                               Text(
-                                'When the price reaches a new high, the protective stop follows at the distance you choose. It can move up, never down, and it never loosens your original stop loss.',
+                                'After the PAPER fill, the app tracks the highest fresh market price. The protective stop follows at your chosen distance, can move up but never down, and never loosens your original stop loss.',
                                 style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
                               ),
                             ],

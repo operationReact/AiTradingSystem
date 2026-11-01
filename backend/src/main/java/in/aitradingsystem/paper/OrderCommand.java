@@ -17,12 +17,19 @@ public record OrderCommand(
     BigDecimal stopLoss,
     BigDecimal target,
     Instant signalGeneratedAt,
-    ProductType productType
+    ProductType productType,
+    BigDecimal trailingStopPercent
 ) {
-    /** Backward-compatible PAPER simulation command: legacy callers remain DELIVERY by default. */
+    /** Backward-compatible PAPER simulation command: legacy callers remain DELIVERY with trailing disabled. */
     public OrderCommand(String symbol, Side side, int quantity, BigDecimal entryPrice,
                         BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt) {
-        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, ProductType.DELIVERY);
+        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, ProductType.DELIVERY, null);
+    }
+
+    /** Backward-compatible explicit product-type command with trailing disabled. */
+    public OrderCommand(String symbol, Side side, int quantity, BigDecimal entryPrice,
+                        BigDecimal stopLoss, BigDecimal target, Instant signalGeneratedAt, ProductType productType) {
+        this(symbol, side, quantity, entryPrice, stopLoss, target, signalGeneratedAt, productType, null);
     }
 
     public OrderCommand {
@@ -33,7 +40,7 @@ public record OrderCommand(
     public String canonicalHash() {
         String canonical = String.join("|",
             symbol, side.name(), Integer.toString(quantity), productType.name(),
-            normalize(entryPrice), normalize(stopLoss), normalize(target),
+            normalize(entryPrice), normalize(stopLoss), normalize(target), normalize(trailingStopPercent),
             signalGeneratedAt == null ? "" : signalGeneratedAt.toString());
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(canonical.getBytes(StandardCharsets.UTF_8));
