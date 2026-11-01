@@ -63,7 +63,7 @@ void main() {
     await tester.tap(candidate);
     await tester.pumpAndSettle();
 
-    final list = find.descendant(of: find.byType(ListView), matching: find.byType(Scrollable)).first;
+    final list = find.byType(Scrollable).first;
     await tester.scrollUntilVisible(find.text('Entry'), 200, scrollable: list);
     expect(find.text('Entry'), findsOneWidget);
     expect(find.text('No previous evaluation is available for this setup.'), findsOneWidget);
