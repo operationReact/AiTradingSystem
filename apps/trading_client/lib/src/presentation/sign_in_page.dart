@@ -1,19 +1,43 @@
 import 'package:flutter/material.dart';
 
-class SignInPage extends StatelessWidget {
-  const SignInPage({super.key});
+class SignInPage extends StatefulWidget {
+  const SignInPage({
+    this.biometricEnrolled = false,
+    this.onSignUp,
+    this.onFingerprintSignIn,
+    this.onPasswordSignIn,
+    super.key,
+  });
 
-  static const _providerName = String.fromEnvironment('AUTH_PROVIDER_NAME');
-  static const _authConfigured = bool.fromEnvironment(
-    'AUTH_PROVIDER_CONFIGURED',
-    defaultValue: false,
-  );
+  final bool biometricEnrolled;
+  final VoidCallback? onSignUp;
+  final VoidCallback? onFingerprintSignIn;
+  final Future<void> Function(String identifier, String password)? onPasswordSignIn;
 
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
   static const _background = Color(0xFF030817);
-  static const _cyan = Color(0xFF0DEBFF);
-  static const _violet = Color(0xFF6E40FF);
-  static const _magenta = Color(0xFFFF24C7);
-  static const _muted = Color(0xFF8FA8CC);
+  static const _cyan = Color(0xFF12E7F4);
+  static const _violet = Color(0xFF6B46FF);
+  static const _magenta = Color(0xFFE53CFF);
+  static const _muted = Color(0xFF8CA5C8);
+
+  final _formKey = GlobalKey<FormState>();
+  final _identifierController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _rememberMe = true;
+  bool _obscurePassword = true;
+  bool _submitting = false;
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,106 +50,156 @@ class SignInPage extends StatelessWidget {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
-                  physics: const ClampingScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
                   child: ConstrainedBox(
                     constraints: BoxConstraints(
-                      minHeight: (constraints.maxHeight - 48)
-                          .clamp(0.0, double.infinity)
-                          .toDouble(),
+                      minHeight: (constraints.maxHeight - 42).clamp(0.0, double.infinity).toDouble(),
                     ),
                     child: Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 390),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const _TradingBrand(),
-                            const SizedBox(height: 36),
-                            Semantics(
-                              header: true,
-                              child: const Text(
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const _TradingBrand(),
+                              const SizedBox(height: 24),
+                              const Text(
                                 'Trade Smarter\nwith AI',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 30,
-                                  height: 1.06,
+                                  fontSize: 29,
+                                  height: 1.05,
                                   fontWeight: FontWeight.w900,
-                                  letterSpacing: -0.8,
+                                  letterSpacing: -0.7,
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 14),
-                            const Text(
-                              'AI research  •  Risk-first trading  •\nReal market insights',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: _muted,
-                                fontSize: 12.5,
-                                height: 1.45,
-                                fontWeight: FontWeight.w600,
+                              const SizedBox(height: 10),
+                              const Text(
+                                'AI research  •  Paper trading  •\nRisk controls  •  Real trading when ready',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: _muted,
+                                  fontSize: 11.5,
+                                  height: 1.45,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 20),
-                            const SizedBox(
-                              height: 210,
-                              width: double.infinity,
-                              child: CustomPaint(painter: _MarketWavePainter()),
-                            ),
-                            const SizedBox(height: 16),
-                            _SocialSignInButton(
-                              key: const ValueKey('secure-sign-in-google'),
-                              label: 'Continue with Google',
-                              leading: const _GoogleMark(),
-                              onPressed: () => _showConfigurationBoundary(context, 'Google'),
-                            ),
-                            const SizedBox(height: 11),
-                            _SocialSignInButton(
-                              key: const ValueKey('secure-sign-in-apple'),
-                              label: 'Continue with Apple',
-                              leading: const Icon(Icons.apple, color: Colors.black, size: 22),
-                              onPressed: () => _showConfigurationBoundary(context, 'Apple'),
-                            ),
-                            const SizedBox(height: 11),
-                            _EmailSignInButton(
-                              key: const ValueKey('secure-sign-in-email'),
-                              onPressed: () => _showConfigurationBoundary(context, 'Email'),
-                            ),
-                            const SizedBox(height: 23),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Text(
-                                  'New here? ',
-                                  style: TextStyle(
+                              const SizedBox(height: 12),
+                              const SizedBox(
+                                height: 126,
+                                width: double.infinity,
+                                child: CustomPaint(painter: _MarketWavePainter()),
+                              ),
+                              const SizedBox(height: 14),
+                              _AuthTextField(
+                                key: const ValueKey('auth-sign-in-identifier'),
+                                controller: _identifierController,
+                                hintText: 'Email or Phone Number',
+                                keyboardType: TextInputType.emailAddress,
+                                prefixIcon: Icons.mail_outline_rounded,
+                                validator: (value) {
+                                  if (value == null || value.trim().isEmpty) {
+                                    return 'Enter your email or phone number';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 11),
+                              _AuthTextField(
+                                key: const ValueKey('auth-sign-in-password'),
+                                controller: _passwordController,
+                                hintText: 'Password',
+                                prefixIcon: Icons.lock_outline_rounded,
+                                obscureText: _obscurePassword,
+                                suffixIcon: IconButton(
+                                  tooltip: _obscurePassword ? 'Show password' : 'Hide password',
+                                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  icon: Icon(
+                                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
                                     color: _muted,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
+                                    size: 19,
                                   ),
                                 ),
-                                TextButton(
-                                  key: const ValueKey('secure-sign-in-create-account'),
-                                  onPressed: () => _showConfigurationBoundary(context, 'Create account'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: const Color(0xFFB794FF),
-                                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                  child: const Text(
-                                    'Create Account',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      decoration: TextDecoration.underline,
-                                      decorationColor: Color(0xFFB794FF),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) return 'Enter your password';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: Checkbox(
+                                      value: _rememberMe,
+                                      onChanged: (value) => setState(() => _rememberMe = value ?? true),
+                                      activeColor: _cyan,
+                                      checkColor: const Color(0xFF06111F),
+                                      side: const BorderSide(color: Color(0xFF4A6284)),
+                                      visualDensity: VisualDensity.compact,
                                     ),
                                   ),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    'Remember me',
+                                    style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                                  ),
+                                  const Spacer(),
+                                  TextButton(
+                                    key: const ValueKey('auth-forgot-password'),
+                                    onPressed: () => _showNotice(context, 'Password recovery will be connected to the customer auth API.'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: _cyan,
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Forgot password?', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 13),
+                              _GradientButton(
+                                key: const ValueKey('auth-sign-in-submit'),
+                                label: _submitting ? 'Signing in…' : 'Sign In',
+                                icon: Icons.arrow_forward_rounded,
+                                enabled: !_submitting,
+                                onPressed: _submitPassword,
+                              ),
+                              if (widget.biometricEnrolled) ...[
+                                const SizedBox(height: 11),
+                                _FingerprintButton(
+                                  key: const ValueKey('auth-fingerprint-sign-in'),
+                                  onPressed: widget.onFingerprintSignIn,
                                 ),
                               ],
-                            ),
-                          ],
+                              const SizedBox(height: 20),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    "Don't have an account? ",
+                                    style: TextStyle(color: _muted, fontSize: 11.5, fontWeight: FontWeight.w600),
+                                  ),
+                                  TextButton(
+                                    key: const ValueKey('auth-open-sign-up'),
+                                    onPressed: widget.onSignUp ?? () => _showNotice(context, 'Sign Up screen is being connected next.'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: _cyan,
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: const Text('Sign Up', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -139,22 +213,27 @@ class SignInPage extends StatelessWidget {
     );
   }
 
-  void _showConfigurationBoundary(BuildContext context, String method) {
-    final providerLabel = _providerName.trim().isEmpty
-        ? 'approved identity provider'
-        : _providerName.trim();
-    final message = _authConfigured
-        ? '$method secure sign-in will hand off to $providerLabel.'
-        : '$method sign-in UI is ready. Production identity integration is not enabled in this build yet.';
+  Future<void> _submitPassword() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (widget.onPasswordSignIn == null) {
+      _showNotice(context, 'Sign In UI is ready. Production customer authentication will be connected after UI approval.');
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await widget.onPasswordSignIn!(
+        _identifierController.text.trim(),
+        _passwordController.text,
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
 
+  void _showNotice(BuildContext context, String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          content: Text(message),
-        ),
-      );
+      ..showSnackBar(SnackBar(behavior: SnackBarBehavior.floating, content: Text(message)));
   }
 }
 
@@ -165,59 +244,107 @@ class _TradingBrand extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const _TradingMark(),
-        const SizedBox(height: 12),
-        Text(
-          'AI Trading',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: Colors.white,
-                fontSize: 21,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.3,
-              ),
+        Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: const LinearGradient(
+              begin: Alignment.bottomLeft,
+              end: Alignment.topRight,
+              colors: [_SignInPageState._cyan, _SignInPageState._violet, _SignInPageState._magenta],
+            ),
+            boxShadow: const [BoxShadow(color: Color(0x5536D9FF), blurRadius: 22)],
+          ),
+          child: const Icon(Icons.query_stats_rounded, color: Colors.white, size: 28),
+        ),
+        const SizedBox(height: 9),
+        const Text(
+          'AiTradingSystem',
+          style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w900, letterSpacing: -0.3),
         ),
       ],
     );
   }
 }
 
-class _TradingMark extends StatelessWidget {
-  const _TradingMark();
+class _AuthTextField extends StatelessWidget {
+  const _AuthTextField({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    required this.prefixIcon,
+    this.keyboardType,
+    this.obscureText = false,
+    this.suffixIcon,
+    this.validator,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final IconData prefixIcon;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+  final Widget? suffixIcon;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
-    const heights = <double>[18, 29, 40, 31];
-    const colors = <Color>[
-      SignInPage._violet,
-      SignInPage._magenta,
-      SignInPage._cyan,
-      Color(0xFF69FFF1),
-    ];
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      validator: validator,
+      style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: const TextStyle(color: Color(0xFF91A7C7), fontSize: 13.5),
+        prefixIcon: Icon(prefixIcon, color: const Color(0xFFD5E3F7), size: 20),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: const Color(0xFF09162A),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF28405E))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF28405E))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _SignInPageState._cyan, width: 1.3)),
+        errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFFF6B8A))),
+      ),
+    );
+  }
+}
 
+class _GradientButton extends StatelessWidget {
+  const _GradientButton({super.key, required this.label, required this.onPressed, this.icon, this.enabled = true});
+  final String label;
+  final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
     return SizedBox(
-      width: 52,
-      height: 44,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: List.generate(
-          heights.length,
-          (index) => Container(
-            width: 7,
-            height: heights[index],
-            margin: const EdgeInsets.symmetric(horizontal: 2.5),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              gradient: LinearGradient(
-                begin: Alignment.bottomCenter,
-                end: Alignment.topCenter,
-                colors: [colors[index].withValues(alpha: 0.55), colors[index]],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colors[index].withValues(alpha: 0.30),
-                  blurRadius: 9,
-                ),
+      height: 48,
+      width: double.infinity,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: enabled
+                ? const [_SignInPageState._cyan, Color(0xFF31D6FF), _SignInPageState._violet, _SignInPageState._magenta]
+                : const [Color(0xFF30445A), Color(0xFF263548)],
+          ),
+          boxShadow: enabled ? const [BoxShadow(color: Color(0x403BD9FF), blurRadius: 20, offset: Offset(0, 7))] : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: enabled ? onPressed : null,
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(label, style: const TextStyle(color: Color(0xFF04111D), fontSize: 14, fontWeight: FontWeight.w900)),
+                if (icon != null) ...[const SizedBox(width: 8), Icon(icon, color: const Color(0xFF04111D), size: 18)],
               ],
             ),
           ),
@@ -227,115 +354,24 @@ class _TradingMark extends StatelessWidget {
   }
 }
 
-class _SocialSignInButton extends StatelessWidget {
-  const _SocialSignInButton({
-    super.key,
-    required this.label,
-    required this.leading,
-    required this.onPressed,
-  });
-
-  final String label;
-  final Widget leading;
-  final VoidCallback onPressed;
+class _FingerprintButton extends StatelessWidget {
+  const _FingerprintButton({super.key, this.onPressed});
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: double.infinity,
-      height: 50,
-      child: FilledButton(
+      height: 48,
+      child: OutlinedButton.icon(
         onPressed: onPressed,
-        style: FilledButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: const Color(0xFF111318),
-          elevation: 0,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.9)),
-        ),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Align(alignment: Alignment.centerLeft, child: leading),
-            Text(
-              label,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GoogleMark extends StatelessWidget {
-  const _GoogleMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 23,
-      height: 23,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFFE3E7EE)),
-      ),
-      child: const Text(
-        'G',
-        style: TextStyle(
-          color: Color(0xFF4285F4),
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-    );
-  }
-}
-
-class _EmailSignInButton extends StatelessWidget {
-  const _EmailSignInButton({super.key, required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(13),
-          gradient: const LinearGradient(
-            colors: [Color(0xFF9D55FF), Color(0xFF5B31FF)],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: SignInPage._violet.withValues(alpha: 0.30),
-              blurRadius: 22,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(13),
-            child: const Center(
-              child: Text(
-                'Sign in with Email',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
+        icon: const Icon(Icons.fingerprint_rounded, color: _SignInPageState._cyan, size: 25),
+        label: const Text('Sign in with Fingerprint'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.white,
+          side: const BorderSide(color: _SignInPageState._cyan, width: 1.1),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -347,22 +383,16 @@ class _AuthBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment(0.70, -0.35),
-            radius: 1.15,
-            colors: [
-              Color(0x2214467A),
-              Color(0x110A2148),
-              SignInPage._background,
-            ],
-            stops: [0, 0.42, 1],
-          ),
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: RadialGradient(
+          center: Alignment(0.72, -0.18),
+          radius: 1.05,
+          colors: [Color(0x28133C65), Color(0x12081226), _SignInPageState._background],
+          stops: [0, 0.42, 1],
         ),
-        child: const SizedBox.expand(),
       ),
+      child: SizedBox.expand(),
     );
   }
 }
@@ -373,110 +403,50 @@ class _MarketWavePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final grid = Paint()
-      ..color = const Color(0xFF1C2A4B).withValues(alpha: 0.18)
-      ..strokeWidth = 0.7;
-
+      ..color = const Color(0xFF1B2E4B).withValues(alpha: 0.26)
+      ..strokeWidth = 0.6;
     for (var i = 1; i < 6; i++) {
-      final y = size.height * i / 7;
+      final y = size.height * i / 6;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
     }
 
-    for (var i = 1; i < 7; i++) {
-      final x = size.width * i / 8;
-      canvas.drawLine(Offset(x, size.height * 0.18), Offset(x, size.height), grid);
-    }
-
-    final glowPath = Path()
-      ..moveTo(-10, size.height * 0.78)
-      ..cubicTo(
-        size.width * 0.14,
-        size.height * 0.68,
-        size.width * 0.22,
-        size.height * 0.85,
-        size.width * 0.35,
-        size.height * 0.60,
-      )
-      ..cubicTo(
-        size.width * 0.45,
-        size.height * 0.42,
-        size.width * 0.53,
-        size.height * 0.70,
-        size.width * 0.62,
-        size.height * 0.48,
-      )
-      ..cubicTo(
-        size.width * 0.72,
-        size.height * 0.22,
-        size.width * 0.78,
-        size.height * 0.40,
-        size.width * 0.88,
-        size.height * 0.18,
-      )
-      ..cubicTo(
-        size.width * 0.94,
-        size.height * 0.06,
-        size.width * 1.02,
-        size.height * 0.30,
-        size.width + 12,
-        size.height * 0.24,
-      );
+    final path = Path()
+      ..moveTo(-8, size.height * 0.83)
+      ..cubicTo(size.width * .12, size.height * .70, size.width * .24, size.height * .87, size.width * .34, size.height * .60)
+      ..cubicTo(size.width * .45, size.height * .36, size.width * .53, size.height * .71, size.width * .62, size.height * .45)
+      ..cubicTo(size.width * .72, size.height * .19, size.width * .80, size.height * .40, size.width * .90, size.height * .15)
+      ..cubicTo(size.width * .95, size.height * .04, size.width, size.height * .16, size.width + 8, size.height * .10);
 
     final glow = Paint()
       ..style = PaintingStyle.stroke
+      ..strokeWidth = 11
       ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 14
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18)
-      ..shader = const LinearGradient(
-        colors: [SignInPage._magenta, SignInPage._violet, SignInPage._cyan],
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(glowPath, glow);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14)
+      ..shader = const LinearGradient(colors: [_SignInPageState._magenta, _SignInPageState._violet, _SignInPageState._cyan]).createShader(Offset.zero & size);
+    canvas.drawPath(path, glow);
 
     final line = Paint()
       ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
       ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = 2.2
-      ..shader = const LinearGradient(
-        colors: [Color(0xFFFF3FDB), SignInPage._violet, SignInPage._cyan, Color(0xFF84FFF7)],
-      ).createShader(Offset.zero & size);
-    canvas.drawPath(glowPath, line);
+      ..shader = const LinearGradient(colors: [_SignInPageState._magenta, _SignInPageState._violet, _SignInPageState._cyan, Color(0xFF73FFF4)]).createShader(Offset.zero & size);
+    canvas.drawPath(path, line);
 
-    final secondaryPath = Path()
-      ..moveTo(-10, size.height * 0.90)
-      ..cubicTo(
-        size.width * 0.20,
-        size.height * 0.76,
-        size.width * 0.29,
-        size.height * 0.96,
-        size.width * 0.44,
-        size.height * 0.72,
-      )
-      ..cubicTo(
-        size.width * 0.61,
-        size.height * 0.51,
-        size.width * 0.71,
-        size.height * 0.82,
-        size.width + 10,
-        size.height * 0.43,
+    final candlePaint = Paint()..strokeWidth = 2;
+    final candleXs = <double>[.11, .17, .24, .31, .43, .49, .58, .67, .74, .83, .91];
+    final candleHeights = <double>[20, 32, 24, 42, 34, 26, 48, 39, 55, 44, 61];
+    for (var i = 0; i < candleXs.length; i++) {
+      final x = size.width * candleXs[i];
+      final base = size.height * (0.88 - candleXs[i] * .45);
+      final height = candleHeights[i];
+      final color = i.isEven ? _SignInPageState._cyan : _SignInPageState._violet;
+      candlePaint.color = color.withValues(alpha: .82);
+      canvas.drawLine(Offset(x, base + 5), Offset(x, base - height - 6), candlePaint);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(Rect.fromLTWH(x - 3, base - height, 6, height), const Radius.circular(2)),
+        Paint()..color = color.withValues(alpha: .88),
       );
-    canvas.drawPath(
-      secondaryPath,
-      Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.15
-        ..color = const Color(0xFF8E68FF).withValues(alpha: 0.78),
-    );
-
-    final baseline = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.9
-      ..color = SignInPage._cyan.withValues(alpha: 0.20);
-    canvas.drawLine(
-      Offset(0, size.height * 0.94),
-      Offset(size.width, size.height * 0.94),
-      baseline,
-    );
+    }
   }
 
   @override
