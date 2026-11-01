@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class AutomatedPaperOrderServiceTest {
 
@@ -75,7 +76,10 @@ class AutomatedPaperOrderServiceTest {
         assertEquals(1, result.eligibleSignals());
         assertEquals(1, result.submitted());
         assertEquals(0, result.failed());
-        verify(orders).placeOrder(any(OrderCommand.class), eq("auto-paper-signal:" + signal.id()));
+        ArgumentCaptor<OrderCommand> command = ArgumentCaptor.forClass(OrderCommand.class);
+        verify(orders).placeOrder(command.capture(), eq("auto-paper-signal:" + signal.id()));
+        assertEquals("AUTOMATED", command.getValue().executionOrigin());
+        assertEquals("STRATEGY_SIGNAL", command.getValue().lifecycleReason());
     }
 
     @Test
