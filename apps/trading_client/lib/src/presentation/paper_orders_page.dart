@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 
 import '../data/authenticated_api_client.dart';
 import '../data/paper_trading_repository.dart';
+import 'trailing_protection_editor.dart';
 
 class PaperOrdersPage extends StatefulWidget {
-  const PaperOrdersPage({required this.repository, super.key});
+  const PaperOrdersPage({
+    required this.repository,
+    this.trailingProtectionPreviewEnabled = false,
+    super.key,
+  });
 
   final PaperTradingRepository repository;
+
+  /// UI-first feature seam. PAPER-05 enables the customer flow only after the
+  /// server persists trailing policy and the automated monitor can honor it.
+  final bool trailingProtectionPreviewEnabled;
 
   @override
   State<PaperOrdersPage> createState() => _PaperOrdersPageState();
@@ -18,10 +27,12 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
   final _referencePrice = TextEditingController();
   final _stopLoss = TextEditingController();
   final _target = TextEditingController();
+  final _trailingDistancePercent = TextEditingController();
   final _signalGeneratedAt = TextEditingController();
 
   String _side = 'BUY';
   String _productType = 'DELIVERY';
+  bool _trailingEnabled = false;
   String? _pendingIdempotencyKey;
   String? _validationError;
   PaperOrderPage? _orders;
@@ -44,6 +55,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     _referencePrice.dispose();
     _stopLoss.dispose();
     _target.dispose();
+    _trailingDistancePercent.dispose();
     _signalGeneratedAt.dispose();
     super.dispose();
   }
@@ -72,6 +84,9 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     final referencePrice = num.tryParse(_referencePrice.text.trim());
     final stopLoss = _stopLoss.text.trim().isEmpty ? null : num.tryParse(_stopLoss.text.trim());
     final target = _target.text.trim().isEmpty ? null : num.tryParse(_target.text.trim());
+    final trailingDistance = _trailingDistancePercent.text.trim().isEmpty
+        ? null
+        : num.tryParse(_trailingDistancePercent.text.trim());
     final signalGeneratedAt = DateTime.tryParse(_signalGeneratedAt.text.trim());
     final symbol = _symbol.text.trim().toUpperCase();
 
@@ -90,6 +105,13 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
       validation = 'Stop loss must be below the reference price.';
     } else if (_side == 'BUY' && target! <= referencePrice) {
       validation = 'Target must be above the reference price.';
+    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled &&
+        (trailingDistance == null || trailingDistance <= 0 || trailingDistance >= 100)) {
+      validation = 'Trail distance must be greater than 0% and less than 100%.';
+    } else if (widget.trailingProtectionPreviewEnabled && _side == 'BUY' && _trailingEnabled) {
+      // PAPER-04 proves the customer contract without silently dropping a
+      // protection setting that the current backend cannot yet persist.
+      validation = 'Trailing protection is not available for order placement yet.';
     }
 
     if (validation != null) {
@@ -267,7 +289,13 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
                     key: const ValueKey('paper-order-side'),
                     value: _side,
                     items: const [DropdownMenuItem(value: 'BUY', child: Text('BUY')), DropdownMenuItem(value: 'SELL', child: Text('SELL'))],
-                    onChanged: (value) => value == null ? null : setState(() => _side = value),
+                    onChanged: (value) {
+                      if (value == null) return;
+                      setState(() {
+                        _side = value;
+                        if (value != 'BUY') _trailingEnabled = false;
+                      });
+                    },
                   ),
                   DropdownButton<String>(
                     key: const ValueKey('paper-order-product'),
@@ -288,6 +316,14 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               TextField(key: const ValueKey('paper-order-stop-loss'), controller: _stopLoss, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Stop loss')),
               const SizedBox(height: 12),
               TextField(key: const ValueKey('paper-order-target'), controller: _target, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Target')),
+              if (widget.trailingProtectionPreviewEnabled && _side == 'BUY') ...[
+                const SizedBox(height: 16),
+                TrailingProtectionEditor(
+                  enabled: _trailingEnabled,
+                  distanceController: _trailingDistancePercent,
+                  onEnabledChanged: (enabled) => setState(() => _trailingEnabled = enabled),
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
                 key: const ValueKey('paper-order-signal-time'),
