@@ -1,1 +1,1 @@
-UI review validation trigger after responsive header overflow fixes.
+UI review validation trigger after Home market pulse responsive fix.
