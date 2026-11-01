@@ -1,0 +1,140 @@
+name: Deploy Flutter Web to live AWS on request
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/flutter-web-deploy.request'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-flutter-web-on-request
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: us-east-1
+  LIVE_DOMAIN: maargglobal.com
+  ECR_FRONTEND: ai-trading-system-frontend
+  ECS_CLUSTER: ai-trading-system
+  ECS_FRONTEND_SERVICE: ai-trading-system-frontend
+  FRONTEND_TASK_FAMILY: ai-trading-system-frontend
+
+jobs:
+  deploy:
+    name: Build and deploy backend-connected Flutter Web
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment intent and backend readiness
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF}" = "refs/heads/dev" || { echo "::error::Deployment is allowed only from dev"; exit 1; }
+          test -n "$AWS_ROLE_ARN" || { echo "::error::Repository variable AWS_ROLE_ARN is required"; exit 1; }
+          test "$AWS_REGION" = "us-east-1" || { echo "::error::Unexpected AWS region"; exit 1; }
+          test "$LIVE_DOMAIN" = "maargglobal.com" || { echo "::error::Unexpected domain"; exit 1; }
+          grep -qx 'deploy_flutter_web=true' infra/flutter-web-deploy.request || { echo "::error::Explicit deploy_flutter_web=true request is required"; exit 1; }
+          BODY="$(curl --fail --silent --show-error "https://$LIVE_DOMAIN/api/health")"
+          echo "$BODY" | jq -e '.status == "UP" and .mode == "PAPER"' >/dev/null || { echo "::error::PAPER backend must be healthy before frontend deployment"; exit 1; }
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Validate and build backend-connected Flutter Web
+        working-directory: apps/trading_client
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build web --release --dart-define=API_BASE_URL="https://${LIVE_DOMAIN}"
+
+      - name: Configure AWS credentials with GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-flutter-web-${{ github.run_id }}
+          allowed-account-ids: '816344830716'
+          action-timeout-s: 120
+
+      - name: Verify frontend service
+        run: |
+          set -euo pipefail
+          aws ecs describe-clusters --clusters "$ECS_CLUSTER" --query 'clusters[0].status' --output text | grep -qx ACTIVE
+          SERVICE_COUNT="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_FRONTEND_SERVICE" --query 'length(services)' --output text)"
+          test "$SERVICE_COUNT" = "1" || { echo "::error::Frontend ECS service is missing"; exit 1; }
+          aws ecs describe-task-definition --task-definition "$FRONTEND_TASK_FAMILY" --query taskDefinition > /tmp/frontend-task.json
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Package and push immutable Flutter Web image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images --repository-name "$ECR_FRONTEND" --image-ids imageTag="$IMAGE_TAG" >/dev/null 2>&1; then
+            echo "Frontend image $IMAGE_TAG already exists; reusing immutable image."
+          else
+            docker build -f apps/trading_client/Dockerfile -t "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" apps/trading_client
+            docker push "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG"
+          fi
+
+      - name: Register frontend task definition with current image
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          jq --arg image "$REGISTRY/$ECR_FRONTEND:$IMAGE_TAG" '
+            .containerDefinitions |= map(if .name == "frontend" then .image = $image else . end)
+            | del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredAt,.registeredBy,.deregisteredAt)
+          ' /tmp/frontend-task.json > /tmp/frontend-task-new.json
+          aws ecs register-task-definition --cli-input-json file:///tmp/frontend-task-new.json > /tmp/frontend-registered.json
+          jq -r '.taskDefinition.taskDefinitionArn' /tmp/frontend-registered.json
+
+      - name: Deploy frontend service
+        run: |
+          set -euo pipefail
+          TASK_ARN="$(jq -r '.taskDefinition.taskDefinitionArn' /tmp/frontend-registered.json)"
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER" \
+            --service "$ECS_FRONTEND_SERVICE" \
+            --task-definition "$TASK_ARN" \
+            --desired-count 1 \
+            --force-new-deployment >/tmp/frontend-service-update.json
+          aws ecs wait services-stable --cluster "$ECS_CLUSTER" --services "$ECS_FRONTEND_SERVICE"
+          RUNNING="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_FRONTEND_SERVICE" --query 'services[0].runningCount' --output text)"
+          DESIRED="$(aws ecs describe-services --cluster "$ECS_CLUSTER" --services "$ECS_FRONTEND_SERVICE" --query 'services[0].desiredCount' --output text)"
+          test "$RUNNING" = "1" -a "$DESIRED" = "1" || { echo "::error::Frontend service did not stabilize at 1/1"; exit 1; }
+          echo "Frontend ECS service is stable at 1/1."
+
+      - name: Verify public integrated app
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            UI_OK=0
+            API_OK=0
+            curl --fail --silent --show-error --location "https://$LIVE_DOMAIN/" >/dev/null && UI_OK=1 || true
+            BODY="$(curl --fail --silent --show-error "https://$LIVE_DOMAIN/api/health" 2>/dev/null || true)"
+            if [ -n "$BODY" ] && echo "$BODY" | jq -e '.status == "UP" and .mode == "PAPER"' >/dev/null 2>&1; then API_OK=1; fi
+            if [ "$UI_OK" -eq 1 ] && [ "$API_OK" -eq 1 ]; then
+              echo "Flutter Web and PAPER backend are integrated at https://$LIVE_DOMAIN"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Integrated Flutter Web/PAPER backend verification failed"
+          exit 1
