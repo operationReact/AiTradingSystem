@@ -10,14 +10,20 @@ enum _TradeStep {
   stockDetail,
   aiAnalysis,
   opportunityDetail,
+  decisionSummary,
+  signalBreakdown,
+  modelEvidence,
   tradeTicket,
   orderReview,
   riskResult,
+  riskDecision,
   executionSuccess,
+  decisionTimeline,
   positionDetail,
   tradeMonitor,
   exitConfirm,
   tradeResult,
+  postTradeLearning,
 }
 
 class MockTradeJourney extends StatefulWidget {
@@ -115,6 +121,15 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
       case _TradeStep.opportunityDetail:
         _go(_TradeStep.aiAnalysis);
         return;
+      case _TradeStep.decisionSummary:
+        _go(_TradeStep.opportunityDetail);
+        return;
+      case _TradeStep.signalBreakdown:
+        _go(_TradeStep.decisionSummary);
+        return;
+      case _TradeStep.modelEvidence:
+        _go(_TradeStep.signalBreakdown);
+        return;
       case _TradeStep.tradeTicket:
         _go(_TradeStep.opportunityDetail);
         return;
@@ -124,11 +139,17 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
       case _TradeStep.riskResult:
         _go(_TradeStep.orderReview);
         return;
-      case _TradeStep.executionSuccess:
+      case _TradeStep.riskDecision:
         _go(_TradeStep.riskResult);
         return;
-      case _TradeStep.positionDetail:
+      case _TradeStep.executionSuccess:
+        _go(_TradeStep.riskDecision);
+        return;
+      case _TradeStep.decisionTimeline:
         _go(_TradeStep.executionSuccess);
+        return;
+      case _TradeStep.positionDetail:
+        _go(_TradeStep.decisionTimeline);
         return;
       case _TradeStep.tradeMonitor:
         _go(_TradeStep.positionDetail);
@@ -138,6 +159,9 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
         return;
       case _TradeStep.tradeResult:
         _go(_TradeStep.positionDetail);
+        return;
+      case _TradeStep.postTradeLearning:
+        _go(_TradeStep.tradeResult);
         return;
     }
   }
@@ -231,42 +255,60 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
         _TradeStep.stockDetail => 'Stock Detail',
         _TradeStep.aiAnalysis => 'AI Analysis',
         _TradeStep.opportunityDetail => 'AI Opportunity',
+        _TradeStep.decisionSummary => 'Trade Decision',
+        _TradeStep.signalBreakdown => 'Signal Breakdown',
+        _TradeStep.modelEvidence => 'AI / Model Evidence',
         _TradeStep.tradeTicket => 'PAPER Trade',
         _TradeStep.orderReview => 'Review Order',
         _TradeStep.riskResult => 'Risk Check',
+        _TradeStep.riskDecision => 'Risk Engine Decision',
         _TradeStep.executionSuccess => 'Order Executed',
+        _TradeStep.decisionTimeline => 'Decision Timeline',
         _TradeStep.positionDetail => 'Position Detail',
         _TradeStep.tradeMonitor => 'AI Trade Monitor',
         _TradeStep.exitConfirm => 'Exit Position',
         _TradeStep.tradeResult => 'Trade Result',
+        _TradeStep.postTradeLearning => 'Post-Trade Review',
       };
 
   String get _subtitle => switch (_step) {
         _TradeStep.stockDetail => '${_quote.symbol} · ${_quote.name}',
         _TradeStep.aiAnalysis => 'Multi-signal review-mode analysis',
         _TradeStep.opportunityDetail => '${_opportunity.rating} · ${_opportunity.confidence}% confidence',
+        _TradeStep.decisionSummary => 'Why the system selected this trade',
+        _TradeStep.signalBreakdown => 'Weighted evidence behind the fused score',
+        _TradeStep.modelEvidence => 'Strategy + quantitative + PyTorch + Gemini evidence',
         _TradeStep.tradeTicket => 'Configure a mock PAPER order',
         _TradeStep.orderReview => 'Confirm exposure before risk validation',
         _TradeStep.riskResult => 'Mandatory risk engine preview',
+        _TradeStep.riskDecision => 'Detailed approval and position-sizing justification',
         _TradeStep.executionSuccess => 'PAPER only · no broker call',
+        _TradeStep.decisionTimeline => 'Auditable provenance from scan to fill',
         _TradeStep.positionDetail => 'Live-looking mock position state',
         _TradeStep.tradeMonitor => 'AI lifecycle monitoring',
         _TradeStep.exitConfirm => 'Close the mock PAPER position',
         _TradeStep.tradeResult => 'Outcome and AI learning summary',
+        _TradeStep.postTradeLearning => 'Prediction quality, execution quality and governed learning data',
       };
 
   Widget _screen() => switch (_step) {
         _TradeStep.stockDetail => _stockDetail(),
         _TradeStep.aiAnalysis => _aiAnalysis(),
         _TradeStep.opportunityDetail => _opportunityDetail(),
+        _TradeStep.decisionSummary => _decisionSummary(),
+        _TradeStep.signalBreakdown => _signalBreakdown(),
+        _TradeStep.modelEvidence => _modelEvidence(),
         _TradeStep.tradeTicket => _tradeTicket(),
         _TradeStep.orderReview => _orderReview(),
         _TradeStep.riskResult => _riskResult(),
+        _TradeStep.riskDecision => _riskDecision(),
         _TradeStep.executionSuccess => _executionSuccess(),
+        _TradeStep.decisionTimeline => _decisionTimeline(),
         _TradeStep.positionDetail => _positionDetail(),
         _TradeStep.tradeMonitor => _tradeMonitor(),
         _TradeStep.exitConfirm => _exitConfirm(),
         _TradeStep.tradeResult => _tradeResult(),
+        _TradeStep.postTradeLearning => _postTradeLearning(),
       };
 
   Widget _stockDetail() {
@@ -468,6 +510,159 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
           ),
         ),
         const SizedBox(height: 16),
+        _PrimaryButton(label: 'Why this trade?', icon: Icons.help_outline_rounded, onTap: () => _go(_TradeStep.decisionSummary)),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => _go(_TradeStep.tradeTicket),
+          icon: const Icon(Icons.tune_rounded),
+          label: const Text('Build PAPER Trade'),
+          style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        ),
+      ],
+    );
+  }
+
+  Widget _decisionSummary() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Glow(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.psychology_alt_rounded, color: _C.cyan),
+                  const SizedBox(width: 9),
+                  const Expanded(child: Text('System Decision', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900))),
+                  _Pill('${_opportunity.confidence}% CONFIDENCE', _C.green),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text('${_opportunity.rating.toUpperCase()} ${_quote.symbol}', style: const TextStyle(fontSize: 27, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 6),
+              const Text('Primary reason: momentum breakout + volume confirmation + supportive market regime.', style: TextStyle(color: _C.muted, height: 1.45)),
+              const SizedBox(height: 10),
+              const _Pill('AUTO EXECUTION ELIGIBLE', _C.cyan),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _Metric(label: 'Entry', value: '₹${_opportunity.entry.toStringAsFixed(0)}', valueColor: _C.cyan)),
+            const SizedBox(width: 8),
+            Expanded(child: _Metric(label: 'Stop', value: '₹${_opportunity.stop.toStringAsFixed(0)}', valueColor: _C.red)),
+            const SizedBox(width: 8),
+            Expanded(child: _Metric(label: 'Target', value: '₹${_opportunity.target.toStringAsFixed(0)}', valueColor: _C.green)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Expected holding period', value: _opportunity.timeframe),
+              const Divider(height: 18),
+              _InfoRow(label: 'Risk / reward', value: _opportunity.riskReward),
+              const Divider(height: 18),
+              const _InfoRow(label: 'Decision source', value: 'Fused AI + strategy'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('The AI proposes and explains the trade. The Risk Engine still decides whether capital exposure is allowed.'),
+        const SizedBox(height: 16),
+        _PrimaryButton(label: 'View Signal Breakdown', icon: Icons.account_tree_outlined, onTap: () => _go(_TradeStep.signalBreakdown)),
+      ],
+    );
+  }
+
+  Widget _signalBreakdown() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Section('Weighted decision evidence'),
+        const SizedBox(height: 8),
+        const _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Trend structure', value: '+18'),
+              Divider(height: 18),
+              _InfoRow(label: 'Momentum strength', value: '+15'),
+              Divider(height: 18),
+              _InfoRow(label: 'Volume breakout', value: '+13'),
+              Divider(height: 18),
+              _InfoRow(label: 'RSI quality', value: '+7'),
+              Divider(height: 18),
+              _InfoRow(label: 'Market regime', value: '+9'),
+              Divider(height: 18),
+              _InfoRow(label: 'Fundamental context', value: '+6'),
+              Divider(height: 18),
+              _InfoRow(label: 'Gemini event evidence', value: '+10'),
+              Divider(height: 18),
+              _InfoRow(label: 'Volatility penalty', value: '-6'),
+              Divider(height: 18),
+              _InfoRow(label: 'Model prior', value: '+10'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Glow(
+          child: Row(
+            children: [
+              const Expanded(child: Text('Final fused score', style: TextStyle(fontWeight: FontWeight.w900))),
+              Text('${_opportunity.confidence} / 100', style: const TextStyle(color: _C.green, fontSize: 22, fontWeight: FontWeight.w900)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('Mock contributions are normalized for UI review. Production weights must come from versioned models and strategy configuration.'),
+        const SizedBox(height: 16),
+        _PrimaryButton(label: 'View AI / Model Evidence', icon: Icons.memory_rounded, onTap: () => _go(_TradeStep.modelEvidence)),
+      ],
+    );
+  }
+
+  Widget _modelEvidence() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Section('Model ensemble'),
+        const SizedBox(height: 8),
+        const _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Deterministic strategy', value: '76 / 100'),
+              Divider(height: 18),
+              _InfoRow(label: 'Quantitative model', value: '78 / 100'),
+              Divider(height: 18),
+              _InfoRow(label: 'PyTorch probability', value: '81% bullish'),
+              Divider(height: 18),
+              _InfoRow(label: 'Gemini sentiment', value: '+0.72'),
+              Divider(height: 18),
+              _InfoRow(label: 'Gemini materiality', value: 'High'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Catalyst', value: 'Sector breadth + breakout volume'),
+              Divider(height: 18),
+              _InfoRow(label: 'Prediction horizon', value: '30–90 min'),
+              Divider(height: 18),
+              _InfoRow(label: 'Model version', value: 'fusion-review-v0.9'),
+              Divider(height: 18),
+              _InfoRow(label: 'Feature snapshot', value: 'review-fixture-1042'),
+              Divider(height: 18),
+              _InfoRow(label: 'Data freshness', value: '18 sec'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('Technical IDs are shown only as review evidence. Raw prompts, tensors and internal JSON stay out of the customer-facing experience.'),
+        const SizedBox(height: 16),
         _PrimaryButton(label: 'Build PAPER Trade', icon: Icons.tune_rounded, onTap: () => _go(_TradeStep.tradeTicket)),
       ],
     );
@@ -617,6 +812,63 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
         const SizedBox(height: 10),
         _Notice('Risk Engine remains mandatory in the real product. This review screen never bypasses it or enables LIVE execution.'),
         const SizedBox(height: 16),
+        _PrimaryButton(label: 'View Detailed Risk Decision', icon: Icons.fact_check_outlined, onTap: () => _go(_TradeStep.riskDecision)),
+      ],
+    );
+  }
+
+  Widget _riskDecision() {
+    final stopDistance = (_entryPrice - _opportunity.stop).abs();
+    final availableAfter = (widget.store.virtualCapital - _estimatedValue).clamp(0, double.infinity);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Glow(
+          child: Column(
+            children: [
+              const Icon(Icons.verified_user_rounded, color: _C.green, size: 42),
+              const SizedBox(height: 8),
+              const Text('Risk Engine — APPROVED', style: TextStyle(color: _C.green, fontSize: 21, fontWeight: FontWeight.w900)),
+              const SizedBox(height: 5),
+              Text('Calculated downside ₹${_maxLoss.toStringAsFixed(0)} is inside the mock ₹1,500 per-trade budget.', textAlign: TextAlign.center, style: const TextStyle(color: _C.muted, height: 1.4)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          child: Column(
+            children: [
+              const _InfoRow(label: 'Max risk budget', value: '₹1,500'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Calculated risk', value: '₹${_maxLoss.toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Stop distance', value: '₹${stopDistance.toStringAsFixed(2)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Approved quantity', value: '$_quantity shares'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Funds after trade', value: '₹${availableAfter.toStringAsFixed(0)}'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Card(
+          child: Column(
+            children: [
+              _RiskCheck('Daily loss limit', 'SAFE'),
+              Divider(height: 18),
+              _RiskCheck('Portfolio exposure', 'SAFE'),
+              Divider(height: 18),
+              _RiskCheck('Sector concentration', 'SAFE'),
+              Divider(height: 18),
+              _RiskCheck('Duplicate-order guard', 'PASS'),
+              Divider(height: 18),
+              _RiskCheck('Emergency Stop', 'OFF'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Notice('Why $_quantity shares? Mock sizing keeps the stop-defined loss below the configured risk budget. Production sizing remains server-authoritative.'),
+        const SizedBox(height: 16),
         _PrimaryButton(
           label: 'Place PAPER Order',
           icon: Icons.play_arrow_rounded,
@@ -660,9 +912,44 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
           ),
         ),
         const SizedBox(height: 16),
-        _PrimaryButton(label: 'View Position', icon: Icons.account_balance_wallet_rounded, onTap: () => _go(_TradeStep.positionDetail)),
+        _PrimaryButton(label: 'View Decision Timeline', icon: Icons.timeline_rounded, onTap: () => _go(_TradeStep.decisionTimeline)),
         const SizedBox(height: 10),
-        OutlinedButton(onPressed: widget.onExit, style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)), child: const Text('Back to App')),
+        OutlinedButton.icon(onPressed: () => _go(_TradeStep.positionDetail), icon: const Icon(Icons.account_balance_wallet_rounded), label: const Text('View Position'), style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48))),
+      ],
+    );
+  }
+
+  Widget _decisionTimeline() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Section('Order provenance'),
+        const SizedBox(height: 8),
+        const _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: '10:31:02', value: 'Market scan detected setup'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:03', value: 'Strategy score 76'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:04', value: 'PyTorch probability 81%'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:05', value: 'Gemini evidence +0.72'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:05', value: 'Fusion score 82'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:06', value: 'Risk Engine APPROVED'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:07', value: 'Auto execution initiated'),
+              Divider(height: 18),
+              _InfoRow(label: '10:31:09', value: 'PAPER fill confirmed'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('Every production automated order should retain equivalent provenance so the user can reconstruct what the system knew and why it acted.'),
+        const SizedBox(height: 16),
+        _PrimaryButton(label: 'View Position', icon: Icons.account_balance_wallet_rounded, onTap: () => _go(_TradeStep.positionDetail)),
       ],
     );
   }
@@ -860,7 +1147,9 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
           ),
         ),
         const SizedBox(height: 16),
-        _PrimaryButton(label: 'Done', icon: Icons.home_outlined, onTap: widget.onExit),
+        _PrimaryButton(label: 'What happened?', icon: Icons.manage_search_rounded, onTap: () => _go(_TradeStep.postTradeLearning)),
+        const SizedBox(height: 10),
+        OutlinedButton(onPressed: widget.onExit, style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)), child: const Text('Done')),
         const SizedBox(height: 10),
         OutlinedButton(
           onPressed: () {
@@ -874,6 +1163,64 @@ class _MockTradeJourneyState extends State<MockTradeJourney> {
           style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
           child: const Text('Review Journey Again'),
         ),
+      ],
+    );
+  }
+
+  Widget _postTradeLearning() {
+    final favorableMove = (_opportunity.target - _entryPrice).abs() * _quantity;
+    final adverseMove = (_entryPrice - _opportunity.stop).abs() * _quantity * .34;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Glow(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(children: [Icon(Icons.analytics_outlined, color: _C.cyan), SizedBox(width: 8), Text('Prediction vs outcome', style: TextStyle(fontWeight: FontWeight.w900))]),
+              const SizedBox(height: 10),
+              const _CheckLine(text: 'Trend prediction was correct', good: true),
+              const _CheckLine(text: 'Volume confirmation remained valid', good: true),
+              const _CheckLine(text: 'Entry timing was inside the planned zone', good: true),
+              _CheckLine(text: _realizedPnl >= 0 ? 'Outcome supported the bullish thesis' : 'Outcome contradicted the bullish thesis', good: _realizedPnl >= 0),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        _Card(
+          child: Column(
+            children: [
+              _InfoRow(label: 'Original confidence', value: '${_opportunity.confidence}%'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Realized P&L', value: '${_realizedPnl >= 0 ? '+' : '-'}₹${_realizedPnl.abs().toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Max favorable excursion', value: '₹${favorableMove.toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Max adverse excursion', value: '₹${adverseMove.toStringAsFixed(0)}'),
+              const Divider(height: 18),
+              const _InfoRow(label: 'Mock slippage', value: '₹3.40'),
+              const Divider(height: 18),
+              _InfoRow(label: 'Exit reason', value: _exitReason),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Governed learning', style: TextStyle(fontWeight: FontWeight.w900)),
+              SizedBox(height: 8),
+              Text('Prediction snapshot, model versions, Gemini evidence, risk decision, execution details and outcome metrics are added to the mock evaluation dataset.', style: TextStyle(color: _C.muted, height: 1.45)),
+              SizedBox(height: 8),
+              Text('This does not trigger automatic retraining or model promotion from one trade.', style: TextStyle(color: _C.green, fontWeight: FontWeight.w800, height: 1.4)),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        const _Notice('Production model changes require batch evaluation, walk-forward evidence, calibration/risk gates and controlled promotion.'),
+        const SizedBox(height: 16),
+        _PrimaryButton(label: 'Done', icon: Icons.home_outlined, onTap: widget.onExit),
       ],
     );
   }
