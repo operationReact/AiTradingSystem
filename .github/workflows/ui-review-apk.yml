@@ -96,7 +96,7 @@ jobs:
         run: flutter analyze --no-fatal-warnings lib
 
       - name: Test review UI at phone viewport
-        run: flutter test test/ui_review_mock_test.dart test/mock_trade_journey_test.dart test/mock_live_trading_test.dart test/sign_in_page_test.dart
+        run: flutter test test/ui_review_mock_test.dart test/mock_trade_journey_test.dart test/mock_transparency_journey_test.dart test/mock_live_trading_test.dart test/sign_in_page_test.dart
 
       - name: Build standalone review APK
         run: flutter build apk --release -t lib/review_main.dart
