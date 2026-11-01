@@ -11,6 +11,7 @@ import 'data/paper_trading_repository.dart';
 import 'data/research_repository.dart';
 import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
+import 'features/trading_control/data/trading_control_repository.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
@@ -117,6 +118,7 @@ class _TradingAppState extends State<TradingApp> {
               themeMode: _themeMode,
               onDesignStyleChanged: _setDesignStyle,
               onThemeModeChanged: _setThemeMode,
+              tradingControlRepository: HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
@@ -332,7 +334,7 @@ class _MoreProductSheet extends StatelessWidget {
     ('/risk', Icons.shield_rounded, 'Risk controls', 'Trading limits and safety controls'),
     ('/backtests', Icons.science_rounded, 'Backtests', 'Review strategy simulations'),
     ('/notifications', Icons.notifications_rounded, 'Notifications', 'Important account and trading updates'),
-    ('/settings', Icons.tune_rounded, 'Appearance', 'Neon, Clean and color mode'),
+    ('/settings', Icons.tune_rounded, 'Settings', 'Trading mode, execution mode and appearance'),
   ];
 
   @override
