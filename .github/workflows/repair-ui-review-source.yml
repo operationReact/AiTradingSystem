@@ -8,6 +8,7 @@ on:
       - 'apps/trading_client/tool/repair_trade_journey.py'
       - 'apps/trading_client/tool/repair_live_review.py'
       - 'apps/trading_client/tool/add_explainability_review.py'
+      - 'apps/trading_client/tool/fix_explainability_overflow.py'
       - '.github/workflows/repair-ui-review-source.yml'
   workflow_dispatch:
 
@@ -29,6 +30,7 @@ jobs:
           python3 tool/repair_trade_journey.py
           python3 tool/repair_live_review.py
           python3 tool/add_explainability_review.py
+          python3 tool/fix_explainability_overflow.py
 
       - name: Commit repaired source
         run: |
@@ -42,5 +44,5 @@ jobs:
                   apps/trading_client/lib/src/presentation/review/mock_review_data.dart \
                   apps/trading_client/lib/src/presentation/review/mock_trade_journey.dart \
                   apps/trading_client/lib/src/presentation/review/mock_live_trading.dart
-          git commit -m 'Add mock AI trade explainability journey'
+          git commit -m 'Repair mock review source and explainability layout'
           git push origin HEAD:ui/post-login-mock-review
