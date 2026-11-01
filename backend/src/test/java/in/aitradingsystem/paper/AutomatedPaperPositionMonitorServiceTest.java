@@ -18,7 +18,9 @@ import in.aitradingsystem.paper.AutomatedPaperPositionRepository.MonitoredPositi
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
 import in.aitradingsystem.risk.RiskPolicySnapshot;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,17 @@ class AutomatedPaperPositionMonitorServiceTest {
         assertTrue(run.emergencyStopped());
         verify(f.positions, never()).openPositions(any());
         verify(f.trading, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
+    void runOnceUsesInjectedClockForDeterministicSupervision() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        when(f.positions.openPositions(NOW)).thenReturn(List.of());
+
+        var run = f.service.runOnce();
+
+        assertEquals(NOW, run.checkedAt());
+        verify(f.positions).openPositions(NOW);
     }
 
     @Test
@@ -80,6 +93,69 @@ class AutomatedPaperPositionMonitorServiceTest {
     }
 
     @Test
+    void newHighAdvancesTrailingStateWithoutSubmittingExit() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        Instant markAt = NOW.minusSeconds(5);
+        MonitoredPosition position = trailingPosition(
+            "105.00", "90.00", "120.00", "5.0", "100.00", "95.000000", markAt);
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.positions.advanceTrailingState(
+            position,
+            new BigDecimal("105.00"),
+            markAt,
+            new BigDecimal("99.750000"),
+            NOW)).thenReturn(true);
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(0, run.triggered());
+        assertEquals(0, run.rejectedOrFailed());
+        verify(f.positions).advanceTrailingState(
+            position,
+            new BigDecimal("105.00"),
+            markAt,
+            new BigDecimal("99.750000"),
+            NOW);
+        verify(f.trading, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
+    void pullbackToEffectiveTrailingStopSubmitsExitThroughNormalPaperService() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        MonitoredPosition position = trailingPosition(
+            "104.00", "90.00", "120.00", "5.0", "110.00", "104.500000", NOW.minusSeconds(5));
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.trading.placeOrder(any(OrderCommand.class), anyString()))
+            .thenReturn(new PaperViews.OrderResult(null, null, null, false));
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(1, run.triggered());
+        assertEquals(1, run.submitted());
+        assertEquals("TRAILING_STOP", run.attempts().getFirst().reason());
+        assertTrue(run.attempts().getFirst().idempotencyKey().startsWith("auto-paper-exit:trailing_stop:"));
+        verify(f.positions, never()).advanceTrailingState(any(), any(), any(), any(), any());
+        verify(f.trading).placeOrder(any(OrderCommand.class), anyString());
+    }
+
+    @Test
+    void concurrentTrailingStateAdvanceFailsClosedWithoutSubmittingExit() {
+        Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
+        Instant markAt = NOW.minusSeconds(5);
+        MonitoredPosition position = trailingPosition(
+            "105.00", "90.00", "120.00", "5.0", "100.00", "95.000000", markAt);
+        when(f.positions.openPositions(NOW)).thenReturn(List.of(position));
+        when(f.positions.advanceTrailingState(any(), any(), any(), any(), any())).thenReturn(false);
+
+        var run = f.service.runOnce(NOW);
+
+        assertEquals(0, run.triggered());
+        assertEquals(1, run.rejectedOrFailed());
+        assertEquals("TRAILING_STATE_CONCURRENT", run.attempts().getFirst().status());
+        verify(f.trading, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
     void staleMarkNeverSubmitsProtectiveExit() {
         Fixture f = fixture(OrderExecutionMode.AUTOMATED, false);
         when(f.positions.openPositions(NOW)).thenReturn(List.of(position("99.00", "100.00", "110.00", NOW.minusSeconds(61))));
@@ -101,13 +177,44 @@ class AutomatedPaperPositionMonitorServiceTest {
         when(trading.isHalted()).thenReturn(halted);
         when(policies.requireActive()).thenReturn(policy(60));
         return new Fixture(positions, trading,
-            new AutomatedPaperPositionMonitorService(authority, positions, trading, policies, audit));
+            new AutomatedPaperPositionMonitorService(
+                authority,
+                positions,
+                trading,
+                policies,
+                audit,
+                Clock.fixed(NOW, ZoneOffset.UTC)));
     }
 
     private static MonitoredPosition position(String mark, String stop, String target, Instant markAt) {
         return new MonitoredPosition(
             101L, "NSE", "RELIANCE-EQ", ProductType.DELIVERY, 3,
             new BigDecimal(stop), new BigDecimal(target), new BigDecimal(mark), markAt, NOW.minusSeconds(120));
+    }
+
+    private static MonitoredPosition trailingPosition(
+            String mark,
+            String stop,
+            String target,
+            String trailingPercent,
+            String highWater,
+            String effectiveStop,
+            Instant markAt) {
+        return new MonitoredPosition(
+            101L,
+            "NSE",
+            "RELIANCE-EQ",
+            ProductType.DELIVERY,
+            3,
+            new BigDecimal(stop),
+            new BigDecimal(target),
+            new BigDecimal(trailingPercent),
+            new BigDecimal(highWater),
+            NOW.minusSeconds(30),
+            new BigDecimal(effectiveStop),
+            new BigDecimal(mark),
+            markAt,
+            NOW.minusSeconds(120));
     }
 
     private static RiskPolicySnapshot policy(int marketAgeSeconds) {
