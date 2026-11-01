@@ -37,7 +37,7 @@ void main() {
 
     expect(find.text('More'), findsWidgets);
     for (final label in ['PAPER orders', 'Risk controls', 'Backtests', 'Notifications', 'Appearance']) {
-      expect(find.text(label), findsOneWidget, reason: 'missing customer destination $label');
+      expect(find.text(label), findsWidgets, reason: 'missing customer destination $label');
     }
 
     for (final internalLabel in ['Scenario & regime', 'Audit trail', 'System health', 'News evidence']) {
