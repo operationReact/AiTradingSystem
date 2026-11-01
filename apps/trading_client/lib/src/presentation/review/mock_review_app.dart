@@ -979,7 +979,7 @@ class _BackTitle extends StatelessWidget {
   final VoidCallback onBack;
   final Widget? trailing;
   @override
-  Widget build(BuildContext context) => Row(children: [IconButton(onPressed: onBack, padding: EdgeInsets.zero, alignment: Alignment.centerLeft, icon: const Icon(Icons.arrow_back_rounded)), Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))), if (trailing != null) trailing!]);
+  Widget build(BuildContext context) => Row(children: [IconButton(onPressed: onBack, padding: EdgeInsets.zero, alignment: Alignment.centerLeft, icon: const Icon(Icons.arrow_back_rounded)), Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900))), ?trailing]);
 }
 
 class _SectionHeader extends StatelessWidget {
