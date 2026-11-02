@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from math import log
 from typing import Annotated, Literal
 
 import numpy as np
