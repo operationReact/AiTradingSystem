@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Annotated
 
@@ -35,7 +35,7 @@ def _latest_history_sample(
     source: str,
     as_of: datetime,
     rows: Sequence[object],
-    causal_fingerprint: str,
+    causal_fingerprint: Callable[[], str],
 ) -> SourceHealthSample | None:
     causal = [row for row in rows if row.available_at <= as_of]
     if not causal:
@@ -44,7 +44,7 @@ def _latest_history_sample(
     return SourceHealthSample(
         family=family,
         source=source,
-        source_id=causal_fingerprint,
+        source_id=causal_fingerprint(),
         event_at=latest.available_at,
         available_at=latest.available_at,
     )
@@ -135,7 +135,7 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_INDEX",
             as_of=as_of,
             rows=nifty50_history.rows,
-            causal_fingerprint=nifty50_history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda: nifty50_history.causal_source_fingerprint(as_of=as_of),
         )
         if sample is not None:
             samples.append(sample)
@@ -146,7 +146,7 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_VIX",
             as_of=as_of,
             rows=india_vix_history.rows,
-            causal_fingerprint=india_vix_history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda: india_vix_history.causal_source_fingerprint(as_of=as_of),
         )
         if sample is not None:
             samples.append(sample)
@@ -160,7 +160,7 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_SECTOR_INDEX",
             as_of=as_of,
             rows=history.rows,
-            causal_fingerprint=history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda history=history: history.causal_source_fingerprint(as_of=as_of),
         )
         if sample is not None:
             samples.append(sample)
