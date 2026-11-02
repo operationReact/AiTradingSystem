@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from aitrading_intelligence.calibration_artifact import (
+    CalibrationObservation,
     IsotonicParameters,
     PlattParameters,
     TemperatureParameters,
@@ -41,7 +42,10 @@ def _registry() -> ModelLabRegistryEntry:
     )
 
 
-def _observations(registry: ModelLabRegistryEntry, count: int = 24):
+def _observations(
+    registry: ModelLabRegistryEntry,
+    count: int = 24,
+) -> list[CalibrationObservation]:
     start = registry.registered_at + timedelta(minutes=1)
     rows = []
     for index in range(count):
@@ -97,9 +101,16 @@ def test_calibration_fails_closed_on_future_label_or_registry_mismatch() -> None
     registry = _registry()
     observations = _observations(registry)
     fit_as_of = max(row.target_observed_at for row in observations)
+    last = observations[-1]
 
-    future = observations[-1].model_copy(
-        update={"target_observed_at": fit_as_of + timedelta(seconds=1)}
+    future = build_calibration_observation(
+        symbol=last.symbol,
+        decision_at=last.decision_at,
+        target_observed_at=fit_as_of + timedelta(seconds=1),
+        source_registry_fingerprint=registry.registry_fingerprint,
+        model_prediction_fingerprint=_hash(999),
+        raw_probability=last.raw_probability,
+        actual_positive=last.actual_positive,
     )
     with pytest.raises(ValueError, match="targets observed after fit_as_of"):
         create_calibration_artifact(
@@ -109,8 +120,14 @@ def test_calibration_fails_closed_on_future_label_or_registry_mismatch() -> None
             parameters=PlattParameters(slope=1.0, intercept=0.0),
         )
 
-    wrong_registry = observations[-1].model_copy(
-        update={"source_registry_fingerprint": _hash(999)}
+    wrong_registry = build_calibration_observation(
+        symbol=last.symbol,
+        decision_at=last.decision_at,
+        target_observed_at=last.target_observed_at,
+        source_registry_fingerprint=_hash(999),
+        model_prediction_fingerprint=_hash(998),
+        raw_probability=last.raw_probability,
+        actual_positive=last.actual_positive,
     )
     with pytest.raises(ValueError, match="exact source registry entry"):
         create_calibration_artifact(
