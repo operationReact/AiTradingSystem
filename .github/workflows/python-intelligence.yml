@@ -36,3 +36,24 @@ jobs:
       - name: OpenAPI smoke test
         working-directory: intelligence
         run: python -c "from aitrading_intelligence.app import app; assert '/v1/contracts/validate' in app.openapi()['paths']"
+
+  model-lab-pytorch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            intelligence/pyproject.toml
+            intelligence/requirements-pytorch-cpu.txt
+      - name: Install intelligence core
+        working-directory: intelligence
+        run: pip install -e '.[dev]'
+      - name: Install pinned PyTorch CPU research dependency
+        working-directory: intelligence
+        run: pip install -r requirements-pytorch-cpu.txt
+      - name: Run fair comparison with PyTorch required
+        working-directory: intelligence
+        run: pytest -q tests/test_model_fair_comparison.py -k pytorch
