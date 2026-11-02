@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from . import CONTRACT_VERSION
 from .contracts import EvidenceContractRequest, EvidenceContractResponse
 from .fingerprints import request_fingerprint
+from .fusion import FusionRequest, RankedOpportunity, fuse_signals
 
 app = FastAPI(
     title="AiTradingSystem Intelligence",
@@ -25,7 +26,12 @@ def validate_contract(request: EvidenceContractRequest) -> EvidenceContractRespo
         accepted=True,
         input_fingerprint=request_fingerprint(request),
         evidence=[],
-        warnings=["Contract validated; no model inference is configured in V2-03."],
+        warnings=["Contract validated; evidence must still pass Java Risk Engine before execution."],
         can_authorize_capital=False,
         generated_at=datetime.now(UTC),
     )
+
+
+@app.post("/v1/fusion/rank", response_model=RankedOpportunity)
+def rank_opportunity(request: FusionRequest) -> RankedOpportunity:
+    return fuse_signals(request)
