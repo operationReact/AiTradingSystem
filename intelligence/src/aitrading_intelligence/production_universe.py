@@ -49,14 +49,20 @@ def build_liquidity_qualified_india_universe_snapshot(
         for binding in bridge.bindings
     ]
 
-    return build_india_universe_snapshot(
+    snapshot = build_india_universe_snapshot(
         universe_id=NIFTY500_LIQUID_UNIVERSE_ID,
         as_of=as_of,
         memberships=memberships,
         source_versions={
+            "identity_mapping_rule": bridge.mapping_rule,
             "instrument_catalogue": bridge.source_catalogue_fingerprint,
             "liquidity_qualified_catalogue": bridge.source_liquidity_snapshot_fingerprint,
             "nifty500_liquidity_identity_bridge": bridge.snapshot_fingerprint,
             "nifty500_sector_enrichment": bridge.source_sector_enrichment_fingerprint,
         },
     )
+    if snapshot.data_cutoff != bridge.data_cutoff:
+        raise ValueError("universe cutoff must exactly match identity bridge cutoff")
+    if len(snapshot.members) != bridge.binding_count:
+        raise ValueError("universe member count must exactly match identity bridge binding count")
+    return snapshot
