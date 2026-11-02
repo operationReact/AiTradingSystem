@@ -6,7 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import in.aitradingsystem.instrument.Instrument;
-import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.instrument.ResearchInstrumentResolver;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -19,7 +19,7 @@ class MarketDataResearchExportServiceTest {
     @Test
     void exportsIntradayBarsAtTheirFirstSafeAvailabilityTime() {
         HistoricalCandleService candles = mock(HistoricalCandleService.class);
-        InstrumentMasterService instruments = mock(InstrumentMasterService.class);
+        ResearchInstrumentResolver instruments = mock(ResearchInstrumentResolver.class);
         MarketDataResearchExportService service = new MarketDataResearchExportService(candles, instruments);
         UUID catalogueVersion = UUID.randomUUID();
         Instrument instrument = new Instrument(1, "NSE", "NSE", "2885", "RELIANCE-EQ", "Reliance",
@@ -31,7 +31,7 @@ class MarketDataResearchExportServiceTest {
                 Instant.parse("2026-11-02T12:00:00Z"));
         LocalDate date = LocalDate.parse("2026-11-02");
 
-        when(instruments.requireActiveInstrument(1)).thenReturn(instrument);
+        when(instruments.requireForResearch(1)).thenReturn(instrument);
         when(candles.query(1, HistoricalCandleInterval.FIVE_MINUTE, date, date, 0, 500))
                 .thenReturn(new CandlePage(List.of(candle), 0, 500, 1, 1, false));
 
@@ -62,7 +62,7 @@ class MarketDataResearchExportServiceTest {
     @Test
     void rejectsUnboundedResearchExports() {
         MarketDataResearchExportService service = new MarketDataResearchExportService(
-                mock(HistoricalCandleService.class), mock(InstrumentMasterService.class));
+                mock(HistoricalCandleService.class), mock(ResearchInstrumentResolver.class));
 
         assertThatThrownBy(() -> service.export(1, HistoricalCandleInterval.ONE_DAY,
                 LocalDate.parse("2026-11-01"), LocalDate.parse("2026-11-01"), 20_001))
