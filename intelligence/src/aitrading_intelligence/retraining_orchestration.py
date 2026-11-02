@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -12,8 +12,6 @@ from .fingerprints import canonical_fingerprint
 from .learning_dataset import LearningDatasetManifest
 from .model_monitoring import ModelMonitoringReport
 from .model_registry import ModelGovernanceCandidate
-from .pytorch_evaluation import PyTorchEvaluation, evaluate_pytorch_challenger
-from .pytorch_model import TorchTrainingConfig
 from .pytorch_target import LabeledExample
 
 RETRAINING_ORCHESTRATION_VERSION = "scheduled-retraining.v1"
@@ -33,6 +31,28 @@ class RetrainingScheduleConfig(BaseModel):
         return canonical_fingerprint(self.model_dump(mode="json"))
 
 
+class ScheduledTorchTrainingConfig(BaseModel):
+    """Lightweight mirror of the existing PyTorch training contract.
+
+    Keeping this contract torch-free allows monitoring and scheduling to run in the
+    standard intelligence service. Actual retraining lazily imports the existing
+    PyTorch evaluator only when a scheduled run is executed on a torch-enabled worker.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_version: Literal["pytorch-mlp.v1"] = "pytorch-mlp.v1"
+    hidden_dim: Annotated[int, Field(ge=2, le=128)] = 16
+    epochs: Annotated[int, Field(ge=10, le=2000)] = 120
+    learning_rate: Annotated[float, Field(gt=0.0, le=1.0)] = 0.03
+    train_fraction: Annotated[float, Field(ge=0.5, le=0.8)] = 0.75
+    seed: Annotated[int, Field(ge=0, le=2_147_483_647)] = 42
+
+    @property
+    def fingerprint(self) -> str:
+        return canonical_fingerprint(self.model_dump(mode="json"))
+
+
 class CandidateRetrainingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -43,6 +63,7 @@ class CandidateRetrainingRequest(BaseModel):
     research_dataset_fingerprint: Hash64
     research_feature_schema_version: Annotated[str, Field(min_length=1, max_length=120)]
     source_feature_schema_fingerprint: Hash64
+    training_config: ScheduledTorchTrainingConfig
     training_config_fingerprint: Hash64
     scheduler_config_fingerprint: Hash64
     code_sha: GitSha
@@ -103,6 +124,13 @@ class CandidateRetrainingRun(BaseModel):
         return value
 
 
+class _EvaluationResult(Protocol):
+    evaluation_fingerprint: str
+    pytorch_model_fingerprint: str
+    comparison: str
+    replay_candidate: bool
+
+
 def _request_identity_payload(
     *,
     source_registry_fingerprint: str,
@@ -154,11 +182,11 @@ def plan_candidate_retraining(
     research_dataset: DatasetManifest,
     code_sha: str,
     requested_at: datetime,
-    training_config: TorchTrainingConfig | None = None,
+    training_config: ScheduledTorchTrainingConfig | None = None,
     scheduler_config: RetrainingScheduleConfig | None = None,
     previous_request: CandidateRetrainingRequest | None = None,
 ) -> CandidateRetrainingRequest:
-    training_config = training_config or TorchTrainingConfig()
+    training_config = training_config or ScheduledTorchTrainingConfig()
     scheduler_config = scheduler_config or RetrainingScheduleConfig()
     if requested_at.tzinfo is None or requested_at.utcoffset() is None:
         raise ValueError("requested_at must be timezone-aware")
@@ -204,6 +232,7 @@ def plan_candidate_retraining(
 
     payload = {
         **identity,
+        "training_config": training_config.model_dump(mode="json"),
         "requested_at": requested_at.isoformat(),
         "scheduled_for": requested_at.isoformat(),
         "status": "RESEARCH_RETRAINING_SCHEDULED",
@@ -219,6 +248,7 @@ def plan_candidate_retraining(
         research_dataset_fingerprint=research_dataset.fingerprint,
         research_feature_schema_version=research_dataset.feature_schema_version,
         source_feature_schema_fingerprint=source_candidate.feature_schema_fingerprint,
+        training_config=training_config,
         training_config_fingerprint=training_config.fingerprint,
         scheduler_config_fingerprint=scheduler_config.fingerprint,
         code_sha=code_sha,
@@ -234,17 +264,31 @@ def _materialized_dataset_fingerprint(rows: Sequence[FeatureRow]) -> str:
     return canonical_fingerprint([row.model_dump(mode="json") for row in ordered])
 
 
+def _run_existing_pytorch_evaluation(
+    rows: Sequence[FeatureRow],
+    examples: Sequence[LabeledExample],
+    scheduled_config: ScheduledTorchTrainingConfig,
+) -> _EvaluationResult:
+    # PyTorch is intentionally optional for the standard intelligence service. Only an
+    # actual retraining worker needs the heavyweight runtime dependency.
+    from .pytorch_evaluation import evaluate_pytorch_challenger
+    from .pytorch_model import TorchTrainingConfig
+
+    runtime_config = TorchTrainingConfig(**scheduled_config.model_dump(mode="python"))
+    if runtime_config.fingerprint != scheduled_config.fingerprint:
+        raise ValueError("runtime PyTorch training config does not match scheduled config")
+    return evaluate_pytorch_challenger(rows, examples, config=runtime_config)
+
+
 def execute_candidate_retraining(
     request: CandidateRetrainingRequest,
     *,
     rows: Sequence[FeatureRow],
     examples: Sequence[LabeledExample],
     research_dataset: DatasetManifest,
-    training_config: TorchTrainingConfig | None = None,
     started_at: datetime,
     completed_at: datetime,
 ) -> CandidateRetrainingRun:
-    training_config = training_config or TorchTrainingConfig()
     if started_at.tzinfo is None or started_at.utcoffset() is None:
         raise ValueError("started_at must be timezone-aware")
     if completed_at.tzinfo is None or completed_at.utcoffset() is None:
@@ -253,6 +297,8 @@ def execute_candidate_retraining(
         raise ValueError("retraining cannot start before its scheduled time")
     if completed_at <= started_at:
         raise ValueError("completed_at must be after started_at")
+    if request.training_config.fingerprint != request.training_config_fingerprint:
+        raise ValueError("scheduled training configuration fingerprint is inconsistent")
     if research_dataset.fingerprint != request.research_dataset_fingerprint:
         raise ValueError("materialized research dataset does not match scheduled lineage")
     if research_dataset.feature_schema_version != request.research_feature_schema_version:
@@ -261,8 +307,6 @@ def execute_candidate_retraining(
         raise ValueError("materialized research rows do not match the dataset manifest")
     if _materialized_dataset_fingerprint(rows) != research_dataset.fingerprint:
         raise ValueError("materialized research row fingerprint does not match the manifest")
-    if training_config.fingerprint != request.training_config_fingerprint:
-        raise ValueError("training configuration changed after scheduling")
     if len(examples) < 40:
         raise ValueError("at least 40 labeled examples are required for retraining")
     if any(
@@ -273,10 +317,10 @@ def execute_candidate_retraining(
     if any(row.data_cutoff > research_dataset.data_cutoff for row in rows):
         raise ValueError("feature row exceeds the scheduled research dataset cutoff")
 
-    evaluation: PyTorchEvaluation = evaluate_pytorch_challenger(
+    evaluation = _run_existing_pytorch_evaluation(
         rows,
         examples,
-        config=training_config,
+        request.training_config,
     )
     next_gate = (
         "V2_08_REPLAY_WALK_FORWARD"
