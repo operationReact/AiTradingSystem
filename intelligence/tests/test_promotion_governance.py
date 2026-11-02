@@ -56,7 +56,11 @@ def _metrics(
     )
 
 
-def _shadow(*, rows: int = 250, assessment: str = "CHALLENGER_ELIGIBLE_FOR_GOVERNANCE_REVIEW") -> ShadowComparisonEvidence:
+def _shadow(
+    *,
+    rows: int = 250,
+    assessment: str = "CHALLENGER_ELIGIBLE_FOR_GOVERNANCE_REVIEW",
+) -> ShadowComparisonEvidence:
     return ShadowComparisonEvidence(
         config_fingerprint="b" * 64,
         champion_registry_fingerprint=CHAMPION,
