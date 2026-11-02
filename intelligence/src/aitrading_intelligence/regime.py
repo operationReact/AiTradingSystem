@@ -86,14 +86,16 @@ class RegimeSnapshot(BaseModel):
     evidence: dict[str, float]
     input_fingerprint: Hash64
     config_fingerprint: Hash64
+    model_fingerprint: Hash64 | None = None
+    training_data_cutoff: datetime | None = None
     snapshot_fingerprint: Hash64
     status: Literal["RESEARCH_REGIME_EVIDENCE_ONLY"] = "RESEARCH_REGIME_EVIDENCE_ONLY"
     can_authorize_capital: Literal[False] = False
 
-    @field_validator("as_of", "data_cutoff")
+    @field_validator("as_of", "data_cutoff", "training_data_cutoff")
     @classmethod
-    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
-        return _require_aware(value)
+    def timestamps_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        return _require_aware(value) if value is not None else None
 
     @field_validator("probabilities")
     @classmethod
@@ -125,6 +127,13 @@ class RegimeSnapshot(BaseModel):
     def validate_snapshot(self) -> RegimeSnapshot:
         if self.data_cutoff > self.as_of:
             raise ValueError("data_cutoff cannot exceed as_of")
+        if self.training_data_cutoff is not None and self.training_data_cutoff > self.as_of:
+            raise ValueError("training_data_cutoff cannot exceed as_of")
+        if self.method == "HEURISTIC_BASELINE":
+            if self.model_fingerprint is not None or self.training_data_cutoff is not None:
+                raise ValueError("heuristic baseline cannot declare trained-model lineage")
+        elif self.model_fingerprint is None or self.training_data_cutoff is None:
+            raise ValueError("challenger regime snapshots require trained-model lineage")
         maximum = max(self.probabilities.values())
         expected_dominant = next(
             label for label in REGIME_LABELS if self.probabilities[label] == maximum
@@ -142,7 +151,6 @@ def _softmax(scores: dict[str, float], *, temperature: float) -> dict[str, float
     weights = {label: math.exp(scaled[label] - pivot) for label in REGIME_LABELS}
     denominator = sum(weights.values())
     probabilities = {label: weights[label] / denominator for label in REGIME_LABELS}
-    # Preserve the canonical total exactly enough for strict contract validation.
     residual = 1.0 - sum(probabilities.values())
     probabilities[REGIME_LABELS[-1]] += residual
     return probabilities
@@ -250,6 +258,8 @@ def build_heuristic_regime_snapshot(
         "evidence": evidence,
         "input_fingerprint": context.snapshot_fingerprint,
         "config_fingerprint": config.fingerprint,
+        "model_fingerprint": None,
+        "training_data_cutoff": None,
         "status": "RESEARCH_REGIME_EVIDENCE_ONLY",
         "can_authorize_capital": False,
     }
