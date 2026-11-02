@@ -57,6 +57,41 @@ public class InstrumentCatalogueResearchRepository {
                 """, (rs, row) -> mapInstrument(rs, row), catalogueVersion, limit);
     }
 
+    /**
+     * Resolves one historical cash instrument by its immutable database identity after the operational
+     * catalogue row has been pruned.  Derivatives are intentionally absent from durable history.
+     */
+    public Instrument findHistoricalCashInstrument(long instrumentId) {
+        List<Instrument> rows = jdbc.query("""
+                SELECT instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
+                       instrument_name, instrument_type, expiry, strike, lot_size, tick_size, catalogue_version
+                  FROM instrument_cash_catalogue_history
+                 WHERE instrument_id = ?
+                 LIMIT 2
+                """, (rs, row) -> mapHistoricalInstrument(rs), instrumentId);
+        if (rows.size() > 1) {
+            throw new InstrumentMasterException("HISTORICAL_INSTRUMENT_AMBIGUOUS",
+                    "Historical cash instrument identity is not unique");
+        }
+        return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private Instrument mapHistoricalInstrument(ResultSet rs) throws SQLException {
+        return new Instrument(
+                rs.getLong("instrument_id"),
+                rs.getString("exchange_segment"),
+                rs.getString("exchange"),
+                rs.getString("symbol_token"),
+                rs.getString("trading_symbol"),
+                rs.getString("instrument_name"),
+                rs.getString("instrument_type"),
+                rs.getObject("expiry", java.time.LocalDate.class),
+                rs.getBigDecimal("strike"),
+                rs.getInt("lot_size"),
+                rs.getBigDecimal("tick_size"),
+                rs.getObject("catalogue_version", UUID.class));
+    }
+
     private InstrumentCatalogueResearchExport.ResearchInstrument mapInstrument(ResultSet rs, int row)
             throws SQLException {
         return new InstrumentCatalogueResearchExport.ResearchInstrument(
