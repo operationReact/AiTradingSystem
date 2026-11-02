@@ -4,7 +4,10 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from pydantic import ValidationError
 
-from aitrading_intelligence.baseline import train_logistic_baseline
+from aitrading_intelligence.baseline import (
+    DEFAULT_BASELINE_FEATURES,
+    train_logistic_baseline,
+)
 from aitrading_intelligence.catboost_model import (
     CatBoostTrainingConfig,
     train_catboost_challenger,
@@ -15,6 +18,7 @@ from aitrading_intelligence.lightgbm_model import (
     train_lightgbm_challenger,
 )
 from aitrading_intelligence.model_prediction_v2 import (
+    MAX_ATTRIBUTION_FEATURES,
     ModelPredictionV2,
     adapt_catboost_prediction,
     adapt_lightgbm_prediction,
@@ -100,7 +104,7 @@ def test_logistic_prediction_v2_preserves_target_lineage_and_attribution() -> No
     assert first.can_authorize_capital is False
 
 
-def test_lightgbm_and_catboost_share_contract_without_fabricated_confidence() -> None:
+def test_tree_models_attach_bounded_native_attribution_without_fabricated_confidence() -> None:
     rows = _series()
     spec = _target_spec()
     examples = build_labeled_examples(rows, spec)
@@ -133,13 +137,22 @@ def test_lightgbm_and_catboost_share_contract_without_fabricated_confidence() ->
         assert 0.0 <= prediction.raw_probability <= 1.0
         assert -1.0 <= prediction.raw_score <= 1.0
         assert prediction.raw_confidence is None
-        assert prediction.attribution_status == "NOT_ATTACHED"
-        assert prediction.attribution_summary == {}
+        assert prediction.attribution_status == "AVAILABLE"
+        assert prediction.attribution_summary
+        assert len(prediction.attribution_summary) <= MAX_ATTRIBUTION_FEATURES
+        assert set(prediction.attribution_summary) <= set(DEFAULT_BASELINE_FEATURES)
+        assert all(
+            value == pytest.approx(value)
+            for value in prediction.attribution_summary.values()
+        )
         assert prediction.inference_latency_micros >= 0
         assert prediction.promotion_allowed is False
         assert prediction.can_authorize_capital is False
 
-    # Latency is telemetry rather than semantic model/input identity.
+    # Latency is telemetry rather than semantic model/input identity, while native
+    # attribution is deterministic semantic evidence and is included in the fingerprint.
+    assert light_prediction.attribution_summary == repeated_light_prediction.attribution_summary
+    assert cat_prediction.attribution_summary == repeated_cat_prediction.attribution_summary
     assert light_prediction.inference_fingerprint == repeated_light_prediction.inference_fingerprint
     assert cat_prediction.inference_fingerprint == repeated_cat_prediction.inference_fingerprint
 
