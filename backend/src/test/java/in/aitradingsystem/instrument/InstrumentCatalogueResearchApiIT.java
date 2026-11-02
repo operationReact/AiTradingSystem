@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -140,7 +142,7 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
         InstrumentImportSummary summary = instrumentService.importSource(payload.getBytes(StandardCharsets.UTF_8));
         assertThat(summary.status()).isEqualTo("SUCCEEDED");
         jdbc.update("UPDATE instrument_import_run SET completed_at = ? WHERE id = ?",
-                completedAt, summary.catalogueVersion());
+                OffsetDateTime.ofInstant(completedAt, ZoneOffset.UTC), summary.catalogueVersion());
         return summary;
     }
 }
