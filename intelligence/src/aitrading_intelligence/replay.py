@@ -124,6 +124,19 @@ class HistoricalReplay(BaseModel):
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
 
+    @field_validator("start_at", "end_at")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("replay timestamps must be timezone-aware")
+        return value
+
+    @model_validator(mode="after")
+    def validate_window(self) -> HistoricalReplay:
+        if self.end_at < self.start_at:
+            raise ValueError("replay end_at cannot precede start_at")
+        return self
+
 
 def _key(symbol: str, as_of: datetime) -> tuple[str, datetime]:
     return symbol, as_of
@@ -140,6 +153,13 @@ def _validate_inputs(
     if len({example.target_spec_fingerprint for example in examples}) != 1:
         raise ValueError("all replay examples must use the same target specification")
 
+    for item in opportunities:
+        for timestamp in (item.as_of, item.data_cutoff):
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise ValueError("opportunity timestamps must be timezone-aware")
+        if item.data_cutoff > item.as_of:
+            raise ValueError("opportunity data_cutoff cannot exceed its decision time")
+
     opportunity_keys = [_key(item.symbol, item.as_of) for item in opportunities]
     if len(set(opportunity_keys)) != len(opportunity_keys):
         raise ValueError("ranked opportunities must be unique by symbol and as_of")
@@ -154,9 +174,6 @@ def _validate_inputs(
     missing = [key for key in opportunity_keys if key not in example_by_key]
     if missing:
         raise ValueError("every ranked opportunity must resolve to a labeled outcome")
-
-    if any(item.data_cutoff > item.as_of for item in opportunities):
-        raise ValueError("opportunity data_cutoff cannot exceed its decision time")
     return example_by_key
 
 
@@ -169,7 +186,14 @@ def run_historical_replay(
     config = config or ReplayConfig()
     example_by_key = _validate_inputs(opportunities, examples)
     ordered = sorted(opportunities, key=lambda item: (item.as_of, item.symbol))
-    target_spec_fingerprint = next(iter({item.target_spec_fingerprint for item in examples}))
+    ordered_examples = sorted(
+        examples,
+        key=lambda item: (item.as_of, item.symbol, item.target_observed_at),
+    )
+    target_spec_fingerprint = ordered_examples[0].target_spec_fingerprint
+    replay_end = max(
+        example_by_key[_key(item.symbol, item.as_of)].target_observed_at for item in ordered
+    )
 
     equity = config.initial_equity
     peak_equity = equity
@@ -242,10 +266,10 @@ def run_historical_replay(
         total_friction_cost += friction_cost
 
     net_returns = [trade.net_return for trade in trades]
-    winners = [value for value in net_returns if value > 0.0]
-    losers = [value for value in net_returns if value < 0.0]
-    gross_profit = sum(winners)
-    gross_loss = abs(sum(losers))
+    winning_trades = [trade for trade in trades if trade.pnl > 0.0]
+    losing_trades = [trade for trade in trades if trade.pnl < 0.0]
+    gross_profit = sum(trade.pnl for trade in winning_trades)
+    gross_loss = abs(sum(trade.pnl for trade in losing_trades))
     profit_factor = gross_profit / gross_loss if gross_loss > 0.0 else None
     max_drawdown = max((point.drawdown for point in equity_curve), default=0.0)
     trade_count = len(trades)
@@ -255,9 +279,9 @@ def run_historical_replay(
         total_return=(equity / config.initial_equity) - 1.0,
         max_drawdown=max_drawdown,
         trade_count=trade_count,
-        winning_trades=len(winners),
-        losing_trades=len(losers),
-        win_rate=(len(winners) / trade_count) if trade_count else 0.0,
+        winning_trades=len(winning_trades),
+        losing_trades=len(losing_trades),
+        win_rate=(len(winning_trades) / trade_count) if trade_count else 0.0,
         average_net_return=(sum(net_returns) / trade_count) if trade_count else 0.0,
         profit_factor=profit_factor,
         turnover_multiple=turnover_notional / config.initial_equity,
@@ -265,13 +289,13 @@ def run_historical_replay(
     )
     provenance = [
         f"opportunity:{item.opportunity_fingerprint}" for item in ordered
-    ] + [f"outcome:{example.example_fingerprint}" for example in examples]
+    ] + [f"outcome:{example.example_fingerprint}" for example in ordered_examples]
     payload = {
         "replay_version": REPLAY_VERSION,
         "config_fingerprint": config.fingerprint,
         "target_spec_fingerprint": target_spec_fingerprint,
         "start_at": ordered[0].as_of.isoformat(),
-        "end_at": ordered[-1].as_of.isoformat(),
+        "end_at": replay_end.isoformat(),
         "considered_opportunities": len(ordered),
         "skipped_watch": skipped_watch,
         "skipped_below_threshold": skipped_below_threshold,
@@ -288,7 +312,7 @@ def run_historical_replay(
         config_fingerprint=config.fingerprint,
         target_spec_fingerprint=target_spec_fingerprint,
         start_at=ordered[0].as_of,
-        end_at=ordered[-1].as_of,
+        end_at=replay_end,
         considered_opportunities=len(ordered),
         skipped_watch=skipped_watch,
         skipped_below_threshold=skipped_below_threshold,
