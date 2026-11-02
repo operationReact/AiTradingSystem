@@ -11,13 +11,14 @@ from .fingerprints import canonical_fingerprint
 from .lightgbm_model import LightGBMModelArtifact, LightGBMTrainingConfig
 from .model_fair_comparison import FairComparisonConfig, ModelFairComparisonReport
 from .monte_carlo import MonteCarloEvidence
+from .pytorch_model import TorchModelArtifact, TorchTrainingConfig
 
 REGISTRY_VERSION = "model-registry.v1"
 REGISTRY_SNAPSHOT_VERSION = "model-registry-snapshot.v1"
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 GitSha = Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")]
 ModelFamily = Literal["LOGISTIC", "TREE", "PYTORCH", "LIGHTGBM", "CATBOOST"]
-ModelLabFamily = Literal["LIGHTGBM", "CATBOOST"]
+ModelLabFamily = Literal["PYTORCH", "LIGHTGBM", "CATBOOST"]
 
 
 class ModelGovernanceCandidate(BaseModel):
@@ -311,6 +312,35 @@ def register_catboost_model_lab_entry(
     expected_config = CatBoostTrainingConfig(seed=comparison_config.seed)
     return _register_model_lab_entry(
         model_family="CATBOOST",
+        model_version=artifact.model_version,
+        artifact_fingerprint=artifact.model_fingerprint,
+        feature_names=artifact.feature_names,
+        target_spec_fingerprint=artifact.target_spec_fingerprint,
+        training_config_fingerprint=artifact.training_config_fingerprint,
+        training_as_of=artifact.training_as_of,
+        training_example_fingerprints=artifact.training_example_fingerprints,
+        validation_example_fingerprints=artifact.validation_example_fingerprints,
+        expected_training_config_fingerprint=expected_config.fingerprint,
+        comparison=comparison,
+        comparison_config=comparison_config,
+        code_sha=code_sha,
+        registered_at=registered_at,
+    )
+
+
+def register_pytorch_model_lab_entry(
+    *,
+    artifact: TorchModelArtifact,
+    comparison: ModelFairComparisonReport,
+    comparison_config: FairComparisonConfig,
+    code_sha: str,
+    registered_at: datetime,
+) -> ModelLabRegistryEntry:
+    if artifact.promotion_allowed or artifact.can_authorize_capital:
+        raise ValueError("PyTorch artifact cannot carry promotion or capital authority")
+    expected_config = TorchTrainingConfig(seed=comparison_config.seed)
+    return _register_model_lab_entry(
+        model_family="PYTORCH",
         model_version=artifact.model_version,
         artifact_fingerprint=artifact.model_fingerprint,
         feature_names=artifact.feature_names,
