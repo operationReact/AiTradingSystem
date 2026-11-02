@@ -100,7 +100,11 @@ class RegimeSnapshot(BaseModel):
     def probabilities_must_be_valid(cls, value: dict[str, float]) -> dict[str, float]:
         if tuple(value) != REGIME_LABELS:
             raise ValueError("regime probabilities must contain the canonical ordered label set")
-        if any(not math.isfinite(probability) or probability < 0.0 or probability > 1.0 for probability in value.values()):
+        invalid = any(
+            not math.isfinite(probability) or probability < 0.0 or probability > 1.0
+            for probability in value.values()
+        )
+        if invalid:
             raise ValueError("regime probabilities must be finite values in [0, 1]")
         if not math.isclose(sum(value.values()), 1.0, rel_tol=0.0, abs_tol=1e-12):
             raise ValueError("regime probabilities must sum to 1")
