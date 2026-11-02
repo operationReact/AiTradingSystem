@@ -38,6 +38,10 @@ class PaperApprovalWorkflowIT extends AbstractApprovalPaperIT {
         deleteApprovals(SYMBOL);
         approvalJdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id IN (SELECT id FROM risk_decision WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :s))")
             .param("s", SYMBOL).update();
+        approvalJdbc.sql("DELETE FROM paper_trade_lot_close WHERE exit_order_id IN (SELECT id FROM paper_order WHERE symbol = :s) OR lot_id IN (SELECT id FROM paper_trade_lot WHERE entry_order_id IN (SELECT id FROM paper_order WHERE symbol = :s))")
+            .param("s", SYMBOL).update();
+        approvalJdbc.sql("DELETE FROM paper_trade_lot WHERE entry_order_id IN (SELECT id FROM paper_order WHERE symbol = :s)")
+            .param("s", SYMBOL).update();
         for (String table : List.of("risk_decision", "paper_fill", "paper_cash_entry")) {
             approvalJdbc.sql("DELETE FROM " + table + " WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :s)")
                 .param("s", SYMBOL).update();
