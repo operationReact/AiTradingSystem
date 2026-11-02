@@ -54,7 +54,7 @@ public class InstrumentCatalogueResearchRepository {
                    AND instrument_type = 'EQ'
                  ORDER BY exchange ASC, trading_symbol ASC, symbol_token ASC, instrument_id ASC
                  LIMIT ?
-                """, (rs, row) -> mapInstrument(rs), catalogueVersion, limit);
+                """, (rs, row) -> mapInstrument(rs, row), catalogueVersion, limit);
     }
 
     private InstrumentCatalogueResearchExport.ResearchInstrument mapInstrument(ResultSet rs, int row)
