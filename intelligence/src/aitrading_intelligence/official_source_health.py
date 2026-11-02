@@ -86,7 +86,10 @@ def build_official_source_health_report(
         raise ValueError("as_of must be timezone-aware")
     policy = policy or OfficialSourceHealthPolicy()
 
-    normalized_required = [item.strip().upper().replace(" ", "_") for item in required_sector_indices]
+    normalized_required = [
+        item.strip().upper().replace(" ", "_")
+        for item in required_sector_indices
+    ]
     if not normalized_required:
         raise ValueError("at least one required sector index is required")
     if len(set(normalized_required)) != len(normalized_required):
@@ -135,7 +138,9 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_INDEX",
             as_of=as_of,
             rows=nifty50_history.rows,
-            causal_fingerprint=lambda: nifty50_history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda: nifty50_history.causal_source_fingerprint(
+                as_of=as_of
+            ),
         )
         if sample is not None:
             samples.append(sample)
@@ -146,7 +151,9 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_VIX",
             as_of=as_of,
             rows=india_vix_history.rows,
-            causal_fingerprint=lambda: india_vix_history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda: india_vix_history.causal_source_fingerprint(
+                as_of=as_of
+            ),
         )
         if sample is not None:
             samples.append(sample)
@@ -160,7 +167,9 @@ def build_official_source_health_report(
             source="NSE_INDIA_HISTORICAL_SECTOR_INDEX",
             as_of=as_of,
             rows=history.rows,
-            causal_fingerprint=lambda history=history: history.causal_source_fingerprint(as_of=as_of),
+            causal_fingerprint=lambda history=history: history.causal_source_fingerprint(
+                as_of=as_of
+            ),
         )
         if sample is not None:
             samples.append(sample)
