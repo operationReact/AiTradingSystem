@@ -37,6 +37,8 @@ class ReplayConfig(BaseModel):
 class ReplayTrade(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
+    replay_version: Literal["historical-replay.v1"] = REPLAY_VERSION
+    config_fingerprint: Hash64
     symbol: str
     entry_at: datetime
     exit_at: datetime
