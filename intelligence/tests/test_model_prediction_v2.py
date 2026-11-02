@@ -2,6 +2,7 @@ import importlib.util
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 
 from aitrading_intelligence.baseline import train_logistic_baseline
 from aitrading_intelligence.catboost_model import (
@@ -14,6 +15,7 @@ from aitrading_intelligence.lightgbm_model import (
     train_lightgbm_challenger,
 )
 from aitrading_intelligence.model_prediction_v2 import (
+    ModelPredictionV2,
     adapt_catboost_prediction,
     adapt_lightgbm_prediction,
     adapt_logistic_prediction,
@@ -91,13 +93,14 @@ def test_logistic_prediction_v2_preserves_target_lineage_and_attribution() -> No
     assert first.feature_row_fingerprint == rows[-1].fingerprint
     assert first.attribution_status == "AVAILABLE"
     assert first.attribution_summary
+    assert first.raw_confidence is not None
     assert first.inference_fingerprint == second.inference_fingerprint
     assert first.raw_probability == second.raw_probability
     assert first.promotion_allowed is False
     assert first.can_authorize_capital is False
 
 
-def test_lightgbm_and_catboost_share_normalized_probability_contract() -> None:
+def test_lightgbm_and_catboost_share_contract_without_fabricated_confidence() -> None:
     rows = _series()
     spec = _target_spec()
     examples = build_labeled_examples(rows, spec)
@@ -129,13 +132,14 @@ def test_lightgbm_and_catboost_share_normalized_probability_contract() -> None:
         assert prediction.target_definition_fingerprint == spec.fingerprint
         assert 0.0 <= prediction.raw_probability <= 1.0
         assert -1.0 <= prediction.raw_score <= 1.0
-        assert 0.0 <= prediction.raw_confidence <= 1.0
+        assert prediction.raw_confidence is None
         assert prediction.attribution_status == "NOT_ATTACHED"
         assert prediction.attribution_summary == {}
         assert prediction.inference_latency_micros >= 0
         assert prediction.promotion_allowed is False
         assert prediction.can_authorize_capital is False
 
+    # Latency is telemetry rather than semantic model/input identity.
     assert light_prediction.inference_fingerprint == repeated_light_prediction.inference_fingerprint
     assert cat_prediction.inference_fingerprint == repeated_cat_prediction.inference_fingerprint
 
@@ -160,6 +164,28 @@ def test_prediction_contract_rejects_future_data_cutoff() -> None:
         )
 
 
+def test_prediction_contract_rejects_probability_score_mismatch() -> None:
+    as_of = datetime(2026, 1, 1, 10, 0, tzinfo=UTC)
+    with pytest.raises(ValidationError, match="raw_score must equal"):
+        ModelPredictionV2(
+            symbol="RELIANCE",
+            as_of=as_of,
+            data_cutoff=as_of,
+            model_family="LIGHTGBM",
+            model_name="LGBMClassifier",
+            model_version="lightgbm-binary.v1",
+            model_artifact_fingerprint="a" * 64,
+            target_definition_fingerprint="b" * 64,
+            raw_probability=0.75,
+            raw_score=0.10,
+            raw_confidence=None,
+            feature_row_fingerprint="c" * 64,
+            attribution_status="NOT_ATTACHED",
+            inference_latency_micros=10,
+            inference_fingerprint="d" * 64,
+        )
+
+
 def test_pytorch_adapter_uses_same_contract_when_optional_dependency_is_available() -> None:
     if importlib.util.find_spec("torch") is None:
         pytest.skip("PyTorch is installed through the separate CPU research requirements")
@@ -181,6 +207,7 @@ def test_pytorch_adapter_uses_same_contract_when_optional_dependency_is_availabl
 
     assert prediction.model_family == "PYTORCH"
     assert prediction.target_definition_fingerprint == spec.fingerprint
+    assert prediction.raw_confidence is not None
     assert prediction.attribution_status == "AVAILABLE"
     assert prediction.attribution_summary
     assert prediction.promotion_allowed is False
