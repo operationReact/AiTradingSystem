@@ -3,7 +3,7 @@
 -- the much larger derivatives catalogue indefinitely while preserving NSE/BSE EQ research evidence.
 CREATE TABLE instrument_cash_catalogue_history (
     history_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    catalogue_version UUID NOT NULL REFERENCES instrument_import_run(id),
+    catalogue_version UUID NOT NULL REFERENCES instrument_import_run(id) ON DELETE CASCADE,
     instrument_id BIGINT NOT NULL,
     exchange_segment VARCHAR(20) NOT NULL,
     exchange VARCHAR(8) NOT NULL CHECK (exchange IN ('NSE', 'BSE')),
