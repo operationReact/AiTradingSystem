@@ -24,6 +24,7 @@ public class AngelOneApiClient {
 
     static final String LOGIN_PATH = "/rest/auth/angelbroking/user/v1/loginByPassword";
     static final String LTP_PATH = "/rest/secure/angelbroking/order/v1/getLtpData";
+    static final String MARKET_QUOTE_PATH = "/rest/secure/angelbroking/market/v1/quote/";
     static final String CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData";
     static final String RMS_PATH = "/rest/secure/angelbroking/user/v1/getRMS";
     static final String HOLDINGS_PATH = "/rest/secure/angelbroking/portfolio/v1/getHolding";
@@ -96,6 +97,35 @@ public class AngelOneApiClient {
                     "LTP response contained a non-positive price");
         }
         return value;
+    }
+
+    /**
+     * Read-only SmartAPI FULL market quote for a bounded NSE token batch. FULL mode is used because it is the
+     * provider REST surface that includes best-five bid/ask depth. Response semantics are validated by the
+     * higher-level depth service before becoming research evidence.
+     */
+    public JsonNode fullMarketQuote(String jwtToken, List<String> symbolTokens) {
+        if (symbolTokens == null || symbolTokens.isEmpty() || symbolTokens.size() > 50) {
+            throw new IllegalArgumentException("FULL market quote requires between 1 and 50 symbol tokens");
+        }
+        ObjectNode exchangeTokens = mapper.createObjectNode();
+        var nseTokens = mapper.createArrayNode();
+        for (String token : symbolTokens) {
+            if (token == null || token.isBlank() || token.length() > 64) {
+                throw new IllegalArgumentException("FULL market quote symbol tokens must be non-blank and bounded");
+            }
+            nseTokens.add(token.trim());
+        }
+        exchangeTokens.set("NSE", nseTokens);
+        ObjectNode body = mapper.createObjectNode()
+                .put("mode", "FULL")
+                .set("exchangeTokens", exchangeTokens);
+        JsonNode data = post(MARKET_QUOTE_PATH, jwtToken, body);
+        if (!data.isObject()) {
+            throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MARKET_QUOTE_NOT_OBJECT",
+                    "FULL market quote response data was not an object");
+        }
+        return data;
     }
 
     /**
