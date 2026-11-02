@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+import argparse
+import json
+import math
+from datetime import datetime
+from pathlib import Path
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from .datasets import FundamentalSnapshot
+
+FUNDAMENTAL_EXPORT_CONTRACT = "fundamental-snapshots.v1"
+
+
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return value
+
+
+class ResearchFundamentalSnapshot(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    source_id: Annotated[str, Field(min_length=1, max_length=200)] = Field(alias="sourceId")
+    symbol: Annotated[str, Field(pattern=r"^[A-Z0-9&._-]{1,32}$")]
+    provider: Annotated[str, Field(min_length=1, max_length=80)]
+    provider_record_id: Annotated[str, Field(min_length=1, max_length=200)] = Field(
+        alias="providerRecordId"
+    )
+    period_end: datetime = Field(alias="periodEnd")
+    available_at: datetime = Field(alias="availableAt")
+    metrics: dict[str, float] = Field(default_factory=dict, min_length=1, max_length=256)
+    content_hash: Annotated[str, Field(min_length=1, max_length=128)] = Field(alias="contentHash")
+
+    @field_validator("period_end", "available_at")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        return _aware(value)
+
+    @field_validator("metrics")
+    @classmethod
+    def metrics_must_be_finite(cls, value: dict[str, float]) -> dict[str, float]:
+        if any(not math.isfinite(number) for number in value.values()):
+            raise ValueError("fundamental metrics must be finite")
+        return value
+
+    @model_validator(mode="after")
+    def validate_timing(self) -> ResearchFundamentalSnapshot:
+        if self.available_at < self.period_end:
+            raise ValueError("availableAt cannot be before periodEnd")
+        return self
+
+
+class FundamentalResearchExport(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
+
+    contract_version: Literal["fundamental-snapshots.v1"] = Field(alias="contractVersion")
+    generated_at: datetime = Field(alias="generatedAt")
+    from_inclusive: datetime = Field(alias="fromInclusive")
+    to_exclusive: datetime = Field(alias="toExclusive")
+    data_cutoff: datetime | None = Field(alias="dataCutoff")
+    provider_sources: list[str] = Field(alias="providerSources", max_length=64)
+    snapshots: list[ResearchFundamentalSnapshot] = Field(max_length=20_000)
+
+    @field_validator("generated_at", "from_inclusive", "to_exclusive", "data_cutoff")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        return _aware(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def validate_export(self) -> FundamentalResearchExport:
+        if self.from_inclusive >= self.to_exclusive:
+            raise ValueError("fromInclusive must be before toExclusive")
+        ids = [snapshot.source_id for snapshot in self.snapshots]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate sourceId values are not allowed")
+        for snapshot in self.snapshots:
+            if not self.from_inclusive <= snapshot.available_at < self.to_exclusive:
+                raise ValueError("availableAt is outside the export window")
+            if snapshot.available_at > self.generated_at:
+                raise ValueError("availableAt cannot be after generatedAt")
+        expected_cutoff = max((snapshot.available_at for snapshot in self.snapshots), default=None)
+        if self.data_cutoff != expected_cutoff:
+            raise ValueError("dataCutoff must equal the latest availableAt")
+        providers = {snapshot.provider for snapshot in self.snapshots}
+        if not providers.issubset(set(self.provider_sources)):
+            raise ValueError("providerSources must include every snapshot provider")
+        return self
+
+    def to_fundamental_snapshots(self) -> list[FundamentalSnapshot]:
+        return [
+            FundamentalSnapshot(
+                symbol=snapshot.symbol,
+                observed_at=snapshot.available_at,
+                period_end=snapshot.period_end,
+                source_id=snapshot.source_id,
+                source=snapshot.provider,
+                metrics=dict(sorted(snapshot.metrics.items())),
+            )
+            for snapshot in sorted(
+                self.snapshots,
+                key=lambda item: (item.available_at, item.symbol, item.source_id),
+            )
+        ]
+
+
+def load_fundamental_export(path: Path) -> FundamentalResearchExport:
+    return FundamentalResearchExport.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Validate and normalize Java point-in-time fundamental research exports"
+    )
+    parser.add_argument("export_json", type=Path)
+    args = parser.parse_args()
+
+    snapshots = load_fundamental_export(args.export_json).to_fundamental_snapshots()
+    print(json.dumps([item.model_dump(mode="json") for item in snapshots], sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
