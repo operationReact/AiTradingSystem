@@ -15,10 +15,9 @@ public class HttpIntelligenceClient implements IntelligenceClient {
     private final RestClient restClient;
     private final boolean enabled;
 
-    public HttpIntelligenceClient(RestClient.Builder builder,
-                                  @Value("${app.intelligence.base-url:http://localhost:8090}") String baseUrl,
+    public HttpIntelligenceClient(@Value("${app.intelligence.base-url:http://localhost:8090}") String baseUrl,
                                   @Value("${app.intelligence.enabled:false}") boolean enabled) {
-        this.restClient = builder.baseUrl(baseUrl).build();
+        this.restClient = RestClient.create(baseUrl);
         this.enabled = enabled;
     }
 
