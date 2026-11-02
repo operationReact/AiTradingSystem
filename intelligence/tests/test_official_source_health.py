@@ -2,20 +2,32 @@ from datetime import UTC, datetime, timedelta
 
 from aitrading_intelligence.india_vix_source import parse_india_vix_history
 from aitrading_intelligence.nifty50_history_source import parse_nifty50_history
-from aitrading_intelligence.nifty_constituent_source import parse_nifty50_constituents
+from aitrading_intelligence.nifty_constituent_source import (
+    parse_nifty50_constituents,
+    parse_nifty500_constituents,
+)
 from aitrading_intelligence.nifty_sector_history_source import parse_sector_index_history
 from aitrading_intelligence.official_source_health import build_official_source_health_report
 
 AS_OF = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 
-def _constituent_snapshot(*, observed_at: datetime = AS_OF - timedelta(days=1)):
+def _nifty50_constituent_snapshot(*, observed_at: datetime = AS_OF - timedelta(days=1)):
     source = (
         b"Company Name,Industry,Symbol,Series,ISIN Code\n"
         b"HDFC Bank Ltd.,Financial Services,HDFCBANK,EQ,INE040A01034\n"
         b"Reliance Industries Ltd.,Oil Gas & Consumable Fuels,RELIANCE,EQ,INE002A01018\n"
     )
     return parse_nifty50_constituents(source, observed_at=observed_at)
+
+
+def _nifty500_constituent_snapshot(*, observed_at: datetime = AS_OF - timedelta(days=1)):
+    source = (
+        b"Company Name,Industry,Symbol,Series,ISIN Code\n"
+        b"HDFC Bank Ltd.,Financial Services,HDFCBANK,EQ,INE040A01034\n"
+        b"Reliance Industries Ltd.,Oil Gas & Consumable Fuels,RELIANCE,EQ,INE002A01018\n"
+    )
+    return parse_nifty500_constituents(source, observed_at=observed_at)
 
 
 def _nifty_history(*, future_only: bool = False, future_append: bool = False):
@@ -81,6 +93,7 @@ def _report(
     *,
     as_of: datetime = AS_OF,
     snapshots=None,
+    nifty500_snapshots=None,
     nifty=None,
     vix=None,
     sectors=None,
@@ -88,7 +101,14 @@ def _report(
 ):
     return build_official_source_health_report(
         as_of=as_of,
-        constituent_snapshots=snapshots if snapshots is not None else [_constituent_snapshot()],
+        constituent_snapshots=(
+            snapshots if snapshots is not None else [_nifty50_constituent_snapshot()]
+        ),
+        nifty500_constituent_snapshots=(
+            nifty500_snapshots
+            if nifty500_snapshots is not None
+            else [_nifty500_constituent_snapshot()]
+        ),
         nifty50_history=nifty if nifty is not None else _nifty_history(),
         india_vix_history=vix if vix is not None else _vix_history(),
         sector_histories=sectors if sectors is not None else [_sector_history()],
@@ -105,12 +125,23 @@ def test_current_official_feeds_are_healthy_under_shared_source_health_gate() ->
     assert report.degraded_families == []
     assert [family.family for family in report.families] == [
         "INDIA_VIX_HISTORY",
+        "NIFTY500_CONSTITUENTS",
         "NIFTY50_HISTORY",
         "NIFTY_CONSTITUENTS",
         "SECTOR_NIFTY_BANK",
     ]
-    assert report.causal_sample_count == 4
+    assert report.causal_sample_count == 5
     assert report.can_authorize_capital is False
+
+
+def test_missing_nifty500_constituents_blocks_official_source_health() -> None:
+    report = _report(nifty500_snapshots=[])
+
+    assert report.health == "BLOCKED"
+    assert report.missing_families == ["NIFTY500_CONSTITUENTS"]
+    family = next(item for item in report.families if item.family == "NIFTY500_CONSTITUENTS")
+    assert family.health == "MISSING"
+    assert family.reasons == ["NO_CAUSAL_SAMPLES"]
 
 
 def test_missing_required_sector_blocks_official_source_health() -> None:
@@ -123,7 +154,7 @@ def test_missing_required_sector_blocks_official_source_health() -> None:
     assert sector.reasons == ["NO_CAUSAL_SAMPLES"]
 
 
-def test_stale_daily_feeds_block_while_constituent_snapshot_remains_fresh() -> None:
+def test_stale_daily_feeds_block_while_constituent_snapshots_remain_fresh() -> None:
     report = _report(as_of=AS_OF + timedelta(days=6))
 
     assert report.health == "BLOCKED"
@@ -132,13 +163,28 @@ def test_stale_daily_feeds_block_while_constituent_snapshot_remains_fresh() -> N
         "NIFTY50_HISTORY",
         "SECTOR_NIFTY_BANK",
     ]
-    constituent = next(item for item in report.families if item.family == "NIFTY_CONSTITUENTS")
-    assert constituent.health == "HEALTHY"
+    for family_name in ("NIFTY_CONSTITUENTS", "NIFTY500_CONSTITUENTS"):
+        constituent = next(item for item in report.families if item.family == family_name)
+        assert constituent.health == "HEALTHY"
+
+
+def test_stale_nifty500_constituents_block_source_health() -> None:
+    report = _report(
+        nifty500_snapshots=[
+            _nifty500_constituent_snapshot(observed_at=AS_OF - timedelta(days=15))
+        ]
+    )
+
+    assert report.health == "BLOCKED"
+    assert report.stale_families == ["NIFTY500_CONSTITUENTS"]
 
 
 def test_future_only_feeds_are_missing_at_earlier_as_of_instead_of_raising() -> None:
     report = _report(
-        snapshots=[_constituent_snapshot(observed_at=AS_OF + timedelta(days=1))],
+        snapshots=[_nifty50_constituent_snapshot(observed_at=AS_OF + timedelta(days=1))],
+        nifty500_snapshots=[
+            _nifty500_constituent_snapshot(observed_at=AS_OF + timedelta(days=1))
+        ],
         nifty=_nifty_history(future_only=True),
         vix=_vix_history(future_only=True),
         sectors=[_sector_history(future_only=True)],
@@ -147,6 +193,7 @@ def test_future_only_feeds_are_missing_at_earlier_as_of_instead_of_raising() -> 
     assert report.health == "BLOCKED"
     assert report.missing_families == [
         "INDIA_VIX_HISTORY",
+        "NIFTY500_CONSTITUENTS",
         "NIFTY50_HISTORY",
         "NIFTY_CONSTITUENTS",
         "SECTOR_NIFTY_BANK",
@@ -159,8 +206,12 @@ def test_future_archive_growth_cannot_mutate_historical_health_report() -> None:
     baseline = _report()
     mutated = _report(
         snapshots=[
-            _constituent_snapshot(),
-            _constituent_snapshot(observed_at=AS_OF + timedelta(days=1)),
+            _nifty50_constituent_snapshot(),
+            _nifty50_constituent_snapshot(observed_at=AS_OF + timedelta(days=1)),
+        ],
+        nifty500_snapshots=[
+            _nifty500_constituent_snapshot(),
+            _nifty500_constituent_snapshot(observed_at=AS_OF + timedelta(days=1)),
         ],
         nifty=_nifty_history(future_append=True),
         vix=_vix_history(future_append=True),
