@@ -20,6 +20,22 @@ Key guarantees:
 - research exports include Parquet schema metadata plus a JSON manifest with dataset version, code SHA, source versions, row count and dataset fingerprint;
 - dataset generation remains an offline/research concern and cannot authorize trades.
 
+## Authoritative Java market-history bridge
+
+The Spring backend exposes a bounded, versioned research export at `GET /api/market-data/research/candles`. It reads the existing authoritative `market_candle` history instead of giving Python direct database access.
+
+The `market-history.v1` contract carries instrument catalogue lineage, provider sources, candle event time, first safe feature-availability time and ingestion time. Intraday OHLCV is not considered observable until the candle interval has closed; daily OHLCV is not considered observable until the Indian cash-market close. This prevents the training pipeline from treating a candle's opening timestamp as if its final high/low/close were already known.
+
+Build an offline Parquet dataset from a saved Java export:
+
+```bash
+python -m aitrading_intelligence.market_source market-history.json ./dataset \
+  --dataset-version reliance-5m-v1 \
+  --code-sha <40-char-git-sha>
+```
+
+The resulting manifest records the Java export contract, instrument catalogue version, provider lineage, interval, code SHA and effective data cutoff.
+
 ## Run locally
 
 ```bash
@@ -40,7 +56,8 @@ pytest -q
 
 - all timestamps are timezone-aware;
 - `data_cutoff <= as_of` so later data cannot leak into an earlier decision;
+- candle event time and safe feature-availability time remain distinct;
 - feature values must be finite numbers;
-- every response says `can_authorize_capital=false`;
+- every intelligence response says `can_authorize_capital=false`;
 - canonical SHA-256 fingerprints make validated inputs and dataset rows reproducible;
 - future model evidence must carry model/version/schema/provenance rather than hidden state.
