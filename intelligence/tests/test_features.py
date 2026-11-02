@@ -80,6 +80,46 @@ def test_feature_row_excludes_future_market_event_and_fundamental_data() -> None
     assert "fundamental:filing:fund-future" not in row.provenance
 
 
+def test_feature_row_retains_latest_event_per_type_and_lineage() -> None:
+    as_of = datetime(2026, 11, 1, 9, 30, tzinfo=UTC)
+    events = [
+        EventRecord(
+            symbol="RELIANCE",
+            event_type="NEWS",
+            observed_at=as_of - timedelta(minutes=3),
+            effective_at=as_of - timedelta(minutes=4),
+            source_id="news-1",
+            source="exchange-news",
+            numeric_features={"present": 1.0},
+        ),
+        EventRecord(
+            symbol="RELIANCE",
+            event_type="AI_NEWS_EVIDENCE",
+            observed_at=as_of - timedelta(minutes=1),
+            effective_at=as_of - timedelta(minutes=3),
+            source_id="analysis-1",
+            source="GEMINI",
+            numeric_features={"direction_score": 0.55, "confidence": 0.82},
+            lineage_ids=["news:news-1", "model:gemini-2.5-flash"],
+        ),
+    ]
+
+    row = build_feature_row(
+        symbol="RELIANCE",
+        as_of=as_of,
+        bars=[bar(as_of, 102.0)],
+        events=events,
+    )
+
+    assert row.features["event.NEWS.present"] == 1.0
+    assert row.features["event.AI_NEWS_EVIDENCE.direction_score"] == 0.55
+    assert row.features["event.AI_NEWS_EVIDENCE.confidence"] == 0.82
+    assert "event:exchange-news:news-1" in row.provenance
+    assert "event:GEMINI:analysis-1" in row.provenance
+    assert "event-lineage:news:news-1" in row.provenance
+    assert "event-lineage:model:gemini-2.5-flash" in row.provenance
+
+
 def test_feature_fingerprint_is_deterministic_for_same_point_in_time_inputs() -> None:
     as_of = datetime(2026, 11, 1, 9, 30, tzinfo=UTC)
     bars = [bar(as_of - timedelta(minutes=5), 100.0), bar(as_of, 101.0)]

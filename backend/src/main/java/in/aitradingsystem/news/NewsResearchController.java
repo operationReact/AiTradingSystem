@@ -15,9 +15,13 @@ import org.springframework.web.bind.annotation.RestController;
 @Validated
 public class NewsResearchController {
     private final NewsResearchExportService exports;
+    private final NewsAiEvidenceExportService aiEvidenceExports;
 
-    public NewsResearchController(NewsResearchExportService exports) {
+    public NewsResearchController(
+        NewsResearchExportService exports,
+        NewsAiEvidenceExportService aiEvidenceExports) {
         this.exports = exports;
+        this.aiEvidenceExports = aiEvidenceExports;
     }
 
     @GetMapping("/events")
@@ -26,5 +30,13 @@ public class NewsResearchController {
         @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toExclusive,
         @RequestParam(defaultValue = "5000") @Min(1) @Max(20_000) int limit) {
         return exports.export(fromInclusive, toExclusive, limit);
+    }
+
+    @GetMapping("/ai-evidence")
+    public NewsAiEvidenceExport aiEvidence(
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant fromInclusive,
+        @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant toExclusive,
+        @RequestParam(defaultValue = "5000") @Min(1) @Max(20_000) int limit) {
+        return aiEvidenceExports.export(fromInclusive, toExclusive, limit);
     }
 }

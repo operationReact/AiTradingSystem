@@ -44,7 +44,13 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                 AiErrorCode.INVALID_RESPONSE,
                 "GEMINI interaction did not complete");
         }
-        return new Completion(extractOutputText(root), nullableText(root.path("id")));
+        JsonNode usage = root.path("usage");
+        return new Completion(
+            extractOutputText(root),
+            nullableText(root.path("id")),
+            nullableNonNegativeInt(usage.path("total_input_tokens")),
+            nullableNonNegativeInt(usage.path("total_output_tokens")),
+            nullableNonNegativeInt(usage.path("total_tokens")));
     }
 
     Map<String, Object> requestBody(String systemPrompt, String userPrompt) {
@@ -80,6 +86,11 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
 
     private static String nullableText(JsonNode node) {
         return node != null && node.isTextual() && !node.asText().isBlank() ? node.asText() : null;
+    }
+
+    private static Integer nullableNonNegativeInt(JsonNode node) {
+        if (node == null || !node.canConvertToInt() || node.asInt() < 0) return null;
+        return node.asInt();
     }
 
     private static Map<String, Object> responseSchema() {

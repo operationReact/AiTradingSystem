@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
+from .ai_evidence_source import NewsAiEvidenceExport, load_ai_evidence_export
 from .event_source import NewsResearchExport, load_news_export
 from .exports import export_feature_dataset
 from .features import build_feature_row
@@ -19,12 +20,15 @@ def build_research_dataset(
     output_dir: Path,
     dataset_version: str,
     code_sha: str,
+    ai_evidence: NewsAiEvidenceExport | None = None,
 ):
     bars = market.to_market_bars()
     if not bars:
         raise ValueError("market export contains no candles")
 
     events = news.to_event_records() if news is not None else []
+    if ai_evidence is not None:
+        events.extend(ai_evidence.to_event_records())
     fundamental_rows = (
         fundamentals.to_fundamental_snapshots() if fundamentals is not None else []
     )
@@ -52,6 +56,11 @@ def build_research_dataset(
     if news is not None:
         source_versions["newsExportContract"] = news.contract_version
         source_versions["newsProviders"] = ",".join(sorted(news.provider_sources))
+    if ai_evidence is not None:
+        source_versions["aiEvidenceExportContract"] = ai_evidence.contract_version
+        source_versions["aiEvidenceProviders"] = ",".join(
+            sorted(ai_evidence.provider_sources)
+        )
     if fundamentals is not None:
         source_versions["fundamentalExportContract"] = fundamentals.contract_version
         source_versions["fundamentalProviders"] = ",".join(
@@ -71,8 +80,13 @@ def _validate_shared_window(
     market: MarketResearchExport,
     news: NewsResearchExport | None,
     fundamentals: FundamentalResearchExport | None,
+    ai_evidence: NewsAiEvidenceExport | None = None,
 ) -> None:
-    for name, export in (("news", news), ("fundamentals", fundamentals)):
+    for name, export in (
+        ("news", news),
+        ("ai evidence", ai_evidence),
+        ("fundamentals", fundamentals),
+    ):
         if export is None:
             continue
         if export.from_inclusive > market.from_inclusive:
@@ -89,18 +103,25 @@ def build_from_paths(
     output_dir: Path,
     dataset_version: str,
     code_sha: str,
+    ai_evidence_path: Path | None = None,
 ):
     market = load_market_export(market_path)
     news = load_news_export(news_path) if news_path is not None else None
+    ai_evidence = (
+        load_ai_evidence_export(ai_evidence_path)
+        if ai_evidence_path is not None
+        else None
+    )
     fundamentals = (
         load_fundamental_export(fundamentals_path)
         if fundamentals_path is not None
         else None
     )
-    _validate_shared_window(market, news, fundamentals)
+    _validate_shared_window(market, news, fundamentals, ai_evidence)
     return build_research_dataset(
         market=market,
         news=news,
+        ai_evidence=ai_evidence,
         fundamentals=fundamentals,
         output_dir=output_dir,
         dataset_version=dataset_version,
@@ -111,13 +132,14 @@ def build_from_paths(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Build a deterministic point-in-time feature dataset from market, news, "
-            "and fundamental exports"
+            "Build a deterministic point-in-time feature dataset from market, raw news, "
+            "AI evidence and fundamental exports"
         )
     )
     parser.add_argument("market_json", type=Path)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--news-json", type=Path)
+    parser.add_argument("--ai-evidence-json", type=Path)
     parser.add_argument("--fundamentals-json", type=Path)
     parser.add_argument("--dataset-version", required=True)
     parser.add_argument("--code-sha", required=True)
@@ -126,6 +148,7 @@ def main() -> None:
     manifest = build_from_paths(
         market_path=args.market_json,
         news_path=args.news_json,
+        ai_evidence_path=args.ai_evidence_json,
         fundamentals_path=args.fundamentals_json,
         output_dir=args.output_dir,
         dataset_version=args.dataset_version,

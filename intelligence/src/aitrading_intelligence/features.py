@@ -49,11 +49,28 @@ class FeatureRow(BaseModel):
 
 
 def _latest_by_observed_at(
-    records: Iterable[EventRecord | FundamentalSnapshot],
+    records: Iterable[FundamentalSnapshot],
     as_of: datetime,
-) -> EventRecord | FundamentalSnapshot | None:
+) -> FundamentalSnapshot | None:
     eligible = [record for record in records if record.observed_at <= as_of]
     return max(eligible, key=lambda record: record.observed_at, default=None)
+
+
+def _latest_events_by_type(
+    records: Iterable[EventRecord],
+    as_of: datetime,
+) -> list[EventRecord]:
+    latest: dict[str, EventRecord] = {}
+    for record in records:
+        if record.observed_at > as_of:
+            continue
+        current = latest.get(record.event_type)
+        if current is None or (record.observed_at, record.source_id) > (
+            current.observed_at,
+            current.source_id,
+        ):
+            latest[record.event_type] = record
+    return [latest[event_type] for event_type in sorted(latest)]
 
 
 def build_feature_row(
@@ -89,18 +106,19 @@ def build_feature_row(
 
     provenance = [f"market:{latest.source}:{latest.observed_at.isoformat()}"]
 
-    latest_event = _latest_by_observed_at(
+    latest_events = _latest_events_by_type(
         (event for event in events if event.symbol == symbol), as_of
     )
-    if isinstance(latest_event, EventRecord):
-        for name, value in sorted(latest_event.numeric_features.items()):
-            features[f"event.{latest_event.event_type}.{name}"] = value
-        provenance.append(f"event:{latest_event.source}:{latest_event.source_id}")
+    for event in latest_events:
+        for name, value in sorted(event.numeric_features.items()):
+            features[f"event.{event.event_type}.{name}"] = value
+        provenance.append(f"event:{event.source}:{event.source_id}")
+        provenance.extend(f"event-lineage:{lineage}" for lineage in event.lineage_ids)
 
     latest_fundamental = _latest_by_observed_at(
         (snapshot for snapshot in fundamentals if snapshot.symbol == symbol), as_of
     )
-    if isinstance(latest_fundamental, FundamentalSnapshot):
+    if latest_fundamental is not None:
         for name, value in sorted(latest_fundamental.metrics.items()):
             features[f"fundamental.{name}"] = value
         provenance.append(
@@ -109,7 +127,7 @@ def build_feature_row(
 
     data_cutoff = max(
         [latest.observed_at]
-        + ([latest_event.observed_at] if latest_event is not None else [])
+        + [event.observed_at for event in latest_events]
         + ([latest_fundamental.observed_at] if latest_fundamental is not None else [])
     )
     payload = {
