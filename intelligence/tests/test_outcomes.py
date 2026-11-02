@@ -77,7 +77,10 @@ def test_outcome_normalizes_path_slippage_and_is_order_invariant() -> None:
 def test_outcome_rejects_future_cutoff_and_price_path_outside_holding_window() -> None:
     source = _source()
     with pytest.raises(ValueError, match="data_cutoff"):
-        source.model_copy(update={"data_cutoff": source.decision_at + timedelta(seconds=1)})
+        TradeOutcomeInput(
+            **source.model_dump(exclude={"data_cutoff"}),
+            data_cutoff=source.decision_at + timedelta(seconds=1),
+        )
 
     with pytest.raises(ValueError, match="holding window"):
         TradeOutcomeInput(
