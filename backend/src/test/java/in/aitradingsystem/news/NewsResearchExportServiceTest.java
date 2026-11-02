@@ -57,7 +57,7 @@ class NewsResearchExportServiceTest {
             .hasMessageContaining("fromInclusive");
         assertThatThrownBy(() -> service.export(FROM, TO, 20_001))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("20_000");
+            .hasMessageContaining("20000");
     }
 
     private static NewsItem item(String id, String source, Instant publishedAt, Instant fetchedAt,
