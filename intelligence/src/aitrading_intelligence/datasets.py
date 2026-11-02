@@ -84,6 +84,12 @@ class FundamentalSnapshot(BaseModel):
     def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         return _require_aware(value)
 
+    @model_validator(mode="after")
+    def period_must_precede_availability(self) -> FundamentalSnapshot:
+        if self.period_end > self.observed_at:
+            raise ValueError("period_end cannot be after observed_at")
+        return self
+
 
 class DatasetManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
