@@ -30,13 +30,18 @@ class OfficialMarketSourceIngestionServiceTest {
 
         List<OfficialMarketSourceIngestionService.SourceRequest> requests = service.scheduledRequests();
 
-        assertThat(requests).hasSize(5);
+        assertThat(requests).hasSize(6);
         assertThat(requests.get(0).family()).isEqualTo(OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS);
         assertThat(requests.get(0).sourceUri().toString())
                 .isEqualTo("https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv");
         assertThat(requests.get(0).bootstrapUri()).isNull();
 
-        OfficialMarketSourceIngestionService.SourceRequest nifty = requests.get(1);
+        assertThat(requests.get(1).family()).isEqualTo(OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS);
+        assertThat(requests.get(1).sourceUri().toString())
+                .isEqualTo("https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv");
+        assertThat(requests.get(1).bootstrapUri()).isNull();
+
+        OfficialMarketSourceIngestionService.SourceRequest nifty = requests.get(2);
         assertThat(nifty.family()).isEqualTo(OfficialMarketSourceFamily.NIFTY50_HISTORY);
         assertThat(nifty.sourceUri().getRawQuery())
                 .contains("indexType=NIFTY+50", "from=26-10-2026", "to=02-11-2026", "csv=true");
@@ -46,7 +51,7 @@ class OfficialMarketSourceIngestionServiceTest {
                 .filter(request -> request.family() == OfficialMarketSourceFamily.SECTOR_INDEX_HISTORY)
                 .map(OfficialMarketSourceIngestionService.SourceRequest::variant))
                 .containsExactly("NIFTY_BANK", "NIFTY_IT");
-        assertThat(requests.get(4).family()).isEqualTo(OfficialMarketSourceFamily.INDIA_VIX_HISTORY);
+        assertThat(requests.get(5).family()).isEqualTo(OfficialMarketSourceFamily.INDIA_VIX_HISTORY);
     }
 
     @Test
@@ -55,9 +60,11 @@ class OfficialMarketSourceIngestionServiceTest {
 
         List<OfficialMarketSourceIngestionService.SourceRequest> requests = service.scheduledRequests();
 
-        assertThat(requests).singleElement()
+        assertThat(requests)
                 .extracting(OfficialMarketSourceIngestionService.SourceRequest::family)
-                .isEqualTo(OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS);
+                .containsExactly(
+                        OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS);
     }
 
     @Test
@@ -80,6 +87,25 @@ class OfficialMarketSourceIngestionServiceTest {
     }
 
     @Test
+    void nifty500PayloadUsesItsOwnFamilyLimitAndArchiveLineage() {
+        OfficialMarketSourceIngestionService service = service("", "", "");
+        OfficialMarketSourceIngestionService.SourceRequest request = service.scheduledRequests().get(1);
+        byte[] body = "Company Name,Industry,Symbol,Series,ISIN Code\n".getBytes();
+        when(transport.get(request.sourceUri(), null, OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS.maxBytes()))
+                .thenReturn(new OfficialMarketSourceTransport.Response("application/octet-stream", body));
+
+        service.ingest(request);
+
+        verify(archive).archive(
+                eq(OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS),
+                eq(""),
+                eq("https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"),
+                eq(NOW),
+                eq("application/octet-stream"),
+                argThat(payload -> java.util.Arrays.equals(payload, body)));
+    }
+
+    @Test
     void unsupportedSectorConfigurationFailsClosed() {
         assertThatThrownBy(() -> service("", "", "NIFTY_FAKE_SECTOR"))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -95,6 +121,7 @@ class OfficialMarketSourceIngestionServiceTest {
                 transport,
                 clock,
                 "https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv",
+                "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv",
                 indexEndpoint,
                 vixEndpoint,
                 "https://www.nseindia.com/",
