@@ -13,6 +13,7 @@ from aitrading_intelligence.lightgbm_model import (
 )
 from aitrading_intelligence.model_fair_comparison import (
     FairComparisonConfig,
+    ModelFairComparisonReport,
     evaluate_model_families,
 )
 from aitrading_intelligence.model_registry import (
@@ -56,7 +57,8 @@ def _series(length: int = 71) -> list[FeatureRow]:
     return rows
 
 
-def _evidence():
+@pytest.fixture(scope="module")
+def registry_evidence():
     rows = _series()
     spec = ForwardReturnTargetSpec(
         horizon_bars=1,
@@ -94,8 +96,10 @@ def _evidence():
     return comparison, lightgbm, catboost, evaluation_as_of
 
 
-def test_gradient_boosting_models_register_against_exact_fair_comparison() -> None:
-    comparison, lightgbm, catboost, evaluation_as_of = _evidence()
+def test_gradient_boosting_models_register_against_exact_fair_comparison(
+    registry_evidence,
+) -> None:
+    comparison, lightgbm, catboost, evaluation_as_of = registry_evidence
     registered_at = evaluation_as_of + timedelta(minutes=1)
 
     light_entry = register_gradient_boosting_model_lab_entry(
@@ -125,8 +129,10 @@ def test_gradient_boosting_models_register_against_exact_fair_comparison() -> No
     assert cat_entry.can_authorize_capital is False
 
 
-def test_model_lab_registry_separates_semantic_reproducibility_from_registration_time() -> None:
-    comparison, lightgbm, _, evaluation_as_of = _evidence()
+def test_model_lab_registry_separates_reproducibility_from_registration_time(
+    registry_evidence,
+) -> None:
+    comparison, lightgbm, _, evaluation_as_of = registry_evidence
     registered_at = evaluation_as_of + timedelta(minutes=1)
     kwargs = {
         "model_family": "LIGHTGBM",
@@ -152,11 +158,16 @@ def test_model_lab_registry_separates_semantic_reproducibility_from_registration
     assert first.reproducibility_fingerprint != changed_code.reproducibility_fingerprint
 
 
-def test_model_lab_registry_fails_closed_on_family_target_or_time_mismatch() -> None:
-    comparison, lightgbm, _, evaluation_as_of = _evidence()
+def test_model_lab_registry_fails_closed_on_family_target_or_time_mismatch(
+    registry_evidence,
+) -> None:
+    comparison, lightgbm, _, evaluation_as_of = registry_evidence
     registered_at = evaluation_as_of + timedelta(minutes=1)
 
-    with pytest.raises(ValueError, match="model version does not match requested model family"):
+    with pytest.raises(
+        ValueError,
+        match="model version does not match requested model family",
+    ):
         register_gradient_boosting_model_lab_entry(
             model_family="CATBOOST",
             artifact=lightgbm,
@@ -165,7 +176,7 @@ def test_model_lab_registry_fails_closed_on_family_target_or_time_mismatch() -> 
             registered_at=registered_at,
         )
 
-    mismatched_target = comparison.model_copy(
+    mismatched_target: ModelFairComparisonReport = comparison.model_copy(
         update={"target_spec_fingerprint": "f" * 64}
     )
     with pytest.raises(ValueError, match="target lineage does not match"):
@@ -177,7 +188,10 @@ def test_model_lab_registry_fails_closed_on_family_target_or_time_mismatch() -> 
             registered_at=registered_at,
         )
 
-    with pytest.raises(ValueError, match="evaluation cutoff cannot exceed registration time"):
+    with pytest.raises(
+        ValueError,
+        match="evaluation cutoff cannot exceed registration time",
+    ):
         register_gradient_boosting_model_lab_entry(
             model_family="LIGHTGBM",
             artifact=lightgbm,
