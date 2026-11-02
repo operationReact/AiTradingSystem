@@ -1,6 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from aitrading_intelligence.fusion import FusionEvidence, FusionRequest, fuse_signals
+from aitrading_intelligence.regime import RegimeSnapshot
 
 
 def _evidence(
@@ -19,6 +22,26 @@ def _evidence(
         observed_at=observed_at,
         fingerprint=(seed * 64)[:64],
         reasons=["fixture"],
+    )
+
+
+def _regime(as_of: datetime, *, seed: str = "9") -> RegimeSnapshot:
+    return RegimeSnapshot(
+        as_of=as_of,
+        data_cutoff=as_of - timedelta(minutes=1),
+        method="HEURISTIC_BASELINE",
+        dominant_regime="TREND_UP",
+        probabilities={
+            "TREND_UP": 0.60,
+            "TREND_DOWN": 0.10,
+            "RANGE_LOW_VOL": 0.20,
+            "STRESS_HIGH_VOL": 0.10,
+        },
+        confidence=0.60,
+        evidence={"benchmark.NIFTY50.return_1d": 0.012},
+        input_fingerprint=("8" * 64),
+        config_fingerprint=("7" * 64),
+        snapshot_fingerprint=(seed * 64)[:64],
     )
 
 
@@ -94,3 +117,66 @@ def test_model_disagreement_remains_watch() -> None:
 
     assert result.action == "WATCH"
     assert "QUANT_NOT_POSITIVE" in result.reason_codes
+
+
+def test_fresh_regime_is_exposed_but_does_not_change_fusion_decision() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    base = FusionRequest(
+        symbol="RELIANCE",
+        as_of=as_of,
+        deterministic=_evidence("DETERMINISTIC", 0.80, 0.90, as_of, "a"),
+        quant=_evidence("QUANT", 0.70, 0.80, as_of, "b"),
+    )
+    with_regime = base.model_copy(update={"regime": _regime(as_of)})
+
+    without_regime_result = fuse_signals(base)
+    result = fuse_signals(with_regime)
+
+    assert result.action == without_regime_result.action == "BUY"
+    assert result.fused_score == without_regime_result.fused_score
+    assert result.rank_score == without_regime_result.rank_score
+    assert result.confidence == without_regime_result.confidence
+    assert result.contributions == without_regime_result.contributions
+    assert result.regime_evidence is not None
+    assert result.regime_evidence.included is True
+    assert result.regime_evidence.reason == "FRESH_ADVISORY_ONLY"
+    assert result.regime_evidence.influences_fusion_score is False
+    assert result.regime_evidence.can_authorize_capital is False
+    assert result.regime_evidence.dominant_regime == "TREND_UP"
+    assert "REGIME_ADVISORY_ONLY" in result.reason_codes
+    assert result.provenance[-1].startswith("REGIME:HEURISTIC_BASELINE:")
+    assert result.opportunity_fingerprint != without_regime_result.opportunity_fingerprint
+
+
+def test_stale_regime_remains_visible_but_cannot_block_or_create_buy() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    request = FusionRequest(
+        symbol="TCS",
+        as_of=as_of,
+        max_age_seconds=300,
+        deterministic=_evidence("DETERMINISTIC", 0.75, 0.90, as_of, "d"),
+        quant=_evidence("QUANT", 0.65, 0.85, as_of, "e"),
+        regime=_regime(as_of - timedelta(minutes=10), seed="6"),
+    )
+
+    result = fuse_signals(request)
+
+    assert result.action == "BUY"
+    assert result.regime_evidence is not None
+    assert result.regime_evidence.included is False
+    assert result.regime_evidence.reason == "STALE_ADVISORY_ONLY"
+    assert "REGIME_STALE" in result.reason_codes
+    assert "REGIME_ADVISORY_ONLY" in result.reason_codes
+
+
+def test_future_regime_evidence_is_rejected() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+
+    with pytest.raises(ValueError, match="regime as_of cannot be later than fusion as_of"):
+        FusionRequest(
+            symbol="INFY",
+            as_of=as_of,
+            deterministic=_evidence("DETERMINISTIC", 0.80, 0.90, as_of, "3"),
+            quant=_evidence("QUANT", 0.60, 0.90, as_of, "4"),
+            regime=_regime(as_of + timedelta(minutes=1), seed="5"),
+        )
