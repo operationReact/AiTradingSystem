@@ -43,15 +43,23 @@ class InstrumentCatalogueResearchExport(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
-    contract_version: Literal["instrument-catalogue.v1"] = Field(alias="contractVersion")
+    contract_version: Literal["instrument-catalogue.v1"] = Field(
+        alias="contractVersion"
+    )
     generated_at: datetime = Field(alias="generatedAt")
     as_of: datetime = Field(alias="asOf")
     data_cutoff: datetime = Field(alias="dataCutoff")
     catalogue_version: UUID = Field(alias="catalogueVersion")
     catalogue_available_at: datetime = Field(alias="catalogueAvailableAt")
-    source_url: Annotated[str, Field(min_length=1, max_length=2048)] = Field(alias="sourceUrl")
-    source_accepted_count: Annotated[int, Field(ge=0)] = Field(alias="sourceAcceptedCount")
-    source_rejected_count: Annotated[int, Field(ge=0)] = Field(alias="sourceRejectedCount")
+    source_url: Annotated[str, Field(min_length=1, max_length=2048)] = Field(
+        alias="sourceUrl"
+    )
+    source_accepted_count: Annotated[int, Field(ge=0)] = Field(
+        alias="sourceAcceptedCount"
+    )
+    source_rejected_count: Annotated[int, Field(ge=0)] = Field(
+        alias="sourceRejectedCount"
+    )
     exchanges: list[Literal["BSE", "NSE"]] = Field(min_length=2, max_length=2)
     instrument_type: Literal["EQ"] = Field(alias="instrumentType")
     row_count: Annotated[int, Field(ge=1, le=50_000)] = Field(alias="rowCount")
