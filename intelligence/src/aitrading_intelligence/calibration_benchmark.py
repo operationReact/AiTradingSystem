@@ -33,7 +33,7 @@ class CalibrationBenchmarkConfig(BaseModel):
     benchmark_version: Literal["calibration-benchmark.v1"] = CALIBRATION_BENCHMARK_VERSION
     fit_fraction: Annotated[float, Field(ge=0.5, le=0.8)] = 0.7
     minimum_fit_rows: Annotated[int, Field(ge=20, le=100_000)] = 30
-    minimum_evaluation_rows: Annotated[int, Field(ge=10, le=100_000)] = 20
+    minimum_evaluation_rows: Annotated[int, Field(ge=20, le=100_000)] = 20
     calibration_bins: Annotated[int, Field(ge=5, le=50)] = 10
     maximum_brier_regression: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
     maximum_log_loss_regression: Annotated[float, Field(ge=0.0, le=10.0)] = 0.0
@@ -87,7 +87,7 @@ class CalibrationBenchmarkReport(BaseModel):
     benchmark_as_of: datetime
     config_fingerprint: Hash64
     fit_observation_fingerprints: list[Hash64] = Field(min_length=20)
-    evaluation_observation_fingerprints: list[Hash64] = Field(min_length=10)
+    evaluation_observation_fingerprints: list[Hash64] = Field(min_length=20)
     purged_observation_fingerprints: list[Hash64]
     fit_dataset_fingerprint: Hash64
     evaluation_dataset_fingerprint: Hash64
@@ -379,6 +379,9 @@ def _candidate(
             reasons.append("ECE_REGRESSION")
         if not reasons:
             reasons.append("NO_CALIBRATION_METRIC_REGRESSION")
+    eligible = method == "RAW" or (
+        len(reasons) == 1 and reasons[0] == "NO_CALIBRATION_METRIC_REGRESSION"
+    )
     return CalibrationCandidateEvaluation(
         method=method,
         artifact_fingerprint=(artifact.artifact_fingerprint if artifact else None),
@@ -389,7 +392,7 @@ def _candidate(
         brier_delta_vs_raw=float(brier_delta),
         log_loss_delta_vs_raw=float(log_loss_delta),
         ece_delta_vs_raw=float(ece_delta),
-        eligible_for_selection=(method == "RAW" or len(reasons) == 1 and reasons[0] == "NO_CALIBRATION_METRIC_REGRESSION"),
+        eligible_for_selection=eligible,
         reason_codes=reasons,
     )
 
