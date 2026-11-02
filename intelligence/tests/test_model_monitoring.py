@@ -73,12 +73,17 @@ def test_stable_monitoring_report_is_deterministic_and_non_authorizing() -> None
 
 
 def test_mild_calibration_regression_enters_watch_without_retraining() -> None:
-    reference = _window(prefix="ref", start=START)
+    reference = _window(
+        prefix="ref",
+        start=START,
+        negative_probability=0.15,
+        positive_probability=0.85,
+    )
     current = _window(
         prefix="cur",
         start=START + timedelta(days=1),
-        negative_probability=0.15,
-        positive_probability=0.85,
+        negative_probability=0.19,
+        positive_probability=0.81,
     )
 
     report = evaluate_model_monitoring(
