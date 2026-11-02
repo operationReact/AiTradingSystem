@@ -94,6 +94,10 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
         approvalJdbc.sql("DELETE FROM order_approval WHERE order_id IN (" + owned + ")").param("v", catalogue).update();
         approvalJdbc.sql("DELETE FROM risk_decision_rule WHERE risk_decision_id IN (SELECT id FROM risk_decision WHERE order_id IN (" + owned + "))")
             .param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM paper_trade_lot_close WHERE exit_order_id IN (" + owned + ") OR lot_id IN (SELECT id FROM paper_trade_lot WHERE entry_order_id IN (" + owned + "))")
+            .param("v", catalogue).update();
+        approvalJdbc.sql("DELETE FROM paper_trade_lot WHERE entry_order_id IN (" + owned + ")")
+            .param("v", catalogue).update();
         for (String table : java.util.List.of("risk_decision", "paper_fill", "paper_cash_entry")) {
             approvalJdbc.sql("DELETE FROM " + table + " WHERE order_id IN (" + owned + ")").param("v", catalogue).update();
         }
