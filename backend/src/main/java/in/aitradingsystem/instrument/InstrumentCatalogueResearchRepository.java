@@ -42,18 +42,16 @@ public class InstrumentCatalogueResearchRepository {
     }
 
     /**
-     * Returns only India cash-market equity candidates. Liquidity qualification belongs to a later V3 universe step.
-     * limit is deliberately supplied as maxRows + 1 so the caller can fail rather than silently truncate evidence.
+     * Returns only India cash-market equity candidates from long-horizon immutable history.
+     * Liquidity qualification belongs to a later V3 universe step.  The caller supplies maxRows + 1
+     * so oversized evidence fails instead of being silently truncated.
      */
     public List<InstrumentCatalogueResearchExport.ResearchInstrument> cashEquities(UUID catalogueVersion, int limit) {
         return jdbc.query("""
                 SELECT instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
                        instrument_name, instrument_type, expiry, strike, lot_size, tick_size
-                  FROM instrument_master
+                  FROM instrument_cash_catalogue_history
                  WHERE catalogue_version = ?
-                   AND active = TRUE
-                   AND exchange IN ('BSE', 'NSE')
-                   AND instrument_type = 'EQ'
                  ORDER BY exchange ASC, trading_symbol ASC, symbol_token ASC, instrument_id ASC
                  LIMIT ?
                 """, (rs, row) -> mapInstrument(rs, row), catalogueVersion, limit);

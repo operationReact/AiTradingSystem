@@ -78,13 +78,19 @@ public class InstrumentMasterRepository {
                            active_count = ?, catalogue_version = ?, error_code = NULL, error_message = NULL
                      WHERE id = ? AND status = 'RUNNING'
                     """, bytes, parsed, publishedCount, rejected, duplicates, publishedCount, runId, runId);
+
+            // Preserve a compact immutable research snapshot before operational catalogue cleanup.
+            // Only NSE/BSE cash equities are retained long-term; derivatives remain short-retention operational data.
+            retainCashEquityHistory(runId);
+
             jdbc.update("""
                     UPDATE instrument_catalogue_state
                        SET active_version = ?, activated_at = now()
                      WHERE singleton_id = 1
                     """, runId);
 
-            // Retain the active plus two previous successful catalogues; history rows stay for audit.
+            // Retain the active plus two previous successful catalogues for operational lookup.
+            // Long-horizon cash-equity research history lives separately in instrument_cash_catalogue_history.
             jdbc.update("""
                     DELETE FROM instrument_master
                      WHERE catalogue_version IN (
@@ -97,6 +103,22 @@ public class InstrumentMasterRepository {
             return publishedCount;
         });
         return activeCount == null ? 0 : activeCount;
+    }
+
+    private void retainCashEquityHistory(UUID runId) {
+        jdbc.update("""
+                INSERT INTO instrument_cash_catalogue_history
+                    (catalogue_version, instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
+                     instrument_name, instrument_type, expiry, strike, lot_size, tick_size, source_updated_at)
+                SELECT catalogue_version, instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
+                       instrument_name, instrument_type, expiry, strike, lot_size, tick_size, source_updated_at
+                  FROM instrument_master
+                 WHERE catalogue_version = ?
+                   AND active = TRUE
+                   AND exchange IN ('NSE', 'BSE')
+                   AND instrument_type = 'EQ'
+                ON CONFLICT DO NOTHING
+                """, runId);
     }
 
     private CatalogueState lockCatalogueState() {
@@ -262,7 +284,6 @@ public class InstrumentMasterRepository {
                 rs.getLong("active_count")))
                 .stream().findFirst().orElse(new CatalogueSummary(null, null, 0));
     }
-
 
     private static Instant toInstant(java.time.OffsetDateTime value) {
         return value == null ? null : value.toInstant();

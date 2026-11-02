@@ -20,6 +20,7 @@ class InstrumentMasterApiIT extends AbstractPostgresIT {
 
     @BeforeEach
     void resetInstrumentCatalogue() {
+        jdbc.update("DELETE FROM instrument_cash_catalogue_history");
         jdbc.update("DELETE FROM instrument_master");
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = NULL, activated_at = NULL WHERE singleton_id = 1");
         jdbc.update("DELETE FROM instrument_import_run");
