@@ -62,15 +62,15 @@ class CalibrationDomainProfile(BaseModel):
             raise ValueError("observation fingerprint count must equal observation_count")
         if len(set(self.observation_fingerprints)) != self.observation_count:
             raise ValueError("domain profile observations must be unique")
-        ordered = (
-            self.raw_probability_min,
-            self.raw_probability_p05,
-            self.raw_probability_mean,
-            self.raw_probability_p95,
-            self.raw_probability_max,
-        )
-        if any(right < left for left, right in zip(ordered, ordered[1:], strict=False)):
-            raise ValueError("probability-domain statistics must be monotonic")
+        if not (
+            self.raw_probability_min
+            <= self.raw_probability_p05
+            <= self.raw_probability_p95
+            <= self.raw_probability_max
+        ):
+            raise ValueError("probability quantiles must be ordered within hard support")
+        if not self.raw_probability_min <= self.raw_probability_mean <= self.raw_probability_max:
+            raise ValueError("probability mean must lie within hard support")
         return self
 
 
