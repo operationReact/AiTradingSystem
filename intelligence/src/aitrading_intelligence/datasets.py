@@ -62,6 +62,9 @@ class EventRecord(BaseModel):
     source_id: Annotated[str, Field(min_length=1, max_length=200)]
     source: Annotated[str, Field(min_length=1, max_length=80)]
     numeric_features: dict[str, float] = Field(default_factory=dict, max_length=128)
+    lineage_ids: list[Annotated[str, Field(min_length=1, max_length=240)]] = Field(
+        default_factory=list, max_length=32
+    )
 
     @field_validator("observed_at", "effective_at")
     @classmethod
