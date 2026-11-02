@@ -12,7 +12,9 @@ START = datetime(2026, 1, 5, 3, 45, tzinfo=UTC)
 TARGET_SPEC = "b" * 64
 
 
-def _fixture(length: int = 50) -> tuple[list[RankedOpportunity], list[LabeledExample], list[FeatureRow]]:
+def _fixture(
+    length: int = 50,
+) -> tuple[list[RankedOpportunity], list[LabeledExample], list[FeatureRow]]:
     opportunities: list[RankedOpportunity] = []
     examples: list[LabeledExample] = []
     rows: list[FeatureRow] = []
@@ -30,7 +32,13 @@ def _fixture(length: int = 50) -> tuple[list[RankedOpportunity], list[LabeledExa
         else:
             return_1 = 0.001
             range_pct = 0.012
-        forward_return = 0.012 if return_1 >= 0.005 else -0.008 if return_1 <= -0.005 else 0.004
+        forward_return = (
+            0.012
+            if return_1 >= 0.005
+            else -0.008
+            if return_1 <= -0.005
+            else 0.004
+        )
         row_fingerprint = f"{index + 1000:064x}"
         opportunity_fingerprint = f"{index + 2000:064x}"
         example_fingerprint = f"{index + 3000:064x}"
@@ -125,7 +133,10 @@ def test_walk_forward_is_purged_deterministic_and_research_only() -> None:
         assert sum(item.candidate_count for item in fold.regime_metrics) == len(
             fold.test_opportunity_fingerprints
         )
-        assert sum(item.trade_count for item in fold.regime_metrics) == fold.replay.metrics.trade_count
+        assert (
+            sum(item.trade_count for item in fold.regime_metrics)
+            == fold.replay.metrics.trade_count
+        )
 
 
 def test_walk_forward_uses_causal_feature_regimes() -> None:
