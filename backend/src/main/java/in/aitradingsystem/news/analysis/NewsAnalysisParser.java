@@ -20,6 +20,7 @@ public class NewsAnalysisParser {
     public static final Set<String> SENTIMENTS = Set.of("POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED");
     public static final Set<String> CATEGORIES =
         Set.of("EARNINGS", "REGULATORY", "MACRO", "CORPORATE_ACTION", "MANAGEMENT", "SECTOR", "OTHER");
+    public static final Set<String> HORIZONS = Set.of("INTRADAY", "MULTI_DAY", "LONGER_TERM", "UNKNOWN");
     private static final Pattern SYMBOL = Pattern.compile("^[A-Z0-9&-]{1,20}$");
     private static final int MAX_SYMBOLS = 10;
     private static final int MAX_RISKS = 5;
@@ -31,11 +32,24 @@ public class NewsAnalysisParser {
         this.mapper = mapper;
     }
 
-    public record Result(String sentiment, String category, BigDecimal confidence, List<String> impactedSymbols,
-        String evidence, List<String> risks) {}
+    public record Result(
+        String sentiment,
+        BigDecimal directionScore,
+        String category,
+        BigDecimal confidence,
+        BigDecimal materiality,
+        String horizon,
+        BigDecimal novelty,
+        boolean contradiction,
+        boolean ambiguity,
+        List<String> impactedSymbols,
+        String evidence,
+        List<String> risks) {}
 
     public Result parse(String raw) {
-        if (raw == null || raw.isBlank()) throw new AiProviderException(AiErrorCode.INVALID_RESPONSE, "Empty model response");
+        if (raw == null || raw.isBlank()) {
+            throw new AiProviderException(AiErrorCode.INVALID_RESPONSE, "Empty model response");
+        }
         JsonNode root;
         try {
             root = mapper.readTree(stripFences(raw));
@@ -47,13 +61,14 @@ public class NewsAnalysisParser {
         }
 
         String sentiment = enumField(root, "sentiment", SENTIMENTS);
+        BigDecimal directionScore = boundedNumber(root, "directionScore", -1, 1);
         String category = enumField(root, "category", CATEGORIES);
-
-        JsonNode conf = root.get("confidence");
-        if (conf == null || !conf.isNumber()) throw invalid("confidence must be a number");
-        double c = conf.asDouble();
-        if (Double.isNaN(c) || c < 0 || c > 1) throw invalid("confidence must be between 0 and 1");
-        BigDecimal confidence = BigDecimal.valueOf(c).setScale(3, RoundingMode.HALF_UP);
+        BigDecimal confidence = boundedNumber(root, "confidence", 0, 1);
+        BigDecimal materiality = boundedNumber(root, "materiality", 0, 1);
+        String horizon = enumField(root, "horizon", HORIZONS);
+        BigDecimal novelty = boundedNumber(root, "novelty", 0, 1);
+        boolean contradiction = booleanField(root, "contradiction");
+        boolean ambiguity = booleanField(root, "ambiguity");
 
         List<String> symbols = new ArrayList<>();
         for (JsonNode s : arrayField(root, "impactedSymbols", MAX_SYMBOLS)) {
@@ -73,7 +88,35 @@ public class NewsAnalysisParser {
             risks.add(truncate(r.asText().trim(), 200));
         }
 
-        return new Result(sentiment, category, confidence, List.copyOf(symbols), evidence, List.copyOf(risks));
+        return new Result(
+            sentiment,
+            directionScore,
+            category,
+            confidence,
+            materiality,
+            horizon,
+            novelty,
+            contradiction,
+            ambiguity,
+            List.copyOf(symbols),
+            evidence,
+            List.copyOf(risks));
+    }
+
+    private BigDecimal boundedNumber(JsonNode root, String name, double min, double max) {
+        JsonNode node = root.get(name);
+        if (node == null || !node.isNumber()) throw invalid(name + " must be a number");
+        double value = node.asDouble();
+        if (Double.isNaN(value) || !Double.isFinite(value) || value < min || value > max) {
+            throw invalid(name + " must be between " + min + " and " + max);
+        }
+        return BigDecimal.valueOf(value).setScale(3, RoundingMode.HALF_UP);
+    }
+
+    private boolean booleanField(JsonNode root, String name) {
+        JsonNode node = root.get(name);
+        if (node == null || !node.isBoolean()) throw invalid(name + " must be a boolean");
+        return node.asBoolean();
     }
 
     private String enumField(JsonNode root, String name, Set<String> allowed) {
