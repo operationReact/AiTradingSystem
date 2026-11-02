@@ -54,12 +54,20 @@ class IsotonicParameters(BaseModel):
             raise ValueError("isotonic x/y thresholds must have equal length")
         if any(
             right <= left
-            for left, right in zip(self.x_thresholds, self.x_thresholds[1:])
+            for left, right in zip(
+                self.x_thresholds,
+                self.x_thresholds[1:],
+                strict=False,
+            )
         ):
             raise ValueError("isotonic x thresholds must be strictly increasing")
         if any(
             right < left
-            for left, right in zip(self.y_thresholds, self.y_thresholds[1:])
+            for left, right in zip(
+                self.y_thresholds,
+                self.y_thresholds[1:],
+                strict=False,
+            )
         ):
             raise ValueError("isotonic y thresholds must be nondecreasing")
         return self
@@ -337,10 +345,12 @@ def write_calibration_artifact(path: Path, artifact: CalibrationArtifact) -> Pat
         with path.open("x", encoding="utf-8", newline="\n") as handle:
             handle.write(serialized)
             handle.write("\n")
-    except FileExistsError:
+    except FileExistsError as exc:
         existing = load_calibration_artifact(path)
         if existing != artifact:
-            raise FileExistsError("calibration artifact path already contains different evidence")
+            raise FileExistsError(
+                "calibration artifact path already contains different evidence"
+            ) from exc
     return path
 
 
