@@ -42,7 +42,14 @@ class ModelPredictionV2(BaseModel):
     target_definition_fingerprint: Hash64
     raw_probability: Annotated[float, Field(ge=0.0, le=1.0)]
     raw_score: Annotated[float, Field(ge=-1.0, le=1.0)]
-    raw_confidence: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
+    raw_confidence: Annotated[
+        float | None,
+        Field(
+            ge=0.0,
+            le=1.0,
+            description="Native model confidence when available; null otherwise.",
+        ),
+    ] = None
     feature_row_fingerprint: Hash64
     attribution_summary: dict[str, float] = Field(default_factory=dict, max_length=16)
     attribution_status: AttributionStatus
