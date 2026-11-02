@@ -51,8 +51,8 @@ class TradeOutcomeInput(BaseModel):
     fee_amount: Annotated[float, Field(ge=0.0)]
     slippage_amount: Annotated[float, Field(ge=0.0)]
     realized_pnl: float
-    mae_return: Annotated[float, Field(le=0.0)]
-    mfe_return: Annotated[float, Field(ge=0.0)]
+    mae_return: Annotated[float, Field(le=0.0)] | None = None
+    mfe_return: Annotated[float, Field(ge=0.0)] | None = None
     exit_reason: ExitReason
     market_regime: MarketRegime
     evidence_cutoff: datetime
@@ -110,8 +110,8 @@ class TradeOutcomeInput(BaseModel):
             self.mae_return,
             self.mfe_return,
         )
-        if any(not math.isfinite(value) for value in numeric_values):
-            raise ValueError("outcome values must be finite")
+        if any(value is not None and not math.isfinite(value) for value in numeric_values):
+            raise ValueError("outcome values must be finite when available")
         return self
 
 
@@ -141,8 +141,8 @@ class TradeOutcomeRecord(BaseModel):
     slippage_amount: float
     realized_pnl: float
     net_return: float
-    mae_return: float
-    mfe_return: float
+    mae_return: float | None = None
+    mfe_return: float | None = None
     exit_reason: ExitReason
     market_regime: MarketRegime
     evidence_cutoff: datetime
