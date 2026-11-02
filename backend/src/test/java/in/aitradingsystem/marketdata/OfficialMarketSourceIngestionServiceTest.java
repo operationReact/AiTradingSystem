@@ -3,6 +3,7 @@ package in.aitradingsystem.marketdata;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -70,11 +71,11 @@ class OfficialMarketSourceIngestionServiceTest {
         service.ingest(request);
 
         verify(archive).archive(
-                OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS,
-                "",
-                request.sourceUri().toString(),
-                NOW,
-                "text/csv; charset=utf-8",
+                eq(OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS),
+                eq(""),
+                eq(request.sourceUri().toString()),
+                eq(NOW),
+                eq("text/csv; charset=utf-8"),
                 argThat(payload -> java.util.Arrays.equals(payload, body)));
     }
 
