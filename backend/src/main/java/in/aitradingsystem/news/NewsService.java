@@ -8,19 +8,19 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.util.Locale;
 
 /** Agent 1 (News Ingestion): normalizes, deduplicates and stores articles. Ingestion never calls an AI model. */
 @Service
@@ -47,9 +47,31 @@ public class NewsService {
 
     public record IngestResult(int received, int inserted, int duplicates) {}
 
-    public record AnalysisView(UUID id, String status, String provider, String model, String sentiment, String category,
-        BigDecimal confidence, List<String> impactedSymbols, String evidence, List<String> risks, String errorCode,
-        int latencyMs, Instant analyzedAt) {}
+    public record AnalysisView(
+        UUID id,
+        String status,
+        String provider,
+        String model,
+        String sentiment,
+        BigDecimal directionScore,
+        String category,
+        BigDecimal confidence,
+        BigDecimal materiality,
+        String horizon,
+        BigDecimal novelty,
+        Boolean contradiction,
+        Boolean ambiguity,
+        List<String> impactedSymbols,
+        String evidence,
+        List<String> risks,
+        String providerRequestId,
+        Instant sourceAvailableAt,
+        String promptHash,
+        String requestFingerprint,
+        String responseFingerprint,
+        String errorCode,
+        int latencyMs,
+        Instant analyzedAt) {}
 
     public record ArticleView(UUID id, String source, String title, String url, String excerpt, Instant publishedAt,
         Instant ingestedAt, AnalysisView analysis) {}
@@ -103,8 +125,12 @@ public class NewsService {
 
     private static final String ARTICLE_SELECT = """
         SELECT a.id, a.source, a.title, a.url, a.excerpt, a.published_at, a.ingested_at,
-               an.id AS an_id, an.status, an.provider, an.model, an.sentiment, an.category, an.confidence,
-               an.impacted_symbols, an.evidence, an.risks, an.error_code, an.latency_ms, an.created_at AS analyzed_at
+               an.id AS an_id, an.status, an.provider, an.model, an.sentiment, an.direction_score,
+               an.category, an.confidence, an.materiality, an.horizon, an.novelty,
+               an.contradiction, an.ambiguity, an.impacted_symbols, an.evidence, an.risks,
+               an.provider_request_id, an.source_available_at, an.prompt_hash,
+               an.request_fingerprint, an.response_fingerprint,
+               an.error_code, an.latency_ms, an.created_at AS analyzed_at
         FROM news_articles a
         LEFT JOIN LATERAL (
             SELECT x.* FROM news_analyses x WHERE x.article_id = a.id ORDER BY x.created_at DESC LIMIT 1
@@ -120,11 +146,22 @@ public class NewsService {
                 rs.getString("provider"),
                 rs.getString("model"),
                 rs.getString("sentiment"),
+                rs.getBigDecimal("direction_score"),
                 rs.getString("category"),
                 rs.getBigDecimal("confidence"),
+                rs.getBigDecimal("materiality"),
+                rs.getString("horizon"),
+                rs.getBigDecimal("novelty"),
+                (Boolean) rs.getObject("contradiction"),
+                (Boolean) rs.getObject("ambiguity"),
                 readList(rs.getString("impacted_symbols")),
                 rs.getString("evidence"),
                 readList(rs.getString("risks")),
+                rs.getString("provider_request_id"),
+                instant(rs.getObject("source_available_at", java.time.OffsetDateTime.class)),
+                rs.getString("prompt_hash"),
+                rs.getString("request_fingerprint"),
+                rs.getString("response_fingerprint"),
                 rs.getString("error_code"),
                 rs.getInt("latency_ms"),
                 rs.getTimestamp("analyzed_at").toInstant());
@@ -185,7 +222,9 @@ public class NewsService {
         try {
             URI u = new URI(raw.trim());
             String scheme = u.getScheme() == null ? "" : u.getScheme().toLowerCase(Locale.ROOT);
-            if (!scheme.equals("http") && !scheme.equals("https")) throw new IllegalArgumentException("url must be http or https");
+            if (!scheme.equals("http") && !scheme.equals("https")) {
+                throw new IllegalArgumentException("url must be http or https");
+            }
             String host = u.getHost() == null ? "" : u.getHost().toLowerCase(Locale.ROOT);
             String path = u.getRawPath() == null ? "" : u.getRawPath().replaceAll("/+$", "");
             String query = u.getRawQuery() == null ? "" : "?" + u.getRawQuery();
