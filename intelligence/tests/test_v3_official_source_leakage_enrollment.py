@@ -16,6 +16,7 @@ from aitrading_intelligence.nifty_constituent_source import (
     parse_nifty50_constituents,
     select_nifty50_snapshot,
 )
+from aitrading_intelligence.nifty_sector_history_source import parse_sector_index_history
 
 DECISION_AT = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 SYMBOLS = ("HDFCBANK", "RELIANCE")
@@ -25,6 +26,10 @@ EXPECTED_CONTEXT_KEYS = (
     "benchmark.NIFTY50.return_1d",
     "benchmark.NIFTY50.shares_traded",
     "benchmark.NIFTY50.turnover_cr",
+    "sector.NIFTY_BANK.close",
+    "sector.NIFTY_BANK.return_1d",
+    "sector.NIFTY_BANK.shares_traded",
+    "sector.NIFTY_BANK.turnover_cr",
     "volatility.INDIA_VIX.close",
 )
 
@@ -50,6 +55,17 @@ def _nifty_history_csv(*, future_corruption: bool) -> bytes:
     ]
     if future_corruption:
         rows.append("03-Nov-2026,103.00,1000.00,1.00,999.00,999999999,99999.00")
+    return ("\n".join(rows) + "\n").encode()
+
+
+def _sector_history_csv(*, future_corruption: bool) -> bytes:
+    rows = [
+        "Date,Open,High,Low,Close,Shares Traded,Turnover (₹ Cr)",
+        "01-Nov-2026,50000.00,50500.00,49700.00,50300.00,1000000,4500.00",
+        "02-Nov-2026,50300.00,51000.00,50100.00,50800.00,1200000,5200.00",
+    ]
+    if future_corruption:
+        rows.append("03-Nov-2026,50800.00,90000.00,100.00,89000.00,999999999,99999.00")
     return ("\n".join(rows) + "\n").encode()
 
 
@@ -112,15 +128,24 @@ def _context(*, future_corruption: bool):
     nifty = parse_nifty50_history(
         _nifty_history_csv(future_corruption=future_corruption)
     )
+    sector = parse_sector_index_history(
+        _sector_history_csv(future_corruption=future_corruption),
+        index_code="NIFTY_BANK",
+    )
     vix = parse_india_vix_history(
         _vix_history_csv(future_corruption=future_corruption)
     )
     return build_india_market_context_snapshot(
         as_of=DECISION_AT,
-        observations=[*nifty.context_observations(), *vix.close_observations()],
+        observations=[
+            *nifty.context_observations(),
+            *sector.context_observations(),
+            *vix.close_observations(),
+        ],
         source_versions={
             "indiaVix": vix.causal_source_fingerprint(as_of=DECISION_AT),
             "nifty50": nifty.causal_source_fingerprint(as_of=DECISION_AT),
+            "sector.NIFTY_BANK": sector.causal_source_fingerprint(as_of=DECISION_AT),
         },
     )
 
@@ -188,6 +213,7 @@ def test_official_source_future_mutations_leave_feature_rows_and_dataset_byte_st
             "NIFTY_CONSTITUENTS",
             "NIFTY50_HISTORY",
             "INDIA_VIX_HISTORY",
+            "SECTOR_INDEX_HISTORY",
         ],
     )
 
@@ -197,6 +223,7 @@ def test_official_source_future_mutations_leave_feature_rows_and_dataset_byte_st
         "INDIA_VIX_HISTORY",
         "NIFTY50_HISTORY",
         "NIFTY_CONSTITUENTS",
+        "SECTOR_INDEX_HISTORY",
     ]
     assert report.baseline_dataset_fingerprint == report.mutated_dataset_fingerprint
 
@@ -204,13 +231,25 @@ def test_official_source_future_mutations_leave_feature_rows_and_dataset_byte_st
 def test_archive_fingerprint_can_change_while_causal_source_version_stays_stable() -> None:
     baseline_nifty = parse_nifty50_history(_nifty_history_csv(future_corruption=False))
     future_nifty = parse_nifty50_history(_nifty_history_csv(future_corruption=True))
+    baseline_sector = parse_sector_index_history(
+        _sector_history_csv(future_corruption=False),
+        index_code="NIFTY_BANK",
+    )
+    future_sector = parse_sector_index_history(
+        _sector_history_csv(future_corruption=True),
+        index_code="NIFTY_BANK",
+    )
     baseline_vix = parse_india_vix_history(_vix_history_csv(future_corruption=False))
     future_vix = parse_india_vix_history(_vix_history_csv(future_corruption=True))
 
     assert baseline_nifty.history_fingerprint != future_nifty.history_fingerprint
+    assert baseline_sector.history_fingerprint != future_sector.history_fingerprint
     assert baseline_vix.history_fingerprint != future_vix.history_fingerprint
     assert baseline_nifty.causal_source_fingerprint(as_of=DECISION_AT) == (
         future_nifty.causal_source_fingerprint(as_of=DECISION_AT)
+    )
+    assert baseline_sector.causal_source_fingerprint(as_of=DECISION_AT) == (
+        future_sector.causal_source_fingerprint(as_of=DECISION_AT)
     )
     assert baseline_vix.causal_source_fingerprint(as_of=DECISION_AT) == (
         future_vix.causal_source_fingerprint(as_of=DECISION_AT)
