@@ -262,7 +262,7 @@ def test_outcome_observed_after_cutoff_stays_unresolved_and_is_future_invariant(
         candidate_return=0.020,
         abstain_return=-0.010,
     )
-    pending_index = 20
+    pending_index = 30
     pending_opportunity = _opportunity(pending_index)
     pending_decision = _decision(pending_index, candidate=True)
     cutoff = pending_decision.decision_as_of + timedelta(minutes=5)
