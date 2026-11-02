@@ -118,7 +118,13 @@ class IndiaCrossSectionSnapshot(BaseModel):
     def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         return _require_aware(value)
 
-    @field_validator("return_mean", "return_dispersion", "median_adv_notional", "median_spread_bps", "median_relative_volume")
+    @field_validator(
+        "return_mean",
+        "return_dispersion",
+        "median_adv_notional",
+        "median_spread_bps",
+        "median_relative_volume",
+    )
     @classmethod
     def metrics_must_be_finite(cls, value: float) -> float:
         if not math.isfinite(value):
@@ -140,7 +146,12 @@ class IndiaCrossSectionSnapshot(BaseModel):
             raise ValueError("data_cutoff cannot exceed as_of")
         if self.covered_members > self.expected_members:
             raise ValueError("covered_members cannot exceed expected_members")
-        if self.advancing_members + self.declining_members + self.unchanged_members != self.covered_members:
+        breadth_total = (
+            self.advancing_members
+            + self.declining_members
+            + self.unchanged_members
+        )
+        if breadth_total != self.covered_members:
             raise ValueError("breadth counts must equal covered_members")
         if len(self.member_source_fingerprints) != self.covered_members:
             raise ValueError("member source fingerprints must match covered_members")
