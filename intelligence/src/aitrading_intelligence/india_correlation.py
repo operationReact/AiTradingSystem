@@ -139,6 +139,8 @@ class IndiaCorrelationSnapshot(BaseModel):
     data_cutoff: datetime
     universe_snapshot_fingerprint: Hash64
     config_fingerprint: Hash64
+    window_observations: Annotated[int, Field(ge=5, le=500)]
+    minimum_pair_observations: Annotated[int, Field(ge=3, le=500)]
     market: CorrelationAggregate
     sectors: dict[str, CorrelationAggregate] = Field(default_factory=dict, max_length=256)
     pair_evidence: list[PairCorrelationEvidence] = Field(min_length=1, max_length=100_000)
@@ -155,6 +157,10 @@ class IndiaCorrelationSnapshot(BaseModel):
     def validate_snapshot(self) -> IndiaCorrelationSnapshot:
         if self.data_cutoff > self.as_of:
             raise ValueError("data_cutoff cannot exceed as_of")
+        if self.minimum_pair_observations > self.window_observations:
+            raise ValueError(
+                "minimum_pair_observations cannot exceed window_observations"
+            )
         if list(self.sectors) != sorted(self.sectors):
             raise ValueError("sector aggregates must be deterministically ordered")
         pair_ids = [item.pair_fingerprint for item in self.pair_evidence]
@@ -165,7 +171,7 @@ class IndiaCorrelationSnapshot(BaseModel):
     def to_context_observations(self) -> list[IndiaContextObservation]:
         """Expose correlation state through the canonical India context contract."""
 
-        suffix = f"{self.config_window_label}"
+        suffix = f"aligned{self.window_observations}"
         values = {
             f"breadth.{self.exchange}.avg_pairwise_corr_{suffix}": (
                 self.market.mean_pairwise_correlation
@@ -209,12 +215,6 @@ class IndiaCorrelationSnapshot(BaseModel):
             )
         return observations
 
-    @property
-    def config_window_label(self) -> str:
-        # The exact window lives in config_fingerprint; the context key uses an explicit
-        # stable semantic label so downstream feature names remain versioned and readable.
-        return "aligned"
-
 
 def _context_token(value: str) -> str:
     token = re.sub(r"[^A-Z0-9&._-]+", "_", value.upper()).strip("_")
@@ -257,7 +257,11 @@ def _latest_by_symbol_event(
     return dict(by_symbol)
 
 
-def _pearson(values_a: Sequence[float], values_b: Sequence[float], epsilon: float) -> float | None:
+def _pearson(
+    values_a: Sequence[float],
+    values_b: Sequence[float],
+    epsilon: float,
+) -> float | None:
     mean_a = fmean(values_a)
     mean_b = fmean(values_b)
     centered_a = [value - mean_a for value in values_a]
@@ -309,8 +313,12 @@ def _pair_evidence(
         "source_fingerprints": source_fingerprints,
     }
     return PairCorrelationEvidence(
-        **payload,
+        left_symbol=left_symbol,
+        right_symbol=right_symbol,
+        common_observations=len(selected),
+        correlation=correlation,
         data_cutoff=cutoff,
+        source_fingerprints=source_fingerprints,
         pair_fingerprint=canonical_fingerprint(payload),
     )
 
@@ -442,6 +450,8 @@ def build_india_correlation_snapshot(
         "data_cutoff": cutoff.isoformat(),
         "universe_snapshot_fingerprint": universe.snapshot_fingerprint,
         "config_fingerprint": config.fingerprint,
+        "window_observations": config.window_observations,
+        "minimum_pair_observations": config.minimum_pair_observations,
         "market": market.model_dump(mode="json"),
         "sectors": {
             sector: sectors[sector].model_dump(mode="json") for sector in sorted(sectors)
@@ -456,6 +466,8 @@ def build_india_correlation_snapshot(
         data_cutoff=cutoff,
         universe_snapshot_fingerprint=universe.snapshot_fingerprint,
         config_fingerprint=config.fingerprint,
+        window_observations=config.window_observations,
+        minimum_pair_observations=config.minimum_pair_observations,
         market=market,
         sectors={sector: sectors[sector] for sector in sorted(sectors)},
         pair_evidence=all_pair_evidence,
