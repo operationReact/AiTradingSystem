@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Annotated, Literal
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sklearn.metrics import brier_score_loss, log_loss, roc_auc_score
 from torch import nn
 
@@ -59,17 +59,35 @@ class TorchModelArtifact(BaseModel):
     learning_rate: float
     target_spec_fingerprint: Hash64
     training_config_fingerprint: Hash64
+    training_as_of: datetime
+    latest_label_observed_at: datetime
     train_start: datetime
     train_end: datetime
     validation_start: datetime
     validation_end: datetime
     train_rows: Annotated[int, Field(ge=20)]
     validation_rows: Annotated[int, Field(ge=10)]
+    training_example_fingerprints: list[Hash64]
+    validation_example_fingerprints: list[Hash64]
     state_dict: dict[str, StateValue]
     validation: TorchValidationMetrics
     model_fingerprint: Hash64
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
+
+    @field_validator(
+        "training_as_of",
+        "latest_label_observed_at",
+        "train_start",
+        "train_end",
+        "validation_start",
+        "validation_end",
+    )
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("PyTorch artifact timestamps must be timezone-aware")
+        return value
 
     @model_validator(mode="after")
     def validate_artifact(self) -> TorchModelArtifact:
@@ -81,6 +99,24 @@ class TorchModelArtifact(BaseModel):
             raise ValueError("feature scales must be positive")
         if self.train_end >= self.validation_start:
             raise ValueError("training inputs must end before validation starts")
+        if self.validation_start > self.validation_end:
+            raise ValueError("validation_start cannot exceed validation_end")
+        if self.validation_end > self.training_as_of:
+            raise ValueError("validation decisions cannot exceed training_as_of")
+        if self.latest_label_observed_at > self.training_as_of:
+            raise ValueError("artifact cannot include labels observed after training_as_of")
+        if len(self.training_example_fingerprints) != self.train_rows:
+            raise ValueError("training fingerprint count must match train_rows")
+        if len(self.validation_example_fingerprints) != self.validation_rows:
+            raise ValueError("validation fingerprint count must match validation_rows")
+        if len(set(self.training_example_fingerprints)) != self.train_rows:
+            raise ValueError("training examples must be unique")
+        if len(set(self.validation_example_fingerprints)) != self.validation_rows:
+            raise ValueError("validation examples must be unique")
+        if set(self.training_example_fingerprints) & set(
+            self.validation_example_fingerprints
+        ):
+            raise ValueError("training and validation examples must be disjoint")
         return self
 
 
@@ -166,14 +202,28 @@ def train_torch_challenger(
     *,
     feature_names: Sequence[str] = DEFAULT_BASELINE_FEATURES,
     config: TorchTrainingConfig | None = None,
+    training_as_of: datetime | None = None,
 ) -> TorchModelArtifact:
     config = config or TorchTrainingConfig()
-    if len(examples) < 40:
-        raise ValueError("at least 40 labeled examples are required")
+    if not examples:
+        raise ValueError("PyTorch training requires labeled examples")
     if not feature_names or len(set(feature_names)) != len(feature_names):
         raise ValueError("feature_names must be non-empty and unique")
+    if training_as_of is not None and (
+        training_as_of.tzinfo is None or training_as_of.utcoffset() is None
+    ):
+        raise ValueError("training_as_of must be timezone-aware")
 
-    ordered = sorted(examples, key=lambda example: example.as_of)
+    all_ordered = sorted(examples, key=lambda example: example.as_of)
+    cutoff = training_as_of or max(
+        example.target_observed_at for example in all_ordered
+    )
+    ordered = [
+        example for example in all_ordered if example.target_observed_at <= cutoff
+    ]
+    if len(ordered) < 40:
+        raise ValueError("at least 40 causally available labeled examples are required")
+
     target_fingerprints = {example.target_spec_fingerprint for example in ordered}
     if len(target_fingerprints) != 1:
         raise ValueError("all examples must use the same target specification")
@@ -229,6 +279,15 @@ def train_torch_challenger(
         negative_rows=len(validation_labels) - sum(validation_labels),
     )
     state = _serialize_state(model)
+    latest_label_observed_at = max(
+        example.target_observed_at for example in [*training, *validation]
+    )
+    training_example_fingerprints = [
+        example.example_fingerprint for example in training
+    ]
+    validation_example_fingerprints = [
+        example.example_fingerprint for example in validation
+    ]
     payload = {
         "model_version": MODEL_VERSION,
         "torch_version": torch.__version__,
@@ -241,12 +300,14 @@ def train_torch_challenger(
         "learning_rate": config.learning_rate,
         "target_spec_fingerprint": next(iter(target_fingerprints)),
         "training_config_fingerprint": config.fingerprint,
+        "training_as_of": cutoff.isoformat(),
+        "latest_label_observed_at": latest_label_observed_at.isoformat(),
         "train_start": training[0].as_of.isoformat(),
         "train_end": training[-1].as_of.isoformat(),
         "validation_start": validation[0].as_of.isoformat(),
         "validation_end": validation[-1].as_of.isoformat(),
-        "train_examples": [example.example_fingerprint for example in training],
-        "validation_examples": [example.example_fingerprint for example in validation],
+        "training_example_fingerprints": training_example_fingerprints,
+        "validation_example_fingerprints": validation_example_fingerprints,
         "state_dict": state,
         "validation": metrics.model_dump(mode="json"),
     }
@@ -261,12 +322,16 @@ def train_torch_challenger(
         learning_rate=config.learning_rate,
         target_spec_fingerprint=next(iter(target_fingerprints)),
         training_config_fingerprint=config.fingerprint,
+        training_as_of=cutoff,
+        latest_label_observed_at=latest_label_observed_at,
         train_start=training[0].as_of,
         train_end=training[-1].as_of,
         validation_start=validation[0].as_of,
         validation_end=validation[-1].as_of,
         train_rows=len(training),
         validation_rows=len(validation),
+        training_example_fingerprints=training_example_fingerprints,
+        validation_example_fingerprints=validation_example_fingerprints,
         state_dict=state,
         validation=metrics,
         model_fingerprint=canonical_fingerprint(payload),
