@@ -46,6 +46,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/actuator/health/**", "/actuator/info", "/error",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                .requestMatchers(HttpMethod.GET,
+                    "/api/auth/angel-one/start", "/api/auth/angel-one/callback").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/angel-one/exchange").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
                     .hasAnyRole("ADMIN", "OPERATOR")
