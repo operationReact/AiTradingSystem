@@ -108,7 +108,8 @@ class SelectivePolicyEvaluationReport(BaseModel):
 
     @model_validator(mode="after")
     def counts_must_reconcile(self) -> SelectivePolicyEvaluationReport:
-        if self.resolved_decision_count + self.unresolved_decision_count != self.eligible_decision_count:
+        resolved_total = self.resolved_decision_count + self.unresolved_decision_count
+        if resolved_total != self.eligible_decision_count:
             raise ValueError("resolved and unresolved decisions must equal eligible decisions")
         if self.candidate_count + self.abstain_count != self.resolved_decision_count:
             raise ValueError("candidate and abstain counts must equal resolved decisions")
@@ -147,9 +148,12 @@ def evaluate_selective_coverage_expectancy(
     if len({item.decision_fingerprint for item in validated_decisions}) != len(validated_decisions):
         raise ValueError("selective decisions must have unique fingerprints")
 
+    expected_opportunity_fingerprints = {
+        item.source_opportunity_fingerprint for item in validated_decisions
+    }
     opportunity_by_fingerprint: dict[str, RankedOpportunity] = {}
     for item in opportunities:
-        if item.opportunity_fingerprint not in {d.source_opportunity_fingerprint for d in validated_decisions}:
+        if item.opportunity_fingerprint not in expected_opportunity_fingerprints:
             continue
         validated = _validate_source_opportunity(item)
         if validated.opportunity_fingerprint in opportunity_by_fingerprint:
