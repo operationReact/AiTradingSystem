@@ -20,7 +20,9 @@ def _hash(value: int) -> str:
 
 def _record(index: int, *, challenger_better: bool = True):
     positive = index % 2 == 0
-    champion_probability = 0.55 if positive else 0.45
+    # Keep champion probabilities in separate calibration buckets. Using 0.55/0.45 puts
+    # both classes in the same bucket and can make ECE look artificially perfect.
+    champion_probability = 0.60 if positive else 0.40
     if challenger_better:
         challenger_probability = 0.80 if positive else 0.20
     else:
@@ -52,6 +54,7 @@ def test_shadow_challenger_can_only_advance_to_explicit_review() -> None:
     assert evidence.required_next_gate == "V2_09_EXPLICIT_GOVERNANCE_DECISION"
     assert evidence.challenger.brier_score < evidence.champion.brier_score
     assert evidence.challenger.log_loss < evidence.champion.log_loss
+    assert evidence.challenger.expected_calibration_error < evidence.champion.expected_calibration_error
     assert evidence.promotion_allowed is False
     assert evidence.can_authorize_capital is False
 
