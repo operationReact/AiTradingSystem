@@ -65,10 +65,7 @@ def _context_vector(context: IndiaMarketContextSnapshot) -> list[float]:
     missing = [key for key in REQUIRED_CONTEXT_KEYS if key not in context.metrics]
     if missing:
         raise ValueError(f"missing required regime context metrics: {', '.join(missing)}")
-    values = [
-        _finite(context.metrics[key], name=key)
-        for key in FEATURE_ORDER
-    ]
+    values = [_finite(context.metrics[key], name=key) for key in FEATURE_ORDER]
     if not -1.0 <= values[1] <= 1.0:
         raise ValueError("breadth.NSE.net_breadth must be in [-1, 1]")
     if values[2] < 0.0:
@@ -107,6 +104,7 @@ class HMMRegimeModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     contract_version: Literal["regime-hmm-model.v1"] = HMM_REGIME_MODEL_CONTRACT_VERSION
+    training_as_of: datetime
     training_end_as_of: datetime
     training_data_cutoff: datetime
     training_samples: Annotated[int, Field(ge=1)]
@@ -127,7 +125,7 @@ class HMMRegimeModel(BaseModel):
     status: Literal["RESEARCH_HMM_CHALLENGER_ONLY"] = "RESEARCH_HMM_CHALLENGER_ONLY"
     can_authorize_capital: Literal[False] = False
 
-    @field_validator("training_end_as_of", "training_data_cutoff")
+    @field_validator("training_as_of", "training_end_as_of", "training_data_cutoff")
     @classmethod
     def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         return _require_aware(value)
@@ -167,16 +165,15 @@ class HMMRegimeModel(BaseModel):
             raise ValueError("training sample count must match input fingerprints")
         if len(set(self.training_input_fingerprints)) != self.training_samples:
             raise ValueError("training context fingerprints must be unique")
-        if self.training_data_cutoff > self.training_end_as_of:
-            raise ValueError("training data cutoff cannot exceed training decision time")
+        if self.training_end_as_of > self.training_as_of:
+            raise ValueError("training sequence cannot exceed training_as_of")
+        if self.training_data_cutoff > self.training_as_of:
+            raise ValueError("training data cutoff cannot exceed training_as_of")
         if any(scale <= 0.0 for scale in self.scaler_scale):
             raise ValueError("scaler scales must be positive")
         if any(covariance <= 0.0 for row in self.state_covariances for covariance in row):
             raise ValueError("state covariances must be positive")
-        for probabilities in (
-            self.start_probabilities,
-            self.terminal_state_probabilities,
-        ):
+        for probabilities in (self.start_probabilities, self.terminal_state_probabilities):
             if any(value < 0.0 or value > 1.0 for value in probabilities):
                 raise ValueError("HMM probabilities must be in [0, 1]")
             if not math.isclose(sum(probabilities), 1.0, rel_tol=0.0, abs_tol=1e-9):
@@ -257,22 +254,25 @@ def _semantic_state_labels(means: np.ndarray) -> list[RegimeLabel]:
 def train_hmm_regime_model(
     *,
     training_contexts: Iterable[IndiaMarketContextSnapshot],
+    training_as_of: datetime,
     config: HMMRegimeConfig | None = None,
 ) -> HMMRegimeModel:
-    """Fit a deterministic four-state HMM using only chronological causal contexts."""
+    """Fit a deterministic HMM from contexts that existed by training_as_of."""
 
     config = config or HMMRegimeConfig()
-    contexts = list(training_contexts)
+    training_as_of = _require_aware(training_as_of)
+    contexts = [context for context in training_contexts if context.as_of <= training_as_of]
+    contexts.sort(key=lambda context: context.as_of)
     if len(contexts) < config.minimum_training_samples:
-        raise ValueError("insufficient HMM training contexts")
+        raise ValueError("insufficient causal HMM training contexts")
     as_of_values = [context.as_of for context in contexts]
-    if any(value.tzinfo is None or value.utcoffset() is None for value in as_of_values):
-        raise ValueError("HMM training context timestamps must be timezone-aware")
-    if as_of_values != sorted(as_of_values) or len(set(as_of_values)) != len(as_of_values):
-        raise ValueError("HMM training contexts must be strictly chronological and unique")
+    if len(set(as_of_values)) != len(as_of_values):
+        raise ValueError("HMM training contexts must have unique decision timestamps")
     for context in contexts:
         if context.data_cutoff > context.as_of:
             raise ValueError("HMM training context is not causal")
+        if context.data_cutoff > training_as_of:
+            raise ValueError("HMM training evidence exceeds training_as_of")
 
     selected = contexts[-config.maximum_training_samples :]
     raw_matrix = np.asarray([_context_vector(context) for context in selected], dtype=float)
@@ -308,6 +308,7 @@ def train_hmm_regime_model(
 
     payload = {
         "contract_version": HMM_REGIME_MODEL_CONTRACT_VERSION,
+        "training_as_of": training_as_of.isoformat(),
         "training_end_as_of": training_end_as_of.isoformat(),
         "training_data_cutoff": training_data_cutoff.isoformat(),
         "training_samples": len(selected),
@@ -367,22 +368,17 @@ def build_hmm_regime_snapshot(
 
     if context.data_cutoff > context.as_of:
         raise ValueError("market context is not causal")
-    if model.training_end_as_of >= context.as_of:
-        raise ValueError("HMM inference context must be strictly after the training window")
+    if model.training_as_of >= context.as_of:
+        raise ValueError("HMM inference must be strictly after training_as_of")
     if model.training_data_cutoff >= context.as_of:
-        raise ValueError("HMM training data must be available before inference decision time")
+        raise ValueError("HMM training data must precede inference decision time")
 
     latent = _latent_posterior(model, context)
     probabilities_by_label = {
-        label: float(latent[state])
-        for state, label in enumerate(model.state_labels)
+        label: float(latent[state]) for state, label in enumerate(model.state_labels)
     }
-    probabilities = {
-        label: probabilities_by_label[label]
-        for label in REGIME_LABELS
-    }
-    residual = 1.0 - sum(probabilities.values())
-    probabilities[REGIME_LABELS[-1]] += residual
+    probabilities = {label: probabilities_by_label[label] for label in REGIME_LABELS}
+    probabilities[REGIME_LABELS[-1]] += 1.0 - sum(probabilities.values())
     maximum = max(probabilities.values())
     dominant = next(label for label in REGIME_LABELS if probabilities[label] == maximum)
     raw = _context_vector(context)
