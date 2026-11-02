@@ -32,8 +32,10 @@ public class ClaudeNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
     }
 
     @Override
-    public String complete(String systemPrompt, String userPrompt) {
-        if (!configured()) throw new AiProviderException(AiErrorCode.UNCONFIGURED, "ANTHROPIC_API_KEY is not set");
+    public Completion complete(String systemPrompt, String userPrompt) {
+        if (!configured()) {
+            throw new AiProviderException(AiErrorCode.UNCONFIGURED, "ANTHROPIC_API_KEY is not set");
+        }
         Map<String, Object> body = Map.of(
             "model", model(),
             "max_tokens", 700,
@@ -46,7 +48,8 @@ public class ClaudeNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
             body);
         for (JsonNode block : root.path("content")) {
             if ("text".equals(block.path("type").asText()) && block.path("text").isTextual()) {
-                return block.path("text").asText();
+                String requestId = root.path("id").isTextual() ? root.path("id").asText() : null;
+                return new Completion(block.path("text").asText(), requestId);
             }
         }
         throw new AiProviderException(AiErrorCode.INVALID_RESPONSE, "CLAUDE returned no text content");
