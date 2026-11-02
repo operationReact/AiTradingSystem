@@ -6,7 +6,6 @@ from aitrading_intelligence.fusion import RankedOpportunity
 from aitrading_intelligence.pytorch_target import LabeledExample
 from aitrading_intelligence.replay import ReplayConfig, run_historical_replay
 
-
 START = datetime(2026, 1, 5, 3, 45, tzinfo=UTC)
 TARGET_SPEC = "a" * 64
 
