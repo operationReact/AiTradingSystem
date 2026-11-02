@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .features import FeatureRow
 from .fingerprints import canonical_fingerprint
@@ -34,8 +35,8 @@ class LabeledExample(BaseModel):
 
     target_version: Literal["forward-return-after-costs.v1"] = TARGET_VERSION
     symbol: str
-    as_of: object
-    target_observed_at: object
+    as_of: datetime
+    target_observed_at: datetime
     feature_row_fingerprint: Hash64
     target_spec_fingerprint: Hash64
     label: Literal[0, 1]
@@ -45,6 +46,13 @@ class LabeledExample(BaseModel):
     provenance: list[str]
     example_fingerprint: Hash64
     can_authorize_capital: Literal[False] = False
+
+    @field_validator("as_of", "target_observed_at")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("target timestamps must be timezone-aware")
+        return value
 
     @model_validator(mode="after")
     def target_must_follow_decision_time(self) -> LabeledExample:
