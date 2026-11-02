@@ -45,7 +45,8 @@ public class OfficialMarketSourceIngestionService {
     private final OfficialMarketSourceArchiveService archive;
     private final OfficialMarketSourceTransport transport;
     private final Clock clock;
-    private final URI constituentUri;
+    private final URI nifty50ConstituentUri;
+    private final URI nifty500ConstituentUri;
     private final URI indexHistoryEndpoint;
     private final URI vixHistoryEndpoint;
     private final URI nseBootstrapUri;
@@ -56,7 +57,8 @@ public class OfficialMarketSourceIngestionService {
             OfficialMarketSourceArchiveService archive,
             OfficialMarketSourceTransport transport,
             Clock clock,
-            @Value("${app.market-data.official-sources.constituents-url:https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv}") String constituentUrl,
+            @Value("${app.market-data.official-sources.constituents-url:https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv}") String nifty50ConstituentUrl,
+            @Value("${app.market-data.official-sources.nifty500-constituents-url:https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv}") String nifty500ConstituentUrl,
             @Value("${app.market-data.official-sources.index-history-endpoint:}") String indexHistoryEndpoint,
             @Value("${app.market-data.official-sources.vix-history-endpoint:}") String vixHistoryEndpoint,
             @Value("${app.market-data.official-sources.nse-bootstrap-url:https://www.nseindia.com/}") String nseBootstrapUrl,
@@ -68,7 +70,8 @@ public class OfficialMarketSourceIngestionService {
         this.archive = archive;
         this.transport = transport;
         this.clock = clock;
-        this.constituentUri = requiredUri(constituentUrl, "NIFTY constituent URL");
+        this.nifty50ConstituentUri = requiredUri(nifty50ConstituentUrl, "NIFTY 50 constituent URL");
+        this.nifty500ConstituentUri = requiredUri(nifty500ConstituentUrl, "NIFTY 500 constituent URL");
         this.indexHistoryEndpoint = optionalUri(indexHistoryEndpoint);
         this.vixHistoryEndpoint = optionalUri(vixHistoryEndpoint);
         this.nseBootstrapUri = requiredUri(nseBootstrapUrl, "NSE bootstrap URL");
@@ -83,7 +86,12 @@ public class OfficialMarketSourceIngestionService {
         requests.add(new SourceRequest(
                 OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS,
                 "",
-                constituentUri,
+                nifty50ConstituentUri,
+                null));
+        requests.add(new SourceRequest(
+                OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS,
+                "",
+                nifty500ConstituentUri,
                 null));
 
         if (indexHistoryEndpoint != null) {
