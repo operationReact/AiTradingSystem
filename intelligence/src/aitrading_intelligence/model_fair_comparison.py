@@ -23,6 +23,10 @@ COMPARISON_VERSION = "model-fair-comparison.v1"
 TREE_VERSION = "hist-gradient-boosting.v1"
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 ModelFamily = Literal["LOGISTIC", "HIST_TREE", "LIGHTGBM", "CATBOOST", "PYTORCH"]
+Predictor = Callable[
+    [Sequence[LabeledExample], Sequence[LabeledExample], Sequence[str], int],
+    list[float],
+]
 
 
 class FairComparisonConfig(BaseModel):
@@ -519,9 +523,7 @@ def evaluate_model_families(
     folds = [entry[0] for entry in fold_entries]
     all_test_examples = [example for _, _, test in fold_entries for example in test]
 
-    predictors: list[
-        tuple[ModelFamily, str, Callable[[Sequence[LabeledExample], Sequence[LabeledExample], Sequence[str], int], list[float]]]
-    ] = [
+    predictors: list[tuple[ModelFamily, str, Predictor]] = [
         ("LOGISTIC", "logistic-baseline.v1", _predict_logistic),
         ("HIST_TREE", TREE_VERSION, _predict_hist_tree),
         ("LIGHTGBM", "lightgbm-binary.v1", _predict_lightgbm),
