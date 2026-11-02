@@ -11,7 +11,10 @@ public record NewsSource(String id, String publisher, URI feedUri, Set<String> a
             Set.of("www.moneycontrol.com", "moneycontrol.com")),
         new NewsSource("economic-times", "The Economic Times",
             URI.create("https://economictimes.indiatimes.com/markets/stocks/rssfeeds/2146842.cms"),
-            Set.of("economictimes.indiatimes.com"))
+            Set.of("economictimes.indiatimes.com")),
+        new NewsSource("sebi", "Securities and Exchange Board of India",
+            URI.create("https://www.sebi.gov.in/sebirss.xml"),
+            Set.of("www.sebi.gov.in", "sebi.gov.in"))
     );
 
     public static NewsSource byId(String id) {
