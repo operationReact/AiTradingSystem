@@ -46,10 +46,10 @@ def test_rejects_header_drift_instead_of_guessing_columns() -> None:
 
 def test_rejects_duplicate_symbols() -> None:
     source = (
-        "Company Name,Industry,Symbol,Series,ISIN Code\n"
-        "A Ltd.,Financial Services,ABC,EQ,INE001A01010\n"
-        "B Ltd.,Industrials,ABC,EQ,INE002A01018\n"
-    ).encode()
+        b"Company Name,Industry,Symbol,Series,ISIN Code\n"
+        b"A Ltd.,Financial Services,ABC,EQ,INE001A01010\n"
+        b"B Ltd.,Industrials,ABC,EQ,INE002A01018\n"
+    )
 
     with pytest.raises(ValueError, match="constituent symbols must be unique"):
         parse_nifty50_constituents(source, observed_at=OBSERVED)
