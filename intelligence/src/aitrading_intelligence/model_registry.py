@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Literal
+from typing import TYPE_CHECKING, Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -11,7 +11,9 @@ from .fingerprints import canonical_fingerprint
 from .lightgbm_model import LightGBMModelArtifact, LightGBMTrainingConfig
 from .model_fair_comparison import FairComparisonConfig, ModelFairComparisonReport
 from .monte_carlo import MonteCarloEvidence
-from .pytorch_model import TorchModelArtifact, TorchTrainingConfig
+
+if TYPE_CHECKING:
+    from .pytorch_model import TorchModelArtifact
 
 REGISTRY_VERSION = "model-registry.v1"
 REGISTRY_SNAPSHOT_VERSION = "model-registry-snapshot.v1"
@@ -336,6 +338,8 @@ def register_pytorch_model_lab_entry(
     code_sha: str,
     registered_at: datetime,
 ) -> ModelLabRegistryEntry:
+    from .pytorch_model import TorchTrainingConfig
+
     if artifact.promotion_allowed or artifact.can_authorize_capital:
         raise ValueError("PyTorch artifact cannot carry promotion or capital authority")
     expected_config = TorchTrainingConfig(seed=comparison_config.seed)
