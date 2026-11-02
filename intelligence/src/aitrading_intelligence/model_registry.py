@@ -19,7 +19,6 @@ Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 GitSha = Annotated[str, Field(pattern=r"^[a-f0-9]{40,64}$")]
 ModelFamily = Literal["LOGISTIC", "TREE", "PYTORCH", "LIGHTGBM", "CATBOOST"]
 GradientBoostingFamily = Literal["LIGHTGBM", "CATBOOST"]
-GradientBoostingArtifact = LightGBMModelArtifact | CatBoostModelArtifact
 
 
 class ModelGovernanceCandidate(BaseModel):
@@ -165,7 +164,7 @@ def register_governance_candidate(
 def register_gradient_boosting_model_lab_entry(
     *,
     model_family: GradientBoostingFamily,
-    artifact: GradientBoostingArtifact,
+    artifact: LightGBMModelArtifact | CatBoostModelArtifact,
     fair_comparison: ModelFairComparisonReport,
     code_sha: str,
     registered_at: datetime,
