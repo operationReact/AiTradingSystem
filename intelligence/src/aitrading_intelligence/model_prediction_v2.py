@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .pytorch_model import TorchModelArtifact
 
 MODEL_PREDICTION_V2 = "model-prediction.v2"
+MAX_ATTRIBUTION_FEATURES = 16
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 ModelFamily = Literal["LOGISTIC", "PYTORCH", "LIGHTGBM", "CATBOOST"]
 AttributionStatus = Literal["AVAILABLE", "NOT_ATTACHED"]
@@ -44,7 +45,10 @@ class ModelPredictionV2(BaseModel):
     raw_score: Annotated[float, Field(ge=-1.0, le=1.0)]
     raw_confidence: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
     feature_row_fingerprint: Hash64
-    attribution_summary: dict[str, float] = Field(default_factory=dict, max_length=16)
+    attribution_summary: dict[str, float] = Field(
+        default_factory=dict,
+        max_length=MAX_ATTRIBUTION_FEATURES,
+    )
     attribution_status: AttributionStatus
     inference_latency_micros: Annotated[int, Field(ge=0)]
     inference_fingerprint: Hash64
@@ -92,9 +96,31 @@ def _feature_vector(row: FeatureRow, feature_names: list[str]) -> list[float]:
     return values
 
 
-def _bounded_attribution(values: dict[str, float], *, limit: int = 16) -> dict[str, float]:
+def _bounded_attribution(
+    values: dict[str, float],
+    *,
+    limit: int = MAX_ATTRIBUTION_FEATURES,
+) -> dict[str, float]:
     ordered = sorted(values.items(), key=lambda item: (-abs(float(item[1])), item[0]))
     return {name: float(value) for name, value in ordered[:limit]}
+
+
+def _tree_attribution(
+    feature_names: list[str],
+    contribution_row: object,
+    *,
+    provider_name: str,
+) -> dict[str, float]:
+    values = [float(value) for value in contribution_row]
+    expected_length = len(feature_names) + 1
+    if len(values) != expected_length:
+        raise ValueError(
+            f"{provider_name} attribution must contain one value per feature plus expected value"
+        )
+    feature_values = values[:-1]
+    if any(not math.isfinite(value) for value in feature_values):
+        raise ValueError(f"{provider_name} attribution values must be finite")
+    return dict(zip(feature_names, feature_values, strict=True))
 
 
 def _latency_micros(start_ns: int) -> int:
@@ -181,6 +207,12 @@ def adapt_lightgbm_prediction(
     vector = _feature_vector(row, artifact.feature_names)
     model = lgb.Booster(model_str=artifact.booster_model)
     probability = float(model.predict([vector])[0])
+    contribution_row = model.predict([vector], pred_contrib=True)[0]
+    attribution = _tree_attribution(
+        artifact.feature_names,
+        contribution_row,
+        provider_name="LightGBM",
+    )
     latency = _latency_micros(start_ns)
     score = (2.0 * probability) - 1.0
     return _build_prediction(
@@ -193,7 +225,7 @@ def adapt_lightgbm_prediction(
         raw_probability=probability,
         raw_score=score,
         raw_confidence=None,
-        attribution_summary={},
+        attribution_summary=attribution,
         inference_latency_micros=latency,
     )
 
@@ -211,6 +243,17 @@ def adapt_catboost_prediction(
         model.load_model(str(path), format="json")
         pool = cb.Pool([vector], feature_names=artifact.feature_names)
         probability = float(model.predict_proba(pool)[0][1])
+        contribution_row = model.get_feature_importance(
+            pool,
+            type=cb.EFstrType.ShapValues,
+            thread_count=1,
+            verbose=False,
+        )[0]
+        attribution = _tree_attribution(
+            artifact.feature_names,
+            contribution_row,
+            provider_name="CatBoost",
+        )
     latency = _latency_micros(start_ns)
     score = (2.0 * probability) - 1.0
     return _build_prediction(
@@ -223,7 +266,7 @@ def adapt_catboost_prediction(
         raw_probability=probability,
         raw_score=score,
         raw_confidence=None,
-        attribution_summary={},
+        attribution_summary=attribution,
         inference_latency_micros=latency,
     )
 
