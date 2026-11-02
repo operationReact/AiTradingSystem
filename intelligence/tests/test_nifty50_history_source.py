@@ -11,7 +11,7 @@ def _csv() -> bytes:
         "Date,Open,High,Low,Close,Shares Traded,Turnover (₹ Cr)\n"
         "01-Jan-2019,10881.70,10923.60,10807.10,10910.10,159404542,8688.26\n"
         "02-Jan-2019,10868.85,10895.35,10735.05,10792.50,309665939,15352.25\n"
-    ).encode("utf-8")
+    ).encode()
 
 
 def test_parses_official_nifty50_history_and_emits_benchmark_context() -> None:
@@ -52,7 +52,7 @@ def test_future_index_row_cannot_mutate_earlier_context_snapshot() -> None:
 
 
 def test_rejects_header_drift() -> None:
-    source = _csv().replace("Turnover (₹ Cr)".encode("utf-8"), b"Turnover", 1)
+    source = _csv().replace("Turnover (₹ Cr)".encode(), b"Turnover", 1)
 
     with pytest.raises(ValueError, match="unexpected NIFTY 50 CSV headers"):
         parse_nifty50_history(source)
@@ -70,7 +70,7 @@ def test_rejects_duplicate_trading_dates() -> None:
         "Date,Open,High,Low,Close,Shares Traded,Turnover (₹ Cr)\n"
         "01-Jan-2019,10881.70,10923.60,10807.10,10910.10,159404542,8688.26\n"
         "01-Jan-2019,10881.70,10923.60,10807.10,10910.10,159404542,8688.26\n"
-    ).encode("utf-8")
+    ).encode()
 
     with pytest.raises(ValueError, match="duplicate trading dates"):
         parse_nifty50_history(source)
