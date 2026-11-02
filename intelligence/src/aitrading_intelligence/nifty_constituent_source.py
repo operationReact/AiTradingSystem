@@ -14,10 +14,18 @@ NIFTY_CONSTITUENT_CONTRACT_VERSION = "nifty-constituent-snapshot.v1"
 NIFTY_50_CONSTITUENT_URL = (
     "https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv"
 )
+NIFTY_500_CONSTITUENT_URL = (
+    "https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv"
+)
 EXPECTED_HEADERS = ["Company Name", "Industry", "Symbol", "Series", "ISIN Code"]
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Symbol = Annotated[str, Field(pattern=r"^[A-Z0-9&._-]{1,32}$")]
 Isin = Annotated[str, Field(pattern=r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")]
+IndexCode = Literal["NIFTY50", "NIFTY500"]
+_SOURCE_URLS: dict[IndexCode, str] = {
+    "NIFTY50": NIFTY_50_CONSTITUENT_URL,
+    "NIFTY500": NIFTY_500_CONSTITUENT_URL,
+}
 
 
 def _aware(value: datetime) -> datetime:
@@ -46,10 +54,8 @@ class NiftyConstituentSnapshot(BaseModel):
     contract_version: Literal["nifty-constituent-snapshot.v1"] = (
         NIFTY_CONSTITUENT_CONTRACT_VERSION
     )
-    index_code: Literal["NIFTY50"] = "NIFTY50"
-    source_url: Literal[
-        "https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv"
-    ] = NIFTY_50_CONSTITUENT_URL
+    index_code: IndexCode
+    source_url: Annotated[str, Field(min_length=1, max_length=512)]
     observed_at: datetime
     source_sha256: Hash64
     constituents: list[NiftyConstituent] = Field(min_length=1, max_length=500)
@@ -64,6 +70,8 @@ class NiftyConstituentSnapshot(BaseModel):
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> NiftyConstituentSnapshot:
+        if self.source_url != _SOURCE_URLS[self.index_code]:
+            raise ValueError("source_url does not match the official URL for index_code")
         identities = [(row.symbol, row.series, row.isin) for row in self.constituents]
         if identities != sorted(identities):
             raise ValueError("constituents must use canonical symbol/series/ISIN ordering")
@@ -76,13 +84,12 @@ class NiftyConstituentSnapshot(BaseModel):
         return self
 
 
-def parse_nifty50_constituents(
+def _parse_constituents(
     source_bytes: bytes,
     *,
     observed_at: datetime,
+    index_code: IndexCode,
 ) -> NiftyConstituentSnapshot:
-    """Parse one official NIFTY 50 CSV capture as first-observed membership evidence."""
-
     _aware(observed_at)
     if not source_bytes:
         raise ValueError("NIFTY constituent source is empty")
@@ -118,10 +125,11 @@ def parse_nifty50_constituents(
         raise ValueError("NIFTY constituent source contains no data rows")
     ordered = sorted(parsed, key=lambda row: (row.symbol, row.series, row.isin))
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+    source_url = _SOURCE_URLS[index_code]
     payload = {
         "contractVersion": NIFTY_CONSTITUENT_CONTRACT_VERSION,
-        "indexCode": "NIFTY50",
-        "sourceUrl": NIFTY_50_CONSTITUENT_URL,
+        "indexCode": index_code,
+        "sourceUrl": source_url,
         "observedAt": observed_at.isoformat(),
         "sourceSha256": source_sha256,
         "constituents": [row.model_dump(mode="json") for row in ordered],
@@ -129,6 +137,8 @@ def parse_nifty50_constituents(
         "canAuthorizeCapital": False,
     }
     return NiftyConstituentSnapshot(
+        index_code=index_code,
+        source_url=source_url,
         observed_at=observed_at,
         source_sha256=source_sha256,
         constituents=ordered,
@@ -136,15 +146,59 @@ def parse_nifty50_constituents(
     )
 
 
+def parse_nifty50_constituents(
+    source_bytes: bytes,
+    *,
+    observed_at: datetime,
+) -> NiftyConstituentSnapshot:
+    """Parse one official NIFTY 50 CSV capture as first-observed membership evidence."""
+
+    return _parse_constituents(source_bytes, observed_at=observed_at, index_code="NIFTY50")
+
+
+def parse_nifty500_constituents(
+    source_bytes: bytes,
+    *,
+    observed_at: datetime,
+) -> NiftyConstituentSnapshot:
+    """Parse one official NIFTY 500 CSV capture as first-observed membership evidence."""
+
+    return _parse_constituents(source_bytes, observed_at=observed_at, index_code="NIFTY500")
+
+
+def _select_snapshot(
+    snapshots: list[NiftyConstituentSnapshot],
+    *,
+    as_of: datetime,
+    index_code: IndexCode,
+) -> NiftyConstituentSnapshot:
+    _aware(as_of)
+    causal = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.index_code == index_code and snapshot.observed_at <= as_of
+    ]
+    if not causal:
+        label = "NIFTY 50" if index_code == "NIFTY50" else "NIFTY 500"
+        raise ValueError(f"no {label} constituent snapshot was observed by as_of")
+    return max(causal, key=lambda snapshot: (snapshot.observed_at, snapshot.snapshot_fingerprint))
+
+
 def select_nifty50_snapshot(
     snapshots: list[NiftyConstituentSnapshot],
     *,
     as_of: datetime,
 ) -> NiftyConstituentSnapshot:
-    """Select only a snapshot that had actually been collected by the research decision time."""
+    """Select only a NIFTY 50 snapshot that was collected by the research decision time."""
 
-    _aware(as_of)
-    causal = [snapshot for snapshot in snapshots if snapshot.observed_at <= as_of]
-    if not causal:
-        raise ValueError("no NIFTY 50 constituent snapshot was observed by as_of")
-    return max(causal, key=lambda snapshot: (snapshot.observed_at, snapshot.snapshot_fingerprint))
+    return _select_snapshot(snapshots, as_of=as_of, index_code="NIFTY50")
+
+
+def select_nifty500_snapshot(
+    snapshots: list[NiftyConstituentSnapshot],
+    *,
+    as_of: datetime,
+) -> NiftyConstituentSnapshot:
+    """Select only a NIFTY 500 snapshot that was collected by the research decision time."""
+
+    return _select_snapshot(snapshots, as_of=as_of, index_code="NIFTY500")
