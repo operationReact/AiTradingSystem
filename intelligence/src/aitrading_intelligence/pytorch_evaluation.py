@@ -220,8 +220,13 @@ def evaluate_pytorch_challenger(
     if len(set(train_labels)) != 2 or len(set(test_labels)) != 2:
         raise ValueError("training and test partitions must contain both classes")
 
-    train_rows = [row_by_fingerprint[example.feature_row_fingerprint] for example in training_examples]
-    test_rows = [row_by_fingerprint[example.feature_row_fingerprint] for example in test_examples]
+    train_rows = [
+        row_by_fingerprint[example.feature_row_fingerprint]
+        for example in training_examples
+    ]
+    test_rows = [
+        row_by_fingerprint[example.feature_row_fingerprint] for example in test_examples
+    ]
 
     logistic_artifact = train_logistic_baseline(
         train_rows,
