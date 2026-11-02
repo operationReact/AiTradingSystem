@@ -6,8 +6,10 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .fingerprints import canonical_fingerprint
+from .regime import RegimeLabel, RegimeMethod, RegimeSnapshot
 
 FUSION_VERSION = "signal-fusion.v1"
+REGIME_FUSION_VIEW_VERSION = "regime-fusion-view.v1"
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
 
@@ -41,6 +43,7 @@ class FusionRequest(BaseModel):
     deterministic: FusionEvidence
     quant: FusionEvidence
     gemini: FusionEvidence | None = None
+    regime: RegimeSnapshot | None = None
 
     @field_validator("as_of")
     @classmethod
@@ -60,6 +63,11 @@ class FusionRequest(BaseModel):
         for evidence in (self.deterministic, self.quant, self.gemini):
             if evidence is not None and evidence.observed_at > self.as_of:
                 raise ValueError("evidence observed_at cannot be later than as_of")
+        if self.regime is not None:
+            if self.regime.as_of > self.as_of:
+                raise ValueError("regime as_of cannot be later than fusion as_of")
+            if self.regime.data_cutoff > self.as_of:
+                raise ValueError("regime data_cutoff cannot be later than fusion as_of")
         return self
 
 
@@ -78,6 +86,35 @@ class FusionContribution(BaseModel):
     fingerprint: Hash64
 
 
+class RegimeEvidenceView(BaseModel):
+    """UI/fusion view of regime evidence. It is deliberately zero-weight advisory context."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    view_version: Literal["regime-fusion-view.v1"] = REGIME_FUSION_VIEW_VERSION
+    as_of: datetime
+    data_cutoff: datetime
+    method: RegimeMethod
+    dominant_regime: RegimeLabel
+    probabilities: dict[str, float]
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    snapshot_fingerprint: Hash64
+    model_fingerprint: Hash64 | None = None
+    training_data_cutoff: datetime | None = None
+    age_seconds: Annotated[int, Field(ge=0)]
+    included: bool
+    reason: Literal["FRESH_ADVISORY_ONLY", "STALE_ADVISORY_ONLY"]
+    influences_fusion_score: Literal[False] = False
+    can_authorize_capital: Literal[False] = False
+
+    @field_validator("as_of", "data_cutoff", "training_data_cutoff")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("regime view timestamps must be timezone-aware")
+        return value
+
+
 class RankedOpportunity(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -90,6 +127,7 @@ class RankedOpportunity(BaseModel):
     rank_score: Annotated[float, Field(ge=0.0, le=1.0)]
     confidence: Annotated[float, Field(ge=0.0, le=1.0)]
     contributions: list[FusionContribution]
+    regime_evidence: RegimeEvidenceView | None = None
     reason_codes: list[str]
     provenance: list[str]
     opportunity_fingerprint: Hash64
@@ -106,6 +144,27 @@ _WEIGHTS = {
 
 def _age_seconds(as_of: datetime, observed_at: datetime) -> int:
     return max(0, int((as_of - observed_at).total_seconds()))
+
+
+def _regime_view(request: FusionRequest) -> RegimeEvidenceView | None:
+    if request.regime is None:
+        return None
+    age_seconds = _age_seconds(request.as_of, request.regime.as_of)
+    included = age_seconds <= request.max_age_seconds
+    return RegimeEvidenceView(
+        as_of=request.regime.as_of,
+        data_cutoff=request.regime.data_cutoff,
+        method=request.regime.method,
+        dominant_regime=request.regime.dominant_regime,
+        probabilities=request.regime.probabilities,
+        confidence=request.regime.confidence,
+        snapshot_fingerprint=request.regime.snapshot_fingerprint,
+        model_fingerprint=request.regime.model_fingerprint,
+        training_data_cutoff=request.regime.training_data_cutoff,
+        age_seconds=age_seconds,
+        included=included,
+        reason="FRESH_ADVISORY_ONLY" if included else "STALE_ADVISORY_ONLY",
+    )
 
 
 def fuse_signals(request: FusionRequest) -> RankedOpportunity:
@@ -180,6 +239,18 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
         f"{evidence.family}:{evidence.provider}:{evidence.version}:{evidence.fingerprint}"
         for evidence in included_evidence
     ]
+
+    regime_evidence = _regime_view(request)
+    if regime_evidence is not None:
+        reason_codes.append("REGIME_ADVISORY_ONLY")
+        if not regime_evidence.included:
+            reason_codes.append("REGIME_STALE")
+        provenance.append(
+            "REGIME:"
+            f"{regime_evidence.method}:"
+            f"{regime_evidence.snapshot_fingerprint}"
+        )
+
     payload = {
         "fusion_version": FUSION_VERSION,
         "symbol": request.symbol,
@@ -190,6 +261,9 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
         "rank_score": rank_score,
         "confidence": confidence,
         "contributions": [item.model_dump(mode="json") for item in contributions],
+        "regime_evidence": (
+            regime_evidence.model_dump(mode="json") if regime_evidence is not None else None
+        ),
         "reason_codes": reason_codes,
         "provenance": provenance,
         "status": "CANDIDATE_NOT_EXECUTABLE",
@@ -205,6 +279,7 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
         rank_score=rank_score,
         confidence=confidence,
         contributions=contributions,
+        regime_evidence=regime_evidence,
         reason_codes=reason_codes,
         provenance=provenance,
         opportunity_fingerprint=canonical_fingerprint(payload),
