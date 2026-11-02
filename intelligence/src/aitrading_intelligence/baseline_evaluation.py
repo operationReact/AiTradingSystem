@@ -146,7 +146,11 @@ def evaluate_baselines(
         for probability in tree.predict_proba([_vector(row, feature_names) for row in test_rows])
     ]
 
-    logistic_metrics = _metrics(logistic_artifact.model_version, test_labels, logistic_probabilities)
+    logistic_metrics = _metrics(
+        logistic_artifact.model_version,
+        test_labels,
+        logistic_probabilities,
+    )
     tree_metrics = _metrics(TREE_VERSION, test_labels, tree_probabilities)
     comparison = _comparison(logistic_metrics, tree_metrics)
     payload = {
