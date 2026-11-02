@@ -1,10 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
-import pytest
-
 from aitrading_intelligence.fusion import RankedOpportunity
 from aitrading_intelligence.pytorch_target import LabeledExample
 from aitrading_intelligence.replay import ReplayConfig, run_historical_replay
+import pytest
 
 
 START = datetime(2026, 1, 5, 3, 45, tzinfo=UTC)
