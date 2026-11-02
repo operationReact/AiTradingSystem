@@ -83,44 +83,45 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
     }
 
     private static Map<String, Object> responseSchema() {
+        Map<String, Object> properties = Map.ofEntries(
+            Map.entry("sentiment", Map.of(
+                "type", "string",
+                "enum", List.of("POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED"))),
+            Map.entry("directionScore", Map.of(
+                "type", "number",
+                "minimum", -1,
+                "maximum", 1)),
+            Map.entry("category", Map.of(
+                "type", "string",
+                "enum", List.of(
+                    "EARNINGS",
+                    "REGULATORY",
+                    "MACRO",
+                    "CORPORATE_ACTION",
+                    "MANAGEMENT",
+                    "SECTOR",
+                    "OTHER"))),
+            Map.entry("confidence", Map.of("type", "number", "minimum", 0, "maximum", 1)),
+            Map.entry("materiality", Map.of("type", "number", "minimum", 0, "maximum", 1)),
+            Map.entry("horizon", Map.of(
+                "type", "string",
+                "enum", List.of("INTRADAY", "MULTI_DAY", "LONGER_TERM", "UNKNOWN"))),
+            Map.entry("novelty", Map.of("type", "number", "minimum", 0, "maximum", 1)),
+            Map.entry("contradiction", Map.of("type", "boolean")),
+            Map.entry("ambiguity", Map.of("type", "boolean")),
+            Map.entry("impactedSymbols", Map.of(
+                "type", "array",
+                "maxItems", 10,
+                "items", Map.of("type", "string"))),
+            Map.entry("evidence", Map.of("type", "string")),
+            Map.entry("risks", Map.of(
+                "type", "array",
+                "maxItems", 5,
+                "items", Map.of("type", "string"))));
         return Map.of(
             "type", "object",
             "additionalProperties", false,
-            "properties", Map.of(
-                "sentiment", Map.of(
-                    "type", "string",
-                    "enum", List.of("POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED")),
-                "directionScore", Map.of(
-                    "type", "number",
-                    "minimum", -1,
-                    "maximum", 1),
-                "category", Map.of(
-                    "type", "string",
-                    "enum", List.of(
-                        "EARNINGS",
-                        "REGULATORY",
-                        "MACRO",
-                        "CORPORATE_ACTION",
-                        "MANAGEMENT",
-                        "SECTOR",
-                        "OTHER")),
-                "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1),
-                "materiality", Map.of("type", "number", "minimum", 0, "maximum", 1),
-                "horizon", Map.of(
-                    "type", "string",
-                    "enum", List.of("INTRADAY", "MULTI_DAY", "LONGER_TERM", "UNKNOWN")),
-                "novelty", Map.of("type", "number", "minimum", 0, "maximum", 1),
-                "contradiction", Map.of("type", "boolean"),
-                "ambiguity", Map.of("type", "boolean"),
-                "impactedSymbols", Map.of(
-                    "type", "array",
-                    "maxItems", 10,
-                    "items", Map.of("type", "string")),
-                "evidence", Map.of("type", "string"),
-                "risks", Map.of(
-                    "type", "array",
-                    "maxItems", 5,
-                    "items", Map.of("type", "string"))),
+            "properties", properties,
             "required", List.of(
                 "sentiment",
                 "directionScore",
