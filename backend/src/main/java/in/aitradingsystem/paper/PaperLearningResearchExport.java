@@ -27,6 +27,7 @@ public record PaperLearningResearchExport(
             String symbol,
             String productType,
             String executionOrigin,
+            String entrySide,
             int quantity,
             BigDecimal expectedEntryPrice,
             BigDecimal entryPrice,
