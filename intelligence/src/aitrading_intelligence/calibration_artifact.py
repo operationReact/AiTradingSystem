@@ -121,6 +121,8 @@ class CalibrationObservation(BaseModel):
         if self.target_observed_at <= self.decision_at:
             raise ValueError("calibration target must be observed after decision time")
         payload = self.model_dump(mode="json", exclude={"observation_fingerprint"})
+        payload["decision_at"] = self.decision_at.isoformat()
+        payload["target_observed_at"] = self.target_observed_at.isoformat()
         expected = canonical_fingerprint(payload)
         if self.observation_fingerprint != expected:
             raise ValueError("calibration observation fingerprint mismatch")
@@ -188,6 +190,9 @@ class CalibrationArtifact(BaseModel):
         if len(set(self.observation_fingerprints)) != len(self.observation_fingerprints):
             raise ValueError("calibration observations must be unique")
         payload = self.model_dump(mode="json", exclude={"artifact_fingerprint"})
+        payload["fit_as_of"] = self.fit_as_of.isoformat()
+        payload["fit_start"] = self.fit_start.isoformat()
+        payload["fit_end"] = self.fit_end.isoformat()
         expected = canonical_fingerprint(payload)
         if self.artifact_fingerprint != expected:
             raise ValueError("calibration artifact fingerprint mismatch")
@@ -267,8 +272,12 @@ def create_calibration_artifact(
     if len(observations) < 20:
         raise ValueError("at least 20 closed calibration observations are required")
 
+    validated = [
+        CalibrationObservation.model_validate(row.model_dump(mode="python"))
+        for row in observations
+    ]
     ordered = sorted(
-        observations,
+        validated,
         key=lambda row: (
             row.decision_at,
             row.symbol,
