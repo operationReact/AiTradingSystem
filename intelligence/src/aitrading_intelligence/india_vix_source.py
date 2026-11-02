@@ -30,6 +30,12 @@ CONSERVATIVE_DAILY_AVAILABLE_TIME = time(16, 0)
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
 
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return value
+
+
 class IndiaVixDailyRow(BaseModel):
     """One official NSE daily India VIX OHLC observation."""
 
@@ -117,6 +123,21 @@ class IndiaVixHistory(BaseModel):
 
     def close_observations(self) -> list[IndiaContextObservation]:
         return [row.to_close_context_observation() for row in self.rows]
+
+    def causal_source_fingerprint(self, *, as_of: datetime) -> str:
+        """Fingerprint only India VIX rows that were available by the decision time."""
+
+        _aware(as_of)
+        causal = [row for row in self.rows if row.available_at <= as_of]
+        if not causal:
+            raise ValueError("no India VIX rows were available by as_of")
+        return canonical_fingerprint(
+            {
+                "contractVersion": INDIA_VIX_HISTORY_CONTRACT_VERSION,
+                "sourceUrl": INDIA_VIX_HISTORY_URL,
+                "rows": [row.model_dump(mode="json") for row in causal],
+            }
+        )
 
 
 def _parse_date(value: str) -> date:

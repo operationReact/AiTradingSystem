@@ -29,6 +29,12 @@ CONSERVATIVE_DAILY_AVAILABLE_TIME = time(16, 0)
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
 
+def _aware(value: datetime) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError("timestamp must be timezone-aware")
+    return value
+
+
 class Nifty50DailyRow(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -118,6 +124,21 @@ class Nifty50History(BaseModel):
                 )
             previous = row
         return observations
+
+    def causal_source_fingerprint(self, *, as_of: datetime) -> str:
+        """Fingerprint only NIFTY 50 rows that were available by the decision time."""
+
+        _aware(as_of)
+        causal = [row for row in self.rows if row.available_at <= as_of]
+        if not causal:
+            raise ValueError("no NIFTY 50 rows were available by as_of")
+        return canonical_fingerprint(
+            {
+                "contractVersion": NIFTY50_HISTORY_CONTRACT_VERSION,
+                "sourceUrl": NIFTY50_HISTORY_URL,
+                "rows": [row.model_dump(mode="json") for row in causal],
+            }
+        )
 
 
 def _parse_date(value: str) -> date:
