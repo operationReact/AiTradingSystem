@@ -3,8 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 DATASET_SCHEMA_VERSION = "dataset.v1"
 FEATURE_SCHEMA_VERSION = "features.market.v1"
