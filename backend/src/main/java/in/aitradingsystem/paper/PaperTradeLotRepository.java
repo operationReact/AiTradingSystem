@@ -14,15 +14,16 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 /**
- * Persists exact entry-fill to exit-fill lineage for PAPER outcome learning.
+ * Exact entry-fill to exit-fill lineage for PAPER outcome learning.
  *
- * <p>The existing position/account ledger remains the accounting authority. This repository adds a
- * deterministic FIFO attribution layer so a later research outcome can identify the exact entry
- * orders/fills that an exit consumed. Close-allocation rows are append-only; only the lot's derived
- * remaining quantity is updated while the surrounding PAPER order transaction is locked.
+ * <p>The existing position/account ledger remains the accounting authority. Close-allocation rows
+ * are append-only. Legacy/incomplete lineage is invalidated rather than guessed, and must never
+ * block an otherwise valid protective exit.
  */
 @Repository
 public class PaperTradeLotRepository {
+    static final String POSITION_QUANTITY_MISMATCH = "POSITION_QUANTITY_MISMATCH";
+
     private final JdbcClient jdbc;
 
     public PaperTradeLotRepository(JdbcClient jdbc) {
@@ -68,17 +69,21 @@ public class PaperTradeLotRepository {
     }
 
     /**
-     * Allocates one authoritative SELL fill across open entry lots in FIFO order.
-     * Monetary fill totals are apportioned by quantity and the final allocation receives the exact
-     * residual, ensuring sums reconcile to the authoritative fill after currency rounding.
+     * Allocates one authoritative SELL fill across tracked entry lots in FIFO order.
+     *
+     * <p>{@code expectedPositionQuantityBefore} comes from the authoritative position accounting
+     * result ({@code remainingAfter + soldQuantity}). If tracked lots do not equal that quantity,
+     * attribution is unsafe: active lots are invalidated and an incomplete result is returned while
+     * the surrounding PAPER execution remains valid.
      */
-    public List<CloseAllocation> allocateClose(
+    public AllocationResult allocateClose(
             UUID exitOrderId,
             UUID exitFillId,
             Long instrumentId,
             String symbol,
             ProductType productType,
             int quantity,
+            int expectedPositionQuantityBefore,
             BigDecimal exitPrice,
             BigDecimal totalFeeAmount,
             BigDecimal totalSlippageAmount,
@@ -86,17 +91,19 @@ public class PaperTradeLotRepository {
             String exitReason,
             Instant closedAt) {
         requireIdentity(exitOrderId, exitFillId, symbol, productType, quantity, closedAt);
+        if (expectedPositionQuantityBefore < quantity) {
+            throw new IllegalArgumentException("expectedPositionQuantityBefore cannot be less than exit quantity");
+        }
         requirePositive(exitPrice, "exitPrice");
         requireNonNegative(totalFeeAmount, "totalFeeAmount");
         requireNonNegative(totalSlippageAmount, "totalSlippageAmount");
         if (totalRealizedPnl == null) throw new IllegalArgumentException("totalRealizedPnl is required");
 
         List<OpenLot> openLots = lockOpenLots(instrumentId, symbol, productType);
-        int available = openLots.stream().mapToInt(OpenLot::remainingQuantity).sum();
-        if (available < quantity) {
-            throw new IllegalStateException(
-                "PAPER lot lineage has insufficient open quantity for exit: requested=" + quantity
-                    + ", available=" + available);
+        int trackedQuantity = openLots.stream().mapToInt(OpenLot::remainingQuantity).sum();
+        if (trackedQuantity != expectedPositionQuantityBefore) {
+            invalidate(openLots, POSITION_QUANTITY_MISMATCH, closedAt);
+            return AllocationResult.incomplete(POSITION_QUANTITY_MISMATCH);
         }
 
         List<PlannedAllocation> plan = new ArrayList<>();
@@ -106,6 +113,10 @@ public class PaperTradeLotRepository {
             int allocated = Math.min(left, lot.remainingQuantity());
             plan.add(new PlannedAllocation(lot, allocated));
             left -= allocated;
+        }
+        if (left != 0) {
+            invalidate(openLots, POSITION_QUANTITY_MISMATCH, closedAt);
+            return AllocationResult.incomplete(POSITION_QUANTITY_MISMATCH);
         }
 
         BigDecimal feeTotal = money(totalFeeAmount);
@@ -153,12 +164,16 @@ public class PaperTradeLotRepository {
                 .update();
 
             int remaining = item.lot().remainingQuantity() - item.quantity();
+            String status = remaining == 0 ? "EXHAUSTED" : "ACTIVE";
             int updated = jdbc.sql("""
                     UPDATE paper_trade_lot
-                       SET remaining_quantity = :remaining
-                     WHERE id = :id AND remaining_quantity = :expected
+                       SET remaining_quantity = :remaining, lineage_status = :status
+                     WHERE id = :id
+                       AND lineage_status = 'ACTIVE'
+                       AND remaining_quantity = :expected
                     """)
                 .param("remaining", remaining)
+                .param("status", status)
                 .param("id", item.lot().id())
                 .param("expected", item.lot().remainingQuantity())
                 .update();
@@ -170,7 +185,7 @@ public class PaperTradeLotRepository {
                 allocatedFee, allocatedSlippage, allocatedPnl, remaining));
         }
 
-        return List.copyOf(result);
+        return AllocationResult.complete(result);
     }
 
     private List<OpenLot> lockOpenLots(Long instrumentId, String symbol, ProductType productType) {
@@ -180,7 +195,8 @@ public class PaperTradeLotRepository {
         var query = jdbc.sql("""
                 SELECT id, entry_order_id, entry_fill_id, remaining_quantity, opened_at
                   FROM paper_trade_lot
-                 WHERE remaining_quantity > 0
+                 WHERE lineage_status = 'ACTIVE'
+                   AND remaining_quantity > 0
                    AND product_type = :productType
                    AND %s
                  ORDER BY opened_at, id
@@ -199,6 +215,23 @@ public class PaperTradeLotRepository {
                 rs.getInt("remaining_quantity"),
                 rs.getObject("opened_at", OffsetDateTime.class).toInstant()))
             .list();
+    }
+
+    private void invalidate(List<OpenLot> lots, String reason, Instant at) {
+        for (OpenLot lot : lots) {
+            jdbc.sql("""
+                    UPDATE paper_trade_lot
+                       SET remaining_quantity = 0,
+                           lineage_status = 'INVALIDATED',
+                           invalidation_reason = :reason,
+                           invalidated_at = :at
+                     WHERE id = :id AND lineage_status = 'ACTIVE'
+                    """)
+                .param("reason", reason)
+                .param("at", ts(at))
+                .param("id", lot.id())
+                .update();
+        }
     }
 
     private static BigDecimal allocateMoney(BigDecimal total, int quantity, int totalQuantity,
@@ -255,4 +288,15 @@ public class PaperTradeLotRepository {
         BigDecimal allocatedRealizedPnl,
         int remainingLotQuantity
     ) {}
+
+    public record AllocationResult(boolean complete, String incompleteReason,
+                                   List<CloseAllocation> allocations) {
+        static AllocationResult complete(List<CloseAllocation> allocations) {
+            return new AllocationResult(true, null, List.copyOf(allocations));
+        }
+
+        static AllocationResult incomplete(String reason) {
+            return new AllocationResult(false, reason, List.of());
+        }
+    }
 }
