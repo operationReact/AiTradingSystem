@@ -54,7 +54,7 @@ public class InstrumentMasterController {
      */
     @GetMapping("/research/cash-catalogue")
     public InstrumentCatalogueResearchExport researchCashCatalogue(
-            @RequestParam Instant asOf,
+            @RequestParam(required = false) Instant asOf,
             @RequestParam(defaultValue = "20000") @Min(1) @Max(50_000) int maxRows) {
         return researchService.exportCashCatalogue(asOf, maxRows);
     }
