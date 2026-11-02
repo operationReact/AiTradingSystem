@@ -179,10 +179,10 @@ def _liquidity(
 def _sector_enrichment(*, as_of: datetime = AS_OF):
     constituent = parse_nifty500_constituents(
         (
-            "Company Name,Industry,Symbol,Series,ISIN Code\n"
-            "Example Bank Limited,Banks,EXBANK,EQ,INE001A01010\n"
-            "Infosys Limited,Software Services,INFY,EQ,INE009A01021\n"
-        ).encode(),
+            b"Company Name,Industry,Symbol,Series,ISIN Code\n"
+            b"Example Bank Limited,Banks,EXBANK,EQ,INE001A01010\n"
+            b"Infosys Limited,Software Services,INFY,EQ,INE009A01021\n"
+        ),
         observed_at=AS_OF - timedelta(hours=2),
     )
     taxonomy = build_nse_sector_taxonomy_snapshot(
@@ -249,6 +249,7 @@ def test_exact_nse_symbol_series_bridge_preserves_isin_and_broker_identity() -> 
     assert binding.broker_trading_symbol == "INFY-EQ"
     assert binding.broker_symbol_token == "1003"
     assert binding.sector == "Information Technology"
+    assert binding.membership_effective_from == AS_OF - timedelta(hours=2)
     assert bridge.snapshot_fingerprint
 
 
@@ -279,7 +280,10 @@ def test_duplicate_exact_broker_trading_symbol_fails_closed_as_ambiguous() -> No
 def test_tampered_liquidity_identity_cannot_cross_catalogue_boundary() -> None:
     catalogue = _catalogue()
 
-    with pytest.raises(ValueError, match="liquidity evidence trading symbol does not match catalogue"):
+    with pytest.raises(
+        ValueError,
+        match="liquidity evidence trading symbol does not match catalogue",
+    ):
         build_nifty500_liquidity_identity_bridge(
             catalogue=catalogue,
             liquidity=_liquidity(catalogue, tamper_infy_symbol=True),
