@@ -26,6 +26,8 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
     private static final String BASE = "/api/instruments/research/cash-catalogue";
     private static final Instant FIRST_AVAILABLE = Instant.parse("2026-11-01T10:00:00Z");
     private static final Instant SECOND_AVAILABLE = Instant.parse("2026-11-02T10:00:00Z");
+    private static final Instant THIRD_AVAILABLE = Instant.parse("2026-11-02T11:00:00Z");
+    private static final Instant FOURTH_AVAILABLE = Instant.parse("2026-11-02T12:00:00Z");
 
     private static final String FIRST_MASTER = """
             [
@@ -45,6 +47,7 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
 
     @BeforeEach
     void resetInstrumentCatalogue() {
+        jdbc.update("DELETE FROM instrument_cash_catalogue_history");
         jdbc.update("DELETE FROM instrument_master");
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = NULL, activated_at = NULL WHERE singleton_id = 1");
         jdbc.update("DELETE FROM instrument_import_run");
@@ -74,6 +77,11 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
         assertThat(firstRead.status()).isEqualTo("RESEARCH_CATALOGUE_ONLY");
         assertThat(firstRead.canAuthorizeCapital()).isFalse();
 
+        Integer derivativeHistory = jdbc.queryForObject(
+                "SELECT count(*) FROM instrument_cash_catalogue_history WHERE catalogue_version = ? AND instrument_type <> 'EQ'",
+                Integer.class, first.catalogueVersion());
+        assertThat(derivativeHistory).isZero();
+
         mvc.perform(get(BASE)
                         .param("asOf", "2026-11-01T12:00:00Z")
                         .param("maxRows", "100")
@@ -95,7 +103,7 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
         InstrumentCatalogueResearchExport after = researchService.exportCashCatalogue(
                 Instant.parse("2026-11-01T12:00:00Z"), 100);
         InstrumentCatalogueResearchExport current = researchService.exportCashCatalogue(
-                Instant.parse("2026-11-02T12:00:00Z"), 100);
+                Instant.parse("2026-11-02T10:30:00Z"), 100);
 
         assertThat(after.catalogueVersion()).isEqualTo(first.catalogueVersion());
         assertThat(after.catalogueFingerprint()).isEqualTo(before.catalogueFingerprint());
@@ -105,9 +113,34 @@ class InstrumentCatalogueResearchApiIT extends AbstractPostgresIT {
     }
 
     @Test
-    void failsClosedWhenHistoricalCatalogueRowsAreNoLongerRetained() {
+    void durableHistorySurvivesOperationalCatalogueRetentionPurge() {
         InstrumentImportSummary first = importAt(FIRST_MASTER, FIRST_AVAILABLE);
-        jdbc.update("DELETE FROM instrument_master WHERE catalogue_version = ?", first.catalogueVersion());
+        InstrumentCatalogueResearchExport original = researchService.exportCashCatalogue(
+                Instant.parse("2026-11-01T12:00:00Z"), 100);
+        importAt(SECOND_MASTER, SECOND_AVAILABLE);
+        importAt(FIRST_MASTER, THIRD_AVAILABLE);
+        importAt(SECOND_MASTER, FOURTH_AVAILABLE);
+
+        Integer operationalRows = jdbc.queryForObject(
+                "SELECT count(*) FROM instrument_master WHERE catalogue_version = ?",
+                Integer.class, first.catalogueVersion());
+        Integer historicalRows = jdbc.queryForObject(
+                "SELECT count(*) FROM instrument_cash_catalogue_history WHERE catalogue_version = ?",
+                Integer.class, first.catalogueVersion());
+        InstrumentCatalogueResearchExport replayed = researchService.exportCashCatalogue(
+                Instant.parse("2026-11-01T12:00:00Z"), 100);
+
+        assertThat(operationalRows).isZero();
+        assertThat(historicalRows).isEqualTo(2);
+        assertThat(replayed.catalogueVersion()).isEqualTo(first.catalogueVersion());
+        assertThat(replayed.catalogueFingerprint()).isEqualTo(original.catalogueFingerprint());
+        assertThat(replayed.instruments()).isEqualTo(original.instruments());
+    }
+
+    @Test
+    void failsClosedWhenHistoricalCashEvidenceIsActuallyMissing() {
+        InstrumentImportSummary first = importAt(FIRST_MASTER, FIRST_AVAILABLE);
+        jdbc.update("DELETE FROM instrument_cash_catalogue_history WHERE catalogue_version = ?", first.catalogueVersion());
 
         assertThatThrownBy(() -> researchService.exportCashCatalogue(
                 Instant.parse("2026-11-01T12:00:00Z"), 100))
