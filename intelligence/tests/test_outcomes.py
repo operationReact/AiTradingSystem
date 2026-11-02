@@ -73,6 +73,26 @@ def test_trade_outcome_is_deterministic_normalized_and_non_executable() -> None:
     assert first.can_authorize_capital is False
 
 
+def test_outcome_preserves_unavailable_excursion_and_model_evidence() -> None:
+    payload = _source().model_dump()
+    payload["mae_return"] = None
+    payload["mfe_return"] = None
+    payload["feature_row_fingerprint"] = None
+    payload["model_artifact_fingerprint"] = None
+    payload["fusion_opportunity_fingerprint"] = None
+    payload["gemini_evidence_fingerprints"] = []
+
+    record = build_trade_outcome(TradeOutcomeInput(**payload))
+
+    assert record.mae_return is None
+    assert record.mfe_return is None
+    assert record.feature_row_fingerprint is None
+    assert record.model_artifact_fingerprint is None
+    assert record.fusion_opportunity_fingerprint is None
+    assert record.gemini_evidence_fingerprints == []
+    assert record.promotion_allowed is False
+
+
 def test_outcome_rejects_future_evidence_and_invalid_round_trip() -> None:
     with pytest.raises(ValidationError, match="evidence_cutoff"):
         _source(evidence_offset_minutes=1)
