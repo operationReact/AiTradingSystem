@@ -94,6 +94,8 @@ def test_heuristic_regime_snapshot_is_deterministic_probabilistic_and_advisory()
     assert first.confidence == max(first.probabilities.values())
     assert first.input_fingerprint == context.snapshot_fingerprint
     assert first.config_fingerprint == HeuristicRegimeConfig().fingerprint
+    assert first.model_fingerprint is None
+    assert first.training_data_cutoff is None
     assert first.can_authorize_capital is False
     assert first.status == "RESEARCH_REGIME_EVIDENCE_ONLY"
 
@@ -202,4 +204,37 @@ def test_regime_contract_rejects_non_normalized_probabilities() -> None:
     }
 
     with pytest.raises(ValidationError, match="probabilities must sum to 1"):
+        RegimeSnapshot.model_validate(payload)
+
+
+def test_regime_contract_requires_lineage_for_trained_challenger() -> None:
+    as_of = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
+    context = _context(
+        as_of=as_of,
+        return_1d=0.01,
+        net_breadth=0.25,
+        dispersion=0.01,
+        india_vix=16.0,
+    )
+    payload = build_heuristic_regime_snapshot(context=context).model_dump()
+    payload["method"] = "HMM_CHALLENGER"
+
+    with pytest.raises(ValidationError, match="require trained-model lineage"):
+        RegimeSnapshot.model_validate(payload)
+
+
+def test_regime_contract_forbids_model_lineage_on_heuristic_baseline() -> None:
+    as_of = datetime(2026, 11, 2, 10, 30, tzinfo=UTC)
+    context = _context(
+        as_of=as_of,
+        return_1d=0.01,
+        net_breadth=0.25,
+        dispersion=0.01,
+        india_vix=16.0,
+    )
+    payload = build_heuristic_regime_snapshot(context=context).model_dump()
+    payload["model_fingerprint"] = "a" * 64
+    payload["training_data_cutoff"] = as_of - timedelta(days=1)
+
+    with pytest.raises(ValidationError, match="cannot declare trained-model lineage"):
         RegimeSnapshot.model_validate(payload)
