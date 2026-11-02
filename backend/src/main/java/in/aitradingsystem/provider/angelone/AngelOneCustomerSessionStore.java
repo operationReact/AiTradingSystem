@@ -14,9 +14,9 @@ import org.springframework.stereotype.Component;
 /**
  * Ephemeral, app-session-scoped customer broker connections.
  *
- * <p>PIN and TOTP values never enter this store. API keys and provider JWTs are kept only in process memory,
- * are bounded by both the provider-session maximum age and the app-session expiry, and disappear on process restart.
- * Nothing in this class persists broker credentials or tokens to PostgreSQL.</p>
+ * <p>The Angel One publisher flow keeps customer PIN/TOTP entirely on Angel One. The returned provider
+ * authorization token is kept only in process memory, bounded by both provider-session maximum age and the
+ * app-session expiry, and disappears on process restart. No broker token is persisted to PostgreSQL.</p>
  */
 @Component
 public class AngelOneCustomerSessionStore {
@@ -34,12 +34,11 @@ public class AngelOneCustomerSessionStore {
         this.clock = clock;
     }
 
-    public Connection bind(UUID appSessionId, String apiKey, String clientCode, String jwtToken,
+    public Connection bind(UUID appSessionId, String clientCode, String authToken,
                            OffsetDateTime appSessionExpiresAt) {
         if (appSessionId == null) throw new IllegalArgumentException("appSessionId is required");
-        String boundedApiKey = requireBounded(apiKey, 256, "apiKey");
         String boundedClientCode = requireBounded(clientCode, 64, "clientCode");
-        String boundedJwt = requireBounded(jwtToken, 8192, "jwtToken");
+        String boundedToken = requireBounded(authToken, 8192, "authToken");
         if (appSessionExpiresAt == null) throw new IllegalArgumentException("appSessionExpiresAt is required");
 
         Instant now = clock.instant();
@@ -49,7 +48,7 @@ public class AngelOneCustomerSessionStore {
         }
         Instant providerExpiry = now.plusSeconds(properties.sessionMaxAgeSeconds());
         Instant expiresAt = providerExpiry.isBefore(appExpiry) ? providerExpiry : appExpiry;
-        Connection connection = new Connection(boundedApiKey, boundedClientCode, boundedJwt, now, expiresAt);
+        Connection connection = new Connection(boundedClientCode, boundedToken, now, expiresAt);
         connections.put(appSessionId, connection);
         return connection;
     }
@@ -89,14 +88,13 @@ public class AngelOneCustomerSessionStore {
     }
 
     public record Connection(
-            String apiKey,
             String clientCode,
-            String jwtToken,
+            String authToken,
             Instant authenticatedAt,
             Instant expiresAt) {
         @Override
         public String toString() {
-            return "Connection[clientCode=" + clientCode + ", credentials=redacted, authenticatedAt="
+            return "Connection[clientCode=" + clientCode + ", token=redacted, authenticatedAt="
                     + authenticatedAt + ", expiresAt=" + expiresAt + "]";
         }
     }
