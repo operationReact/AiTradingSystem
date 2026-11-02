@@ -8,7 +8,7 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .datasets import DatasetManifest, FEATURE_SCHEMA_VERSION
+from .datasets import FEATURE_SCHEMA_VERSION, DatasetManifest
 from .features import FeatureRow
 from .fingerprints import canonical_fingerprint
 
