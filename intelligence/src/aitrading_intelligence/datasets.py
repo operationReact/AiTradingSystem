@@ -25,8 +25,10 @@ class MarketBar(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     symbol: Annotated[str, Field(pattern=r"^[A-Z0-9&._-]{1,32}$")]
-    interval: Literal["1m", "5m", "15m", "30m", "1h", "1d"]
+    interval: Literal["1m", "3m", "5m", "10m", "15m", "30m", "1h", "1d"]
     observed_at: datetime
+    event_at: datetime | None = None
+    ingested_at: datetime | None = None
     open: Annotated[float, Field(gt=0)]
     high: Annotated[float, Field(gt=0)]
     low: Annotated[float, Field(gt=0)]
@@ -34,17 +36,19 @@ class MarketBar(BaseModel):
     volume: Annotated[float, Field(ge=0)]
     source: Annotated[str, Field(min_length=1, max_length=80)]
 
-    @field_validator("observed_at")
+    @field_validator("observed_at", "event_at", "ingested_at")
     @classmethod
-    def observed_at_must_be_aware(cls, value: datetime) -> datetime:
-        return _require_aware(value)
+    def timestamps_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        return _require_aware(value) if value is not None else None
 
     @model_validator(mode="after")
-    def validate_ohlc(self) -> MarketBar:
+    def validate_bar(self) -> MarketBar:
         if self.low > min(self.open, self.close) or self.high < max(self.open, self.close):
             raise ValueError("OHLC values are inconsistent")
         if self.low > self.high:
             raise ValueError("low cannot exceed high")
+        if self.event_at is not None and self.event_at > self.observed_at:
+            raise ValueError("event_at cannot be after observed_at")
         return self
 
 

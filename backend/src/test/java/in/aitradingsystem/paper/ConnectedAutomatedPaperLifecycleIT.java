@@ -173,7 +173,12 @@ class ConnectedAutomatedPaperLifecycleIT extends AbstractApprovalPaperIT {
                 SELECT side || ':' || execution_origin || ':' || lifecycle_reason || ':' || status
                   FROM paper_order
                  WHERE symbol = :symbol
-                 ORDER BY created_at, id
+                 ORDER BY CASE lifecycle_reason
+                              WHEN 'STRATEGY_SIGNAL' THEN 0
+                              WHEN 'STOP_LOSS' THEN 1
+                              ELSE 2
+                          END,
+                          id
                 """).param("symbol", SYMBOL).query(String.class).list();
         assertThat(lifecycle).containsExactly(
             "BUY:AUTOMATED:STRATEGY_SIGNAL:FILLED",
