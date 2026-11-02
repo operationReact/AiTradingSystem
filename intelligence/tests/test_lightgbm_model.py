@@ -47,12 +47,16 @@ def _series(length: int = 65) -> list[FeatureRow]:
     return rows
 
 
-def _examples():
-    spec = ForwardReturnTargetSpec(
+def _spec() -> ForwardReturnTargetSpec:
+    return ForwardReturnTargetSpec(
         horizon_bars=1,
         minimum_edge_bps=25,
         round_trip_cost_bps=10,
     )
+
+
+def _examples():
+    spec = _spec()
     return build_labeled_examples(_series(), spec), spec
 
 
@@ -81,6 +85,8 @@ def test_training_is_reproducible_purged_and_never_promoted() -> None:
     assert first.target_spec_fingerprint == spec.fingerprint
     assert first.training_config_fingerprint == config.fingerprint
     assert first.train_end < first.validation_start
+    assert first.validation_end <= first.training_as_of
+    assert first.latest_label_observed_at <= first.training_as_of
     assert first.train_rows >= 20
     assert first.validation_rows >= 10
     assert len(first.training_example_fingerprints) == first.train_rows
@@ -90,6 +96,27 @@ def test_training_is_reproducible_purged_and_never_promoted() -> None:
     assert first.status == "CHALLENGER_MODEL_ONLY"
     assert first.promotion_allowed is False
     assert first.can_authorize_capital is False
+
+
+def test_future_examples_cannot_rewrite_historical_training_artifact() -> None:
+    original = build_labeled_examples(_series(65), _spec())
+    extended = build_labeled_examples(_series(90), _spec())
+    training_as_of = original[-1].target_observed_at
+
+    historical = train_lightgbm_challenger(
+        original,
+        training_as_of=training_as_of,
+        config=_config(),
+    )
+    after_archive_growth = train_lightgbm_challenger(
+        extended,
+        training_as_of=training_as_of,
+        config=_config(),
+    )
+
+    assert historical == after_archive_growth
+    assert historical.training_as_of == training_as_of
+    assert historical.latest_label_observed_at == training_as_of
 
 
 def test_validation_metrics_are_bounded_and_serialized_booster_reloads() -> None:
@@ -122,7 +149,7 @@ def test_training_requires_sufficient_labeled_history() -> None:
     rows = _series(35)
     examples = build_labeled_examples(rows, ForwardReturnTargetSpec(horizon_bars=1))
 
-    with pytest.raises(ValueError, match="at least 40 labeled examples"):
+    with pytest.raises(ValueError, match="at least 40 causal labeled examples"):
         train_lightgbm_challenger(examples, config=_config())
 
 
