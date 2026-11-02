@@ -12,7 +12,6 @@ from aitrading_intelligence.india_cross_section import (
 )
 from aitrading_intelligence.market_depth_source import (
     OBSERVED_SPREAD_FLAG,
-    AngelOneMarketDepthResearchExport,
     MarketDepthSpreadJoinConfig,
     attach_market_depth_spreads,
     parse_market_depth_research_export,
