@@ -1,86 +1,93 @@
-# Angel One SmartAPI integration: endpoint inventory
+# Angel One SmartAPI integration: verified server-side contract
 
-Status legend:
-- **VERIFIED-SDK**: named in the official `angel-one/smartapi-java` README (v2.2.0). Parameters and response shapes are NOT verified.
-- **UNVERIFIED**: not confirmed against official documentation. Do not implement against it without checking.
-- **NOT IMPLEMENTED**: no code exists in this repository.
+Last verification: **2026-11-02** against Angel One's current SmartAPI documentation and official SDK route inventory.
 
-## Verification limits
+This integration intentionally uses Spring `RestClient` rather than adding the legacy SmartAPI Java SDK as a runtime dependency. Credentials and JWTs remain server-side and are never persisted by this adapter.
 
-- The official docs at https://smartapi.angelone.in/docs and https://smartapi.angelone.in/exchange-regulations are client-rendered. Automated retrieval returned only the page title, so endpoint paths, request and response schemas, and rate limits could not be confirmed from them.
-- The SDK README (https://github.com/angel-one/smartapi-java) documents the Java method names only. It describes the session flow with `generateSession(clientId, password, totp)`, `renewAccessToken(accessToken, refreshToken)`, and `setSessionExpiryHook`.
-- The SDK targets the legacy `com.angelbroking.smartapi` package. Compatibility with Java 21 and Spring Boot 3.5 is unverified.
-- Rate limits, static-IP rules, and the instrument-master schema are unverified. Configured limits must stay conservative until checked.
+## Safety boundary
 
-## A. Authentication and session
+- The implemented broker surface is **read-only** for account data and market data.
+- No SmartAPI place-order, modify-order, cancel-order, convert-position, or GTT mutation method exists in `AngelOneApiClient`.
+- Real-money execution remains disabled and belongs to a later gated phase.
+- API responses and provider exceptions never include credentials, JWTs, passwords, or TOTP secrets.
+- Session JWTs are stored in memory only by `AngelOneSessionManager`.
 
-| Capability | Endpoint / SDK method | Status | Notes |
-|---|---|---|---|
-| Login with client code, password, TOTP | `POST /rest/auth/angelbroking/user/v1/loginByPassword` (SDK `generateSession`) | PARTIALLY_VERIFIED, IMPLEMENTED | Path and body verified from SDK source. Response fields `jwtToken`, `refreshToken`, `feedToken` verified from SDK. Tokens are held in memory only and redacted from `toString()`. |
-| Renew access token | SDK `renewAccessToken` | NOT IMPLEMENTED | The session manager re-logs in with TOTP instead. Refresh endpoint unverified for this project. |
-| Session expiry | Envelope codes AG8001, AG8003, AB8050, AB8051, AB1010 | PARTIALLY_VERIFIED, IMPLEMENTED | Codes taken from SDK `SmartAPIResponseHandler`. On expiry the session is invalidated and one re-login is attempted. |
+## Authentication and session
 
-Session lifetime is unverified. A configurable ceiling (`session-max-age-seconds`, default 21600) forces re-login. Credentials are read from `ANGELONE_API_KEY`, `ANGELONE_CLIENT_CODE`, `ANGELONE_PASSWORD`, `ANGELONE_TOTP_SECRET`, and `ANGELONE_BASE_URL` (see `.env.example`). TOTP is RFC 6238 (HMAC-SHA1, 30 s, 6 digits), which is the SDK's behavior and is verified by unit tests against RFC vectors.
-
-Header uncertainty: the SDK also sends `X-ClientLocalIP`, `X-ClientPublicIP`, and `X-MACAddress`. This project omits them deliberately (privacy and fragility). Whether Angel One requires them is UNVERIFIED. If login fails with a header-related error, this is the first thing to revisit.
-
-## B. Instrument master
-
-| Capability | Status | Notes |
+| Capability | Provider route / behavior | Project status |
 |---|---|---|
-| Download the instrument master | UNVERIFIED | URL and schema unconfirmed. Do not guess token mappings. |
-| Symbol and token resolution | NOT IMPLEMENTED | Depends on the master file. |
+| Login | `POST /rest/auth/angelbroking/user/v1/loginByPassword` | Implemented |
+| TOTP | RFC 6238, 6 digits / 30 s | Implemented |
+| Session reuse | In-memory JWT with configurable max age | Implemented |
+| Session expiry recovery | One explicit re-login after SmartAPI token/session expiry | Implemented |
+| Credential persistence | None | Enforced |
 
-## C. Historical candles
+Provider credentials are supplied through environment configuration (`ANGELONE_API_KEY`, `ANGELONE_CLIENT_CODE`, `ANGELONE_PASSWORD`, `ANGELONE_TOTP_SECRET`, `ANGELONE_BASE_URL`).
 
-| Capability | Status | Notes |
+## Market data
+
+| Capability | Provider route | Project status |
 |---|---|---|
-| Historical OHLCV by interval | UNVERIFIED | Endpoint path, interval names, and max date ranges per interval are unconfirmed. |
+| LTP | `POST /rest/secure/angelbroking/order/v1/getLtpData` | Implemented |
+| Historical candles | `POST /rest/secure/angelbroking/historical/v1/getCandleData` | Implemented |
+| Instrument catalogue/token resolution | Server-side instrument master | Implemented |
 
-## D. Quotes and streaming
+`GET /api/providers/angel-one/ltp` accepts only an internal `instrumentId`; exchange, trading symbol, and provider token are resolved from the active catalogue rather than trusted from the caller.
 
-| Capability | SDK method | Status | Notes |
-|---|---|---|---|
-| Last traded price | `POST /rest/secure/angelbroking/order/v1/getLtpData` (SDK `getLTP`) | PARTIALLY_VERIFIED, IMPLEMENTED | Request `{exchange, tradingsymbol, symboltoken}` verified from SDK. Response field `ltp` is only partially verified. Exposed at `GET /api/providers/angel-one/ltp`. |
-| OHLC / full quote | UNVERIFIED | NOT IMPLEMENTED | |
-| WebSocket streaming | UNVERIFIED | NOT IMPLEMENTED | Frame format, heartbeat, and exchange-type codes are unconfirmed. |
+## Read-only account data
 
-## E. Market intelligence
+The following SmartAPI routes are current official **GET** endpoints and are implemented by `AngelOneApiClient` + `AngelOneAccountReadService`:
 
-Gainers and losers, put-call ratio, Greeks, open-interest data, intraday-eligible lists, and cautionary scrips are all **UNVERIFIED** and **NOT IMPLEMENTED**. Surface them as explicitly unavailable until confirmed.
-
-## F. Portfolio and account (read-only)
-
-| Capability | SDK method | Status |
+| Capability | SmartAPI route | Application endpoint |
 |---|---|---|
-| Holdings | `getHolding` | VERIFIED-SDK, NOT IMPLEMENTED |
-| All holdings | `getAllHolding` | VERIFIED-SDK, NOT IMPLEMENTED |
-| Positions | `getPosition` | VERIFIED-SDK, NOT IMPLEMENTED |
-| RMS / available margin | `getRMS` | VERIFIED-SDK, NOT IMPLEMENTED |
-| Trade book | `getTrades` | VERIFIED-SDK, NOT IMPLEMENTED |
-| Order history | `getOrderHistory` | VERIFIED-SDK, NOT IMPLEMENTED |
-| Brokerage and charge estimate | UNVERIFIED | NOT IMPLEMENTED |
+| Funds / RMS | `/rest/secure/angelbroking/user/v1/getRMS` | `GET /api/providers/angel-one/funds` |
+| All holdings + provider summary | `/rest/secure/angelbroking/portfolio/v1/getAllHolding` | `GET /api/providers/angel-one/holdings` |
+| Settled holdings | `/rest/secure/angelbroking/portfolio/v1/getHolding` | `GET /api/providers/angel-one/holdings/settled` |
+| Positions | `/rest/secure/angelbroking/order/v1/getPosition` | `GET /api/providers/angel-one/positions` |
+| Order book | `/rest/secure/angelbroking/order/v1/getOrderBook` | `GET /api/providers/angel-one/order-book` |
 
-## G. Order execution (disabled)
+These application routes are protected by the existing Spring Security chain. Authenticated `VIEWER`, `TRADER`, `ADMIN`, or `OPERATOR` identities may perform `GET /api/**` reads; mutation endpoints remain separately restricted.
 
-Place, modify, cancel, order-detail, and GTT methods are named in the SDK (`placeOrder`, `modifyOrder`, `cancelOrder`). **All are UNVERIFIED for this project and must stay disabled.** Live execution is blocked server-side. No code path may submit a real order. Static-IP and account-level prerequisites are unverified and must be confirmed in the Angel One account before any future enablement.
+The application returns the provider `data` payload wrapped with `source=ANGEL_ONE_SMARTAPI` and a server-side `fetchedAt` timestamp. No provider session token is exposed to the client.
 
-## Decision
+## Retry and session-recovery policy
 
-The SDK is NOT added as a dependency. It targets Java 1.8 and legacy libraries, and the project targets Java 21 and Spring Boot 3.5. The integration uses Spring `RestClient` (`provider/angelone/AngelOneApiClient`) against the endpoints above. The adapter stays server-side behind `AngelOneQuoteService` and `AngelOneSessionManager`.
+`AngelOneAccountReadService` follows the same safety model as quote reads:
 
-## Implemented in this phase
+1. Obtain the current in-memory JWT.
+2. Apply the endpoint-specific local rate limiter.
+3. Use `AngelOneRetryPolicy` only for idempotent/read-only transient failures.
+4. On an explicit provider session-expiry signal, reserve retry capacity first, re-authenticate once, and retry the read.
+5. Never retry validation/provider rejection as if it were transient.
 
-- Configuration: `config/AngelOneProperties`, `config/AngelOneClientConfig`.
-- Session: `AngelOneSessionManager` (in-memory JWT, TOTP login, max-age reuse, single re-login on expiry).
-- Health: `AngelOneHealthService` with states NOT_CONFIGURED, CONFIGURED_UNVERIFIED, AUTHENTICATED, SESSION_EXPIRED, DEGRADED, UNAVAILABLE. Status is reported without network calls. Test connection is explicit.
-- Quotes: LTP only, with a local rate limiter (`AngelOneRateLimiter`, fail-fast).
-- API: `GET /api/providers/angel-one/status`, `POST /api/providers/angel-one/test-connection`, `GET /api/providers/angel-one/ltp`. All require the operator API key.
+## Verified provider rate limits
 
-## Deferred (not implemented)
+Angel One's SmartAPI rate-limit documentation checked on 2026-11-02 publishes:
 
-Instrument master, historical candles, WebSocket streaming, market analytics, portfolio and margin reads, brokerage estimates, and every order endpoint. Each needs its contract verified first. Live order execution remains disabled and fails closed.
+| API | Provider limit |
+|---|---:|
+| Login | 1 request/sec |
+| RMS / funds | 2 requests/sec |
+| Holdings | 1 request/sec |
+| All holdings | 1 request/sec |
+| Positions | 1 request/sec |
+| Order book | 1 request/sec |
+| LTP | 10/sec, 500/min, 5000/hour |
+| Historical candles | 3/sec, 120/min, 5000/hour |
 
-## Rate limits
+The project intentionally keeps its historical-candle limiter more conservative at 2/sec and 80/min. Account reads use dedicated local categories: 500 ms minimum spacing for RMS and 1000 ms minimum spacing for holdings/positions/order-book.
 
-Local intervals are configured conservatively (`login-min-interval-ms`, `quote-min-interval-ms`). Official limits are UNVERIFIED and must be checked before raising throughput.
+## Still deferred / disabled
+
+- WebSocket streaming acceptance and production reconnect soak.
+- Trade-book read model if/when the UI requires it.
+- Brokerage/charge-estimate normalization.
+- Order placement, modification, cancellation, position conversion, GTT mutations, and any other real-money write path.
+- Live execution enablement until independent risk, broker reconciliation, runtime soak, and explicit capital-promotion gates are satisfied.
+
+## Verification sources
+
+- Angel One SmartAPI docs: `https://smartapi.angelone.in/docs`
+- Angel One official SmartAPI SDK route inventory.
+
+Do not infer undocumented provider behavior from this document. Re-verify provider routes, response shapes, static-IP rules, and rate limits before changing the broker execution boundary.
