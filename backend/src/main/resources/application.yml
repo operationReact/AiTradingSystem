@@ -86,6 +86,25 @@ app:
   market-data:
     max-range-days: 366
     max-chunks-per-run: 5
+    official-sources:
+      # Scheduler is opt-in. The direct NIFTY 50 constituent CSV is stable and verified; historical
+      # endpoints stay empty unless explicitly configured because NSE has changed those routes over time.
+      constituents-url: ${OFFICIAL_NIFTY50_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv}
+      index-history-endpoint: ${OFFICIAL_INDEX_HISTORY_ENDPOINT:}
+      vix-history-endpoint: ${OFFICIAL_VIX_HISTORY_ENDPOINT:}
+      nse-bootstrap-url: ${OFFICIAL_NSE_BOOTSTRAP_URL:https://www.nseindia.com/}
+      history-lookback-days: ${OFFICIAL_SOURCE_HISTORY_LOOKBACK_DAYS:14}
+      sector-indices: ${OFFICIAL_SECTOR_INDICES:}
+      connect-timeout-ms: ${OFFICIAL_SOURCE_CONNECT_TIMEOUT_MS:5000}
+      request-timeout-ms: ${OFFICIAL_SOURCE_REQUEST_TIMEOUT_MS:15000}
+      max-attempts: ${OFFICIAL_SOURCE_MAX_ATTEMPTS:2}
+      retry-backoff-ms: ${OFFICIAL_SOURCE_RETRY_BACKOFF_MS:250}
+      user-agent: ${OFFICIAL_SOURCE_USER_AGENT:AiTradingSystem/1.0 research-market-data}
+      scheduler:
+        enabled: ${OFFICIAL_SOURCE_SCHEDULER_ENABLED:false}
+        cron: ${OFFICIAL_SOURCE_SCHEDULER_CRON:0 30 16 * * MON-FRI}
+        zone: ${OFFICIAL_SOURCE_SCHEDULER_ZONE:Asia/Kolkata}
+        max-requests-per-run: ${OFFICIAL_SOURCE_MAX_REQUESTS_PER_RUN:25}
   news:
     retention-days: ${NEWS_RETENTION_DAYS:90}
     ingestion:
