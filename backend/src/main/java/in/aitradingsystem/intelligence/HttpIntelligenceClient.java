@@ -7,7 +7,7 @@ import org.springframework.web.client.RestClient;
 
 /**
  * Internal adapter to the Python intelligence plane. It is deliberately disconnected from order execution:
- * evidence can inform research/signal fusion later, but Java Risk Engine remains the only capital gate.
+ * evidence can inform research/signal fusion, but Java Risk Engine remains the only capital gate.
  */
 @Component
 public class HttpIntelligenceClient implements IntelligenceClient {
@@ -23,9 +23,7 @@ public class HttpIntelligenceClient implements IntelligenceClient {
 
     @Override
     public IntelligenceEvidenceResponse validate(IntelligenceEvidenceRequest request) {
-        if (!enabled) {
-            throw new IntelligenceUnavailableException("Python intelligence service is disabled");
-        }
+        requireEnabled();
         IntelligenceEvidenceResponse response = restClient.post()
                 .uri("/v1/contracts/validate")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -39,5 +37,32 @@ public class HttpIntelligenceClient implements IntelligenceClient {
             throw new IntelligenceUnavailableException("Invalid intelligence response attempted capital authorization");
         }
         return response;
+    }
+
+    @Override
+    public FusionRankResponse rank(FusionRankRequest request) {
+        requireEnabled();
+        FusionRankResponse response = restClient.post()
+                .uri("/v1/fusion/rank")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
+                .retrieve()
+                .body(FusionRankResponse.class);
+        if (response == null) {
+            throw new IntelligenceUnavailableException("Python fusion service returned no candidate");
+        }
+        if (response.canAuthorizeCapital()) {
+            throw new IntelligenceUnavailableException("Invalid fusion response attempted capital authorization");
+        }
+        if (!"CANDIDATE_NOT_EXECUTABLE".equals(response.status())) {
+            throw new IntelligenceUnavailableException("Fusion response crossed the execution boundary");
+        }
+        return response;
+    }
+
+    private void requireEnabled() {
+        if (!enabled) {
+            throw new IntelligenceUnavailableException("Python intelligence service is disabled");
+        }
     }
 }
