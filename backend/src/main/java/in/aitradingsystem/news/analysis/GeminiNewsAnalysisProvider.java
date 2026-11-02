@@ -55,8 +55,7 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
             "store", false,
             "generation_config", Map.of(
                 "temperature", 0,
-                "max_output_tokens", 1024,
-                "tool_choice", "none"),
+                "max_output_tokens", 1024),
             "response_format", Map.of(
                 "type", "text",
                 "mime_type", "application/json",
