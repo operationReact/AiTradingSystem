@@ -215,6 +215,7 @@ def evaluate_ensemble_uncertainty(
     disagreement_score = max(
         metrics["normalized_dispersion"],
         metrics["directional_disagreement_ratio"],
+        metrics["directional_entropy"],
     )
     if usable_count < cfg.minimum_available_experts:
         uncertainty_score = 1.0
