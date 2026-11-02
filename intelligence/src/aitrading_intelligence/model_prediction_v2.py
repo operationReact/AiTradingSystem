@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from time import perf_counter_ns
@@ -32,8 +33,8 @@ class ModelPredictionV2(BaseModel):
 
     contract_version: Literal["model-prediction.v2"] = MODEL_PREDICTION_V2
     symbol: str
-    as_of: object
-    data_cutoff: object
+    as_of: datetime
+    data_cutoff: datetime
     model_family: ModelFamily
     model_name: str
     model_version: str
@@ -56,11 +57,7 @@ class ModelPredictionV2(BaseModel):
 
     @field_validator("as_of", "data_cutoff")
     @classmethod
-    def timestamps_must_be_aware(cls, value: object) -> object:
-        from datetime import datetime
-
-        if not isinstance(value, datetime):
-            raise ValueError("prediction timestamps must be datetimes")
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("prediction timestamps must be timezone-aware")
         return value
