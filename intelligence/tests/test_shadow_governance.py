@@ -54,7 +54,10 @@ def test_shadow_challenger_can_only_advance_to_explicit_review() -> None:
     assert evidence.required_next_gate == "V2_09_EXPLICIT_GOVERNANCE_DECISION"
     assert evidence.challenger.brier_score < evidence.champion.brier_score
     assert evidence.challenger.log_loss < evidence.champion.log_loss
-    assert evidence.challenger.expected_calibration_error < evidence.champion.expected_calibration_error
+    assert (
+        evidence.challenger.expected_calibration_error
+        < evidence.champion.expected_calibration_error
+    )
     assert evidence.promotion_allowed is False
     assert evidence.can_authorize_capital is False
 
