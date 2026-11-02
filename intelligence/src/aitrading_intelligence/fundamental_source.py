@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import json
 from datetime import datetime
 from pathlib import Path
@@ -112,7 +113,7 @@ def load_fundamental_export(path: Path) -> FundamentalResearchExport:
 
 
 def main() -> None:
-    parser = __import__("argparse").ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="Validate a point-in-time fundamental research export"
     )
     parser.add_argument("export_json", type=Path)
