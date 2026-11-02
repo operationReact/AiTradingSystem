@@ -1,6 +1,7 @@
 package in.aitradingsystem.news;
 
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,7 @@ public class NewsIngestionJob {
     private final RssFeedParser parser;
     private final NewsRepository repository;
     private final GeminiNewsSummarizer summarizer;
+    private final NewsSourceHealthRepository sourceHealth;
     private final List<String> sourceIds;
     private final List<String> watchlist;
     private final int maxPayloadBytes;
@@ -26,7 +28,7 @@ public class NewsIngestionJob {
     private final int retentionDays;
 
     public NewsIngestionJob(RssFeedClient feedClient, RssFeedParser parser, NewsRepository repository,
-        GeminiNewsSummarizer summarizer,
+        GeminiNewsSummarizer summarizer, NewsSourceHealthRepository sourceHealth,
         @Value("${app.news.ingestion.sources:}") List<String> sourceIds,
         @Value("${app.news.ingestion.watchlist:}") List<String> watchlist,
         @Value("${app.news.ingestion.max-payload-bytes:1048576}") int maxPayloadBytes,
@@ -38,6 +40,7 @@ public class NewsIngestionJob {
         this.parser = parser;
         this.repository = repository;
         this.summarizer = summarizer;
+        this.sourceHealth = sourceHealth;
         this.sourceIds = sourceIds;
         this.watchlist = watchlist;
         this.maxPayloadBytes = Math.max(1024, Math.min(maxPayloadBytes, 2_097_152));
@@ -58,15 +61,21 @@ public class NewsIngestionJob {
         int summaries = 0;
         for (String id : sourceIds.stream().limit(NewsSource.SUPPORTED.size()).toList()) {
             if (inserted >= maxArticlesPerRun) break;
+            Instant startedAt = Instant.now();
+            int fetchedForSource = 0;
+            int insertedForSource = 0;
+            int summariesForSource = 0;
             try {
                 NewsSource source = NewsSource.byId(id);
                 byte[] body = feedClient.fetch(source, maxPayloadBytes);
                 List<NewsArticle> articles = parser.parse(body, source, watchlist,
                     Math.min(maxItemsPerSource, maxArticlesPerRun - inserted));
+                fetchedForSource = articles.size();
                 for (NewsArticle article : articles) {
                     var newId = repository.insert(article);
                     if (newId.isEmpty()) continue;
                     inserted++;
+                    insertedForSource++;
                     if (summaries < maxSummariesPerRun) {
                         try {
                             var summary = summarizer.summarize(article);
@@ -75,6 +84,7 @@ public class NewsIngestionJob {
                                 repository.saveSummary(newId.get(), generated.provider(), generated.model(),
                                     generated.text(), Timestamp.from(generated.generatedAt()));
                                 summaries++;
+                                summariesForSource++;
                             }
                         } catch (Exception e) {
                             log.warn("Optional news summarization failed for source {}", source.id());
@@ -82,8 +92,28 @@ public class NewsIngestionJob {
                     }
                     if (inserted >= maxArticlesPerRun) break;
                 }
+                sourceHealth.record(
+                    id,
+                    startedAt,
+                    Instant.now(),
+                    "SUCCESS",
+                    fetchedForSource,
+                    insertedForSource,
+                    summariesForSource,
+                    null,
+                    null);
             } catch (Exception e) {
                 log.warn("News ingestion failed for source {}", id);
+                sourceHealth.record(
+                    id,
+                    startedAt,
+                    Instant.now(),
+                    "FAILED",
+                    fetchedForSource,
+                    insertedForSource,
+                    summariesForSource,
+                    e.getClass().getSimpleName(),
+                    e.getMessage());
             }
         }
     }
