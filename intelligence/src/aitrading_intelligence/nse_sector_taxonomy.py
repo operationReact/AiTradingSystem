@@ -11,10 +11,12 @@ from .india_context import IndiaUniverseMembership
 from .nifty_constituent_source import (
     NiftyConstituentSnapshot,
     select_nifty50_snapshot,
+    select_nifty500_snapshot,
 )
 
 NSE_SECTOR_TAXONOMY_VERSION = "nse-sector-taxonomy.v1"
 NIFTY_SECTOR_ENRICHMENT_VERSION = "nifty-sector-enrichment.v1"
+NIFTY500_SECTOR_ENRICHMENT_VERSION = "nifty500-sector-enrichment.v1"
 NSE_INDUSTRY_CLASSIFICATION_URL = (
     "https://www.niftyindices.com/resources/industry-classification"
 )
@@ -145,6 +147,49 @@ class SectorEnrichedNiftyConstituent(BaseModel):
     mapping_evidence_fingerprint: Hash64
 
 
+def _validate_enriched_snapshot(
+    *,
+    as_of: datetime,
+    data_cutoff: datetime,
+    constituent_observed_at: datetime,
+    taxonomy_observed_at: datetime,
+    constituents: Sequence[SectorEnrichedNiftyConstituent],
+) -> None:
+    if data_cutoff > as_of:
+        raise ValueError("data_cutoff cannot exceed as_of")
+    if data_cutoff != max(constituent_observed_at, taxonomy_observed_at):
+        raise ValueError("data_cutoff must equal the latest selected source availability")
+    identities = [(row.symbol, row.series, row.isin) for row in constituents]
+    if identities != sorted(identities):
+        raise ValueError("sector-enriched constituents must use canonical ordering")
+    if len({row.symbol for row in constituents}) != len(constituents):
+        raise ValueError("sector-enriched constituent symbols must be unique")
+
+
+def _to_universe_memberships(
+    *,
+    constituents: Sequence[SectorEnrichedNiftyConstituent],
+    constituent_observed_at: datetime,
+    data_cutoff: datetime,
+    index_membership: str,
+) -> list[IndiaUniverseMembership]:
+    return [
+        IndiaUniverseMembership(
+            instrument_id=f"NSE:{row.isin}",
+            exchange="NSE",
+            symbol=row.symbol,
+            series=row.series,
+            sector=row.sector,
+            index_memberships=[index_membership],
+            effective_from=constituent_observed_at,
+            available_at=data_cutoff,
+            source="NSE_INDICES_CLASSIFICATION",
+            source_id=row.mapping_evidence_fingerprint,
+        )
+        for row in constituents
+    ]
+
+
 class SectorEnrichedNifty50Snapshot(BaseModel):
     """Causal NIFTY 50 membership enriched with explicit NSE sector hierarchy evidence."""
 
@@ -170,35 +215,71 @@ class SectorEnrichedNifty50Snapshot(BaseModel):
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> SectorEnrichedNifty50Snapshot:
-        if self.data_cutoff > self.as_of:
-            raise ValueError("data_cutoff cannot exceed as_of")
-        if self.data_cutoff != max(self.constituent_observed_at, self.taxonomy_observed_at):
-            raise ValueError("data_cutoff must equal the latest selected source availability")
-        identities = [(row.symbol, row.series, row.isin) for row in self.constituents]
-        if identities != sorted(identities):
-            raise ValueError("sector-enriched constituents must use canonical ordering")
-        if len({row.symbol for row in self.constituents}) != len(self.constituents):
-            raise ValueError("sector-enriched constituent symbols must be unique")
+        _validate_enriched_snapshot(
+            as_of=self.as_of,
+            data_cutoff=self.data_cutoff,
+            constituent_observed_at=self.constituent_observed_at,
+            taxonomy_observed_at=self.taxonomy_observed_at,
+            constituents=self.constituents,
+        )
         return self
 
     def to_universe_memberships(self) -> list[IndiaUniverseMembership]:
         """Create the causally observed NIFTY 50 subset; this is not the full liquid universe."""
 
-        return [
-            IndiaUniverseMembership(
-                instrument_id=f"NSE:{row.isin}",
-                exchange="NSE",
-                symbol=row.symbol,
-                series=row.series,
-                sector=row.sector,
-                index_memberships=["NIFTY_50"],
-                effective_from=self.constituent_observed_at,
-                available_at=self.data_cutoff,
-                source="NSE_INDICES_CLASSIFICATION",
-                source_id=row.mapping_evidence_fingerprint,
-            )
-            for row in self.constituents
-        ]
+        return _to_universe_memberships(
+            constituents=self.constituents,
+            constituent_observed_at=self.constituent_observed_at,
+            data_cutoff=self.data_cutoff,
+            index_membership="NIFTY_50",
+        )
+
+
+class SectorEnrichedNifty500Snapshot(BaseModel):
+    """Causal NIFTY 500 membership enriched with explicit NSE sector hierarchy evidence."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["nifty500-sector-enrichment.v1"] = (
+        NIFTY500_SECTOR_ENRICHMENT_VERSION
+    )
+    as_of: datetime
+    data_cutoff: datetime
+    constituent_observed_at: datetime
+    taxonomy_observed_at: datetime
+    constituent_snapshot_fingerprint: Hash64
+    taxonomy_snapshot_fingerprint: Hash64
+    taxonomy_version: Annotated[str, Field(min_length=1, max_length=80)]
+    constituents: list[SectorEnrichedNiftyConstituent] = Field(min_length=1, max_length=500)
+    snapshot_fingerprint: Hash64
+    status: Literal["RESEARCH_SECTOR_ENRICHMENT_ONLY"] = "RESEARCH_SECTOR_ENRICHMENT_ONLY"
+    can_authorize_capital: Literal[False] = False
+
+    @field_validator("as_of", "data_cutoff", "constituent_observed_at", "taxonomy_observed_at")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        return _aware(value)
+
+    @model_validator(mode="after")
+    def validate_snapshot(self) -> SectorEnrichedNifty500Snapshot:
+        _validate_enriched_snapshot(
+            as_of=self.as_of,
+            data_cutoff=self.data_cutoff,
+            constituent_observed_at=self.constituent_observed_at,
+            taxonomy_observed_at=self.taxonomy_observed_at,
+            constituents=self.constituents,
+        )
+        return self
+
+    def to_universe_memberships(self) -> list[IndiaUniverseMembership]:
+        """Create the causally observed NIFTY 500 subset; it is not all listed NSE equities."""
+
+        return _to_universe_memberships(
+            constituents=self.constituents,
+            constituent_observed_at=self.constituent_observed_at,
+            data_cutoff=self.data_cutoff,
+            index_membership="NIFTY_500",
+        )
 
 
 def build_nse_sector_taxonomy_snapshot(
@@ -263,17 +344,11 @@ def select_nse_sector_taxonomy_snapshot(
     )
 
 
-def build_nifty50_sector_enrichment(
+def _enrich_constituents(
     *,
-    constituent_snapshots: Sequence[NiftyConstituentSnapshot],
-    taxonomy_snapshots: Sequence[NseSectorTaxonomySnapshot],
-    as_of: datetime,
-) -> SectorEnrichedNifty50Snapshot:
-    """Resolve every selected NIFTY 50 raw Industry label through explicit taxonomy evidence."""
-
-    _aware(as_of)
-    constituents = select_nifty50_snapshot(list(constituent_snapshots), as_of=as_of)
-    taxonomy = select_nse_sector_taxonomy_snapshot(taxonomy_snapshots, as_of=as_of)
+    constituents: NiftyConstituentSnapshot,
+    taxonomy: NseSectorTaxonomySnapshot,
+) -> list[SectorEnrichedNiftyConstituent]:
     entries_by_code = {entry.industry_code: entry for entry in taxonomy.entries}
     aliases_by_label = {
         _label_key(alias.constituent_industry_label): alias
@@ -321,8 +396,21 @@ def build_nifty50_sector_enrichment(
             "NIFTY constituent industry labels are not explicitly mapped: "
             + ",".join(labels)
         )
+    return sorted(enriched, key=lambda row: (row.symbol, row.series, row.isin))
 
-    ordered = sorted(enriched, key=lambda row: (row.symbol, row.series, row.isin))
+
+def build_nifty50_sector_enrichment(
+    *,
+    constituent_snapshots: Sequence[NiftyConstituentSnapshot],
+    taxonomy_snapshots: Sequence[NseSectorTaxonomySnapshot],
+    as_of: datetime,
+) -> SectorEnrichedNifty50Snapshot:
+    """Resolve every selected NIFTY 50 raw Industry label through explicit taxonomy evidence."""
+
+    _aware(as_of)
+    constituents = select_nifty50_snapshot(list(constituent_snapshots), as_of=as_of)
+    taxonomy = select_nse_sector_taxonomy_snapshot(taxonomy_snapshots, as_of=as_of)
+    ordered = _enrich_constituents(constituents=constituents, taxonomy=taxonomy)
     data_cutoff = max(constituents.observed_at, taxonomy.observed_at)
     payload = {
         "contractVersion": NIFTY_SECTOR_ENRICHMENT_VERSION,
@@ -338,6 +426,45 @@ def build_nifty50_sector_enrichment(
         "canAuthorizeCapital": False,
     }
     return SectorEnrichedNifty50Snapshot(
+        as_of=as_of,
+        data_cutoff=data_cutoff,
+        constituent_observed_at=constituents.observed_at,
+        taxonomy_observed_at=taxonomy.observed_at,
+        constituent_snapshot_fingerprint=constituents.snapshot_fingerprint,
+        taxonomy_snapshot_fingerprint=taxonomy.snapshot_fingerprint,
+        taxonomy_version=taxonomy.taxonomy_version,
+        constituents=ordered,
+        snapshot_fingerprint=canonical_fingerprint(payload),
+    )
+
+
+def build_nifty500_sector_enrichment(
+    *,
+    constituent_snapshots: Sequence[NiftyConstituentSnapshot],
+    taxonomy_snapshots: Sequence[NseSectorTaxonomySnapshot],
+    as_of: datetime,
+) -> SectorEnrichedNifty500Snapshot:
+    """Resolve every selected NIFTY 500 Industry label through explicit taxonomy evidence."""
+
+    _aware(as_of)
+    constituents = select_nifty500_snapshot(list(constituent_snapshots), as_of=as_of)
+    taxonomy = select_nse_sector_taxonomy_snapshot(taxonomy_snapshots, as_of=as_of)
+    ordered = _enrich_constituents(constituents=constituents, taxonomy=taxonomy)
+    data_cutoff = max(constituents.observed_at, taxonomy.observed_at)
+    payload = {
+        "contractVersion": NIFTY500_SECTOR_ENRICHMENT_VERSION,
+        "asOf": as_of.isoformat(),
+        "dataCutoff": data_cutoff.isoformat(),
+        "constituentObservedAt": constituents.observed_at.isoformat(),
+        "taxonomyObservedAt": taxonomy.observed_at.isoformat(),
+        "constituentSnapshotFingerprint": constituents.snapshot_fingerprint,
+        "taxonomySnapshotFingerprint": taxonomy.snapshot_fingerprint,
+        "taxonomyVersion": taxonomy.taxonomy_version,
+        "constituents": [row.model_dump(mode="json") for row in ordered],
+        "status": "RESEARCH_SECTOR_ENRICHMENT_ONLY",
+        "canAuthorizeCapital": False,
+    }
+    return SectorEnrichedNifty500Snapshot(
         as_of=as_of,
         data_cutoff=data_cutoff,
         constituent_observed_at=constituents.observed_at,
