@@ -3,6 +3,7 @@ package in.aitradingsystem.news;
 import in.aitradingsystem.domain.NewsItem;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -79,6 +80,39 @@ public class NewsRepository {
                 rs.getString("summary"), rs.getString("summary_provider"), rs.getString("summary_model"),
                 summaryGenerated == null ? null : summaryGenerated.toInstant());
         }, limit, offset);
+    }
+
+    public List<NewsItem> researchEvents(Instant fromInclusive, Instant toExclusive, int limit) {
+        return jdbc.query("""
+            SELECT n.id::text, n.source, n.publisher, n.source_url, n.published_at, n.fetched_at,
+                   n.title, n.normalized_content, n.content_hash, n.linked_symbols,
+                   n.ingestion_status, s.summary, s.provider AS summary_provider,
+                   s.model AS summary_model, s.generated_at AS summary_generated_at
+            FROM news_item n
+            LEFT JOIN news_summary s ON s.news_id = n.id
+            WHERE n.fetched_at >= ?
+              AND n.fetched_at < ?
+              AND cardinality(n.linked_symbols) > 0
+            ORDER BY n.fetched_at, n.id
+            LIMIT ?
+            """, (rs, row) -> {
+            java.sql.Array sqlSymbols = rs.getArray("linked_symbols");
+            List<String> symbols = new ArrayList<>();
+            if (sqlSymbols != null) {
+                Object[] values = (Object[]) sqlSymbols.getArray();
+                for (Object value : values) symbols.add(String.valueOf(value));
+                sqlSymbols.free();
+            }
+            Timestamp published = rs.getTimestamp("published_at");
+            Timestamp fetched = rs.getTimestamp("fetched_at");
+            Timestamp summaryGenerated = rs.getTimestamp("summary_generated_at");
+            return new NewsItem(rs.getString("id"), rs.getString("source"), rs.getString("publisher"),
+                rs.getString("source_url"), published == null ? null : published.toInstant(),
+                fetched.toInstant(), rs.getString("title"), rs.getString("normalized_content"),
+                rs.getString("content_hash"), List.copyOf(symbols), rs.getString("ingestion_status"),
+                rs.getString("summary"), rs.getString("summary_provider"), rs.getString("summary_model"),
+                summaryGenerated == null ? null : summaryGenerated.toInstant());
+        }, Timestamp.from(fromInclusive), Timestamp.from(toExclusive), limit);
     }
 
     public void deleteExpired(int retentionDays) {
