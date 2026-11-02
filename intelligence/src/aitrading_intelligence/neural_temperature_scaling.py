@@ -53,7 +53,7 @@ class NeuralTemperatureConfig(BaseModel):
 
 
 class NeuralTemperatureCalibrationArtifact(CalibrationArtifact):
-    """The shared calibration-artifact.v1 contract specialized for neural output."""
+    """Shared calibration-artifact.v1 specialized for neural temperature scaling."""
 
     model_family: Literal["PYTORCH"] = "PYTORCH"
     method: Literal["TEMPERATURE"] = "TEMPERATURE"
@@ -124,9 +124,11 @@ class NeuralTemperatureBenchmarkReport(BaseModel):
             raise ValueError("temperature fit and evaluation observations must be disjoint")
         if self.selected_method == "RAW" and self.selected_artifact_fingerprint is not None:
             raise ValueError("RAW selection cannot reference a temperature artifact")
-        if self.selected_method == "TEMPERATURE":
-            if self.selected_artifact_fingerprint != self.temperature_artifact_fingerprint:
-                raise ValueError("temperature selection must reference the temperature artifact")
+        if (
+            self.selected_method == "TEMPERATURE"
+            and self.selected_artifact_fingerprint != self.temperature_artifact_fingerprint
+        ):
+            raise ValueError("temperature selection must reference the temperature artifact")
         return self
 
 
@@ -138,29 +140,19 @@ def benchmark_neural_temperature_scaling(
     config: NeuralTemperatureConfig | None = None,
 ) -> NeuralTemperatureBenchmarkReport:
     cfg = config or NeuralTemperatureConfig()
-    if benchmark_as_of.tzinfo is None or benchmark_as_of.utcoffset() is None:
-        raise ValueError("benchmark_as_of must be timezone-aware")
-    if source_registry.model_family != "PYTORCH":
-        raise ValueError("temperature scaling is restricted to the PyTorch neural model")
-    if source_registry.required_next_gate != "V3_05_CALIBRATION":
-        raise ValueError("source registry entry is not routed to V3-05 calibration")
-    if source_registry.promotion_allowed or source_registry.can_authorize_capital:
-        raise ValueError("source registry entry cannot carry promotion or capital authority")
-    if benchmark_as_of < source_registry.evaluation_as_of:
-        raise ValueError("temperature benchmark cannot predate source model evaluation")
-
+    _validate_source_registry(source_registry, benchmark_as_of)
     eligible = _validated_observations(
         source_registry=source_registry,
         observations=observations,
         benchmark_as_of=benchmark_as_of,
     )
+
     required_rows = cfg.minimum_fit_rows + cfg.minimum_evaluation_rows
     if len(eligible) < required_rows:
         raise ValueError("insufficient closed observations for temperature benchmark")
 
     proposed_split = max(cfg.minimum_fit_rows, int(len(eligible) * cfg.fit_fraction))
-    maximum_split = len(eligible) - cfg.minimum_evaluation_rows
-    split_index = min(proposed_split, maximum_split)
+    split_index = min(proposed_split, len(eligible) - cfg.minimum_evaluation_rows)
     evaluation_rows = list(eligible[split_index:])
     if len(evaluation_rows) < cfg.minimum_evaluation_rows:
         raise ValueError("insufficient held-out observations for temperature benchmark")
@@ -175,10 +167,8 @@ def benchmark_neural_temperature_scaling(
     ]
     if len(fit_rows) < cfg.minimum_fit_rows:
         raise ValueError("purged temperature fit set has fewer than minimum rows")
-    if {row.actual_positive for row in fit_rows} != {False, True}:
-        raise ValueError("temperature fit rows must contain both outcome classes")
-    if {row.actual_positive for row in evaluation_rows} != {False, True}:
-        raise ValueError("temperature evaluation rows must contain both outcome classes")
+    _require_both_classes(fit_rows, "temperature fit")
+    _require_both_classes(evaluation_rows, "temperature evaluation")
 
     fit_as_of = max(row.target_observed_at for row in fit_rows)
     if fit_as_of >= evaluation_start:
@@ -218,25 +208,20 @@ def benchmark_neural_temperature_scaling(
     strictly_improves = min(brier_delta, log_loss_delta, ece_delta) < -1e-12
     if regressions:
         selected_method: SelectedMethod = "RAW"
-        reason_codes = sorted(regressions)
+        selection_reason_codes = sorted(regressions)
         selected_artifact_fingerprint = None
     elif strictly_improves:
         selected_method = "TEMPERATURE"
-        reason_codes = ["TEMPERATURE_NO_REGRESSION_AND_STRICT_IMPROVEMENT"]
+        selection_reason_codes = ["TEMPERATURE_NO_REGRESSION_AND_STRICT_IMPROVEMENT"]
         selected_artifact_fingerprint = artifact.artifact_fingerprint
     else:
         selected_method = "RAW"
-        reason_codes = ["RAW_RETAINED_ON_TIE"]
+        selection_reason_codes = ["RAW_RETAINED_ON_TIE"]
         selected_artifact_fingerprint = None
 
     fit_fingerprints = [row.observation_fingerprint for row in fit_rows]
     evaluation_fingerprints = [row.observation_fingerprint for row in evaluation_rows]
     purged_fingerprints = [row.observation_fingerprint for row in purged_rows]
-    fit_dataset_fingerprint = _dataset_fingerprint(source_registry, fit_fingerprints)
-    evaluation_dataset_fingerprint = _dataset_fingerprint(
-        source_registry,
-        evaluation_fingerprints,
-    )
     raw_probability_fingerprint = canonical_fingerprint(
         [round(value, 12) for value in raw_probabilities]
     )
@@ -253,8 +238,11 @@ def benchmark_neural_temperature_scaling(
         "fit_observation_fingerprints": fit_fingerprints,
         "evaluation_observation_fingerprints": evaluation_fingerprints,
         "purged_observation_fingerprints": purged_fingerprints,
-        "fit_dataset_fingerprint": fit_dataset_fingerprint,
-        "evaluation_dataset_fingerprint": evaluation_dataset_fingerprint,
+        "fit_dataset_fingerprint": _dataset_fingerprint(source_registry, fit_fingerprints),
+        "evaluation_dataset_fingerprint": _dataset_fingerprint(
+            source_registry,
+            evaluation_fingerprints,
+        ),
         "temperature_artifact_fingerprint": artifact.artifact_fingerprint,
         "temperature": temperature,
         "raw_probability_fingerprint": raw_probability_fingerprint,
@@ -266,7 +254,7 @@ def benchmark_neural_temperature_scaling(
         "ece_delta_vs_raw": ece_delta,
         "selected_method": selected_method,
         "selected_artifact_fingerprint": selected_artifact_fingerprint,
-        "selection_reason_codes": reason_codes,
+        "selection_reason_codes": selection_reason_codes,
         "status": "NEURAL_TEMPERATURE_BENCHMARK_ONLY",
         "required_next_gate": "V3_05_CALIBRATION_FRESHNESS",
         "promotion_allowed": False,
@@ -276,6 +264,22 @@ def benchmark_neural_temperature_scaling(
         **payload,
         report_fingerprint=canonical_fingerprint(payload),
     )
+
+
+def _validate_source_registry(
+    source_registry: ModelLabRegistryEntry,
+    benchmark_as_of: datetime,
+) -> None:
+    if benchmark_as_of.tzinfo is None or benchmark_as_of.utcoffset() is None:
+        raise ValueError("benchmark_as_of must be timezone-aware")
+    if source_registry.model_family != "PYTORCH":
+        raise ValueError("temperature scaling is restricted to the PyTorch neural model")
+    if source_registry.required_next_gate != "V3_05_CALIBRATION":
+        raise ValueError("source registry entry is not routed to V3-05 calibration")
+    if source_registry.promotion_allowed or source_registry.can_authorize_capital:
+        raise ValueError("source registry entry cannot carry promotion or capital authority")
+    if benchmark_as_of < source_registry.registered_at:
+        raise ValueError("temperature benchmark cannot predate source model registration")
 
 
 def _validated_observations(
@@ -288,12 +292,13 @@ def _validated_observations(
         CalibrationObservation.model_validate(row.model_dump(mode="python"))
         for row in observations
     ]
+    closed = [row for row in validated if row.target_observed_at <= benchmark_as_of]
+    if any(row.decision_at <= source_registry.registered_at for row in closed):
+        raise ValueError(
+            "temperature calibration observations must occur after model registration"
+        )
     ordered = sorted(
-        (
-            row
-            for row in validated
-            if row.target_observed_at <= benchmark_as_of
-        ),
+        closed,
         key=lambda row: (
             row.decision_at,
             row.symbol,
@@ -369,17 +374,19 @@ def _create_temperature_artifact(
             row.observation_fingerprint,
         ),
     )
-    if source_registry.model_family != "PYTORCH":
-        raise ValueError("neural temperature artifact requires PyTorch registry lineage")
+    if not ordered:
+        raise ValueError("temperature artifact requires calibration observations")
+    if any(row.decision_at <= source_registry.registered_at for row in ordered):
+        raise ValueError("temperature artifact cannot reuse pre-registration observations")
     if any(row.target_observed_at > fit_as_of for row in ordered):
         raise ValueError("temperature artifact cannot use future labels")
     if {row.source_registry_fingerprint for row in ordered} != {
         source_registry.registry_fingerprint
     }:
         raise ValueError("temperature artifact observations must match source registry")
+    _require_both_classes(ordered, "temperature artifact")
+
     labels = [int(row.actual_positive) for row in ordered]
-    if set(labels) != {0, 1}:
-        raise ValueError("temperature artifact requires both outcome classes")
     raw_probabilities = [row.raw_probability for row in ordered]
     calibrated_probabilities = [
         apply_calibration(probability, parameters) for probability in raw_probabilities
@@ -435,6 +442,14 @@ def _dataset_fingerprint(
             "observation_fingerprints": list(observation_fingerprints),
         }
     )
+
+
+def _require_both_classes(
+    observations: Sequence[CalibrationObservation],
+    label: str,
+) -> None:
+    if {row.actual_positive for row in observations} != {False, True}:
+        raise ValueError(f"{label} rows must contain both outcome classes")
 
 
 def _metrics(
