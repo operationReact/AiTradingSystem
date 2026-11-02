@@ -1,6 +1,6 @@
 # AiTradingSystem Intelligence Service
 
-Python 3.11 foundation for point-in-time research, feature engineering, quantitative models and future PyTorch inference.
+Python 3.11 foundation for point-in-time research, feature engineering, quantitative models and PyTorch challenger inference.
 
 ## Safety boundary
 
@@ -38,7 +38,7 @@ The resulting manifest records the Java export contract, instrument catalogue ve
 
 ## V2-06 quantitative baseline and signal fusion
 
-V2-06 starts with an interpretable scikit-learn logistic baseline trained from point-in-time `FeatureRow` inputs. The persisted research artifact contains explicit feature names, coefficients, intercept, training window, class counts and a deterministic SHA-256 artifact fingerprint. Runtime scoring is performed directly from those persisted coefficients, which keeps the evidence portable and auditable.
+V2-06 uses an interpretable scikit-learn logistic baseline trained from point-in-time `FeatureRow` inputs and a fixed tree challenger for chronological out-of-sample comparison. The persisted logistic research artifact contains explicit feature names, coefficients, intercept, training window, class counts and a deterministic SHA-256 artifact fingerprint.
 
 `POST /v1/fusion/rank` combines three evidence families:
 
@@ -49,6 +49,32 @@ V2-06 starts with an interpretable scikit-learn logistic baseline trained from p
 Fusion is freshness-aware and confidence-weighted. Deterministic strategy and quantitative evidence are mandatory and must be fresh; Gemini can be omitted or excluded when stale. Model disagreement remains `WATCH` rather than being hidden by a high aggregate score.
 
 Every fused result remains `CANDIDATE_NOT_EXECUTABLE` and `can_authorize_capital=false`. A ranked `BUY` candidate is still only evidence for the Java Risk Engine; it is not an order approval.
+
+## V2-07 PyTorch challenger foundation
+
+The first PyTorch target is `forward-return-after-costs.v1`: at decision time `t`, predict whether the close after a configurable number of bars exceeds the current close by more than the configured round-trip cost plus minimum edge. The future close is used only to generate the offline label; it is never copied into the model input feature snapshot.
+
+Training is intentionally conservative:
+
+- chronological train/validation split;
+- training examples whose future target would not yet be known at validation start are purged;
+- feature mean/scale are learned only from the training partition;
+- small CPU MLP with fixed seed and deterministic PyTorch algorithms;
+- immutable target/config/data/model fingerprints;
+- validation ROC AUC, Brier score and log loss;
+- gradient × standardized-input attribution for inference evidence;
+- every artifact and inference result remains `promotion_allowed=false` and `can_authorize_capital=false`.
+
+PyTorch is isolated behind a dedicated CPU-only dependency file and CI workflow so ordinary API/backend changes do not download the large ML runtime.
+
+Install the research runtime:
+
+```bash
+pip install -r requirements-pytorch-cpu.txt
+pip install -e '.[dev]'
+```
+
+A trained PyTorch candidate remains a **challenger**. It cannot enter signal fusion as an accepted model until it beats the V2-06 baselines under later out-of-sample, replay, regime, cost/slippage and governance gates.
 
 ## Run locally
 
@@ -66,6 +92,8 @@ ruff check src tests
 pytest -q
 ```
 
+For the PyTorch-enabled suite use the dedicated CPU runtime above; CI runs it separately.
+
 ## Contract invariants
 
 - all timestamps are timezone-aware;
@@ -75,4 +103,5 @@ pytest -q
 - every intelligence response says `can_authorize_capital=false`;
 - canonical SHA-256 fingerprints make validated inputs, model artifacts and fused candidates reproducible;
 - model evidence carries version/schema/provenance rather than hidden state;
+- PyTorch remains a non-promoted challenger until objective baseline/replay/governance gates pass;
 - signal fusion ranks evidence only; Java Risk Engine remains the only capital authority.
