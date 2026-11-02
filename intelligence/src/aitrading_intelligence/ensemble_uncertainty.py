@@ -309,7 +309,8 @@ def evaluate_ensemble_uncertainty(
 
 def _validate_source_prediction(item: CalibratedPredictionV1) -> CalibratedPredictionV1:
     validated = CalibratedPredictionV1.model_validate(item.model_dump(mode="python"))
-    payload = validated.model_dump(mode="json", exclude={"evidence_fingerprint"})
+    payload = validated.model_dump(mode="python", exclude={"evidence_fingerprint"})
+    payload["as_of"] = validated.as_of.isoformat()
     expected = canonical_fingerprint(payload)
     if validated.evidence_fingerprint != expected:
         raise ValueError("calibrated prediction evidence fingerprint mismatch")
