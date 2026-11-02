@@ -54,6 +54,9 @@ jobs:
       - name: Install pinned PyTorch CPU research dependency
         working-directory: intelligence
         run: pip install -r requirements-pytorch-cpu.txt
-      - name: Run fair comparison with PyTorch required
+      - name: Run PyTorch model-lab and neural calibration tests
         working-directory: intelligence
-        run: pytest -q tests/test_model_fair_comparison.py -k pytorch
+        run: |
+          pytest -q tests/test_pytorch_model.py tests/test_pytorch_temperature_registry.py
+          pytest -q tests/test_model_fair_comparison.py -k pytorch
+          pytest -q tests/test_neural_temperature_scaling.py
