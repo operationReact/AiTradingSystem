@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -14,10 +14,15 @@ from .data_quality import (
 )
 from .india_vix_source import IndiaVixHistory
 from .nifty50_history_source import Nifty50History
-from .nifty_constituent_source import NiftyConstituentSnapshot, select_nifty50_snapshot
+from .nifty_constituent_source import (
+    NiftyConstituentSnapshot,
+    select_nifty50_snapshot,
+    select_nifty500_snapshot,
+)
 from .nifty_sector_history_source import SECTOR_INDEX_CODES, SectorIndexHistory
 
 OFFICIAL_SOURCE_HEALTH_POLICY_VERSION = "official-source-health-policy.v1"
+ConstituentIndexCode = Literal["NIFTY50", "NIFTY500"]
 
 
 class OfficialSourceHealthPolicy(BaseModel):
@@ -54,16 +59,28 @@ def _constituent_sample(
     snapshots: Sequence[NiftyConstituentSnapshot],
     *,
     as_of: datetime,
+    index_code: ConstituentIndexCode,
 ) -> SourceHealthSample | None:
+    if index_code == "NIFTY50":
+        selector = select_nifty50_snapshot
+        family = "NIFTY_CONSTITUENTS"
+        source = "NIFTY_INDICES_CONSTITUENTS"
+        missing_message = "no NIFTY 50 constituent snapshot was observed by as_of"
+    else:
+        selector = select_nifty500_snapshot
+        family = "NIFTY500_CONSTITUENTS"
+        source = "NIFTY_INDICES_NIFTY500_CONSTITUENTS"
+        missing_message = "no NIFTY 500 constituent snapshot was observed by as_of"
+
     try:
-        selected = select_nifty50_snapshot(list(snapshots), as_of=as_of)
+        selected = selector(list(snapshots), as_of=as_of)
     except ValueError as exc:
-        if "no NIFTY 50 constituent snapshot was observed by as_of" not in str(exc):
+        if missing_message not in str(exc):
             raise
         return None
     return SourceHealthSample(
-        family="NIFTY_CONSTITUENTS",
-        source="NIFTY_INDICES_CONSTITUENTS",
+        family=family,
+        source=source,
         source_id=selected.snapshot_fingerprint,
         event_at=selected.observed_at,
         available_at=selected.observed_at,
@@ -74,13 +91,14 @@ def build_official_source_health_report(
     *,
     as_of: datetime,
     constituent_snapshots: Sequence[NiftyConstituentSnapshot],
+    nifty500_constituent_snapshots: Sequence[NiftyConstituentSnapshot],
     nifty50_history: Nifty50History | None,
     india_vix_history: IndiaVixHistory | None,
     sector_histories: Sequence[SectorIndexHistory],
     required_sector_indices: Sequence[str],
     policy: OfficialSourceHealthPolicy | None = None,
 ) -> SourceHealthReport:
-    """Evaluate the official NIFTY/VIX/sector feeds using the shared fail-closed health gate."""
+    """Evaluate required official India context/universe feeds through one fail-closed gate."""
 
     if as_of.tzinfo is None or as_of.utcoffset() is None:
         raise ValueError("as_of must be timezone-aware")
@@ -111,6 +129,10 @@ def build_official_source_health_report(
             max_age_seconds=policy.constituent_max_age_seconds,
         ),
         SourceHealthRule(
+            family="NIFTY500_CONSTITUENTS",
+            max_age_seconds=policy.constituent_max_age_seconds,
+        ),
+        SourceHealthRule(
             family="NIFTY50_HISTORY",
             max_age_seconds=policy.daily_max_age_seconds,
         ),
@@ -128,9 +150,21 @@ def build_official_source_health_report(
     ]
 
     samples: list[SourceHealthSample] = []
-    constituent = _constituent_sample(constituent_snapshots, as_of=as_of)
+    constituent = _constituent_sample(
+        constituent_snapshots,
+        as_of=as_of,
+        index_code="NIFTY50",
+    )
     if constituent is not None:
         samples.append(constituent)
+
+    nifty500_constituent = _constituent_sample(
+        nifty500_constituent_snapshots,
+        as_of=as_of,
+        index_code="NIFTY500",
+    )
+    if nifty500_constituent is not None:
+        samples.append(nifty500_constituent)
 
     if nifty50_history is not None:
         sample = _latest_history_sample(
