@@ -19,6 +19,7 @@ class HistoricalMarketResearchResolutionIT extends AbstractPostgresIT {
 
     private static final long HISTORICAL_INSTRUMENT_ID = 900_001L;
     private static final UUID CATALOGUE_VERSION = UUID.fromString("12345678-1234-1234-1234-123456789abc");
+    private static final UUID BACKFILL_ID = UUID.fromString("abcdefab-cdef-abcd-efab-cdefabcdefab");
 
     @BeforeEach
     void reset() {
@@ -46,6 +47,15 @@ class HistoricalMarketResearchResolutionIT extends AbstractPostgresIT {
                 VALUES (?, ?, 'NSE_EQ', 'NSE', '2885', 'RELIANCE-EQ',
                         'Reliance Industries', 'EQ', NULL, NULL, 1, 0.05, ?)
                 """, CATALOGUE_VERSION, HISTORICAL_INSTRUMENT_ID, catalogueAvailableAt);
+        jdbc.update("""
+                INSERT INTO candle_backfill_run
+                    (id, instrument_id, exchange, trading_symbol, symbol_token, catalogue_version, interval,
+                     from_date, to_date, next_from_date, status, chunks_completed, fetched_rows, persisted_rows,
+                     completed_at)
+                VALUES (?, ?, 'NSE', 'RELIANCE-EQ', '2885', ?, 'ONE_DAY',
+                        '2026-10-26', '2026-10-26', '2026-10-27', 'SUCCEEDED', 1, 1, 1,
+                        '2026-10-27T08:00:00Z')
+                """, BACKFILL_ID, HISTORICAL_INSTRUMENT_ID, CATALOGUE_VERSION);
         jdbc.update("""
                 INSERT INTO market_candle
                     (instrument_id, exchange, trading_symbol, symbol_token, catalogue_version, interval,
