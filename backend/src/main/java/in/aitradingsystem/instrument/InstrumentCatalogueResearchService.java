@@ -22,9 +22,9 @@ public class InstrumentCatalogueResearchService {
     private static final List<String> CASH_EXCHANGES = List.of("BSE", "NSE");
     private static final String CASH_INSTRUMENT_TYPE = "EQ";
 
-    private final InstrumentMasterRepository repository;
+    private final InstrumentCatalogueResearchRepository repository;
 
-    public InstrumentCatalogueResearchService(InstrumentMasterRepository repository) {
+    public InstrumentCatalogueResearchService(InstrumentCatalogueResearchRepository repository) {
         this.repository = repository;
     }
 
@@ -44,24 +44,19 @@ public class InstrumentCatalogueResearchService {
                     "Research catalogue maxRows must be between 1 and " + MAX_ROWS);
         }
 
-        InstrumentMasterRepository.CatalogueResearchVersion version = repository.requireResearchVersionAt(asOf);
-        List<Instrument> rows = repository.researchCashEquities(version.version(), maxRows + 1);
-        if (rows.isEmpty()) {
+        InstrumentCatalogueResearchRepository.CatalogueResearchVersion version = repository.requireVersionAt(asOf);
+        List<InstrumentCatalogueResearchExport.ResearchInstrument> instruments =
+                repository.cashEquities(version.version(), maxRows + 1);
+        if (instruments.isEmpty()) {
             throw new InstrumentMasterException("CATALOGUE_NOT_RETAINED",
-                    "The point-in-time catalogue metadata exists but its instrument rows are not retained");
+                    "The point-in-time catalogue metadata exists but its cash-equity rows are not retained");
         }
-        if (rows.size() > maxRows) {
+        if (instruments.size() > maxRows) {
             throw new InstrumentMasterException("RESEARCH_CATALOGUE_TOO_LARGE",
                     "The point-in-time cash catalogue exceeds the requested maxRows bound");
         }
 
-        List<InstrumentCatalogueResearchExport.ResearchInstrument> instruments = rows.stream()
-                .map(row -> new InstrumentCatalogueResearchExport.ResearchInstrument(
-                        row.id(), row.exchangeSegment(), row.exchange(), row.symbolToken(), row.tradingSymbol(),
-                        row.name(), row.instrumentType(), row.expiry(), row.strike(), row.lotSize(), row.tickSize()))
-                .toList();
         String fingerprint = fingerprint(version, instruments);
-
         return new InstrumentCatalogueResearchExport(
                 CONTRACT_VERSION,
                 Instant.now(),
@@ -82,7 +77,7 @@ public class InstrumentCatalogueResearchService {
     }
 
     /** Fingerprint excludes generatedAt/asOf so the same catalogue payload has one stable identity. */
-    static String fingerprint(InstrumentMasterRepository.CatalogueResearchVersion version,
+    static String fingerprint(InstrumentCatalogueResearchRepository.CatalogueResearchVersion version,
                               List<InstrumentCatalogueResearchExport.ResearchInstrument> instruments) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
