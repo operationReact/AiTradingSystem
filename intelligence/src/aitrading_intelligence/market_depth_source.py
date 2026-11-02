@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from datetime import datetime
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -226,7 +226,11 @@ def _latest_causal_depth(
             clock = (row.available_at, row.event_at)
             previous_clock = latest_clock.get(row.instrument_id)
             previous = latest.get(row.instrument_id)
-            if previous_clock == clock and previous is not None and previous.source_id != row.source_id:
+            if (
+                previous_clock == clock
+                and previous is not None
+                and previous.source_id != row.source_id
+            ):
                 raise ValueError("ambiguous market-depth evidence at the same causal timestamp")
             if previous is None or (clock, row.source_id) > (
                 previous_clock,
@@ -245,7 +249,7 @@ def attach_market_depth_spreads(
     as_of: datetime,
     config: MarketDepthSpreadJoinConfig | None = None,
 ) -> MarketDepthSpreadJoinSnapshot:
-    """Replace placeholder spread inputs with exact, fresh, causally available FULL-depth evidence."""
+    """Replace placeholders with exact, fresh, causally available FULL-depth spreads."""
 
     _aware(as_of)
     config = config or MarketDepthSpreadJoinConfig()
@@ -268,13 +272,17 @@ def attach_market_depth_spreads(
         raise ValueError("base cross-section observations cannot be empty")
     identities = [(row.exchange, row.symbol) for row in base]
     if len(identities) != len(set(identities)):
-        raise ValueError("base cross-section observations must have unique exchange/symbol identities")
+        raise ValueError(
+            "base cross-section observations must have unique exchange/symbol identities"
+        )
 
     joined: list[IndiaCrossSectionMemberObservation] = []
     selected_source_ids: list[str] = []
     for observation in sorted(base, key=lambda row: row.symbol):
         if observation.exchange != "NSE":
-            raise ValueError("Angel One market-depth spread join currently accepts NSE observations only")
+            raise ValueError(
+                "Angel One market-depth spread join currently accepts NSE observations only"
+            )
         if observation.available_at > as_of:
             raise ValueError("base cross-section observation is not available by decision time")
         binding = binding_by_symbol.get(observation.symbol)
