@@ -77,8 +77,10 @@ def test_outcome_rejects_future_evidence_and_invalid_round_trip() -> None:
     with pytest.raises(ValidationError, match="evidence_cutoff"):
         _source(evidence_offset_minutes=1)
 
+    payload = _source().model_dump()
+    payload["exit_side"] = "BUY"
     with pytest.raises(ValidationError, match="opposite"):
-        _source().model_copy(update={"exit_side": "BUY"}, revalidate_instances="always")
+        TradeOutcomeInput(**payload)
 
 
 def test_outcome_rejects_invalid_excursion_and_duplicate_fill_lineage() -> None:
