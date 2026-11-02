@@ -23,11 +23,14 @@ class GeminiNewsAnalysisProviderTest {
         assertThat(body).containsEntry("input", "user");
         assertThat(body).containsEntry("system_instruction", "system");
         assertThat(body).containsEntry("store", false);
+        assertThat(body).doesNotContainKey("tools");
+        assertThat(body).doesNotContainKey("tool_choice");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> generation = (Map<String, Object>) body.get("generation_config");
-        assertThat(generation).containsEntry("tool_choice", "none");
         assertThat(generation).containsEntry("temperature", 0);
+        assertThat(generation).containsEntry("max_output_tokens", 1024);
+        assertThat(generation).doesNotContainKey("tool_choice");
 
         @SuppressWarnings("unchecked")
         Map<String, Object> responseFormat = (Map<String, Object>) body.get("response_format");
