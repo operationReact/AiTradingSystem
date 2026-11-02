@@ -42,7 +42,7 @@ class ModelPredictionV2(BaseModel):
     target_definition_fingerprint: Hash64
     raw_probability: Annotated[float, Field(ge=0.0, le=1.0)]
     raw_score: Annotated[float, Field(ge=-1.0, le=1.0)]
-    raw_confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    raw_confidence: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
     feature_row_fingerprint: Hash64
     attribution_summary: dict[str, float] = Field(default_factory=dict, max_length=16)
     attribution_status: AttributionStatus
@@ -73,6 +73,9 @@ class ModelPredictionV2(BaseModel):
     def validate_prediction(self) -> ModelPredictionV2:
         if self.data_cutoff > self.as_of:
             raise ValueError("prediction data_cutoff cannot exceed as_of")
+        expected_score = (2.0 * self.raw_probability) - 1.0
+        if not math.isclose(self.raw_score, expected_score, rel_tol=0.0, abs_tol=1e-9):
+            raise ValueError("raw_score must equal 2 * raw_probability - 1")
         if self.attribution_status == "AVAILABLE" and not self.attribution_summary:
             raise ValueError("AVAILABLE attribution requires a non-empty summary")
         if self.attribution_status == "NOT_ATTACHED" and self.attribution_summary:
@@ -81,6 +84,8 @@ class ModelPredictionV2(BaseModel):
 
 
 def _feature_vector(row: FeatureRow, feature_names: list[str]) -> list[float]:
+    if row.data_cutoff > row.as_of:
+        raise ValueError("prediction feature row is not causal")
     values = [float(row.features.get(name, 0.0)) for name in feature_names]
     if any(not math.isfinite(value) for value in values):
         raise ValueError("prediction feature values must be finite")
@@ -106,7 +111,7 @@ def _build_prediction(
     target_definition_fingerprint: str,
     raw_probability: float,
     raw_score: float,
-    raw_confidence: float,
+    raw_confidence: float | None,
     attribution_summary: dict[str, float],
     inference_latency_micros: int,
 ) -> ModelPredictionV2:
@@ -138,6 +143,8 @@ def _build_prediction(
     return ModelPredictionV2(
         **payload,
         inference_latency_micros=inference_latency_micros,
+        # Latency is deliberately telemetry, not semantic identity; identical model/input
+        # evidence retains one reproducible inference fingerprint across repeated runs.
         inference_fingerprint=canonical_fingerprint(payload),
     )
 
@@ -185,7 +192,7 @@ def adapt_lightgbm_prediction(
         target_definition_fingerprint=artifact.target_spec_fingerprint,
         raw_probability=probability,
         raw_score=score,
-        raw_confidence=abs(score),
+        raw_confidence=None,
         attribution_summary={},
         inference_latency_micros=latency,
     )
@@ -215,7 +222,7 @@ def adapt_catboost_prediction(
         target_definition_fingerprint=artifact.target_spec_fingerprint,
         raw_probability=probability,
         raw_score=score,
-        raw_confidence=abs(score),
+        raw_confidence=None,
         attribution_summary={},
         inference_latency_micros=latency,
     )
