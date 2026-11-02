@@ -6,7 +6,7 @@ Python 3.11 foundation for point-in-time research, feature engineering, quantita
 
 This service produces **evidence only**. It cannot authorize capital, place an order, bypass the Java Risk Engine, or activate LIVE trading. Java/Spring remains authoritative for account state, risk, orders, fills and execution.
 
-The first version intentionally contains no learned model. `/v1/contracts/validate` establishes the versioned Java↔Python evidence contract, point-in-time guards and deterministic input fingerprinting without fabricating a recommendation.
+`/v1/contracts/validate` establishes the versioned Java↔Python evidence contract, point-in-time guards and deterministic input fingerprinting.
 
 ## Feature and dataset foundation
 
@@ -36,6 +36,20 @@ python -m aitrading_intelligence.market_source market-history.json ./dataset \
 
 The resulting manifest records the Java export contract, instrument catalogue version, provider lineage, interval, code SHA and effective data cutoff.
 
+## V2-06 quantitative baseline and signal fusion
+
+V2-06 starts with an interpretable scikit-learn logistic baseline trained from point-in-time `FeatureRow` inputs. The persisted research artifact contains explicit feature names, coefficients, intercept, training window, class counts and a deterministic SHA-256 artifact fingerprint. Runtime scoring is performed directly from those persisted coefficients, which keeps the evidence portable and auditable.
+
+`POST /v1/fusion/rank` combines three evidence families:
+
+- deterministic Java strategy evidence;
+- Python quantitative baseline evidence;
+- optional Gemini structured evidence.
+
+Fusion is freshness-aware and confidence-weighted. Deterministic strategy and quantitative evidence are mandatory and must be fresh; Gemini can be omitted or excluded when stale. Model disagreement remains `WATCH` rather than being hidden by a high aggregate score.
+
+Every fused result remains `CANDIDATE_NOT_EXECUTABLE` and `can_authorize_capital=false`. A ranked `BUY` candidate is still only evidence for the Java Risk Engine; it is not an order approval.
+
 ## Run locally
 
 ```bash
@@ -59,5 +73,6 @@ pytest -q
 - candle event time and safe feature-availability time remain distinct;
 - feature values must be finite numbers;
 - every intelligence response says `can_authorize_capital=false`;
-- canonical SHA-256 fingerprints make validated inputs and dataset rows reproducible;
-- future model evidence must carry model/version/schema/provenance rather than hidden state.
+- canonical SHA-256 fingerprints make validated inputs, model artifacts and fused candidates reproducible;
+- model evidence carries version/schema/provenance rather than hidden state;
+- signal fusion ranks evidence only; Java Risk Engine remains the only capital authority.
