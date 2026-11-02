@@ -38,13 +38,14 @@ class Nifty500LiquidityIdentityBinding(BaseModel):
     broker_symbol_token: Annotated[str, Field(min_length=1, max_length=64)]
     liquidity_evidence_fingerprint: Hash64
     sector_mapping_evidence_fingerprint: Hash64
+    membership_effective_from: datetime
     available_at: datetime
     mapping_rule: Literal["nse-symbol-series-to-angel-trading-symbol.v1"] = MAPPING_RULE_VERSION
     binding_fingerprint: Hash64
 
-    @field_validator("available_at")
+    @field_validator("membership_effective_from", "available_at")
     @classmethod
-    def available_at_must_be_aware(cls, value: datetime) -> datetime:
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         return _aware(value)
 
     @model_validator(mode="after")
@@ -54,7 +55,11 @@ class Nifty500LiquidityIdentityBinding(BaseModel):
         if self.expected_trading_symbol != f"{self.symbol}-{self.series}":
             raise ValueError("expected trading symbol must exactly equal <symbol>-<series>")
         if self.broker_trading_symbol != self.expected_trading_symbol:
-            raise ValueError("broker trading symbol must exactly match the deterministic NSE mapping")
+            raise ValueError(
+                "broker trading symbol must exactly match the deterministic NSE mapping"
+            )
+        if self.membership_effective_from > self.available_at:
+            raise ValueError("membership_effective_from cannot exceed binding availability")
         return self
 
 
@@ -197,6 +202,7 @@ def build_nifty500_liquidity_identity_bridge(
             "brokerSymbolToken": instrument.symbol_token,
             "liquidityEvidenceFingerprint": evidence.evidence_fingerprint,
             "sectorMappingEvidenceFingerprint": row.mapping_evidence_fingerprint,
+            "membershipEffectiveFrom": sector_enrichment.constituent_observed_at.isoformat(),
             "availableAt": available_at.isoformat(),
             "mappingRule": MAPPING_RULE_VERSION,
         }
@@ -213,6 +219,7 @@ def build_nifty500_liquidity_identity_bridge(
                 broker_symbol_token=instrument.symbol_token,
                 liquidity_evidence_fingerprint=evidence.evidence_fingerprint,
                 sector_mapping_evidence_fingerprint=row.mapping_evidence_fingerprint,
+                membership_effective_from=sector_enrichment.constituent_observed_at,
                 available_at=available_at,
                 binding_fingerprint=canonical_fingerprint(binding_payload),
             )
