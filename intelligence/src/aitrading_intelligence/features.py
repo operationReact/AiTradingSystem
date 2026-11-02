@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from datetime import datetime
-from typing import Annotated, Iterable, Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -47,7 +48,10 @@ class FeatureRow(BaseModel):
         return self
 
 
-def _latest_by_observed_at(records: Iterable[EventRecord | FundamentalSnapshot], as_of: datetime):
+def _latest_by_observed_at(
+    records: Iterable[EventRecord | FundamentalSnapshot],
+    as_of: datetime,
+) -> EventRecord | FundamentalSnapshot | None:
     eligible = [record for record in records if record.observed_at <= as_of]
     return max(eligible, key=lambda record: record.observed_at, default=None)
 
