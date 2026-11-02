@@ -18,6 +18,7 @@ SourceFamily = Literal[
     "FUNDAMENTAL",
     "UNIVERSE",
     "INDIA_CONTEXT",
+    "MARKET_DEPTH",
     "NIFTY_CONSTITUENTS",
     "NIFTY500_CONSTITUENTS",
     "NIFTY50_HISTORY",
@@ -37,7 +38,7 @@ class FutureMutationInvariantReport(BaseModel):
     )
     decision_at: datetime
     row_count: Annotated[int, Field(gt=0)]
-    mutated_source_families: list[SourceFamily] = Field(min_length=1, max_length=11)
+    mutated_source_families: list[SourceFamily] = Field(min_length=1, max_length=12)
     baseline_dataset_fingerprint: Hash64
     mutated_dataset_fingerprint: Hash64
     historical_rows_fingerprint: Hash64
