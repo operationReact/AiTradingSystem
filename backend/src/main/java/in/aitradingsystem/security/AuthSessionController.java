@@ -1,5 +1,6 @@
 package in.aitradingsystem.security;
 
+import in.aitradingsystem.provider.angelone.AngelOneCustomerSessionStore;
 import in.aitradingsystem.security.SessionAuthenticationFilter.SessionPrincipal;
 import in.aitradingsystem.user.UserAccountStore;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,6 +28,7 @@ public class AuthSessionController {
 
     private final UserSessionStore sessions;
     private final UserAccountStore users;
+    private final AngelOneCustomerSessionStore brokerSessions;
     private final Duration ttl;
     private final boolean cookieSecure;
     private final boolean devBootstrapEnabled;
@@ -34,6 +36,7 @@ public class AuthSessionController {
     public AuthSessionController(
             UserSessionStore sessions,
             UserAccountStore users,
+            AngelOneCustomerSessionStore brokerSessions,
             @Value("${app.security.session.ttl-seconds:28800}") long ttlSeconds,
             @Value("${app.security.session.cookie-secure:true}") boolean cookieSecure,
             @Value("${app.security.dev-session-bootstrap-enabled:false}") boolean devBootstrapEnabled) {
@@ -42,6 +45,7 @@ public class AuthSessionController {
         }
         this.sessions = sessions;
         this.users = users;
+        this.brokerSessions = brokerSessions;
         this.ttl = Duration.ofSeconds(ttlSeconds);
         this.cookieSecure = cookieSecure;
         this.devBootstrapEnabled = devBootstrapEnabled;
@@ -84,17 +88,19 @@ public class AuthSessionController {
 
     @GetMapping("/csrf")
     public Map<String, String> csrf(Authentication authentication) {
-        SessionContext context = requireSession(authentication);
+        requireSession(authentication);
         // A fresh CSRF token is not derivable from the stored hash. Clients receive the token at session creation;
-        // production IdP/login integration will return it in the login exchange. This endpoint intentionally
-        // communicates presence only until that provider-specific exchange is implemented.
+        // the Angel One publisher exchange returns it in the login exchange. This endpoint intentionally
+        // communicates presence only.
         return Map.of("status", "BOUND_TO_SESSION");
     }
 
     @DeleteMapping("/session")
     public ResponseEntity<Void> logout(Authentication authentication) {
         SessionContext context = requireSession(authentication);
-        sessions.revoke(context.principal().sessionId());
+        UUID sessionId = context.principal().sessionId();
+        brokerSessions.revoke(sessionId);
+        sessions.revoke(sessionId);
         return ResponseEntity.noContent()
             .header(HttpHeaders.SET_COOKIE, sessionCookie("", Duration.ZERO).toString())
             .build();
