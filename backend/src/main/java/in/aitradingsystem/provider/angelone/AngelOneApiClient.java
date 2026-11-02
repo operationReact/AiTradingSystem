@@ -15,9 +15,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 
 /**
- * Thin HTTP adapter for the Angel One SmartAPI endpoints in use. Paths were taken from the official SDK source
- * (angel-one/smartapi-java, Routes.java) and are marked VERIFIED_SDK in docs/angel-one-smartapi-integration.md.
- * Request and response bodies are never logged; error messages carry only HTTP status and provider error codes.
+ * Thin HTTP adapter for the Angel One SmartAPI endpoints in use. Paths are verified against Angel One's current
+ * SmartAPI documentation and official SDK route inventory. Request and response bodies are never logged; error
+ * messages carry only HTTP status and provider error codes.
  */
 @Component
 public class AngelOneApiClient {
@@ -25,6 +25,11 @@ public class AngelOneApiClient {
     static final String LOGIN_PATH = "/rest/auth/angelbroking/user/v1/loginByPassword";
     static final String LTP_PATH = "/rest/secure/angelbroking/order/v1/getLtpData";
     static final String CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData";
+    static final String RMS_PATH = "/rest/secure/angelbroking/user/v1/getRMS";
+    static final String HOLDINGS_PATH = "/rest/secure/angelbroking/portfolio/v1/getHolding";
+    static final String ALL_HOLDINGS_PATH = "/rest/secure/angelbroking/portfolio/v1/getAllHolding";
+    static final String POSITIONS_PATH = "/rest/secure/angelbroking/order/v1/getPosition";
+    static final String ORDER_BOOK_PATH = "/rest/secure/angelbroking/order/v1/getOrderBook";
 
     /** Provider error codes that the SDK treats as token or session expiry. */
     static final Set<String> SESSION_EXPIRED_CODES = Set.of("AG8001", "AG8003", "AB8050", "AB8051", "AB1010");
@@ -63,7 +68,7 @@ public class AngelOneApiClient {
                 .put("clientcode", clientCode)
                 .put("password", password)
                 .put("totp", totp);
-        JsonNode data = call(LOGIN_PATH, null, body);
+        JsonNode data = post(LOGIN_PATH, null, body);
         String jwt = text(data, "jwtToken");
         String refresh = text(data, "refreshToken");
         if (jwt == null || refresh == null) {
@@ -79,7 +84,7 @@ public class AngelOneApiClient {
                 .put("exchange", exchange)
                 .put("tradingsymbol", tradingSymbol)
                 .put("symboltoken", symbolToken);
-        JsonNode data = call(LTP_PATH, jwtToken, body);
+        JsonNode data = post(LTP_PATH, jwtToken, body);
         JsonNode ltp = data.get("ltp");
         if (ltp == null || !ltp.isNumber()) {
             throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MISSING_LTP",
@@ -95,7 +100,7 @@ public class AngelOneApiClient {
 
     /**
      * Historical candles. Request fields (exchange, symboltoken, interval, fromdate, todate) are verified from the
-     * SDK README; the layout of each returned element is NOT verified and is left to the caller to parse strictly.
+     * provider documentation; each returned row is still parsed strictly by the historical service.
      */
     public JsonNode candles(String jwtToken, String exchange, String symbolToken, String interval,
                             String fromDate, String toDate) {
@@ -105,7 +110,7 @@ public class AngelOneApiClient {
                 .put("interval", interval)
                 .put("fromdate", fromDate)
                 .put("todate", toDate);
-        JsonNode data = call(CANDLE_PATH, jwtToken, body);
+        JsonNode data = post(CANDLE_PATH, jwtToken, body);
         if (!data.isArray()) {
             throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "CANDLES_NOT_ARRAY",
                     "Candle response data was not an array");
@@ -113,48 +118,38 @@ public class AngelOneApiClient {
         return data;
     }
 
-    private JsonNode call(String path, String jwtToken, JsonNode body) {
+    public JsonNode rms(String jwtToken) {
+        return get(RMS_PATH, jwtToken);
+    }
+
+    public JsonNode holdings(String jwtToken) {
+        return get(HOLDINGS_PATH, jwtToken);
+    }
+
+    public JsonNode allHoldings(String jwtToken) {
+        return get(ALL_HOLDINGS_PATH, jwtToken);
+    }
+
+    public JsonNode positions(String jwtToken) {
+        return get(POSITIONS_PATH, jwtToken);
+    }
+
+    public JsonNode orderBook(String jwtToken) {
+        return get(ORDER_BOOK_PATH, jwtToken);
+    }
+
+    private JsonNode post(String path, String jwtToken, JsonNode body) {
         long startedAt = metrics == null ? 0L : metrics.start();
         try {
             JsonNode result = rest.post()
                     .uri(path)
-                    .headers(h -> {
-                        h.setContentType(MediaType.APPLICATION_JSON);
-                        h.setAccept(List.of(MediaType.APPLICATION_JSON));
-                        h.set("X-PrivateKey", properties.apiKey());
-                        h.set("X-UserType", "USER");
-                        h.set("X-SourceID", "WEB");
-                        if (jwtToken != null) h.setBearerAuth(jwtToken);
-                    })
+                    .headers(h -> applyHeaders(h, jwtToken))
                     // Serialize the JSON tree explicitly. Passing JsonNode as Object lets the active HTTP converter
                     // introspect JsonNode's bean-style accessors on some Spring/Jackson combinations, producing a
                     // metadata object instead of the SmartAPI payload.
                     .body(body.toString())
-                    .exchange((request, response) -> {
-                        int status = response.getStatusCode().value();
-                        // SmartAPI's current official RateLimit page documents 403 when a provider rate limit is hit.
-                        if (status == 403 || status == 429) {
-                            throw new AngelOneException(AngelOneException.Kind.RATE_LIMITED, "HTTP_" + status,
-                                    "Provider rate limit reached");
-                        }
-                        if (status == 401) {
-                            throw jwtToken != null
-                                    ? new AngelOneException(AngelOneException.Kind.SESSION_EXPIRED, "HTTP_401",
-                                            "Provider session is no longer valid")
-                                    : new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_401",
-                                            "Provider rejected the request as unauthorised");
-                        }
-                        if (status == 408 || status == 425 || status >= 500) {
-                            throw new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "HTTP_" + status,
-                                    "Provider returned a transient HTTP error");
-                        }
-                        if (status >= 400) {
-                            throw new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_" + status,
-                                    "Provider rejected the request");
-                        }
-                        String raw = new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8);
-                        return parseEnvelope(raw);
-                    });
+                    .exchange((request, response) -> parseHttpResponse(response.getStatusCode().value(), jwtToken,
+                            new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)));
             if (metrics != null) metrics.recordSuccess(path, startedAt);
             return result;
         } catch (AngelOneException e) {
@@ -166,6 +161,60 @@ public class AngelOneApiClient {
             if (metrics != null) metrics.recordFailure(path, mapped, startedAt);
             throw mapped;
         }
+    }
+
+    private JsonNode get(String path, String jwtToken) {
+        long startedAt = metrics == null ? 0L : metrics.start();
+        try {
+            JsonNode result = rest.get()
+                    .uri(path)
+                    .headers(h -> applyHeaders(h, jwtToken))
+                    .exchange((request, response) -> parseHttpResponse(response.getStatusCode().value(), jwtToken,
+                            new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)));
+            if (metrics != null) metrics.recordSuccess(path, startedAt);
+            return result;
+        } catch (AngelOneException e) {
+            if (metrics != null) metrics.recordFailure(path, e, startedAt);
+            throw e;
+        } catch (ResourceAccessException e) {
+            AngelOneException mapped = new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "NETWORK",
+                    "Provider could not be reached");
+            if (metrics != null) metrics.recordFailure(path, mapped, startedAt);
+            throw mapped;
+        }
+    }
+
+    private void applyHeaders(org.springframework.http.HttpHeaders headers, String jwtToken) {
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+        headers.set("X-PrivateKey", properties.apiKey());
+        headers.set("X-UserType", "USER");
+        headers.set("X-SourceID", "WEB");
+        if (jwtToken != null) headers.setBearerAuth(jwtToken);
+    }
+
+    private JsonNode parseHttpResponse(int status, String jwtToken, String raw) {
+        // SmartAPI's current official RateLimit page documents 403 when a provider rate limit is hit.
+        if (status == 403 || status == 429) {
+            throw new AngelOneException(AngelOneException.Kind.RATE_LIMITED, "HTTP_" + status,
+                    "Provider rate limit reached");
+        }
+        if (status == 401) {
+            throw jwtToken != null
+                    ? new AngelOneException(AngelOneException.Kind.SESSION_EXPIRED, "HTTP_401",
+                            "Provider session is no longer valid")
+                    : new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_401",
+                            "Provider rejected the request as unauthorised");
+        }
+        if (status == 408 || status == 425 || status >= 500) {
+            throw new AngelOneException(AngelOneException.Kind.UNAVAILABLE, "HTTP_" + status,
+                    "Provider returned a transient HTTP error");
+        }
+        if (status >= 400) {
+            throw new AngelOneException(AngelOneException.Kind.REJECTED, "HTTP_" + status,
+                    "Provider rejected the request");
+        }
+        return parseEnvelope(raw);
     }
 
     private JsonNode parseEnvelope(String raw) {
