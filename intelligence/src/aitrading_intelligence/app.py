@@ -26,7 +26,9 @@ def validate_contract(request: EvidenceContractRequest) -> EvidenceContractRespo
         accepted=True,
         input_fingerprint=request_fingerprint(request),
         evidence=[],
-        warnings=["Contract validated; evidence must still pass Java Risk Engine before execution."],
+        warnings=[
+            "Contract validated; evidence must still pass Java Risk Engine before execution."
+        ],
         can_authorize_capital=False,
         generated_at=datetime.now(UTC),
     )
