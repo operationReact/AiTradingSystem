@@ -216,8 +216,8 @@ def build_heuristic_regime_snapshot(
             - 0.25 * positive_dispersion
         ),
         "STRESS_HIGH_VOL": (
-            0.95 * volatility_state
-            + 0.75 * dispersion_state
+            1.20 * volatility_state
+            + 1.00 * dispersion_state
             + 0.25 * abs(return_state)
             + 0.15 * abs(breadth_state)
         ),
