@@ -16,11 +16,11 @@ def build_research_dataset(
     *,
     market: MarketResearchExport,
     news: NewsResearchExport | None,
-    ai_evidence: NewsAiEvidenceExport | None,
     fundamentals: FundamentalResearchExport | None,
     output_dir: Path,
     dataset_version: str,
     code_sha: str,
+    ai_evidence: NewsAiEvidenceExport | None = None,
 ):
     bars = market.to_market_bars()
     if not bars:
@@ -79,8 +79,8 @@ def build_research_dataset(
 def _validate_shared_window(
     market: MarketResearchExport,
     news: NewsResearchExport | None,
-    ai_evidence: NewsAiEvidenceExport | None,
     fundamentals: FundamentalResearchExport | None,
+    ai_evidence: NewsAiEvidenceExport | None = None,
 ) -> None:
     for name, export in (
         ("news", news),
@@ -99,11 +99,11 @@ def build_from_paths(
     *,
     market_path: Path,
     news_path: Path | None,
-    ai_evidence_path: Path | None,
     fundamentals_path: Path | None,
     output_dir: Path,
     dataset_version: str,
     code_sha: str,
+    ai_evidence_path: Path | None = None,
 ):
     market = load_market_export(market_path)
     news = load_news_export(news_path) if news_path is not None else None
@@ -117,7 +117,7 @@ def build_from_paths(
         if fundamentals_path is not None
         else None
     )
-    _validate_shared_window(market, news, ai_evidence, fundamentals)
+    _validate_shared_window(market, news, fundamentals, ai_evidence)
     return build_research_dataset(
         market=market,
         news=news,
