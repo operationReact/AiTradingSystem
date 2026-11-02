@@ -3,6 +3,8 @@ package in.aitradingsystem.instrument;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,10 +30,10 @@ public class InstrumentCatalogueResearchRepository {
                  LIMIT 1
                 """, (rs, row) -> new CatalogueResearchVersion(
                 rs.getObject("id", UUID.class),
-                rs.getObject("completed_at", java.time.OffsetDateTime.class).toInstant(),
+                rs.getObject("completed_at", OffsetDateTime.class).toInstant(),
                 rs.getString("source_url"),
                 rs.getInt("accepted_count"),
-                rs.getInt("rejected_count")), asOf);
+                rs.getInt("rejected_count")), OffsetDateTime.ofInstant(asOf, ZoneOffset.UTC));
         if (rows.isEmpty()) {
             throw new InstrumentMasterException("CATALOGUE_NOT_AVAILABLE_AT_AS_OF",
                     "No successfully published instrument catalogue was available at the requested asOf");
