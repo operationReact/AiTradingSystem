@@ -131,3 +131,25 @@ def test_temperature_scaling_rejects_non_neural_registry() -> None:
             observations=observations,
             benchmark_as_of=observations[-1].target_observed_at,
         )
+
+
+def test_temperature_scaling_rejects_pre_registration_observations() -> None:
+    registry = _registry()
+    decision_at = registry.evaluation_as_of
+    pre_registration = build_calibration_observation(
+        symbol="RELIANCE",
+        decision_at=decision_at,
+        target_observed_at=decision_at + timedelta(seconds=30),
+        source_registry_fingerprint=registry.registry_fingerprint,
+        model_prediction_fingerprint=_hash(9000),
+        raw_probability=0.80,
+        actual_positive=True,
+    )
+    valid = _observations(registry)
+
+    with pytest.raises(ValueError, match="after model registration"):
+        benchmark_neural_temperature_scaling(
+            source_registry=registry,
+            observations=[pre_registration, *valid],
+            benchmark_as_of=valid[-1].target_observed_at,
+        )
