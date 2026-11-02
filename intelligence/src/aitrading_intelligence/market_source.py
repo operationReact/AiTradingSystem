@@ -65,8 +65,12 @@ class MarketResearchExport(BaseModel):
     generated_at: datetime = Field(alias="generatedAt")
     instrument_id: Annotated[int, Field(gt=0)] = Field(alias="instrumentId")
     exchange: Annotated[str, Field(min_length=1, max_length=20)]
-    trading_symbol: Annotated[str, Field(min_length=1, max_length=64)] = Field(alias="tradingSymbol")
-    symbol_token: Annotated[str, Field(min_length=1, max_length=64)] = Field(alias="symbolToken")
+    trading_symbol: Annotated[str, Field(min_length=1, max_length=64)] = Field(
+        alias="tradingSymbol"
+    )
+    symbol_token: Annotated[str, Field(min_length=1, max_length=64)] = Field(
+        alias="symbolToken"
+    )
     catalogue_version: UUID = Field(alias="catalogueVersion")
     interval: Literal[
         "ONE_MINUTE",
@@ -172,7 +176,9 @@ def load_market_export(path: Path) -> MarketResearchExport:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build a point-in-time research dataset from Java market history")
+    parser = argparse.ArgumentParser(
+        description="Build a point-in-time research dataset from Java market history"
+    )
     parser.add_argument("export_json", type=Path)
     parser.add_argument("output_dir", type=Path)
     parser.add_argument("--dataset-version", required=True)
