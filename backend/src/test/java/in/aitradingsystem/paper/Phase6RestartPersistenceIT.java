@@ -39,6 +39,10 @@ class Phase6RestartPersistenceIT extends AbstractApprovalPaperIT {
             .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM audit_event WHERE entity_type = 'PAPER_ORDER' AND entity_id IN (SELECT id::text FROM paper_order WHERE symbol = :symbol)")
             .param("symbol", SYMBOL).update();
+        jdbc.sql("DELETE FROM paper_trade_lot_close WHERE exit_order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol) OR lot_id IN (SELECT id FROM paper_trade_lot WHERE entry_order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol))")
+            .param("symbol", SYMBOL).update();
+        jdbc.sql("DELETE FROM paper_trade_lot WHERE entry_order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")
+            .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM paper_fill WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")
             .param("symbol", SYMBOL).update();
         jdbc.sql("DELETE FROM paper_cash_entry WHERE order_id IN (SELECT id FROM paper_order WHERE symbol = :symbol)")

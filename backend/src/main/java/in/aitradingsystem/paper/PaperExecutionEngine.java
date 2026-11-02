@@ -22,13 +22,16 @@ public class PaperExecutionEngine {
     private final PositionAccountingService positionAccounting;
     private final PaperFillRepository fills;
     private final PaperOrderRepository orders;
+    private final PaperTradeLotRepository tradeLots;
 
     public PaperExecutionEngine(PaperAccountRepository accounts, PositionAccountingService positionAccounting,
-                                PaperFillRepository fills, PaperOrderRepository orders) {
+                                PaperFillRepository fills, PaperOrderRepository orders,
+                                PaperTradeLotRepository tradeLots) {
         this.accounts = accounts;
         this.positionAccounting = positionAccounting;
         this.fills = fills;
         this.orders = orders;
+        this.tradeLots = tradeLots;
     }
 
     public ExecutionResult execute(UUID orderId, OrderCommand command, RiskContext context,
@@ -57,13 +60,25 @@ public class PaperExecutionEngine {
             command.side() == Side.BUY ? "BUY_SETTLEMENT" : "SELL_SETTLEMENT",
             netAmount, cashAfter, now);
 
-        fills.appendFill(orderId, 1, new FillWrite(
+        UUID fillId = fills.appendFill(orderId, 1, new FillWrite(
             command.symbol(), command.side(), command.quantity(), command.entryPrice(),
             decision.effectiveFillPrice(), decision.grossNotional(), decision.estimatedFee(),
             decision.estimatedSlippage(), netAmount, accounting.appliedCostBasis(),
             accounting.realizedDelta(), EXECUTION_MODEL_VERSION, LIQUIDITY_ASSUMPTION, now));
-        orders.updateFillSummary(orderId, command.quantity(), decision.effectiveFillPrice(), now);
 
+        if (command.side() == Side.BUY) {
+            tradeLots.openLot(orderId, fillId, instrumentId, context.exchange(), command.symbol(),
+                command.productType(), command.quantity(), decision.effectiveFillPrice(),
+                accounting.appliedCostBasis(), decision.estimatedFee(), decision.estimatedSlippage(), now);
+        } else {
+            int positionQuantityBefore = Math.addExact(accounting.quantity(), command.quantity());
+            tradeLots.allocateClose(orderId, fillId, instrumentId, command.symbol(), command.productType(),
+                command.quantity(), positionQuantityBefore, decision.effectiveFillPrice(),
+                decision.estimatedFee(), decision.estimatedSlippage(), accounting.realizedDelta(),
+                command.lifecycleReason(), now);
+        }
+
+        orders.updateFillSummary(orderId, command.quantity(), decision.effectiveFillPrice(), now);
         return new ExecutionResult(cashAfter, accounting.appliedCostBasis(), accounting.realizedDelta());
     }
 
