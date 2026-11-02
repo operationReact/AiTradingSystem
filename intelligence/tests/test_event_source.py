@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
 
 from aitrading_intelligence.event_source import NewsResearchExport
-
-UTC = timezone.utc
 
 
 def _payload() -> dict:
