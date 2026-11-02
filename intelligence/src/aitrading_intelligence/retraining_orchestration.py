@@ -229,6 +229,11 @@ def plan_candidate_retraining(
     )
 
 
+def _materialized_dataset_fingerprint(rows: Sequence[FeatureRow]) -> str:
+    ordered = sorted(rows, key=lambda row: (row.symbol, row.as_of, row.fingerprint))
+    return canonical_fingerprint([row.model_dump(mode="json") for row in ordered])
+
+
 def execute_candidate_retraining(
     request: CandidateRetrainingRequest,
     *,
@@ -254,11 +259,16 @@ def execute_candidate_retraining(
         raise ValueError("research feature schema changed after scheduling")
     if research_dataset.row_count != len(rows):
         raise ValueError("materialized research rows do not match the dataset manifest")
+    if _materialized_dataset_fingerprint(rows) != research_dataset.fingerprint:
+        raise ValueError("materialized research row fingerprint does not match the manifest")
     if training_config.fingerprint != request.training_config_fingerprint:
         raise ValueError("training configuration changed after scheduling")
     if len(examples) < 40:
         raise ValueError("at least 40 labeled examples are required for retraining")
-    if any(row.feature_schema_version != request.research_feature_schema_version for row in rows):
+    if any(
+        row.feature_schema_version != request.research_feature_schema_version
+        for row in rows
+    ):
         raise ValueError("materialized feature rows do not match the scheduled schema")
     if any(row.data_cutoff > research_dataset.data_cutoff for row in rows):
         raise ValueError("feature row exceeds the scheduled research dataset cutoff")
