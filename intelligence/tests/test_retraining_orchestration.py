@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,7 +10,6 @@ from aitrading_intelligence.fingerprints import canonical_fingerprint
 from aitrading_intelligence.learning_dataset import LearningDatasetManifest
 from aitrading_intelligence.model_monitoring import ModelMonitoringReport, MonitoringMetrics
 from aitrading_intelligence.model_registry import ModelGovernanceCandidate
-from aitrading_intelligence.pytorch_evaluation import EvaluationMetrics, PyTorchEvaluation
 from aitrading_intelligence.pytorch_target import LabeledExample
 from aitrading_intelligence.retraining_orchestration import (
     RetrainingScheduleConfig,
@@ -147,33 +147,10 @@ def _examples(rows: list[FeatureRow], count: int = 40) -> list[LabeledExample]:
     return examples
 
 
-def _evaluation(*, replay_candidate: bool = True) -> PyTorchEvaluation:
-    def metrics(version: str) -> EvaluationMetrics:
-        return EvaluationMetrics(
-            model_version=version,
-            roc_auc=0.75,
-            brier_score=0.18,
-            log_loss=0.55,
-            accuracy=0.70,
-            precision=0.70,
-            recall=0.70,
-            expected_calibration_error=0.04,
-            calibration_buckets=[],
-            test_rows=10,
-            positive_rows=5,
-            negative_rows=5,
-        )
-
+def _evaluation(*, replay_candidate: bool = True):
     comparison = "PYTORCH_ADVANCES_TO_REPLAY" if replay_candidate else "INCONCLUSIVE"
-    return PyTorchEvaluation(
-        feature_names=["market.close", "market.return_1", "market.volume"],
-        target_spec_fingerprint="e" * 64,
+    return SimpleNamespace(
         pytorch_model_fingerprint="f" * 64,
-        train_rows=30,
-        test_rows=10,
-        logistic=metrics("logistic.v1"),
-        tree=metrics("tree.v1"),
-        pytorch=metrics("pytorch-mlp.v1"),
         comparison=comparison,
         replay_candidate=replay_candidate,
         evaluation_fingerprint="0" * 64,
@@ -207,6 +184,7 @@ def test_plan_binds_both_datasets_and_never_grants_activation() -> None:
     assert request.source_registry_fingerprint == REGISTRY
     assert request.learning_dataset_fingerprint == _learning_dataset().dataset_fingerprint
     assert request.research_dataset_fingerprint == _research_dataset(rows).fingerprint
+    assert request.training_config.fingerprint == request.training_config_fingerprint
     assert request.required_next_gate == "V2_09_RUN_CANDIDATE_RETRAINING"
     assert request.activation_allowed is False
     assert request.promotion_allowed is False
@@ -272,14 +250,14 @@ def test_execution_invokes_existing_evaluator_and_stays_research_only(monkeypatc
     request = _plan(rows=rows)
     called = {"value": False}
 
-    def fake_evaluator(rows_arg, examples_arg, *, config):
+    def fake_evaluator(rows_arg, examples_arg, scheduled_config):
         called["value"] = True
         assert len(rows_arg) == 50
         assert len(examples_arg) == 40
-        assert config.fingerprint == request.training_config_fingerprint
+        assert scheduled_config.fingerprint == request.training_config_fingerprint
         return _evaluation(replay_candidate=True)
 
-    monkeypatch.setattr(orchestration, "evaluate_pytorch_challenger", fake_evaluator)
+    monkeypatch.setattr(orchestration, "_run_existing_pytorch_evaluation", fake_evaluator)
     run = execute_candidate_retraining(
         request,
         rows=rows,
@@ -306,7 +284,7 @@ def test_execution_rejects_rows_that_do_not_match_scheduled_manifest(monkeypatch
     )
     monkeypatch.setattr(
         orchestration,
-        "evaluate_pytorch_challenger",
+        "_run_existing_pytorch_evaluation",
         lambda *args, **kwargs: _evaluation(),
     )
 
