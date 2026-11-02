@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Literal, Sequence
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sklearn.linear_model import LogisticRegression
