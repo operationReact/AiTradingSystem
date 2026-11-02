@@ -31,7 +31,7 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
     }
 
     @Override
-    public String complete(String systemPrompt, String userPrompt) {
+    public Completion complete(String systemPrompt, String userPrompt) {
         if (!configured()) {
             throw new AiProviderException(AiErrorCode.UNCONFIGURED, "GEMINI_API_KEY is not set");
         }
@@ -44,7 +44,7 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                 AiErrorCode.INVALID_RESPONSE,
                 "GEMINI interaction did not complete");
         }
-        return extractOutputText(root);
+        return new Completion(extractOutputText(root), nullableText(root.path("id")));
     }
 
     Map<String, Object> requestBody(String systemPrompt, String userPrompt) {
@@ -78,6 +78,10 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
             "GEMINI returned no structured text content");
     }
 
+    private static String nullableText(JsonNode node) {
+        return node != null && node.isTextual() && !node.asText().isBlank() ? node.asText() : null;
+    }
+
     private static Map<String, Object> responseSchema() {
         return Map.of(
             "type", "object",
@@ -86,6 +90,10 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                 "sentiment", Map.of(
                     "type", "string",
                     "enum", List.of("POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED")),
+                "directionScore", Map.of(
+                    "type", "number",
+                    "minimum", -1,
+                    "maximum", 1),
                 "category", Map.of(
                     "type", "string",
                     "enum", List.of(
@@ -96,10 +104,14 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                         "MANAGEMENT",
                         "SECTOR",
                         "OTHER")),
-                "confidence", Map.of(
-                    "type", "number",
-                    "minimum", 0,
-                    "maximum", 1),
+                "confidence", Map.of("type", "number", "minimum", 0, "maximum", 1),
+                "materiality", Map.of("type", "number", "minimum", 0, "maximum", 1),
+                "horizon", Map.of(
+                    "type", "string",
+                    "enum", List.of("INTRADAY", "MULTI_DAY", "LONGER_TERM", "UNKNOWN")),
+                "novelty", Map.of("type", "number", "minimum", 0, "maximum", 1),
+                "contradiction", Map.of("type", "boolean"),
+                "ambiguity", Map.of("type", "boolean"),
                 "impactedSymbols", Map.of(
                     "type", "array",
                     "maxItems", 10,
@@ -111,8 +123,14 @@ public class GeminiNewsAnalysisProvider extends AbstractHttpAnalysisProvider {
                     "items", Map.of("type", "string"))),
             "required", List.of(
                 "sentiment",
+                "directionScore",
                 "category",
                 "confidence",
+                "materiality",
+                "horizon",
+                "novelty",
+                "contradiction",
+                "ambiguity",
                 "impactedSymbols",
                 "evidence",
                 "risks"));
