@@ -1,5 +1,5 @@
--- V2-09: immutable entry-to-exit lineage for outcome learning.
--- Portfolio accounting remains authoritative; this ledger adds exact fill/order lineage for research attribution.
+-- V2-09: exact entry-to-exit lineage for outcome learning.
+-- Portfolio accounting remains authoritative; this ledger adds research attribution without blocking safe exits.
 
 CREATE TABLE paper_trade_lot (
     id UUID PRIMARY KEY,
@@ -15,7 +15,10 @@ CREATE TABLE paper_trade_lot (
     entry_cost_basis NUMERIC(20,2) NOT NULL,
     entry_fee_amount NUMERIC(20,2) NOT NULL,
     entry_slippage_amount NUMERIC(20,2) NOT NULL,
+    lineage_status VARCHAR(16) NOT NULL DEFAULT 'ACTIVE',
+    invalidation_reason VARCHAR(80),
     opened_at TIMESTAMPTZ NOT NULL,
+    invalidated_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT ck_paper_trade_lot_product_type CHECK (product_type IN ('DELIVERY','INTRADAY')),
     CONSTRAINT ck_paper_trade_lot_entry_quantity CHECK (entry_quantity > 0),
@@ -25,7 +28,14 @@ CREATE TABLE paper_trade_lot (
     CONSTRAINT ck_paper_trade_lot_entry_price CHECK (entry_price > 0),
     CONSTRAINT ck_paper_trade_lot_cost_basis CHECK (entry_cost_basis > 0),
     CONSTRAINT ck_paper_trade_lot_fee CHECK (entry_fee_amount >= 0),
-    CONSTRAINT ck_paper_trade_lot_slippage CHECK (entry_slippage_amount >= 0)
+    CONSTRAINT ck_paper_trade_lot_slippage CHECK (entry_slippage_amount >= 0),
+    CONSTRAINT ck_paper_trade_lot_lineage_status CHECK (
+        lineage_status IN ('ACTIVE','EXHAUSTED','INVALIDATED')
+    ),
+    CONSTRAINT ck_paper_trade_lot_invalidation CHECK (
+        (lineage_status = 'INVALIDATED' AND invalidation_reason IS NOT NULL AND invalidated_at IS NOT NULL)
+        OR (lineage_status <> 'INVALIDATED' AND invalidation_reason IS NULL AND invalidated_at IS NULL)
+    )
 );
 
 CREATE TABLE paper_trade_lot_close (
@@ -58,7 +68,7 @@ CREATE TABLE paper_trade_lot_close (
 
 CREATE INDEX idx_paper_trade_lot_open_fifo
     ON paper_trade_lot (instrument_id, symbol, product_type, opened_at, id)
-    WHERE remaining_quantity > 0;
+    WHERE lineage_status = 'ACTIVE' AND remaining_quantity > 0;
 CREATE INDEX idx_paper_trade_lot_entry_order ON paper_trade_lot (entry_order_id);
 CREATE INDEX idx_paper_trade_lot_close_exit_order ON paper_trade_lot_close (exit_order_id);
 CREATE INDEX idx_paper_trade_lot_close_lot ON paper_trade_lot_close (lot_id, closed_at);
