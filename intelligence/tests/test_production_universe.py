@@ -2,6 +2,13 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from aitrading_intelligence.datasets import MarketBar
+from aitrading_intelligence.feature_v2 import build_feature_row_v2
+from aitrading_intelligence.features import build_feature_row
+from aitrading_intelligence.india_context import (
+    IndiaContextObservation,
+    build_india_market_context_snapshot,
+)
 from aitrading_intelligence.production_universe import (
     NIFTY500_INDEX_MEMBERSHIP,
     NIFTY500_LIQUID_UNIVERSE_ID,
@@ -149,6 +156,7 @@ def test_carries_exact_bridge_lineage_into_snapshot_fingerprint_inputs() -> None
     )
 
     assert snapshot.source_versions == {
+        "identity_mapping_rule": bridge.mapping_rule,
         "instrument_catalogue": bridge.source_catalogue_fingerprint,
         "liquidity_qualified_catalogue": bridge.source_liquidity_snapshot_fingerprint,
         "nifty500_liquidity_identity_bridge": bridge.snapshot_fingerprint,
@@ -177,11 +185,83 @@ def test_bridge_lineage_change_changes_universe_fingerprint() -> None:
     assert original.snapshot_fingerprint != changed.snapshot_fingerprint
 
 
+def test_final_universe_feeds_feature_row_v2_with_canonical_identity() -> None:
+    universe = build_liquidity_qualified_india_universe_snapshot(
+        bridge=_bridge(),
+        as_of=AS_OF,
+    )
+    bar = MarketBar(
+        symbol="INFY",
+        interval="5m",
+        observed_at=AS_OF - timedelta(minutes=1),
+        event_at=AS_OF - timedelta(minutes=1, seconds=2),
+        ingested_at=AS_OF - timedelta(minutes=1),
+        open=1495.0,
+        high=1505.0,
+        low=1490.0,
+        close=1500.0,
+        volume=1_000_000.0,
+        source="fixture",
+    )
+    base = build_feature_row(symbol="INFY", as_of=AS_OF, bars=[bar])
+    context = build_india_market_context_snapshot(
+        as_of=AS_OF,
+        observations=[
+            IndiaContextObservation(
+                context_key="benchmark.NIFTY50.close",
+                event_at=AS_OF - timedelta(minutes=6),
+                available_at=AS_OF - timedelta(minutes=5),
+                value=25_000.0,
+                source="fixture",
+                source_id="nifty50-close",
+            )
+        ],
+        source_versions={"benchmark": "fixture.v1"},
+    )
+
+    row = build_feature_row_v2(
+        base_row=base,
+        universe=universe,
+        context=context,
+        expected_context_keys=["benchmark.NIFTY50.close"],
+        required_context_keys=["benchmark.NIFTY50.close"],
+    )
+
+    assert row.instrument_id == "NSE:INE009A01021"
+    assert row.symbol == "INFY"
+    assert row.sector == "Information Technology"
+    assert row.index_memberships == [NIFTY500_INDEX_MEMBERSHIP]
+    assert row.universe_snapshot_fingerprint == universe.snapshot_fingerprint
+    assert row.can_authorize_capital is False
+
+
 def test_rejects_bridge_built_for_a_different_decision_time() -> None:
     with pytest.raises(ValueError, match="identity bridge must match"):
         build_liquidity_qualified_india_universe_snapshot(
             bridge=_bridge(),
             as_of=AS_OF + timedelta(minutes=1),
+        )
+
+
+def test_rejects_tampered_bridge_cutoff() -> None:
+    bridge = _bridge().model_copy(
+        update={"data_cutoff": AS_OF - timedelta(minutes=10)}
+    )
+
+    with pytest.raises(ValueError, match="universe cutoff must exactly match"):
+        build_liquidity_qualified_india_universe_snapshot(
+            bridge=bridge,
+            as_of=AS_OF,
+        )
+
+
+def test_rejects_tampered_bridge_binding_count() -> None:
+    bridge = _bridge().model_copy(update={"binding_count": 99})
+
+    with pytest.raises(ValueError, match="universe member count must exactly match"):
+        build_liquidity_qualified_india_universe_snapshot(
+            bridge=bridge,
+            as_of=AS_OF,
         )
 
 
