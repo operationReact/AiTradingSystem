@@ -39,11 +39,10 @@ public class MarketDataResearchExportService {
         List<MarketCandle> rows = new ArrayList<>(Math.min(limit, PAGE_SIZE));
         int page = 0;
         while (rows.size() < limit) {
+            CandlePage result = candles.query(instrumentId, interval, fromDate, toDate, page, PAGE_SIZE);
             int remaining = limit - rows.size();
-            CandlePage result = candles.query(instrumentId, interval, fromDate, toDate, page,
-                    Math.min(PAGE_SIZE, remaining));
-            rows.addAll(result.items());
-            if (!result.hasNext() || result.items().isEmpty()) break;
+            rows.addAll(result.items().stream().limit(remaining).toList());
+            if (!result.hasNext() || result.items().isEmpty() || rows.size() >= limit) break;
             page++;
         }
 
