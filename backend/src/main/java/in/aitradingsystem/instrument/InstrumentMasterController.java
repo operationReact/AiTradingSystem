@@ -4,6 +4,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -22,9 +23,12 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/instruments")
 public class InstrumentMasterController {
     private final InstrumentMasterService service;
+    private final InstrumentCatalogueResearchService researchService;
 
-    public InstrumentMasterController(InstrumentMasterService service) {
+    public InstrumentMasterController(InstrumentMasterService service,
+                                      InstrumentCatalogueResearchService researchService) {
         this.service = service;
+        this.researchService = researchService;
     }
 
     @GetMapping("/search")
@@ -42,6 +46,17 @@ public class InstrumentMasterController {
     @GetMapping("/status")
     public InstrumentMasterRepository.CatalogueSummary status() {
         return service.catalogueSummary();
+    }
+
+    /**
+     * Point-in-time research boundary over the already-ingested Angel One catalogue.
+     * The response is cash-equity candidate evidence only; liquidity qualification happens downstream.
+     */
+    @GetMapping("/research/cash-catalogue")
+    public InstrumentCatalogueResearchExport researchCashCatalogue(
+            @RequestParam(required = false) Instant asOf,
+            @RequestParam(defaultValue = "20000") @Min(1) @Max(50_000) int maxRows) {
+        return researchService.exportCashCatalogue(asOf, maxRows);
     }
 
     /** Explicit operator-triggered import; the source is fetched only by the backend. */
@@ -65,7 +80,8 @@ public class InstrumentMasterController {
     ProblemDetail handleInstrumentError(InstrumentMasterException exception) {
         HttpStatus status = switch (exception.code()) {
             case "IMPORT_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "INVALID_PAGE", "INVALID_PAGE_SIZE", "INVALID_LIMIT" -> HttpStatus.BAD_REQUEST;
+            case "INVALID_PAGE", "INVALID_PAGE_SIZE", "INVALID_LIMIT", "INVALID_AS_OF", "INVALID_RESEARCH_LIMIT" ->
+                    HttpStatus.BAD_REQUEST;
             default -> HttpStatus.UNPROCESSABLE_ENTITY;
         };
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, exception.getMessage());
