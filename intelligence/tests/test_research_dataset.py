@@ -3,6 +3,7 @@ from uuid import UUID
 
 import pyarrow.parquet as pq
 
+from aitrading_intelligence.ai_evidence_source import NewsAiEvidenceExport
 from aitrading_intelligence.event_source import NewsResearchExport
 from aitrading_intelligence.fundamental_source import FundamentalResearchExport
 from aitrading_intelligence.market_source import MarketResearchExport
@@ -81,6 +82,46 @@ def _news_export() -> NewsResearchExport:
     )
 
 
+def _ai_evidence_export() -> NewsAiEvidenceExport:
+    return NewsAiEvidenceExport.model_validate(
+        {
+            "contractVersion": "news-ai-evidence.v1",
+            "generatedAt": _dt(10, 0),
+            "fromInclusive": _dt(9, 15),
+            "toExclusive": _dt(9, 18),
+            "dataCutoff": _dt(9, 16, 50),
+            "providerSources": ["GEMINI:gemini-2.5-flash"],
+            "evidence": [
+                {
+                    "analysisId": "analysis-1",
+                    "sourceId": "news-1",
+                    "provider": "GEMINI",
+                    "model": "gemini-2.5-flash",
+                    "providerRequestId": "interaction-1",
+                    "sourceAvailableAt": _dt(9, 16, 30),
+                    "evidenceAvailableAt": _dt(9, 16, 50),
+                    "promptHash": "a" * 64,
+                    "requestFingerprint": "b" * 64,
+                    "responseFingerprint": "c" * 64,
+                    "sentiment": "POSITIVE",
+                    "directionScore": 0.55,
+                    "category": "EARNINGS",
+                    "confidence": 0.82,
+                    "materiality": 0.77,
+                    "horizon": "MULTI_DAY",
+                    "novelty": 0.64,
+                    "contradiction": False,
+                    "ambiguity": True,
+                    "impactedSymbols": ["RELIANCE"],
+                    "inputTokens": 120,
+                    "outputTokens": 60,
+                    "totalTokens": 180,
+                }
+            ],
+        }
+    )
+
+
 def _fundamental_export() -> FundamentalResearchExport:
     return FundamentalResearchExport.model_validate(
         {
@@ -109,6 +150,7 @@ def test_combined_dataset_excludes_future_evidence_and_preserves_lineage(tmp_pat
     manifest = build_research_dataset(
         market=_market_export(),
         news=_news_export(),
+        ai_evidence=_ai_evidence_export(),
         fundamentals=_fundamental_export(),
         output_dir=output,
         dataset_version="research-2026-10-01",
@@ -120,20 +162,26 @@ def test_combined_dataset_excludes_future_evidence_and_preserves_lineage(tmp_pat
     assert manifest.row_count == 2
     assert manifest.data_cutoff == _dt(9, 17, 5)
     assert manifest.source_versions["newsExportContract"] == "news-events.v1"
+    assert manifest.source_versions["aiEvidenceExportContract"] == "news-ai-evidence.v1"
     assert manifest.source_versions["fundamentalExportContract"] == "fundamentals-history.v1"
 
     first_features = table[0]["features_json"]
     second_features = table[1]["features_json"]
     assert "event.NEWS.present" not in first_features
+    assert "event.AI_NEWS_EVIDENCE.direction_score" not in first_features
     assert "fundamental.eps" not in first_features
     assert '"event.NEWS.present":1.0' in second_features
+    assert '"event.AI_NEWS_EVIDENCE.direction_score":0.55' in second_features
     assert '"fundamental.eps":41.2' in second_features
 
     first_provenance = table[0]["provenance_json"]
     second_provenance = table[1]["provenance_json"]
     assert "news-1" not in first_provenance
+    assert "analysis-1" not in first_provenance
     assert "filing-q2" not in first_provenance
-    assert "news-1" in second_provenance
+    assert "event:exchange-news:news-1" in second_provenance
+    assert "event:GEMINI:analysis-1" in second_provenance
+    assert "event-lineage:news:news-1" in second_provenance
     assert "filing-q2" in second_provenance
 
 
@@ -141,6 +189,7 @@ def test_same_inputs_reproduce_same_dataset_fingerprint(tmp_path) -> None:
     kwargs = {
         "market": _market_export(),
         "news": _news_export(),
+        "ai_evidence": _ai_evidence_export(),
         "fundamentals": _fundamental_export(),
         "dataset_version": "research-2026-10-01",
         "code_sha": "b" * 40,
