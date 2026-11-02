@@ -72,7 +72,10 @@ def test_rejects_backdated_ai_evidence_and_bad_token_accounting() -> None:
     backdated = _payload()
     backdated["evidence"][0]["evidenceAvailableAt"] = _dt(9, 16, 20)
     backdated["dataCutoff"] = _dt(9, 16, 20)
-    with pytest.raises(ValidationError, match="sourceAvailableAt cannot be after evidenceAvailableAt"):
+    with pytest.raises(
+        ValidationError,
+        match="sourceAvailableAt cannot be after evidenceAvailableAt",
+    ):
         NewsAiEvidenceExport.model_validate(backdated)
 
     bad_usage = _payload()
