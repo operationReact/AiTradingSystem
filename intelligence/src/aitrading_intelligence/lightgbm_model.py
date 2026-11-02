@@ -58,6 +58,8 @@ class LightGBMModelArtifact(BaseModel):
     feature_names: list[str] = Field(min_length=1, max_length=128)
     target_spec_fingerprint: Hash64
     training_config_fingerprint: Hash64
+    training_as_of: datetime
+    latest_label_observed_at: datetime
     train_start: datetime
     train_end: datetime
     validation_start: datetime
@@ -74,7 +76,14 @@ class LightGBMModelArtifact(BaseModel):
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
 
-    @field_validator("train_start", "train_end", "validation_start", "validation_end")
+    @field_validator(
+        "training_as_of",
+        "latest_label_observed_at",
+        "train_start",
+        "train_end",
+        "validation_start",
+        "validation_end",
+    )
     @classmethod
     def timestamps_must_be_aware(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
@@ -89,6 +98,10 @@ class LightGBMModelArtifact(BaseModel):
             raise ValueError("training inputs must end before validation starts")
         if self.validation_start > self.validation_end:
             raise ValueError("validation_start cannot be after validation_end")
+        if self.validation_end > self.training_as_of:
+            raise ValueError("validation decisions cannot exceed training_as_of")
+        if self.latest_label_observed_at > self.training_as_of:
+            raise ValueError("artifact cannot include labels observed after training_as_of")
         if len(self.training_example_fingerprints) != self.train_rows:
             raise ValueError("training fingerprint count must match train_rows")
         if len(self.validation_example_fingerprints) != self.validation_rows:
@@ -110,19 +123,32 @@ def _feature_vector(example: LabeledExample, feature_names: Sequence[str]) -> li
 def train_lightgbm_challenger(
     examples: Sequence[LabeledExample],
     *,
+    training_as_of: datetime | None = None,
     feature_names: Sequence[str] = DEFAULT_BASELINE_FEATURES,
     config: LightGBMTrainingConfig | None = None,
 ) -> LightGBMModelArtifact:
-    """Train a deterministic LightGBM challenger on the existing purged target contract."""
+    """Train deterministically from labels available no later than ``training_as_of``."""
 
     config = config or LightGBMTrainingConfig()
-    if len(examples) < 40:
-        raise ValueError("at least 40 labeled examples are required")
+    if not examples:
+        raise ValueError("labeled examples are required")
+    if training_as_of is None:
+        training_as_of = max(example.target_observed_at for example in examples)
+    if training_as_of.tzinfo is None or training_as_of.utcoffset() is None:
+        raise ValueError("training_as_of must be timezone-aware")
     if not feature_names or len(set(feature_names)) != len(feature_names):
         raise ValueError("feature_names must be non-empty and unique")
 
+    eligible = [
+        example
+        for example in examples
+        if example.as_of < training_as_of
+        and example.target_observed_at <= training_as_of
+    ]
+    if len(eligible) < 40:
+        raise ValueError("at least 40 causal labeled examples are required")
     ordered = sorted(
-        examples,
+        eligible,
         key=lambda example: (example.as_of, example.symbol, example.example_fingerprint),
     )
     if len({example.example_fingerprint for example in ordered}) != len(ordered):
@@ -136,8 +162,8 @@ def train_lightgbm_challenger(
     validation_examples = ordered[split_index:]
     validation_start = validation_examples[0].as_of
 
-    # Match the existing PyTorch challenger: purge any training label whose future target
-    # was not yet observable strictly before the validation decision boundary.
+    # Purge any training label whose future target was not observable strictly before the
+    # validation decision boundary. Validation labels are all known by training_as_of.
     training_examples = [
         example
         for example in ordered[:split_index]
@@ -151,9 +177,7 @@ def train_lightgbm_challenger(
     if len(set(train_labels)) != 2 or len(set(validation_labels)) != 2:
         raise ValueError("training and validation partitions must contain both classes")
 
-    train_vectors = [
-        _feature_vector(example, feature_names) for example in training_examples
-    ]
+    train_vectors = [_feature_vector(example, feature_names) for example in training_examples]
     validation_vectors = [
         _feature_vector(example, feature_names) for example in validation_examples
     ]
@@ -176,10 +200,12 @@ def train_lightgbm_challenger(
     )
     model.fit(train_vectors, train_labels, feature_name=list(feature_names))
     validation_probabilities = [
-        float(probabilities[1])
-        for probabilities in model.predict_proba(validation_vectors)
+        float(probabilities[1]) for probabilities in model.predict_proba(validation_vectors)
     ]
-    if any(not math.isfinite(value) or value < 0.0 or value > 1.0 for value in validation_probabilities):
+    if any(
+        not math.isfinite(value) or value < 0.0 or value > 1.0
+        for value in validation_probabilities
+    ):
         raise ValueError("LightGBM validation probabilities must be finite values in [0, 1]")
 
     metrics = LightGBMValidationMetrics(
@@ -193,18 +219,17 @@ def train_lightgbm_challenger(
     booster_model = model.booster_.model_to_string()
     rounded_probabilities = [round(value, 12) for value in validation_probabilities]
     probability_fingerprint = canonical_fingerprint(rounded_probabilities)
-    training_fingerprints = [
-        example.example_fingerprint for example in training_examples
-    ]
-    validation_fingerprints = [
-        example.example_fingerprint for example in validation_examples
-    ]
+    training_fingerprints = [example.example_fingerprint for example in training_examples]
+    validation_fingerprints = [example.example_fingerprint for example in validation_examples]
+    latest_label_observed_at = max(example.target_observed_at for example in ordered)
     payload = {
         "model_version": LIGHTGBM_MODEL_VERSION,
         "lightgbm_version": lgb.__version__,
         "feature_names": list(feature_names),
         "target_spec_fingerprint": next(iter(target_fingerprints)),
         "training_config_fingerprint": config.fingerprint,
+        "training_as_of": training_as_of.isoformat(),
+        "latest_label_observed_at": latest_label_observed_at.isoformat(),
         "train_start": training_examples[0].as_of.isoformat(),
         "train_end": training_examples[-1].as_of.isoformat(),
         "validation_start": validation_examples[0].as_of.isoformat(),
