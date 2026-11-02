@@ -1,7 +1,7 @@
 package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.instrument.Instrument;
-import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.instrument.ResearchInstrumentResolver;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -22,9 +22,9 @@ public class MarketDataResearchExportService {
     private static final int MAX_ROWS = 20_000;
 
     private final HistoricalCandleService candles;
-    private final InstrumentMasterService instruments;
+    private final ResearchInstrumentResolver instruments;
 
-    public MarketDataResearchExportService(HistoricalCandleService candles, InstrumentMasterService instruments) {
+    public MarketDataResearchExportService(HistoricalCandleService candles, ResearchInstrumentResolver instruments) {
         this.candles = candles;
         this.instruments = instruments;
     }
@@ -35,7 +35,7 @@ public class MarketDataResearchExportService {
             throw new MarketDataException("INVALID_RESEARCH_LIMIT",
                     "Research export limit must be between 1 and " + MAX_ROWS);
         }
-        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
+        Instrument instrument = instruments.requireForResearch(instrumentId);
         List<MarketCandle> rows = new ArrayList<>(Math.min(limit, PAGE_SIZE));
         int page = 0;
         while (rows.size() < limit) {
