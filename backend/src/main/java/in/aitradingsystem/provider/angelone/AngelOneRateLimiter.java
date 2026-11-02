@@ -11,22 +11,29 @@ import org.springframework.stereotype.Component;
 /**
  * Process-local SmartAPI request throttle.
  *
- * <p>The provider windows below were verified against Angel One's official SmartAPI RateLimit documentation on
- * 2026-10-29: login 1/sec; LTP 10/sec, 500/min, 5000/hour; historical candles 2/sec, 80/min, 5000/hour.
- * Production application.yml remains intentionally more conservative for login and quote pacing. Configured
- * intervals are honored so focused fixtures can use short bounded windows without sleeping for provider defaults;
- * minute/hour ceilings remain hard provider bounds for categories that publish them.
+ * <p>Provider limits were checked against Angel One's official SmartAPI RateLimit documentation on 2026-11-02:
+ * login 1/sec; LTP 10/sec, 500/min, 5000/hour; RMS 2/sec; holdings, all-holdings, positions and order-book 1/sec.
+ * The project intentionally retains its older, more conservative historical-candle cap (2/sec, 80/min, 5000/hour)
+ * even though the current provider page permits 3/sec and 120/min. Configured login/quote intervals remain honored.
  */
 @Component
 public class AngelOneRateLimiter {
-    public enum Category { AUTH, MARKET_QUOTE, HISTORICAL_CANDLES }
+    public enum Category {
+        AUTH,
+        MARKET_QUOTE,
+        HISTORICAL_CANDLES,
+        ACCOUNT_FUNDS,
+        ACCOUNT_PORTFOLIO
+    }
 
     record ProviderLimit(long perSecondIntervalMs, int perMinute, int perHour) {}
 
     private static final Map<Category, ProviderLimit> VERIFIED_LIMITS = Map.of(
             Category.AUTH, new ProviderLimit(1_000, 0, 0),
             Category.MARKET_QUOTE, new ProviderLimit(100, 500, 5_000),
-            Category.HISTORICAL_CANDLES, new ProviderLimit(500, 80, 5_000));
+            Category.HISTORICAL_CANDLES, new ProviderLimit(500, 80, 5_000),
+            Category.ACCOUNT_FUNDS, new ProviderLimit(500, 0, 0),
+            Category.ACCOUNT_PORTFOLIO, new ProviderLimit(1_000, 0, 0));
 
     private final Map<Category, Long> minIntervalNanos = new EnumMap<>(Category.class);
     private final Map<Category, Long> lastAcquiredNanos = new EnumMap<>(Category.class);
@@ -37,8 +44,11 @@ public class AngelOneRateLimiter {
     public AngelOneRateLimiter(AngelOneProperties properties) {
         configure(Category.AUTH, properties.loginMinIntervalMs());
         configure(Category.MARKET_QUOTE, properties.quoteMinIntervalMs());
-        // Historical pacing has no legacy configurable fixture value, so enforce the verified per-second ceiling.
-        configure(Category.HISTORICAL_CANDLES, VERIFIED_LIMITS.get(Category.HISTORICAL_CANDLES).perSecondIntervalMs());
+        configure(Category.HISTORICAL_CANDLES,
+                VERIFIED_LIMITS.get(Category.HISTORICAL_CANDLES).perSecondIntervalMs());
+        configure(Category.ACCOUNT_FUNDS, VERIFIED_LIMITS.get(Category.ACCOUNT_FUNDS).perSecondIntervalMs());
+        configure(Category.ACCOUNT_PORTFOLIO,
+                VERIFIED_LIMITS.get(Category.ACCOUNT_PORTFOLIO).perSecondIntervalMs());
         recoveryMaxWaitMs = properties.sessionRetryMaxWaitMs();
         for (Category category : Category.values()) {
             minuteAcquisitions.put(category, new ArrayDeque<>());

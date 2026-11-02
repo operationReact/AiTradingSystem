@@ -1,13 +1,17 @@
 package in.aitradingsystem.api;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.provider.angelone.AngelOneAccountReadService;
 import in.aitradingsystem.provider.angelone.AngelOneException;
 import in.aitradingsystem.provider.angelone.AngelOneHealthService;
 import in.aitradingsystem.provider.angelone.AngelOneHealthService.ProviderHealth;
 import in.aitradingsystem.provider.angelone.AngelOneQuoteService;
 import jakarta.validation.constraints.Min;
+import java.math.BigDecimal;
+import java.time.Instant;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.validation.annotation.Validated;
@@ -18,27 +22,30 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.math.BigDecimal;
-import java.time.Instant;
-
 @RestController
 @Validated
 @RequestMapping("/api/providers/angel-one")
 public class AngelOneController {
 
+    private static final String SOURCE = "ANGEL_ONE_SMARTAPI";
+
     private final AngelOneHealthService health;
     private final AngelOneQuoteService quotes;
+    private final AngelOneAccountReadService accountReads;
     private final InstrumentMasterService instruments;
 
     public AngelOneController(AngelOneHealthService health, AngelOneQuoteService quotes,
-                              InstrumentMasterService instruments) {
+                              AngelOneAccountReadService accountReads, InstrumentMasterService instruments) {
         this.health = health;
         this.quotes = quotes;
+        this.accountReads = accountReads;
         this.instruments = instruments;
     }
 
     public record LtpResponse(long instrumentId, String exchange, String tradingSymbol, String symbolToken,
                               BigDecimal ltp, Instant fetchedAt, String source) {}
+
+    public record AccountReadResponse(String source, Instant fetchedAt, JsonNode data) {}
 
     @GetMapping("/status")
     public ProviderHealth status() {
@@ -60,7 +67,38 @@ public class AngelOneController {
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         BigDecimal ltp = quotes.ltp(instrument.exchange(), instrument.tradingSymbol(), instrument.symbolToken());
         return new LtpResponse(instrument.id(), instrument.exchange(), instrument.tradingSymbol(),
-                instrument.symbolToken(), ltp, Instant.now(), "ANGEL_ONE_SMARTAPI");
+                instrument.symbolToken(), ltp, Instant.now(), SOURCE);
+    }
+
+    @GetMapping("/funds")
+    public AccountReadResponse funds() {
+        return accountResponse(accountReads.funds());
+    }
+
+    /** Returns the provider's all-holdings view, including summary information when SmartAPI supplies it. */
+    @GetMapping("/holdings")
+    public AccountReadResponse holdings() {
+        return accountResponse(accountReads.allHoldings());
+    }
+
+    /** Returns the settled holding list exposed by SmartAPI's getHolding route. */
+    @GetMapping("/holdings/settled")
+    public AccountReadResponse settledHoldings() {
+        return accountResponse(accountReads.holdings());
+    }
+
+    @GetMapping("/positions")
+    public AccountReadResponse positions() {
+        return accountResponse(accountReads.positions());
+    }
+
+    @GetMapping("/order-book")
+    public AccountReadResponse orderBook() {
+        return accountResponse(accountReads.orderBook());
+    }
+
+    private AccountReadResponse accountResponse(JsonNode data) {
+        return new AccountReadResponse(SOURCE, Instant.now(), data);
     }
 
     @ExceptionHandler(InstrumentMasterException.class)
