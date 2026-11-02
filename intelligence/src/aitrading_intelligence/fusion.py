@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .fingerprints import canonical_fingerprint
+from .regime import REGIME_LABELS, RegimeMethod, RegimeSnapshot
 
 FUSION_VERSION = "signal-fusion.v1"
+REGIME_EXPLAINABILITY_VERSION = "regime-explainability.v1"
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 
 
@@ -31,6 +34,40 @@ class FusionEvidence(BaseModel):
         return value
 
 
+class RegimeExplainability(BaseModel):
+    """UI/API-safe regime context that cannot participate in capital authorization."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["regime-explainability.v1"] = REGIME_EXPLAINABILITY_VERSION
+    as_of: datetime
+    data_cutoff: datetime
+    method: RegimeMethod
+    dominant_regime: str
+    probabilities: dict[str, float]
+    confidence: Annotated[float, Field(ge=0.0, le=1.0)]
+    normalized_entropy: Annotated[float, Field(ge=0.0, le=1.0)]
+    regime_snapshot_fingerprint: Hash64
+    explainability_fingerprint: Hash64
+    status: Literal["RESEARCH_EXPLAINABILITY_ONLY"] = "RESEARCH_EXPLAINABILITY_ONLY"
+    can_authorize_capital: Literal[False] = False
+
+    @field_validator("as_of", "data_cutoff")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("regime explainability timestamps must be timezone-aware")
+        return value
+
+    @model_validator(mode="after")
+    def validate_probabilities(self) -> RegimeExplainability:
+        if tuple(self.probabilities) != REGIME_LABELS:
+            raise ValueError("regime explainability probabilities must use canonical labels")
+        if self.data_cutoff > self.as_of:
+            raise ValueError("regime explainability data_cutoff cannot exceed as_of")
+        return self
+
+
 class FusionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -41,6 +78,7 @@ class FusionRequest(BaseModel):
     deterministic: FusionEvidence
     quant: FusionEvidence
     gemini: FusionEvidence | None = None
+    regime: RegimeSnapshot | None = None
 
     @field_validator("as_of")
     @classmethod
@@ -60,6 +98,13 @@ class FusionRequest(BaseModel):
         for evidence in (self.deterministic, self.quant, self.gemini):
             if evidence is not None and evidence.observed_at > self.as_of:
                 raise ValueError("evidence observed_at cannot be later than as_of")
+        if self.regime is not None:
+            if self.regime.as_of > self.as_of:
+                raise ValueError("regime as_of cannot be later than fusion as_of")
+            if self.regime.data_cutoff > self.as_of:
+                raise ValueError("regime data_cutoff cannot be later than fusion as_of")
+            if self.regime.can_authorize_capital:
+                raise ValueError("regime evidence cannot authorize capital")
         return self
 
 
@@ -93,8 +138,21 @@ class RankedOpportunity(BaseModel):
     reason_codes: list[str]
     provenance: list[str]
     opportunity_fingerprint: Hash64
+    regime_context: RegimeExplainability | None = None
+    explainability_fingerprint: Hash64 | None = None
     status: Literal["CANDIDATE_NOT_EXECUTABLE"] = "CANDIDATE_NOT_EXECUTABLE"
     can_authorize_capital: Literal[False] = False
+
+    @model_validator(mode="after")
+    def explainability_is_all_or_nothing(self) -> RankedOpportunity:
+        if (self.regime_context is None) != (self.explainability_fingerprint is None):
+            raise ValueError("regime context and explainability fingerprint must appear together")
+        if self.regime_context is not None:
+            if self.regime_context.can_authorize_capital:
+                raise ValueError("regime context cannot authorize capital")
+            if self.regime_context.explainability_fingerprint != self.explainability_fingerprint:
+                raise ValueError("regime explainability fingerprint mismatch")
+        return self
 
 
 _WEIGHTS = {
@@ -106,6 +164,37 @@ _WEIGHTS = {
 
 def _age_seconds(as_of: datetime, observed_at: datetime) -> int:
     return max(0, int((as_of - observed_at).total_seconds()))
+
+
+def _normalized_entropy(probabilities: dict[str, float]) -> float:
+    entropy = -sum(
+        probability * math.log(probability)
+        for probability in probabilities.values()
+        if probability > 0.0
+    )
+    return entropy / math.log(len(REGIME_LABELS))
+
+
+def _regime_explainability(regime: RegimeSnapshot) -> RegimeExplainability:
+    probabilities = {label: regime.probabilities[label] for label in REGIME_LABELS}
+    payload = {
+        "contract_version": REGIME_EXPLAINABILITY_VERSION,
+        "as_of": regime.as_of.isoformat(),
+        "data_cutoff": regime.data_cutoff.isoformat(),
+        "method": regime.method,
+        "dominant_regime": regime.dominant_regime,
+        "probabilities": probabilities,
+        "confidence": regime.confidence,
+        "normalized_entropy": _normalized_entropy(probabilities),
+        "regime_snapshot_fingerprint": regime.snapshot_fingerprint,
+        "status": "RESEARCH_EXPLAINABILITY_ONLY",
+        "can_authorize_capital": False,
+    }
+    fingerprint = canonical_fingerprint(payload)
+    return RegimeExplainability(
+        **payload,
+        explainability_fingerprint=fingerprint,
+    )
 
 
 def fuse_signals(request: FusionRequest) -> RankedOpportunity:
@@ -195,6 +284,8 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
         "status": "CANDIDATE_NOT_EXECUTABLE",
         "can_authorize_capital": False,
     }
+    opportunity_fingerprint = canonical_fingerprint(payload)
+    regime_context = _regime_explainability(request.regime) if request.regime is not None else None
     return RankedOpportunity(
         fusion_version=FUSION_VERSION,
         symbol=request.symbol,
@@ -207,5 +298,9 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
         contributions=contributions,
         reason_codes=reason_codes,
         provenance=provenance,
-        opportunity_fingerprint=canonical_fingerprint(payload),
+        opportunity_fingerprint=opportunity_fingerprint,
+        regime_context=regime_context,
+        explainability_fingerprint=(
+            regime_context.explainability_fingerprint if regime_context is not None else None
+        ),
     )
