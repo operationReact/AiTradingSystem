@@ -37,8 +37,8 @@ class OfficialMarketSourceIngestionServiceTest {
 
         OfficialMarketSourceIngestionService.SourceRequest nifty = requests.get(1);
         assertThat(nifty.family()).isEqualTo(OfficialMarketSourceFamily.NIFTY50_HISTORY);
-        assertThat(nifty.sourceUri().getQuery())
-                .contains("indexType=NIFTY 50", "from=26-10-2026", "to=02-11-2026", "csv=true");
+        assertThat(nifty.sourceUri().getRawQuery())
+                .contains("indexType=NIFTY+50", "from=26-10-2026", "to=02-11-2026", "csv=true");
         assertThat(nifty.bootstrapUri()).isEqualTo(URI.create("https://www.nseindia.com/"));
 
         assertThat(requests.stream()
