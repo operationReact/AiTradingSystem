@@ -201,16 +201,27 @@ Only invoke it for an experiment previously created and started by an
 authorized Java control-plane operator/worker. The Java server rechecks RBAC,
 governance, worker claim and transaction uniqueness.
 
+**Authentication contract:** Java's current ADMIN API authenticates via the
+HttpOnly `ATS_SESSION` cookie plus `X-CSRF-Token` on POST. A Bearer header is
+not supported, and legacy API-key authentication yields only ROLE_OPERATOR,
+which cannot access model-governance endpoints. The session must already belong
+to an ADMIN account. The local/dev session-bootstrap endpoint is not a means of
+obtaining ADMIN authority; never elevate its role for this worker.
+A deployment lacking an authorized ADMIN session is a genuine operational blocker.
+
 ```bash
-# Export a short-lived ADMIN credential through secure runtime secret injection.
-# Do not pass the bearer token as a CLI argument or put it in version control.
-export AITS_JAVA_ADMIN_BEARER_TOKEN='<runtime-injected-secret>'
+# Supply an EXISTING ADMIN session and its session-bound CSRF token securely.
+# Obtain these from an authorized authentication flow; never use the legacy
+# X-API-Key (ROLE_OPERATOR) or an unsupported Bearer header.
+# Avoid typing real secrets into terminal history or committing them to Git.
+export AITS_JAVA_ADMIN_SESSION='<securely-injected-ATS_SESSION-cookie-value>'
+export AITS_JAVA_ADMIN_CSRF_TOKEN='<securely-injected-X-CSRF-Token-value>'
 python -m aitrading_intelligence.java_research_result_worker \
   https://your-governed-backend.example \
   00000000-0000-4000-8000-000000000001 \
   india-holdout-report.json
 # Optional: --xgboost-report xgboost-research-report.json
-unset AITS_JAVA_ADMIN_BEARER_TOKEN
+unset AITS_JAVA_ADMIN_SESSION AITS_JAVA_ADMIN_CSRF_TOKEN
 ```
 
 HTTPS is required except HTTP to loopback for isolated local testing;
@@ -219,7 +230,7 @@ are disabled. Requests use a bounded timeout and never retry the non-idempotent
 POST. On a timeout or conflict the worker checks for an existing immutable
 Java result instead of posting again. Any discrepancy, authorization failure,
 expired lease, or ambiguous outcome is fail-closed; the worker never prints
-bearer secrets or claim tokens.
+ADMIN session cookies, CSRF tokens or claim tokens.
 
 A success receipt means only that Java **stored and read back**
 `INCONCLUSIVE` research evidence and marked its job `SUCCEEDED`.
