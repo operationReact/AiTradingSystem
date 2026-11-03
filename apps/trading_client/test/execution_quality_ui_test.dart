@@ -159,6 +159,8 @@ void main() {
         matching: find.byType(Scrollable),
       ).first,
     );
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
     await tester.tap(toggle);
     await tester.pumpAndSettle();
 
@@ -166,7 +168,9 @@ void main() {
     expect(find.byKey(const ValueKey('execution-quality-00000000-0000-0000-0000-000000000099')), findsOneWidget);
     expect(find.text('₹18.75'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('paper-order-quality-toggle-00000000-0000-0000-0000-000000000099')));
+    await tester.ensureVisible(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(repository.detailRequests, 1, reason: 'cached detail should not be fetched again');
   });
