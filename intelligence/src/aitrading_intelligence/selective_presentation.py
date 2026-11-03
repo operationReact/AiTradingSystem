@@ -66,7 +66,9 @@ class SelectivePresentationV1(BaseModel):
             if self.probability_semantics != "CALIBRATED_EVENT_PROBABILITY":
                 raise ValueError("candidate probability must be explicitly calibrated")
             if self.evaluation_assessment != "QUALITY_PRESERVED_OR_IMPROVED":
-                raise ValueError("candidate presentation requires preserved/improved selective quality")
+                raise ValueError(
+                    "candidate presentation requires preserved/improved selective quality"
+                )
             if self.evidence_quality != "COMPLETE":
                 raise ValueError("candidate presentation requires complete evidence")
         else:
@@ -86,7 +88,10 @@ def build_selective_presentation(
     validated_decision = _validate_decision(decision)
     validated_evaluation = _validate_evaluation(evaluation)
 
-    if validated_decision.decision_fingerprint not in validated_evaluation.source_decision_fingerprints:
+    if (
+        validated_decision.decision_fingerprint
+        not in validated_evaluation.source_decision_fingerprints
+    ):
         raise ValueError("selective evaluation does not cover the supplied decision")
     if validated_decision.decision_as_of > validated_evaluation.evaluation_as_of:
         raise ValueError("selective evaluation cannot predate the supplied decision")
