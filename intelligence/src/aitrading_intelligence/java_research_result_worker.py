@@ -212,7 +212,8 @@ def submit_governed_java_research_result(
         if (
             not secret
             or secret != secret.strip()
-            or any(c in secret for c in "\\r\\n;")
+            or ";" in secret
+            or any(ord(c) < 0x20 or ord(c) == 0x7F for c in secret)
             or any(c.isspace() for c in secret)
             or len(secret) > 4096
         ):
