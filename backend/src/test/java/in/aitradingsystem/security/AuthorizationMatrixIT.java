@@ -21,9 +21,13 @@ class AuthorizationMatrixIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
 
     @Test
-    void viewerCanReadButCannotMutateTraderAdminOrUnclassifiedApiRoutes() throws Exception {
+    void viewerCanReadGeneralApiButCannotReadAdminOrMutateProtectedRoutes() throws Exception {
         mvc.perform(get("/api/audit/__authz_probe").with(user("viewer").roles("VIEWER")))
             .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/__authz_probe").with(user("viewer").roles("VIEWER")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/model-governance/__authz_probe").with(user("viewer").roles("VIEWER")))
+            .andExpect(status().isForbidden());
 
         mvc.perform(post("/api/research/__authz_probe").with(user("viewer").roles("VIEWER")))
             .andExpect(status().isForbidden());
@@ -34,9 +38,13 @@ class AuthorizationMatrixIT extends AbstractPostgresIT {
     }
 
     @Test
-    void traderCanMutateTradingRoutesButCannotMutateAdminOrUnclassifiedRoutes() throws Exception {
+    void traderCanMutateTradingRoutesButCannotReadAdminOrMutateAdminRoutes() throws Exception {
         mvc.perform(get("/api/audit/__authz_probe").with(user("trader").roles("TRADER")))
             .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/__authz_probe").with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get("/api/admin/model-governance/__authz_probe").with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
 
         mvc.perform(post("/api/research/__authz_probe").with(user("trader").roles("TRADER")))
             .andExpect(status().isNoContent());
@@ -47,8 +55,12 @@ class AuthorizationMatrixIT extends AbstractPostgresIT {
     }
 
     @Test
-    void adminCanMutateTraderAdminAndFailClosedUnclassifiedRoutes() throws Exception {
+    void adminCanReadAndMutateAdminGovernanceAndFailClosedRoutes() throws Exception {
         mvc.perform(get("/api/audit/__authz_probe").with(user("admin").roles("ADMIN")))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/__authz_probe").with(user("admin").roles("ADMIN")))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/model-governance/__authz_probe").with(user("admin").roles("ADMIN")))
             .andExpect(status().isOk());
 
         mvc.perform(post("/api/research/__authz_probe").with(user("admin").roles("ADMIN")))
@@ -59,11 +71,36 @@ class AuthorizationMatrixIT extends AbstractPostgresIT {
             .andExpect(status().isNoContent());
     }
 
+    @Test
+    void legacyOperatorCannotEnterV4ModelGovernance() throws Exception {
+        mvc.perform(get("/api/admin/__authz_probe").with(user("operator").roles("OPERATOR")))
+            .andExpect(status().isOk());
+        mvc.perform(get("/api/admin/model-governance/__authz_probe").with(user("operator").roles("OPERATOR")))
+            .andExpect(status().isForbidden());
+        mvc.perform(post("/api/admin/model-governance/__authz_probe").with(user("operator").roles("OPERATOR")))
+            .andExpect(status().isForbidden());
+    }
+
     @RestController
     static class AuthorizationProbeController {
         @GetMapping("/api/audit/__authz_probe")
         ResponseEntity<Void> readProbe() {
             return ResponseEntity.ok().build();
+        }
+
+        @GetMapping("/api/admin/__authz_probe")
+        ResponseEntity<Void> adminReadProbe() {
+            return ResponseEntity.ok().build();
+        }
+
+        @GetMapping("/api/admin/model-governance/__authz_probe")
+        ResponseEntity<Void> governanceReadProbe() {
+            return ResponseEntity.ok().build();
+        }
+
+        @PostMapping("/api/admin/model-governance/__authz_probe")
+        ResponseEntity<Void> governanceWriteProbe() {
+            return ResponseEntity.noContent().build();
         }
 
         @PostMapping("/api/research/__authz_probe")
