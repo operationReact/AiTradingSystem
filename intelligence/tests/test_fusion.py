@@ -1,13 +1,13 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from typing import Mapping
 
 import pytest
 
 from aitrading_intelligence.fusion import (
+    V2_CHAMPION_FUSION_POLICY,
     FusionEvidence,
     FusionFamily,
     FusionRequest,
-    V2_CHAMPION_FUSION_POLICY,
     fuse_signals,
 )
 from aitrading_intelligence.regime import RegimeSnapshot
