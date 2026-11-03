@@ -1,25 +1,29 @@
 from __future__ import annotations
 
+import importlib.util
 import math
 
 import pytest
 from pydantic import ValidationError
 
-pytest.importorskip("xgboost")
-
-from aitrading_intelligence.india_independent_holdout import IndiaHoldoutConfig  # noqa: E402
-from aitrading_intelligence.xgboost_benchmark import (  # noqa: E402
+from aitrading_intelligence.india_independent_holdout import IndiaHoldoutConfig
+from aitrading_intelligence.xgboost_benchmark import (
     XGBoostConditionalBenchmarkReport,
     XGBoostResearchConfig,
     XGBoostScreenPolicy,
     evaluate_conditional_xgboost_benchmark,
 )
-from test_india_independent_holdout import (  # noqa: E402
+from test_india_independent_holdout import (
     HOLDOUT_DAYS,
     TRAIN_DAYS,
     _export,
     _fee_book,
     _target,
+)
+
+pytestmark = pytest.mark.skipif(
+    importlib.util.find_spec("xgboost") is None,
+    reason="install optional CPU XGBoost for this benchmark",
 )
 
 
