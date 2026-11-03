@@ -1,8 +1,15 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from aitrading_intelligence.fusion import FusionEvidence, FusionRequest, fuse_signals
+from aitrading_intelligence.fusion import (
+    V2_CHAMPION_FUSION_POLICY,
+    FusionEvidence,
+    FusionFamily,
+    FusionRequest,
+    fuse_signals,
+)
 from aitrading_intelligence.regime import RegimeSnapshot
 
 
@@ -180,3 +187,79 @@ def test_future_regime_evidence_is_rejected() -> None:
             quant=_evidence("QUANT", 0.60, 0.90, as_of, "4"),
             regime=_regime(as_of + timedelta(minutes=1), seed="5"),
         )
+
+
+def test_default_policy_is_byte_identical_to_explicit_v2_champion() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    request = FusionRequest(
+        symbol="RELIANCE",
+        as_of=as_of,
+        deterministic=_evidence("DETERMINISTIC", 0.80, 0.90, as_of, "a"),
+        quant=_evidence("QUANT", 0.70, 0.80, as_of, "b"),
+        gemini=_evidence("GEMINI", 0.60, 0.75, as_of, "c"),
+        regime=_regime(as_of),
+    )
+
+    default = fuse_signals(request)
+    explicit_champion = fuse_signals(request, policy=V2_CHAMPION_FUSION_POLICY)
+
+    assert default.model_dump(mode="json") == explicit_champion.model_dump(mode="json")
+    assert default.opportunity_fingerprint == explicit_champion.opportunity_fingerprint
+    assert [item.configured_weight for item in default.contributions] == [0.45, 0.35, 0.20]
+
+
+class _StrictResearchPolicy:
+    policy_id = "fixture-strict-threshold"
+
+    def configured_weights(self, request: FusionRequest) -> Mapping[FusionFamily, float]:
+        del request
+        return {"DETERMINISTIC": 0.45, "QUANT": 0.35, "GEMINI": 0.20}
+
+    def required_positive_families(self, request: FusionRequest) -> tuple[FusionFamily, ...]:
+        del request
+        return ("DETERMINISTIC", "QUANT")
+
+    def buy_threshold(self, request: FusionRequest) -> float:
+        del request
+        return 0.90
+
+
+def test_policy_boundary_is_injectable_without_changing_default_champion() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    request = FusionRequest(
+        symbol="TCS",
+        as_of=as_of,
+        deterministic=_evidence("DETERMINISTIC", 0.80, 0.90, as_of, "d"),
+        quant=_evidence("QUANT", 0.70, 0.80, as_of, "e"),
+        gemini=_evidence("GEMINI", 0.60, 0.75, as_of, "f"),
+    )
+
+    champion = fuse_signals(request)
+    challenger = fuse_signals(request, policy=_StrictResearchPolicy())
+
+    assert champion.action == "BUY"
+    assert challenger.action == "WATCH"
+    assert "FUSION_SCORE_BELOW_BUY_THRESHOLD" in challenger.reason_codes
+    assert champion.can_authorize_capital is False
+    assert challenger.can_authorize_capital is False
+
+
+class _InvalidResearchPolicy(_StrictResearchPolicy):
+    policy_id = "fixture-invalid-weights"
+
+    def configured_weights(self, request: FusionRequest) -> Mapping[FusionFamily, float]:
+        del request
+        return {"DETERMINISTIC": 0.60, "QUANT": 0.40}
+
+
+def test_invalid_policy_shape_fails_closed_before_fusion() -> None:
+    as_of = datetime(2026, 1, 2, 10, 0, tzinfo=UTC)
+    request = FusionRequest(
+        symbol="INFY",
+        as_of=as_of,
+        deterministic=_evidence("DETERMINISTIC", 0.80, 0.90, as_of, "1"),
+        quant=_evidence("QUANT", 0.70, 0.80, as_of, "2"),
+    )
+
+    with pytest.raises(ValueError, match="must configure DETERMINISTIC, QUANT and GEMINI"):
+        fuse_signals(request, policy=_InvalidResearchPolicy())
