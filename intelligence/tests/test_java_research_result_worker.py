@@ -5,8 +5,14 @@ from datetime import timedelta
 
 import httpx
 import pytest
-from test_java_research_registration import JOB_ID, NOW, holdout, snapshots
+from test_india_independent_holdout import _run
+from test_java_research_registration import JOB_ID, NOW
 
+from aitrading_intelligence.java_research_registration import (
+    JavaExperimentJobSnapshot,
+    JavaExperimentSnapshot,
+    derive_holdout_dataset_fingerprint,
+)
 from aitrading_intelligence.java_research_result_worker import (
     JavaRegistrationError,
     JavaResearchResultReceipt,
@@ -15,6 +21,49 @@ from aitrading_intelligence.java_research_result_worker import (
 
 ORIGIN = "https://java.example.test"
 TOKEN = "sample-test-admin-token"
+
+
+@pytest.fixture(scope="module")
+def holdout():
+    # Synthetic research candles; this test does not access NSE/BSE markets.
+    return _run()
+
+
+@pytest.fixture(scope="module")
+def snapshots(holdout):
+    experiment_id = "11111111-1111-4111-8111-111111111111"
+    spec = JavaExperimentSnapshot.model_validate({
+        "experimentId": experiment_id,
+        "modelVersionId": "22222222-2222-4222-8222-222222222222",
+        "specFingerprint": "a" * 64,
+        "fromAt": "2026-10-28T00:00:00Z",
+        "toAt": "2026-10-31T12:00:00Z",
+        "dataset": {
+            "datasetFingerprint": derive_holdout_dataset_fingerprint(holdout),
+            "pointInTime": True,
+            "asOf": "2026-10-30T13:00:00Z",
+        },
+        "target": {
+            "targetName": "forward-return-after-costs.v1",
+            "labelDefinitionFingerprint": holdout.target_spec_fingerprint,
+            "horizonBars": 1,
+        },
+        "folds": {"protocol": "CHRONOLOGICAL", "folds": 2},
+        "canAuthorizeCapital": False,
+    })
+    job = JavaExperimentJobSnapshot.model_validate({
+        "jobId": str(JOB_ID),
+        "experimentId": experiment_id,
+        "specFingerprint": spec.specFingerprint,
+        "runnerType": "PYTHON_INTELLIGENCE",
+        "runnerVersion": "india-independent-holdout.v1",
+        "orchestrationFingerprint": "b" * 64,
+        "status": "RUNNING",
+        "claimToken": "44444444-4444-4444-8444-444444444444",
+        "leaseExpiresAt": (NOW + timedelta(minutes=5)).isoformat(),
+        "canAuthorizeCapital": False,
+    })
+    return spec, job
 
 
 def _fake_java(holdout, snapshots, *, mode="created"):
