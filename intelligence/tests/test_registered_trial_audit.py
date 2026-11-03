@@ -147,13 +147,13 @@ def test_six_declared_trials_cannot_use_unsupported_99_percent_confidence() -> N
 def test_unregistered_trial_or_changed_version_fails_closed() -> None:
     freeze, plan, baseline, candidates, now = _case()
     unknown = _aligned(_candidate("not-declared", 0.009, count=80))
-    with pytest.raises(ValueError, match="unregistered evaluated candidates"):
+    with pytest.raises(ValueError, match="unregistered trial dispositions"):
         audit_registered_trials(
             freeze, plan, baseline, [_outcome(unknown)], [unknown],
             evaluation_started_at=now,
         )
     wrong = candidates[0].model_copy(update={"prediction": unknown.prediction})
-    with pytest.raises(ValueError, match="evaluated result evidence must match"):
+    with pytest.raises(ValueError, match="tournament prediction/net-return mismatches"):
         audit_registered_trials(
             freeze, plan, baseline, [_outcome(candidates[0])], [wrong],
             evaluation_started_at=now,
@@ -219,7 +219,7 @@ def test_report_is_tamper_evident_and_never_capital_eligible() -> None:
     with pytest.raises(ValidationError, match="trial audit report fingerprint"):
         RegisteredTrialAuditReport.model_validate({
             **report.model_dump(mode="json"),
-            "observed_trial_dispositions": 100,
+            "observed_trial_dispositions": 2,
         })
 
 
