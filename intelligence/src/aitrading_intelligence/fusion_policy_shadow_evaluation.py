@@ -39,7 +39,10 @@ class FusionPolicyShadowEvaluationConfig(BaseModel):
     minimum_challenger_trades: Annotated[int, Field(ge=1, le=100_000)] = 8
     minimum_challenger_coverage: Annotated[float, Field(gt=0.0, le=1.0)] = 0.05
     round_trip_cost_bps: Annotated[float, Field(ge=0.0, le=500.0)] = 10.0
-    minimum_expectancy_uplift_bps: Annotated[float, Field(ge=0.0, le=500.0)] = 0.0
+    minimum_expectancy_uplift_bps: Annotated[
+        float,
+        Field(gt=0.0, le=500.0),
+    ] = 1.0
     maximum_drawdown_regression: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
 
     @property
@@ -90,6 +93,8 @@ class FusionPolicyShadowEvaluationReport(BaseModel):
     evaluation_as_of: datetime
     config_fingerprint: Hash64
     target_spec_fingerprint: Hash64
+    challenger_base_policy_config_fingerprint: Hash64
+    challenger_disagreement_config_fingerprint: Hash64
     eligible_request_count: Annotated[int, Field(ge=1)]
     resolved_request_count: Annotated[int, Field(ge=1)]
     unresolved_request_count: Annotated[int, Field(ge=0)]
@@ -100,7 +105,10 @@ class FusionPolicyShadowEvaluationReport(BaseModel):
     maximum_drawdown_change: float
     assessment: Assessment
     reason_codes: list[str] = Field(min_length=1, max_length=48)
-    source_request_fingerprints: list[Hash64] = Field(min_length=1, max_length=100_000)
+    source_request_fingerprints: list[Hash64] = Field(
+        min_length=1,
+        max_length=100_000,
+    )
     source_adaptive_decision_fingerprints: list[Hash64] = Field(
         min_length=1,
         max_length=100_000,
@@ -117,7 +125,10 @@ class FusionPolicyShadowEvaluationReport(BaseModel):
         min_length=1,
         max_length=100_000,
     )
-    source_outcome_fingerprints: list[Hash64] = Field(min_length=1, max_length=100_000)
+    source_outcome_fingerprints: list[Hash64] = Field(
+        min_length=1,
+        max_length=100_000,
+    )
     required_next_gate: Literal[
         "V3_06_POLICY_GOVERNANCE_REVIEW",
         "V3_06_CHALLENGER_RESEARCH_REVIEW",
@@ -151,23 +162,33 @@ class FusionPolicyShadowEvaluationReport(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def counts_and_lineage_must_reconcile(self) -> FusionPolicyShadowEvaluationReport:
-        if self.resolved_request_count + self.unresolved_request_count != self.eligible_request_count:
-            raise ValueError("resolved and unresolved requests must equal eligible requests")
-        for fingerprints in (
+    def counts_and_lineage_must_reconcile(
+        self,
+    ) -> FusionPolicyShadowEvaluationReport:
+        resolved_total = self.resolved_request_count + self.unresolved_request_count
+        if resolved_total != self.eligible_request_count:
+            raise ValueError(
+                "resolved and unresolved requests must equal eligible requests"
+            )
+        request_side_sources = (
             self.source_request_fingerprints,
             self.source_adaptive_decision_fingerprints,
             self.source_disagreement_control_fingerprints,
             self.source_static_opportunity_fingerprints,
             self.source_guarded_opportunity_fingerprints,
-        ):
+        )
+        for fingerprints in request_side_sources:
             if len(fingerprints) != self.eligible_request_count:
-                raise ValueError("request-side source fingerprints must match eligible request count")
+                raise ValueError(
+                    "request-side source fingerprints must match eligible request count"
+                )
             if len(set(fingerprints)) != len(fingerprints):
                 raise ValueError("request-side source fingerprints must be unique")
         if len(self.source_outcome_fingerprints) != self.resolved_request_count:
             raise ValueError("outcome fingerprint count must match resolved requests")
-        if len(set(self.source_outcome_fingerprints)) != len(self.source_outcome_fingerprints):
+        if len(set(self.source_outcome_fingerprints)) != len(
+            self.source_outcome_fingerprints
+        ):
             raise ValueError("resolved outcome fingerprints must be unique")
         return self
 
@@ -205,10 +226,15 @@ def evaluate_fusion_policy_shadow(
         raise ValueError("no fusion requests are eligible at evaluation_as_of")
 
     request_by_fingerprint: dict[str, FusionRequest] = {}
+    request_keys: set[tuple[str, datetime]] = set()
     for request in eligible_requests:
         fingerprint = fusion_request_fingerprint(request)
         if fingerprint in request_by_fingerprint:
             raise ValueError("fusion requests must have unique fingerprints")
+        request_key = (request.symbol, request.as_of)
+        if request_key in request_keys:
+            raise ValueError("fusion requests must be unique by symbol and as_of")
+        request_keys.add(request_key)
         request_by_fingerprint[fingerprint] = request
 
     decision_by_request: dict[str, AdaptiveFusionDecisionV1] = {}
@@ -246,19 +272,30 @@ def evaluate_fusion_policy_shadow(
     adaptive_fingerprints: list[str] = []
     control_fingerprints: list[str] = []
     request_fingerprints: list[str] = []
-    resolved_rows: list[tuple[datetime, str, bool, bool, LabeledExample]] = []
+    resolved_rows: list[tuple[bool, bool, LabeledExample]] = []
     unresolved = 0
+    base_policy_config_fingerprints: set[str] = set()
+    disagreement_config_fingerprints: set[str] = set()
 
     for request in eligible_requests:
         request_fingerprint = fusion_request_fingerprint(request)
         decision = decision_by_request.get(request_fingerprint)
         control = control_by_request.get(request_fingerprint)
         if decision is None:
-            raise ValueError("every eligible request must resolve to one adaptive decision")
+            raise ValueError(
+                "every eligible request must resolve to one adaptive decision"
+            )
         if control is None:
-            raise ValueError("every eligible request must resolve to one disagreement control")
+            raise ValueError(
+                "every eligible request must resolve to one disagreement control"
+            )
+
         static_opportunity = fuse_signals(request)
         guarded = fuse_with_disagreement_control(request, decision, control)
+        base_policy_config_fingerprints.add(
+            decision.base_policy_config_fingerprint
+        )
+        disagreement_config_fingerprints.add(control.config_fingerprint)
 
         request_fingerprints.append(request_fingerprint)
         adaptive_fingerprints.append(decision.decision_fingerprint)
@@ -272,31 +309,40 @@ def evaluate_fusion_policy_shadow(
             continue
         resolved_rows.append(
             (
-                request.as_of,
-                request_fingerprint,
                 static_opportunity.action == "BUY",
                 guarded.guarded_action == "BUY",
                 outcome,
             )
         )
 
+    if len(base_policy_config_fingerprints) != 1:
+        raise ValueError("shadow comparison requires one base policy configuration")
+    if len(disagreement_config_fingerprints) != 1:
+        raise ValueError("shadow comparison requires one disagreement configuration")
+    base_policy_config_fingerprint = next(iter(base_policy_config_fingerprints))
+    disagreement_config_fingerprint = next(iter(disagreement_config_fingerprints))
+
     if not resolved_rows:
-        raise ValueError("at least one request must have a resolved outcome by evaluation_as_of")
-    target_fingerprints = {row[4].target_spec_fingerprint for row in resolved_rows}
+        raise ValueError(
+            "at least one request must have a resolved outcome by evaluation_as_of"
+        )
+    target_fingerprints = {
+        row[2].target_spec_fingerprint for row in resolved_rows
+    }
     if len(target_fingerprints) != 1:
         raise ValueError("all resolved outcomes must use one target specification")
     target_spec_fingerprint = next(iter(target_fingerprints))
 
     cost_fraction = cfg.round_trip_cost_bps / 10_000.0
     static_returns = [
-        row[4].forward_return - cost_fraction
+        row[2].forward_return - cost_fraction
         for row in resolved_rows
-        if row[2]
+        if row[0]
     ]
     challenger_returns = [
-        row[4].forward_return - cost_fraction
+        row[2].forward_return - cost_fraction
         for row in resolved_rows
-        if row[3]
+        if row[1]
     ]
     resolved_count = len(resolved_rows)
     static_point = _point("STATIC_45_35_20", static_returns, resolved_count)
@@ -308,7 +354,8 @@ def evaluate_fusion_policy_shadow(
 
     expectancy_uplift = (
         None
-        if static_point.expectancy_bps is None or challenger_point.expectancy_bps is None
+        if static_point.expectancy_bps is None
+        or challenger_point.expectancy_bps is None
         else challenger_point.expectancy_bps - static_point.expectancy_bps
     )
     total_return_uplift = (
@@ -337,8 +384,12 @@ def evaluate_fusion_policy_shadow(
         assessment: Assessment = "INSUFFICIENT_EVIDENCE"
         required_next_gate = "V3_06_CHALLENGER_RESEARCH_REVIEW"
     else:
-        expectancy_passed = expectancy_uplift >= cfg.minimum_expectancy_uplift_bps
-        drawdown_passed = drawdown_change <= cfg.maximum_drawdown_regression
+        expectancy_passed = (
+            expectancy_uplift >= cfg.minimum_expectancy_uplift_bps
+        )
+        drawdown_passed = (
+            drawdown_change <= cfg.maximum_drawdown_regression
+        )
         if expectancy_passed and drawdown_passed:
             assessment = "CHALLENGER_EVIDENCE_SUPERIOR"
             required_next_gate = "V3_06_POLICY_GOVERNANCE_REVIEW"
@@ -363,6 +414,12 @@ def evaluate_fusion_policy_shadow(
         "evaluation_as_of": evaluation_as_of.isoformat(),
         "config_fingerprint": cfg.fingerprint,
         "target_spec_fingerprint": target_spec_fingerprint,
+        "challenger_base_policy_config_fingerprint": (
+            base_policy_config_fingerprint
+        ),
+        "challenger_disagreement_config_fingerprint": (
+            disagreement_config_fingerprint
+        ),
         "eligible_request_count": len(eligible_requests),
         "resolved_request_count": resolved_count,
         "unresolved_request_count": unresolved,
@@ -379,8 +436,12 @@ def evaluate_fusion_policy_shadow(
         "source_static_opportunity_fingerprints": [
             item.opportunity_fingerprint for item in static_opportunities
         ],
-        "source_guarded_opportunity_fingerprints": guarded_opportunity_fingerprints,
-        "source_outcome_fingerprints": [row[4].example_fingerprint for row in resolved_rows],
+        "source_guarded_opportunity_fingerprints": (
+            guarded_opportunity_fingerprints
+        ),
+        "source_outcome_fingerprints": [
+            row[2].example_fingerprint for row in resolved_rows
+        ],
         "required_next_gate": required_next_gate,
         "status": "RESEARCH_SHADOW_EVALUATION_ONLY",
         "promotion_allowed": False,
