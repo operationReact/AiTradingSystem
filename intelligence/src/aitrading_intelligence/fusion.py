@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Literal
+from math import isfinite
+from typing import Annotated, Literal, Mapping, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -11,12 +12,13 @@ from .regime import RegimeLabel, RegimeMethod, RegimeSnapshot
 FUSION_VERSION = "signal-fusion.v1"
 REGIME_FUSION_VIEW_VERSION = "regime-fusion-view.v1"
 Hash64 = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
+FusionFamily = Literal["DETERMINISTIC", "QUANT", "GEMINI"]
 
 
 class FusionEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    family: Literal["DETERMINISTIC", "QUANT", "GEMINI"]
+    family: FusionFamily
     provider: Annotated[str, Field(min_length=1, max_length=80)]
     version: Annotated[str, Field(min_length=1, max_length=120)]
     score: Annotated[float, Field(ge=-1.0, le=1.0)]
@@ -74,7 +76,7 @@ class FusionRequest(BaseModel):
 class FusionContribution(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    family: Literal["DETERMINISTIC", "QUANT", "GEMINI"]
+    family: FusionFamily
     configured_weight: Annotated[float, Field(ge=0.0, le=1.0)]
     effective_weight: Annotated[float, Field(ge=0.0, le=1.0)]
     score: Annotated[float, Field(ge=-1.0, le=1.0)]
@@ -135,11 +137,41 @@ class RankedOpportunity(BaseModel):
     can_authorize_capital: Literal[False] = False
 
 
-_WEIGHTS = {
-    "DETERMINISTIC": 0.45,
-    "QUANT": 0.35,
-    "GEMINI": 0.20,
-}
+class FusionPolicy(Protocol):
+    """Injectable fusion policy boundary; evidence/output contracts remain unchanged."""
+
+    policy_id: str
+
+    def configured_weights(self, request: FusionRequest) -> Mapping[FusionFamily, float]: ...
+
+    def required_positive_families(self, request: FusionRequest) -> tuple[FusionFamily, ...]: ...
+
+    def buy_threshold(self, request: FusionRequest) -> float: ...
+
+
+class StaticV2ChampionFusionPolicy:
+    """Current V2/V3 champion: static 45/35/20 weighting and 0.35 BUY threshold."""
+
+    policy_id = "v2-static-45-35-20"
+
+    def configured_weights(self, request: FusionRequest) -> Mapping[FusionFamily, float]:
+        del request
+        return {
+            "DETERMINISTIC": 0.45,
+            "QUANT": 0.35,
+            "GEMINI": 0.20,
+        }
+
+    def required_positive_families(self, request: FusionRequest) -> tuple[FusionFamily, ...]:
+        del request
+        return ("DETERMINISTIC", "QUANT")
+
+    def buy_threshold(self, request: FusionRequest) -> float:
+        del request
+        return 0.35
+
+
+V2_CHAMPION_FUSION_POLICY: FusionPolicy = StaticV2ChampionFusionPolicy()
 
 
 def _age_seconds(as_of: datetime, observed_at: datetime) -> int:
@@ -167,10 +199,43 @@ def _regime_view(request: FusionRequest) -> RegimeEvidenceView | None:
     )
 
 
-def fuse_signals(request: FusionRequest) -> RankedOpportunity:
+def _policy_inputs(
+    policy: FusionPolicy,
+    request: FusionRequest,
+) -> tuple[dict[FusionFamily, float], tuple[FusionFamily, ...], float]:
+    weights = dict(policy.configured_weights(request))
+    expected_families: set[FusionFamily] = {"DETERMINISTIC", "QUANT", "GEMINI"}
+    if set(weights) != expected_families:
+        raise ValueError("fusion policy must configure DETERMINISTIC, QUANT and GEMINI weights")
+    if any(not isfinite(weight) or weight < 0.0 or weight > 1.0 for weight in weights.values()):
+        raise ValueError("fusion policy weights must be finite values in [0, 1]")
+    if sum(weights.values()) <= 0.0:
+        raise ValueError("fusion policy must assign positive total weight")
+
+    required_families = tuple(policy.required_positive_families(request))
+    if not required_families:
+        raise ValueError("fusion policy must require at least one positive family")
+    if len(set(required_families)) != len(required_families):
+        raise ValueError("fusion policy required families must be unique")
+    if any(family not in expected_families for family in required_families):
+        raise ValueError("fusion policy contains an unsupported required family")
+
+    threshold = policy.buy_threshold(request)
+    if not isfinite(threshold) or threshold < -1.0 or threshold > 1.0:
+        raise ValueError("fusion policy BUY threshold must be finite and within [-1, 1]")
+    return weights, required_families, threshold
+
+
+def fuse_signals(
+    request: FusionRequest,
+    *,
+    policy: FusionPolicy = V2_CHAMPION_FUSION_POLICY,
+) -> RankedOpportunity:
+    weights, required_families, buy_threshold = _policy_inputs(policy, request)
     evidence_items = [request.deterministic, request.quant]
     if request.gemini is not None:
         evidence_items.append(request.gemini)
+    evidence_by_family = {evidence.family: evidence for evidence in evidence_items}
 
     contributions: list[FusionContribution] = []
     included: list[tuple[FusionEvidence, float]] = []
@@ -179,9 +244,9 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
 
     for evidence in evidence_items:
         age_seconds = _age_seconds(request.as_of, evidence.observed_at)
-        configured_weight = _WEIGHTS[evidence.family]
+        configured_weight = weights[evidence.family]
         is_fresh = age_seconds <= request.max_age_seconds
-        if not is_fresh and evidence.family in {"DETERMINISTIC", "QUANT"}:
+        if not is_fresh and evidence.family in required_families:
             required_stale = True
         effective_weight = configured_weight * evidence.confidence if is_fresh else 0.0
         weighted_score = effective_weight * evidence.score
@@ -214,20 +279,24 @@ def fuse_signals(request: FusionRequest) -> RankedOpportunity:
     rank_score = (fused_score + 1.0) / 2.0
     confidence = min(1.0, denominator)
 
-    deterministic_positive = request.deterministic.score > 0.0
-    quant_positive = request.quant.score > 0.0
+    required_positive = {
+        family: (
+            evidence_by_family.get(family) is not None
+            and evidence_by_family[family].score > 0.0
+        )
+        for family in required_families
+    }
     action = "WATCH"
     if required_stale:
         reason_codes.append("REQUIRED_EVIDENCE_STALE")
-    elif deterministic_positive and quant_positive and fused_score >= 0.35:
+    elif all(required_positive.values()) and fused_score >= buy_threshold:
         action = "BUY"
         reason_codes.append("FUSION_BUY_THRESHOLD_MET")
     else:
-        if not deterministic_positive:
-            reason_codes.append("DETERMINISTIC_NOT_POSITIVE")
-        if not quant_positive:
-            reason_codes.append("QUANT_NOT_POSITIVE")
-        if fused_score < 0.35:
+        for family in required_families:
+            if not required_positive[family]:
+                reason_codes.append(f"{family}_NOT_POSITIVE")
+        if fused_score < buy_threshold:
             reason_codes.append("FUSION_SCORE_BELOW_BUY_THRESHOLD")
 
     included_evidence = [evidence for evidence, _ in included]
