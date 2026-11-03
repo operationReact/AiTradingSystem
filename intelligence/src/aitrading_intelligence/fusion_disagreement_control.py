@@ -20,7 +20,6 @@ from .fusion import (
     FusionEvidence,
     FusionFamily,
     FusionRequest,
-    RankedOpportunity,
     fuse_signals,
 )
 from .regime_fusion_policy import FUSION_FAMILIES
@@ -458,9 +457,7 @@ def fuse_with_disagreement_control(
 ) -> DisagreementControlledOpportunityV1:
     policy = DisagreementControlledFusionPolicy(adaptive_decision, control)
     opportunity = fuse_signals(request, policy=policy)
-    guarded_action: GuardedAction = (
-        "WATCH" if control.veto_buy else opportunity.action
-    )
+    guarded_action: GuardedAction = "WATCH" if control.veto_buy else opportunity.action
     reasons = sorted(
         set(
             opportunity.reason_codes
@@ -515,5 +512,7 @@ def _validate_control(
     if checked.control_fingerprint != canonical_fingerprint(payload):
         raise ValueError("fusion disagreement control fingerprint mismatch")
     if checked.promotion_allowed or checked.can_authorize_capital:
-        raise ValueError("fusion disagreement control cannot carry promotion or capital authority")
+        raise ValueError(
+            "fusion disagreement control cannot carry promotion or capital authority"
+        )
     return checked
