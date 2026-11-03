@@ -11,7 +11,7 @@ from .fusion import (
     FusionRequest,
     V2_CHAMPION_FUSION_POLICY,
 )
-from .regime import REGIME_LABELS, RegimeLabel
+from .regime import REGIME_LABELS
 
 REGIME_MANUAL_FUSION_POLICY_VERSION = "regime-conditioned-manual-fusion.v1"
 POLICY_ID = "v3-regime-manual-v1"
@@ -64,7 +64,9 @@ class RegimeConditionedManualFusionConfig(BaseModel):
     @model_validator(mode="after")
     def validate_matrix(self) -> RegimeConditionedManualFusionConfig:
         if tuple(self.regime_weights) != REGIME_LABELS:
-            raise ValueError("regime weight matrix must use canonical ordered regime labels")
+            raise ValueError(
+                "regime weight matrix must use canonical ordered regime labels"
+            )
         expected_families = tuple(FUSION_FAMILIES)
         for label in REGIME_LABELS:
             row = self.regime_weights[label]
@@ -76,8 +78,15 @@ class RegimeConditionedManualFusionConfig(BaseModel):
                 not math.isfinite(weight) or weight < 0.0 or weight > 1.0
                 for weight in row.values()
             ):
-                raise ValueError("regime-conditioned weights must be finite values in [0, 1]")
-            if not math.isclose(sum(row.values()), 1.0, rel_tol=0.0, abs_tol=1e-12):
+                raise ValueError(
+                    "regime-conditioned weights must be finite values in [0, 1]"
+                )
+            if not math.isclose(
+                sum(row.values()),
+                1.0,
+                rel_tol=0.0,
+                abs_tol=1e-12,
+            ):
                 raise ValueError("each regime-conditioned weight row must sum to 1")
 
         uniform_blend = {
@@ -136,7 +145,10 @@ class RegimeConditionedManualFusionPolicy:
 
     policy_id = POLICY_ID
 
-    def __init__(self, config: RegimeConditionedManualFusionConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: RegimeConditionedManualFusionConfig | None = None,
+    ) -> None:
         self.config = config or RegimeConditionedManualFusionConfig()
 
     def explain(self, request: FusionRequest) -> RegimeFusionWeightExplanation:
@@ -180,7 +192,10 @@ class RegimeConditionedManualFusionPolicy:
             configured_weights=configured_weights,
         )
 
-    def configured_weights(self, request: FusionRequest) -> dict[FusionFamily, float]:
+    def configured_weights(
+        self,
+        request: FusionRequest,
+    ) -> dict[FusionFamily, float]:
         explanation = self.explain(request)
         return {
             family: explanation.configured_weights[family]
