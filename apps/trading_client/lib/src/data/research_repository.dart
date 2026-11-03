@@ -1,4 +1,5 @@
 import 'authenticated_api_client.dart';
+import 'selective_research_presentation.dart';
 
 class ResearchScanSummary {
   const ResearchScanSummary({
@@ -58,6 +59,7 @@ class ResearchCandidate {
     required this.candleTime,
     required this.reasons,
     required this.fingerprint,
+    this.selectivePresentation,
   });
 
   final int candidateId;
@@ -74,6 +76,7 @@ class ResearchCandidate {
   final DateTime? candleTime;
   final List<String> reasons;
   final String fingerprint;
+  final SelectiveResearchPresentation? selectivePresentation;
 
   factory ResearchCandidate.fromJson(Map<String, dynamic> json) => ResearchCandidate(
         candidateId: (json['candidateId'] as num?)?.toInt() ?? 0,
@@ -90,7 +93,20 @@ class ResearchCandidate {
         candleTime: DateTime.tryParse('${json['candleTime'] ?? ''}'),
         reasons: (json['reasons'] as List<dynamic>? ?? const []).map((value) => '$value').toList(growable: false),
         fingerprint: '${json['candidateFingerprint'] ?? ''}',
+        selectivePresentation: _selectivePresentationFromJson(
+          json['selectivePresentation'] ?? json['selective_presentation'],
+        ),
       );
+}
+
+SelectiveResearchPresentation? _selectivePresentationFromJson(dynamic value) {
+  if (value is Map<String, dynamic>) {
+    return SelectiveResearchPresentation.fromJson(value);
+  }
+  if (value is Map) {
+    return SelectiveResearchPresentation.fromJson(Map<String, dynamic>.from(value));
+  }
+  return null;
 }
 
 class ResearchCandidateDetail {
