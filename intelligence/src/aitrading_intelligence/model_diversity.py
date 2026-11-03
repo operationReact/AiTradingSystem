@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from itertools import combinations
-from typing import Annotated, Literal, Sequence
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -303,7 +304,9 @@ def _pairwise_metric(
 
 def _pearson(left: Sequence[float], right: Sequence[float]) -> float | None:
     if len(left) != len(right) or len(left) < 2:
-        raise ValueError("Pearson correlation requires equal vectors with at least two observations")
+        raise ValueError(
+            "Pearson correlation requires equal vectors with at least two observations"
+        )
     left_mean = sum(left) / len(left)
     right_mean = sum(right) / len(right)
     left_centered = [value - left_mean for value in left]
