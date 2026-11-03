@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import argparse
+import json
 import math
 from collections.abc import Sequence
+from pathlib import Path
 from time import perf_counter
 from typing import Annotated, Literal
 
@@ -20,7 +23,7 @@ from .india_independent_holdout import (
     evaluate_india_independent_holdout,
 )
 from .joint_diversity_economic_gate import evaluate_joint_diversity_economic_gate
-from .market_source import MarketResearchExport
+from .market_source import MarketResearchExport, load_market_export
 from .model_diversity import build_prediction_series
 from .model_fair_comparison import _max_drawdown, _predict_catboost, _vector
 from .pytorch_target import ForwardReturnTargetSpec, LabeledExample
@@ -358,3 +361,33 @@ def evaluate_conditional_xgboost_benchmark(
     return XGBoostConditionalBenchmarkReport(
         **result, report_fingerprint=canonical_fingerprint(result)
     )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Research-only CPU XGBoost vs CatBoost on an India cash-equity holdout"
+    )
+    parser.add_argument("training_export", type=Path)
+    parser.add_argument("holdout_export", type=Path)
+    parser.add_argument("india_fee_book", type=Path)
+    parser.add_argument("--horizon-bars", type=int, default=1)
+    parser.add_argument("--cost-bps", type=float, required=True)
+    parser.add_argument("--minimum-edge-bps", type=float, default=15.0)
+    args = parser.parse_args()
+    report = evaluate_conditional_xgboost_benchmark(
+        load_market_export(args.training_export),
+        load_market_export(args.holdout_export),
+        IndiaFeeTaxBookV1.model_validate_json(
+            args.india_fee_book.read_text(encoding="utf-8")
+        ),
+        ForwardReturnTargetSpec(
+            horizon_bars=args.horizon_bars,
+            round_trip_cost_bps=args.cost_bps,
+            minimum_edge_bps=args.minimum_edge_bps,
+        ),
+    )
+    print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()
