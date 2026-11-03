@@ -314,7 +314,7 @@ public class ModelRegistryService {
         return normalized.isEmpty() ? null : normalized;
     }
 
-    static String fingerprint(String... values) {
+    public static String fingerprint(String... values) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             for (String value : values) {

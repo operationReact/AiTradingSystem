@@ -9,7 +9,13 @@ import org.testcontainers.containers.PostgreSQLContainer;
 
 @SpringBootTest
 @AutoConfigureMockMvc
-@TestPropertySource(properties = "app.security.api-key=test-operator-key-0123456789")
+@TestPropertySource(properties = {
+    "app.security.api-key=test-operator-key-0123456789",
+    // Integration tests share one Spring context and MockMvc client address. Keep the production
+    // sensitive-mutation limit unchanged while preventing unrelated test classes from exhausting
+    // one shared in-memory rate bucket. Dedicated SecurityHardeningFilterTest covers rate limiting.
+    "app.security.rate-limit.sensitive-requests-per-window=10000"
+})
 public abstract class AbstractPostgresIT {
     public static final String API_KEY = "test-operator-key-0123456789";
 
