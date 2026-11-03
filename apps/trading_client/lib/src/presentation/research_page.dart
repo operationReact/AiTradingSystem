@@ -103,6 +103,14 @@ class _ResearchPageState extends State<ResearchPage> {
     }
   }
 
+  String _candidateEvidenceSummary(ResearchCandidate candidate) {
+    final presentation = candidate.selectivePresentation;
+    if (presentation == null) {
+      return 'AI score ${candidate.score.toStringAsFixed(3)}';
+    }
+    return '${presentation.probabilityLabel} • ${presentation.uncertaintyLabel}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -308,7 +316,7 @@ class _ResearchPageState extends State<ResearchPage> {
                         const CustomerLifecycleBadge(state: CustomerLifecycleState.watching),
                       ],
                     ),
-                    subtitle: Text('${candidate.exchange} • ${candidate.strategy}\nAI ${candidate.score.toStringAsFixed(3)} • ${candidate.reasons.join(', ')}'),
+                    subtitle: Text('${candidate.exchange} • ${candidate.strategy}\n${_candidateEvidenceSummary(candidate)} • ${candidate.reasons.join(', ')}'),
                     isThreeLine: true,
                     trailing: const Icon(Icons.chevron_right_rounded),
                     onTap: () => _selectCandidate(candidate),
