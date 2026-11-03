@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
@@ -64,7 +64,7 @@ def _comparison(
     lightgbm_brier: float = 0.16,
     lightgbm_drawdown: float = 0.09,
 ) -> ModelFairComparisonReport:
-    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2025, 1, 1, tzinfo=UTC)
     folds: list[PurgedFold] = []
     for index in range(2):
         boundary = start + timedelta(days=31 * (index + 1))
