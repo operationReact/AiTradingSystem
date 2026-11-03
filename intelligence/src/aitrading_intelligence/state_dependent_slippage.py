@@ -21,7 +21,7 @@ SlippageState = Literal["EVALUATED", "INCONCLUSIVE"]
 
 
 class StateDependentSlippageConfigV1(BaseModel):
-    """Bounded spread/liquidity/volatility slippage policy for cash equity."""
+    """Support-bounded spread/liquidity/volatility slippage policy for cash equity."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -42,16 +42,13 @@ class StateDependentSlippageConfigV1(BaseModel):
         Field(ge=0.0, le=500.0),
     ] = 5.0
     maximum_volatility_addon_bps: Annotated[float, Field(ge=0.0, le=500.0)] = 20.0
-    maximum_total_slippage_bps: Annotated[float, Field(gt=0.0, le=2_000.0)] = 50.0
+    maximum_supported_slippage_bps: Annotated[float, Field(gt=0.0, le=2_000.0)] = 50.0
 
     @model_validator(mode="after")
-    def validate_weights_and_cap(self) -> StateDependentSlippageConfigV1:
+    def validate_weights(self) -> StateDependentSlippageConfigV1:
         total_weight = self.adv_liquidity_weight + self.relative_volume_liquidity_weight
         if not math.isclose(total_weight, 1.0, rel_tol=1e-12, abs_tol=1e-12):
             raise ValueError("liquidity weights must sum to 1")
-        minimum_possible_cap = 0.0
-        if self.maximum_total_slippage_bps < minimum_possible_cap:
-            raise ValueError("maximum_total_slippage_bps is invalid")
         return self
 
     @property
@@ -86,9 +83,7 @@ class StateDependentSlippageEstimateV1(BaseModel):
     liquidity_pressure: Annotated[float | None, Field(ge=0.0, le=1.0)] = None
     liquidity_component_bps: Annotated[float | None, Field(ge=0.0)] = None
     volatility_component_bps: Annotated[float | None, Field(ge=0.0)] = None
-    raw_slippage_bps: Annotated[float | None, Field(ge=0.0)] = None
     estimated_slippage_bps: Annotated[float | None, Field(ge=0.0)] = None
-    capped: bool = False
     estimate_fingerprint: Hash64
     status: Literal["RESEARCH_SLIPPAGE_ESTIMATE_ONLY"] = (
         "RESEARCH_SLIPPAGE_ESTIMATE_ONLY"
@@ -112,7 +107,6 @@ class StateDependentSlippageEstimateV1(BaseModel):
             self.liquidity_pressure,
             self.liquidity_component_bps,
             self.volatility_component_bps,
-            self.raw_slippage_bps,
             self.estimated_slippage_bps,
         )
         if self.state == "EVALUATED":
@@ -129,13 +123,24 @@ class StateDependentSlippageEstimateV1(BaseModel):
                 raise ValueError("evaluated slippage estimate requires complete market state")
             if any(value is None for value in component_fields):
                 raise ValueError("evaluated slippage estimate requires complete components")
+            assert self.estimated_slippage_bps is not None
+            expected = (
+                self.spread_component_bps
+                + self.liquidity_component_bps
+                + self.volatility_component_bps
+            )
+            if not math.isclose(
+                self.estimated_slippage_bps,
+                expected,
+                rel_tol=1e-12,
+                abs_tol=1e-12,
+            ):
+                raise ValueError("estimated slippage must equal the component sum")
         else:
             if not self.reason_codes:
                 raise ValueError("inconclusive slippage estimate requires reason codes")
             if any(value is not None for value in component_fields):
                 raise ValueError("inconclusive slippage estimate cannot expose computed slippage")
-            if self.capped:
-                raise ValueError("inconclusive slippage estimate cannot be capped")
         if self.estimate_fingerprint != canonical_fingerprint(_estimate_payload(self)):
             raise ValueError("state-dependent slippage fingerprint mismatch")
         return self
@@ -215,9 +220,7 @@ def _make_inconclusive(
         "liquidity_pressure": None,
         "liquidity_component_bps": None,
         "volatility_component_bps": None,
-        "raw_slippage_bps": None,
         "estimated_slippage_bps": None,
-        "capped": False,
         "status": "RESEARCH_SLIPPAGE_ESTIMATE_ONLY",
         "promotion_allowed": False,
         "can_authorize_capital": False,
@@ -347,9 +350,20 @@ def estimate_state_dependent_slippage(
         cfg.maximum_volatility_addon_bps,
         cfg.volatility_bps_at_reference_range * volatility_ratio,
     )
-    raw_slippage = spread_component + liquidity_component + volatility_component
-    estimated_slippage = min(raw_slippage, cfg.maximum_total_slippage_bps)
-    capped = raw_slippage > cfg.maximum_total_slippage_bps
+    estimated_slippage = spread_component + liquidity_component + volatility_component
+    if estimated_slippage > cfg.maximum_supported_slippage_bps:
+        return _make_inconclusive(
+            side=side,
+            feature_row=checked_feature,
+            spread_snapshot=checked_snapshot,
+            config=cfg,
+            reasons=["SLIPPAGE_EXCEEDS_MODEL_SUPPORT"],
+            source_market_state_id=source_market_state_id,
+            spread_bps=market_state.spread_bps,
+            adv_notional=market_state.adv_notional,
+            relative_volume=market_state.relative_volume,
+            volatility_range_pct=volatility_range_pct,
+        )
 
     payload = {
         "slippage_version": STATE_DEPENDENT_SLIPPAGE_VERSION,
@@ -372,9 +386,7 @@ def estimate_state_dependent_slippage(
         "liquidity_pressure": liquidity_pressure,
         "liquidity_component_bps": liquidity_component,
         "volatility_component_bps": volatility_component,
-        "raw_slippage_bps": raw_slippage,
         "estimated_slippage_bps": estimated_slippage,
-        "capped": capped,
         "status": "RESEARCH_SLIPPAGE_ESTIMATE_ONLY",
         "promotion_allowed": False,
         "can_authorize_capital": False,

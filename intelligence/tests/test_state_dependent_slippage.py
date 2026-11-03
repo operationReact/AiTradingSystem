@@ -122,9 +122,12 @@ def test_slippage_components_are_deterministic_and_reconstructable() -> None:
     assert estimate.liquidity_pressure == pytest.approx(0.41)
     assert estimate.liquidity_component_bps == pytest.approx(4.1)
     assert estimate.volatility_component_bps == pytest.approx(6.0)
-    assert estimate.raw_slippage_bps == pytest.approx(12.1)
     assert estimate.estimated_slippage_bps == pytest.approx(12.1)
-    assert estimate.capped is False
+    assert estimate.estimated_slippage_bps == pytest.approx(
+        estimate.spread_component_bps
+        + estimate.liquidity_component_bps
+        + estimate.volatility_component_bps
+    )
     assert estimate.status == "RESEARCH_SLIPPAGE_ESTIMATE_ONLY"
     assert estimate.promotion_allowed is False
     assert estimate.can_authorize_capital is False
@@ -176,7 +179,7 @@ def test_wider_spread_thinner_liquidity_and_higher_volatility_worsen_slippage() 
     assert stressed.estimated_slippage_bps > healthy.estimated_slippage_bps
 
 
-def test_total_slippage_is_bounded_and_exposes_cap() -> None:
+def test_state_beyond_model_support_is_inconclusive_not_capped() -> None:
     estimate = estimate_state_dependent_slippage(
         spread_snapshot=_spread_snapshot(
             spread_bps=100.0,
@@ -185,14 +188,17 @@ def test_total_slippage_is_bounded_and_exposes_cap() -> None:
         ),
         feature_row=_feature_row(range_pct=0.20),
         side="BUY",
-        config=StateDependentSlippageConfigV1(maximum_total_slippage_bps=25.0),
+        config=StateDependentSlippageConfigV1(
+            maximum_supported_slippage_bps=25.0
+        ),
     )
 
-    assert estimate.state == "EVALUATED"
-    assert estimate.raw_slippage_bps is not None
-    assert estimate.raw_slippage_bps > 25.0
-    assert estimate.estimated_slippage_bps == 25.0
-    assert estimate.capped is True
+    assert estimate.state == "INCONCLUSIVE"
+    assert estimate.reason_codes == ["SLIPPAGE_EXCEEDS_MODEL_SUPPORT"]
+    assert estimate.estimated_slippage_bps is None
+    assert estimate.spread_component_bps is None
+    assert estimate.liquidity_component_bps is None
+    assert estimate.volatility_component_bps is None
 
 
 def test_missing_or_stale_state_is_explicitly_inconclusive() -> None:
@@ -218,7 +224,7 @@ def test_missing_or_stale_state_is_explicitly_inconclusive() -> None:
 
     assert stale_spread.state == "INCONCLUSIVE"
     assert stale_spread.reason_codes == ["STALE_SPREAD_LIQUIDITY_STATE"]
-    assert stale_spread.raw_slippage_bps is None
+    assert stale_spread.estimated_slippage_bps is None
 
     assert stale_volatility.state == "INCONCLUSIVE"
     assert stale_volatility.reason_codes == ["STALE_VOLATILITY_FEATURE"]
