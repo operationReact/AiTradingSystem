@@ -75,7 +75,7 @@ class GstTaxBasePolicyV1(BaseModel):
 
     brokerage: bool = True
     exchange_transaction_charge: bool = True
-    ipft: bool = False
+    ipft: bool = True
     sebi_turnover_fee: bool = True
     dp_charge: bool = True
 
