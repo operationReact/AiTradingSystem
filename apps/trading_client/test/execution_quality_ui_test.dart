@@ -1,5 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:trading_client/src/data/authenticated_api_client.dart';
+import 'package:trading_client/src/data/operator_session.dart';
 import 'package:trading_client/src/data/paper_trading_repository.dart';
 import 'package:trading_client/src/presentation/execution_quality_panel.dart';
 import 'package:trading_client/src/presentation/paper_orders_page.dart';
@@ -131,6 +137,47 @@ void main() {
     expect(parsed.fill!.feeAmount, 18.75);
     expect(parsed.fill!.slippageAmount, 12.50);
     expect(parsed.fill!.fillPrice, 2501.25);
+  });
+
+  test('HTTP detail repository uses canonical PAPER order endpoint', () async {
+    const orderId = '00000000-0000-0000-0000-000000000099';
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    late Uri requestedUri;
+    final client = MockClient((request) async {
+      requestedUri = request.url;
+      expect(request.method, 'GET');
+      expect(request.headers['X-API-Key'], 'test-operator-key');
+      return http.Response(
+        jsonEncode({
+          'order': {
+            'id': orderId,
+            'symbol': 'RELIANCE',
+            'side': 'BUY',
+            'quantity': 10,
+            'filledQuantity': 10,
+            'orderType': 'MARKET',
+            'productType': 'INTRADAY',
+            'averageFillPrice': 2501.25,
+            'entryPrice': 2500,
+            'status': 'FILLED',
+          },
+          'replayed': false,
+        }),
+        200,
+        headers: const {'content-type': 'application/json'},
+      );
+    });
+    final api = AuthenticatedApiClient(
+      session: session,
+      client: client,
+      baseUri: Uri.parse('https://example.test'),
+    );
+    final repository = HttpPaperTradingRepository(api);
+
+    final result = await repository.fetchOrderDetail(orderId);
+
+    expect(requestedUri.path, '/api/paper-orders/$orderId');
+    expect(result.order.id, orderId);
   });
 
   testWidgets('execution-quality panel shows realized ledger evidence without inventing expected TCA', (tester) async {
