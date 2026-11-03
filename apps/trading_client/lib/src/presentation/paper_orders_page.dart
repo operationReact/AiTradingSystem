@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/paper_trading_repository.dart';
 import 'customer_lifecycle_state.dart';
+import 'execution_quality_panel.dart';
 import 'trailing_protection_editor.dart';
 
 class PaperOrdersPage extends StatefulWidget {
@@ -40,6 +41,10 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
   ApiFailure? _listFailure;
   ApiFailure? _submitFailure;
   PaperOrderResult? _lastResult;
+  final Set<String> _expandedQuality = <String>{};
+  final Set<String> _qualityLoading = <String>{};
+  final Map<String, PaperOrderResult> _qualityDetails = <String, PaperOrderResult>{};
+  final Map<String, ApiFailure> _qualityFailures = <String, ApiFailure>{};
   bool _loading = false;
   bool _submitting = false;
 
@@ -174,6 +179,35 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
     } on ApiFailure catch (failure) {
       if (!mounted) return;
       setState(() => _submitFailure = failure);
+    }
+  }
+
+  Future<void> _toggleExecutionQuality(PaperOrder order) async {
+    if (order.id.isEmpty) return;
+    if (_expandedQuality.contains(order.id)) {
+      setState(() => _expandedQuality.remove(order.id));
+      return;
+    }
+
+    setState(() => _expandedQuality.add(order.id));
+    if (_qualityDetails.containsKey(order.id) || _qualityLoading.contains(order.id)) return;
+
+    final repository = widget.repository;
+    if (repository is! PaperOrderDetailRepository) return;
+
+    setState(() {
+      _qualityLoading.add(order.id);
+      _qualityFailures.remove(order.id);
+    });
+    try {
+      final detail = await repository.fetchOrderDetail(order.id);
+      if (!mounted) return;
+      setState(() => _qualityDetails[order.id] = detail);
+    } on ApiFailure catch (failure) {
+      if (!mounted) return;
+      setState(() => _qualityFailures[order.id] = failure);
+    } finally {
+      if (mounted) setState(() => _qualityLoading.remove(order.id));
     }
   }
 
@@ -399,32 +433,79 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
         ),
       );
 
-  Widget _orderCard(PaperOrder order) => Card(
-        key: ValueKey('paper-order-${order.id}'),
-        child: ListTile(
-          title: Row(
-            children: [
-              Expanded(child: Text('${order.side} ${order.quantity} ${order.symbol}')),
-              const SizedBox(width: 8),
-              CustomerLifecycleBadge(
-                state: CustomerLifecycleState.forOrder(status: order.status, side: order.side, executionOrigin: order.executionOrigin, lifecycleReason: order.lifecycleReason),
+  Widget _orderCard(PaperOrder order) {
+    final expanded = _expandedQuality.contains(order.id);
+    final detail = _qualityDetails[order.id];
+    final failure = _qualityFailures[order.id];
+    final detailSupported = widget.repository is PaperOrderDetailRepository;
+
+    return Card(
+      key: ValueKey('paper-order-${order.id}'),
+      child: Column(
+        children: [
+          ListTile(
+            title: Row(
+              children: [
+                Expanded(child: Text('${order.side} ${order.quantity} ${order.symbol}')),
+                const SizedBox(width: 8),
+                CustomerLifecycleBadge(
+                  state: CustomerLifecycleState.forOrder(
+                    status: order.status,
+                    side: order.side,
+                    executionOrigin: order.executionOrigin,
+                    lifecycleReason: order.lifecycleReason,
+                  ),
+                ),
+              ],
+            ),
+            subtitle: Text(
+              '${order.productType} • ${order.status} • filled ${order.filledQuantity}/${order.quantity}\n'
+              'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}'
+              '${order.trailingStopPercent == null ? '' : ' • Trail ${order.trailingStopPercent}%'}',
+            ),
+            isThreeLine: true,
+            trailing: order.status == 'NEW' || order.status == 'RISK_APPROVED'
+                ? IconButton(
+                    key: ValueKey('paper-order-cancel-${order.id}'),
+                    tooltip: 'Cancel PAPER order',
+                    onPressed: () => _cancel(order),
+                    icon: const Icon(Icons.cancel_outlined),
+                  )
+                : null,
+          ),
+          const Divider(height: 1),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              key: ValueKey('paper-order-quality-toggle-${order.id}'),
+              onPressed: () => _toggleExecutionQuality(order),
+              icon: Icon(expanded ? Icons.expand_less_rounded : Icons.analytics_outlined),
+              label: Text(expanded ? 'Hide execution quality' : 'Execution quality'),
+            ),
+          ),
+          if (expanded) ...[
+            if (_qualityLoading.contains(order.id))
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (failure != null)
+              Padding(
+                key: ValueKey('execution-quality-error-${order.id}'),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: const Text('Execution-quality detail could not be loaded. The order data above is unchanged.'),
+              )
+            else if (detail != null)
+              ExecutionQualityPanel(detail: detail)
+            else if (!detailSupported)
+              Padding(
+                key: ValueKey('execution-quality-unsupported-${order.id}'),
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                child: const Text('Execution-quality detail is unavailable for this repository.'),
               ),
-            ],
-          ),
-          subtitle: Text(
-            '${order.productType} • ${order.status} • filled ${order.filledQuantity}/${order.quantity}\n'
-            'Entry ${order.entryPrice ?? '—'} • Avg fill ${order.averageFillPrice ?? '—'}'
-            '${order.trailingStopPercent == null ? '' : ' • Trail ${order.trailingStopPercent}%'}',
-          ),
-          isThreeLine: true,
-          trailing: order.status == 'NEW' || order.status == 'RISK_APPROVED'
-              ? IconButton(
-                  key: ValueKey('paper-order-cancel-${order.id}'),
-                  tooltip: 'Cancel PAPER order',
-                  onPressed: () => _cancel(order),
-                  icon: const Icon(Icons.cancel_outlined),
-                )
-              : null,
-        ),
-      );
+          ],
+        ],
+      ),
+    );
+  }
 }
