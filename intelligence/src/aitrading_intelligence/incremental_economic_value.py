@@ -219,7 +219,9 @@ def evaluate_incremental_economic_value(
         "config_fingerprint": policy.fingerprint,
         "observation_membership_fingerprint": canonical_fingerprint({
             "observation_fingerprints": first.observation_fingerprints,
-            "decision_times": TypeAdapter(list[datetime]).dump_python(first.decision_times, mode="json"),
+            "decision_times": TypeAdapter(list[datetime]).dump_python(
+                first.decision_times, mode="json"
+            ),
         }),
         "observation_count": count,
         "mean_baseline_net_return": mean_base,
