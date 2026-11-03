@@ -170,7 +170,15 @@ def freeze_india_holdout_plan(
         "promotion_allowed": False,
         "can_authorize_capital": False,
     }
-    return IndiaHoldoutFreezePlan(**payload, plan_fingerprint=canonical_fingerprint(payload))
+    # Pydantic normalizes UTC datetimes to "Z" in JSON-mode serialization;
+    # fingerprint the canonical serialized model, not Python isoformat strings.
+    preliminary = IndiaHoldoutFreezePlan.model_construct(
+        **payload, plan_fingerprint="0" * 64
+    )
+    fingerprint = canonical_fingerprint(
+        preliminary.model_dump(mode="json", exclude={"plan_fingerprint"})
+    )
+    return IndiaHoldoutFreezePlan(**payload, plan_fingerprint=fingerprint)
 
 
 def bind_india_holdout_to_plan(
