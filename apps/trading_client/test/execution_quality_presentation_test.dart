@@ -22,6 +22,11 @@ Map<String, dynamic> _qualityJson() => {
       'expectedTotalCostBps': 15.5,
       'realizedAverageFillPrice': 2501.25,
       'realizedCost': {
+        'costModelVersion': 'execution-cost-model.v1',
+        'feeTaxConfigVersion': 'india-fee-tax-config.v1',
+        'slippageModelVersion': 'state-dependent-slippage.v1',
+        'fillSimulatorVersion': 'fill-simulator.v1',
+        'feeScheduleFingerprint': '3' * 64,
         'totalFeeTaxBps': 7.7,
         'realizedSlippageBps': 10.0,
         'realizedTotalCostBps': 17.7,
