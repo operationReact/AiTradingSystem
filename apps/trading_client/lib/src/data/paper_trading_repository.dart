@@ -191,6 +191,42 @@ class PaperOrder {
       );
 }
 
+class PaperFill {
+  const PaperFill({
+    required this.id,
+    required this.fillPrice,
+    required this.grossAmount,
+    required this.feeAmount,
+    required this.slippageAmount,
+    required this.netAmount,
+    required this.costBasis,
+    required this.realizedPnl,
+    required this.filledAt,
+  });
+
+  final String id;
+  final num? fillPrice;
+  final num? grossAmount;
+  final num? feeAmount;
+  final num? slippageAmount;
+  final num? netAmount;
+  final num? costBasis;
+  final num? realizedPnl;
+  final DateTime? filledAt;
+
+  factory PaperFill.fromJson(Map<String, dynamic> json) => PaperFill(
+        id: '${json['id'] ?? ''}',
+        fillPrice: json['fillPrice'] as num?,
+        grossAmount: json['grossAmount'] as num?,
+        feeAmount: json['feeAmount'] as num?,
+        slippageAmount: json['slippageAmount'] as num?,
+        netAmount: json['netAmount'] as num?,
+        costBasis: json['costBasis'] as num?,
+        realizedPnl: json['realizedPnl'] as num?,
+        filledAt: DateTime.tryParse('${json['filledAt'] ?? ''}'),
+      );
+}
+
 class PaperOrderPage {
   const PaperOrderPage({required this.items, required this.page, required this.totalPages, required this.totalItems});
 
@@ -216,16 +252,23 @@ class PaperOrderPage {
 }
 
 class PaperOrderResult {
-  const PaperOrderResult({required this.order, required this.replayed, required this.reasonCodes});
+  const PaperOrderResult({
+    required this.order,
+    required this.replayed,
+    required this.reasonCodes,
+    this.fill,
+  });
 
   final PaperOrder order;
   final bool replayed;
   final List<String> reasonCodes;
+  final PaperFill? fill;
 
   factory PaperOrderResult.fromJson(Map<String, dynamic> json) {
     final order = json['order'];
     final decision = json['decision'];
     final reasons = decision is Map ? decision['reasonCodes'] : null;
+    final fill = json['fill'];
     if (order is! Map) {
       throw const FormatException('Missing PAPER order result');
     }
@@ -233,6 +276,7 @@ class PaperOrderResult {
       order: PaperOrder.fromJson(Map<String, dynamic>.from(order)),
       replayed: json['replayed'] == true,
       reasonCodes: reasons is List ? reasons.map((value) => '$value').toList(growable: false) : const [],
+      fill: fill is Map ? PaperFill.fromJson(Map<String, dynamic>.from(fill)) : null,
     );
   }
 }
@@ -287,7 +331,11 @@ abstract interface class PaperTradingRepository {
   Future<PaperOrderResult> cancelOrder(String orderId);
 }
 
-class HttpPaperTradingRepository implements PaperTradingRepository {
+abstract interface class PaperOrderDetailRepository {
+  Future<PaperOrderResult> fetchOrderDetail(String orderId);
+}
+
+class HttpPaperTradingRepository implements PaperTradingRepository, PaperOrderDetailRepository {
   HttpPaperTradingRepository(this.api);
 
   final AuthenticatedApiClient api;
@@ -307,6 +355,13 @@ class HttpPaperTradingRepository implements PaperTradingRepository {
     );
     if (decoded is! Map) throw const ApiTransportFailure('INVALID_PAPER_ORDER_LIST_RESPONSE', null);
     return PaperOrderPage.fromJson(Map<String, dynamic>.from(decoded));
+  }
+
+  @override
+  Future<PaperOrderResult> fetchOrderDetail(String orderId) async {
+    final decoded = await api.getJson('/api/paper-trades/$orderId');
+    if (decoded is! Map) throw const ApiTransportFailure('INVALID_PAPER_ORDER_DETAIL_RESPONSE', null);
+    return PaperOrderResult.fromJson(Map<String, dynamic>.from(decoded));
   }
 
   @override
