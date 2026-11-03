@@ -235,7 +235,9 @@ def screen_structured_alpha_tournament(
     payload = {
         "contract_version": TOURNAMENT_VERSION,
         "baseline_candidate_id": ids[0],
-        "baseline_source_result_fingerprint": canonical_baseline.prediction.source_result_fingerprint,
+        "baseline_source_result_fingerprint": (
+            canonical_baseline.prediction.source_result_fingerprint
+        ),
         "diversity_report_fingerprint": diversity.report_fingerprint,
         "original_economic_config_fingerprint": policy.fingerprint,
         "corrected_economic_config_fingerprint": corrected.fingerprint,
