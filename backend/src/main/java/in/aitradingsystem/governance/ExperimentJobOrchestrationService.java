@@ -383,6 +383,15 @@ public class ExperimentJobOrchestrationService {
         requireClaim(state, claimToken, JobStatus.RUNNING, true);
 
         JobView job = byId(jobId);
+        // V4-03 research runners only provide unverified source/holdout evidence.
+        // The Java registry must reject PASS independently of a Python caller's policy.
+        if (job.runnerType() == RunnerType.PYTHON_INTELLIGENCE
+                && ("india-independent-holdout.v1".equals(job.runnerVersion())
+                    || "conditional-xgboost-benchmark.v1".equals(job.runnerVersion()))
+                && input.assessment() != ResultAssessment.INCONCLUSIVE) {
+            throw new IllegalArgumentException(
+                "Unverified V4-03 Python research results must be INCONCLUSIVE");
+        }
         ExperimentSpecService.ExperimentSpecView experiment = experiments.byId(job.experimentId());
         if (!job.specFingerprint().equals(experiment.specFingerprint())) {
             throw new IllegalStateException("Experiment job/spec fingerprint mismatch");

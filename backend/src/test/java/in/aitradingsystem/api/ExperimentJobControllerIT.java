@@ -127,6 +127,75 @@ class ExperimentJobControllerIT extends AbstractPostgresIT {
     }
 
     @Test
+    void v403PythonResearchJobCannotRegisterUnverifiedPassOrFail() throws Exception {
+        UUID experimentId = registerExperiment(103);
+        String queuedBody = mvc.perform(post("/api/admin/model-governance/experiment-jobs")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(enqueueJson(
+                    experimentId, "PYTHON_INTELLIGENCE",
+                    "india-independent-holdout.v1", 1)))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        UUID jobId = UUID.fromString(mapper.readTree(queuedBody).path("jobId").asText());
+        UUID token = claim("PYTHON_INTELLIGENCE", "research-worker", jobId, 1);
+
+        mvc.perform(post("/api/admin/model-governance/experiment-jobs/" + jobId + "/start")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"claimToken\":\"" + token + "\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("RUNNING"));
+
+        for (String rejected : new String[]{"PASS", "FAIL"}) {
+            mvc.perform(post("/api/admin/model-governance/experiment-jobs/" + jobId + "/result")
+                    .with(user("research-admin").roles("ADMIN"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(resultJson(token, rejected, 60)))
+                .andExpect(status().isBadRequest());
+        }
+
+        mvc.perform(post("/api/admin/model-governance/experiment-jobs/" + jobId + "/result")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(resultJson(token, "INCONCLUSIVE", 60)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.assessment").value("INCONCLUSIVE"))
+            .andExpect(jsonPath("$.sampleCount").value(60))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+
+        mvc.perform(get("/api/admin/model-governance/experiment-jobs/" + jobId + "/result")
+                .with(user("research-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.assessment").value("INCONCLUSIVE"));
+    }
+
+    @Test
+    void v403XgboostResearchJobCannotRegisterPass() throws Exception {
+        UUID experimentId = registerExperiment(104);
+        String queuedBody = mvc.perform(post("/api/admin/model-governance/experiment-jobs")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(enqueueJson(
+                    experimentId, "PYTHON_INTELLIGENCE",
+                    "conditional-xgboost-benchmark.v1", 1)))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        UUID jobId = UUID.fromString(mapper.readTree(queuedBody).path("jobId").asText());
+        UUID token = claim("PYTHON_INTELLIGENCE", "xgboost-worker", jobId, 1);
+        mvc.perform(post("/api/admin/model-governance/experiment-jobs/" + jobId + "/start")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"claimToken\":\"" + token + "\"}"))
+            .andExpect(status().isOk());
+        mvc.perform(post("/api/admin/model-governance/experiment-jobs/" + jobId + "/result")
+                .with(user("research-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(resultJson(token, "PASS", 44)))
+            .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void retryableFailureRequeuesAndNewClaimGetsNewToken() throws Exception {
         UUID experimentId = registerExperiment(7);
         String queuedBody = mvc.perform(post("/api/admin/model-governance/experiment-jobs")
