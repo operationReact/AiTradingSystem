@@ -24,10 +24,11 @@ def _calibration(
     *,
     action: str = "USE_CALIBRATED",
     age_seconds: int = 3_600,
+    decision_at: datetime = NOW,
 ) -> CalibrationFreshnessDomainDecision:
     payload = {
         "contract_version": "calibration-usability.v1",
-        "decision_at": NOW.isoformat(),
+        "decision_at": decision_at.isoformat(),
         "raw_probability": 0.64,
         "calibration_artifact_fingerprint": HASH_A,
         "domain_profile_fingerprint": HASH_B,
@@ -126,7 +127,7 @@ def test_insufficient_shadow_evidence_stays_neutral() -> None:
     assert multiplier.promotion_allowed is False
 
 
-def test_sufficient_shadow_expectancy_produces_bounded_reconstructable_multiplier() -> None:
+def test_sufficient_shadow_expectancy_is_bounded_and_reconstructable() -> None:
     config = FusionQualityMultiplierConfig(
         minimum_resolved_shadow_observations=2,
         performance_scale_bps=500.0,
@@ -150,10 +151,13 @@ def test_sufficient_shadow_expectancy_produces_bounded_reconstructable_multiplie
     assert multiplier.calibration_quality_multiplier == 1.0
     assert multiplier.freshness_multiplier == 1.0
     assert multiplier.combined_multiplier == pytest.approx(1.10)
-    assert multiplier.shadow_performance_evidence_fingerprint == evidence.evidence_fingerprint
+    assert (
+        multiplier.shadow_performance_evidence_fingerprint
+        == evidence.evidence_fingerprint
+    )
 
 
-def test_calibration_quality_and_freshness_are_separate_multiplier_components() -> None:
+def test_calibration_quality_and_freshness_are_separate_components() -> None:
     config = FusionQualityMultiplierConfig(
         fresh_calibration_seconds=100,
         maximum_calibration_age_seconds=1_100,
@@ -176,7 +180,7 @@ def test_calibration_quality_and_freshness_are_separate_multiplier_components() 
     assert "CALIBRATION_FRESHNESS_PENALTY_APPLIED" in multiplier.reason_codes
 
 
-def test_calibration_abstain_zeroes_quality_without_authorizing_any_action() -> None:
+def test_calibration_abstain_zeroes_quality_without_authority() -> None:
     calibration = _calibration(action="ABSTAIN", age_seconds=100)
     multiplier = build_fusion_quality_multiplier(
         family="QUANT",
@@ -231,7 +235,10 @@ def test_tampered_shadow_performance_fingerprint_fails_closed() -> None:
         config=config,
     ).model_copy(update={"evidence_fingerprint": "0" * 64})
 
-    with pytest.raises(ValueError, match="shadow performance evidence fingerprint mismatch"):
+    with pytest.raises(
+        ValueError,
+        match="shadow performance evidence fingerprint mismatch",
+    ):
         build_fusion_quality_multiplier(
             family="QUANT",
             evaluated_at=NOW,
@@ -241,7 +248,9 @@ def test_tampered_shadow_performance_fingerprint_fails_closed() -> None:
 
 
 def test_tampered_calibration_fingerprint_fails_closed() -> None:
-    calibration = _calibration().model_copy(update={"decision_fingerprint": "0" * 64})
+    calibration = _calibration().model_copy(
+        update={"decision_fingerprint": "0" * 64}
+    )
 
     with pytest.raises(ValueError, match="calibration decision fingerprint mismatch"):
         build_fusion_quality_multiplier(
@@ -252,7 +261,7 @@ def test_tampered_calibration_fingerprint_fails_closed() -> None:
 
 
 def test_future_calibration_or_performance_evidence_is_rejected() -> None:
-    calibration = _calibration().model_copy(update={"decision_at": NOW + timedelta(seconds=1)})
+    calibration = _calibration(decision_at=NOW + timedelta(seconds=1))
     with pytest.raises(ValueError, match="calibration decision cannot postdate"):
         build_fusion_quality_multiplier(
             family="QUANT",
@@ -261,13 +270,14 @@ def test_future_calibration_or_performance_evidence_is_rejected() -> None:
         )
 
     config = FusionQualityMultiplierConfig(minimum_resolved_shadow_observations=2)
+    future_evaluation_at = NOW + timedelta(minutes=1)
     evidence = evaluate_shadow_performance(
         _observations(count=2, net_return=0.01),
         family="QUANT",
-        evaluation_as_of=NOW,
+        evaluation_as_of=future_evaluation_at,
         config=config,
-    ).model_copy(update={"evaluation_as_of": NOW + timedelta(seconds=1)})
-    with pytest.raises(ValueError):
+    )
+    with pytest.raises(ValueError, match="cannot postdate multiplier evaluation"):
         build_fusion_quality_multiplier(
             family="QUANT",
             evaluated_at=NOW,
