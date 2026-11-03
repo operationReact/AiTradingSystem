@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fingerprints import canonical_fingerprint
 from .india_independent_holdout import IndiaHoldoutReport
@@ -121,7 +121,7 @@ class JavaResearchRegistrationEnvelope(BaseModel):
     def check_envelope(self) -> JavaResearchRegistrationEnvelope:
         # Never hash or log the Java worker lease's claim token.
         public = self.model_dump(mode="json", exclude={
-            "envelope_fingerprint", "request": {"claimToken"},
+            "envelope_fingerprint": True, "request": {"claimToken"},
         })
         if self.envelope_fingerprint != canonical_fingerprint(public):
             raise ValueError("research registration envelope fingerprint mismatch")
@@ -130,11 +130,6 @@ class JavaResearchRegistrationEnvelope(BaseModel):
         if self.request.assessment != "INCONCLUSIVE":
             raise ValueError("unverified research may never register PASS")
         return self
-
-
-@field_validator("asOf", "fromAt", "toAt", "leaseExpiresAt", check_fields=False)
-def _placeholder():  # pragma: no cover - timezone validated explicitly below
-    raise AssertionError("This validator must not be registered")
 
 
 def _aware(value: datetime, field: str) -> None:
@@ -276,9 +271,11 @@ def build_java_research_result_registration(
         "promotion_allowed": False,
         "can_authorize_capital": False,
     }
-    serialized = JavaResearchRegistrationEnvelope.model_construct(**public)
+    serialized = JavaResearchRegistrationEnvelope.model_construct(
+        **public, envelope_fingerprint="0" * 64
+    )
     public_hash = serialized.model_dump(mode="json", exclude={
-        "envelope_fingerprint", "request": {"claimToken"},
+        "envelope_fingerprint": True, "request": {"claimToken"},
     })
     return JavaResearchRegistrationEnvelope(
         **public, envelope_fingerprint=canonical_fingerprint(public_hash)
