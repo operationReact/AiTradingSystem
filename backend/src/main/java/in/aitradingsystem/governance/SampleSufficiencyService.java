@@ -11,7 +11,6 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -165,8 +164,7 @@ public class SampleSufficiencyService {
         UUID evaluationId = UUID.randomUUID();
         Instant now = clock.instant();
         String actor = currentActor();
-        try {
-            jdbc.sql("""
+        int inserted = jdbc.sql("""
                     INSERT INTO sample_sufficiency_evaluation (
                         evaluation_id, contract_version, comparison_id, comparison_fingerprint,
                         minimum_sample_count, policy_fingerprint, overall_status,
@@ -176,6 +174,7 @@ public class SampleSufficiencyService {
                         :evaluationId, :contractVersion, :comparisonId, :comparisonFingerprint,
                         :minimumSampleCount, :policyFingerprint, :overallStatus,
                         :evaluationFingerprint, :createdAt, :createdBy, FALSE, FALSE)
+                    ON CONFLICT (comparison_id, policy_fingerprint) DO NOTHING
                     """)
                 .param("evaluationId", evaluationId)
                 .param("contractVersion", CONTRACT_VERSION)
@@ -188,34 +187,9 @@ public class SampleSufficiencyService {
                 .param("createdAt", OffsetDateTime.ofInstant(now, ZoneOffset.UTC))
                 .param("createdBy", actor)
                 .update();
-
-            for (CandidateEvaluation candidate : evaluated) {
-                jdbc.sql("""
-                        INSERT INTO sample_sufficiency_candidate (
-                            evaluation_id, result_id, model_version_id, candidate_order,
-                            observed_sample_count, minimum_sample_count,
-                            original_assessment, effective_assessment,
-                            sufficient, shortfall, evidence_fingerprint)
-                        VALUES (
-                            :evaluationId, :resultId, :modelVersionId, :candidateOrder,
-                            :observedSampleCount, :minimumSampleCount,
-                            :originalAssessment, :effectiveAssessment,
-                            :sufficient, :shortfall, :evidenceFingerprint)
-                        """)
-                    .param("evaluationId", evaluationId)
-                    .param("resultId", candidate.resultId())
-                    .param("modelVersionId", candidate.modelVersionId())
-                    .param("candidateOrder", candidate.candidateOrder())
-                    .param("observedSampleCount", candidate.observedSampleCount())
-                    .param("minimumSampleCount", candidate.minimumSampleCount())
-                    .param("originalAssessment", candidate.originalAssessment().name())
-                    .param("effectiveAssessment", candidate.effectiveAssessment().name())
-                    .param("sufficient", candidate.sufficient())
-                    .param("shortfall", candidate.shortfall())
-                    .param("evidenceFingerprint", candidate.evidenceFingerprint())
-                    .update();
-            }
-        } catch (DuplicateKeyException ex) {
+        // PostgreSQL leaves the transaction aborted after a unique-key exception.
+        // Use conflict-safe insertion so concurrent identical requests remain idempotent.
+        if (inserted == 0) {
             UUID duplicateId = jdbc.sql("""
                     SELECT evaluation_id
                       FROM sample_sufficiency_evaluation
@@ -225,9 +199,35 @@ public class SampleSufficiencyService {
                 .param("comparisonId", comparisonId)
                 .param("policyFingerprint", policyFingerprint)
                 .query(UUID.class)
-                .optional()
-                .orElseThrow(() -> ex);
+                .single();
             return new CreateEvaluationResult(byId(duplicateId), false);
+        }
+
+        for (CandidateEvaluation candidate : evaluated) {
+            jdbc.sql("""
+                    INSERT INTO sample_sufficiency_candidate (
+                        evaluation_id, result_id, model_version_id, candidate_order,
+                        observed_sample_count, minimum_sample_count,
+                        original_assessment, effective_assessment,
+                        sufficient, shortfall, evidence_fingerprint)
+                    VALUES (
+                        :evaluationId, :resultId, :modelVersionId, :candidateOrder,
+                        :observedSampleCount, :minimumSampleCount,
+                        :originalAssessment, :effectiveAssessment,
+                        :sufficient, :shortfall, :evidenceFingerprint)
+                    """)
+                .param("evaluationId", evaluationId)
+                .param("resultId", candidate.resultId())
+                .param("modelVersionId", candidate.modelVersionId())
+                .param("candidateOrder", candidate.candidateOrder())
+                .param("observedSampleCount", candidate.observedSampleCount())
+                .param("minimumSampleCount", candidate.minimumSampleCount())
+                .param("originalAssessment", candidate.originalAssessment().name())
+                .param("effectiveAssessment", candidate.effectiveAssessment().name())
+                .param("sufficient", candidate.sufficient())
+                .param("shortfall", candidate.shortfall())
+                .param("evidenceFingerprint", candidate.evidenceFingerprint())
+                .update();
         }
 
         audit.record("SAMPLE_SUFFICIENCY_EVALUATED", "SAMPLE_SUFFICIENCY", evaluationId.toString(), Map.of(
