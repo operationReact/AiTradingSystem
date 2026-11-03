@@ -49,7 +49,7 @@ def _universe(count: int = 4):
     )
 
 
-def _evidence(family: str, score: float, seed: str) -> FusionEvidence:
+def _evidence(family: str, score: float, seed: int) -> FusionEvidence:
     return FusionEvidence(
         family=family,
         provider=f"fixture-{family.lower()}",
@@ -57,18 +57,18 @@ def _evidence(family: str, score: float, seed: str) -> FusionEvidence:
         score=score,
         confidence=1.0,
         observed_at=AS_OF,
-        fingerprint=(seed * 64)[:64],
+        fingerprint=f"{seed:064x}",
         reasons=["fixture"],
     )
 
 
-def _opportunity(symbol: str, score: float, seed: str = "a"):
+def _opportunity(symbol: str, score: float, seed: int = 1):
     return fuse_signals(
         FusionRequest(
             symbol=symbol,
             as_of=AS_OF,
             deterministic=_evidence("DETERMINISTIC", score, seed),
-            quant=_evidence("QUANT", score, chr(ord(seed) + 1)),
+            quant=_evidence("QUANT", score, seed + 100),
         )
     )
 
@@ -97,15 +97,20 @@ def _outcome(symbol: str, forward_return: float, *, observed_at: datetime):
 def test_dataset_orders_candidates_by_score_with_deterministic_tie_breaks() -> None:
     plan = build_cross_sectional_scan_plan(_universe(), batch_size=2)
     opportunities = [
-        _opportunity("SYM3", 0.40, "c"),
-        _opportunity("SYM1", 0.80, "a"),
-        _opportunity("SYM4", 0.40, "e"),
-        _opportunity("SYM2", 0.60, "g"),
+        _opportunity("SYM3", 0.40, 3),
+        _opportunity("SYM1", 0.80, 1),
+        _opportunity("SYM4", 0.40, 4),
+        _opportunity("SYM2", 0.60, 2),
     ]
 
     dataset = build_cross_sectional_ranking_dataset(plan, opportunities)
 
-    assert [row.symbol for row in dataset.rows] == ["SYM1", "SYM2", "SYM3", "SYM4"]
+    assert [row.symbol for row in dataset.rows] == [
+        "SYM1",
+        "SYM2",
+        "SYM3",
+        "SYM4",
+    ]
     assert [row.rank for row in dataset.rows] == [1, 2, 3, 4]
     assert dataset.coverage == 1.0
     assert dataset.missing_member_count == 0
@@ -118,9 +123,9 @@ def test_dataset_records_missing_scan_members_without_substituting_another_unive
     dataset = build_cross_sectional_ranking_dataset(
         plan,
         [
-            _opportunity("SYM1", 0.80, "a"),
-            _opportunity("SYM2", 0.60, "c"),
-            _opportunity("SYM3", 0.40, "e"),
+            _opportunity("SYM1", 0.80, 1),
+            _opportunity("SYM2", 0.60, 2),
+            _opportunity("SYM3", 0.40, 3),
         ],
     )
 
@@ -137,10 +142,10 @@ def test_top_k_metrics_use_frozen_rank_and_after_cost_returns() -> None:
     dataset = build_cross_sectional_ranking_dataset(
         plan,
         [
-            _opportunity("SYM1", 0.80, "a"),
-            _opportunity("SYM2", 0.60, "c"),
-            _opportunity("SYM3", 0.40, "e"),
-            _opportunity("SYM4", 0.20, "g"),
+            _opportunity("SYM1", 0.80, 1),
+            _opportunity("SYM2", 0.60, 2),
+            _opportunity("SYM3", 0.40, 3),
+            _opportunity("SYM4", 0.20, 4),
         ],
     )
     cutoff = AS_OF + timedelta(hours=1)
@@ -174,10 +179,10 @@ def test_unresolved_top_rank_is_not_backfilled_from_lower_rank() -> None:
     dataset = build_cross_sectional_ranking_dataset(
         plan,
         [
-            _opportunity("SYM1", 0.80, "a"),
-            _opportunity("SYM2", 0.60, "c"),
-            _opportunity("SYM3", 0.40, "e"),
-            _opportunity("SYM4", 0.20, "g"),
+            _opportunity("SYM1", 0.80, 1),
+            _opportunity("SYM2", 0.60, 2),
+            _opportunity("SYM3", 0.40, 3),
+            _opportunity("SYM4", 0.20, 4),
         ],
     )
     cutoff = AS_OF + timedelta(hours=1)
@@ -209,8 +214,8 @@ def test_future_outcome_cannot_rewrite_historical_ranking_evaluation() -> None:
     dataset = build_cross_sectional_ranking_dataset(
         plan,
         [
-            _opportunity("SYM1", 0.80, "a"),
-            _opportunity("SYM2", 0.60, "c"),
+            _opportunity("SYM1", 0.80, 1),
+            _opportunity("SYM2", 0.60, 2),
         ],
     )
     cutoff = AS_OF + timedelta(hours=1)
@@ -240,10 +245,10 @@ def test_rejects_candidate_outside_scan_plan_or_wrong_time() -> None:
     with pytest.raises(ValueError, match="not a member"):
         build_cross_sectional_ranking_dataset(
             plan,
-            [_opportunity("OTHER", 0.80, "a")],
+            [_opportunity("OTHER", 0.80, 1)],
         )
 
-    wrong_time = _opportunity("SYM1", 0.80, "c").model_copy(
+    wrong_time = _opportunity("SYM1", 0.80, 2).model_copy(
         update={"as_of": AS_OF + timedelta(seconds=1)}
     )
     with pytest.raises(ValueError):
@@ -252,7 +257,7 @@ def test_rejects_candidate_outside_scan_plan_or_wrong_time() -> None:
 
 def test_tampered_candidate_or_dataset_fingerprint_fails_closed() -> None:
     plan = build_cross_sectional_scan_plan(_universe(2), batch_size=2)
-    tampered_candidate = _opportunity("SYM1", 0.80, "a").model_copy(
+    tampered_candidate = _opportunity("SYM1", 0.80, 1).model_copy(
         update={"opportunity_fingerprint": "0" * 64}
     )
     with pytest.raises(ValueError, match="opportunity fingerprint mismatch"):
@@ -260,7 +265,7 @@ def test_tampered_candidate_or_dataset_fingerprint_fails_closed() -> None:
 
     dataset = build_cross_sectional_ranking_dataset(
         plan,
-        [_opportunity("SYM1", 0.80, "c")],
+        [_opportunity("SYM1", 0.80, 2)],
     )
     tampered = dataset.model_dump(mode="python")
     tampered["rows"][0]["ranking_score"] = 0.01
