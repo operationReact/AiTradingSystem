@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -20,6 +21,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Bean
@@ -46,12 +48,15 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/api/health", "/actuator/health/**", "/actuator/info", "/error",
                     "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                // V4 governance intentionally excludes the legacy OPERATOR compatibility authority.
+                .requestMatchers("/api/admin/model-governance/**").hasRole("ADMIN")
+                // Admin routes must be evaluated before the generic authenticated GET rule below.
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
                     .hasAnyRole("ADMIN", "OPERATOR")
                 .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
                     .hasAnyRole("TRADER", "ADMIN", "OPERATOR")
                 .requestMatchers("/api/auth/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
+                .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
                 .requestMatchers("/api/**").hasAnyRole("ADMIN", "OPERATOR")
                 .anyRequest().denyAll())
             .addFilterBefore(hardeningFilter, UsernamePasswordAuthenticationFilter.class)
