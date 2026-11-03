@@ -7,9 +7,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fingerprints import canonical_fingerprint
 from .fusion import (
+    V2_CHAMPION_FUSION_POLICY,
     FusionFamily,
     FusionRequest,
-    V2_CHAMPION_FUSION_POLICY,
 )
 from .regime import REGIME_LABELS
 
