@@ -103,6 +103,31 @@ class ExecutionQualityPresentation {
       throw const FormatException('Invalid execution-quality fill fractions');
     }
 
+    final executionPlanFingerprint = _requiredFingerprint(
+      json,
+      'executionPlanFingerprint',
+      'execution_plan_fingerprint',
+    );
+    final fillResultFingerprint = _requiredFingerprint(
+      json,
+      'fillResultFingerprint',
+      'fill_result_fingerprint',
+    );
+    final feeScheduleFingerprint = _requiredFingerprint(
+      json,
+      'feeScheduleFingerprint',
+      'fee_schedule_fingerprint',
+    );
+    final costModelVersion = _nullableString(json, 'costModelVersion', 'cost_model_version');
+    final costModelFingerprint = _nullableFingerprint(
+      json,
+      'costModelFingerprint',
+      'cost_model_fingerprint',
+    );
+    if (costModelVersion != null && costModelVersion != 'execution-cost-model.v1') {
+      throw const FormatException('Unsupported execution cost-model version');
+    }
+
     final expectedFeeTax = _optionalDouble(json, 'expectedFeeTaxBps', 'expected_fee_tax_bps');
     final expectedSlippage = _optionalDouble(json, 'expectedSlippageBps', 'expected_slippage_bps');
     final expectedTotal = _optionalDouble(json, 'expectedTotalCostBps', 'expected_total_cost_bps');
@@ -138,11 +163,17 @@ class ExecutionQualityPresentation {
     switch (state) {
       case ExecutionQualityState.fullyFilled:
       case ExecutionQualityState.partiallyFilled:
+        if (costModelVersion == null || costModelFingerprint == null) {
+          throw const FormatException('Filled execution quality requires cost-model lineage');
+        }
         if (expectedMetrics.any((value) => value == null) ||
             realizedMetrics.any((value) => value == null)) {
           throw const FormatException('Filled execution quality requires complete metrics');
         }
       case ExecutionQualityState.unfilled:
+        if (costModelVersion == null || costModelFingerprint == null) {
+          throw const FormatException('Unfilled execution quality requires cost-model lineage');
+        }
         if (expectedMetrics.any((value) => value == null) ||
             realizedMetrics.any((value) => value != null)) {
           throw const FormatException('Unfilled execution quality has invalid metrics');
@@ -153,6 +184,53 @@ class ExecutionQualityPresentation {
         }
     }
 
+    if (expectedFeeTax != null &&
+        expectedSlippage != null &&
+        expectedTotal != null &&
+        (expectedTotal - expectedFeeTax - expectedSlippage).abs() > 1e-9) {
+      throw const FormatException('Expected execution cost does not reconcile');
+    }
+    if (realizedCost != null) {
+      if (_string(realizedCost, 'costModelVersion', 'cost_model_version') != 'execution-cost-model.v1' ||
+          _string(realizedCost, 'feeTaxConfigVersion', 'fee_tax_config_version') != 'india-fee-tax-config.v1' ||
+          _string(realizedCost, 'slippageModelVersion', 'slippage_model_version') != 'state-dependent-slippage.v1' ||
+          _string(realizedCost, 'fillSimulatorVersion', 'fill_simulator_version') != 'fill-simulator.v1') {
+        throw const FormatException('Unsupported realized execution-cost lineage');
+      }
+      if (_requiredFingerprint(
+            realizedCost,
+            'feeScheduleFingerprint',
+            'fee_schedule_fingerprint',
+          ) !=
+          feeScheduleFingerprint) {
+        throw const FormatException('Realized fee-schedule lineage mismatch');
+      }
+      if (realizedFeeTax != null &&
+          realizedSlippage != null &&
+          realizedTotal != null &&
+          (realizedTotal - realizedFeeTax - realizedSlippage).abs() > 1e-9) {
+        throw const FormatException('Realized execution cost does not reconcile');
+      }
+    }
+    if (expectedFeeTax != null &&
+        realizedFeeTax != null &&
+        feeDelta != null &&
+        (feeDelta - (realizedFeeTax - expectedFeeTax)).abs() > 1e-9) {
+      throw const FormatException('Fee/tax delta does not reconcile');
+    }
+    if (expectedSlippage != null &&
+        realizedSlippage != null &&
+        slippageDelta != null &&
+        (slippageDelta - (realizedSlippage - expectedSlippage)).abs() > 1e-9) {
+      throw const FormatException('Slippage delta does not reconcile');
+    }
+    if (expectedTotal != null &&
+        realizedTotal != null &&
+        totalDelta != null &&
+        (totalDelta - (realizedTotal - expectedTotal)).abs() > 1e-9) {
+      throw const FormatException('Total cost delta does not reconcile');
+    }
+
     return ExecutionQualityPresentation(
       state: state,
       reasonCodes: _stringList(json, 'reasonCodes', 'reason_codes'),
@@ -160,27 +238,11 @@ class ExecutionQualityPresentation {
       filledQuantity: filledQuantity,
       fillFraction: fillFraction,
       completionShortfallFraction: shortfall,
-      executionPlanFingerprint: _requiredFingerprint(
-        json,
-        'executionPlanFingerprint',
-        'execution_plan_fingerprint',
-      ),
-      fillResultFingerprint: _requiredFingerprint(
-        json,
-        'fillResultFingerprint',
-        'fill_result_fingerprint',
-      ),
-      feeScheduleFingerprint: _requiredFingerprint(
-        json,
-        'feeScheduleFingerprint',
-        'fee_schedule_fingerprint',
-      ),
-      costModelVersion: _nullableString(json, 'costModelVersion', 'cost_model_version'),
-      costModelFingerprint: _nullableFingerprint(
-        json,
-        'costModelFingerprint',
-        'cost_model_fingerprint',
-      ),
+      executionPlanFingerprint: executionPlanFingerprint,
+      fillResultFingerprint: fillResultFingerprint,
+      feeScheduleFingerprint: feeScheduleFingerprint,
+      costModelVersion: costModelVersion,
+      costModelFingerprint: costModelFingerprint,
       expectedFeeTaxBps: expectedFeeTax,
       expectedSlippageBps: expectedSlippage,
       expectedTotalCostBps: expectedTotal,
