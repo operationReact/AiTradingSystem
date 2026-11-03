@@ -106,7 +106,7 @@ class _ResearchPageState extends State<ResearchPage> {
   String _candidateEvidenceSummary(ResearchCandidate candidate) {
     final presentation = candidate.selectivePresentation;
     if (presentation == null) {
-      return 'AI score ${candidate.score.toStringAsFixed(3)}';
+      return 'AI ${candidate.score.toStringAsFixed(3)}';
     }
     return '${presentation.probabilityLabel} • ${presentation.uncertaintyLabel}';
   }
