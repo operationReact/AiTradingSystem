@@ -201,6 +201,8 @@ def audit_registered_trials(
         raise ValueError("trial budget is not bound to this frozen India holdout")
     if not frozen.recorded_at <= plan.registered_at < frozen.planned_holdout_from:
         raise ValueError("trial budget was registered after holdout opened")
+    if not {trial.family for trial in plan.trials}.issubset(frozen.model_families):
+        raise ValueError("trial budget contains a model family absent from frozen plan")
     if evaluation_started_at < frozen.planned_holdout_to:
         raise ValueError("trial screening cannot begin before holdout window ends")
     if (reference.prediction.candidate_id != plan.baseline_candidate_id
