@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 from .fingerprints import canonical_fingerprint
 from .india_fee_tax import IndiaFeeTaxBookV1, resolve_india_fee_tax_schedule
@@ -137,7 +137,7 @@ def register_holdout_design(
         raise ValueError("registered model family list must be unique and sorted")
     payload = {
         "contract_version": REGISTRATION_VERSION,
-        "registered_at": registered_at.isoformat(),
+        "registered_at": TypeAdapter(datetime).dump_python(registered_at, mode="json"),
         "training_export_fingerprint": _export_hash(training),
         "holdout_export_fingerprint": _export_hash(holdout),
         "india_fee_book_fingerprint": fee_book.book_fingerprint,
