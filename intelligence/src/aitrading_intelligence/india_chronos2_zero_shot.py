@@ -18,7 +18,6 @@ from .incremental_economic_value import (
 )
 from .india_causal_forecast_baseline import (
     CausalForecastConfig,
-    CausalForecastRow,
     _causal_rows,
     evaluate_india_causal_forecast_baseline,
 )
