@@ -1,4 +1,5 @@
 import 'authenticated_api_client.dart';
+import 'execution_quality_presentation.dart';
 
 class PaperPosition {
   const PaperPosition({
@@ -89,8 +90,8 @@ class PaperPortfolio {
   final num? realizedPnl;
   final num? unrealizedPnl;
   final num? realizedPnlToday;
-  final num? exposurePercent;
   final int openPositions;
+  final num? exposurePercent;
   final bool cashReconciled;
   final String? markPriceSource;
   final List<PaperPosition> positions;
@@ -257,18 +258,21 @@ class PaperOrderResult {
     required this.replayed,
     required this.reasonCodes,
     this.fill,
+    this.executionQuality,
   });
 
   final PaperOrder order;
   final bool replayed;
   final List<String> reasonCodes;
   final PaperFill? fill;
+  final ExecutionQualityPresentation? executionQuality;
 
   factory PaperOrderResult.fromJson(Map<String, dynamic> json) {
     final order = json['order'];
     final decision = json['decision'];
     final reasons = decision is Map ? decision['reasonCodes'] : null;
     final fill = json['fill'];
+    final executionQuality = json['executionQuality'] ?? json['execution_quality'];
     if (order is! Map) {
       throw const FormatException('Missing PAPER order result');
     }
@@ -277,6 +281,7 @@ class PaperOrderResult {
       replayed: json['replayed'] == true,
       reasonCodes: reasons is List ? reasons.map((value) => '$value').toList(growable: false) : const [],
       fill: fill is Map ? PaperFill.fromJson(Map<String, dynamic>.from(fill)) : null,
+      executionQuality: ExecutionQualityPresentation.tryFromJson(executionQuality),
     );
   }
 }
