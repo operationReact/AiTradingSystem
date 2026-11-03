@@ -21,7 +21,7 @@ LifecycleState = Literal[
     "DISABLED",
 ]
 
-_ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
+_ALLOWED_TRANSITIONS: dict[LifecycleState, frozenset[LifecycleState]] = {
     "REGISTERED": frozenset({"SHADOW", "QUARANTINED", "DISABLED"}),
     "SHADOW": frozenset({"ELIGIBLE", "QUARANTINED", "DISABLED"}),
     "ELIGIBLE": frozenset({"SHADOW", "QUARANTINED", "DISABLED"}),
@@ -34,9 +34,9 @@ _ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
 class ModelControlPlaneEntry(BaseModel):
     """Immutable governance state for one registered model artifact.
 
-    ``live_eligible`` means the model may be selected by an execution workflow. It never means
-    the Python intelligence service may authorize capital; deterministic Java risk and execution
-    controls remain authoritative.
+    ``live_eligible`` allows selection by an execution workflow. It never gives
+    Python capital authority; deterministic Java risk and execution controls
+    remain authoritative.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -105,7 +105,10 @@ class ModelGovernanceControlPlane(BaseModel):
     contract_version: Literal["model-governance-control-plane.v1"] = CONTROL_PLANE_VERSION
     as_of: datetime
     entries: list[ModelControlPlaneEntry] = Field(min_length=1, max_length=1_000)
-    audit_log: list[GovernanceTransitionAudit] = Field(default_factory=list, max_length=100_000)
+    audit_log: list[GovernanceTransitionAudit] = Field(
+        default_factory=list,
+        max_length=100_000,
+    )
     snapshot_fingerprint: Hash64
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
@@ -128,9 +131,11 @@ class ModelGovernanceControlPlane(BaseModel):
             raise ValueError("control plane cannot contain future model state")
         if any(event.occurred_at > self.as_of for event in self.audit_log):
             raise ValueError("control plane cannot contain future audit events")
+
         known_ids = set(registry_ids)
         if any(event.registry_fingerprint not in known_ids for event in self.audit_log):
             raise ValueError("audit log references a model outside the control plane")
+
         ordered = sorted(self.entries, key=lambda entry: entry.registry_fingerprint)
         if self.entries != ordered:
             raise ValueError("control plane entries must use canonical registry order")
@@ -253,6 +258,7 @@ def initialize_model_governance_control_plane(
             raise ValueError("control plane cannot enroll a future registry candidate")
         if candidate.promotion_allowed or candidate.can_authorize_capital:
             raise ValueError("registry candidates cannot carry promotion or capital authority")
+
         evidence_fingerprint = canonical_fingerprint(
             {
                 "evaluation_fingerprint": candidate.evaluation_fingerprint,
@@ -276,6 +282,20 @@ def initialize_model_governance_control_plane(
     return _build_snapshot(entries=entries, audit_log=[], as_of=as_of)
 
 
+def _find_entry(
+    control_plane: ModelGovernanceControlPlane,
+    registry_fingerprint: str,
+) -> ModelControlPlaneEntry:
+    matches = [
+        entry
+        for entry in control_plane.entries
+        if entry.registry_fingerprint == registry_fingerprint
+    ]
+    if len(matches) != 1:
+        raise ValueError("registry fingerprint must identify exactly one controlled model")
+    return matches[0]
+
+
 def transition_model_lifecycle(
     control_plane: ModelGovernanceControlPlane,
     *,
@@ -294,12 +314,7 @@ def transition_model_lifecycle(
     if occurred_at < control_plane.as_of:
         raise ValueError("governance transitions must be monotonic in time")
 
-    matches = [
-        entry for entry in control_plane.entries if entry.registry_fingerprint == registry_fingerprint
-    ]
-    if len(matches) != 1:
-        raise ValueError("registry fingerprint must identify exactly one controlled model")
-    current = matches[0]
+    current = _find_entry(control_plane, registry_fingerprint)
     if target_state not in _ALLOWED_TRANSITIONS[current.lifecycle_state]:
         raise ValueError(
             f"illegal lifecycle transition: {current.lifecycle_state} -> {target_state}"
@@ -325,7 +340,10 @@ def transition_model_lifecycle(
         evidence_fingerprint=evidence_fingerprint,
         config_fingerprint=config_fingerprint,
     )
-    entries = [updated if entry.registry_fingerprint == registry_fingerprint else entry for entry in control_plane.entries]
+    entries = [
+        updated if entry.registry_fingerprint == registry_fingerprint else entry
+        for entry in control_plane.entries
+    ]
     return _build_snapshot(
         entries=entries,
         audit_log=[*control_plane.audit_log, audit],
@@ -360,12 +378,7 @@ def activate_champion(
     if promotion_decision.promotion_allowed or promotion_decision.can_authorize_capital:
         raise ValueError("promotion evidence cannot carry capital authority")
 
-    matches = [
-        entry for entry in control_plane.entries if entry.registry_fingerprint == registry_fingerprint
-    ]
-    if len(matches) != 1:
-        raise ValueError("registry fingerprint must identify exactly one controlled model")
-    target = matches[0]
+    target = _find_entry(control_plane, registry_fingerprint)
     if target.lifecycle_state != "ELIGIBLE":
         raise ValueError("only an ELIGIBLE model may become champion")
     if target.challenger_of != promotion_decision.champion_registry_fingerprint:
@@ -381,66 +394,67 @@ def activate_champion(
             != promotion_decision.champion_registry_fingerprint
         ):
             raise ValueError("promotion decision does not match the active champion")
+    else:
+        current_champion = None
 
     evidence_fingerprint = promotion_decision.decision_fingerprint
     config_fingerprint = promotion_decision.config_fingerprint
     audit_log = list(control_plane.audit_log)
-    entries: list[ModelControlPlaneEntry] = []
+    replacement_by_id: dict[str, ModelControlPlaneEntry] = {}
 
-    for entry in control_plane.entries:
-        if entry.registry_fingerprint == registry_fingerprint:
-            promoted = _build_entry(
-                registry_fingerprint=entry.registry_fingerprint,
-                model_family=entry.model_family,
-                model_version=entry.model_version,
-                challenger_of=entry.challenger_of,
-                lifecycle_state="CHAMPION",
+    if current_champion is not None:
+        replacement_by_id[current_champion.registry_fingerprint] = _build_entry(
+            registry_fingerprint=current_champion.registry_fingerprint,
+            model_family=current_champion.model_family,
+            model_version=current_champion.model_version,
+            challenger_of=current_champion.challenger_of,
+            lifecycle_state="ELIGIBLE",
+            evidence_fingerprint=evidence_fingerprint,
+            config_fingerprint=config_fingerprint,
+            updated_at=occurred_at,
+        )
+        audit_log.append(
+            _build_audit(
+                registry_fingerprint=current_champion.registry_fingerprint,
+                from_state="CHAMPION",
+                to_state="ELIGIBLE",
+                occurred_at=occurred_at,
+                actor=actor,
+                reason="replaced by explicitly approved challenger",
                 evidence_fingerprint=evidence_fingerprint,
                 config_fingerprint=config_fingerprint,
-                updated_at=occurred_at,
+                promotion_decision_fingerprint=promotion_decision.decision_fingerprint,
+                explicit_activation_approved=True,
             )
-            entries.append(promoted)
-            audit_log.append(
-                _build_audit(
-                    registry_fingerprint=entry.registry_fingerprint,
-                    from_state="ELIGIBLE",
-                    to_state="CHAMPION",
-                    occurred_at=occurred_at,
-                    actor=actor,
-                    reason=reason,
-                    evidence_fingerprint=evidence_fingerprint,
-                    config_fingerprint=config_fingerprint,
-                    promotion_decision_fingerprint=promotion_decision.decision_fingerprint,
-                    explicit_activation_approved=True,
-                )
-            )
-        elif entry.lifecycle_state == "CHAMPION":
-            demoted = _build_entry(
-                registry_fingerprint=entry.registry_fingerprint,
-                model_family=entry.model_family,
-                model_version=entry.model_version,
-                challenger_of=entry.challenger_of,
-                lifecycle_state="ELIGIBLE",
-                evidence_fingerprint=evidence_fingerprint,
-                config_fingerprint=config_fingerprint,
-                updated_at=occurred_at,
-            )
-            entries.append(demoted)
-            audit_log.append(
-                _build_audit(
-                    registry_fingerprint=entry.registry_fingerprint,
-                    from_state="CHAMPION",
-                    to_state="ELIGIBLE",
-                    occurred_at=occurred_at,
-                    actor=actor,
-                    reason="replaced by explicitly approved challenger",
-                    evidence_fingerprint=evidence_fingerprint,
-                    config_fingerprint=config_fingerprint,
-                    promotion_decision_fingerprint=promotion_decision.decision_fingerprint,
-                    explicit_activation_approved=True,
-                )
-            )
-        else:
-            entries.append(entry)
+        )
 
+    replacement_by_id[target.registry_fingerprint] = _build_entry(
+        registry_fingerprint=target.registry_fingerprint,
+        model_family=target.model_family,
+        model_version=target.model_version,
+        challenger_of=target.challenger_of,
+        lifecycle_state="CHAMPION",
+        evidence_fingerprint=evidence_fingerprint,
+        config_fingerprint=config_fingerprint,
+        updated_at=occurred_at,
+    )
+    audit_log.append(
+        _build_audit(
+            registry_fingerprint=target.registry_fingerprint,
+            from_state="ELIGIBLE",
+            to_state="CHAMPION",
+            occurred_at=occurred_at,
+            actor=actor,
+            reason=reason,
+            evidence_fingerprint=evidence_fingerprint,
+            config_fingerprint=config_fingerprint,
+            promotion_decision_fingerprint=promotion_decision.decision_fingerprint,
+            explicit_activation_approved=True,
+        )
+    )
+
+    entries = [
+        replacement_by_id.get(entry.registry_fingerprint, entry)
+        for entry in control_plane.entries
+    ]
     return _build_snapshot(entries=entries, audit_log=audit_log, as_of=occurred_at)
