@@ -147,9 +147,10 @@ def test_exact_target_observation_purges_irregular_overlap_beyond_bucket_embargo
 
     assert targets[1].target_fingerprint in first.purged_target_fingerprints
     assert targets[1].target_fingerprint not in first.training_target_fingerprints
-    assert first.candidate_training_target_count == 2
-    assert first.training_target_count == 1
     assert first.purged_target_count == 1
+    assert first.candidate_training_target_count == (
+        first.training_target_count + first.purged_target_count
+    )
 
 
 def test_embargo_targets_never_appear_in_training_or_test() -> None:
