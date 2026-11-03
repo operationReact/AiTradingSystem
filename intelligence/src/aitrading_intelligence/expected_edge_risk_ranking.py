@@ -388,6 +388,7 @@ def _build_score(
 def _validate_selective_decision(item: SelectiveDecisionV1) -> SelectiveDecisionV1:
     decision = SelectiveDecisionV1.model_validate(item.model_dump(mode="python"))
     payload = decision.model_dump(mode="json", exclude={"decision_fingerprint"})
+    payload["decision_as_of"] = decision.decision_as_of.isoformat()
     if decision.decision_fingerprint != canonical_fingerprint(payload):
         raise ValueError("selective decision fingerprint mismatch")
     if decision.promotion_allowed or decision.can_authorize_capital:
