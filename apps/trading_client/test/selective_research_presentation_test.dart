@@ -85,7 +85,7 @@ void main() {
       'suggestedTarget': 104,
       'candleTime': '2026-01-12T06:00:00Z',
       'reasons': ['fixture'],
-      'candidateFingerprint': 'a' * 64,
+      'candidateFingerprint': List.filled(64, 'a').join(),
       'selectivePresentation': candidatePresentation(),
     });
 
