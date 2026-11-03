@@ -36,7 +36,7 @@ class Chronos2ResearchConfig(BaseModel):
 
     contract_version: Literal["india-chronos2-zero-shot-research.v1"] = VERSION
     checkpoint_id: Literal["amazon/chronos-2"] = "amazon/chronos-2"
-    checkpoint_revision: Hash64 | Annotated[str, Field(pattern=r"^[a-f0-9]{40}$")]
+    checkpoint_revision: Annotated[str, Field(pattern=r"^[a-f0-9]{40}$")]
     context_returns: Annotated[int, Field(ge=8, le=40)] = 8
     minimum_calibration_rows: Annotated[int, Field(ge=15, le=512)] = 16
     minimum_holdout_rows: Annotated[int, Field(ge=30, le=512)] = 30
@@ -77,7 +77,8 @@ class Chronos2ResearchReport(BaseModel):
     paired_economic_assessment: str | None
     status: Literal["RESEARCH_COMPARISON_ONLY", "INCONCLUSIVE"]
     reason_codes: list[str]
-    checkpoint_execution_verified: bool
+    adapter_invocation_completed: bool
+    checkpoint_integrity_independently_verified: Literal[False] = False
     market_source_independently_verified: Literal[False] = False
     independent_holdout_preregistration_verified: Literal[False] = False
     checkpoint_commercial_review_complete: Literal[False] = False
@@ -92,13 +93,13 @@ class Chronos2ResearchReport(BaseModel):
             raise ValueError("Chronos-2 research reasons must be canonical")
         if self.status == "RESEARCH_COMPARISON_ONLY" and (
             self.reason_codes
-            or not self.checkpoint_execution_verified
+            or not self.adapter_invocation_completed
             or not self.native_quantile_forecasts_fingerprint
             or not self.paired_economic_report_fingerprint
         ):
             raise ValueError("comparison requires complete research evidence")
         if self.status == "INCONCLUSIVE" and (
-            not self.reason_codes or self.checkpoint_execution_verified
+            not self.reason_codes or self.adapter_invocation_completed
         ):
             raise ValueError("inconclusive evidence cannot claim model execution")
         if self.report_fingerprint != canonical_fingerprint(
@@ -306,7 +307,8 @@ def evaluate_chronos2_zero_shot(
         "paired_economic_assessment": assessment,
         "status": "INCONCLUSIVE" if reasons else "RESEARCH_COMPARISON_ONLY",
         "reason_codes": sorted(reasons),
-        "checkpoint_execution_verified": False,
+        "adapter_invocation_completed": not bool(reasons),
+        "checkpoint_integrity_independently_verified": False,
         "market_source_independently_verified": False,
         "independent_holdout_preregistration_verified": False,
         "checkpoint_commercial_review_complete": False,
@@ -314,11 +316,6 @@ def evaluate_chronos2_zero_shot(
         "promotion_allowed": False,
         "can_authorize_capital": False,
     }
-    # Explicit zero-shot adapter contract is usable with mocked CI pipelines;
-    # even with a real local pipeline the external checkpoint authenticity
-    # remains separately unverified unless proven by an operator attestation.
-    if not reasons:
-        payload["checkpoint_execution_verified"] = True
     return Chronos2ResearchReport(
         **payload, report_fingerprint=canonical_fingerprint(payload)
     )
