@@ -50,8 +50,7 @@ class CrossSectionalRankingRowV1(BaseModel):
 
     @model_validator(mode="after")
     def validate_row_fingerprint(self) -> CrossSectionalRankingRowV1:
-        payload = self.model_dump(mode="json", exclude={"row_fingerprint"})
-        if self.row_fingerprint != canonical_fingerprint(payload):
+        if self.row_fingerprint != canonical_fingerprint(_row_payload(self)):
             raise ValueError("ranking row fingerprint mismatch")
         return self
 
@@ -73,7 +72,10 @@ class CrossSectionalRankingDatasetV1(BaseModel):
     missing_member_count: Annotated[int, Field(ge=0, le=1_000)]
     coverage: Annotated[float, Field(ge=0.0, le=1.0)]
     rows: list[CrossSectionalRankingRowV1] = Field(min_length=1, max_length=1_000)
-    missing_member_fingerprints: list[Hash64] = Field(default_factory=list, max_length=1_000)
+    missing_member_fingerprints: list[Hash64] = Field(
+        default_factory=list,
+        max_length=1_000,
+    )
     dataset_fingerprint: Hash64
     status: Literal["RESEARCH_RANKING_DATASET_ONLY"] = (
         "RESEARCH_RANKING_DATASET_ONLY"
@@ -94,10 +96,16 @@ class CrossSectionalRankingDatasetV1(BaseModel):
             raise ValueError("ranked_member_count must match rows")
         if self.missing_member_count != len(self.missing_member_fingerprints):
             raise ValueError("missing_member_count must match missing fingerprints")
-        if self.ranked_member_count + self.missing_member_count != self.source_universe_member_count:
+        total_members = self.ranked_member_count + self.missing_member_count
+        if total_members != self.source_universe_member_count:
             raise ValueError("ranked plus missing members must equal source universe count")
         expected_coverage = self.ranked_member_count / self.source_universe_member_count
-        if not math.isclose(self.coverage, expected_coverage, rel_tol=0.0, abs_tol=1e-12):
+        if not math.isclose(
+            self.coverage,
+            expected_coverage,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
             raise ValueError("ranking coverage must equal ranked/source member count")
         if [row.rank for row in self.rows] != list(range(1, len(self.rows) + 1)):
             raise ValueError("ranking rows must have contiguous one-based ranks")
@@ -113,8 +121,7 @@ class CrossSectionalRankingDatasetV1(BaseModel):
             self.missing_member_fingerprints
         ):
             raise ValueError("missing scan members must be unique")
-        payload = self.model_dump(mode="json", exclude={"dataset_fingerprint"})
-        if self.dataset_fingerprint != canonical_fingerprint(payload):
+        if self.dataset_fingerprint != canonical_fingerprint(_dataset_payload(self)):
             raise ValueError("ranking dataset fingerprint mismatch")
         return self
 
@@ -134,7 +141,10 @@ class TopKRankingMetricV1(BaseModel):
 
     @field_validator("total_net_return", "mean_net_return", "expectancy_bps")
     @classmethod
-    def optional_metrics_must_be_finite(cls, value: float | None) -> float | None:
+    def optional_metrics_must_be_finite(
+        cls,
+        value: float | None,
+    ) -> float | None:
         if value is not None and not math.isfinite(value):
             raise ValueError("Top-K ranking metrics must be finite")
         return value
@@ -142,7 +152,9 @@ class TopKRankingMetricV1(BaseModel):
     @model_validator(mode="after")
     def validate_metric_state(self) -> TopKRankingMetricV1:
         if self.resolved_count + self.unresolved_count != self.selected_count:
-            raise ValueError("Top-K resolved and unresolved counts must equal selected_count")
+            raise ValueError(
+                "Top-K resolved and unresolved counts must equal selected_count"
+            )
         metrics = (
             self.win_rate,
             self.total_net_return,
@@ -175,8 +187,14 @@ class CrossSectionalRankingEvaluationV1(BaseModel):
     resolved_member_count: Annotated[int, Field(ge=0, le=1_000)]
     unresolved_member_count: Annotated[int, Field(ge=0, le=1_000)]
     top_k_metrics: list[TopKRankingMetricV1] = Field(min_length=1, max_length=32)
-    score_return_spearman: Annotated[float | None, Field(ge=-1.0, le=1.0)] = None
-    source_outcome_fingerprints: list[Hash64] = Field(default_factory=list, max_length=1_000)
+    score_return_spearman: Annotated[
+        float | None,
+        Field(ge=-1.0, le=1.0),
+    ] = None
+    source_outcome_fingerprints: list[Hash64] = Field(
+        default_factory=list,
+        max_length=1_000,
+    )
     evaluation_fingerprint: Hash64
     status: Literal["RESEARCH_RANKING_EVALUATION_ONLY"] = (
         "RESEARCH_RANKING_EVALUATION_ONLY"
@@ -193,7 +211,8 @@ class CrossSectionalRankingEvaluationV1(BaseModel):
 
     @model_validator(mode="after")
     def validate_evaluation(self) -> CrossSectionalRankingEvaluationV1:
-        if self.resolved_member_count + self.unresolved_member_count != self.ranked_member_count:
+        total_members = self.resolved_member_count + self.unresolved_member_count
+        if total_members != self.ranked_member_count:
             raise ValueError("resolved plus unresolved must equal ranked member count")
         if len(self.source_outcome_fingerprints) != self.resolved_member_count:
             raise ValueError("outcome fingerprints must match resolved member count")
@@ -201,12 +220,12 @@ class CrossSectionalRankingEvaluationV1(BaseModel):
             self.source_outcome_fingerprints
         ):
             raise ValueError("resolved ranking outcomes must be unique")
-        if [metric.k for metric in self.top_k_metrics] != sorted(
-            metric.k for metric in self.top_k_metrics
+        metric_k = [metric.k for metric in self.top_k_metrics]
+        if metric_k != sorted(metric_k) or len(metric_k) != len(set(metric_k)):
+            raise ValueError("Top-K metrics must use unique ascending k values")
+        if self.evaluation_fingerprint != canonical_fingerprint(
+            _evaluation_payload(self)
         ):
-            raise ValueError("Top-K metrics must be sorted by k")
-        payload = self.model_dump(mode="json", exclude={"evaluation_fingerprint"})
-        if self.evaluation_fingerprint != canonical_fingerprint(payload):
             raise ValueError("ranking evaluation fingerprint mismatch")
         return self
 
@@ -225,7 +244,9 @@ def build_cross_sectional_ranking_dataset(
     if not ranking_policy_id or len(ranking_policy_id) > 120:
         raise ValueError("ranking_policy_id must be between 1 and 120 characters")
 
-    scan_members = [member for batch in validated_plan.batches for member in batch.members]
+    scan_members = [
+        member for batch in validated_plan.batches for member in batch.members
+    ]
     member_by_symbol = {member.symbol: member for member in scan_members}
     if len(member_by_symbol) != len(scan_members):
         raise ValueError("scan plan symbols must be unique for ranking")
@@ -236,7 +257,9 @@ def build_cross_sectional_ranking_dataset(
         if checked.as_of != validated_plan.scan_as_of:
             raise ValueError("ranking opportunity as_of must match scan plan")
         if checked.symbol not in member_by_symbol:
-            raise ValueError("ranking opportunity is not a member of the source scan plan")
+            raise ValueError(
+                "ranking opportunity is not a member of the source scan plan"
+            )
         if checked.symbol in candidate_by_symbol:
             raise ValueError("ranking opportunities must be unique by symbol")
         candidate_by_symbol[checked.symbol] = checked
@@ -339,7 +362,9 @@ def evaluate_cross_sectional_ranking(
 
     target_specs = {item.target_spec_fingerprint for item in resolved.values()}
     if len(target_specs) > 1:
-        raise ValueError("resolved ranking outcomes must share one target specification")
+        raise ValueError(
+            "resolved ranking outcomes must share one target specification"
+        )
     target_spec = next(iter(target_specs)) if target_specs else None
     cost_fraction = round_trip_cost_bps / 10_000.0
 
@@ -348,7 +373,9 @@ def evaluate_cross_sectional_ranking(
         selected = validated_dataset.rows[: min(k, len(validated_dataset.rows))]
         if not selected:
             continue
-        selected_outcomes = [resolved.get((row.symbol, row.as_of)) for row in selected]
+        selected_outcomes = [
+            resolved.get((row.symbol, row.as_of)) for row in selected
+        ]
         resolved_count = sum(item is not None for item in selected_outcomes)
         unresolved_count = len(selected) - resolved_count
         if unresolved_count:
@@ -417,9 +444,90 @@ def evaluate_cross_sectional_ranking(
     )
 
 
+def _row_payload(item: CrossSectionalRankingRowV1) -> dict[str, object]:
+    return {
+        "contract_version": item.contract_version,
+        "rank": item.rank,
+        "instrument_id": item.instrument_id,
+        "symbol": item.symbol,
+        "as_of": item.as_of.isoformat(),
+        "candidate_action": item.candidate_action,
+        "ranking_score": item.ranking_score,
+        "fused_score": item.fused_score,
+        "confidence": item.confidence,
+        "source_scan_member_fingerprint": item.source_scan_member_fingerprint,
+        "source_candidate_fingerprint": item.source_candidate_fingerprint,
+        "can_authorize_capital": False,
+    }
+
+
+def _dataset_payload(item: CrossSectionalRankingDatasetV1) -> dict[str, object]:
+    return {
+        "contract_version": item.contract_version,
+        "ranking_policy_id": item.ranking_policy_id,
+        "as_of": item.as_of.isoformat(),
+        "source_scan_plan_fingerprint": item.source_scan_plan_fingerprint,
+        "source_universe_fingerprint": item.source_universe_fingerprint,
+        "source_universe_member_count": item.source_universe_member_count,
+        "ranked_member_count": item.ranked_member_count,
+        "missing_member_count": item.missing_member_count,
+        "coverage": item.coverage,
+        "rows": [row.model_dump(mode="json") for row in item.rows],
+        "missing_member_fingerprints": list(item.missing_member_fingerprints),
+        "status": item.status,
+        "promotion_allowed": False,
+        "can_authorize_capital": False,
+    }
+
+
+def _evaluation_payload(
+    item: CrossSectionalRankingEvaluationV1,
+) -> dict[str, object]:
+    return {
+        "contract_version": item.contract_version,
+        "evaluation_as_of": item.evaluation_as_of.isoformat(),
+        "source_dataset_fingerprint": item.source_dataset_fingerprint,
+        "target_spec_fingerprint": item.target_spec_fingerprint,
+        "round_trip_cost_bps": item.round_trip_cost_bps,
+        "ranked_member_count": item.ranked_member_count,
+        "resolved_member_count": item.resolved_member_count,
+        "unresolved_member_count": item.unresolved_member_count,
+        "top_k_metrics": [
+            metric.model_dump(mode="json") for metric in item.top_k_metrics
+        ],
+        "score_return_spearman": item.score_return_spearman,
+        "source_outcome_fingerprints": list(item.source_outcome_fingerprints),
+        "status": item.status,
+        "promotion_allowed": False,
+        "can_authorize_capital": False,
+    }
+
+
 def _validate_opportunity(item: RankedOpportunity) -> RankedOpportunity:
     checked = RankedOpportunity.model_validate(item.model_dump(mode="python"))
-    payload = checked.model_dump(mode="json", exclude={"opportunity_fingerprint"})
+    payload = {
+        "fusion_version": checked.fusion_version,
+        "symbol": checked.symbol,
+        "as_of": checked.as_of.isoformat(),
+        "data_cutoff": checked.data_cutoff.isoformat(),
+        "action": checked.action,
+        "fused_score": checked.fused_score,
+        "rank_score": checked.rank_score,
+        "confidence": checked.confidence,
+        "contributions": [
+            contribution.model_dump(mode="json")
+            for contribution in checked.contributions
+        ],
+        "regime_evidence": (
+            checked.regime_evidence.model_dump(mode="json")
+            if checked.regime_evidence is not None
+            else None
+        ),
+        "reason_codes": list(checked.reason_codes),
+        "provenance": list(checked.provenance),
+        "status": checked.status,
+        "can_authorize_capital": False,
+    }
     if checked.opportunity_fingerprint != canonical_fingerprint(payload):
         raise ValueError("ranking opportunity fingerprint mismatch")
     if checked.can_authorize_capital:
@@ -429,7 +537,9 @@ def _validate_opportunity(item: RankedOpportunity) -> RankedOpportunity:
 
 def _spearman(left: Sequence[float], right: Sequence[float]) -> float:
     if len(left) != len(right) or len(left) < 2:
-        raise ValueError("Spearman correlation requires equal vectors of length at least two")
+        raise ValueError(
+            "Spearman correlation requires equal vectors of length at least two"
+        )
     left_ranks = _average_ranks(left)
     right_ranks = _average_ranks(right)
     left_mean = sum(left_ranks) / len(left_ranks)
