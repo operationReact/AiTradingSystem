@@ -27,7 +27,6 @@ class BacktestComparisonControllerIT extends AbstractPostgresIT {
     private static final String HASH_B = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     private static final String HASH_C = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
     private static final String HASH_D = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
-    private static final String HASH_E = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
     private static final String HASH_F = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
     private static final String CODE_SHA = "0123456789abcdef0123456789abcdef01234567";
 
@@ -96,7 +95,7 @@ class BacktestComparisonControllerIT extends AbstractPostgresIT {
         Integer auditCount = jdbc.sql("""
                 SELECT count(*) FROM audit_event
                  WHERE event_type = 'BACKTEST_COMPARISON_REGISTERED'
-                   AND aggregate_id = :comparisonId
+                   AND entity_id = :comparisonId
                    AND details ->> 'promotionAllowed' = 'false'
                    AND details ->> 'canAuthorizeCapital' = 'false'
                 """)
