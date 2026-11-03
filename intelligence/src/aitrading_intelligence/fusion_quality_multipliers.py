@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -41,11 +41,11 @@ class FusionQualityMultiplierConfig(BaseModel):
         int,
         Field(ge=2, le=100_000),
     ] = 20
-    performance_scale_bps: Annotated[float, Field(gt=0.0, le=10_000.0)] = 100.0
+    performance_scale_bps: Annotated[float, Field(gt=0.0, le=10_000.0)] = 500.0
     maximum_performance_adjustment: Annotated[
         float,
         Field(ge=0.0, le=0.50),
-    ] = 0.20
+    ] = 0.10
     minimum_combined_multiplier: Annotated[float, Field(ge=0.0, le=1.0)] = 0.0
     maximum_combined_multiplier: Annotated[float, Field(ge=1.0, le=2.0)] = 1.20
 
@@ -187,12 +187,19 @@ class ShadowPerformanceEvidenceV1(BaseModel):
             raise ValueError("shadow performance window_start cannot exceed window_end")
         if self.window_end > self.evaluation_as_of:
             raise ValueError("shadow performance window_end cannot exceed evaluation_as_of")
-        if self.source_data_cutoff is not None and self.source_data_cutoff > self.evaluation_as_of:
-            raise ValueError("shadow performance data cutoff cannot exceed evaluation_as_of")
+        if (
+            self.source_data_cutoff is not None
+            and self.source_data_cutoff > self.evaluation_as_of
+        ):
+            raise ValueError(
+                "shadow performance data cutoff cannot exceed evaluation_as_of"
+            )
         if self.winning_observation_count > self.resolved_observation_count:
             raise ValueError("winning observations cannot exceed resolved observations")
         if len(self.source_observation_fingerprints) != self.resolved_observation_count:
-            raise ValueError("source fingerprint count must equal resolved observation count")
+            raise ValueError(
+                "source fingerprint count must equal resolved observation count"
+            )
         if len(set(self.source_observation_fingerprints)) != len(
             self.source_observation_fingerprints
         ):
@@ -200,9 +207,8 @@ class ShadowPerformanceEvidenceV1(BaseModel):
         if self.resolved_observation_count == 0:
             if self.mean_net_return is not None or self.net_expectancy_bps is not None:
                 raise ValueError("empty shadow evidence cannot carry performance metrics")
-        else:
-            if self.mean_net_return is None or self.net_expectancy_bps is None:
-                raise ValueError("resolved shadow evidence requires performance metrics")
+        elif self.mean_net_return is None or self.net_expectancy_bps is None:
+            raise ValueError("resolved shadow evidence requires performance metrics")
         return self
 
 
@@ -224,15 +230,14 @@ def evaluate_shadow_performance(
             continue
         checked = _validate_shadow_observation(item)
         if checked.observation_fingerprint in seen:
-            raise ValueError("shadow performance observations must have unique fingerprints")
+            raise ValueError(
+                "shadow performance observations must have unique fingerprints"
+            )
         seen.add(checked.observation_fingerprint)
         validated.append(checked)
 
     window_end = evaluation_as_of
-    window_start = evaluation_as_of.fromtimestamp(
-        evaluation_as_of.timestamp() - cfg.trailing_window_seconds,
-        tz=evaluation_as_of.tzinfo,
-    )
+    window_start = evaluation_as_of - timedelta(seconds=cfg.trailing_window_seconds)
     future = [item for item in validated if item.target_observed_at > evaluation_as_of]
     eligible = [
         item
@@ -311,6 +316,9 @@ class FusionExpertQualityMultiplierV1(BaseModel):
     calibration_quality_multiplier: Annotated[float, Field(ge=0.0, le=1.0)]
     freshness_multiplier: Annotated[float, Field(ge=0.0, le=1.0)]
     performance_multiplier: Annotated[float, Field(ge=0.5, le=1.5)]
+    raw_combined_multiplier: Annotated[float, Field(ge=0.0, le=1.5)]
+    minimum_combined_multiplier: Annotated[float, Field(ge=0.0, le=1.0)]
+    maximum_combined_multiplier: Annotated[float, Field(ge=1.0, le=2.0)]
     combined_multiplier: Annotated[float, Field(ge=0.0, le=2.0)]
     calibration_decision_fingerprint: Hash64 | None = None
     shadow_performance_evidence_fingerprint: Hash64 | None = None
@@ -329,6 +337,35 @@ class FusionExpertQualityMultiplierV1(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("evaluated_at must be timezone-aware")
         return value
+
+    @model_validator(mode="after")
+    def validate_multiplier_arithmetic(self) -> FusionExpertQualityMultiplierV1:
+        if self.minimum_combined_multiplier > self.maximum_combined_multiplier:
+            raise ValueError("combined multiplier bounds are invalid")
+        expected_raw = (
+            self.calibration_quality_multiplier
+            * self.freshness_multiplier
+            * self.performance_multiplier
+        )
+        if not math.isclose(
+            self.raw_combined_multiplier,
+            expected_raw,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("raw combined multiplier must equal component product")
+        expected_combined = max(
+            self.minimum_combined_multiplier,
+            min(self.maximum_combined_multiplier, expected_raw),
+        )
+        if not math.isclose(
+            self.combined_multiplier,
+            expected_combined,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("combined multiplier must equal bounded component product")
+        return self
 
 
 def build_fusion_quality_multiplier(
@@ -379,16 +416,22 @@ def build_fusion_quality_multiplier(
     if shadow_performance is None:
         reasons.append("SHADOW_PERFORMANCE_NOT_SUPPLIED_NEUTRAL")
     else:
-        checked_performance = _validate_shadow_performance_evidence(shadow_performance)
+        checked_performance = _validate_shadow_performance_evidence(
+            shadow_performance
+        )
         if checked_performance.family != family:
             raise ValueError("shadow performance family must match multiplier family")
         if checked_performance.evaluation_as_of > evaluated_at:
-            raise ValueError("shadow performance evidence cannot postdate multiplier evaluation")
+            raise ValueError(
+                "shadow performance evidence cannot postdate multiplier evaluation"
+            )
         if (
             checked_performance.source_data_cutoff is not None
             and checked_performance.source_data_cutoff > evaluated_at
         ):
-            raise ValueError("shadow performance cutoff cannot postdate multiplier evaluation")
+            raise ValueError(
+                "shadow performance cutoff cannot postdate multiplier evaluation"
+            )
         performance_fingerprint = checked_performance.evidence_fingerprint
         if checked_performance.state == "SUFFICIENT":
             expectancy_bps = checked_performance.net_expectancy_bps
@@ -404,14 +447,14 @@ def build_fusion_quality_multiplier(
         else:
             reasons.append("SHADOW_PERFORMANCE_INSUFFICIENT_NEUTRAL")
 
-    combined = (
+    raw_combined = (
         calibration_quality_multiplier
         * freshness_multiplier
         * performance_multiplier
     )
     combined = max(
         cfg.minimum_combined_multiplier,
-        min(cfg.maximum_combined_multiplier, combined),
+        min(cfg.maximum_combined_multiplier, raw_combined),
     )
     payload = {
         "contract_version": FUSION_QUALITY_MULTIPLIER_VERSION,
@@ -420,6 +463,9 @@ def build_fusion_quality_multiplier(
         "calibration_quality_multiplier": calibration_quality_multiplier,
         "freshness_multiplier": freshness_multiplier,
         "performance_multiplier": performance_multiplier,
+        "raw_combined_multiplier": raw_combined,
+        "minimum_combined_multiplier": cfg.minimum_combined_multiplier,
+        "maximum_combined_multiplier": cfg.maximum_combined_multiplier,
         "combined_multiplier": combined,
         "calibration_decision_fingerprint": calibration_fingerprint,
         "shadow_performance_evidence_fingerprint": performance_fingerprint,
@@ -459,14 +505,18 @@ def _validate_calibration_decision(
     if checked.decision_fingerprint != canonical_fingerprint(payload):
         raise ValueError("calibration decision fingerprint mismatch")
     if checked.promotion_allowed or checked.can_authorize_capital:
-        raise ValueError("calibration decision cannot carry promotion or capital authority")
+        raise ValueError(
+            "calibration decision cannot carry promotion or capital authority"
+        )
     return checked
 
 
 def _validate_shadow_observation(
     item: ShadowPerformanceObservationV1,
 ) -> ShadowPerformanceObservationV1:
-    checked = ShadowPerformanceObservationV1.model_validate(item.model_dump(mode="python"))
+    checked = ShadowPerformanceObservationV1.model_validate(
+        item.model_dump(mode="python")
+    )
     payload = checked.model_dump(mode="python", exclude={"observation_fingerprint"})
     payload["decision_as_of"] = checked.decision_as_of.isoformat()
     payload["target_observed_at"] = checked.target_observed_at.isoformat()
@@ -480,7 +530,9 @@ def _validate_shadow_observation(
 def _validate_shadow_performance_evidence(
     item: ShadowPerformanceEvidenceV1,
 ) -> ShadowPerformanceEvidenceV1:
-    checked = ShadowPerformanceEvidenceV1.model_validate(item.model_dump(mode="python"))
+    checked = ShadowPerformanceEvidenceV1.model_validate(
+        item.model_dump(mode="python")
+    )
     payload = checked.model_dump(mode="python", exclude={"evidence_fingerprint"})
     payload["evaluation_as_of"] = checked.evaluation_as_of.isoformat()
     payload["window_start"] = checked.window_start.isoformat()
@@ -493,5 +545,7 @@ def _validate_shadow_performance_evidence(
     if checked.evidence_fingerprint != canonical_fingerprint(payload):
         raise ValueError("shadow performance evidence fingerprint mismatch")
     if checked.promotion_allowed or checked.can_authorize_capital:
-        raise ValueError("shadow performance evidence cannot carry promotion or capital authority")
+        raise ValueError(
+            "shadow performance evidence cannot carry promotion or capital authority"
+        )
     return checked
