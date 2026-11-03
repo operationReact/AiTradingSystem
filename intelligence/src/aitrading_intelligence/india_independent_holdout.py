@@ -157,7 +157,15 @@ def _build_examples(
     if len(rows) <= target.horizon_bars + 1:
         return []
     # The first row has no previous candle, so do not silently train on missing lag features.
-    return build_labeled_examples(rows, target)[1:]
+    examples = build_labeled_examples(rows, target)[1:]
+    # An intraday position must not be evaluated using the next trading day's close.
+    # The source target helper supports general time series, so filter the boundary here.
+    return [
+        example
+        for example in examples
+        if example.as_of.astimezone(MARKET_ZONE).date()
+        == example.target_observed_at.astimezone(MARKET_ZONE).date()
+    ]
 
 
 def _configured_round_trip_fee_bps(schedule: IndiaFeeTaxScheduleV1) -> float:
