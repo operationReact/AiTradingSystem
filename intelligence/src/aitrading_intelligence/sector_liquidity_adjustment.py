@@ -33,9 +33,7 @@ class SectorLiquidityAdjustmentConfigV1(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    policy_id: Literal["sector-liquidity-concentration.v1"] = (
-        SECTOR_LIQUIDITY_POLICY_ID
-    )
+    policy_id: Literal["sector-liquidity-concentration.v1"] = SECTOR_LIQUIDITY_POLICY_ID
     liquidity_floor: Annotated[float, Field(gt=0.0, le=1.0)] = 0.50
     sector_repeat_penalty: Annotated[float, Field(ge=0.0, le=1.0)] = 0.15
     sector_floor: Annotated[float, Field(gt=0.0, le=1.0)] = 0.50
@@ -50,9 +48,7 @@ class SectorLiquidityScoreV1(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    contract_version: Literal["sector-liquidity-score.v1"] = (
-        SECTOR_LIQUIDITY_SCORE_VERSION
-    )
+    contract_version: Literal["sector-liquidity-score.v1"] = SECTOR_LIQUIDITY_SCORE_VERSION
     rank: Annotated[int, Field(ge=1, le=1_000)]
     instrument_id: Annotated[str, Field(min_length=1, max_length=120)]
     symbol: Annotated[str, Field(pattern=r"^[A-Z0-9&._-]{1,32}$")]
@@ -67,6 +63,7 @@ class SectorLiquidityScoreV1(BaseModel):
     adjusted_ranking_score: Annotated[float, Field(ge=0.0, le=1.0)]
     source_expected_edge_risk_ranking_fingerprint: Hash64
     source_ranking_row_fingerprint: Hash64
+    source_candidate_fingerprint: Hash64
     source_scan_member_fingerprint: Hash64
     source_identity_binding_fingerprint: Hash64
     source_liquidity_evidence_fingerprint: Hash64
@@ -151,6 +148,7 @@ class SectorLiquidityAdjustmentV1(BaseModel):
             raise ValueError("reranked dataset must use sector/liquidity policy")
         expected_config = self.config.fingerprint
         seen_rows: set[str] = set()
+        seen_candidates: set[str] = set()
         seen_instruments: set[str] = set()
         sector_counts: Counter[str] = Counter()
         prior_adjusted = math.inf
@@ -167,6 +165,8 @@ class SectorLiquidityAdjustmentV1(BaseModel):
                 raise ValueError("concentration score source ranking fingerprint mismatch")
             if score.source_ranking_row_fingerprint in seen_rows:
                 raise ValueError("concentration scores must be unique by source row")
+            if score.source_candidate_fingerprint in seen_candidates:
+                raise ValueError("concentration scores must be unique by source candidate")
             if score.instrument_id in seen_instruments:
                 raise ValueError("concentration scores must be unique by instrument")
             if score.prior_selected_sector_count != sector_counts[score.sector]:
@@ -177,6 +177,7 @@ class SectorLiquidityAdjustmentV1(BaseModel):
             sector_counts[score.sector] += 1
             prior_adjusted = score.adjusted_ranking_score
             seen_rows.add(score.source_ranking_row_fingerprint)
+            seen_candidates.add(score.source_candidate_fingerprint)
             seen_instruments.add(score.instrument_id)
 
         for row, score in zip(self.reranked_dataset.rows, self.scores, strict=True):
@@ -184,8 +185,8 @@ class SectorLiquidityAdjustmentV1(BaseModel):
                 raise ValueError("reranked row rank must match concentration score")
             if row.instrument_id != score.instrument_id or row.symbol != score.symbol:
                 raise ValueError("reranked row identity must match concentration score")
-            if row.row_fingerprint == score.source_ranking_row_fingerprint:
-                raise ValueError("reranked row must have a new fingerprint after score change")
+            if row.source_candidate_fingerprint != score.source_candidate_fingerprint:
+                raise ValueError("reranked row candidate lineage must match concentration score")
             if not math.isclose(
                 row.ranking_score,
                 score.adjusted_ranking_score,
@@ -246,12 +247,7 @@ def adjust_sector_liquidity_concentration(
             raise ValueError("identity binding liquidity evidence is missing")
         _validate_binding_liquidity(binding, evidence, source.as_of)
         candidates.append(
-            _Candidate(
-                row=row,
-                member=member,
-                binding=binding,
-                evidence=evidence,
-            )
+            _Candidate(row=row, member=member, binding=binding, evidence=evidence)
         )
 
     if len({item.binding.binding_fingerprint for item in candidates}) != len(candidates):
@@ -280,7 +276,7 @@ def adjust_sector_liquidity_concentration(
             key=lambda item: (
                 -item.adjusted_ranking_score,
                 item.instrument_id,
-                item.source_ranking_row_fingerprint,
+                item.source_candidate_fingerprint,
             ),
         )
         scores.append(selected)
@@ -403,9 +399,7 @@ def _marginal_score(
         config.sector_floor,
         1.0 - config.sector_repeat_penalty * prior_sector_count,
     )
-    adjusted = (
-        candidate.row.ranking_score * liquidity_multiplier * sector_multiplier
-    )
+    adjusted = candidate.row.ranking_score * liquidity_multiplier * sector_multiplier
     payload = {
         "contract_version": SECTOR_LIQUIDITY_SCORE_VERSION,
         "rank": rank,
@@ -422,6 +416,7 @@ def _marginal_score(
         "adjusted_ranking_score": adjusted,
         "source_expected_edge_risk_ranking_fingerprint": source_ranking_fingerprint,
         "source_ranking_row_fingerprint": candidate.row.row_fingerprint,
+        "source_candidate_fingerprint": candidate.row.source_candidate_fingerprint,
         "source_scan_member_fingerprint": candidate.member.member_fingerprint,
         "source_identity_binding_fingerprint": candidate.binding.binding_fingerprint,
         "source_liquidity_evidence_fingerprint": candidate.evidence.evidence_fingerprint,
