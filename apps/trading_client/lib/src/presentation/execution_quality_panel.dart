@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/paper_trading_repository.dart';
+import 'execution_quality_card.dart';
 
 class ExecutionQualityPanel extends StatelessWidget {
   const ExecutionQualityPanel({
@@ -12,8 +13,16 @@ class ExecutionQualityPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final order = detail.order;
+    final exactEvidence = detail.executionQuality;
+    if (exactEvidence != null) {
+      return ExecutionQualityCard(
+        key: ValueKey('execution-quality-${order.id}'),
+        quality: exactEvidence,
+      );
+    }
+
+    final theme = Theme.of(context);
     final fill = detail.fill;
     final fillFraction = order.quantity <= 0 ? 0.0 : order.filledQuantity / order.quantity;
 
