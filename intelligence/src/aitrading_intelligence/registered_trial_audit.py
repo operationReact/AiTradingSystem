@@ -135,15 +135,17 @@ class RegisteredTrialAuditReport(BaseModel):
 
 def register_trial_budget(
     freeze: IndiaHoldoutFreezePlan,
-    baseline: TournamentCandidate,
     trials: Sequence[RegisteredTrial],
     *,
+    baseline_candidate_id: str,
+    baseline_model_version_ref: str,
     registered_at: datetime,
 ) -> RegisteredTrialBudget:
     """Commit a fixed set of challenger configurations before any holdout observations."""
     frozen = IndiaHoldoutFreezePlan.model_validate(freeze.model_dump(mode="python"))
-    anchor = TournamentCandidate.model_validate(baseline.model_dump(mode="python"))
     _aware(registered_at)
+    if not baseline_candidate_id or not baseline_model_version_ref:
+        raise ValueError("baseline ID and frozen model version must be predeclared")
     if not frozen.recorded_at <= registered_at < frozen.planned_holdout_from:
         raise ValueError("trial budget must be recorded before the holdout opens")
     planned = sorted(trials, key=lambda trial: trial.candidate_id)
@@ -154,8 +156,8 @@ def register_trial_budget(
     payload = {
         "contract_version": PLAN_VERSION,
         "holdout_freeze_plan_fingerprint": frozen.plan_fingerprint,
-        "baseline_candidate_id": anchor.prediction.candidate_id,
-        "baseline_model_version_ref": anchor.prediction.model_version_ref,
+        "baseline_candidate_id": baseline_candidate_id,
+        "baseline_model_version_ref": baseline_model_version_ref,
         "registered_at": registered_at,
         "trials": [trial.model_dump(mode="json") for trial in planned],
         "externally_timestamped": False,
@@ -270,7 +272,10 @@ def audit_registered_trials(
         if tournament.status == "RESEARCH_SHORTLIST_ONLY"
         else "NO_ADDITIVE_RESEARCH"
     )
-    shortlisted = tournament.shortlisted_candidate_ids if status == "RESEARCH_SHORTLIST_ONLY" else []
+    shortlisted = (
+        tournament.shortlisted_candidate_ids
+        if status == "RESEARCH_SHORTLIST_ONLY" else []
+    )
     if status == "INCONCLUSIVE" and tournament is not None:
         problems.add("TOURNAMENT_INCONCLUSIVE")
     payload = {
