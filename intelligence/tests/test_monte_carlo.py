@@ -115,7 +115,7 @@ def test_stationary_bootstrap_is_seeded_and_keeps_contiguous_runs() -> None:
     assert len(first) == len(values)
     contiguous_transitions = sum(
         int((int(right) - int(left)) % len(values) == 1)
-        for left, right in zip(first, first[1:])
+        for left, right in zip(first, first[1:], strict=False)
     )
     assert contiguous_transitions >= len(values) // 2
 
