@@ -60,7 +60,7 @@ def test_patch_rejects_gaps_in_five_minute_history() -> None:
         datetime.fromisoformat(row["availableAt"]) + timedelta(minutes=1)
     ).isoformat()
     shifted = MarketResearchExport.model_validate(payload)
-    with pytest.raises(ValueError, match="contiguous five-minute history"):
+    with pytest.raises(ValueError, match="contiguous five-minute bars"):
         _run(holdout=shifted)
 
 
@@ -70,6 +70,7 @@ def test_insufficient_fit_or_calibration_fails_closed_before_importing_torch() -
     assert report.baseline is None and report.challenger is None
     assert report.paired_economic_report_fingerprint is None
     assert report.model_state_fingerprint is None
+    assert report.same_independent_holdout_compared is False
     assert report.promotion_allowed is False and report.can_authorize_capital is False
     assert "INSUFFICIENT_PURGED_FIT_ROWS" in report.reason_codes
     assert "INSUFFICIENT_UNTOUCHED_CALIBRATION_ROWS" in report.reason_codes
