@@ -112,6 +112,14 @@ using `pip install -r requirements-xgboost-cpu.txt`. The dedicated
 `python-xgboost.yml` CI workflow validates the real XGBoost implementation,
 without adding its runtime to the backend or regular Python intelligence image.
 
+Run offline with separate, point-in-time, previously frozen market exports:
+
+```bash
+python -m aitrading_intelligence.xgboost_benchmark \
+  train-market-history.json holdout-market-history.json india-fee-book.json \
+  --horizon-bars 1 --cost-bps 25 --minimum-edge-bps 15
+```
+
 The evaluation reuses the existing India holdout's source identity, causal
 train/holdout split, same-session targets, fee-book and spread/slippage checks.
 It records aligned after-cost returns and probabilities, paired block-bootstrap
