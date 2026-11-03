@@ -86,16 +86,24 @@ class PaperSmartLimitDecisionV1(BaseModel):
         )
         if self.state in ("PLACE_LIMIT", "REPRICE_LIMIT"):
             if any(value is None for value in action_fields):
-                raise ValueError("actionable PAPER smart-limit decision requires complete price evidence")
+                raise ValueError(
+                    "actionable PAPER smart-limit decision requires complete price evidence"
+                )
             if self.state == "PLACE_LIMIT":
                 if self.attempt_index != 0:
                     raise ValueError("initial smart-limit decision must use attempt_index zero")
                 if self.previous_decision_fingerprint is not None:
-                    raise ValueError("initial smart-limit decision cannot have previous decision lineage")
+                    raise ValueError(
+                        "initial smart-limit decision cannot have previous decision lineage"
+                    )
                 if self.prior_fill_result_fingerprint is not None:
-                    raise ValueError("initial smart-limit decision cannot have prior fill lineage")
+                    raise ValueError(
+                        "initial smart-limit decision cannot have prior fill lineage"
+                    )
                 if self.previous_limit_price is not None:
-                    raise ValueError("initial smart-limit decision cannot have previous limit price")
+                    raise ValueError(
+                        "initial smart-limit decision cannot have previous limit price"
+                    )
             else:
                 if self.attempt_index < 1:
                     raise ValueError("reprice decision requires positive attempt_index")
@@ -107,7 +115,9 @@ class PaperSmartLimitDecisionV1(BaseModel):
                     raise ValueError("reprice decision requires previous limit price")
         else:
             if any(value is not None for value in action_fields):
-                raise ValueError("non-actionable PAPER decision cannot expose an order instruction")
+                raise ValueError(
+                    "non-actionable PAPER decision cannot expose an order instruction"
+                )
             if not self.reason_codes:
                 raise ValueError("non-actionable PAPER decision requires reason codes")
 
@@ -134,6 +144,16 @@ def _checked_fill(fill: FillSimulationResultV1) -> FillSimulationResultV1:
     return FillSimulationResultV1.model_validate(fill.model_dump(mode="python"))
 
 
+def _tick_floor(price: float, tick_size: float) -> float:
+    ticks = math.floor((price / tick_size) + 1e-12)
+    return max(tick_size, ticks * tick_size)
+
+
+def _tick_ceil(price: float, tick_size: float) -> float:
+    ticks = math.ceil((price / tick_size) - 1e-12)
+    return max(tick_size, ticks * tick_size)
+
+
 def _price_from_concession(
     *,
     side: TradeSide,
@@ -141,25 +161,26 @@ def _price_from_concession(
     concession_bps: float,
     tick_size: float,
 ) -> float:
-    multiplier = 1.0 + concession_bps / 10_000.0 if side == "BUY" else 1.0 - concession_bps / 10_000.0
-    raw_price = reference_price * multiplier
     if side == "BUY":
-        ticks = math.floor((raw_price / tick_size) + 1e-12)
-    else:
-        ticks = math.ceil((raw_price / tick_size) - 1e-12)
-    return max(tick_size, ticks * tick_size)
+        raw_price = reference_price * (1.0 + concession_bps / 10_000.0)
+        return _tick_floor(raw_price, tick_size)
+    raw_price = reference_price * (1.0 - concession_bps / 10_000.0)
+    return _tick_ceil(raw_price, tick_size)
 
 
 def _apply_plan_hard_limit(
     *,
     plan: ExecutionPlanV1,
     proposed_limit: float,
+    tick_size: float,
 ) -> float:
     if plan.order_type != "LIMIT" or plan.limit_price is None:
         return proposed_limit
     if plan.side == "BUY":
-        return min(proposed_limit, plan.limit_price)
-    return max(proposed_limit, plan.limit_price)
+        hard_limit = _tick_floor(plan.limit_price, tick_size)
+        return min(proposed_limit, hard_limit)
+    hard_limit = _tick_ceil(plan.limit_price, tick_size)
+    return max(proposed_limit, hard_limit)
 
 
 def _concession_bps_from_price(
@@ -200,7 +221,9 @@ def _non_actionable(
         side=plan.side,
         execution_plan_fingerprint=plan.plan_fingerprint,
         cost_model_fingerprint=(
-            plan.expected_cost.cost_model_fingerprint if plan.expected_cost is not None else None
+            plan.expected_cost.cost_model_fingerprint
+            if plan.expected_cost is not None
+            else None
         ),
         slippage_estimate_fingerprint=plan.slippage_estimate_fingerprint,
         fill_config_fingerprint=plan.fill_config_fingerprint,
@@ -215,7 +238,9 @@ def _non_actionable(
         requested_quantity=plan.quantity,
         quantity_to_submit=None,
         reference_price=plan.reference_price,
-        previous_limit_price=(previous.proposed_limit_price if previous is not None else None),
+        previous_limit_price=(
+            previous.proposed_limit_price if previous is not None else None
+        ),
         proposed_limit_price=None,
         expected_slippage_bps=None,
         concession_bps=None,
@@ -266,7 +291,9 @@ def _validate_reprice_lineage(
         rel_tol=1e-12,
         abs_tol=1e-12,
     ):
-        raise ValueError("prior fill limit price does not match previous PAPER instruction")
+        raise ValueError(
+            "prior fill limit price does not match previous PAPER instruction"
+        )
 
 
 def decide_paper_smart_limit(
@@ -354,7 +381,9 @@ def decide_paper_smart_limit(
         quantity = fill.remaining_quantity
         state = "REPRICE_LIMIT"
         reasons = [
-            "PRIOR_PARTIAL_FILL" if fill.state == "PARTIALLY_FILLED" else "PRIOR_UNFILLED"
+            "PRIOR_PARTIAL_FILL"
+            if fill.state == "PARTIALLY_FILLED"
+            else "PRIOR_UNFILLED"
         ]
 
     maximum_concession = expected_slippage * cfg.maximum_concession_fraction
@@ -368,7 +397,11 @@ def decide_paper_smart_limit(
         concession_bps=target_concession,
         tick_size=cfg.tick_size_inr,
     )
-    proposed = _apply_plan_hard_limit(plan=checked_plan, proposed_limit=proposed)
+    proposed = _apply_plan_hard_limit(
+        plan=checked_plan,
+        proposed_limit=proposed,
+        tick_size=cfg.tick_size_inr,
+    )
     actual_concession = _concession_bps_from_price(
         side=checked_plan.side,
         reference_price=checked_plan.reference_price,
@@ -378,11 +411,15 @@ def decide_paper_smart_limit(
     if actual_concession > maximum_concession + 1e-9:
         raise ValueError("tick-adjusted PAPER limit exceeds maximum slippage concession")
 
-    if previous is not None and previous.proposed_limit_price is not None and math.isclose(
-        proposed,
-        previous.proposed_limit_price,
-        rel_tol=1e-12,
-        abs_tol=1e-12,
+    if (
+        previous is not None
+        and previous.proposed_limit_price is not None
+        and math.isclose(
+            proposed,
+            previous.proposed_limit_price,
+            rel_tol=1e-12,
+            abs_tol=1e-12,
+        )
     ):
         return _non_actionable(
             state="STOP",
@@ -405,13 +442,17 @@ def decide_paper_smart_limit(
         previous_decision_fingerprint=(
             previous.decision_fingerprint if previous is not None else None
         ),
-        prior_fill_result_fingerprint=(fill.result_fingerprint if fill is not None else None),
+        prior_fill_result_fingerprint=(
+            fill.result_fingerprint if fill is not None else None
+        ),
         policy_config_fingerprint=cfg.fingerprint,
         attempt_index=attempt_index,
         requested_quantity=checked_plan.quantity,
         quantity_to_submit=quantity,
         reference_price=checked_plan.reference_price,
-        previous_limit_price=(previous.proposed_limit_price if previous is not None else None),
+        previous_limit_price=(
+            previous.proposed_limit_price if previous is not None else None
+        ),
         proposed_limit_price=proposed,
         expected_slippage_bps=expected_slippage,
         concession_bps=actual_concession,
