@@ -4,9 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from aitrading_intelligence.cross_sectional_ranking import (
-    MetaLabelDatasetV1 if False else CrossSectionalRankingDatasetV1,
-)
-from aitrading_intelligence.cross_sectional_ranking import (
+    CrossSectionalRankingDatasetV1,
     build_cross_sectional_ranking_dataset,
 )
 from aitrading_intelligence.cross_sectional_scan import build_cross_sectional_scan_plan
@@ -287,9 +285,7 @@ def test_unresolved_ranking_rows_are_recorded_explicitly_in_coverage() -> None:
     assert dataset.matched_target_count == 1
     assert dataset.unresolved_count == 1
     assert dataset.coverage == pytest.approx(0.5)
-    unresolved_symbol = next(
-        row for row in ranking.rows if row.symbol == "SYM2"
-    )
+    unresolved_symbol = next(row for row in ranking.rows if row.symbol == "SYM2")
     assert dataset.unresolved_row_fingerprints == [unresolved_symbol.row_fingerprint]
 
 
