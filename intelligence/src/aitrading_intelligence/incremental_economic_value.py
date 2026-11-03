@@ -5,7 +5,7 @@ import random
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 from .fingerprints import canonical_fingerprint
 
@@ -48,7 +48,7 @@ class NetReturnSeries(BaseModel):
         if len(set(self.observation_fingerprints)) != count:
             raise ValueError("observation fingerprints must be unique")
         if any(later <= earlier for earlier, later in
-               zip(self.decision_times, self.decision_times[1:], strict=True)):
+               zip(self.decision_times[:-1], self.decision_times[1:], strict=True)):
             raise ValueError("decision times must be strictly chronological")
         if any(not math.isfinite(v) or v < -1.0 or v > 10.0
                for v in self.net_returns_after_costs):
@@ -134,7 +134,7 @@ def create_net_return_series(
         "fold_binding_fingerprint": fold_binding_fingerprint,
         "economic_cost_binding_fingerprint": economic_cost_binding_fingerprint,
         "observation_fingerprints": observation_fingerprints,
-        "decision_times": [t.isoformat() for t in decision_times],
+        "decision_times": TypeAdapter(list[datetime]).dump_python(decision_times, mode="json"),
         "net_returns_after_costs": net_returns_after_costs,
         "promotion_allowed": False,
         "can_authorize_capital": False,
@@ -219,7 +219,7 @@ def evaluate_incremental_economic_value(
         "config_fingerprint": policy.fingerprint,
         "observation_membership_fingerprint": canonical_fingerprint({
             "observation_fingerprints": first.observation_fingerprints,
-            "decision_times": [t.isoformat() for t in first.decision_times],
+            "decision_times": TypeAdapter(list[datetime]).dump_python(first.decision_times, mode="json"),
         }),
         "observation_count": count,
         "mean_baseline_net_return": mean_base,
