@@ -290,7 +290,10 @@ def test_no_post_latency_bars_is_valid_unfilled_gap_outcome() -> None:
         slippage=_slippage(),
         identity_bridge=_bridge(),
         market_export=_market_export(),
-        config=FillSimulationConfigV1(latency_milliseconds=250),
+        config=FillSimulationConfigV1(
+            latency_milliseconds=250,
+            max_slippage_age_seconds=3_600,
+        ),
     )
 
     assert result.state == "UNFILLED"
