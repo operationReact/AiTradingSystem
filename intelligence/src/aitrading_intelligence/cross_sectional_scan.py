@@ -119,7 +119,21 @@ class CrossSectionalScanPlanV1(BaseModel):
             if batch.member_count > self.batch_size:
                 raise ValueError("scan batch cannot exceed configured batch_size")
             expected_offset += batch.member_count
-        payload = self.model_dump(mode="json", exclude={"plan_fingerprint"})
+        payload = {
+            "contract_version": self.contract_version,
+            "universe_contract_version": self.universe_contract_version,
+            "universe_id": self.universe_id,
+            "scan_as_of": self.scan_as_of.isoformat(),
+            "universe_data_cutoff": self.universe_data_cutoff.isoformat(),
+            "source_universe_fingerprint": self.source_universe_fingerprint,
+            "source_universe_member_count": self.source_universe_member_count,
+            "batch_size": self.batch_size,
+            "batch_count": self.batch_count,
+            "batches": [item.model_dump(mode="json") for item in self.batches],
+            "status": self.status,
+            "promotion_allowed": False,
+            "can_authorize_capital": False,
+        }
         if self.plan_fingerprint != canonical_fingerprint(payload):
             raise ValueError("scan plan fingerprint mismatch")
         return self
