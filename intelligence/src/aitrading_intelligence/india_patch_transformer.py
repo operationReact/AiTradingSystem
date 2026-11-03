@@ -272,7 +272,6 @@ def _metrics(
         if predicted - bound > threshold else 0.0
         for row, predicted in zip(holdout, holdout_prediction, strict=True)
     ]
-    trades = [v for v in returns if v != 0]  # zero outcomes are still matched as abstentions
     metrics = BoundedPatchMetrics(
         forecast_fingerprint=canonical_fingerprint(holdout_prediction),
         calibration_absolute_error_quantile=bound,
