@@ -60,3 +60,4 @@ jobs:
           pytest -q tests/test_pytorch_model.py tests/test_pytorch_temperature_registry.py
           pytest -q tests/test_model_fair_comparison.py -k pytorch
           pytest -q tests/test_neural_temperature_scaling.py
+          pytest -q tests/test_india_patch_transformer.py
