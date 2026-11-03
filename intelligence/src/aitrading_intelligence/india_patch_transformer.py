@@ -161,11 +161,14 @@ def _return_windows(
     for bars in sessions.values():
         for end in range(lookback, len(bars) - horizon):
             history = bars[end - lookback:end + 1]
+            # The target horizon must also be contiguous. Otherwise one
+            # declared five-minute forward label may secretly span a gap.
+            full_path = bars[end - lookback:end + horizon + 1]
             if any(
                 right.observed_at - left.observed_at != timedelta(minutes=5)
-                for left, right in zip(history[:-1], history[1:], strict=True)
+                for left, right in zip(full_path[:-1], full_path[1:], strict=True)
             ):
-                raise ValueError("patch input requires contiguous five-minute history")
+                raise ValueError("patch input and target require contiguous five-minute bars")
             returns = [
                 right.close / left.close - 1
                 for left, right in zip(history[:-1], history[1:], strict=True)
@@ -449,8 +452,8 @@ def evaluate_bounded_patch_forecast(
         "status": status,
         "reason_codes": sorted(reasons),
         "neural_family": "BOUNDED_CPU_PATCH_TRANSFORMER",
-        "same_independent_holdout_compared": not bool(
-            {"CAUSAL_BASELINE_INCONCLUSIVE"} & reasons
+        "same_independent_holdout_compared": (
+            base_metrics is not None and challenger_metrics is not None
         ),
         "external_market_source_verified": False,
         "holdout_pre_registration_verified": False,
