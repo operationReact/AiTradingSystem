@@ -204,7 +204,16 @@ def _validate_universe_snapshot(
     item: IndiaUniverseSnapshot,
 ) -> IndiaUniverseSnapshot:
     validated = IndiaUniverseSnapshot.model_validate(item.model_dump(mode="python"))
-    payload = validated.model_dump(mode="json", exclude={"snapshot_fingerprint"})
+    payload = {
+        "contract_version": validated.contract_version,
+        "universe_id": validated.universe_id,
+        "as_of": validated.as_of.isoformat(),
+        "data_cutoff": validated.data_cutoff.isoformat(),
+        "members": [member.model_dump(mode="json") for member in validated.members],
+        "source_versions": dict(validated.source_versions),
+        "status": validated.status,
+        "can_authorize_capital": False,
+    }
     if validated.snapshot_fingerprint != canonical_fingerprint(payload):
         raise ValueError("source universe snapshot fingerprint mismatch")
     if validated.can_authorize_capital:
