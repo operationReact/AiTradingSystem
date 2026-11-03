@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .fingerprints import canonical_fingerprint
 from .india_context import IndiaUniverseMembership, IndiaUniverseSnapshot
@@ -26,6 +27,15 @@ class CrossSectionalScanMemberV1(BaseModel):
     index_memberships: list[str] = Field(max_length=32)
     source_membership_id: Annotated[str, Field(min_length=1, max_length=240)]
     member_fingerprint: Hash64
+
+    @model_validator(mode="after")
+    def validate_member_fingerprint(self) -> CrossSectionalScanMemberV1:
+        if self.index_memberships != sorted(self.index_memberships):
+            raise ValueError("scan member index memberships must be canonically ordered")
+        payload = self.model_dump(mode="json", exclude={"member_fingerprint"})
+        if self.member_fingerprint != canonical_fingerprint(payload):
+            raise ValueError("scan member fingerprint mismatch")
+        return self
 
 
 class CrossSectionalScanBatchV1(BaseModel):
@@ -51,6 +61,9 @@ class CrossSectionalScanBatchV1(BaseModel):
             raise ValueError("scan batch members must have unique identities")
         if identities != sorted(identities):
             raise ValueError("scan batch members must remain canonically ordered")
+        payload = self.model_dump(mode="json", exclude={"batch_fingerprint"})
+        if self.batch_fingerprint != canonical_fingerprint(payload):
+            raise ValueError("scan batch fingerprint mismatch")
         return self
 
 
@@ -64,8 +77,8 @@ class CrossSectionalScanPlanV1(BaseModel):
     )
     universe_contract_version: Literal["india-universe-snapshot.v1"]
     universe_id: Annotated[str, Field(min_length=1, max_length=120)]
-    scan_as_of: str
-    universe_data_cutoff: str
+    scan_as_of: datetime
+    universe_data_cutoff: datetime
     source_universe_fingerprint: Hash64
     source_universe_member_count: Annotated[int, Field(ge=1, le=1_000)]
     batch_size: Annotated[int, Field(ge=1, le=200)]
@@ -76,8 +89,17 @@ class CrossSectionalScanPlanV1(BaseModel):
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
 
+    @field_validator("scan_as_of", "universe_data_cutoff")
+    @classmethod
+    def timestamps_must_be_aware(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("scan plan timestamps must be timezone-aware")
+        return value
+
     @model_validator(mode="after")
     def validate_plan(self) -> CrossSectionalScanPlanV1:
+        if self.universe_data_cutoff > self.scan_as_of:
+            raise ValueError("universe data cutoff cannot exceed scan_as_of")
         if self.batch_count != len(self.batches):
             raise ValueError("scan plan batch_count must match batches")
         flattened = [member for batch in self.batches for member in batch.members]
@@ -97,6 +119,9 @@ class CrossSectionalScanPlanV1(BaseModel):
             if batch.member_count > self.batch_size:
                 raise ValueError("scan batch cannot exceed configured batch_size")
             expected_offset += batch.member_count
+        payload = self.model_dump(mode="json", exclude={"plan_fingerprint"})
+        if self.plan_fingerprint != canonical_fingerprint(payload):
+            raise ValueError("scan plan fingerprint mismatch")
         return self
 
 
@@ -166,7 +191,7 @@ def _scan_member(member: IndiaUniverseMembership) -> CrossSectionalScanMemberV1:
         "symbol": member.symbol,
         "series": member.series,
         "sector": member.sector,
-        "index_memberships": list(member.index_memberships),
+        "index_memberships": sorted(member.index_memberships),
         "source_membership_id": member.source_id,
     }
     return CrossSectionalScanMemberV1(
