@@ -10,6 +10,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -19,6 +20,7 @@ public class AiScannerService {
     private final RankedOpportunityProvider provider;
     private final Clock clock;
 
+    @Autowired
     public AiScannerService(RankedOpportunityProvider provider) {
         this(provider, Clock.systemUTC());
     }
