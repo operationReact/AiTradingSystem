@@ -76,6 +76,12 @@ def test_future_label_mutation_cannot_change_earlier_forecast_or_calibration() -
     payload = original.model_dump(mode="json", by_alias=True)
     # The next bar after the first forecast decision is a future target.
     payload["candles"][9]["close"] *= 1.01
+    payload["candles"][9]["high"] = max(
+        payload["candles"][9]["open"], payload["candles"][9]["close"]
+    ) * 1.001
+    payload["candles"][9]["low"] = min(
+        payload["candles"][9]["open"], payload["candles"][9]["close"]
+    ) * 0.999
     changed = MarketResearchExport.model_validate(payload)
     after = _causal_rows(changed, lookback=8, horizon=1)
     assert first.predicted_forward_return == after[0].predicted_forward_return
