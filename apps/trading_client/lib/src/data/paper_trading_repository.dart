@@ -336,7 +336,7 @@ abstract interface class PaperTradingRepository {
   Future<PaperOrderResult> cancelOrder(String orderId);
 }
 
-abstract interface class PaperOrderDetailRepository {
+abstract interface class PaperOrderDetailRepository implements PaperTradingRepository {
   Future<PaperOrderResult> fetchOrderDetail(String orderId);
 }
 
