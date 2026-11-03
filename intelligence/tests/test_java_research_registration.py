@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
+from test_india_independent_holdout import _run
 
 from aitrading_intelligence.java_research_registration import (
     JavaExperimentJobSnapshot,
@@ -13,7 +14,6 @@ from aitrading_intelligence.java_research_registration import (
     build_java_research_result_registration,
     derive_holdout_dataset_fingerprint,
 )
-from test_india_independent_holdout import _run
 
 NOW = datetime(2026, 11, 3, 18, tzinfo=UTC)
 EXPERIMENT_ID = UUID("11111111-1111-4111-8111-111111111111")
