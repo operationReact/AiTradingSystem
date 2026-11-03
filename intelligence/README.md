@@ -180,6 +180,55 @@ verified. A successfully registered result means the research computation
 finished, NOT that the model is approved for PAPER, SHADOW or LIVE trading.
 No broker order, deployment, or capital authorization is added.
 
+## V4-03 trusted Java result submission and read-back (opt-in, no trading)
+
+The one-shot `java_research_result_worker` consumes a **precomputed**
+`india-independent-holdout.v1` report, optionally with a
+`conditional-xgboost-benchmark.v1` child report. It uses the existing
+Spring ADMIN-only experiment-job API to:
+
+1. GET the explicit, already **RUNNING** Python experiment job
+2. GET the immutable experiment specification
+3. Confirm job/spec/dataset/target, research report fingerprints, runner
+   version, and unexpired Java claim lease
+4. POST **one** `INCONCLUSIVE` immutable result with its active claim token
+5. GET the Java result and completed job to verify fingerprints, lineage and
+   zero capital authority
+
+The tool **does not** register an experiment, claim/start a queue job, run
+model training, manage Java credentials, enable LIVE, or make broker calls.
+Only invoke it for an experiment previously created and started by an
+authorized Java control-plane operator/worker. The Java server rechecks RBAC,
+governance, worker claim and transaction uniqueness.
+
+```bash
+# Export a short-lived ADMIN credential through secure runtime secret injection.
+# Do not pass the bearer token as a CLI argument or put it in version control.
+export AITS_JAVA_ADMIN_BEARER_TOKEN='<runtime-injected-secret>'
+python -m aitrading_intelligence.java_research_result_worker \
+  https://your-governed-backend.example \
+  00000000-0000-4000-8000-000000000001 \
+  india-holdout-report.json
+# Optional: --xgboost-report xgboost-research-report.json
+unset AITS_JAVA_ADMIN_BEARER_TOKEN
+```
+
+HTTPS is required except HTTP to loopback for isolated local testing;
+redirects, embedded URL credentials, and automatic proxy environment access
+are disabled. Requests use a bounded timeout and never retry the non-idempotent
+POST. On a timeout or conflict the worker checks for an existing immutable
+Java result instead of posting again. Any discrepancy, authorization failure,
+expired lease, or ambiguous outcome is fail-closed; the worker never prints
+bearer secrets or claim tokens.
+
+A success receipt means only that Java **stored and read back**
+`INCONCLUSIVE` research evidence and marked its job `SUCCEEDED`.
+It does **not** prove genuine NSE/BSE inputs, pre-registered holdout, actual
+strategy profit, PAPER/SHADOW acceptance, deployment, or LIVE readiness.
+Tests use a simulated Java HTTP control-plane response; no real endpoint is
+contacted by CI. Runtime deployment and authoritative market-data
+verification remain separate acceptance requirements.
+
 ## Run locally
 
 ```bash
