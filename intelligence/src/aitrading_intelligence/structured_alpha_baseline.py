@@ -89,6 +89,8 @@ class StructuredAlphaBaselineReport(BaseModel):
             raise ValueError("challenger list must use canonical family order")
         if self.status == "INCONCLUSIVE" and self.research_leader is not None:
             raise ValueError("inconclusive research cannot select a leader")
+        if self.status == "INCONCLUSIVE" and not self.reason_codes:
+            raise ValueError("inconclusive research requires explicit reason codes")
         if self.status == "BASELINE_RETAINED" and self.research_leader != "CATBOOST":
             raise ValueError("baseline retained must select CATBOOST only")
         if self.status == "CHALLENGER_PROMISING" and self.research_leader not in {
@@ -207,7 +209,14 @@ def evaluate_structured_alpha_baseline(
         "catboost_net_return_after_costs": baseline.total_net_return,
         "status": status,
         "research_leader": leader,
-        "reason_codes": sorted(set(baseline_reasons)),
+        "reason_codes": sorted(set(
+            baseline_reasons
+            + [
+                f"{gate.model_family}:{reason}"
+                for gate in gates if gate.state == "INCONCLUSIVE"
+                for reason in gate.reason_codes
+            ]
+        )),
         "challengers": [gate.model_dump(mode="json") for gate in gates],
         "promotion_allowed": False,
         "can_authorize_capital": False,
