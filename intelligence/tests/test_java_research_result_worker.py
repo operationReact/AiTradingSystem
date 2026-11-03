@@ -285,10 +285,10 @@ def test_empty_admin_session_rejected_before_any_network(holdout) -> None:
     [
         ("", CSRF, "ADMIN session cookie"),
         ("bad;cookie", CSRF, "ADMIN session cookie"),
-        ("bad\\nvalue", CSRF, "ADMIN session cookie"),
+        ("bad\nvalue", CSRF, "ADMIN session cookie"),
         (SESSION, "", "ADMIN CSRF token"),
         (SESSION, "bad;csrf", "ADMIN CSRF token"),
-        (SESSION, "bad\\ncsrf", "ADMIN CSRF token"),
+        (SESSION, "bad\ncsrf", "ADMIN CSRF token"),
     ],
 )
 def test_bad_session_or_csrf_never_reaches_network(
