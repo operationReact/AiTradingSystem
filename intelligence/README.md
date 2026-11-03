@@ -116,6 +116,12 @@ python -m aitrading_intelligence.india_market_provenance audit \
   --holdout-report india-holdout-model-report.json
 ```
 
+Registration cannot be timestamped before its frozen market exports were generated,
+and source-custody records cannot predate the corresponding export. When a model
+result is included, every evaluated model family must have been named in the
+frozen candidate list; a post-hoc LightGBM/PyTorch/XGBoost trial is not silently
+accepted as a preregistered experiment.
+
 Any missing custody declaration, changed export/fees/model settings, invalid
 market-time candle, deficient India fee coverage, or report mismatch yields
 `INCONCLUSIVE` with explicit reason codes. Passing internal checks produces

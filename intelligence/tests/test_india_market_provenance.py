@@ -221,3 +221,44 @@ def test_candle_after_export_generation_is_inconclusive() -> None:
     report = audit_india_market_holdout(**inputs)
 
     assert "HOLDOUT_FETCH_AFTER_EXPORT_GENERATED" in report.reason_codes
+
+
+def test_result_model_families_must_be_in_the_frozen_registration() -> None:
+    inputs = _inputs()
+    inputs["registration"] = register_holdout_design(
+        inputs["training"], inputs["holdout"], inputs["fee_book"],
+        inputs["target"], inputs["config"],
+        registered_at=REGISTERED,
+        candidate_families=["CATBOOST"],
+    )
+    inputs["report"] = _run()  # The research runner evaluates CatBoost and LightGBM.
+    audited = audit_india_market_holdout(**inputs)
+
+    assert audited.assessment == "INCONCLUSIVE"
+    assert "UNREGISTERED_RESULT_MODEL_FAMILY" in audited.reason_codes
+
+
+def test_cannot_preregister_hashes_before_source_export_generation() -> None:
+    inputs = _inputs()
+    before_export_generation = datetime(2026, 11, 2, 10, tzinfo=UTC)
+    with pytest.raises(ValueError, match="cannot predate source export generation"):
+        register_holdout_design(
+            inputs["training"], inputs["holdout"], inputs["fee_book"],
+            inputs["target"], inputs["config"],
+            registered_at=before_export_generation,
+            candidate_families=["CATBOOST", "LIGHTGBM"],
+        )
+
+
+def test_custody_declaration_cannot_be_logged_before_export_exists() -> None:
+    inputs = _inputs()
+    too_early = datetime(2026, 11, 3, 11, tzinfo=UTC)
+    inputs["declarations"] = [
+        declaration.model_copy(update={"recorded_at": too_early})
+        for declaration in inputs["declarations"]
+    ]
+    audited = audit_india_market_holdout(**inputs)
+
+    assert audited.assessment == "INCONCLUSIVE"
+    assert "TRAINING_CUSTODY_LOGGED_BEFORE_EXPORT_GENERATED" in audited.reason_codes
+    assert "HOLDOUT_CUSTODY_LOGGED_BEFORE_EXPORT_GENERATED" in audited.reason_codes
