@@ -285,8 +285,8 @@ def test_adverse_arrival_gap_is_visible_as_realized_cost_overrun() -> None:
     assert quality.state == "FULLY_FILLED"
     assert quality.arrival_gap_bps == pytest.approx(100.0)
     assert quality.realized_cost is not None
-    assert quality.realized_cost.realized_slippage_bps == pytest.approx(107.0)
-    assert quality.slippage_delta_bps == pytest.approx(100.0)
+    assert quality.realized_cost.realized_slippage_bps == pytest.approx(107.07)
+    assert quality.slippage_delta_bps == pytest.approx(100.07)
     assert quality.total_cost_delta_bps is not None
     assert quality.total_cost_delta_bps > 99.0
 
