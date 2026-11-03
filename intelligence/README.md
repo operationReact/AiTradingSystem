@@ -135,6 +135,51 @@ holdout pre-registration and source authenticity are unverified; this screen
 does not correct for repeated unregistered experiments. It does not enroll a
 candidate in PAPER/SHADOW or authorize production/LIVE capital.
 
+## V4-03 Python -> Java research evidence bridge (research-only)
+
+`python-research-result-bridge.v1` prepares the existing ADMIN-only Java
+`POST /api/admin/model-governance/experiment-jobs/{jobId}/result` request
+from an immutable NSE/BSE holdout report (optionally paired with an immutable
+XGBoost benchmark report). **It does not send HTTP requests or claim a job.**
+
+The worker must already have registered an experiment spec, enqueued a
+`PYTHON_INTELLIGENCE` job with runner version exactly
+`india-independent-holdout.v1` or `conditional-xgboost-benchmark.v1`,
+obtained an active lease through Java `/claim`, and started that job.
+The runner computes `derive_holdout_dataset_fingerprint(holdout_report)` and
+pre-registers that digest as `experiment.dataset.datasetFingerprint`.
+The target label fingerprint must match
+`experiment.target.labelDefinitionFingerprint`, and the Java target name
+must be `forward-return-after-costs.v1`. Java's experiment spec, not this
+bridge, remains the authority for job identity and model-governance policy.
+
+```bash
+python -m aitrading_intelligence.java_research_registration \
+  java-experiment.json java-running-job.json india-holdout-report.json \
+  private-result-registration.json
+# Optional: --xgboost-report xgboost-research-report.json
+```
+
+The output is exactly the JSON body for Java's result endpoint. It includes
+the short-lived **claimToken**; the CLI writes it with restrictive file
+creation permissions (0600) and never prints the token. Use the authenticated
+ADMIN worker's established session to submit it before the Java lease expires.
+Do not commit, upload, or log this token-bearing request. A fresh Java lease
+and a new output path are required after expiry; the tool refuses overwrite.
+
+The bridge validates the exact Java experiment ID, spec fingerprint, dataset
+binding, target label, running Python runner version, and unexpired lease.
+It validates the source report fingerprint and, for XGBoost, its exact parent
+holdout report fingerprint. The Java server revalidates ADMIN authorization,
+job state, lease token, model governance, and immutable result uniqueness.
+
+**All these reports use assessment `INCONCLUSIVE`**, even if a model
+looks promising. Source authenticity, holdout preregistration, the Java
+multi-fold protocol and real trading economics have not been independently
+verified. A successfully registered result means the research computation
+finished, NOT that the model is approved for PAPER, SHADOW or LIVE trading.
+No broker order, deployment, or capital authorization is added.
+
 ## Run locally
 
 ```bash
