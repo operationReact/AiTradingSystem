@@ -39,7 +39,7 @@ class ExpectedEdgeRiskRankingConfigV1(BaseModel):
 
 
 class ExpectedEdgeRiskScoreV1(BaseModel):
-    """Auditable pre-outcome score used to replace raw probability/score ordering."""
+    """Auditable pre-outcome score used instead of raw probability ordering."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -75,18 +75,15 @@ class ExpectedEdgeRiskScoreV1(BaseModel):
             raise ValueError("edge/risk score as_of must be timezone-aware")
         return value
 
-    @field_validator("expected_net_edge_bps")
+    @field_validator(
+        "expected_net_edge_bps",
+        "positive_edge_strength",
+        "edge_to_risk_ratio",
+    )
     @classmethod
-    def edge_must_be_finite(cls, value: float) -> float:
+    def numeric_values_must_be_finite(cls, value: float) -> float:
         if not math.isfinite(value):
-            raise ValueError("expected net edge must be finite")
-        return value
-
-    @field_validator("positive_edge_strength", "edge_to_risk_ratio")
-    @classmethod
-    def derived_values_must_be_finite(cls, value: float) -> float:
-        if not math.isfinite(value):
-            raise ValueError("edge/risk derived values must be finite")
+            raise ValueError("edge/risk numeric values must be finite")
         return value
 
     @model_validator(mode="after")
@@ -164,14 +161,21 @@ class ExpectedEdgeRiskRankingV1(BaseModel):
             raise ValueError("reranked dataset must use expected-net-edge-risk policy")
         if self.reranked_dataset.ranked_member_count != self.score_count:
             raise ValueError("reranked rows must match edge/risk score count")
-        if len({score.source_ranking_row_fingerprint for score in self.scores}) != len(
-            self.scores
-        ):
+        source_rows = [score.source_ranking_row_fingerprint for score in self.scores]
+        candidates = [score.source_candidate_fingerprint for score in self.scores]
+        if len(set(source_rows)) != len(source_rows):
             raise ValueError("edge/risk scores must be unique by source ranking row")
-        if len({score.source_candidate_fingerprint for score in self.scores}) != len(
-            self.scores
-        ):
+        if len(set(candidates)) != len(candidates):
             raise ValueError("edge/risk scores must be unique by candidate")
+
+        expected_config_fingerprint = self.config.fingerprint
+        for score in self.scores:
+            if score.as_of != self.as_of:
+                raise ValueError("edge/risk score as_of must match ranking bundle")
+            if score.config_fingerprint != expected_config_fingerprint:
+                raise ValueError("edge/risk score config fingerprint mismatch")
+            _validate_score_derivations(score, self.config)
+
         ordered_scores = sorted(
             self.scores,
             key=lambda item: (
@@ -232,6 +236,15 @@ def rerank_by_expected_net_edge_risk(
             raise ValueError("selective decision symbol does not match ranking row")
         if decision.decision_as_of != source.as_of:
             raise ValueError("selective decision_as_of must equal frozen ranking as_of")
+        if not math.isclose(
+            decision.fused_score,
+            source_row.fused_score,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
+            raise ValueError("selective decision fused score does not match ranking row")
+        if decision.policy_decision == "TRADE" and source_row.candidate_action != "BUY":
+            raise ValueError("selective TRADE requires source candidate action BUY")
         decisions_by_candidate[candidate_fingerprint] = decision
 
     missing = set(rows_by_candidate) - set(decisions_by_candidate)
@@ -329,7 +342,9 @@ def _build_score(
             decision.uncertainty_score + coverage_penalty,
         ),
     )
-    positive_edge_strength = max(0.0, decision.expected_net_edge_bps) / config.edge_scale_bps
+    positive_edge_strength = (
+        max(0.0, decision.expected_net_edge_bps) / config.edge_scale_bps
+    )
     if decision.policy_decision == "TRADE":
         if decision.expected_net_edge_bps <= 0.0:
             raise ValueError("selective TRADE must have positive net edge for ranking")
@@ -378,6 +393,34 @@ def _validate_selective_decision(item: SelectiveDecisionV1) -> SelectiveDecision
     if decision.promotion_allowed or decision.can_authorize_capital:
         raise ValueError("selective decision cannot carry promotion or capital authority")
     return decision
+
+
+def _validate_score_derivations(
+    score: ExpectedEdgeRiskScoreV1,
+    config: ExpectedEdgeRiskRankingConfigV1,
+) -> None:
+    expected_penalty = (1.0 - score.expert_coverage) * config.coverage_penalty_weight
+    if not math.isclose(
+        score.coverage_penalty,
+        expected_penalty,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("edge/risk coverage penalty mismatch")
+    expected_risk = min(
+        1.0,
+        max(config.minimum_risk_score, score.uncertainty_score + expected_penalty),
+    )
+    if not math.isclose(score.risk_score, expected_risk, rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError("edge/risk risk_score mismatch")
+    expected_strength = max(0.0, score.expected_net_edge_bps) / config.edge_scale_bps
+    if not math.isclose(
+        score.positive_edge_strength,
+        expected_strength,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    ):
+        raise ValueError("edge/risk positive edge strength mismatch")
 
 
 def _score_payload(score: ExpectedEdgeRiskScoreV1) -> dict[str, object]:
