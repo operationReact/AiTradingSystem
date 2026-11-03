@@ -103,6 +103,30 @@ pre-registration, repeat-trial bias, liquidity/volume capacity, realistic fills,
 independent external data audits and PAPER/SHADOW success remain **unverified**.
 No model receives production champion, risk, broker or LIVE authority.
 
+## V4-03 conditional XGBoost benchmark (optional CPU research)
+
+The research-only `conditional-xgboost-benchmark.v1` compares bounded CPU XGBoost
+with the existing CatBoost baseline on exactly the same independently held-out
+NSE/BSE intraday market-history cohort. Install the optional pinned dependency
+using `pip install -r requirements-xgboost-cpu.txt`. The dedicated
+`python-xgboost.yml` CI workflow validates the real XGBoost implementation,
+without adding its runtime to the backend or regular Python intelligence image.
+
+The evaluation reuses the existing India holdout's source identity, causal
+train/holdout split, same-session targets, fee-book and spread/slippage checks.
+It records aligned after-cost returns and probabilities, paired block-bootstrap
+economic uplift, probability redundancy, calibration and drawdown regression,
+and XGBoost CPU fit/inference latency. Configuration bounds model size and
+maximum inference time. A candidate can only receive
+`RESEARCH_CANDIDATE_ONLY`; insufficient or non-additive evidence returns
+`INCONCLUSIVE` or `NOT_ADDITIVE` with explicit reasons.
+
+**Limitations:** Synthetic test fixtures do not establish Indian-market
+profitability. Trading fees and slippage require independently verified inputs;
+holdout pre-registration and source authenticity are unverified; this screen
+does not correct for repeated unregistered experiments. It does not enroll a
+candidate in PAPER/SHADOW or authorize production/LIVE capital.
+
 ## Run locally
 
 ```bash
