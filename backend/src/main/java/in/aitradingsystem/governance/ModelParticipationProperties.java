@@ -1,12 +1,14 @@
 package in.aitradingsystem.governance;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 /**
  * Global fail-closed participation switches. Per-model controls can only further restrict these bounds.
  * Environments not implemented for routine use remain disabled by default.
  */
+@Component
 @Validated
 @ConfigurationProperties(prefix = "app.governance.model-participation")
 public class ModelParticipationProperties {
