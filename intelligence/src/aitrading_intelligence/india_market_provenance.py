@@ -132,6 +132,8 @@ def register_holdout_design(
 ) -> IndiaHoldoutRegistration:
     """Freeze data, fees, labels and predeclared candidate families before evaluation."""
     _aware(registered_at)
+    if registered_at < max(training.generated_at, holdout.generated_at):
+        raise ValueError("registration cannot predate source export generation")
     families = sorted(set(candidate_families))
     if not candidate_families or families != candidate_families:
         raise ValueError("registered model family list must be unique and sorted")
@@ -217,6 +219,8 @@ def audit_india_market_holdout(
             reasons.add(label)
     if frozen.registered_at >= evaluation_started_at:
         reasons.add("NOT_REGISTERED_BEFORE_EVALUATION")
+    if frozen.registered_at < max(train.generated_at, test.generated_at):
+        reasons.add("REGISTRATION_PREDATES_SOURCE_EXPORT")
     if not train.candles or not test.candles:
         reasons.add("MISSING_MARKET_CANDLES")
     if (train.exchange, train.instrument_id, train.symbol_token) != (
@@ -250,6 +254,8 @@ def audit_india_market_holdout(
             reasons.add(f"{row.export_role}_CUSTODY_PROVIDER_NOT_IN_EXPORT")
         if row.recorded_at > evaluation_started_at:
             reasons.add(f"{row.export_role}_CUSTODY_LOGGED_AFTER_EVALUATION")
+        if row.recorded_at < expected.generated_at:
+            reasons.add(f"{row.export_role}_CUSTODY_LOGGED_BEFORE_EXPORT_GENERATED")
     for export in (train, test):
         for bar in export.candles:
             try:
@@ -264,6 +270,11 @@ def audit_india_market_holdout(
 
     if report is not None:
         actual_report = IndiaHoldoutReport.model_validate(report.model_dump(mode="python"))
+        if any(
+            result.model_family not in frozen.candidate_families
+            for result in actual_report.results
+        ):
+            reasons.add("UNREGISTERED_RESULT_MODEL_FAMILY")
         for label, expected, actual in (
             ("REPORT_TRAINING_SOURCE_MISMATCH", actual_report.train_export_fingerprint, train_hash),
             ("REPORT_HOLDOUT_SOURCE_MISMATCH", actual_report.holdout_export_fingerprint,
