@@ -425,11 +425,15 @@ def _validate_score_derivations(
 
 
 def _score_payload(score: ExpectedEdgeRiskScoreV1) -> dict[str, object]:
-    return score.model_dump(mode="json", exclude={"score_fingerprint"})
+    payload = score.model_dump(mode="json", exclude={"score_fingerprint"})
+    payload["as_of"] = score.as_of.isoformat()
+    return payload
 
 
 def _ranking_payload(ranking: ExpectedEdgeRiskRankingV1) -> dict[str, object]:
-    return ranking.model_dump(mode="json", exclude={"ranking_fingerprint"})
+    payload = ranking.model_dump(mode="json", exclude={"ranking_fingerprint"})
+    payload["as_of"] = ranking.as_of.isoformat()
+    return payload
 
 
 __all__ = [
