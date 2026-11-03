@@ -20,7 +20,8 @@ from aitrading_intelligence.java_research_result_worker import (
 )
 
 ORIGIN = "https://java.example.test"
-TOKEN = "sample-test-admin-token"
+SESSION = "sample-test-admin-session"
+CSRF = "sample-test-csrf-token"
 
 
 @pytest.fixture(scope="module")
@@ -73,7 +74,10 @@ def _fake_java(holdout, snapshots, *, mode="created"):
     specs = f"/api/admin/model-governance/experiments/{experiment.experimentId}"
 
     def route(request: httpx.Request) -> httpx.Response:
-        assert request.headers.get("Authorization") == f"Bearer {TOKEN}"
+        assert request.headers.get("Authorization") is None
+        assert f"ATS_SESSION={SESSION}" in request.headers.get("Cookie", "")
+        if request.method == "POST":
+            assert request.headers.get("X-CSRF-Token") == CSRF
         assert request.headers.get("Accept") == "application/json"
         state["requests"].append((request.method, request.url.path))
         path = request.url.path
@@ -133,7 +137,8 @@ def _fake_java(holdout, snapshots, *, mode="created"):
 def _submit(holdout, transport, **kwargs):
     return submit_governed_java_research_result(
         backend_url=ORIGIN,
-        admin_bearer_token=TOKEN,
+        admin_session_cookie=SESSION,
+        admin_csrf_token=CSRF,
         job_id=JOB_ID,
         holdout=holdout,
         now=NOW,
@@ -158,7 +163,8 @@ def test_trusted_worker_posts_once_then_reads_back_java_result_and_job(
     assert [method for method, _ in state["requests"]] == [
         "GET", "GET", "POST", "GET", "GET",
     ]
-    assert TOKEN not in receipt.model_dump_json()
+    assert SESSION not in receipt.model_dump_json()
+    assert CSRF not in receipt.model_dump_json()
     assert str(snapshots[1].claimToken) not in receipt.model_dump_json()
     assert (
         JavaResearchResultReceipt.model_validate(receipt.model_dump(mode="json"))
@@ -184,7 +190,8 @@ def test_failed_post_does_not_retry_and_never_exposes_admin_token(
     with pytest.raises(JavaRegistrationError, match="outcome is ambiguous") as exc:
         _submit(holdout, transport)
     assert state["posts"] == 1
-    assert TOKEN not in str(exc.value)
+    assert SESSION not in str(exc.value)
+    assert CSRF not in str(exc.value)
     assert str(snapshots[1].claimToken) not in str(exc.value)
 
 
@@ -253,18 +260,45 @@ def test_never_send_admin_credentials_to_untrusted_origin(holdout, origin) -> No
     with pytest.raises(ValueError, match="Java backend|Plaintext"):
         submit_governed_java_research_result(
             backend_url=origin,
-            admin_bearer_token=TOKEN,
+            admin_session_cookie=SESSION,
+            admin_csrf_token=CSRF,
             job_id=JOB_ID,
             holdout=holdout,
             now=NOW,
         )
 
 
-def test_empty_admin_token_rejected_before_any_network(holdout) -> None:
-    with pytest.raises(ValueError, match="ADMIN bearer token"):
+def test_empty_admin_session_rejected_before_any_network(holdout) -> None:
+    with pytest.raises(ValueError, match="ADMIN session cookie"):
         submit_governed_java_research_result(
             backend_url=ORIGIN,
-            admin_bearer_token="",
+            admin_session_cookie="",
+            admin_csrf_token=CSRF,
+            job_id=JOB_ID,
+            holdout=holdout,
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("session", "csrf", "expected"),
+    [
+        ("", CSRF, "ADMIN session cookie"),
+        ("bad;cookie", CSRF, "ADMIN session cookie"),
+        ("bad\nvalue", CSRF, "ADMIN session cookie"),
+        (SESSION, "", "ADMIN CSRF token"),
+        (SESSION, "bad;csrf", "ADMIN CSRF token"),
+        (SESSION, "bad\ncsrf", "ADMIN CSRF token"),
+    ],
+)
+def test_bad_session_or_csrf_never_reaches_network(
+    holdout, session, csrf, expected
+) -> None:
+    with pytest.raises(ValueError, match=expected):
+        submit_governed_java_research_result(
+            backend_url=ORIGIN,
+            admin_session_cookie=session,
+            admin_csrf_token=csrf,
             job_id=JOB_ID,
             holdout=holdout,
             now=NOW,

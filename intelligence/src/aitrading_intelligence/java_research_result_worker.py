@@ -188,7 +188,8 @@ def _persist_once(
 def submit_governed_java_research_result(
     *,
     backend_url: str,
-    admin_bearer_token: str,
+    admin_session_cookie: str,
+    admin_csrf_token: str,
     job_id: UUID,
     holdout: IndiaHoldoutReport,
     xgboost: XGBoostConditionalBenchmarkReport | None = None,
@@ -202,8 +203,21 @@ def submit_governed_java_research_result(
     The output proves an immutable Java *INCONCLUSIVE* record was read back.
     """
     origin = _validated_origin(backend_url)
-    if not admin_bearer_token or admin_bearer_token != admin_bearer_token.strip():
-        raise ValueError("A nonblank ADMIN bearer token is required")
+    # Java's ADMIN control plane uses ATS_SESSION + X-CSRF-Token. Legacy X-API-Key
+    # supplies only ROLE_OPERATOR and a bearer token has no auth filter.
+    for secret, label in (
+        (admin_session_cookie, "ADMIN session cookie"),
+        (admin_csrf_token, "ADMIN CSRF token"),
+    ):
+        if (
+            not secret
+            or secret != secret.strip()
+            or ";" in secret
+            or any(ord(c) < 0x20 or ord(c) == 0x7F for c in secret)
+            or any(c.isspace() for c in secret)
+            or len(secret) > 4096
+        ):
+            raise ValueError(f"A valid {label} is required")
     if job_id.int == 0:
         raise ValueError("An actual experiment job ID is required")
     timestamp = now if now is not None else datetime.now(UTC)
@@ -212,10 +226,11 @@ def submit_governed_java_research_result(
 
     job_path = f"{API_PREFIX}/experiment-jobs/{job_id}"
     result_path = f"{job_path}/result"
-    headers = {"Authorization": f"Bearer {admin_bearer_token}", "Accept": "application/json"}
+    headers = {"Accept": "application/json", "X-CSRF-Token": admin_csrf_token}
     with httpx.Client(
         base_url=origin,
         headers=headers,
+        cookies={"ATS_SESSION": admin_session_cookie},
         follow_redirects=False,
         timeout=httpx.Timeout(10.0),
         trust_env=False,
@@ -292,9 +307,13 @@ def main() -> None:
     parser.add_argument("holdout_report", type=Path)
     parser.add_argument("--xgboost-report", type=Path)
     args = parser.parse_args()
-    token = os.environ.get("AITS_JAVA_ADMIN_BEARER_TOKEN", "")
-    if not token:
-        parser.error("AITS_JAVA_ADMIN_BEARER_TOKEN is required (never use CLI token arguments)")
+    session = os.environ.get("AITS_JAVA_ADMIN_SESSION", "")
+    csrf = os.environ.get("AITS_JAVA_ADMIN_CSRF_TOKEN", "")
+    if not session or not csrf:
+        parser.error(
+            "AITS_JAVA_ADMIN_SESSION and AITS_JAVA_ADMIN_CSRF_TOKEN are required "
+            "(never pass authentication secrets as CLI arguments)"
+        )
     holdout = IndiaHoldoutReport.model_validate_json(
         args.holdout_report.read_text(encoding="utf-8")
     )
@@ -304,7 +323,8 @@ def main() -> None:
         ) if args.xgboost_report is not None else None
     )
     receipt = submit_governed_java_research_result(
-        backend_url=args.backend_origin, admin_bearer_token=token,
+        backend_url=args.backend_origin,
+        admin_session_cookie=session, admin_csrf_token=csrf,
         job_id=args.job_id, holdout=holdout, xgboost=xgboost,
     )
     # The receipt is safe to log; it never includes the claim token or bearer secret.
