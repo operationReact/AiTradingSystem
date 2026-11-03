@@ -49,6 +49,7 @@ class TripleBarrierTargetV1(BaseModel):
     )
     symbol: Annotated[str, Field(pattern=r"^[A-Z0-9&._-]{1,32}$")]
     as_of: datetime
+    label_as_of: datetime
     target_observed_at: datetime
     bar_interval: BarInterval
     horizon_bars: Annotated[int, Field(ge=1, le=390)]
@@ -75,7 +76,7 @@ class TripleBarrierTargetV1(BaseModel):
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
 
-    @field_validator("as_of", "target_observed_at", "first_touch_bar_at")
+    @field_validator("as_of", "label_as_of", "target_observed_at", "first_touch_bar_at")
     @classmethod
     def timestamps_must_be_aware(cls, value: datetime | None) -> datetime | None:
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
@@ -91,8 +92,12 @@ class TripleBarrierTargetV1(BaseModel):
 
     @model_validator(mode="after")
     def validate_target(self) -> TripleBarrierTargetV1:
+        if self.label_as_of <= self.as_of:
+            raise ValueError("label cutoff must follow decision time")
         if self.target_observed_at <= self.as_of:
             raise ValueError("target observation must follow decision time")
+        if self.target_observed_at > self.label_as_of:
+            raise ValueError("target observation cannot exceed the frozen label cutoff")
         if self.observed_bar_count != len(self.source_bar_fingerprints):
             raise ValueError("observed_bar_count must match source bar lineage")
         if len(set(self.source_bar_fingerprints)) != len(self.source_bar_fingerprints):
@@ -100,16 +105,26 @@ class TripleBarrierTargetV1(BaseModel):
         if self.observed_bar_count > self.horizon_bars:
             raise ValueError("observed bars cannot exceed the configured horizon")
 
-        expected_upper = self.reference_price * (1.0 + self.upper_barrier_bps / 10_000.0)
-        expected_lower = self.reference_price * (1.0 - self.lower_barrier_bps / 10_000.0)
+        expected_upper = self.reference_price * (
+            1.0 + self.upper_barrier_bps / 10_000.0
+        )
+        expected_lower = self.reference_price * (
+            1.0 - self.lower_barrier_bps / 10_000.0
+        )
         if expected_lower <= 0.0:
             raise ValueError("lower barrier must remain positive")
         if not math.isclose(
-            self.upper_barrier_price, expected_upper, rel_tol=0.0, abs_tol=1e-12
+            self.upper_barrier_price,
+            expected_upper,
+            rel_tol=0.0,
+            abs_tol=1e-12,
         ):
             raise ValueError("upper barrier price does not match the target policy")
         if not math.isclose(
-            self.lower_barrier_price, expected_lower, rel_tol=0.0, abs_tol=1e-12
+            self.lower_barrier_price,
+            expected_lower,
+            rel_tol=0.0,
+            abs_tol=1e-12,
         ):
             raise ValueError("lower barrier price does not match the target policy")
 
@@ -152,18 +167,29 @@ class TripleBarrierTargetV1(BaseModel):
                 raise ValueError("vertical outcome must use neutral label 0")
             if self.observed_bar_count != self.horizon_bars:
                 raise ValueError("vertical outcome requires the full configured horizon")
-            if self.exit_price is None or self.gross_return is None or self.net_return is None:
+            if (
+                self.exit_price is None
+                or self.gross_return is None
+                or self.net_return is None
+            ):
                 raise ValueError("vertical outcome requires exit and return evidence")
             expected_gross = (self.exit_price / self.reference_price) - 1.0
             if not math.isclose(
-                self.gross_return, expected_gross, rel_tol=0.0, abs_tol=1e-12
+                self.gross_return,
+                expected_gross,
+                rel_tol=0.0,
+                abs_tol=1e-12,
             ):
                 raise ValueError("vertical gross return mismatch")
             self._validate_net_return()
         else:
             if self.label is not None:
                 raise ValueError("ambiguous same-bar touch must abstain from a label")
-            if self.exit_price is not None or self.gross_return is not None or self.net_return is not None:
+            if (
+                self.exit_price is not None
+                or self.gross_return is not None
+                or self.net_return is not None
+            ):
                 raise ValueError("ambiguous same-bar touch cannot invent realized returns")
 
         if self.target_fingerprint != canonical_fingerprint(_target_payload(self)):
@@ -179,12 +205,24 @@ class TripleBarrierTargetV1(BaseModel):
     ) -> None:
         if self.label != expected_label:
             raise ValueError("barrier outcome label mismatch")
-        if self.exit_price is None or self.gross_return is None or self.net_return is None:
+        if (
+            self.exit_price is None
+            or self.gross_return is None
+            or self.net_return is None
+        ):
             raise ValueError("resolved barrier outcome requires exit and return evidence")
-        if not math.isclose(self.exit_price, expected_exit, rel_tol=0.0, abs_tol=1e-12):
+        if not math.isclose(
+            self.exit_price,
+            expected_exit,
+            rel_tol=0.0,
+            abs_tol=1e-12,
+        ):
             raise ValueError("barrier exit price mismatch")
         if not math.isclose(
-            self.gross_return, expected_gross, rel_tol=0.0, abs_tol=1e-12
+            self.gross_return,
+            expected_gross,
+            rel_tol=0.0,
+            abs_tol=1e-12,
         ):
             raise ValueError("barrier gross return mismatch")
         self._validate_net_return()
@@ -194,7 +232,10 @@ class TripleBarrierTargetV1(BaseModel):
         assert self.net_return is not None
         expected_net = self.gross_return - self.round_trip_cost_bps / 10_000.0
         if not math.isclose(
-            self.net_return, expected_net, rel_tol=0.0, abs_tol=1e-12
+            self.net_return,
+            expected_net,
+            rel_tol=0.0,
+            abs_tol=1e-12,
         ):
             raise ValueError("net return must equal gross return minus round-trip cost")
 
@@ -212,7 +253,9 @@ def build_triple_barrier_targets(
         raise ValueError("label_as_of must be timezone-aware")
 
     checked_rows = [_validate_feature_row(row) for row in rows]
-    checked_bars = [MarketBar.model_validate(bar.model_dump(mode="python")) for bar in bars]
+    checked_bars = [
+        MarketBar.model_validate(bar.model_dump(mode="python")) for bar in bars
+    ]
 
     grouped_bars: dict[str, list[MarketBar]] = defaultdict(list)
     for bar in checked_bars:
@@ -226,6 +269,8 @@ def build_triple_barrier_targets(
 
     targets: list[TripleBarrierTargetV1] = []
     for row in sorted(checked_rows, key=lambda item: (item.symbol, item.as_of)):
+        if row.as_of >= label_as_of:
+            continue
         if "market.close" not in row.features:
             raise ValueError("market.close is required for triple-barrier targets")
         reference_price = float(row.features["market.close"])
@@ -238,7 +283,15 @@ def build_triple_barrier_targets(
         if len(future_bars) < spec.horizon_bars:
             continue
         horizon = future_bars[: spec.horizon_bars]
-        targets.append(_build_target(row, horizon, spec, reference_price))
+        targets.append(
+            _build_target(
+                row,
+                horizon,
+                spec,
+                reference_price,
+                label_as_of=label_as_of,
+            )
+        )
 
     if not targets:
         raise ValueError("no complete triple-barrier targets exist at label_as_of")
@@ -250,6 +303,8 @@ def _build_target(
     horizon: Sequence[MarketBar],
     spec: TripleBarrierTargetSpecV1,
     reference_price: float,
+    *,
+    label_as_of: datetime,
 ) -> TripleBarrierTargetV1:
     upper_price = reference_price * (1.0 + spec.upper_barrier_bps / 10_000.0)
     lower_price = reference_price * (1.0 - spec.lower_barrier_bps / 10_000.0)
@@ -296,11 +351,14 @@ def _build_target(
         if gross_return is None
         else gross_return - spec.round_trip_cost_bps / 10_000.0
     )
-    source_bar_fingerprints = [canonical_fingerprint(_bar_payload(bar)) for bar in used_bars]
+    source_bar_fingerprints = [
+        canonical_fingerprint(_bar_payload(bar)) for bar in used_bars
+    ]
     payload = {
         "target_version": TRIPLE_BARRIER_TARGET_VERSION,
         "symbol": row.symbol,
         "as_of": row.as_of.isoformat(),
+        "label_as_of": label_as_of.isoformat(),
         "target_observed_at": target_observed_at.isoformat(),
         "bar_interval": spec.bar_interval,
         "horizon_bars": spec.horizon_bars,
@@ -368,6 +426,7 @@ def _target_payload(target: TripleBarrierTargetV1) -> dict[str, object]:
         "target_version": target.target_version,
         "symbol": target.symbol,
         "as_of": target.as_of.isoformat(),
+        "label_as_of": target.label_as_of.isoformat(),
         "target_observed_at": target.target_observed_at.isoformat(),
         "bar_interval": target.bar_interval,
         "horizon_bars": target.horizon_bars,
