@@ -256,7 +256,9 @@ def submit_governed_java_research_result(
             or finished_job.get("status") != "SUCCEEDED"
             or finished_job.get("canAuthorizeCapital") is not False
         ):
-            raise JavaRegistrationError("Java job did not enter SUCCEEDED after result registration")
+            raise JavaRegistrationError(
+                "Java job did not enter SUCCEEDED after result registration"
+            )
 
     receipt = {
         "contract_version": "java-research-result-receipt.v1",
