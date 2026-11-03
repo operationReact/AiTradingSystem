@@ -76,6 +76,57 @@ pip install -e '.[dev]'
 
 A trained PyTorch candidate remains a **challenger**. It cannot enter signal fusion as an accepted model until it beats the V2-06 baselines under later out-of-sample, replay, regime, cost/slippage and governance gates.
 
+## V4-03 frozen NSE/BSE cohort and custody preflight (research only)
+
+`india-market-provenance-preflight.v1` freezes the **exact source exports,
+fee book, target, feature config, and declared model families** in
+`india-holdout-pre-registration.v1`. Its create-once local registration is a
+content-addressed record, **not an external trusted timestamp**. Run
+`register` before inspecting the holdout's model outcomes; never use it to
+backdate research or claim prospective evaluation.
+
+```bash
+python -m aitrading_intelligence.india_market_provenance register \
+  train-market-history.json holdout-market-history.json india-fee-book.json \
+  target-spec.json holdout-config.json frozen-holdout-registration.json \
+  --candidate-families CATBOOST,LIGHTGBM
+# Optional families must be uniquely sorted: CATBOOST,LIGHTGBM,PYTORCH,XGBOOST
+```
+
+The tool creates the registration file only if it does not already exist,
+with restricted file permissions. Preserve an unmodified copy in the
+approved evidence store. Its creation time comes from the operator's system
+clock and is **not** a trusted third-party pre-registration attestation.
+
+To audit, supply two explicit `SourceCustodyDeclaration` records, one
+`TRAINING` and one `HOLDOUT`, with their matching frozen export fingerprints,
+declared providers, raw capture SHA-256 fingerprints, acquisition references,
+license references and capture log times. These values are **declarations**,
+not independently authenticated provider receipts. The auditor checks
+registration/report fingerprints, instrument and provider consistency,
+nonoverlapping windows, five-minute NSE/BSE cash-session candle timing,
+OHLC integrity, ingestion/availability timing, and effective India fee
+schedule coverage for every market session.
+
+```bash
+python -m aitrading_intelligence.india_market_provenance audit \
+  train-market-history.json holdout-market-history.json india-fee-book.json \
+  target-spec.json holdout-config.json frozen-holdout-registration.json \
+  --source-declarations custody-declarations.json \
+  --holdout-report india-holdout-model-report.json
+```
+
+Any missing custody declaration, changed export/fees/model settings, invalid
+market-time candle, deficient India fee coverage, or report mismatch yields
+`INCONCLUSIVE` with explicit reason codes. Passing internal checks produces
+only `CONSISTENT_BUT_UNVERIFIED`. Even this outcome has immutable
+`data_source_independently_verified=false`,
+`preregistration_independently_timestamped=false`,
+`market_fee_schedule_independently_verified=false`, and no model promotion or
+capital authority. Independently authenticated exchange/broker receipts,
+data-use licenses, third-party registration timestamp, real OOS financial
+results, and PAPER/SHADOW qualification remain **open**.
+
 ## V4-03 independent Indian-market holdout runner (research only)
 
 This runner consumes **two distinct** Java `market-history.v1` exports of the same
