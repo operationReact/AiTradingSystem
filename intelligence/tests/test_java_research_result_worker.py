@@ -261,7 +261,7 @@ def test_never_send_admin_credentials_to_untrusted_origin(holdout, origin) -> No
         submit_governed_java_research_result(
             backend_url=origin,
             admin_session_cookie=SESSION,
-        admin_csrf_token=CSRF,
+            admin_csrf_token=CSRF,
             job_id=JOB_ID,
             holdout=holdout,
             now=NOW,
@@ -274,6 +274,31 @@ def test_empty_admin_session_rejected_before_any_network(holdout) -> None:
             backend_url=ORIGIN,
             admin_session_cookie="",
             admin_csrf_token=CSRF,
+            job_id=JOB_ID,
+            holdout=holdout,
+            now=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("session", "csrf", "expected"),
+    [
+        ("", CSRF, "ADMIN session cookie"),
+        ("bad;cookie", CSRF, "ADMIN session cookie"),
+        ("bad\\nvalue", CSRF, "ADMIN session cookie"),
+        (SESSION, "", "ADMIN CSRF token"),
+        (SESSION, "bad;csrf", "ADMIN CSRF token"),
+        (SESSION, "bad\\ncsrf", "ADMIN CSRF token"),
+    ],
+)
+def test_bad_session_or_csrf_never_reaches_network(
+    holdout, session, csrf, expected
+) -> None:
+    with pytest.raises(ValueError, match=expected):
+        submit_governed_java_research_result(
+            backend_url=ORIGIN,
+            admin_session_cookie=session,
+            admin_csrf_token=csrf,
             job_id=JOB_ID,
             holdout=holdout,
             now=NOW,
