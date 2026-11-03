@@ -299,19 +299,63 @@ def audit_india_market_holdout(
     )
 
 
+def _load_design_inputs(args: argparse.Namespace):
+    return (
+        load_market_export(args.training_export),
+        load_market_export(args.holdout_export),
+        IndiaFeeTaxBookV1.model_validate_json(
+            args.fee_book.read_text(encoding="utf-8")
+        ),
+        ForwardReturnTargetSpec.model_validate_json(
+            args.target.read_text(encoding="utf-8")
+        ),
+        IndiaHoldoutConfig.model_validate_json(
+            args.config.read_text(encoding="utf-8")
+        ),
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Audit frozen Indian-market research evidence; never certify provenance"
+        description="Freeze an offline India holdout or audit its unverified source custody"
     )
-    parser.add_argument("registration", type=Path)
-    parser.add_argument("training_export", type=Path)
-    parser.add_argument("holdout_export", type=Path)
-    parser.add_argument("fee_book", type=Path)
-    parser.add_argument("target", type=Path)
-    parser.add_argument("config", type=Path)
-    parser.add_argument("--source-declarations", type=Path)
-    parser.add_argument("--holdout-report", type=Path)
+    commands = parser.add_subparsers(dest="command", required=True)
+    registration_parser = commands.add_parser("register")
+    audit_parser = commands.add_parser("audit")
+    for subparser in (registration_parser, audit_parser):
+        subparser.add_argument("training_export", type=Path)
+        subparser.add_argument("holdout_export", type=Path)
+        subparser.add_argument("fee_book", type=Path)
+        subparser.add_argument("target", type=Path)
+        subparser.add_argument("config", type=Path)
+    registration_parser.add_argument("output", type=Path)
+    registration_parser.add_argument(
+        "--candidate-families", default="CATBOOST,LIGHTGBM",
+        help="Sorted, comma-separated preregistered family names",
+    )
+    audit_parser.add_argument("registration", type=Path)
+    audit_parser.add_argument("--source-declarations", type=Path)
+    audit_parser.add_argument("--holdout-report", type=Path)
     args = parser.parse_args()
+
+    training, holdout, book, target, config = _load_design_inputs(args)
+    if args.command == "register":
+        families = args.candidate_families.split(",")
+        registration = register_holdout_design(
+            training, holdout, book, target, config,
+            registered_at=datetime.now(UTC),
+            candidate_families=families,
+        )
+        # Prevent overwriting a frozen design with a later one after evaluation.
+        import os
+
+        descriptor = os.open(str(args.output), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(registration.model_dump(mode="json"), stream, sort_keys=True)
+            stream.write("\\n")
+        print(registration.registration_fingerprint)
+        return
+
     declarations = (
         [SourceCustodyDeclaration.model_validate(x) for x in json.loads(
             args.source_declarations.read_text(encoding="utf-8")
@@ -321,13 +365,7 @@ def main() -> None:
         IndiaHoldoutRegistration.model_validate_json(
             args.registration.read_text(encoding="utf-8")
         ),
-        load_market_export(args.training_export),
-        load_market_export(args.holdout_export),
-        IndiaFeeTaxBookV1.model_validate_json(args.fee_book.read_text(encoding="utf-8")),
-        ForwardReturnTargetSpec.model_validate_json(
-            args.target.read_text(encoding="utf-8")
-        ),
-        IndiaHoldoutConfig.model_validate_json(args.config.read_text(encoding="utf-8")),
+        training, holdout, book, target, config,
         evaluation_started_at=datetime.now(UTC),
         declarations=declarations,
         report=(
