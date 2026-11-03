@@ -3,6 +3,16 @@ import 'package:flutter/material.dart';
 import '../data/paper_trading_repository.dart';
 import 'execution_quality_card.dart';
 
+extension PaperOrderDetailCapability on PaperTradingRepository {
+  Future<PaperOrderResult> fetchOrderDetail(String orderId) {
+    final repository = this;
+    if (repository is PaperOrderDetailRepository) {
+      return repository.fetchOrderDetail(orderId);
+    }
+    throw StateError('PAPER order detail capability is unavailable');
+  }
+}
+
 class ExecutionQualityPanel extends StatelessWidget {
   const ExecutionQualityPanel({
     required this.detail,
