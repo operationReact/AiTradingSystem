@@ -364,7 +364,7 @@ class HttpPaperTradingRepository implements PaperTradingRepository, PaperOrderDe
 
   @override
   Future<PaperOrderResult> fetchOrderDetail(String orderId) async {
-    final decoded = await api.getJson('/api/paper-trades/$orderId');
+    final decoded = await api.getJson('/api/paper-orders/$orderId');
     if (decoded is! Map) throw const ApiTransportFailure('INVALID_PAPER_ORDER_DETAIL_RESPONSE', null);
     return PaperOrderResult.fromJson(Map<String, dynamic>.from(decoded));
   }
