@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from .execution_plan import (
     EXECUTION_COST_MODEL_VERSION,
-    EXECUTION_PLAN_VERSION,
     ExecutionPlanV1,
 )
 from .fill_simulator import FILL_SIMULATOR_VERSION, FillSimulationResultV1
