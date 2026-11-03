@@ -10,9 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .fingerprints import canonical_fingerprint
 from .fusion import (
     FUSION_VERSION,
+    V2_CHAMPION_FUSION_POLICY,
     FusionFamily,
     FusionRequest,
-    V2_CHAMPION_FUSION_POLICY,
 )
 from .fusion_quality_multipliers import FusionExpertQualityMultiplierV1
 from .regime_fusion_policy import (
