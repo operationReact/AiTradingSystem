@@ -206,7 +206,9 @@ class OverfitDiagnosticsReportV1(BaseModel):
             else "INCONCLUSIVE"
         )
         if self.state != expected_state:
-            raise ValueError("overall overfit diagnostic state must reflect both component diagnostics")
+            raise ValueError(
+                "overall diagnostic state must reflect both component diagnostics"
+            )
         if self.report_fingerprint != canonical_fingerprint(_report_payload(self)):
             raise ValueError("overfit diagnostic report fingerprint mismatch")
         return self
