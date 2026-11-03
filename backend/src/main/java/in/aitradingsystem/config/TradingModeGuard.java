@@ -19,4 +19,12 @@ public class TradingModeGuard {
                 + "'. This build has no live broker order adapter; only PAPER is allowed.");
         }
     }
+
+    /**
+     * Separate capital-authority gate used by model governance. This remains closed until the live
+     * broker adapter and the independent LIVE approval gates are implemented and reviewed.
+     */
+    public boolean isLiveCapitalAuthorityOpen() {
+        return false;
+    }
 }
