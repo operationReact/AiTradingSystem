@@ -13,6 +13,7 @@ from aitrading_intelligence.india_fee_tax import (
 )
 from aitrading_intelligence.india_independent_holdout import (
     IndiaHoldoutReport,
+    _build_examples,
     evaluate_india_independent_holdout,
 )
 from aitrading_intelligence.market_source import MarketResearchExport
@@ -97,6 +98,26 @@ def _run(*, training=None, holdout=None, target=None, fee_book=None, pytorch=Fal
         fee_book or _fee_book(),
         target or _target(),
         include_pytorch=pytorch,
+    )
+
+
+def test_intraday_horizon_does_not_cross_market_session_boundary() -> None:
+    target = _target()
+    examples = _build_examples(_export(HOLDOUT_DAYS), target)
+
+    assert len(examples) > 30
+    assert all(
+        example.as_of.astimezone(IST).date()
+        == example.target_observed_at.astimezone(IST).date()
+        for example in examples
+    )
+    assert any(
+        example.as_of.astimezone(IST).date() == HOLDOUT_DAYS[0]
+        for example in examples
+    )
+    assert any(
+        example.as_of.astimezone(IST).date() == HOLDOUT_DAYS[1]
+        for example in examples
     )
 
 
