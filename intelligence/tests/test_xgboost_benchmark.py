@@ -5,6 +5,13 @@ import math
 
 import pytest
 from pydantic import ValidationError
+from test_india_independent_holdout import (
+    HOLDOUT_DAYS,
+    TRAIN_DAYS,
+    _export,
+    _fee_book,
+    _target,
+)
 
 from aitrading_intelligence.india_independent_holdout import IndiaHoldoutConfig
 from aitrading_intelligence.xgboost_benchmark import (
@@ -12,13 +19,6 @@ from aitrading_intelligence.xgboost_benchmark import (
     XGBoostResearchConfig,
     XGBoostScreenPolicy,
     evaluate_conditional_xgboost_benchmark,
-)
-from test_india_independent_holdout import (
-    HOLDOUT_DAYS,
-    TRAIN_DAYS,
-    _export,
-    _fee_book,
-    _target,
 )
 
 pytestmark = pytest.mark.skipif(
