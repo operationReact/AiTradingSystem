@@ -152,6 +152,7 @@ def test_challenger_with_mismatched_sample_count_is_inconclusive() -> None:
     assert report.status == "INCONCLUSIVE"
     assert report.research_leader is None
     assert "MISMATCHED_EVALUATION_COUNTS" in report.challengers[0].reason_codes
+    assert "LIGHTGBM:MISMATCHED_EVALUATION_COUNTS" in report.reason_codes
 
 
 def test_calibration_or_drawdown_regression_blocks_research_challenger() -> None:
