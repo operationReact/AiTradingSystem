@@ -230,7 +230,6 @@ class AiScannerServiceTest {
             double liquidityPercentile,
             String uncertainty,
             double regimeFit) {
-        String seed = Integer.toHexString(rank);
         return new RankedOpportunityV2(
                 RankedOpportunityV2.VERSION,
                 "INDIA_NSE_NIFTY500_LIQUID",
@@ -260,12 +259,16 @@ class AiScannerServiceTest {
                 new RankedOpportunityV2.RiskRewardInputs(50.0, 25.0, 12, 2.0),
                 reasons,
                 List.of("STALE_EVIDENCE"),
-                seed.repeat(64),
-                Integer.toHexString(rank + 5).repeat(64),
-                Integer.toHexString(rank + 9).repeat(64),
-                Integer.toHexString(rank + 12).repeat(64),
+                hash(rank),
+                hash(rank + 5),
+                hash(rank + 9),
+                hash(rank + 12),
                 RankedOpportunityV2.STATUS,
                 false,
                 false);
+    }
+
+    private static String hash(int value) {
+        return String.format("%064x", value);
     }
 }
