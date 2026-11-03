@@ -247,7 +247,7 @@ def build_triple_barrier_targets(
     *,
     label_as_of: datetime,
 ) -> list[TripleBarrierTargetV1]:
-    """Build only fully observable targets at one frozen label cutoff."""
+    """Build every target causally resolved by one frozen label cutoff."""
 
     if label_as_of.tzinfo is None or label_as_of.utcoffset() is None:
         raise ValueError("label_as_of must be timezone-aware")
@@ -279,22 +279,21 @@ def build_triple_barrier_targets(
 
         future_bars = [
             bar for bar in grouped_bars.get(row.symbol, []) if bar.observed_at > row.as_of
-        ]
-        if len(future_bars) < spec.horizon_bars:
+        ][: spec.horizon_bars]
+        if not future_bars:
             continue
-        horizon = future_bars[: spec.horizon_bars]
-        targets.append(
-            _build_target(
-                row,
-                horizon,
-                spec,
-                reference_price,
-                label_as_of=label_as_of,
-            )
+        target = _build_target(
+            row,
+            future_bars,
+            spec,
+            reference_price,
+            label_as_of=label_as_of,
         )
+        if target is not None:
+            targets.append(target)
 
     if not targets:
-        raise ValueError("no complete triple-barrier targets exist at label_as_of")
+        raise ValueError("no resolved triple-barrier targets exist at label_as_of")
     return targets
 
 
@@ -305,19 +304,19 @@ def _build_target(
     reference_price: float,
     *,
     label_as_of: datetime,
-) -> TripleBarrierTargetV1:
+) -> TripleBarrierTargetV1 | None:
     upper_price = reference_price * (1.0 + spec.upper_barrier_bps / 10_000.0)
     lower_price = reference_price * (1.0 - spec.lower_barrier_bps / 10_000.0)
     if lower_price <= 0.0:
         raise ValueError("configured lower barrier must remain positive")
 
-    outcome: BarrierOutcome = "VERTICAL"
-    label: Literal[-1, 0, 1] | None = 0
+    outcome: BarrierOutcome | None = None
+    label: Literal[-1, 0, 1] | None = None
     first_touch_index: int | None = None
     first_touch_at: datetime | None = None
-    exit_price: float | None = horizon[-1].close
-    gross_return: float | None = (exit_price / reference_price) - 1.0
-    used_bars = list(horizon)
+    exit_price: float | None = None
+    gross_return: float | None = None
+    used_bars: list[MarketBar] = []
 
     for index, bar in enumerate(horizon, start=1):
         hit_upper = bar.high >= upper_price
@@ -330,9 +329,6 @@ def _build_target(
         first_touch_at = bar.observed_at
         if hit_upper and hit_lower:
             outcome = "AMBIGUOUS"
-            label = None
-            exit_price = None
-            gross_return = None
         elif hit_upper:
             outcome = "UPPER"
             label = 1
@@ -344,6 +340,15 @@ def _build_target(
             exit_price = lower_price
             gross_return = -spec.lower_barrier_bps / 10_000.0
         break
+
+    if outcome is None:
+        if len(horizon) < spec.horizon_bars:
+            return None
+        outcome = "VERTICAL"
+        label = 0
+        used_bars = list(horizon)
+        exit_price = horizon[-1].close
+        gross_return = (exit_price / reference_price) - 1.0
 
     target_observed_at = used_bars[-1].observed_at
     net_return = (
