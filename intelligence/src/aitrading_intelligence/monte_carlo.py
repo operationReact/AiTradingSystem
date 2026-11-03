@@ -15,6 +15,7 @@ Assessment = Literal[
     "V2_09_GOVERNANCE_CANDIDATE",
     "V2_08_RESEARCH_REVIEW",
 ]
+BootstrapMethod = Literal["stationary", "moving_block"]
 
 
 class MonteCarloConfig(BaseModel):
@@ -23,7 +24,8 @@ class MonteCarloConfig(BaseModel):
     monte_carlo_version: Literal["monte-carlo.v1"] = MONTE_CARLO_VERSION
     simulations: Annotated[int, Field(ge=100, le=100_000)] = 2_000
     seed: Annotated[int, Field(ge=0, le=2_147_483_647)] = 42
-    block_size: Annotated[int, Field(ge=1, le=100)] = 1
+    bootstrap_method: BootstrapMethod = "stationary"
+    block_size: Annotated[int, Field(ge=2, le=100)] = 5
     minimum_oos_trades: Annotated[int, Field(ge=5, le=100_000)] = 20
     ruin_equity_fraction: Annotated[float, Field(gt=0.0, lt=1.0)] = 0.50
     drawdown_limit: Annotated[float, Field(gt=0.0, lt=1.0)] = 0.25
@@ -107,7 +109,7 @@ def _unique_oos_portfolio_returns(
     return returns, [trade.trade_fingerprint for trade in trades]
 
 
-def _bootstrap_sequence(
+def _moving_block_bootstrap_sequence(
     values: list[float],
     *,
     block_size: int,
@@ -121,6 +123,47 @@ def _bootstrap_sequence(
             if len(sampled) == len(values):
                 break
     return sampled
+
+
+def _stationary_bootstrap_sequence(
+    values: list[float],
+    *,
+    mean_block_size: int,
+    rng: random.Random,
+) -> list[float]:
+    if not values:
+        return []
+
+    restart_probability = 1.0 / mean_block_size
+    index = rng.randrange(len(values))
+    sampled = [values[index]]
+    while len(sampled) < len(values):
+        if rng.random() < restart_probability:
+            index = rng.randrange(len(values))
+        else:
+            index = (index + 1) % len(values)
+        sampled.append(values[index])
+    return sampled
+
+
+def _bootstrap_sequence(
+    values: list[float],
+    *,
+    method: BootstrapMethod,
+    block_size: int,
+    rng: random.Random,
+) -> list[float]:
+    if method == "stationary":
+        return _stationary_bootstrap_sequence(
+            values,
+            mean_block_size=block_size,
+            rng=rng,
+        )
+    return _moving_block_bootstrap_sequence(
+        values,
+        block_size=block_size,
+        rng=rng,
+    )
 
 
 def _simulate_path(
@@ -164,6 +207,7 @@ def run_monte_carlo_robustness(
     for _ in range(config.simulations):
         sequence = _bootstrap_sequence(
             portfolio_returns,
+            method=config.bootstrap_method,
             block_size=config.block_size,
             rng=rng,
         )

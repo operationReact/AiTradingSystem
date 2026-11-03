@@ -1,3 +1,4 @@
+import random
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -6,6 +7,7 @@ from aitrading_intelligence.features import FeatureRow
 from aitrading_intelligence.fusion import RankedOpportunity
 from aitrading_intelligence.monte_carlo import (
     MonteCarloConfig,
+    _bootstrap_sequence,
     run_monte_carlo_robustness,
 )
 from aitrading_intelligence.pytorch_target import LabeledExample
@@ -83,6 +85,41 @@ def _walk_forward(length: int = 80):
     return run_walk_forward(opportunities, examples, rows, config=config)
 
 
+def test_default_bootstrap_preserves_dependence_and_rejects_iid_block_size() -> None:
+    config = MonteCarloConfig()
+
+    assert config.bootstrap_method == "stationary"
+    assert config.block_size == 5
+    assert config.block_size > 1
+
+    with pytest.raises(ValueError):
+        MonteCarloConfig(block_size=1)
+
+
+def test_stationary_bootstrap_is_seeded_and_keeps_contiguous_runs() -> None:
+    values = [float(index) for index in range(20)]
+    first = _bootstrap_sequence(
+        values,
+        method="stationary",
+        block_size=5,
+        rng=random.Random(17),
+    )
+    second = _bootstrap_sequence(
+        values,
+        method="stationary",
+        block_size=5,
+        rng=random.Random(17),
+    )
+
+    assert first == second
+    assert len(first) == len(values)
+    contiguous_transitions = sum(
+        int((int(right) - int(left)) % len(values) == 1)
+        for left, right in zip(first, first[1:], strict=False)
+    )
+    assert contiguous_transitions >= len(values) // 2
+
+
 def test_monte_carlo_is_deterministic_and_never_promotes() -> None:
     evidence = _walk_forward()
     config = MonteCarloConfig(
@@ -114,7 +151,6 @@ def test_strong_fixture_can_only_advance_to_governance_not_production() -> None:
         config=MonteCarloConfig(
             simulations=500,
             seed=7,
-            block_size=1,
             minimum_oos_trades=20,
             minimum_p05_total_return=-0.10,
             maximum_drawdown_breach_probability=0.25,
