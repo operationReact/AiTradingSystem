@@ -4,10 +4,8 @@ from uuid import UUID
 import pytest
 
 from aitrading_intelligence.execution_plan import build_execution_plan
-from aitrading_intelligence.fill_simulator import (
-    FillSimulationConfigV1,
-    simulate_fill,
-)
+from aitrading_intelligence.execution_quality import evaluate_execution_quality
+from aitrading_intelligence.fill_simulator import FillSimulationConfigV1, simulate_fill
 from aitrading_intelligence.fingerprints import canonical_fingerprint
 from aitrading_intelligence.india_fee_tax import build_india_fee_tax_schedule
 from aitrading_intelligence.market_source import MarketResearchExport, ResearchCandle
@@ -150,6 +148,31 @@ def _schedule():
     )
 
 
+def _artifacts(*, side: str = "BUY", quantity: int = 100, order_type: str = "MARKET"):
+    slippage = _slippage(side=side)
+    bridge = _bridge()
+    schedule = _schedule()
+    fill_config = FillSimulationConfigV1(
+        latency_milliseconds=250,
+        max_fill_fraction_of_bar_volume=0.10,
+        max_wait_bars=1,
+        max_slippage_age_seconds=60,
+    )
+    plan = build_execution_plan(
+        candidate_fingerprint=CANDIDATE_FINGERPRINT,
+        side=side,
+        order_type=order_type,
+        quantity=quantity,
+        reference_price=100.0,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+        limit_price=99.0 if order_type == "LIMIT" else None,
+    )
+    return plan, slippage, bridge, schedule, fill_config
+
+
 def _candle(
     minute: int,
     *,
@@ -209,38 +232,12 @@ def _market_export(
     )
 
 
-def _plan(
-    *,
-    side: str = "BUY",
-    quantity: int = 100,
-    order_type: str = "MARKET",
-):
-    slippage = _slippage(side=side)
-    fill_config = FillSimulationConfigV1(
-        latency_milliseconds=250,
-        max_fill_fraction_of_bar_volume=0.10,
-        max_wait_bars=1,
-        max_slippage_age_seconds=60,
-    )
-    plan = build_execution_plan(
-        candidate_fingerprint=CANDIDATE_FINGERPRINT,
-        side=side,
-        order_type=order_type,
-        quantity=quantity,
-        reference_price=100.0,
-        slippage=slippage,
-        identity_bridge=_bridge(),
-        fee_schedule=_schedule(),
-        fill_config=fill_config,
-        limit_price=99.0 if order_type == "LIMIT" else None,
-    )
-    return plan, slippage, fill_config
-
-
-def _simulate_instruction(
+def _fill_and_quality(
     *,
     instruction,
     slippage,
+    bridge,
+    schedule,
     fill_config,
     next_open: float = 100.0,
     next_high: float = 101.0,
@@ -248,16 +245,17 @@ def _simulate_instruction(
     volume: float = 1_000.0,
     submitted_at: datetime = AS_OF,
 ):
-    return simulate_fill(
+    plan = instruction.recommended_plan
+    fill = simulate_fill(
         order_id=f"paper-limit-{instruction.instruction_index}",
-        side=instruction.side,
+        side=plan.side,
         order_type="LIMIT",
-        quantity=instruction.quantity,
+        quantity=plan.quantity,
         submitted_at=submitted_at,
-        reference_price=instruction.reference_price,
-        limit_price=instruction.limit_price,
+        reference_price=plan.reference_price,
+        limit_price=plan.limit_price,
         slippage=slippage,
-        identity_bridge=_bridge(),
+        identity_bridge=bridge,
         market_export=_market_export(
             next_open=next_open,
             next_high=next_high,
@@ -266,64 +264,86 @@ def _simulate_instruction(
         ),
         config=fill_config,
     )
+    quality = evaluate_execution_quality(
+        plan=plan,
+        fill_result=fill,
+        fee_schedule=schedule,
+    )
+    return fill, quality
 
 
-def test_initial_buy_limit_uses_fraction_of_modeled_slippage() -> None:
-    plan, slippage, _ = _plan()
-
+def _initial(*, side: str = "BUY", quantity: int = 100, config=None):
+    plan, slippage, bridge, schedule, fill_config = _artifacts(
+        side=side,
+        quantity=quantity,
+    )
     decision = build_initial_paper_smart_limit_decision(
         plan=plan,
         slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+        config=config,
     )
+    return decision, plan, slippage, bridge, schedule, fill_config
+
+
+def test_initial_buy_limit_emits_exact_tca_compatible_execution_plan() -> None:
+    decision, source_plan, _, _, _, _ = _initial()
 
     assert decision.state == "INSTRUCTION"
     assert decision.reason_codes == []
     assert decision.instruction is not None
-    assert decision.instruction.action == "INITIAL_LIMIT"
-    assert decision.instruction.instruction_index == 0
-    assert decision.instruction.aggressiveness_fraction == pytest.approx(0.25)
-    assert decision.instruction.limit_offset_bps == pytest.approx(1.75)
-    assert decision.instruction.limit_price == pytest.approx(100.0175)
-    assert decision.instruction.quantity == 100
+    instruction = decision.instruction
+    assert instruction.action == "INITIAL_LIMIT"
+    assert instruction.instruction_index == 0
+    assert instruction.aggressiveness_fraction == pytest.approx(0.25)
+    assert instruction.limit_offset_bps == pytest.approx(1.75)
+    assert instruction.limit_price == pytest.approx(100.0175)
+    assert instruction.source_execution_plan_fingerprint == source_plan.plan_fingerprint
+    assert instruction.recommended_plan.order_type == "LIMIT"
+    assert instruction.recommended_plan.quantity == 100
+    assert instruction.recommended_plan.limit_price == pytest.approx(100.0175)
+    assert instruction.recommended_plan.plan_fingerprint != source_plan.plan_fingerprint
+    assert instruction.recommended_plan.executable is False
     assert decision.paper_only is True
     assert decision.executable is False
     assert decision.promotion_allowed is False
     assert decision.can_authorize_capital is False
 
 
-def test_initial_sell_limit_is_below_reference() -> None:
-    plan, slippage, _ = _plan(side="SELL")
-
-    decision = build_initial_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
-    )
+def test_initial_sell_limit_moves_below_reference() -> None:
+    decision, _, _, _, _, _ = _initial(side="SELL")
 
     assert decision.instruction is not None
     assert decision.instruction.limit_offset_bps == pytest.approx(1.75)
     assert decision.instruction.limit_price == pytest.approx(99.9825)
+    assert decision.instruction.recommended_plan.side == "SELL"
 
 
-def test_unfilled_order_reprices_more_aggressively_within_budget() -> None:
-    plan, slippage, fill_config = _plan()
-    first = build_initial_paper_smart_limit_decision(plan=plan, slippage=slippage)
+def test_unfilled_limit_reprices_from_exact_execution_quality() -> None:
+    first, _, slippage, bridge, schedule, fill_config = _initial()
     assert first.instruction is not None
-    fill = _simulate_instruction(
+    fill, quality = _fill_and_quality(
         instruction=first.instruction,
         slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
         fill_config=fill_config,
         next_open=100.04,
         next_high=100.05,
         next_low=100.03,
     )
     assert fill.state == "UNFILLED"
-    assert fill.arrival_gap_bps == pytest.approx(4.0)
+    assert quality.state == "UNFILLED"
 
     second = advance_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
         previous_decision=first,
-        fill_result=fill,
+        execution_quality=quality,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
     )
 
     assert second.state == "INSTRUCTION"
@@ -333,84 +353,100 @@ def test_unfilled_order_reprices_more_aggressively_within_budget() -> None:
     assert second.instruction.aggressiveness_fraction == pytest.approx(0.50)
     assert second.instruction.limit_price == pytest.approx(100.035)
     assert second.instruction.limit_price > first.instruction.limit_price
-    assert second.instruction.quantity == 100
+    assert second.instruction.source_quality_fingerprint == quality.quality_fingerprint
     assert second.instruction.previous_instruction_fingerprint == (
         first.instruction.instruction_fingerprint
     )
-    assert second.instruction.source_fill_result_fingerprint == fill.result_fingerprint
+    assert second.source_execution_plan_fingerprint == (
+        first.instruction.recommended_plan.plan_fingerprint
+    )
 
 
-def test_partial_fill_reprices_only_remaining_quantity() -> None:
-    plan, slippage, fill_config = _plan(quantity=250)
-    first = build_initial_paper_smart_limit_decision(plan=plan, slippage=slippage)
+def test_partial_fill_reprices_remaining_quantity_and_recalculates_cost_model() -> None:
+    first, _, slippage, bridge, schedule, fill_config = _initial(quantity=250)
     assert first.instruction is not None
-    fill = _simulate_instruction(
+    fill, quality = _fill_and_quality(
         instruction=first.instruction,
         slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
         fill_config=fill_config,
         volume=1_000.0,
     )
     assert fill.state == "PARTIALLY_FILLED"
-    assert fill.filled_quantity == 100
-    assert fill.remaining_quantity == 150
+    assert quality.state == "PARTIALLY_FILLED"
+    assert quality.filled_quantity == 100
 
     second = advance_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
         previous_decision=first,
-        fill_result=fill,
-    )
-
-    assert second.state == "INSTRUCTION"
-    assert second.instruction is not None
-    assert second.instruction.quantity == 150
-    assert second.instruction.instruction_index == 1
-
-
-def test_full_fill_completes_without_new_instruction() -> None:
-    plan, slippage, fill_config = _plan(quantity=100)
-    first = build_initial_paper_smart_limit_decision(plan=plan, slippage=slippage)
-    assert first.instruction is not None
-    fill = _simulate_instruction(
-        instruction=first.instruction,
+        execution_quality=quality,
         slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
         fill_config=fill_config,
     )
-    assert fill.state == "FULLY_FILLED"
+
+    assert second.instruction is not None
+    next_plan = second.instruction.recommended_plan
+    assert next_plan.quantity == 150
+    assert next_plan.expected_cost is not None
+    assert next_plan.expected_cost.notional_inr == pytest.approx(15_000.0)
+    assert first.instruction.recommended_plan.expected_cost is not None
+    assert next_plan.expected_cost.cost_model_fingerprint != (
+        first.instruction.recommended_plan.expected_cost.cost_model_fingerprint
+    )
+
+
+def test_full_fill_completes_without_another_plan() -> None:
+    first, _, slippage, bridge, schedule, fill_config = _initial()
+    assert first.instruction is not None
+    _, quality = _fill_and_quality(
+        instruction=first.instruction,
+        slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
+        fill_config=fill_config,
+    )
+    assert quality.state == "FULLY_FILLED"
 
     complete = advance_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
         previous_decision=first,
-        fill_result=fill,
+        execution_quality=quality,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
     )
 
     assert complete.state == "COMPLETE"
     assert complete.reason_codes == []
     assert complete.instruction is None
-    assert complete.source_fill_result_fingerprint == fill.result_fingerprint
+    assert complete.source_quality_fingerprint == quality.quality_fingerprint
 
 
 def test_adverse_gap_beyond_modeled_slippage_stops_chasing() -> None:
-    plan, slippage, fill_config = _plan()
-    first = build_initial_paper_smart_limit_decision(plan=plan, slippage=slippage)
+    first, _, slippage, bridge, schedule, fill_config = _initial()
     assert first.instruction is not None
-    fill = _simulate_instruction(
+    fill, quality = _fill_and_quality(
         instruction=first.instruction,
         slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
         fill_config=fill_config,
         next_open=100.10,
         next_high=100.11,
         next_low=100.09,
     )
     assert fill.state == "UNFILLED"
-    assert fill.arrival_gap_bps == pytest.approx(10.0)
+    assert quality.arrival_gap_bps == pytest.approx(10.0)
 
     stopped = advance_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
         previous_decision=first,
-        fill_result=fill,
+        execution_quality=quality,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
     )
 
     assert stopped.state == "STOPPED"
@@ -418,18 +454,42 @@ def test_adverse_gap_beyond_modeled_slippage_stops_chasing() -> None:
     assert stopped.instruction is None
 
 
-def test_max_reprices_is_a_hard_stop() -> None:
-    config = PaperSmartLimitConfigV1(max_reprices=0)
-    plan, slippage, fill_config = _plan()
-    first = build_initial_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
-        config=config,
-    )
+def test_inconclusive_fill_quality_stops_repricing_fail_closed() -> None:
+    first, _, slippage, bridge, schedule, fill_config = _initial()
     assert first.instruction is not None
-    fill = _simulate_instruction(
+    _, quality = _fill_and_quality(
         instruction=first.instruction,
         slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
+        fill_config=fill_config,
+        submitted_at=AS_OF + timedelta(seconds=61),
+    )
+    assert quality.state == "INCONCLUSIVE"
+
+    decision = advance_paper_smart_limit_decision(
+        previous_decision=first,
+        execution_quality=quality,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+    )
+
+    assert decision.state == "INCONCLUSIVE"
+    assert decision.reason_codes == ["EXECUTION_QUALITY_INCONCLUSIVE"]
+    assert decision.instruction is None
+
+
+def test_max_reprices_is_a_hard_stop() -> None:
+    config = PaperSmartLimitConfigV1(max_reprices=0)
+    first, _, slippage, bridge, schedule, fill_config = _initial(config=config)
+    assert first.instruction is not None
+    _, quality = _fill_and_quality(
+        instruction=first.instruction,
+        slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
         fill_config=fill_config,
         next_open=100.04,
         next_high=100.05,
@@ -437,53 +497,93 @@ def test_max_reprices_is_a_hard_stop() -> None:
     )
 
     stopped = advance_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
         previous_decision=first,
-        fill_result=fill,
+        execution_quality=quality,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
         config=config,
     )
 
     assert stopped.state == "STOPPED"
     assert stopped.reason_codes == ["MAX_REPRICES_REACHED"]
-    assert stopped.instruction is None
 
 
-def test_existing_limit_plan_is_not_rewritten_by_smart_limit_policy() -> None:
-    plan, slippage, _ = _plan(order_type="LIMIT")
-
-    decision = build_initial_paper_smart_limit_decision(
-        plan=plan,
-        slippage=slippage,
-    )
-
-    assert decision.state == "INCONCLUSIVE"
-    assert decision.reason_codes == ["MARKET_EXECUTION_PLAN_REQUIRED"]
-    assert decision.instruction is None
-
-
-def test_fill_must_match_instruction_exactly() -> None:
-    plan, slippage, fill_config = _plan()
-    first = build_initial_paper_smart_limit_decision(plan=plan, slippage=slippage)
+def test_policy_chain_rejects_config_or_quality_lineage_changes() -> None:
+    first, _, slippage, bridge, schedule, fill_config = _initial()
     assert first.instruction is not None
-    wrong_fill = simulate_fill(
-        order_id="wrong-limit",
-        side="BUY",
-        order_type="LIMIT",
-        quantity=first.instruction.quantity,
-        submitted_at=AS_OF,
-        reference_price=first.instruction.reference_price,
-        limit_price=first.instruction.limit_price + 0.01,
+    _, quality = _fill_and_quality(
+        instruction=first.instruction,
         slippage=slippage,
-        identity_bridge=_bridge(),
-        market_export=_market_export(),
-        config=fill_config,
+        bridge=bridge,
+        schedule=schedule,
+        fill_config=fill_config,
+        next_open=100.04,
+        next_high=100.05,
+        next_low=100.03,
     )
 
-    with pytest.raises(ValueError, match="limit price does not match instruction"):
+    with pytest.raises(ValueError, match="config changed"):
         advance_paper_smart_limit_decision(
-            plan=plan,
-            slippage=slippage,
             previous_decision=first,
-            fill_result=wrong_fill,
+            execution_quality=quality,
+            slippage=slippage,
+            identity_bridge=bridge,
+            fee_schedule=schedule,
+            fill_config=fill_config,
+            config=PaperSmartLimitConfigV1(initial_slippage_fraction=0.50),
         )
+
+    other_plan, _, _, _, _ = _artifacts(quantity=101)
+    other_first = build_initial_paper_smart_limit_decision(
+        plan=other_plan,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+    )
+    assert other_first.instruction is not None
+    _, other_quality = _fill_and_quality(
+        instruction=other_first.instruction,
+        slippage=slippage,
+        bridge=bridge,
+        schedule=schedule,
+        fill_config=fill_config,
+        next_open=100.04,
+        next_high=100.05,
+        next_low=100.03,
+    )
+    with pytest.raises(ValueError, match="another LIMIT plan"):
+        advance_paper_smart_limit_decision(
+            previous_decision=first,
+            execution_quality=other_quality,
+            slippage=slippage,
+            identity_bridge=bridge,
+            fee_schedule=schedule,
+            fill_config=fill_config,
+        )
+
+
+def test_initial_policy_is_deterministic_and_requires_market_plan() -> None:
+    first, source_plan, slippage, bridge, schedule, fill_config = _initial()
+    second = build_initial_paper_smart_limit_decision(
+        plan=source_plan,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+    )
+    assert first == second
+
+    limit_plan, _, _, _, _ = _artifacts(order_type="LIMIT")
+    inconclusive = build_initial_paper_smart_limit_decision(
+        plan=limit_plan,
+        slippage=slippage,
+        identity_bridge=bridge,
+        fee_schedule=schedule,
+        fill_config=fill_config,
+    )
+    assert inconclusive.state == "INCONCLUSIVE"
+    assert inconclusive.reason_codes == ["MARKET_EXECUTION_PLAN_REQUIRED"]
+    assert inconclusive.instruction is None
