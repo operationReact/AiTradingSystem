@@ -233,6 +233,23 @@ def test_wrong_holdout_plan_and_unregistered_family_are_rejected() -> None:
             baseline_model_version_ref=baseline.prediction.model_version_ref,
             registered_at=freeze.recorded_at + timedelta(minutes=5),
         )
+    # Even a self-consistently rehashed post-hoc budget cannot introduce
+    # model families absent from the earlier immutable market holdout plan.
+    from aitrading_intelligence.fingerprints import canonical_fingerprint
+
+    rehashed = plan.model_dump(mode="json")
+    rehashed["trials"][0]["family"] = "PYTORCH"
+    rehashed["budget_fingerprint"] = canonical_fingerprint({
+        key: value for key, value in rehashed.items() if key != "budget_fingerprint"
+    })
+    rewritten_budget = RegisteredTrialBudget.model_validate(rehashed)
+    with pytest.raises(ValueError, match="model family absent from frozen plan"):
+        audit_registered_trials(
+            freeze, rewritten_budget, baseline,
+            [_outcome(candidates[0])], [candidates[0]],
+            evaluation_started_at=now,
+        )
+
     wrong = plan.model_copy(
         update={"holdout_freeze_plan_fingerprint": _sha("wrong-freeze")}
     )
