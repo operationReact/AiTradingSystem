@@ -76,6 +76,33 @@ pip install -e '.[dev]'
 
 A trained PyTorch candidate remains a **challenger**. It cannot enter signal fusion as an accepted model until it beats the V2-06 baselines under later out-of-sample, replay, regime, cost/slippage and governance gates.
 
+## V4-03 independent Indian-market holdout runner (research only)
+
+This runner consumes **two distinct** Java `market-history.v1` exports of the same
+NSE/BSE cash-equity instrument (5-minute bars), plus a versioned and fingerprinted
+`india-fee-tax-config.v1` book. Training labels must be observable before the later
+holdout begins. CatBoost and LightGBM are trained only on the earlier export and
+scored on the untouched later export. PyTorch is optional in the CPU model-lab runtime.
+
+```bash
+python -m aitrading_intelligence.india_independent_holdout \
+  train-market-history.json holdout-market-history.json india-fee-book.json \
+  --horizon-bars 1 --cost-bps 25 --minimum-edge-bps 15
+# Add --include-pytorch only after installing requirements-pytorch-cpu.txt.
+```
+
+The configured total round-trip cost must cover the effective NSE/BSE intraday
+brokerage, statutory charges, GST on applicable charges, and a declared
+spread/slippage allowance. Rates are **provided** by the operator, not fetched or
+certified as statutory truth; independently verify the broker fee book and source.
+Holdout sample/session or class insufficiency produces `INCONCLUSIVE`, never
+fictitious validation metrics.
+
+Even successful output is `RESEARCH_HOLDOUT_METRICS_ONLY`. Source authenticity,
+pre-registration, repeat-trial bias, liquidity/volume capacity, realistic fills,
+independent external data audits and PAPER/SHADOW success remain **unverified**.
+No model receives production champion, risk, broker or LIVE authority.
+
 ## Run locally
 
 ```bash
