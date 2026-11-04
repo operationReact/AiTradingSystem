@@ -98,11 +98,15 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     try {
       final versions = await widget.repository.versions(model.key);
       if (!mounted || generation != _authGeneration ||
-          _selected?.key != model.key) return;
+          _selected?.key != model.key) {
+        return;
+      }
       setState(() => _versions = versions);
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration ||
-          _selected?.key != model.key) return;
+          _selected?.key != model.key) {
+        return;
+      }
       if (_isAccessDenied(error)) {
         _clearRevokedEvidence(error);
       } else {
