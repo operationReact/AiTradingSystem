@@ -34,12 +34,14 @@ python -m aitrading_intelligence.research_release_bundle verify \
   --bundle .research-release --code-sha FULL_40_CHARACTER_DEV_SHA
 ```
 
-To **build only** (operator-reviewed source/custody, source rights and model performance validation must be carried out separately; never publish automatically):
+**V84 supersedes direct Docker building from a mutable checkout.** Before any manual image build, run the exact-commit private Git archive and model receipt preflight from [V84](v4-09-v84-research-committed-source-image-context.md); the following V80 command is legacy guidance and should **not** be used directly against an arbitrary working tree.
+
+To **build only** from a V84 prepared private context (operator-reviewed source/custody, source rights and model performance validation remain separate prerequisites; never publish automatically):
 
 ```bash
-docker build --file Dockerfile.research-release \
+docker build --file "$CONTEXT/Dockerfile.research-release" \
   --build-arg RESEARCH_SOURCE_SHA=FULL_40_CHARACTER_DEV_SHA \
-  --tag research-worker:local-preflight .
+  --tag research-worker:local-preflight "$CONTEXT"
 ```
 
 This optional Dockerfile differs from `intelligence/Dockerfile`: it deliberately fails when private staged files or the receipt are missing, altered, symlinked or tied to a different Git commit. It copies verified model files into `/opt/research` with ownership for UID 65532, validates the exact release receipt **during the image build**, and keeps the V78 strict runtime boot check. The runtime's private `AI_RESEARCH_WORKER_TOKEN` is **never** a build argument or image layer secret and must later come from a separately verified Secrets Manager reference.
