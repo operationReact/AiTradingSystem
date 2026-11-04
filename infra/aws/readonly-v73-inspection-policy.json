@@ -1,0 +1,49 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "VerifyCallerAccount",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyKnownPaperCluster",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeClusters"
+      ],
+      "Resource": "arn:aws:ecs:us-east-1:816344830716:cluster/ai-trading-system"
+    },
+    {
+      "Sid": "ReadOnlyKnownPaperServices",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices"
+      ],
+      "Resource": [
+        "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-backend",
+        "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-research-worker"
+      ]
+    },
+    {
+      "Sid": "ReadOnlyBackendTaskDefinition",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeTaskDefinition"
+      ],
+      "Resource": "arn:aws:ecs:us-east-1:816344830716:task-definition/ai-trading-system-backend:*"
+    },
+    {
+      "Sid": "ReadOnlyALBTargetHealth",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:DescribeTargetGroups",
+        "elasticloadbalancing:DescribeTargetHealth"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
