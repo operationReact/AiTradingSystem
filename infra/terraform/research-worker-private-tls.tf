@@ -54,6 +54,17 @@ resource "aws_acm_certificate_validation" "research_worker_tls" {
   validation_record_fqdns = [aws_route53_record.research_worker_tls_validation[0].fqdn]
 }
 
+# aws_security_group.tasks is shared by Java AND Flutter frontend.
+# Give only Java backend ECS tasks a distinct caller identity SG, with no
+# ingress or egress permissions of its own. Existing task egress is unchanged.
+resource "aws_security_group" "research_worker_java_identity" {
+  count       = local.worker_tls_count
+  name        = "${local.name}-worker-java-identity"
+  description = "Dedicated Java backend ECS identity for private research HTTPS"
+  vpc_id      = aws_vpc.main.id
+  tags        = local.worker_tags
+}
+
 resource "aws_security_group" "research_worker_tls_alb" {
   count       = local.worker_tls_count
   name        = "${local.name}-worker-https-alb"
@@ -66,11 +77,11 @@ resource "aws_security_group" "research_worker_tls_alb" {
 resource "aws_vpc_security_group_ingress_rule" "backend_to_worker_tls" {
   count                        = local.worker_tls_count
   security_group_id            = aws_security_group.research_worker_tls_alb[0].id
-  referenced_security_group_id = aws_security_group.tasks.id
+  referenced_security_group_id = aws_security_group.research_worker_java_identity[0].id
   from_port                    = 443
   to_port                      = 443
   ip_protocol                  = "tcp"
-  description                  = "Only existing Java backend tasks may call private HTTPS worker edge"
+  description                  = "HTTPS only from dedicated Java backend ECS identity SG"
 }
 
 resource "aws_vpc_security_group_egress_rule" "worker_tls_to_target" {
@@ -147,9 +158,34 @@ resource "aws_lb_listener" "research_worker_tls" {
   certificate_arn   = aws_acm_certificate_validation.research_worker_tls[0].certificate_arn
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
 
+  # Deny every path unless explicitly allowed below. This prevents future
+  # Python routes (admin, metrics, docs, debug) from becoming reachable
+  # automatically through the private ALB.
   default_action {
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Forbidden"
+      status_code  = "403"
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "research_worker_private_api_only" {
+  count        = local.worker_tls_count
+  listener_arn = aws_lb_listener.research_worker_tls[0].arn
+  priority     = 10
+  action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.research_worker_tls[0].arn
+  }
+  condition {
+    path_pattern {
+      values = [
+        "/v1/research/artifact-readiness",
+        "/v1/research/artifact-inference"
+      ]
+    }
   }
 }
 
@@ -172,7 +208,9 @@ resource "aws_route53_record" "research_worker_private" {
   alias {
     name                   = aws_lb.research_worker_tls[0].dns_name
     zone_id                = aws_lb.research_worker_tls[0].zone_id
-    evaluate_target_health = true
+    # Zero worker targets is expected. DNS resolution is necessary for
+    # certificate preflight but never implies a healthy model worker.
+    evaluate_target_health = false
   }
 }
 
