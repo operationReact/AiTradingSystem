@@ -409,7 +409,7 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                     .param("id", currentId).query(String.class).single()
                 : UUID.randomUUID().toString().substring(0, 8))
             .param("candleTime", OffsetDateTime.ofInstant(
-                currentCandleAt.minus(1, ChronoUnit.MICROS), ZoneOffset.UTC))
+                currentCandleAt.minus(1, ChronoUnit.MINUTES), ZoneOffset.UTC))
             .param("fetchedAt", OffsetDateTime.ofInstant(
                 currentFetchedAt.minusSeconds(2), ZoneOffset.UTC))
             .update();
