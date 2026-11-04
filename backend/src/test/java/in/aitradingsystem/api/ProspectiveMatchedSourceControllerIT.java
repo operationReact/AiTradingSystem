@@ -286,6 +286,182 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
         return UUID.fromString(mapper.readTree(version).path("versionId").asText());
     }
 
+
+    @Test
+    void createsAnImmutablePointInTimeFeatureSnapshotFromActualJavaCandleAndAiEvidence()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(8));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), Instant.now().minusSeconds(7));
+        mvc.perform(post(ENROLL + "/" + session + "/source-cases")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = ENROLL + "/" + session + "/source-cases/case-0001/features";
+        String body = mvc.perform(post(endpoint)
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.contractVersion")
+                .value("v4-java-prospective-research-features.v1"))
+            .andExpect(jsonPath("$.javaDatabaseBound").value(true))
+            .andExpect(jsonPath("$.sourceRightsVerified").value(false))
+            .andExpect(jsonPath("$.modelInferenceExecuted").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false))
+            .andReturn().getResponse().getContentAsString();
+        JsonNode result = mapper.readTree(body);
+        JsonNode features = result.path("features");
+        assertEquals(6, features.size());
+        assertEquals(0.75, features.path("event.AI_NEWS_EVIDENCE.direction_score").asDouble(),
+            0.000001);
+        assertEquals(0.8, features.path("event.AI_NEWS_EVIDENCE.confidence").asDouble(),
+            0.000001);
+        assertEquals(0.65, features.path("event.AI_NEWS_EVIDENCE.materiality").asDouble(),
+            0.000001);
+        assertEquals(1.0, features.path("market.volume_change_1").asDouble(), 0.000001);
+        assertEquals(2.0 / 100.5, features.path("market.range_pct").asDouble(), 0.000001);
+        assertEquals(100.5 / 99.5 - 1.0, features.path("market.return_1").asDouble(),
+            0.000001);
+        assertTrue(!features.has("forward_return"));
+        assertTrue(!features.has("market_outcome"));
+        assertTrue(!Instant.parse(result.path("latestFeatureAvailableAt").asText())
+            .isAfter(Instant.parse(result.path("featureAsOf").asText())));
+
+        mvc.perform(get(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.featurePayloadFingerprint")
+                .value(result.path("featurePayloadFingerprint").asText()));
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.featurePayloadFingerprint")
+                .value(result.path("featurePayloadFingerprint").asText()));
+        assertEquals(1, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_capture
+                 WHERE session_id = :sessionId AND case_key = 'case-0001'
+                """).param("sessionId", session).query(Integer.class).single());
+        mvc.perform(get(endpoint).with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
+
+        // Original DB row may be mutable; frozen features must never be re-written.
+        jdbc.sql("UPDATE market_candle SET close_price = 100.600000 WHERE candle_id = :id")
+            .param("id", rows.candleId()).update();
+        mvc.perform(get(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.featurePayloadFingerprint")
+                .value(result.path("featurePayloadFingerprint").asText()));
+    }
+
+    @Test
+    void featurePreparationFailsClosedWithoutEarlierBarOrCausallyAvailableAiEvidence()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(8));
+        mvc.perform(post(ENROLL + "/" + session + "/source-cases")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = ENROLL + "/" + session + "/source-cases/case-0001/features";
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        seedPreviousCandle(rows.candleId());
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+
+        // Post-snapshot AI analysis cannot be backfilled as a predecision feature.
+        seedAiEvidence(rows.newsId(), Instant.now().plusSeconds(30));
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_capture
+                 WHERE session_id = :session
+                """).param("session", session).query(Integer.class).single());
+    }
+
+    @Test
+    void pausedSessionCannotStartAFeatureCaptureButHistoricalReadbackRemainsPossible()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(8));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), Instant.now().minusSeconds(7));
+        mvc.perform(post(ENROLL + "/" + session + "/source-cases")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = ENROLL + "/" + session + "/source-cases/case-0001/features";
+        mvc.perform(put(ENROLL + "/" + session + "/control")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"Upstream news inference drift\"}"))
+            .andExpect(status().isOk());
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        mvc.perform(get(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isNotFound());
+    }
+
+    private void seedPreviousCandle(long currentCandleId) {
+        var latest = jdbc.sql("""
+                SELECT symbol_token, candle_time, fetched_at
+                  FROM market_candle WHERE candle_id = :id
+                """)
+            .param("id", currentCandleId)
+            .query((rs, row) -> new Instant[]{
+                rs.getObject("candle_time", OffsetDateTime.class).toInstant(),
+                rs.getObject("fetched_at", OffsetDateTime.class).toInstant(),
+            })
+            .single();
+        String token = jdbc.sql("SELECT symbol_token FROM market_candle WHERE candle_id = :id")
+            .param("id", currentCandleId).query(String.class).single();
+        jdbc.sql("""
+                INSERT INTO market_candle (
+                    instrument_id, exchange, trading_symbol, symbol_token,
+                    interval, candle_time, open_price, high_price, low_price,
+                    close_price, volume, source, fetched_at)
+                VALUES (
+                    1, 'NSE', 'RELIANCE-EQ', :token, 'ONE_MINUTE', :candleAt,
+                    99.000000, 100.000000, 98.500000,
+                    99.500000, 4000, 'TEST_JAVA_FEED', :fetchedAt)
+                """)
+            .param("token", token)
+            .param("candleAt", OffsetDateTime.ofInstant(latest[0].minusSeconds(60),
+                ZoneOffset.UTC))
+            .param("fetchedAt", OffsetDateTime.ofInstant(latest[1].minusSeconds(60),
+                ZoneOffset.UTC))
+            .update();
+    }
+
+    private void seedAiEvidence(UUID newsId, Instant generatedAt) {
+        Instant sourceAt = jdbc.sql("SELECT fetched_at FROM news_item WHERE id = :id")
+            .param("id", newsId)
+            .query((rs, row) -> rs.getObject(1, OffsetDateTime.class).toInstant())
+            .single();
+        UUID id = UUID.randomUUID();
+        jdbc.sql("""
+                INSERT INTO news_ai_evidence (
+                    id, news_id, provider, model, source_available_at, generated_at,
+                    prompt_hash, request_fingerprint, response_fingerprint,
+                    sentiment, direction_score, category, confidence, materiality,
+                    horizon, novelty, contradiction, ambiguity, evidence,
+                    latency_ms)
+                VALUES (
+                    :id, :news, 'TEST_GEMINI', 'fixture-model',
+                    :sourceAt, :generatedAt, :promptHash, :requestHash, :responseHash,
+                    'POSITIVE', 0.750, 'EARNINGS', 0.800, 0.650,
+                    'INTRADAY', 0.200, FALSE, FALSE, 'Synthetic test event', 0)
+                """)
+            .param("id", id).param("news", newsId)
+            .param("sourceAt", OffsetDateTime.ofInstant(sourceAt, ZoneOffset.UTC))
+            .param("generatedAt", OffsetDateTime.ofInstant(generatedAt, ZoneOffset.UTC))
+            .param("promptHash", A).param("requestHash",
+                id.toString().replace("-", "").repeat(2))
+            .param("responseHash", B)
+            .update();
+    }
+
     private record SourceRows(long candleId, UUID newsId) {}
 
     private SourceRows sourceRows(Instant fetchedAt) {
