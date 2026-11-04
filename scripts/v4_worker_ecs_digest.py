@@ -126,9 +126,13 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
     secret_names = [row.get("name") for row in secretrows]
     env = {row.get("name"): row.get("value") for row in envrows}
     unique_ok = check(
-        len(envnames) == len(set(envnames))
+        all(isinstance(n, str) and bool(n) for n in envnames + secret_names)
+        and len(envnames) == len(set(envnames))
         and len(secret_names) == len(set(secret_names))
-        and not set(envnames).intersection(secret_names),
+        and not set(envnames).intersection(secret_names)
+        and all(isinstance(row, dict) for row in envrows + secretrows)
+        and all(isinstance(row.get("valueFrom"), str) and row["valueFrom"]
+                for row in secretrows),
         "WORKER_CONFIG_AMBIGUOUS",
     )
     mode_ok = check(
@@ -152,7 +156,11 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "WORKER_SECRET_OR_MANIFEST_DECLARATION_UNVERIFIED",
     )
     sensitive_plaintext = any(
-        re.search(r"(?:_TOKEN|_PASSWORD|_SECRET|_API_KEY|_PRIVATE_KEY)$", str(name))
+        str(name) in {
+            "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
+            "DATABASE_URL", "REDIS_URL", "DATABASE_DSN", "SPRING_DATASOURCE_URL",
+        } or re.search(r"(?:_TOKEN|_PASSWORD|_SECRET|_API_KEY|_PRIVATE_KEY|_ACCESS_KEY)$",
+                       str(name))
         for name in envnames
     )
     secret_safe = check(not sensitive_plaintext, "PLAINTEXT_WORKER_CREDENTIAL_NAME")
