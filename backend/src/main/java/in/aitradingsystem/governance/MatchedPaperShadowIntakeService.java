@@ -217,6 +217,7 @@ public class MatchedPaperShadowIntakeService {
                        input_fingerprint
                   FROM v4_matched_source_capture
                  WHERE session_id = :sessionId AND case_key = :caseKey
+                 FOR SHARE
                 """)
             .param("sessionId", sessionId).param("caseKey", input.caseKey())
             .query((rs, row) -> new FrozenSource(
