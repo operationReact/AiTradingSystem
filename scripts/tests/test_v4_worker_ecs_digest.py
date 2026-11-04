@@ -136,6 +136,14 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         f["definition"]["taskDefinition"]["containerDefinitions"][0][
             "environmentFiles"] = [{"type": "s3", "value": "PRIVATE-URI"}]
         self.blocked(f, "WORKER_PAPER_DECLARATION_UNVERIFIED")
+        f = fixture()
+        f["definition"]["taskDefinition"]["containerDefinitions"][0][
+            "environment"].append({"name": "AWS_ACCESS_KEY_ID", "value": "PRIVATE"})
+        self.blocked(f, "PLAINTEXT_WORKER_CREDENTIAL_NAME")
+        f = fixture()
+        f["definition"]["taskDefinition"]["containerDefinitions"][0][
+            "secrets"].append({"name": "", "valueFrom": ""})
+        self.blocked(f, "WORKER_CONFIG_AMBIGUOUS")
 
     def test_read_only_manual_workflow(self):
         workflow = (Path(__file__).resolve().parents[2] /
