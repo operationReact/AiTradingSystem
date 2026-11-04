@@ -24,6 +24,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   bool _loadingRecentSessions = false;
   ApiFailure? _modelsError;
   ApiFailure? _versionsError;
+  ApiFailure? _emergencyError;
+  String? _disablingVersionId;
+  Map<String, Future<EffectiveModelEmergencyStatus>> _statusFutures = {};
   ApiFailure? _sessionError;
   String? _sessionValidation;
   bool _loadingModels = false;
@@ -63,12 +66,20 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _selected = model;
       _versions = null;
       _versionsError = null;
+      _emergencyError = null;
+      _statusFutures = {};
       _loadingVersions = true;
     });
     try {
       final versions = await widget.repository.versions(model.key);
       if (!mounted || _selected?.key != model.key) return;
-      setState(() => _versions = versions);
+      setState(() {
+        _versions = versions;
+        _statusFutures = {
+          for (final version in versions)
+            version.id: widget.repository.effectiveModelStatus(version.id),
+        };
+      });
     } on ApiFailure catch (error) {
       if (!mounted || _selected?.key != model.key) return;
       setState(() => _versionsError = error);
@@ -91,6 +102,74 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       setState(() => _recentSessionsError = error);
     } finally {
       if (mounted) setState(() => _loadingRecentSessions = false);
+    }
+  }
+
+  Future<void> _emergencyDisable(ModelVersionEvidence version) async {
+    final reasonController = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Emergency model disable'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Disable model version ${version.label}? This action is '
+                'audited on the backend and can affect research model eligibility.'),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('model-disable-reason'),
+              controller: reasonController,
+              maxLength: 512,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Required audit reason',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('model-disable-confirm'),
+            onPressed: () {
+              final text = reasonController.text.trim();
+              if (text.isEmpty) return;
+              Navigator.of(dialogContext).pop(text);
+            },
+            child: const Text('Confirm disable'),
+          ),
+        ],
+      ),
+    );
+    reasonController.dispose();
+    if (!mounted || reason == null) return;
+    setState(() { _disablingVersionId = version.id; _emergencyError = null; });
+    try {
+      await widget.repository.disableModelVersion(version.id, reason);
+      final current = await widget.repository.effectiveModelStatus(version.id);
+      if (!mounted) return;
+      if (!current.modelVersionDisabled || current.canAuthorizeCapital) {
+        throw const ApiTransportFailure('MODEL_DISABLE_NOT_EFFECTIVE', null);
+      }
+      setState(() {
+        _statusFutures = {
+          ..._statusFutures,
+          version.id: Future.value(current),
+        };
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Model version disabled by backend governance.')),
+      );
+    } on ApiFailure catch (error) {
+      if (!mounted) return;
+      setState(() => _emergencyError = error);
+    } finally {
+      if (mounted) setState(() => _disablingVersionId = null);
     }
   }
 
@@ -233,6 +312,8 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
             const LinearProgressIndicator(key: ValueKey('model-versions-loading')),
           if (_versionsError != null)
             _problem(_versionsError!, stale: _versions != null),
+          if (_emergencyError != null)
+            _problem(_emergencyError!, stale: _versions != null),
           if (_versions != null && _versions!.isEmpty)
             const Card(child: ListTile(
               title: Text('No versions registered for this model.'),
@@ -244,10 +325,46 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                 title: Text(version.label),
                 subtitle: Text('Version: ${_short(version.fingerprint)}\nArtifact: ${_short(version.artifactFingerprint)}'),
                 isThreeLine: true,
+                trailing: _effectiveVersionControl(version),
               ),
             )),
         ],
       ],
+    );
+  }
+
+  Widget _effectiveVersionControl(ModelVersionEvidence version) {
+    final pending = _statusFutures[version.id];
+    if (pending == null) return const SizedBox.shrink();
+    return FutureBuilder<EffectiveModelEmergencyStatus>(
+      future: pending,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Status unavailable',
+              key: ValueKey('model-disable-status-error'));
+        }
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            width: 22, height: 22,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          );
+        }
+        final status = snapshot.data!;
+        if (status.modelVersionDisabled) {
+          return const Text('Disabled', key: ValueKey('model-version-disabled'));
+        }
+        if (!status.allowed) {
+          return const Text('Ineligible',
+              key: ValueKey('model-version-ineligible'));
+        }
+        return OutlinedButton(
+          key: ValueKey('model-disable-' + version.id),
+          onPressed: _disablingVersionId != null
+              ? null
+              : () => _emergencyDisable(version),
+          child: const Text('Disable'),
+        );
+      },
     );
   }
 
