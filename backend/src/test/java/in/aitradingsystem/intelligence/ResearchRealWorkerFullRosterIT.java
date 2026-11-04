@@ -23,6 +23,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -304,6 +307,136 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
             .GET().build(), HttpResponse.BodyHandlers.ofString()).body());
     }
 
+
+    @Test
+    @EnabledIfEnvironmentVariable(named = "ATS_V4_10_MODEL_SOAK", matches = "true")
+    void tenModelOneShotRosterProvesBoundedParallelismAndEmitsSyntheticLatency()
+            throws Exception {
+        JsonNode manifest = mapper.readTree(Files.readString(
+            Path.of(System.getenv("ATS_V4_RESEARCH_SMOKE_MANIFEST"))));
+        assertEquals(10, manifest.path("models").size(),
+            "The bounded V70 test requires exactly ten synthetic allowlisted model IDs");
+        var members = new ArrayList<UUID>();
+        for (JsonNode model : manifest.path("models")) {
+            UUID id = UUID.fromString(model.path("model_version_id").asText());
+            registerVersion(id, model.path("family").asText(),
+                model.path("artifact_fingerprint").asText());
+            members.add(id);
+        }
+        assertEquals(10, members.stream().distinct().count());
+        assertTrue(members.contains(CAT) && members.contains(LIGHT));
+        var challengers = new ArrayList<>(members);
+        challengers.remove(CAT);
+        SyntheticCase cohort = createSyntheticCase(CAT, challengers);
+        String proxyUrl = System.getenv("ATS_V4_RESEARCH_SMOKE_PROXY_URL");
+        assertTrue(proxyUrl.startsWith("http://127.0.0.1:"),
+            "Load evidence must never call a non-loopback worker");
+        URI gate = URI.create(proxyUrl);
+        HttpClient http = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(3)).build();
+        int priorRequests = gateStatus(http, gate).path("total").asInt();
+        assertEquals(200, gatePost(http, gate, "/ci/arm").statusCode());
+
+        var runner = Executors.newSingleThreadExecutor();
+        long start = System.nanoTime();
+        try {
+            var future = runner.submit(() -> mvc.perform(
+                post(cohort.route()).with(user(ACTOR).roles("ADMIN")))
+                .andReturn());
+            boolean fourInFlight = false;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(6);
+            while (System.nanoTime() < deadline) {
+                JsonNode telemetry = gateStatus(http, gate);
+                int held = telemetry.path("held").asInt();
+                if (held > 4) {
+                    throw new IllegalStateException("V64 per-case worker bound exceeded");
+                }
+                if (held == 4
+                        && count("v4_research_inference_reservation",
+                            cohort.session(), cohort.caseKey()) == 4) {
+                    fourInFlight = true;
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            assertTrue(fourInFlight,
+                "Exactly four real worker requests must be held after reservations");
+            // The remaining six should be waiting for bounded worker capacity,
+            // not sent to Python or pre-reserved while all four are held.
+            Thread.sleep(200);
+            assertEquals(4, gateStatus(http, gate).path("held").asInt());
+            assertEquals(4, count("v4_research_inference_reservation",
+                cohort.session(), cohort.caseKey()));
+            assertEquals(200, gatePost(http, gate, "/ci/release").statusCode());
+            MvcResult result = future.get(42, TimeUnit.SECONDS);
+            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(
+                System.nanoTime() - start);
+            assertTrue(elapsedMs < 45_000,
+                "Research one-shot roster exceeded existing V64 45-second bound");
+            assertEquals(200, result.getResponse().getStatus());
+            JsonNode body = mapper.readTree(result.getResponse().getContentAsString());
+            assertEquals("FINALIZED_RESEARCH_ONLY", body.path("status").asText());
+            assertEquals(10, body.path("expectedModels").asInt());
+            assertEquals(10, body.path("succeeded").asInt());
+            assertEquals(0, body.path("unresolved").asInt());
+            assertTrue(body.path("matchedEvidenceFinalized").asBoolean());
+            assertFalse(body.path("canAuthorizeCapital").asBoolean());
+            assertFalse(body.path("paperOrdersSubmitted").asBoolean());
+
+            assertEquals(10, count("v4_research_inference_reservation",
+                cohort.session(), cohort.caseKey()));
+            assertEquals(10, count("v4_matched_decision",
+                cohort.session(), cohort.caseKey()));
+            assertEquals(1, count("v4_matched_case",
+                cohort.session(), cohort.caseKey()));
+            assertEquals(1, count("v4_research_matched_case_link",
+                cohort.session(), cohort.caseKey()));
+            assertEquals(10, jdbc.sql("""
+                    SELECT count(*) FROM v4_research_inference_receipt receipt
+                     JOIN v4_research_inference_reservation reservation
+                       ON reservation.reservation_id = receipt.reservation_id
+                    WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                      AND receipt.status='SUCCEEDED'
+                      AND receipt.can_authorize_capital=FALSE
+                    """).param("session", cohort.session())
+                .param("caseKey", cohort.caseKey())
+                .query(Integer.class).single());
+            assertEquals(0, jdbc.sql("""
+                    SELECT count(*) FROM paper_order
+                     WHERE correlation_id=:correlation
+                    """).param("correlation", cohort.session().toString())
+                .query(Integer.class).single());
+            assertEquals(priorRequests + 10,
+                gateStatus(http, gate).path("total").asInt(),
+                "Exactly one real HTTP call per synthetic model is allowed");
+            mvc.perform(post(cohort.route()).with(user(ACTOR).roles("ADMIN")))
+                .andExpect(status().isConflict());
+            assertEquals(priorRequests + 10,
+                gateStatus(http, gate).path("total").asInt(),
+                "Complete research roster must never replay its remote calls");
+
+            String artifactPath = System.getenv("ATS_V4_SOAK_REPORT_PATH");
+            if (artifactPath == null || artifactPath.isBlank()) {
+                throw new IllegalStateException("Synthetic evidence file path missing");
+            }
+            Files.writeString(Path.of(artifactPath), mapper.writeValueAsString(Map.of(
+                "contract", "v4-synthetic-roster-throughput.v1",
+                "synthetic_only", true,
+                "registered_model_ids", 10,
+                "distinct_trained_weight_families", 2,
+                "observed_held_concurrency", 4,
+                "bound_max_parallel_per_case", 4,
+                "wall_clock_ms", elapsedMs,
+                "success_receipts", 10,
+                "paper_orders", 0,
+                "can_authorize_capital", false)));
+        } finally {
+            gatePost(http, gate, "/ci/release");
+            runner.shutdownNow();
+        }
+    }
+
     private record SyntheticCase(UUID session, String caseKey, String route) {}
 
     /**
@@ -312,17 +445,33 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
      */
     private SyntheticCase createSyntheticCase(UUID champion, UUID challenger)
             throws Exception {
+        return createSyntheticCase(champion, List.of(challenger));
+    }
+
+    private SyntheticCase createSyntheticCase(UUID champion, List<UUID> challengers)
+            throws Exception {
+        if (champion == null || challengers == null
+                || challengers.isEmpty() || challengers.size() > 9
+                || challengers.contains(champion)
+                || challengers.stream().distinct().count() != challengers.size()) {
+            throw new IllegalArgumentException("Unique two-to-ten member roster required");
+        }
         UUID session = UUID.randomUUID();
         String caseKey = "ci-v67-" + UUID.randomUUID().toString().substring(0, 8);
+        var models = new ArrayList<Map<String, String>>();
+        models.add(Map.of("modelVersionId", champion.toString(),
+            "role", "PAPER_CHAMPION"));
+        for (UUID challenger : challengers) {
+            models.add(Map.of("modelVersionId", challenger.toString(),
+                "role", "SHADOW_CHALLENGER"));
+        }
         mvc.perform(post(ENDPOINT + "/sessions")
                 .with(user(ACTOR).roles("ADMIN"))
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("""
-                    {"sessionId":"%s","targetSpecFingerprint":"%s",
-                     "models":[
-                       {"modelVersionId":"%s","role":"PAPER_CHAMPION"},
-                       {"modelVersionId":"%s","role":"SHADOW_CHALLENGER"}]}
-                    """.formatted(session, C, champion, challenger)))
+                .content(mapper.writeValueAsString(Map.of(
+                    "sessionId", session.toString(),
+                    "targetSpecFingerprint", C,
+                    "models", models))))
             .andExpect(status().isCreated());
         var enrollment = jdbc.sql("""
                 SELECT created_at FROM v4_matched_session

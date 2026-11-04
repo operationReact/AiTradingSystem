@@ -14,6 +14,7 @@ on:
       - 'intelligence/pyproject.toml'
       - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
       - 'intelligence/scripts/v4_ci_worker_pause_proxy.py'
+      - 'intelligence/scripts/expand_v4_synthetic_roster.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   push:
     branches: [dev]
@@ -28,6 +29,7 @@ on:
       - 'intelligence/pyproject.toml'
       - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
       - 'intelligence/scripts/v4_ci_worker_pause_proxy.py'
+      - 'intelligence/scripts/expand_v4_synthetic_roster.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   workflow_dispatch:
 
@@ -202,6 +204,26 @@ jobs:
           export ATS_TEST_POSTGRES_PASSWORD=aitrading
           mvn --batch-mode --no-transfer-progress \
             -Dtest=ResearchRealWorkerFullRosterIT test
+
+          # V70 changes ONLY the private synthetic allowlist after V66-V69
+          # original two-model acceptance has already passed.
+          cd ..
+          python intelligence/scripts/expand_v4_synthetic_roster.py \
+            "$temporary/manifest.json"
+          export ATS_V4_10_MODEL_SOAK=true
+          export ATS_V4_SOAK_REPORT_PATH="$GITHUB_WORKSPACE/v4-synthetic-roster-throughput.json"
+          cd backend
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=ResearchRealWorkerFullRosterIT#tenModelOneShotRosterProvesBoundedParallelismAndEmitsSyntheticLatency' test
+
+      - name: Upload bounded synthetic roster throughput evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v4-synthetic-ten-model-roster-throughput
+          path: v4-synthetic-roster-throughput.json
+          if-no-files-found: ignore
+          retention-days: 14
 
 # The loopback integration uses real Java HTTP and a real Python process on
 # one CI runner with synthetic lab data. It is not a deployed production
