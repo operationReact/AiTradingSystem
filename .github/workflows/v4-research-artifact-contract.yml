@@ -82,7 +82,7 @@ jobs:
           test
 
   java-to-real-python-http:
-    name: Java HttpClient to running Python CatBoost/LightGBM (synthetic)
+    name: Java HTTP and Spring/PostgreSQL roster to running Python (synthetic)
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -152,6 +152,29 @@ jobs:
           cd backend
           mvn --batch-mode --no-transfer-progress \
             -Dtest=ResearchArtifactLiveWorkerSmokeTest test
+
+          # V67 extends the same real worker with an isolated ephemeral
+          # PostgreSQL instance. Only synthetic V56–V63 evidence is inserted.
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-client
+          fi
+          sudo systemctl start postgresql
+          if ! sudo -u postgres psql -tAc \
+            "SELECT 1 FROM pg_roles WHERE rolname='aitrading'" | grep -qx 1; then
+            sudo -u postgres psql -v ON_ERROR_STOP=1 \
+              -c "CREATE ROLE aitrading LOGIN PASSWORD 'aitrading';"
+          else
+            sudo -u postgres psql -v ON_ERROR_STOP=1 \
+              -c "ALTER ROLE aitrading WITH LOGIN PASSWORD 'aitrading';"
+          fi
+          sudo -u postgres dropdb --if-exists aitrading_v4_realworker
+          sudo -u postgres createdb --owner=aitrading aitrading_v4_realworker
+          export ATS_TEST_POSTGRES_JDBC_URL="jdbc:postgresql://127.0.0.1:5432/aitrading_v4_realworker"
+          export ATS_TEST_POSTGRES_USERNAME=aitrading
+          export ATS_TEST_POSTGRES_PASSWORD=aitrading
+          mvn --batch-mode --no-transfer-progress \
+            -Dtest=ResearchRealWorkerFullRosterIT test
 
 # The loopback integration uses real Java HTTP and a real Python process on
 # one CI runner with synthetic lab data. It is not a deployed production
