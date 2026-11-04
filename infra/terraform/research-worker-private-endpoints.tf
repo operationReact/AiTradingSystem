@@ -39,18 +39,9 @@ resource "aws_security_group" "research_worker_endpoints" {
   tags = local.worker_tags
 }
 
-# Java backend may connect privately to a dormant worker on 8090 only.
-# This ingress is provisioned even without V77 endpoints if V76 scaffold
-# was separately opted into; service desired count remains zero.
-resource "aws_vpc_security_group_ingress_rule" "worker_from_java" {
-  count                        = local.worker_scaffold_count
-  security_group_id            = aws_security_group.research_worker[0].id
-  referenced_security_group_id = aws_security_group.tasks.id
-  ip_protocol                  = "tcp"
-  from_port                    = 8090
-  to_port                      = 8090
-  description                  = "Internal Java backend to research worker HTTP (not TLS release approval)"
-}
+# V81 intentionally removes the direct Java-to-worker HTTP ingress.
+# All worker HTTP 8090 ingress must originate from the dedicated V81 private
+# TLS ALB security group; if private TLS is disabled no ingress is provisioned.
 
 resource "aws_vpc_security_group_ingress_rule" "worker_to_endpoints" {
   count                        = local.worker_endpoint_count
@@ -145,5 +136,5 @@ resource "aws_vpc_endpoint" "worker_secretsmanager" {
 }
 
 # These endpoints only provide AWS service reachability. They do not solve
-# Java-to-Python TLS identity, stable internal DNS, missing model manifests,
+# Java-to-Python accepted private TLS identity, stable internal DNS, missing model manifests,
 # model source rights or operator authorization to run a worker. No task scale.
