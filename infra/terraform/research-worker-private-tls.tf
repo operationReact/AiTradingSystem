@@ -206,8 +206,8 @@ resource "aws_route53_record" "research_worker_private" {
   name    = local.worker_tls_fqdn
   type    = "A"
   alias {
-    name                   = aws_lb.research_worker_tls[0].dns_name
-    zone_id                = aws_lb.research_worker_tls[0].zone_id
+    name    = aws_lb.research_worker_tls[0].dns_name
+    zone_id = aws_lb.research_worker_tls[0].zone_id
     # Zero worker targets is expected. DNS resolution is necessary for
     # certificate preflight but never implies a healthy model worker.
     evaluate_target_health = false
