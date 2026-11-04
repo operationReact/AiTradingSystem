@@ -265,6 +265,13 @@ void main() {
       scrollable: paperScroll,
     );
     expect(find.text('Intake: ACTIVE'), findsOneWidget);
+    // The safety card can be below the 800x600 widget test viewport, even
+    // after materializing it in the inner PAPER/SHADOW scrollable. Reveal
+    // across all nested scrollables before tapping the actual control.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('matched-safety-pause')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('matched-safety-pause')));
     await tester.pumpAndSettle();
     expect(find.text('Confirm PAUSE session control'), findsOneWidget);
@@ -307,6 +314,10 @@ void main() {
       find.byKey(const ValueKey('matched-safety-quarantine')), 220,
       scrollable: paperScroll,
     );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('matched-safety-quarantine')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('matched-safety-quarantine')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Quarantine is permanent.'), findsOneWidget);
