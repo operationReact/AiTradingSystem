@@ -43,7 +43,7 @@ class PrivateEndpointsContractTest(unittest.TestCase):
     def test_endpoints_never_scale_or_grant_live_trading(self):
         self.assertRegex(self.worker, r"desired_count\s*=\s*0")
         self.assertIn('assign_public_ip = false', self.worker)
-        self.assertIn('enable_execute_command  = false', self.worker)
+        self.assertRegex(self.worker, r"enable_execute_command\\s*=\\s*false")
         self.assertNotIn("aws_ecs_service", self.net)
         self.assertNotIn('aws_route" "internet"', self.net)
         self.assertIn('data.aws_caller_identity.current.account_id == "816344830716"', self.net)
