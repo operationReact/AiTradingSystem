@@ -176,14 +176,14 @@ resource "aws_ecs_task_definition" "research_worker" {
 }
 
 resource "aws_ecs_service" "research_worker" {
-  count                  = local.worker_scaffold_count
-  name                   = "${local.name}-research-worker"
-  cluster                = aws_ecs_cluster.main.id
-  task_definition        = aws_ecs_task_definition.research_worker[0].arn
-  desired_count          = 0
-  launch_type            = "FARGATE"
-  platform_version       = "LATEST"
-  enable_execute_command          = false
+  count                             = local.worker_scaffold_count
+  name                              = "${local.name}-research-worker"
+  cluster                           = aws_ecs_cluster.main.id
+  task_definition                   = aws_ecs_task_definition.research_worker[0].arn
+  desired_count                     = 0
+  launch_type                       = "FARGATE"
+  platform_version                  = "LATEST"
+  enable_execute_command            = false
   health_check_grace_period_seconds = 90
 
   # This is deliberately attached ONLY if the independent V81 cost/TLS opt-in
