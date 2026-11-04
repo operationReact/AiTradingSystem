@@ -191,6 +191,29 @@ class RuntimePostureTest(unittest.TestCase):
         )
         self.assert_blocked(f, "ECS_TASK_DEFINITION_UNVERIFIED")
 
+    def test_inspection_action_is_manual_and_not_deployment_capable(self):
+        workflow = (Path(__file__).resolve().parents[2] /
+                    ".github/workflows/v4-paper-runtime-inspect.yml"
+                    ).read_text(encoding="utf-8")
+        self.assertIn("on:\\n  workflow_dispatch:", workflow)
+        self.assertNotIn("\\n  push:", workflow)
+        self.assertNotIn("\\n  pull_request:", workflow)
+        self.assertIn("vars.AWS_READONLY_ROLE_ARN", workflow)
+        self.assertNotIn("vars.AWS_ROLE_ARN", workflow)
+        self.assertIn("allowed-account-ids: '816344830716'", workflow)
+        for mutation in (
+            "aws ecs update-service",
+            "aws ecs register-task-definition",
+            "aws ecs run-task",
+            "aws ecr put-image",
+            "aws ecr create-repository",
+            "aws ssm send-command",
+            "aws secretsmanager get-secret-value",
+            "aws iam",
+            "aws ecs execute-command",
+        ):
+            self.assertNotIn(mutation, workflow.lower())
+
     def test_invalid_sha_and_missing_inputs_fail_without_inventing_metrics(self):
         f = fixtures()
         f["sha"] = "garbage"
