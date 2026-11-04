@@ -11,6 +11,10 @@ The Flutter repository uses the existing `AuthenticatedApiClient` and existing s
 
 Tests use mocked HTTP for wire-contract checks and a typed fake repository for widget behavior. They verify four connected ADMIN routes, session query limit and authenticated headers, model details, disagreement, validation, empty, access denied and lack of LIVE controls.
 
+## Session discovery follow-up
+
+The next V4-11 increment adds an ADMIN-only `GET /api/admin/model-governance/paper-shadow/sessions?limit=20` backed by the immutable V56 session table (maximum 50 results, ordered by recorded session creation). The Flutter PAPER/SHADOW tab now has a recent-session dropdown which loads the existing Java roster and candidate actions without manual UUID lookup. Each entry remains explicitly read-only, and no session is automatically enrolled or traded. New Java, repository and widget tests cover role restrictions, result bounds, exact route and selecting an existing session.
+
 ## Not complete
 
 This is **not** the full V4-11 Admin control center. It lacks model registration forms, experiment launcher, ensemble weights, confidence/latency/drift dashboards, PAPER/SHADOW enrollment/pause/quarantine, promotion and rollback, cost/retraining, full audit search and platform-specific production acceptance. The V4-09 Java ledger still needs authenticated inference publisher, actual PAPER fills/transaction cost/reconciliation and genuine SHADOW runtime.

@@ -343,6 +343,25 @@ public class MatchedPaperShadowIntakeService {
     }
 
     @Transactional(readOnly = true)
+    public List<SessionView> recentSessions(int limit) {
+        if (limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("session limit must be 1-50");
+        }
+        return jdbc.sql("""
+                SELECT session_id
+                  FROM v4_matched_session
+                 ORDER BY created_at DESC, session_id DESC
+                 LIMIT :limit
+                """)
+            .param("limit", limit)
+            .query(UUID.class)
+            .list()
+            .stream()
+            .map(this::session)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
     public List<ObservationView> recent(UUID sessionId, int limit) {
         if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be 1-100");
         session(sessionId);

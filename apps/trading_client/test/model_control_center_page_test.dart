@@ -36,6 +36,22 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
       ];
 
   @override
+  Future<List<MatchedSessionEvidence>> recentSessions() async => const [
+    MatchedSessionEvidence(
+      id: sessionId, fingerprint: 'enrollment-fingerprint',
+      createdAt: null, createdBy: 'admin', canAuthorizeCapital: false,
+      participants: [
+        MatchedParticipantEvidence(
+          versionId: 'version-1', role: 'PAPER_CHAMPION', modelFingerprint: 'model-alpha',
+        ),
+        MatchedParticipantEvidence(
+          versionId: 'version-2', role: 'SHADOW_CHALLENGER', modelFingerprint: 'model-beta',
+        ),
+      ],
+    ),
+  ];
+
+  @override
   Future<MatchedSessionEvidence> session(String id) async {
     sessionRequests++;
     return const MatchedSessionEvidence(
@@ -103,11 +119,20 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('PAPER / SHADOW'));
     await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('model-session-picker')), findsOneWidget);
 
     await tester.enterText(find.byKey(const ValueKey('model-session-input')), sessionId);
     await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
     await tester.pumpAndSettle();
     expect(repository.sessionRequests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-session-summary')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
     expect(find.textContaining('Source and runtime independently verified: NO'),
         findsOneWidget);
@@ -123,6 +148,33 @@ void main() {
     expect(find.text('Champion/challenger disagreement'), findsOneWidget);
     expect(find.text('Independent source validation: NOT VERIFIED'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
+  });
+
+  testWidgets('recent-session picker opens persisted matched evidence',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAPER / SHADOW'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('model-session-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Session 11111111-222').last);
+    await tester.pumpAndSettle();
+
+    expect(repository.sessionRequests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-session-summary')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
   });
 
   testWidgets('malformed session ID fails locally without any fetch',

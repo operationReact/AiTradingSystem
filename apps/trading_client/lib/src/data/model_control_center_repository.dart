@@ -150,6 +150,7 @@ class MatchedCaseEvidence {
 abstract interface class ModelControlCenterRepository {
   Future<List<RegisteredModelEvidence>> models();
   Future<List<ModelVersionEvidence>> versions(String modelKey);
+  Future<List<MatchedSessionEvidence>> recentSessions();
   Future<MatchedSessionEvidence> session(String sessionId);
   Future<List<MatchedCaseEvidence>> recentCases(String sessionId);
 }
@@ -172,6 +173,16 @@ class HttpModelControlCenterRepository implements ModelControlCenterRepository {
       '/api/admin/model-governance/models/$key/versions',
     );
     return _records(response).map(ModelVersionEvidence.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<List<MatchedSessionEvidence>> recentSessions() async {
+    final response = await api.getJson(
+      '/api/admin/model-governance/paper-shadow/sessions',
+      query: const {'limit': '20'},
+    );
+    return _records(response).map(MatchedSessionEvidence.fromJson)
         .toList(growable: false);
   }
 

@@ -376,6 +376,40 @@ class MatchedPaperShadowControllerIT extends AbstractPostgresIT {
         return id;
     }
 
+    @Test
+    void adminBrowsesBoundedRegisteredSessionsWithoutCrossingRoleBoundary() throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = UUID.randomUUID();
+        enroll(sessionId, champion, challenger);
+
+        String body = mvc.perform(get(API + "/sessions?limit=50")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        JsonNode sessions = mapper.readTree(body);
+        org.junit.jupiter.api.Assertions.assertTrue(sessions.isArray());
+        org.junit.jupiter.api.Assertions.assertTrue(sessions.size() <= 50);
+        boolean found = false;
+        for (JsonNode item : sessions) {
+            if (sessionId.toString().equals(item.path("sessionId").asText())) {
+                found = true;
+                assertEquals(2, item.path("models").size());
+                assertEquals(false, item.path("canAuthorizeCapital").asBoolean());
+            }
+        }
+        org.junit.jupiter.api.Assertions.assertTrue(found);
+        mvc.perform(get(API + "/sessions?limit=51")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(API + "/sessions?limit=0")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(API + "/sessions")
+                .with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
+    }
+
     private int countCases(UUID id) {
         return jdbc.sql("SELECT count(*) FROM v4_matched_case WHERE session_id = :id")
             .param("id", id).query(Integer.class).single();

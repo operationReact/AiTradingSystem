@@ -19,6 +19,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
+  List<MatchedSessionEvidence>? _recentSessions;
+  ApiFailure? _recentSessionsError;
+  bool _loadingRecentSessions = false;
   ApiFailure? _modelsError;
   ApiFailure? _versionsError;
   ApiFailure? _sessionError;
@@ -31,6 +34,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   void initState() {
     super.initState();
     _loadModels();
+    _loadRecentSessions();
   }
 
   @override
@@ -72,6 +76,21 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       if (mounted && _selected?.key == model.key) {
         setState(() => _loadingVersions = false);
       }
+    }
+  }
+
+  Future<void> _loadRecentSessions() async {
+    if (_loadingRecentSessions) return;
+    setState(() { _loadingRecentSessions = true; _recentSessionsError = null; });
+    try {
+      final recent = await widget.repository.recentSessions();
+      if (!mounted) return;
+      setState(() => _recentSessions = recent);
+    } on ApiFailure catch (error) {
+      if (!mounted) return;
+      setState(() => _recentSessionsError = error);
+    } finally {
+      if (mounted) setState(() => _loadingRecentSessions = false);
     }
   }
 
@@ -249,6 +268,44 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           'view does not enroll models or submit simulated or live orders.',
         ),
         const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: Text('Recent registered sessions',
+              style: theme.textTheme.titleMedium)),
+          IconButton(
+            key: const ValueKey('model-session-list-refresh'),
+            tooltip: 'Refresh session list',
+            onPressed: _loadingRecentSessions ? null : _loadRecentSessions,
+            icon: const Icon(Icons.refresh),
+          ),
+        ]),
+        if (_loadingRecentSessions && _recentSessions == null)
+          const LinearProgressIndicator(key: ValueKey('model-session-list-loading')),
+        if (_recentSessionsError != null)
+          _problem(_recentSessionsError!, stale: _recentSessions != null),
+        if (_recentSessions != null && _recentSessions!.isEmpty)
+          const Text('No registered PAPER/SHADOW sessions yet.'),
+        if (_recentSessions != null && _recentSessions!.isNotEmpty)
+          DropdownButtonFormField<String>(
+            key: const ValueKey('model-session-picker'),
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'Browse session',
+              border: OutlineInputBorder(),
+            ),
+            items: _recentSessions!.map((item) => DropdownMenuItem<String>(
+              value: item.id,
+              child: Text(
+                'Session ${_short(item.id)} · ${item.participants.length} models',
+                overflow: TextOverflow.ellipsis,
+              ),
+            )).toList(growable: false),
+            onChanged: (id) {
+              if (id == null) return;
+              _sessionController.text = id;
+              _loadSession();
+            },
+          ),
+        const SizedBox(height: 12),
         TextField(
           key: const ValueKey('model-session-input'),
           controller: _sessionController,
