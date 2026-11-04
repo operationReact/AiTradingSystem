@@ -34,7 +34,7 @@
       "Action": [
         "ecs:DescribeTaskDefinition"
       ],
-      "Resource": "arn:aws:ecs:us-east-1:816344830716:task-definition/ai-trading-system-backend:*"
+      "Resource": "*"
     },
     {
       "Sid": "ReadOnlyALBTargetHealth",
