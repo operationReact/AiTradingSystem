@@ -124,7 +124,7 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn('variable "research_worker_java_secret_prep_enabled"', prep)
-        self.assertRegex(prep, r"default\\s*=\\s*false")
+        self.assertRegex(prep, r"default\s*=\s*false")
         self.assertIn("var.research_worker_tls_enabled", prep)
         self.assertIn("var.research_worker_java_secret_prep_enabled ? [", self.backend)
         self.assertIn(
