@@ -101,7 +101,7 @@ class ResearchArtifactLiveWorkerSmokeTest {
             .POST(HttpRequest.BodyPublishers.ofString(
                 MAPPER.writeValueAsString(preflightBody)))
             .build();
-        var preflightReply = HttpClient.newHttpClient().send(
+        var preflightReply = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build().send(
             preflight, HttpResponse.BodyHandlers.ofString());
         if (preflightReply.statusCode() != 200) {
             // Only JSON validation field paths/types are safe in CI output.
@@ -164,7 +164,7 @@ class ResearchArtifactLiveWorkerSmokeTest {
             .POST(HttpRequest.BodyPublishers.ofString(
                 MAPPER.writeValueAsString(request)))
             .build();
-        var reply = HttpClient.newHttpClient().send(
+        var reply = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build().send(
             unauthorized, HttpResponse.BodyHandlers.discarding());
         assertEquals(401, reply.statusCode());
 
