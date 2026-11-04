@@ -79,6 +79,7 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
     contract_version: Literal["india-gemini-advisory-heldout-benchmark.v1"] = VERSION
     annotated_corpus_fingerprint: Hash64
     causal_market_corpus_fingerprint: Hash64
+    config: GeminiAdvisoryBenchmarkConfig
     config_fingerprint: Hash64
     imported_provider_category: Literal["GEMINI_ADVISORY"] = "GEMINI_ADVISORY"
     total_eligible_market_cases: Annotated[int, Field(ge=0)]
@@ -104,6 +105,8 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
 
     @model_validator(mode="after")
     def verify_report(self) -> GeminiHeldoutBenchmarkReport:
+        if self.config_fingerprint != self.config.fingerprint:
+            raise ValueError("Gemini benchmark configuration fingerprint mismatch")
         if [r.source_id for r in self.rows] != sorted(r.source_id for r in self.rows):
             raise ValueError("Gemini event results must be sorted by source ID")
         if len({r.source_id for r in self.rows}) != len(self.rows):
@@ -113,6 +116,13 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
         ):
             raise ValueError("all eligible causal cases need a holdout annotation")
         ready = [r for r in self.rows if r.predicted_sentiment is not None]
+        if any(
+            r.predicted_sentiment != _sentiment(
+                r.advisory_direction_score, self.config.neutral_abs_direction_score
+            )
+            for r in ready if r.advisory_direction_score is not None
+        ):
+            raise ValueError("Gemini predicted label differs from frozen neutral band")
         if (
             len(ready) != self.causally_available_advisories
             or len(self.rows) - len(ready) != self.missing_or_late_advisories
@@ -129,8 +139,17 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
         ]
         if expected_confusion != self.ordered_confusion_counts:
             raise ValueError("confusion matrix differs from heldout predictions")
-        if self.reason_codes != sorted(set(self.reason_codes)):
-            raise ValueError("Gemini benchmark reasons must be canonical")
+        expected_reasons = []
+        if len(ready) < self.config.minimum_evaluable_predictions:
+            expected_reasons.append("INSUFFICIENT_CAUSAL_GEMINI_PREDICTIONS")
+        if any(
+            sum(r.observed_sentiment == sentiment for r in ready)
+            < self.config.minimum_per_actual_label
+            for sentiment in labels
+        ):
+            expected_reasons.append("INSUFFICIENT_PER_CLASS_HOLDOUT_SUPPORT")
+        if self.reason_codes != sorted(expected_reasons):
+            raise ValueError("Gemini benchmark reasons differ from heldout support")
         if self.status == "INCONCLUSIVE":
             if not self.reason_codes or self.sentiment_accuracy is not None or (
                 self.sentiment_macro_f1 is not None
@@ -192,6 +211,8 @@ def benchmark_heldout_gemini_advisory(
     causal = IndiaFinancialNlpCorpusReport.model_validate(
         imported_causal_news.model_dump(mode="python")
     )
+    if causal.status != "CAUSAL_RESEARCH_CORPUS_ONLY":
+        raise ValueError("Gemini benchmark requires completed causal news corpus")
     samples = [
         item for item in labeled.samples if item.split == "INDEPENDENT_HOLDOUT"
     ]
@@ -274,6 +295,7 @@ def benchmark_heldout_gemini_advisory(
         "contract_version": VERSION,
         "annotated_corpus_fingerprint": labeled.corpus_fingerprint,
         "causal_market_corpus_fingerprint": causal.report_fingerprint,
+        "config": policy.model_dump(mode="json"),
         "config_fingerprint": policy.fingerprint,
         "imported_provider_category": "GEMINI_ADVISORY",
         "total_eligible_market_cases": len(causal.cases),
