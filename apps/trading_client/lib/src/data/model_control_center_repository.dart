@@ -147,8 +147,49 @@ class MatchedCaseEvidence {
       );
 }
 
+class EffectiveModelEmergencyStatus {
+  const EffectiveModelEmergencyStatus({
+    required this.versionId, required this.allowed,
+    required this.modelVersionDisabled, required this.modelFamilyDisabled,
+    required this.staticFallbackEnabled, required this.canAuthorizeCapital,
+  });
+  final String versionId;
+  final bool allowed, modelVersionDisabled, modelFamilyDisabled;
+  final bool staticFallbackEnabled, canAuthorizeCapital;
+
+  factory EffectiveModelEmergencyStatus.fromJson(Map<String, dynamic> json) =>
+      EffectiveModelEmergencyStatus(
+        versionId: _value(json, 'versionId'),
+        allowed: json['allowed'] == true,
+        modelVersionDisabled: json['modelVersionDisabled'] == true,
+        modelFamilyDisabled: json['modelFamilyDisabled'] == true,
+        staticFallbackEnabled: json['staticFallbackEnabled'] == true,
+        canAuthorizeCapital: json['canAuthorizeCapital'] == true,
+      );
+}
+
+class DisabledModelReceipt {
+  const DisabledModelReceipt({
+    required this.active, required this.reason,
+    required this.stateFingerprint, required this.canAuthorizeCapital,
+  });
+  final bool active, canAuthorizeCapital;
+  final String reason, stateFingerprint;
+
+  factory DisabledModelReceipt.fromJson(Map<String, dynamic> json) =>
+      DisabledModelReceipt(
+        active: json['active'] == true,
+        reason: _value(json, 'reason'),
+        stateFingerprint: _value(json, 'stateFingerprint'),
+        canAuthorizeCapital: json['canAuthorizeCapital'] == true,
+      );
+}
+
 abstract interface class ModelControlCenterRepository {
   Future<List<RegisteredModelEvidence>> models();
+  Future<EffectiveModelEmergencyStatus> effectiveModelStatus(String versionId);
+  Future<DisabledModelReceipt> disableModelVersion(String versionId, String reason);
+
   Future<List<ModelVersionEvidence>> versions(String modelKey);
   Future<List<MatchedSessionEvidence>> recentSessions();
   Future<MatchedSessionEvidence> session(String sessionId);
@@ -158,6 +199,34 @@ abstract interface class ModelControlCenterRepository {
 class HttpModelControlCenterRepository implements ModelControlCenterRepository {
   const HttpModelControlCenterRepository(this.api);
   final AuthenticatedApiClient api;
+
+  @override
+  Future<EffectiveModelEmergencyStatus> effectiveModelStatus(String versionId) async {
+    final id = Uri.encodeComponent(versionId);
+    final response = await api.getJson(
+      '/api/admin/model-governance/emergency-controls/models/$id/effective',
+    );
+    return EffectiveModelEmergencyStatus.fromJson(_record(response));
+  }
+
+  @override
+  Future<DisabledModelReceipt> disableModelVersion(
+      String versionId, String reason) async {
+    final id = Uri.encodeComponent(versionId);
+    final cleaned = reason.trim();
+    if (cleaned.isEmpty || cleaned.length > 512) {
+      throw ArgumentError.value(reason, 'reason', 'A bounded audit reason is required');
+    }
+    final response = await api.putJson(
+      '/api/admin/model-governance/emergency-controls/models/$id',
+      body: {'disabled': true, 'reason': cleaned},
+    );
+    final receipt = DisabledModelReceipt.fromJson(_record(response));
+    if (!receipt.active || receipt.canAuthorizeCapital) {
+      throw const ApiTransportFailure('INVALID_MODEL_DISABLE_RECEIPT', null);
+    }
+    return receipt;
+  }
 
   @override
   Future<List<RegisteredModelEvidence>> models() async {
