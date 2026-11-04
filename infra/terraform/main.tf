@@ -477,7 +477,7 @@ resource "aws_ecs_service" "backend" {
     rollback = true
   }
   network_configuration {
-    subnets          = aws_subnet.public[*].id
+    subnets = aws_subnet.public[*].id
     # V82 optional backend-only TLS caller identity. Frontend ECS tasks
     # never receive this SG; default-off V82 leaves this list unchanged.
     security_groups = concat(
