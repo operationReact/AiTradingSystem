@@ -165,8 +165,10 @@ def test_gemini_holdout_benchmark_is_replayable_and_never_proves_real_performanc
     assert report.sentiment_macro_f1 == 1
     assert report.ordered_confusion_counts == [1, 0, 0, 0, 1, 0, 0, 0, 1]
     assert report.source_advisory_config.advisory_provider == "GEMINI"
-    assert (report.source_advisory_config_fingerprint ==
-            IndiaFinancialNlpCorpusConfig().fingerprint)
+    assert (
+        report.source_advisory_config_fingerprint
+        == IndiaFinancialNlpCorpusConfig().fingerprint
+    )
     assert report.independent_gemini_api_execution_verified is False
     assert report.sentiment_labels_independently_adjudicated is False
     assert report.independent_news_and_content_rights_verified is False
