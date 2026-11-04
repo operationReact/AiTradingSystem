@@ -6,6 +6,9 @@ on:
     paths:
       - 'scripts/v4_paper_runtime_posture.py'
       - 'scripts/tests/test_v4_paper_runtime_posture.py'
+      - 'scripts/tests/test_v4_readonly_oidc_policy.py'
+      - 'infra/aws/readonly-v73-oidc-trust.json'
+      - 'infra/aws/readonly-v73-inspection-policy.json'
       - '.github/workflows/v4-paper-runtime-inspect.yml'
       - '.github/workflows/v4-paper-runtime-posture-contract.yml'
   push:
@@ -13,6 +16,9 @@ on:
     paths:
       - 'scripts/v4_paper_runtime_posture.py'
       - 'scripts/tests/test_v4_paper_runtime_posture.py'
+      - 'scripts/tests/test_v4_readonly_oidc_policy.py'
+      - 'infra/aws/readonly-v73-oidc-trust.json'
+      - 'infra/aws/readonly-v73-inspection-policy.json'
       - '.github/workflows/v4-paper-runtime-inspect.yml'
       - '.github/workflows/v4-paper-runtime-posture-contract.yml'
   workflow_dispatch:
@@ -31,9 +37,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run synthetic, isolated AWS JSON posture cases
-        run: >-
-          python3 -m unittest discover -v
-          -s scripts/tests
-          -p test_v4_paper_runtime_posture.py
+        run: |
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_paper_runtime_posture.py
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_readonly_oidc_policy.py
 
 # No OIDC credentials, network calls, AWS state or broker access in this gate.
