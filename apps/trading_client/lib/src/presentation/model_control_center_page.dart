@@ -29,6 +29,36 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   bool _loadingModels = false;
   bool _loadingVersions = false;
   bool _loadingSession = false;
+  int _authGeneration = 0;
+
+  bool _isAccessDenied(ApiFailure error) =>
+      error is ApiAuthenticationRequired ||
+      error.statusCode == 401 ||
+      error.statusCode == 403;
+
+  /// Invalidate every cached ADMIN view on any 401/403, including in-flight reads.
+  void _clearRevokedEvidence(ApiFailure error) {
+    _authGeneration++;
+    _sessionController.clear();
+    setState(() {
+      _models = null;
+      _versions = null;
+      _selected = null;
+      _session = null;
+      _cases = null;
+      _recentSessions = null;
+      _modelsError = error;
+      _versionsError = null;
+      _sessionError = error;
+      _recentSessionsError = error;
+      _sessionValidation = null;
+      _loadingModels = false;
+      _loadingVersions = false;
+      _loadingSession = false;
+      _loadingRecentSessions = false;
+    });
+  }
+
 
   @override
   void initState() {
@@ -45,20 +75,28 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
 
   Future<void> _loadModels() async {
     if (_loadingModels) return;
+    final generation = _authGeneration;
     setState(() { _loadingModels = true; _modelsError = null; });
     try {
       final models = await widget.repository.models();
-      if (!mounted) return;
+      if (!mounted || generation != _authGeneration) return;
       setState(() => _models = models);
     } on ApiFailure catch (error) {
-      if (!mounted) return;
-      setState(() => _modelsError = error);
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() => _modelsError = error);
+      }
     } finally {
-      if (mounted) setState(() => _loadingModels = false);
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingModels = false);
+      }
     }
   }
 
   Future<void> _selectModel(RegisteredModelEvidence model) async {
+    final generation = _authGeneration;
     setState(() {
       _selected = model;
       _versions = null;
@@ -67,13 +105,24 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     });
     try {
       final versions = await widget.repository.versions(model.key);
-      if (!mounted || _selected?.key != model.key) return;
+      if (!mounted || generation != _authGeneration ||
+          _selected?.key != model.key) {
+        return;
+      }
       setState(() => _versions = versions);
     } on ApiFailure catch (error) {
-      if (!mounted || _selected?.key != model.key) return;
-      setState(() => _versionsError = error);
+      if (!mounted || generation != _authGeneration ||
+          _selected?.key != model.key) {
+        return;
+      }
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() => _versionsError = error);
+      }
     } finally {
-      if (mounted && _selected?.key == model.key) {
+      if (mounted && generation == _authGeneration &&
+          _selected?.key == model.key) {
         setState(() => _loadingVersions = false);
       }
     }
@@ -81,16 +130,23 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
 
   Future<void> _loadRecentSessions() async {
     if (_loadingRecentSessions) return;
+    final generation = _authGeneration;
     setState(() { _loadingRecentSessions = true; _recentSessionsError = null; });
     try {
       final recent = await widget.repository.recentSessions();
-      if (!mounted) return;
+      if (!mounted || generation != _authGeneration) return;
       setState(() => _recentSessions = recent);
     } on ApiFailure catch (error) {
-      if (!mounted) return;
-      setState(() => _recentSessionsError = error);
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() => _recentSessionsError = error);
+      }
     } finally {
-      if (mounted) setState(() => _loadingRecentSessions = false);
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingRecentSessions = false);
+      }
     }
   }
 
@@ -102,21 +158,31 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       setState(() => _sessionValidation = 'Enter a valid session UUID.');
       return;
     }
+    final generation = _authGeneration;
     setState(() {
       _loadingSession = true;
+      _session = null;
+      _cases = null;
       _sessionError = null;
       _sessionValidation = null;
     });
     try {
       final session = await widget.repository.session(id);
+      if (!mounted || generation != _authGeneration) return;
       final cases = await widget.repository.recentCases(id);
-      if (!mounted) return;
+      if (!mounted || generation != _authGeneration) return;
       setState(() { _session = session; _cases = cases; });
     } on ApiFailure catch (error) {
-      if (!mounted) return;
-      setState(() => _sessionError = error);
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() => _sessionError = error);
+      }
     } finally {
-      if (mounted) setState(() => _loadingSession = false);
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingSession = false);
+      }
     }
   }
 
@@ -158,8 +224,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   );
 
   Widget _problem(ApiFailure error, {required bool stale}) {
-    final denied = error is ApiHttpFailure &&
-        (error.statusCode == 401 || error.statusCode == 403);
+    final denied = _isAccessDenied(error);
     final detail = denied
         ? 'ADMIN access is required. No model evidence was changed.'
         : stale
@@ -240,10 +305,25 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           if (_versions != null)
             ..._versions!.map((version) => Card(
               key: ValueKey('model-version-${version.id}'),
-              child: ListTile(
-                title: Text(version.label),
-                subtitle: Text('Version: ${_short(version.fingerprint)}\nArtifact: ${_short(version.artifactFingerprint)}'),
-                isThreeLine: true,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(version.label, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    Text('Version: ${_short(version.fingerprint)}'),
+                    Text('Artifact: ${_short(version.artifactFingerprint)}'),
+                    Text('Feature schema: ${_short(version.featureSchemaFingerprint)}'),
+                    Text('Training dataset: ${_short(version.trainingDatasetFingerprint)}'),
+                    Text('Training config: ${_short(version.trainingConfigFingerprint)}'),
+                    Text('Code: ${_short(version.codeSha)}'),
+                    if (version.researchRegistryFingerprint != null)
+                      Text('Research: ${_short(version.researchRegistryFingerprint!)}'),
+                    if (version.trainingCutoff != null)
+                      Text('Training cutoff: ${version.trainingCutoff!.toIso8601String()}'),
+                  ],
+                ),
               ),
             )),
         ],
