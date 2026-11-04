@@ -132,11 +132,11 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
   @override
   Future<MatchedSessionAggregateEvidence> sessionEvidence(String id) async {
     if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
-    return const MatchedSessionAggregateEvidence(
+    return MatchedSessionAggregateEvidence(
       sessionId: sessionId,
       enrollmentFingerprint: 'enrollment-fingerprint',
-      sessionSafetyState: 'PAUSED',
-      sessionStateRevision: 1,
+      sessionSafetyState: safetyMode,
+      sessionStateRevision: safetyRevision,
       matchedCases: 1,
       championEnterCases: 1,
       shadowDisagreementCases: 1,
@@ -232,7 +232,7 @@ void main() {
       ).first,
     );
     expect(find.byKey(const ValueKey('model-session-evidence')), findsOneWidget);
-    expect(find.textContaining('Safety state: PAUSED'), findsOneWidget);
+    expect(find.textContaining('Safety state: ACTIVE'), findsOneWidget);
     expect(find.textContaining('Unlinked ENTER: 1'), findsOneWidget);
     expect(find.byKey(const ValueKey('model-evidence-unverified')), findsOneWidget);
     await tester.scrollUntilVisible(
