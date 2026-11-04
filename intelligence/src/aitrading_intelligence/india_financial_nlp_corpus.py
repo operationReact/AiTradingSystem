@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .ai_evidence_source import NewsAiEvidenceExport, ResearchAiEvidence
-from .event_source import NewsResearchExport, ResearchNewsEvent
+from .event_source import NewsResearchExport
 from .fingerprints import canonical_fingerprint
 from .market_source import MarketResearchExport
 from .pytorch_target import ForwardReturnTargetSpec
