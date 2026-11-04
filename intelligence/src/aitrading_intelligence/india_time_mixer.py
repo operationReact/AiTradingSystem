@@ -23,6 +23,10 @@ from .india_causal_forecast_baseline import (
 from .india_fee_tax import IndiaFeeTaxBookV1
 from .india_patch_transformer import BoundedPatchMetrics, _metrics, _return_windows
 from .market_source import MarketResearchExport, load_market_export
+from .native_forecast_trace import (
+    NativeForecastDecisionTrace,
+    build_native_forecast_trace,
+)
 from .pytorch_target import ForwardReturnTargetSpec
 
 VERSION = "india-bounded-time-mixer-cpu.v1"
@@ -89,6 +93,7 @@ class TimeMixerResearchReport(BaseModel):
     production_model_approved: Literal[False] = False
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
+    native_trace: NativeForecastDecisionTrace | None
     report_fingerprint: Hash64
 
     @model_validator(mode="after")
@@ -107,6 +112,41 @@ class TimeMixerResearchReport(BaseModel):
             "paired_economic_report_fingerprint", "paired_economic_assessment",
         )):
             raise ValueError("inconclusive TimeMixer must not claim model comparison")
+        if self.native_trace is None:
+            if self.model_state_fingerprint is not None:
+                raise ValueError("model run must include its native decision trace")
+        else:
+            trace = self.native_trace
+            candidate = self.time_mixer_metrics
+            if (
+                trace.candidate_id != "bounded-time-mixer-research"
+                or trace.model_version_ref != VERSION
+                or trace.model_state_fingerprint != self.model_state_fingerprint
+                or trace.causal_baseline_report_fingerprint
+                != self.causal_baseline_report_fingerprint
+                or trace.cohort.holdout_export_fingerprint
+                != self.holdout_export_fingerprint
+                or trace.cohort.training_export_fingerprint
+                != self.training_export_fingerprint
+                or trace.cohort.fee_book_fingerprint != self.fee_book_fingerprint
+                or trace.target.fingerprint != self.target_spec_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.calibration_rows
+                ]) != self.calibration_example_membership_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.holdout_rows
+                ]) != self.holdout_example_membership_fingerprint
+                or candidate is None
+                or candidate.forecast_fingerprint
+                != canonical_fingerprint(trace.holdout_predictions)
+                or candidate.trade_count != trace.reported_trade_count
+                or not math.isclose(
+                    candidate.net_return_after_assumed_costs,
+                    sum(trace.holdout_net_returns_after_costs),
+                    rel_tol=1e-9, abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("model summary and native decision trace disagree")
         if self.report_fingerprint != canonical_fingerprint(
             self.model_dump(mode="json", exclude={"report_fingerprint"})
         ):
@@ -256,6 +296,7 @@ def evaluate_bounded_time_mixer(
         reasons.add("INSUFFICIENT_INDEPENDENT_HOLDOUT_ROWS")
     baseline_metrics = candidate_metrics = None
     state_hash = paired_hash = assessment = None
+    native_trace = None
     if not reasons:
         calib_prediction, holdout_prediction, state_hash = _train_bounded_time_mixer(
             [window for _, window in fit],
@@ -271,9 +312,25 @@ def evaluate_bounded_time_mixer(
             calibration, calib_prediction, heldout, holdout_prediction,
             target=target, interval_coverage=policy.interval_coverage,
         )
-        common = bind_common_causal_tournament_cohort(
+        native_cohort = bind_common_causal_tournament_cohort(
             parent, heldout, target
-        ).series_kwargs()
+        )
+        native_trace = build_native_forecast_trace(
+            candidate_id="bounded-time-mixer-research",
+            model_version_ref=VERSION,
+            model_state_fingerprint=state_hash,
+            causal_baseline_report_fingerprint=parent.report_fingerprint,
+            cohort=native_cohort,
+            target=target,
+            interval_coverage=policy.interval_coverage,
+            calibration_rows=calibration,
+            calibration_predictions=calib_prediction,
+            holdout_rows=heldout,
+            holdout_predictions=holdout_prediction,
+            holdout_net_returns_after_costs=candidate_returns,
+            reported_trade_count=candidate_metrics.trade_count,
+        )
+        common = native_cohort.series_kwargs()
         baseline_series = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
@@ -335,6 +392,7 @@ def evaluate_bounded_time_mixer(
         "genuine_market_economic_uplift_verified": False,
         "upstream_timemixer_weights_used": False,
         "production_model_approved": False,
+        "native_trace": native_trace.model_dump(mode="json") if native_trace else None,
         "promotion_allowed": False,
         "can_authorize_capital": False,
     }

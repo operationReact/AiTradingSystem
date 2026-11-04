@@ -23,6 +23,10 @@ from .india_causal_forecast_baseline import (
 from .india_fee_tax import IndiaFeeTaxBookV1
 from .india_patch_transformer import BoundedPatchMetrics, _metrics, _return_windows
 from .market_source import MarketResearchExport, load_market_export
+from .native_forecast_trace import (
+    NativeForecastDecisionTrace,
+    build_native_forecast_trace,
+)
 from .pytorch_target import ForwardReturnTargetSpec
 
 CONTRACT = "india-bounded-tft-quantile-cpu.v1"
@@ -90,6 +94,7 @@ class BoundedTftReport(BaseModel):
     economically_proven_in_indian_markets: Literal[False] = False
     model_promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
+    native_trace: NativeForecastDecisionTrace | None
     report_fingerprint: Hash64
 
     @model_validator(mode="after")
@@ -114,6 +119,41 @@ class BoundedTftReport(BaseModel):
             0 <= self.native_quantile_interval_coverage <= 1
         ):
             raise ValueError("native quantile coverage must be between zero and one")
+        if self.native_trace is None:
+            if self.model_state_fingerprint is not None:
+                raise ValueError("model run must include its native decision trace")
+        else:
+            trace = self.native_trace
+            candidate = self.candidate_metrics
+            if (
+                trace.candidate_id != "original-bounded-tft"
+                or trace.model_version_ref != CONTRACT
+                or trace.model_state_fingerprint != self.model_state_fingerprint
+                or trace.causal_baseline_report_fingerprint
+                != self.causal_baseline_report_fingerprint
+                or trace.cohort.holdout_export_fingerprint
+                != self.holdout_export_fingerprint
+                or trace.cohort.training_export_fingerprint
+                != self.training_export_fingerprint
+                or trace.cohort.fee_book_fingerprint != self.india_fee_book_fingerprint
+                or trace.target.fingerprint != self.target_spec_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.calibration_rows
+                ]) != self.calibration_membership_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.holdout_rows
+                ]) != self.independent_holdout_membership_fingerprint
+                or candidate is None
+                or candidate.forecast_fingerprint
+                != canonical_fingerprint(trace.holdout_predictions)
+                or candidate.trade_count != trace.reported_trade_count
+                or not math.isclose(
+                    candidate.net_return_after_assumed_costs,
+                    sum(trace.holdout_net_returns_after_costs),
+                    rel_tol=1e-9, abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("model summary and native decision trace disagree")
         if self.report_fingerprint != canonical_fingerprint(
             self.model_dump(mode="json", exclude={"report_fingerprint"})
         ):
@@ -278,6 +318,7 @@ def evaluate_bounded_tft(
         reasons.add("INSUFFICIENT_INDEPENDENT_HOLDOUT_ROWS")
     state = forecasts = base_metrics = candidate_metrics = paired_hash = assessment = None
     native_coverage = None
+    native_trace = None
     if not reasons:
         train_q, held_q, state = _fit_bounded_tft(
             [window for _, window in fit],
@@ -301,9 +342,25 @@ def evaluate_bounded_tft(
             heldout, [value[1] for value in held_q],
             target=target, interval_coverage=policy.interval_coverage,
         )
-        shared = bind_common_causal_tournament_cohort(
+        native_cohort = bind_common_causal_tournament_cohort(
             parent, heldout, target
-        ).series_kwargs()
+        )
+        native_trace = build_native_forecast_trace(
+            candidate_id="original-bounded-tft",
+            model_version_ref=CONTRACT,
+            model_state_fingerprint=state,
+            causal_baseline_report_fingerprint=parent.report_fingerprint,
+            cohort=native_cohort,
+            target=target,
+            interval_coverage=policy.interval_coverage,
+            calibration_rows=calibration,
+            calibration_predictions=[value[1] for value in train_q],
+            holdout_rows=heldout,
+            holdout_predictions=[value[1] for value in held_q],
+            holdout_net_returns_after_costs=candidate_returns,
+            reported_trade_count=candidate_metrics.trade_count,
+        )
+        shared = native_cohort.series_kwargs()
         baseline = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
@@ -365,6 +422,7 @@ def evaluate_bounded_tft(
         "independently_authenticated_market_data": False,
         "independently_preregistered_holdout": False,
         "economically_proven_in_indian_markets": False,
+        "native_trace": native_trace.model_dump(mode="json") if native_trace else None,
         "model_promotion_allowed": False,
         "can_authorize_capital": False,
     }
