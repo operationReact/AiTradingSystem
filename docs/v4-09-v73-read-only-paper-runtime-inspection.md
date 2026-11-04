@@ -34,12 +34,21 @@ Do not interpret an ECS task definition as an independently verified worker.
 ### What the manual workflow actually does
 
 A maintainer must choose `dev` and dispatch **Inspect V4 PAPER runtime
-posture (read-only, not release acceptance)** from GitHub Actions. The
-existing repository `AWS_ROLE_ARN` variable must point to a permitted
-OIDC role with read-only STS, ECS and ELB Describe permissions. Restrict
-role permissions and GitHub OIDC subjects at the AWS IAM level; the workflow
-uses only read APIs. It cannot push images, deploy ECS services, rotate
-secrets, invoke a trading strategy or alter desired count.
+posture (read-only, not release acceptance)** from GitHub Actions. Create a **dedicated least-privilege AWS IAM OIDC inspection role** and set
+the repository variable `AWS_READONLY_ROLE_ARN` to its ARN. **Do not reuse**
+`AWS_ROLE_ARN` from existing deployment workflows; that role may have
+image-push or ECS-write permissions. The trust policy must restrict the GitHub
+OIDC provider to audience `sts.amazonaws.com` and the exact subject
+`repo:operationReact/AiTradingSystem:ref:refs/heads/dev`. The inspection
+role needs only `ecs:DescribeClusters`, `ecs:DescribeServices`,
+`ecs:DescribeTaskDefinition`, `elasticloadbalancing:DescribeTargetGroups`,
+`elasticloadbalancing:DescribeTargetHealth` and STS caller identity
+(obtained from STS without any access to secrets or customer data).
+No ECR write, ECS service update, SSM command, secret retrieval, broker
+or IAM mutation permissions should be granted.
+
+The workflow uses only read APIs. It cannot push images, deploy ECS
+services, rotate secrets, invoke a trading strategy or alter desired count.
 
 The workflow requests short-lived AWS credentials, then collects, in a
 private GitHub runner temporary directory: STS caller account, ECS cluster
