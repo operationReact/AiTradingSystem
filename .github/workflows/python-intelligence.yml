@@ -62,3 +62,4 @@ jobs:
           pytest -q tests/test_neural_temperature_scaling.py
           pytest -q tests/test_india_patch_transformer.py
           pytest -q tests/test_india_time_mixer.py
+          pytest -q tests/test_india_bounded_tft.py
