@@ -1,0 +1,39 @@
+name: V4 PAPER runtime posture contract (offline only)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_paper_runtime_posture.py'
+      - 'scripts/tests/test_v4_paper_runtime_posture.py'
+      - '.github/workflows/v4-paper-runtime-inspect.yml'
+      - '.github/workflows/v4-paper-runtime-posture-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_paper_runtime_posture.py'
+      - 'scripts/tests/test_v4_paper_runtime_posture.py'
+      - '.github/workflows/v4-paper-runtime-inspect.yml'
+      - '.github/workflows/v4-paper-runtime-posture-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-posture:
+    name: Reject LIVE, wrong account, old image and credential leakage
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run synthetic, isolated AWS JSON posture cases
+        run: >-
+          python3 -m unittest discover -v
+          -s scripts/tests
+          -p test_v4_paper_runtime_posture.py
+
+# No OIDC credentials, network calls, AWS state or broker access in this gate.
