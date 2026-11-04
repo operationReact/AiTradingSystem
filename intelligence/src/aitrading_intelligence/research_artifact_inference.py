@@ -131,6 +131,95 @@ class BoundedInferenceResponse(BaseModel):
         return self
 
 
+READINESS_VERSION = "v4-research-worker-roster-readiness.v1"
+
+
+class VerifiedWorkerModel(BaseModel):
+    """Public-to-authorized-Java metadata only; no model weights or file paths."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    model_version_id: str = Field(pattern=r"^[0-9a-fA-F-]{36}$")
+    model_family: ModelFamily
+    artifact_fingerprint: Hash64
+
+
+class VerifiedWorkerRoster(BaseModel):
+    """A checked local manifest snapshot; NOT an attested cloud deployment."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["v4-research-worker-roster-readiness.v1"] = (
+        READINESS_VERSION
+    )
+    manifest_sha256: Hash64
+    models: list[VerifiedWorkerModel] = Field(min_length=1, max_length=16)
+    local_artifacts_validated: Literal[True] = True
+    independently_verified_deployment: Literal[False] = False
+    source_rights_verified: Literal[False] = False
+    paper_shadow_soak_accepted: Literal[False] = False
+    broker_reconciliation_accepted: Literal[False] = False
+    can_authorize_capital: Literal[False] = False
+    response_fingerprint: Hash64
+
+    @model_validator(mode="after")
+    def verify_roster_fingerprint(self) -> VerifiedWorkerRoster:
+        if self.response_fingerprint != canonical_fingerprint(
+            self.model_dump(mode="json", exclude={"response_fingerprint"})
+        ):
+            raise ValueError("readiness roster fingerprint mismatch")
+        return self
+
+
+def inspect_worker_roster(manifest_path: Path) -> VerifiedWorkerRoster:
+    """Verify every locally pinned artifact, not just /health availability.
+
+    Even an authentic response only proves what was accessible in *this*
+    worker process for this request; not licensed data, production continuity,
+    model profitability or authorization to execute an order.
+    """
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise InferenceUnavailable("research manifest unavailable")
+    if manifest_path.stat().st_size > 64 * 1024:
+        raise InferenceUnavailable("research manifest too large")
+    try:
+        raw_before = manifest_path.read_bytes()
+        manifest = InferenceManifest.model_validate_json(raw_before)
+        members = []
+        for entry in sorted(manifest.models, key=lambda item: item.model_version_id):
+            registered, artifact = load_allowlisted_model(
+                manifest_path, entry.model_version_id
+            )
+            if registered.family != entry.family:
+                raise InferenceUnavailable("research model family changed")
+            members.append(VerifiedWorkerModel(
+                model_version_id=entry.model_version_id,
+                model_family=entry.family,
+                artifact_fingerprint=artifact.model_fingerprint,
+            ))
+        # A changed manifest while verifying models must not return a
+        # misleading ready state. Do not return paths, filenames, weights,
+        # thresholds or tokens to any caller.
+        if manifest_path.is_symlink() or manifest_path.read_bytes() != raw_before:
+            raise InferenceUnavailable("research manifest changed during inspection")
+        payload = {
+            "contract_version": READINESS_VERSION,
+            "manifest_sha256": hashlib.sha256(raw_before).hexdigest(),
+            "models": [member.model_dump(mode="json") for member in members],
+            "local_artifacts_validated": True,
+            "independently_verified_deployment": False,
+            "source_rights_verified": False,
+            "paper_shadow_soak_accepted": False,
+            "broker_reconciliation_accepted": False,
+            "can_authorize_capital": False,
+        }
+        return VerifiedWorkerRoster.model_validate({
+            **payload, "response_fingerprint": canonical_fingerprint(payload),
+        })
+    except (OSError, ValidationError, ValueError) as exc:
+        raise InferenceUnavailable("research worker roster unavailable") from exc
+
+
 class InferenceUnavailable(ValueError):
     """Sanitized rejection for unconfigured or invalid research artifacts."""
 
