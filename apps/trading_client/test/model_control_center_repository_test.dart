@@ -116,8 +116,7 @@ void main() {
         requests.add(request);
         expect(request.headers['X-API-Key'], 'admin-key');
         expect(request.url.path,
-            '/api/admin/model-governance/emergency-controls/models/12345678-1234-1234-1234-123456789abc' +
-            (request.method == 'GET' ? '/effective' : ''));
+            '/api/admin/model-governance/emergency-controls/models/12345678-1234-1234-1234-123456789abc${request.method == 'GET' ? '/effective' : ''}');
         if (request.method == 'GET') {
           return http.Response(jsonEncode({
             'versionId': '12345678-1234-1234-1234-123456789abc',
