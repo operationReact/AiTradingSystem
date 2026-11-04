@@ -1,0 +1,36 @@
+name: V75 worker ECS image evidence (offline contract)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_worker_ecs_digest.py'
+      - 'scripts/tests/test_v4_worker_ecs_digest.py'
+      - '.github/workflows/v4-worker-ecs-image-inspect.yml'
+      - '.github/workflows/v4-worker-ecs-digest-contract.yml'
+      - 'infra/aws/readonly-v75-worker-inspection-policy.json'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_worker_ecs_digest.py'
+      - 'scripts/tests/test_v4_worker_ecs_digest.py'
+      - '.github/workflows/v4-worker-ecs-image-inspect.yml'
+      - '.github/workflows/v4-worker-ecs-digest-contract.yml'
+      - 'infra/aws/readonly-v75-worker-inspection-policy.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    name: Reject mismatched worker image and unsafe config
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute synthetic V75 contract without AWS
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_worker_ecs_digest.py
