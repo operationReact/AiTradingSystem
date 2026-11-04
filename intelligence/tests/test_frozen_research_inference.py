@@ -165,9 +165,6 @@ def test_unregistered_model_wrong_target_and_missing_features_rejected(
     ).status_code == 422
     row = _json_row()
     row["features"].pop("market.close")
-    row["fingerprint"] = canonical_fingerprint({
-        **row, "as_of": row["as_of"], "data_cutoff": row["data_cutoff"],
-    } | {}) if False else row["fingerprint"]
     # A stale hash is rejected before model scoring.
     assert client.post(
         "/v1/research/model-inference",
