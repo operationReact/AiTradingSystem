@@ -50,7 +50,7 @@ public class MatchedCausalFeatureProjectionService {
         String inputHash, String captureHash, Instant capturedAt) {}
 
     private record Candle(
-        long id, String symbol, String exchange, String interval,
+        long id, String symbol, String exchange, String symbolToken, String interval,
         Instant candleAt, BigDecimal open, BigDecimal high, BigDecimal low,
         BigDecimal close, long volume, String source, Instant fetchedAt) {}
 
@@ -101,18 +101,18 @@ public class MatchedCausalFeatureProjectionService {
         }
         Candle candle = candle(source.candleId());
         Candle previous = jdbc.sql("""
-                SELECT candle_id, trading_symbol, exchange, interval, candle_time,
+                SELECT candle_id, trading_symbol, exchange, symbol_token, interval, candle_time,
                        open_price, high_price, low_price, close_price, volume,
                        source, fetched_at
                   FROM market_candle
                  WHERE trading_symbol = :symbol AND exchange = :exchange
-                   AND interval = :interval AND candle_time < :candleTime
+                   AND symbol_token = :token AND interval = :interval AND candle_time < :candleTime
                    AND fetched_at <= :capturedAt
                  ORDER BY candle_time DESC, candle_id DESC
                  LIMIT 1
                 """)
             .param("symbol", source.symbol()).param("exchange", candle.exchange())
-            .param("interval", candle.interval()).param("candleTime", at(candle.candleAt()))
+            .param("token", candle.symbolToken()).param("interval", candle.interval()).param("candleTime", at(candle.candleAt()))
             .param("capturedAt", at(source.capturedAt()))
             .query((rs, n) -> mapCandle(rs))
             .optional()
@@ -239,6 +239,16 @@ public class MatchedCausalFeatureProjectionService {
             return byCase(sessionId, caseKey);
         }
 
+        int decisionsAlreadyRecorded = jdbc.sql("""
+                SELECT COUNT(*) FROM v4_matched_case
+                 WHERE session_id = :sessionId AND case_key = :caseKey
+                """)
+            .param("sessionId", sessionId).param("caseKey", caseKey)
+            .query(Integer.class).single();
+        if (decisionsAlreadyRecorded != 0) {
+            throw new IllegalStateException("Cannot backfill model features after candidate decisions");
+        }
+
         String actor = actor();
         jdbc.sql("""
                 INSERT INTO v4_matched_feature_projection (
@@ -326,7 +336,7 @@ public class MatchedCausalFeatureProjectionService {
 
     private Candle candle(long id) {
         return jdbc.sql("""
-                SELECT candle_id, trading_symbol, exchange, interval, candle_time,
+                SELECT candle_id, trading_symbol, exchange, symbol_token, interval, candle_time,
                        open_price, high_price, low_price, close_price, volume,
                        source, fetched_at
                   FROM market_candle WHERE candle_id = :id
@@ -340,7 +350,8 @@ public class MatchedCausalFeatureProjectionService {
     private static Candle mapCandle(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Candle(
             rs.getLong("candle_id"), rs.getString("trading_symbol"),
-            rs.getString("exchange"), rs.getString("interval"),
+            rs.getString("exchange"), rs.getString("symbol_token"),
+            rs.getString("interval"),
             instant(rs, "candle_time"),
             rs.getBigDecimal("open_price"), rs.getBigDecimal("high_price"),
             rs.getBigDecimal("low_price"), rs.getBigDecimal("close_price"),
