@@ -1,0 +1,38 @@
+name: V88 external research signer trust policy contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_signer_trust.py'
+      - 'intelligence/tests/test_research_signer_trust.py'
+      - 'scripts/tests/test_v4_external_signer_trust_policy.py'
+      - '.github/workflows/v4-external-signer-trust-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'intelligence/src/aitrading_intelligence/research_signer_trust.py'
+      - 'intelligence/tests/test_research_signer_trust.py'
+      - 'scripts/tests/test_v4_external_signer_trust_policy.py'
+      - '.github/workflows/v4-external-signer-trust-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-pinned-signer-policy:
+    name: Deny revoked/expired signer and any release authority
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify offline V88 signer trust governance and CI boundaries
+        run: |
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_external_signer_trust_policy.py
+
+# No AWS identity, runtime model artifact, external trust key, live order,
+# release image, broker account or capital permissions are present.
