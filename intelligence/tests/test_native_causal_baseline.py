@@ -49,7 +49,7 @@ def test_baseline_native_evidence_preserves_original_inclusive_cost_gate() -> No
     )
     assert len(evidence.calibration_rows) == report.calibration_rows
     assert len(evidence.heldout_rows) == report.independent_holdout_rows
-    assert evidence.external_registration_verified if False else True
+    assert evidence.externally_timestamped_registration_verified is False
     assert evidence.independent_market_authenticity_verified is False
     assert evidence.eligible_for_paper_or_live is False
     assert evidence.can_authorize_capital is False
