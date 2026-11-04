@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .cross_model_causal_cohort import bind_common_causal_tournament_cohort
 from .fingerprints import canonical_fingerprint
 from .incremental_economic_value import (
     IncrementalValueConfig,
@@ -231,27 +232,9 @@ def evaluate_chronos2_zero_shot(
         )
         baseline_metrics_hash = canonical_fingerprint(base_metrics.model_dump(mode="json"))
         challenger_metrics_hash = canonical_fingerprint(challenger_metrics.model_dump(mode="json"))
-        members = [
-            canonical_fingerprint({
-                "history": row.history_fingerprint,
-                "target": row.target_fingerprint,
-                "time": row.decision_at.isoformat(),
-            }) for row in heldout
-        ]
-        common = {
-            "target_binding_fingerprint": target.fingerprint,
-            "fold_binding_fingerprint": canonical_fingerprint({
-                "training": parent.train_export_fingerprint,
-                "holdout": parent.holdout_export_fingerprint,
-                "members": members,
-            }),
-            "economic_cost_binding_fingerprint": canonical_fingerprint({
-                "fee_book": parent.india_fee_book_fingerprint,
-                "assumed_round_trip_cost_bps": target.round_trip_cost_bps,
-            }),
-            "observation_fingerprints": members,
-            "decision_times": [row.decision_at for row in heldout],
-        }
+        common = bind_common_causal_tournament_cohort(
+            parent, heldout, target
+        ).series_kwargs()
         base_series = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
