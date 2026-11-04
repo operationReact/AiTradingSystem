@@ -75,7 +75,7 @@ class _FakeResearchJobRepository implements ResearchExperimentJobRepository {
 
   @override
   Future<ResearchExperimentResult> result(String jobId) async =>
-      const ResearchExperimentResult(
+      ResearchExperimentResult(
         jobId: jobId,
         assessment: 'INCONCLUSIVE',
         sampleCount: 25,
