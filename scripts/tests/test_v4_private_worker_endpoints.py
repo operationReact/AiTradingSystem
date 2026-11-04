@@ -39,8 +39,10 @@ class PrivateEndpointsContractTest(unittest.TestCase):
         # Terraform AWS provider documents that this causes perpetual diffs.
         self.assertNotRegex(self.worker, r"(?m)^\s*(?:ingress|egress)\s*(?:=|\{)")
         self.assertNotRegex(self.net, r"(?m)^\s*(?:ingress|egress)\s*(?:=|\{)")
-        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_java"', self.net)
-        self.assertIn("referenced_security_group_id = aws_security_group.tasks.id", self.net)
+        self.assertNotIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_java"', self.net)
+        tls = (ROOT / "infra/terraform/research-worker-private-tls.tf").read_text(encoding="utf-8")
+        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_tls_alb"', tls)
+        self.assertIn("referenced_security_group_id = aws_security_group.tasks.id", tls)
         self.assertNotIn('cidr_blocks = ["0.0.0.0/0"]', self.worker)
         self.assertNotIn('cidr_blocks = ["0.0.0.0/0"]', self.net)
 
