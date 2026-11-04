@@ -95,7 +95,8 @@ def test_authenticated_worker_roster_readiness_checks_every_local_artifact(
     trained_artifacts, tmp_path, monkeypatch
 ):
     from aitrading_intelligence.research_artifact_inference import (
-        VerifiedWorkerRoster, inspect_worker_roster,
+        VerifiedWorkerRoster,
+        inspect_worker_roster,
     )
 
     cat, light = trained_artifacts
