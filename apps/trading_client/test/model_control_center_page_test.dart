@@ -243,6 +243,91 @@ void main() {
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
   });
 
+  testWidgets('pause requires a reason, confirms Java state and exposes resume',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAPER / SHADOW'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('model-session-input')), sessionId);
+    await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
+    await tester.pumpAndSettle();
+
+    final paperScroll = find.descendant(
+      of: find.byKey(const ValueKey('model-control-paper-shadow')),
+      matching: find.byType(Scrollable),
+    ).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('matched-safety-pause')), 220,
+      scrollable: paperScroll,
+    );
+    expect(find.text('Intake: ACTIVE'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('matched-safety-pause')));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm PAUSE session control'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('matched-safety-confirm')));
+    await tester.pumpAndSettle();
+    expect(repository.safetyMutations, 0);
+    expect(find.text('Confirm PAUSE session control'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('matched-safety-reason')),
+        'market feed latency incident');
+    await tester.tap(find.byKey(const ValueKey('matched-safety-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(repository.safetyMutations, 1);
+    expect(repository.lastSafetyAction, 'PAUSE');
+    expect(repository.lastSafetyReason, 'market feed latency incident');
+    expect(find.text('Intake: PAUSED'), findsOneWidget);
+    expect(find.byKey(const ValueKey('matched-safety-resume')), findsOneWidget);
+    expect(find.byKey(const ValueKey('matched-safety-history-1')), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
+  });
+
+  testWidgets('quarantine is explicitly confirmed, terminal, and cannot be cancelled',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAPER / SHADOW'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('model-session-input')), sessionId);
+    await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
+    await tester.pumpAndSettle();
+    final paperScroll = find.descendant(
+      of: find.byKey(const ValueKey('model-control-paper-shadow')),
+      matching: find.byType(Scrollable),
+    ).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('matched-safety-quarantine')), 220,
+      scrollable: paperScroll,
+    );
+    await tester.tap(find.byKey(const ValueKey('matched-safety-quarantine')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Quarantine is permanent.'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('matched-safety-cancel')));
+    await tester.pumpAndSettle();
+    expect(repository.safetyMutations, 0);
+
+    await tester.tap(find.byKey(const ValueKey('matched-safety-quarantine')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('matched-safety-reason')),
+        'source integrity irrecoverable');
+    await tester.tap(find.byKey(const ValueKey('matched-safety-confirm')));
+    await tester.pumpAndSettle();
+    expect(repository.safetyMutations, 1);
+    expect(repository.lastSafetyAction, 'QUARANTINE');
+    expect(find.text('Intake: QUARANTINED'), findsOneWidget);
+    expect(find.byKey(const ValueKey('matched-safety-terminal')), findsOneWidget);
+    expect(find.byKey(const ValueKey('matched-safety-resume')), findsNothing);
+    expect(find.byKey(const ValueKey('matched-safety-quarantine')), findsNothing);
+  });
+
   testWidgets('malformed session ID fails locally without any fetch',
       (tester) async {
     final repository = _ModelEvidenceFake();
