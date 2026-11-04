@@ -226,10 +226,12 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
                     child: Text('Disable model version')),
                 ],
                 onChanged: _submitting ? null : (next) {
-                  if (next != null) setState(() {
-                    _action = next;
-                    _scope.clear();
-                  });
+                  if (next != null) {
+                    setState(() {
+                      _action = next;
+                      _scope.clear();
+                    });
+                  }
                 },
               ),
               if (_action != _EmergencyAction.fallback) ...[
