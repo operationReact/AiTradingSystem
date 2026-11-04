@@ -1,0 +1,46 @@
+name: V89 GitHub-only inspection role variable preflight (no AWS access)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v89-readonly-role-variable-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Check declared V73/V75/V86 role identities without assuming them
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    env:
+      AWS_READONLY_ROLE_ARN: ${{ vars.AWS_READONLY_ROLE_ARN }}
+      AWS_WORKER_READONLY_ROLE_ARN: ${{ vars.AWS_WORKER_READONLY_ROLE_ARN }}
+      AWS_WORKER_TLS_READONLY_ROLE_ARN: ${{ vars.AWS_WORKER_TLS_READONLY_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect exact-dev role variable format only; never contact AWS
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REF" = 'refs/heads/dev' || exit 1
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem' || exit 1
+          python3 scripts/v4_inspection_role_variables_preflight.py \
+            --expected-sha "$GITHUB_SHA" \
+            --output "$GITHUB_WORKSPACE/v89-readonly-role-variable-posture.json"
+
+      - name: Retain sanitized format-only, never real-IAM, report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v89-readonly-role-variable-format
+          path: v89-readonly-role-variable-posture.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+# This is a repo variable string check. It has NO AWS credentials, OIDC,
+# trust-policy attestation, IAM role assumption, ECS tasks, model artifacts,
+# broker connection, cost-bearing infrastructure or capital authority.
