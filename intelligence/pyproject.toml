@@ -21,7 +21,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# V85 verification only. Production worker images need no signing-key tools.
+release = [
+  "cryptography>=45,<49",
+]
 dev = [
+  "cryptography>=45,<49",
   "pytest>=8.3,<9",
   "ruff>=0.9,<1",
 ]
