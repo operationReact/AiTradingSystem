@@ -81,6 +81,32 @@ class ResearchArtifactLiveWorkerSmokeTest {
         var client = new ResearchArtifactInferenceClient(
             MAPPER, baseUrl, token, true);
         ProjectionView original = frozen();
+        // CI-only direct preflight exposes a bounded HTTP status before the
+        // production client intentionally maps every non-200 to UNKNOWN.
+        // No secrets, response body or model weights are logged.
+        var preflightBody = Map.of(
+            "model_version_id", CAT.toString(),
+            "case_key", original.caseKey(),
+            "symbol", original.symbol(),
+            "source_input_fingerprint", SOURCE_HASH,
+            "feature_as_of", original.featureAsOf().toString(),
+            "latest_feature_available_at",
+                original.latestFeatureAvailableAt().toString(),
+            "features", original.features());
+        var preflight = HttpRequest.newBuilder(URI.create(
+                baseUrl + "/v1/research/artifact-inference"))
+            .timeout(Duration.ofSeconds(10))
+            .header("Content-Type", "application/json")
+            .header("X-Research-Worker-Token", token)
+            .POST(HttpRequest.BodyPublishers.ofString(
+                MAPPER.writeValueAsString(preflightBody)))
+            .build();
+        var preflightReply = HttpClient.newHttpClient().send(
+            preflight, HttpResponse.BodyHandlers.discarding());
+        assertEquals(200, preflightReply.statusCode(),
+            "Synthetic Python worker rejected valid CatBoost request, HTTP "
+                + preflightReply.statusCode());
+
         for (UUID modelId : new UUID[]{CAT, LIGHT}) {
             var result = client.score(modelId, original);
             var expectedFamily = modelId.equals(CAT) ? "CATBOOST" : "LIGHTGBM";
