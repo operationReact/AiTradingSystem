@@ -56,7 +56,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         _permissionDenied = failure.statusCode == 401 || failure.statusCode == 403;
         _error = _permissionDenied
             ? 'Administrator authentication is required.'
-            : 'Refresh failed: ' + failure.code;
+            : 'Refresh failed: ${failure.code}';
         if (_permissionDenied) {
           _models = const [];
           _versions = const [];
@@ -149,12 +149,12 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                       'Research evidence never authorizes LIVE trading.'),
                     const SizedBox(height: 10),
                     Wrap(spacing: 8, runSpacing: 8, children: [
-                      Chip(label: Text(_models.length.toString() + ' models')),
-                      Chip(label: Text(active.toString() + ' active controls')),
+                      Chip(label: Text('${_models.length} models')),
+                      Chip(label: Text('${active} active controls')),
                       const Chip(label: Text('LIVE unavailable')),
                     ]),
                     if (_lastRefresh != null)
-                      Text('Last updated: ' + _lastRefresh!.toIso8601String(),
+                      Text('Last updated: ${_lastRefresh!.toIso8601String()}',
                         style: theme.bodySmall),
                   ]),
                 ),
@@ -184,14 +184,13 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                     style: theme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 7),
                   ..._models.map((model) => Card(
-                    key: ValueKey('model-row-' + model.modelKey),
+                    key: ValueKey('model-row-${model.modelKey}'),
                     child: ListTile(
                       selected: _selected?.modelKey == model.modelKey,
                       leading: const Icon(Icons.psychology_alt_outlined),
                       title: Text(model.displayName,
                         style: const TextStyle(fontWeight: FontWeight.w800)),
-                      subtitle: Text(model.family + ' · ' + model.role + ' · ' + model.provider
-                        + '\nLicense: ' + model.licenseStatus),
+                      subtitle: Text('${model.family} · ${model.role} · ${model.provider}\nLicense: ${model.licenseStatus}'),
                       isThreeLine: true,
                       trailing: const Icon(Icons.chevron_right_rounded),
                       onTap: () => _select(model),
@@ -200,10 +199,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                 ],
                 if (!_permissionDenied && _selected != null) ...[
                   const SizedBox(height: 24),
-                  Text('Versions: ' + _selected!.displayName,
+                  Text('Versions: ${_selected!.displayName}',
                     style: theme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
-                  SelectableText('Definition SHA-256: ' + _selected!.definitionFingerprint,
+                  SelectableText('Definition SHA-256: ${_selected!.definitionFingerprint}',
                     style: theme.bodySmall),
                   if (_loadingVersions)
                     const DataStatePanel(kind: DataStateKind.loading,
@@ -217,20 +216,20 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                       title: 'No versions', message: 'This model has no registered artifact versions.')
                   else
                     ..._versions.map((v) => Card(
-                      key: ValueKey('model-version-' + v.versionId),
+                      key: ValueKey('model-version-${v.versionId}'),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text(v.label, style: theme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
                           const SizedBox(height: 6),
-                          SelectableText('Version: ' + v.versionId
-                            + '\nArtifact: ' + v.artifactFingerprint
-                            + '\nFeature schema: ' + v.featureSchemaFingerprint
-                            + '\nDataset: ' + v.trainingDatasetFingerprint
-                            + '\nCode SHA: ' + v.codeSha,
+                          SelectableText('Version: ${v.versionId}\n'
+                            'Artifact: ${v.artifactFingerprint}\n'
+                            'Feature schema: ${v.featureSchemaFingerprint}\n'
+                            'Dataset: ${v.trainingDatasetFingerprint}\n'
+                            'Code SHA: ${v.codeSha}',
                             style: theme.bodySmall),
                           if (v.trainingCutoff != null)
-                            Text('Training cutoff: ' + v.trainingCutoff!.toIso8601String()),
+                            Text('Training cutoff: ${v.trainingCutoff!.toIso8601String()}'),
                         ]),
                       ),
                     )),
@@ -246,12 +245,12 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                       message: 'This does not imply any model is eligible for LIVE.')
                   else
                     ..._controls.map((control) => Card(
-                      key: ValueKey('model-control-' + control.type + '-' + control.scope),
+                      key: ValueKey('model-control-${control.type}-${control.scope}'),
                       child: ListTile(
                         leading: Icon(control.active
                           ? Icons.gpp_bad_rounded : Icons.gpp_good_outlined,
                           color: control.active ? scheme.error : scheme.primary),
-                        title: Text(control.type + ' · ' + control.scope),
+                        title: Text('${control.type} · ${control.scope}'),
                         subtitle: Text(control.reason.isEmpty
                           ? 'No operator reason reported' : control.reason),
                         trailing: Text(control.active ? 'ACTIVE' : 'INACTIVE',
