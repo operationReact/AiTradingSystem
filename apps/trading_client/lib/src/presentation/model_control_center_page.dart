@@ -295,7 +295,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       final report = await widget.repository.researchReceipts(session.id, key);
       if (!mounted || generation != _authGeneration ||
           _session?.id != session.id ||
-          _researchCaseController.text.trim() != key) return;
+          _researchCaseController.text.trim() != key) {
+        return;
+      }
       if (report.sessionId != session.id ||
           report.caseKey != key ||
           report.enrollmentFingerprint != session.fingerprint ||
@@ -307,7 +309,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       setState(() => _researchReport = report);
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration ||
-          _session?.id != session.id) return;
+          _session?.id != session.id) {
+        return;
+      }
       if (_isAccessDenied(error)) {
         _clearRevokedEvidence(error);
       } else {
