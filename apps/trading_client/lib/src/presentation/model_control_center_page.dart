@@ -19,6 +19,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
+  MatchedSessionAggregateEvidence? _aggregateEvidence;
   MatchedSessionSafetyState? _safety;
   List<MatchedSessionSafetyChange>? _safetyHistory;
   ApiFailure? _safetyError;
@@ -51,6 +52,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _selected = null;
       _session = null;
       _cases = null;
+      _aggregateEvidence = null;
       _safety = null;
       _safetyHistory = null;
       _safetyError = null;
@@ -173,6 +175,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _loadingSession = true;
       _session = null;
       _cases = null;
+      _aggregateEvidence = null;
       _safety = null;
       _safetyHistory = null;
       _safetyError = null;
@@ -184,7 +187,17 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       if (!mounted || generation != _authGeneration) return;
       final cases = await widget.repository.recentCases(id);
       if (!mounted || generation != _authGeneration) return;
-      setState(() { _session = session; _cases = cases; });
+      final aggregate = await widget.repository.sessionEvidence(id);
+      if (!mounted || generation != _authGeneration) return;
+      if (aggregate.sessionId != session.id ||
+          aggregate.enrollmentFingerprint != session.fingerprint) {
+        throw const ApiTransportFailure('MATCHED_SESSION_IDENTITY_MISMATCH', null);
+      }
+      setState(() {
+        _session = session;
+        _cases = cases;
+        _aggregateEvidence = aggregate;
+      });
       await _loadSafety(id);
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration) return;
@@ -212,7 +225,17 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       if (!mounted || generation != _authGeneration || _session?.id != id) return;
       final history = await widget.repository.safetyHistory(id);
       if (!mounted || generation != _authGeneration || _session?.id != id) return;
-      setState(() { _safety = state; _safetyHistory = history; });
+      // The independently read Java safety state must agree with the
+      // session aggregate. A concurrent pause invalidates stale evidence.
+      setState(() {
+        if (_aggregateEvidence != null &&
+            (_aggregateEvidence!.sessionSafetyState != state.state ||
+             _aggregateEvidence!.sessionStateRevision != state.revision)) {
+          _aggregateEvidence = null;
+        }
+        _safety = state;
+        _safetyHistory = history;
+      });
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration) return;
       if (_isAccessDenied(error)) {
@@ -307,7 +330,12 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           history.isEmpty || history.first.revision != confirmed.revision) {
         throw const ApiTransportFailure('MATCHED_SAFETY_READBACK_MISMATCH', null);
       }
-      setState(() { _safety = confirmed; _safetyHistory = history; });
+      setState(() {
+        _safety = confirmed;
+        _safetyHistory = history;
+        // Any control mutation invalidates the previously loaded aggregate.
+        _aggregateEvidence = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Server confirmed $expected session control.')),
       );
@@ -664,6 +692,47 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         if (session != null) ...[
           const SizedBox(height: 10),
           _sessionSafetyPanel(),
+        ],
+        if (_aggregateEvidence != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            key: const ValueKey('model-session-evidence'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Recorded PAPER/SHADOW evidence',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Safety state: ${_aggregateEvidence!.sessionSafetyState} '
+                      '(revision ${_aggregateEvidence!.sessionStateRevision})'),
+                  Text('Matched cases: ${_aggregateEvidence!.matchedCases} · '
+                      'Champion ENTER: ${_aggregateEvidence!.championEnterCases}'),
+                  Text('Challenger disagreements: '
+                      '${_aggregateEvidence!.shadowDisagreementCases}'),
+                  Text('Linked PAPER orders: ${_aggregateEvidence!.linkedPaperOrders} '
+                      '· Unlinked ENTER: ${_aggregateEvidence!.unlinkedChampionEnters}'),
+                  Text('Fill-quantity mismatches: '
+                      '${_aggregateEvidence!.paperFillQuantityMismatchOrders}'),
+                  Text('Recorded PAPER fills: '
+                      '${_aggregateEvidence!.recordedFillQuantity}'),
+                  Text('Recorded PAPER fees: '
+                      '${_aggregateEvidence!.recordedPaperFees} · '
+                      'Slippage: ${_aggregateEvidence!.recordedPaperSlippage}'),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Independent data, inference, broker reconciliation, soak '
+                    'and LIVE acceptance: NOT VERIFIED.',
+                    key: ValueKey('model-evidence-unverified'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Pending/failed checks: '
+                      '${_aggregateEvidence!.reasonCodes.join(', ')}'),
+                ],
+              ),
+            ),
+          ),
         ],
         if (cases != null && cases.isEmpty)
           const Card(
