@@ -29,7 +29,7 @@ MAX_POLICY_BYTES = 16384
 MAX_KEYS = 8
 MAX_POLICY_AGE = timedelta(days=7)
 MAX_KEY_WINDOW = timedelta(days=90)
-SHA256 = re.compile(r"[a-f0-9]{64}\\Z")
+SHA256 = re.compile(r"[a-f0-9]{64}\Z")
 TIME_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 DENIED_POLICY_AUTHORITIES = (
     "model_image_publish_allowed",
@@ -95,7 +95,7 @@ def verify_trusted_policy(
         policy = json.loads(contents)
     except (UnicodeDecodeError, ValueError) as error:
         raise ReleaseBundleBlocked("trust-policy JSON invalid") from error
-    if not isinstance(policy, dict) or contents != _canonical(policy) + b"\\n":
+    if not isinstance(policy, dict) or contents != _canonical(policy) + b"\n":
         raise ReleaseBundleBlocked("trust policy is not canonical")
     required = {
         "contract_version", "purpose", "valid_from_utc", "valid_until_utc",
