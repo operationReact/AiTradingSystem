@@ -19,9 +19,6 @@ from test_research_image_context import (
 from test_research_image_context import (
     prepared_input as prepared_input,  # model bundle fixture dependency
 )
-from test_research_context_signature import (
-    signed_context as signed_context,  # real V85/V84/V80 synthetic fixture
-)
 
 from aitrading_intelligence.research_context_signature import ReleaseBundleBlocked
 from aitrading_intelligence.research_image_context import _canonical
