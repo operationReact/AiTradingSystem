@@ -10,8 +10,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.support.AbstractApprovalPaperIT;
-import in.aitradingsystem.risk.RiskPolicyBootstrap;
 import in.aitradingsystem.risk.RiskPolicyConfigRepository;
+import in.aitradingsystem.risk.CreateRiskPolicyRequest;
+import in.aitradingsystem.risk.RiskPolicyConfigService;
 import in.aitradingsystem.risk.RiskPolicySnapshot;
 import in.aitradingsystem.config.RiskProperties;
 import java.math.BigDecimal;
@@ -39,27 +40,59 @@ class PaperTradeApiIT extends AbstractApprovalPaperIT {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired JdbcClient jdbc;
-    @Autowired RiskPolicyBootstrap riskBootstrap;
+    @Autowired RiskPolicyConfigService riskPolicyConfig;
     @Autowired RiskPolicyConfigRepository policyRepository;
     @Autowired RiskProperties defaultRisk;
 
     @BeforeEach
     void isolateExpectedPaperRiskPolicy() {
-        // This legacy paper-trade suite requires the application default fee
-        // and risk budget, but other PostgreSQL suites intentionally activate
-        // stricter policies. Shared CI database ordering must not determine
-        // PAPER fill accounting or whether a high-risk order gets accepted.
-        jdbc.sql("DELETE FROM audit_event WHERE entity_type='RISK_POLICY_CONFIG'")
-            .update();
-        jdbc.sql("DELETE FROM risk_policy_config").update();
-        riskBootstrap.run(null);
-        RiskPolicySnapshot baseline = policyRepository.requireActive();
+        // Other integration suites may activate stricter policies. Never
+        // DELETE referenced immutable policies: historical risk_decision
+        // rows depend on their FK. The supported versioned activation API
+        // preserves original auditability and complete prior risk history.
+        RiskPolicySnapshot active = policyRepository.requireActive();
+        boolean canonical = active.riskPerTradePercent().compareTo(
+                    defaultRisk.riskPerTradePercent()) == 0
+            && active.maxDailyDrawdownPercent().compareTo(
+                    defaultRisk.maxDailyDrawdownPercent()) == 0
+            && active.maxOpenPositions() == defaultRisk.maxOpenPositions()
+            && active.feeRate().compareTo(defaultRisk.feeRate()) == 0
+            && active.slippageRate().compareTo(defaultRisk.slippageRate()) == 0
+            && active.signalMaxAgeMinutes() == defaultRisk.signalMaxAgeMinutes()
+            && active.minRewardRiskRatio().compareTo(BigDecimal.ONE) == 0
+            && active.maxOrderNotional().compareTo(
+                new BigDecimal("999999999999999.99")) == 0
+            && !active.enforceMarketSession()
+            && active.rejectExistingSymbolPosition()
+            && !active.rejectDuplicatePendingExposure();
+        if (!canonical) {
+            riskPolicyConfig.createAndActivate(new CreateRiskPolicyRequest(
+                "PAPER API integration canonical baseline",
+                defaultRisk.riskPerTradePercent(),
+                defaultRisk.maxDailyDrawdownPercent(),
+                defaultRisk.maxOpenPositions(),
+                BigDecimal.ONE,
+                new BigDecimal("999999999999999.99"),
+                new BigDecimal("100"),
+                new BigDecimal("100"),
+                1000,
+                defaultRisk.signalMaxAgeMinutes(),
+                3600,
+                false,
+                true,
+                false,
+                defaultRisk.feeRate(),
+                defaultRisk.slippageRate(),
+                "legacy-risk-v1-bootstrap"
+            ), "PAPER_TRADE_API_IT");
+        }
+        RiskPolicySnapshot actual = policyRepository.requireActive();
         org.junit.jupiter.api.Assertions.assertEquals(0,
-            baseline.riskPerTradePercent().compareTo(defaultRisk.riskPerTradePercent()));
+            actual.riskPerTradePercent().compareTo(defaultRisk.riskPerTradePercent()));
         org.junit.jupiter.api.Assertions.assertEquals(0,
-            baseline.feeRate().compareTo(defaultRisk.feeRate()));
+            actual.feeRate().compareTo(defaultRisk.feeRate()));
         org.junit.jupiter.api.Assertions.assertEquals(0,
-            baseline.slippageRate().compareTo(defaultRisk.slippageRate()));
+            actual.slippageRate().compareTo(defaultRisk.slippageRate()));
     }
 
     @AfterEach
