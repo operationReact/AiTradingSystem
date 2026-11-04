@@ -24,6 +24,19 @@ RESEARCH_FLAGS = {
     "AI_RESEARCH_WORKER_CLIENT_ENABLED",
     "AI_RESEARCH_WORKER_READINESS_ENABLED",
     "AI_RESEARCH_ROSTER_DISPATCH_ENABLED",
+    "APP_RESEARCH_ARTIFACT_WORKER_ENABLED",
+    "APP_RESEARCH_WORKER_READINESS_ENABLED",
+    "APP_RESEARCH_ROSTER_DISPATCH_ENABLED",
+}
+# These alternative property sources can override application.yml and bypass
+# an otherwise correct explicit false/absent research flag check.
+UNVERIFIED_CONFIG_OVERRIDE_NAMES = {
+    "SPRING_APPLICATION_JSON",
+    "JAVA_TOOL_OPTIONS",
+    "JDK_JAVA_OPTIONS",
+    "SPRING_CONFIG_LOCATION",
+    "SPRING_CONFIG_ADDITIONAL_LOCATION",
+    "SPRING_PROFILES_ACTIVE",
 }
 SENSITIVE_NAMES = {
     "APP_API_KEY",
@@ -119,11 +132,6 @@ def evaluate(
         ) for name in env),
         "PLAINTEXT_CREDENTIAL_NAME_IN_ECS_ENVIRONMENT",
     )
-    disabled = require(
-        all(str(env.get(flag, "false")).lower() == "false"
-            for flag in RESEARCH_FLAGS),
-        "RESEARCH_OPT_IN_ON_EXISTING_BACKEND",
-    )
     # Never claim secret values or IAM policies were verified from task metadata.
     secret_names = [row.get("name") for row in container.get("secrets", [])
                     if isinstance(row, dict)]
@@ -131,6 +139,20 @@ def evaluate(
         len(secret_names) == len(set(secret_names))
         and all(isinstance(n, str) for n in secret_names),
         "ECS_SECRET_REFERENCE_AMBIGUOUS",
+    )
+    all_names = set(names) | set(secret_names)
+    disabled = require(
+        all(str(env.get(flag, "false")).lower() == "false"
+            for flag in RESEARCH_FLAGS)
+        and not (set(secret_names) & RESEARCH_FLAGS),
+        "RESEARCH_OPT_IN_ON_EXISTING_BACKEND",
+    )
+    config_sources_verified = require(
+        not (all_names & UNVERIFIED_CONFIG_OVERRIDE_NAMES)
+        and not container.get("environmentFiles")
+        and not container.get("command")
+        and not container.get("entryPoint"),
+        "UNVERIFIED_SPRING_CONFIGURATION_OVERRIDE",
     )
 
     target_rows = (targets.get("TargetHealthDescriptions", [])
@@ -171,6 +193,7 @@ def evaluate(
         "paper_mode_verified": paper_mode,
         "plaintext_sensitive_env_absent": secrets_safe,
         "research_opt_ins_disabled": disabled,
+        "runtime_configuration_override_absent": config_sources_verified,
         "alb_healthy": alb_ok,
         "public_paper_health_verified": endpoint_ok,
         "research_worker_service_candidate_seen": candidate_worker_seen,
