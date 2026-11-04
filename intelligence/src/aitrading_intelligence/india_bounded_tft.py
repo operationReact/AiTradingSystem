@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .cross_model_causal_cohort import bind_common_causal_tournament_cohort
 from .fingerprints import canonical_fingerprint
 from .incremental_economic_value import (
     IncrementalValueConfig,
@@ -300,28 +301,9 @@ def evaluate_bounded_tft(
             heldout, [value[1] for value in held_q],
             target=target, interval_coverage=policy.interval_coverage,
         )
-        membership = [
-            canonical_fingerprint({
-                "history": row.history_fingerprint,
-                "target": row.target_fingerprint,
-                "time": row.decision_at.isoformat(),
-            })
-            for row in heldout
-        ]
-        shared = {
-            "target_binding_fingerprint": target.fingerprint,
-            "fold_binding_fingerprint": canonical_fingerprint({
-                "train": parent.train_export_fingerprint,
-                "holdout": parent.holdout_export_fingerprint,
-                "observations": membership,
-            }),
-            "economic_cost_binding_fingerprint": canonical_fingerprint({
-                "fee_book": parent.india_fee_book_fingerprint,
-                "cost_bps": target.round_trip_cost_bps,
-            }),
-            "observation_fingerprints": membership,
-            "decision_times": [row.decision_at for row in heldout],
-        }
+        shared = bind_common_causal_tournament_cohort(
+            parent, heldout, target
+        ).series_kwargs()
         baseline = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
