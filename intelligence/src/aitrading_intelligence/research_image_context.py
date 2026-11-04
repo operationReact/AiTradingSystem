@@ -205,8 +205,8 @@ def verify_context(context: Path, code_sha: str) -> dict:
         if len(content) != size or _hash(content) != digest:
             raise ReleaseBundleBlocked("committed source file changed")
         source_set.add(name)
-    if source_set != {item["path"] for item in sorted(items, key=lambda v: v["path"])}:
-        raise ReleaseBundleBlocked("source inventory invalid")
+    if sum(item["size"] for item in items) > MAX_SOURCE_BYTES:
+        raise ReleaseBundleBlocked("source inventory exceeds total bound")
     if not REQUIRED.issubset(source_set) or not any(p.startswith(SOURCE_DIR) for p in source_set):
         raise ReleaseBundleBlocked("committed source set incomplete")
     if items != sorted(items, key=lambda entry: entry["path"]):
