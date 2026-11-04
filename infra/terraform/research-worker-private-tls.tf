@@ -150,8 +150,8 @@ resource "aws_route53_record" "research_worker_tls_validation" {
 }
 
 resource "aws_acm_certificate_validation" "research_worker_private_tls" {
-  count                   = local.worker_tls_count
-  certificate_arn         = aws_acm_certificate.research_worker_private_tls[0].arn
+  count           = local.worker_tls_count
+  certificate_arn = aws_acm_certificate.research_worker_private_tls[0].arn
   validation_record_fqdns = [
     for record in aws_route53_record.research_worker_tls_validation : record.fqdn
   ]
@@ -208,8 +208,8 @@ resource "aws_route53_record" "research_worker_private" {
   name    = local.worker_tls_fqdn
   type    = "A"
   alias {
-    name                   = aws_lb.research_worker_private_tls[0].dns_name
-    zone_id                = aws_lb.research_worker_private_tls[0].zone_id
+    name    = aws_lb.research_worker_private_tls[0].dns_name
+    zone_id = aws_lb.research_worker_private_tls[0].zone_id
     # A dormant worker has no healthy targets. DNS remains discoverable for
     # planned future preflight; alias resolution never means runtime ready.
     evaluate_target_health = false
