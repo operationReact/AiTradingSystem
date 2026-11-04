@@ -80,7 +80,7 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
         self.assertIn("evaluate_target_health = false", self.tls)
         self.assertRegex(
             self.tls,
-            r"name\\s*=\\s*aws_lb\\.research_worker_tls\\[0\\]\\.dns_name",
+            r"name\s*=\s*aws_lb\.research_worker_tls\[0\]\.dns_name",
         )
         self.assertIn('output "research_worker_private_https_url"', self.tls)
         self.assertIn('"https://${local.worker_tls_fqdn}"', self.tls)
