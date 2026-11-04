@@ -6,7 +6,6 @@ production verifier; no AWS/ECR/Docker/broker activity occurs.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
