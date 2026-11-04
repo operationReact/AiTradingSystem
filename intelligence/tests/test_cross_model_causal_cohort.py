@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pydantic import ValidationError
 import pytest
+from pydantic import ValidationError
 from test_india_independent_holdout import (
     HOLDOUT_DAYS,
     TRAIN_DAYS,
