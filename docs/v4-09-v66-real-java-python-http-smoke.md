@@ -40,3 +40,17 @@ edge, fees, drawdown or PAPER soak. No LIVE path is enabled. Those require
 distinct gated work and independently verifiable evidence.
 
 V4-09 remains IN PROGRESS after passing V66.
+
+## Real transport defect fixed on this branch
+
+The initial real HTTP test correctly failed: Java 21's default HttpClient
+attempts cleartext HTTP/2 Upgrade (h2c) against Uvicorn's h11 transport.
+Uvicorn observed `Content-Length > 0` but received **zero body bytes** and
+FastAPI rejected the request as HTTP 422 (Pydantic `body:missing`).
+This was reproduced with a separate minimal Java/Python HTTP client-server
+pair and resolved by setting Java's worker client to HTTP/1.1 explicitly.
+The security policy remains HTTP only for loopback and HTTPS otherwise,
+with redirects and uncertain-outcome retries still disabled.
+
+The real CI integration test guards against this regression; the existing
+mocked Java Transport tests alone could not observe it.
