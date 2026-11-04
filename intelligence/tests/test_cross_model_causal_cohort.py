@@ -137,12 +137,17 @@ def test_binding_and_fee_identity_tampering_is_detected() -> None:
         CrossModelCausalCohort.model_validate(modified)
 
 
-def test_model_cost_binding_changes_when_fee_book_changes() -> None:
+def test_same_holdout_but_changed_assumed_cost_requires_new_economic_binding() -> None:
     parent, rows, target = _case()
     original = bind_common_causal_tournament_cohort(parent, rows, target)
-    fee_book = _fee_book()
-    payload = fee_book.model_dump(mode="json")
-    # Modifying real fee assumptions must produce a new fee-book fingerprint,
-    # even if model predictions are otherwise identical.
-    assert original.fee_book_fingerprint == fee_book.book_fingerprint
-    assert original.fee_book_fingerprint != "0" * 64
+    more_costly_target = _target(cost_bps=30)
+    changed_parent, changed_rows, _ = _case(target=more_costly_target)
+    changed = bind_common_causal_tournament_cohort(
+        changed_parent, changed_rows, more_costly_target
+    )
+    assert changed.holdout_export_fingerprint == original.holdout_export_fingerprint
+    assert changed.fold_binding_fingerprint == original.fold_binding_fingerprint
+    assert (
+        changed.economic_cost_binding_fingerprint
+        != original.economic_cost_binding_fingerprint
+    )
