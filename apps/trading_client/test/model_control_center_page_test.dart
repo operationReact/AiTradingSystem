@@ -11,6 +11,54 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
   bool denied;
   final bool empty;
   int sessionRequests = 0;
+  int safetyMutations = 0;
+  String? lastSafetyAction;
+  String? lastSafetyReason;
+  String safetyMode = 'ACTIVE';
+  int safetyRevision = 0;
+
+  @override
+  Future<MatchedSessionSafetyState> safetyState(String id) async {
+    if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    return MatchedSessionSafetyState(
+      sessionId: id, state: safetyMode, revision: safetyRevision,
+      fingerprint: 'a'.padRight(64, 'a'), reason: 'Initial enrollment',
+      updatedBy: 'admin', canAuthorizeCapital: false,
+    );
+  }
+
+  @override
+  Future<List<MatchedSessionSafetyChange>> safetyHistory(String id) async {
+    if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    return [
+      MatchedSessionSafetyChange(
+        revision: safetyRevision,
+        previousState: safetyRevision == 0 ? null : 'ACTIVE',
+        newState: safetyMode,
+        reason: 'Initial enrollment', changedBy: 'admin',
+        fingerprint: 'a'.padRight(64, 'a'),
+      ),
+    ];
+  }
+
+  @override
+  Future<MatchedSessionSafetyState> transitionSafety(
+      String id, String action, String reason) async {
+    if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    safetyMutations++;
+    lastSafetyAction = action;
+    lastSafetyReason = reason;
+    safetyRevision++;
+    safetyMode = switch (action) {
+      'PAUSE' => 'PAUSED',
+      'RESUME' => 'ACTIVE',
+      'QUARANTINE' => 'QUARANTINED',
+      _ => throw StateError('unexpected action'),
+    };
+    return safetyState(id);
+  }
+
+
 
   @override
   Future<List<RegisteredModelEvidence>> models() async {
