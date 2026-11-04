@@ -1,0 +1,70 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CallerIdentity",
+      "Effect": "Allow",
+      "Action": [
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadExactAiTradingServicesOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ecs:DescribeServices"
+      ],
+      "Resource": [
+        "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-backend",
+        "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-frontend",
+        "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-research-worker"
+      ]
+    },
+    {
+      "Sid": "ReadOnlyELBDiscoveryMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "elasticloadbalancing:DescribeLoadBalancers",
+        "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeRules",
+        "elasticloadbalancing:DescribeTargetGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyVPCSecurityMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeSubnets"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyPrivateHostedZoneDiscovery",
+      "Effect": "Allow",
+      "Action": [
+        "route53:ListHostedZonesByName"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadOnlyHostedZoneMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "route53:GetHostedZone",
+        "route53:ListResourceRecordSets"
+      ],
+      "Resource": "arn:aws:route53:::hostedzone/*"
+    },
+    {
+      "Sid": "ReadOnlyRegionScopedCertificateMetadata",
+      "Effect": "Allow",
+      "Action": [
+        "acm:DescribeCertificate"
+      ],
+      "Resource": "arn:aws:acm:us-east-1:816344830716:certificate/*"
+    }
+  ]
+}
