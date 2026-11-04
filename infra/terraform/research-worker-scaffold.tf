@@ -65,23 +65,9 @@ resource "aws_security_group" "research_worker" {
   description = "Research HTTP ingress from Java backend tasks only; no ALB or internet ingress"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description     = "Private Java-to-research-worker HTTP only"
-    from_port       = 8090
-    to_port         = 8090
-    protocol        = "tcp"
-    security_groups = [aws_security_group.tasks.id]
-  }
-
-  # A future approved worker release needs route/VPC endpoint checks. No NAT
-  # or public IP is granted here. AWS private route tables have local routes only.
-  egress {
-    description = "Only HTTPS egress when a reviewed private route becomes available"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # Rules are standalone aws_vpc_security_group_*_rule resources.
+  # Terraform removes the AWS default ALLOW ALL egress on creation; without
+  # the separate V77 endpoint opt-in, no outgoing rule is provisioned.
   tags = local.worker_tags
 }
 
