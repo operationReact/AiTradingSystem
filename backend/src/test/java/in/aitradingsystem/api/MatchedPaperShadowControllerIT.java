@@ -560,6 +560,139 @@ class MatchedPaperShadowControllerIT extends AbstractPostgresIT {
             .andExpect(status().isBadRequest());
     }
 
+    @Test
+    void sessionEvidenceIsReadOnlyAndExplainsMissingOrdersWithoutClaimingRuntimeAcceptance()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID id = UUID.randomUUID();
+        enroll(id, champion, challenger);
+        String path = API + "/sessions/" + id + "/evidence";
+
+        mvc.perform(get(path).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.contractVersion")
+                .value("v4-matched-paper-shadow-session-evidence.v1"))
+            .andExpect(jsonPath("$.matchedCases").value(0))
+            .andExpect(jsonPath("$.linkedPaperOrders").value(0))
+            .andExpect(jsonPath("$.reasonCodes", org.hamcrest.Matchers.hasItem("NO_MATCHED_CASES")))
+            .andExpect(jsonPath("$.actualInferenceProducerAttested").value(false))
+            .andExpect(jsonPath("$.originalLicensedSourceCustodyVerified").value(false))
+            .andExpect(jsonPath("$.paperShadowSoakAccepted").value(false))
+            .andExpect(jsonPath("$.liveOrderExecutionEnabled").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+
+        Instant decision = Instant.now();
+        mvc.perform(post(API + "/sessions/" + id + "/observations")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observationJson(champion, challenger, decision, "ENTER", "WAIT", A, A)))
+            .andExpect(status().isCreated());
+        mvc.perform(get(path).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.matchedCases").value(1))
+            .andExpect(jsonPath("$.incompleteModelRosterCases").value(0))
+            .andExpect(jsonPath("$.championEnterCases").value(1))
+            .andExpect(jsonPath("$.championWaitCases").value(0))
+            .andExpect(jsonPath("$.shadowDisagreementCases").value(1))
+            .andExpect(jsonPath("$.linkedPaperOrders").value(0))
+            .andExpect(jsonPath("$.unlinkedChampionEnters").value(1))
+            .andExpect(jsonPath("$.reasonCodes",
+                org.hamcrest.Matchers.hasItem("UNLINKED_CHAMPION_ENTER_CASES")))
+            .andExpect(jsonPath("$.independentEconomicPerformanceVerified").value(false));
+        for (String role : new String[]{"VIEWER", "TRADER", "OPERATOR"}) {
+            mvc.perform(get(path).with(user("no-admin").roles(role)))
+                .andExpect(status().isForbidden());
+        }
+        mvc.perform(get(API + "/sessions/" + UUID.randomUUID() + "/evidence")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void sessionEvidenceReadsRealPaperFillQuantitiesAndDetectsReconciliationMismatch()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID id = UUID.randomUUID();
+        enroll(id, champion, challenger);
+        Instant decision = Instant.now();
+        mvc.perform(post(API + "/sessions/" + id + "/observations")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observationJson(champion, challenger, decision, "ENTER", "WAIT", A, A)))
+            .andExpect(status().isCreated());
+        UUID orderId = seedAutomatedPaperOrder("RELIANCE-EQ", "AUTOMATED", decision.plusSeconds(1));
+        mvc.perform(post(paperLink(id))
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"paperOrderId\":\"" + orderId + "\"}"))
+            .andExpect(status().isCreated());
+        String url = API + "/sessions/" + id + "/evidence";
+        mvc.perform(get(url).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.linkedPaperOrders").value(1))
+            .andExpect(jsonPath("$.unlinkedChampionEnters").value(0))
+            .andExpect(jsonPath("$.paperFillQuantityMismatchOrders").value(1))
+            .andExpect(jsonPath("$.recordedFillQuantity").value(0))
+            .andExpect(jsonPath("$.reasonCodes",
+                org.hamcrest.Matchers.hasItem("PAPER_FILL_QUANTITY_MISMATCH")));
+
+        fills.appendFill(orderId, 1, new FillWrite(
+            "RELIANCE-EQ", Side.BUY, 3, new BigDecimal("100.00"), new BigDecimal("100.05"),
+            new BigDecimal("300.15"), new BigDecimal("1.25"), new BigDecimal("0.15"),
+            new BigDecimal("-301.40"), new BigDecimal("301.40"), BigDecimal.ZERO,
+            "PAPER_EXECUTION_V1", "FULL_LIQUIDITY", decision.plusSeconds(2)));
+        mvc.perform(get(url).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.linkedPaperOrders").value(1))
+            .andExpect(jsonPath("$.paperFillQuantityMismatchOrders").value(0))
+            .andExpect(jsonPath("$.recordedFillQuantity").value(3))
+            .andExpect(jsonPath("$.recordedPaperFees").value(1.25))
+            .andExpect(jsonPath("$.recordedPaperSlippage").value(0.15))
+            .andExpect(jsonPath("$.brokerReconciliationAccepted").value(false))
+            .andExpect(jsonPath("$.paperShadowSoakAccepted").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+    }
+
+    @Test
+    void evidenceReportCarriesDurableSafetyRevisionWithoutTreatingPauseAsAcceptance()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID id = UUID.randomUUID();
+        enroll(id, champion, challenger);
+        String endpoint = API + "/sessions/" + id + "/evidence";
+        mvc.perform(get(endpoint).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessionSafetyState").value("ACTIVE"))
+            .andExpect(jsonPath("$.sessionStateRevision").value(0));
+        mvc.perform(put(API + "/sessions/" + id + "/control")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"incident investigation\"}"))
+            .andExpect(status().isOk());
+        mvc.perform(get(endpoint).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessionSafetyState").value("PAUSED"))
+            .andExpect(jsonPath("$.sessionStateRevision").value(1))
+            .andExpect(jsonPath("$.reasonCodes",
+                org.hamcrest.Matchers.hasItem("SESSION_PAUSED_NO_NEW_EVIDENCE")))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+        mvc.perform(put(API + "/sessions/" + id + "/control")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"QUARANTINE\",\"reason\":\"untrusted inference evidence\"}"))
+            .andExpect(status().isOk());
+        mvc.perform(get(endpoint).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.sessionSafetyState").value("QUARANTINED"))
+            .andExpect(jsonPath("$.sessionStateRevision").value(2))
+            .andExpect(jsonPath("$.reasonCodes",
+                org.hamcrest.Matchers.hasItem("SESSION_TERMINALLY_QUARANTINED")))
+            .andExpect(jsonPath("$.actualInferenceProducerAttested").value(false));
+    }
+
     private int countCases(UUID id) {
         return jdbc.sql("SELECT count(*) FROM v4_matched_case WHERE session_id = :id")
             .param("id", id).query(Integer.class).single();
