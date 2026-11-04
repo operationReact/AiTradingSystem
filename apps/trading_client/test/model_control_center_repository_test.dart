@@ -39,6 +39,20 @@ void main() {
               'artifactFingerprint': 'c'.padRight(64, 'c'),
               'createdAt': '2026-11-04T09:00:00Z',
             }]), 200);
+          case '/api/admin/model-governance/paper-shadow/sessions':
+            expect(request.url.queryParameters, {'limit': '20'});
+            return http.Response(jsonEncode([{
+              'sessionId': sessionId,
+              'enrollmentFingerprint': 'd'.padRight(64, 'd'),
+              'createdAt': '2026-11-04T09:10:00Z',
+              'createdBy': 'admin',
+              'models': [{
+                'modelVersionId': 'model-1',
+                'role': 'PAPER_CHAMPION',
+                'modelFingerprint': 'b'.padRight(64, 'b'),
+              }],
+              'canAuthorizeCapital': false,
+            }]), 200);
           case '/api/admin/model-governance/paper-shadow/sessions/$sessionId':
             return http.Response(jsonEncode({
               'sessionId': sessionId,
@@ -78,6 +92,9 @@ void main() {
     expect(models.single.licenseStatus, 'RESEARCH_ONLY');
     final versions = await repository.versions(models.single.key);
     expect(versions.single.id, 'model-1');
+    final sessions = await repository.recentSessions();
+    expect(sessions.single.id, sessionId);
+    expect(sessions.single.participants.single.role, 'PAPER_CHAMPION');
     final session = await repository.session(sessionId);
     expect(session.canAuthorizeCapital, false);
     expect(session.participants.single.role, 'PAPER_CHAMPION');
@@ -85,7 +102,7 @@ void main() {
     expect(cases.single.hasDisagreement, true);
     expect(cases.single.verified, false);
     expect(cases.single.canAuthorizeCapital, false);
-    expect(paths.length, 4);
+    expect(paths.length, 5);
   });
 
   test('rejects malformed evidence rather than fabricating defaults', () async {
