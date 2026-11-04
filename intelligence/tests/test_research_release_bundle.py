@@ -5,7 +5,6 @@ These tests never publish model weights, touch AWS or authorize capital.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 
 import pytest
@@ -13,7 +12,7 @@ from test_research_artifact_inference import (
     MODEL_ID,
     SHADOW_ID,
     _create_manifest,
-    trained_artifacts,
+    trained_artifacts as trained_artifacts,  # pytest fixture used by name
 )
 
 from aitrading_intelligence.research_release_bundle import (
