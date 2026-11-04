@@ -18,7 +18,7 @@ CLUSTER = "ai-trading-system"
 SERVICE = "ai-trading-system-research-worker"
 CONTAINER = "research-worker"
 REPO = "ai-trading-system-research-worker"
-VERSION = "v4-worker-ecs-digest-evidence.v1"
+VERSION = "v4-worker-ecs-digest-evidence.v2"
 TASK_FAMILY = SERVICE
 CLUSTER_ARN = f"arn:aws:ecs:{REGION}:{ACCOUNT}:cluster/{CLUSTER}"
 TASK_PREFIX = f"arn:aws:ecs:{REGION}:{ACCOUNT}:task/{CLUSTER}/"
@@ -143,6 +143,14 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         and not container.get("command"),
         "WORKER_PAPER_DECLARATION_UNVERIFIED",
     )
+    # V79: a healthy ECS image is not acceptable if the deployed task can
+    # bypass V78's local hash/token validation during container startup.
+    # A secret-sourced/missing/false flag is not an attested strict runtime.
+    strict_boot_ok = check(
+        env.get("AI_RESEARCH_STRICT_BOOT_REQUIRED") == "true"
+        and "AI_RESEARCH_STRICT_BOOT_REQUIRED" not in secret_names,
+        "WORKER_STRICT_BOOT_NOT_REQUIRED",
+    )
     refs = [row.get("valueFrom", "") for row in secretrows
             if row.get("name") == "AI_RESEARCH_WORKER_TOKEN"]
     token_ref_ok = check(
@@ -188,6 +196,7 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "running_image_digest_matches_ecr": digest_ok,
         "environment_unambiguous": unique_ok,
         "paper_declaration_verified": mode_ok,
+        "strict_worker_boot_declared": strict_boot_ok,
         "worker_secret_reference_and_manifest_declared": token_ref_ok,
         "no_plaintext_credential_env_names": secret_safe,
         "config_override_absent": overrides_safe,

@@ -49,6 +49,7 @@ def fixture() -> dict:
                 "name": "research-worker", "essential": True, "image": IMAGE,
                 "environment": [
                     {"name": "TRADING_MODE", "value": "PAPER"},
+                    {"name": "AI_RESEARCH_STRICT_BOOT_REQUIRED", "value": "true"},
                     {"name": "AI_RESEARCH_MODEL_MANIFEST", "value": "/private/models.json"},
                 ],
                 "secrets": [{"name": "AI_RESEARCH_WORKER_TOKEN",
@@ -70,6 +71,7 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         result = evaluate(**fixture())
         self.assertTrue(result["ecs_worker_image_posture_verified"])
         self.assertTrue(result["running_image_digest_matches_ecr"])
+        self.assertTrue(result["strict_worker_boot_declared"])
         self.assertEqual(result["verdict"], "PAPER_WORKER_IMAGE_POSTURE_ONLY_MODEL_UNVERIFIED")
         for field in ("worker_model_artifacts_verified",
                       "worker_secret_value_or_iam_access_verified",
@@ -90,6 +92,33 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         f = fixture()
         f["identity"]["Account"] = "000000000000"
         self.blocked(f, "ACCOUNT_UNVERIFIED")
+
+    def test_v78_strict_boot_is_mandatory_for_worker_posture(self):
+        f = fixture()
+        rows = f["definition"]["taskDefinition"]["containerDefinitions"][0][
+            "environment"]
+        rows[:] = [row for row in rows
+                   if row["name"] != "AI_RESEARCH_STRICT_BOOT_REQUIRED"]
+        self.blocked(f, "WORKER_STRICT_BOOT_NOT_REQUIRED")
+
+        for wrong in ("false", "TRUE", "", "1"):
+            f = fixture()
+            rows = f["definition"]["taskDefinition"]["containerDefinitions"][0][
+                "environment"]
+            next(row for row in rows
+                 if row["name"] == "AI_RESEARCH_STRICT_BOOT_REQUIRED")["value"] = wrong
+            self.blocked(f, "WORKER_STRICT_BOOT_NOT_REQUIRED")
+
+        f = fixture()
+        rows = f["definition"]["taskDefinition"]["containerDefinitions"][0][
+            "environment"]
+        rows[:] = [row for row in rows
+                   if row["name"] != "AI_RESEARCH_STRICT_BOOT_REQUIRED"]
+        f["definition"]["taskDefinition"]["containerDefinitions"][0]["secrets"].append({
+            "name": "AI_RESEARCH_STRICT_BOOT_REQUIRED",
+            "valueFrom": f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:strict",
+        })
+        self.blocked(f, "WORKER_STRICT_BOOT_NOT_REQUIRED")
 
     def test_running_image_must_match_ecr_digest_and_tag(self):
         f = fixture()
