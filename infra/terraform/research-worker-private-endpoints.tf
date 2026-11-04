@@ -34,9 +34,22 @@ resource "aws_security_group" "research_worker_endpoints" {
   name        = "${local.name}-research-worker-vpce"
   description = "HTTPS ingress to private AWS service endpoints from worker tasks only"
   vpc_id      = aws_vpc.main.id
-  # No outgoing rule is needed for stateful responses from these interface ENIs.
-  egress = []
-  tags   = local.worker_tags
+  # No inline SG rules: Terraform removes AWS default egress on creation.
+  # Explicit ingress is managed by the standalone rule below.
+  tags = local.worker_tags
+}
+
+# Java backend may connect privately to a dormant worker on 8090 only.
+# This ingress is provisioned even without V77 endpoints if V76 scaffold
+# was separately opted into; service desired count remains zero.
+resource "aws_vpc_security_group_ingress_rule" "worker_from_java" {
+  count                        = local.worker_scaffold_count
+  security_group_id            = aws_security_group.research_worker[0].id
+  referenced_security_group_id = aws_security_group.tasks.id
+  ip_protocol                  = "tcp"
+  from_port                    = 8090
+  to_port                      = 8090
+  description                  = "Internal Java backend to research worker HTTP (not TLS release approval)"
 }
 
 resource "aws_vpc_security_group_ingress_rule" "worker_to_endpoints" {
