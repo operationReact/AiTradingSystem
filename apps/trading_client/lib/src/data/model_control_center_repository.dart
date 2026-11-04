@@ -223,11 +223,93 @@ class MatchedSessionSafetyChange {
   }
 }
 
+class MatchedSessionAggregateEvidence {
+  const MatchedSessionAggregateEvidence({
+    required this.sessionId,
+    required this.enrollmentFingerprint,
+    required this.sessionSafetyState,
+    required this.sessionStateRevision,
+    required this.matchedCases,
+    required this.championEnterCases,
+    required this.shadowDisagreementCases,
+    required this.linkedPaperOrders,
+    required this.unlinkedChampionEnters,
+    required this.paperFillQuantityMismatchOrders,
+    required this.recordedFillQuantity,
+    required this.recordedPaperFees,
+    required this.recordedPaperSlippage,
+    required this.reasonCodes,
+  });
+
+  final String sessionId, enrollmentFingerprint, sessionSafetyState;
+  final int sessionStateRevision, matchedCases, championEnterCases;
+  final int shadowDisagreementCases, linkedPaperOrders, unlinkedChampionEnters;
+  final int paperFillQuantityMismatchOrders, recordedFillQuantity;
+  final String recordedPaperFees, recordedPaperSlippage;
+  final List<String> reasonCodes;
+
+  static int _count(Map<String, dynamic> json, String name) {
+    final value = json[name];
+    if (value is! int || value < 0) {
+      throw const ApiTransportFailure('INVALID_MATCHED_EVIDENCE_COUNT', null);
+    }
+    return value;
+  }
+
+  static String _decimal(Map<String, dynamic> json, String name) {
+    final value = json[name];
+    if (value is! num || !value.isFinite) {
+      throw const ApiTransportFailure('INVALID_MATCHED_EVIDENCE_AMOUNT', null);
+    }
+    return value.toString();
+  }
+
+  factory MatchedSessionAggregateEvidence.fromJson(Map<String, dynamic> json) {
+    if (json['contractVersion'] != 'v4-matched-paper-shadow-session-evidence.v1' ||
+        json['canAuthorizeCapital'] != false ||
+        json['liveOrderExecutionEnabled'] != false ||
+        json['originalLicensedSourceCustodyVerified'] != false ||
+        json['actualInferenceProducerAttested'] != false ||
+        json['paperShadowSoakAccepted'] != false ||
+        json['brokerReconciliationAccepted'] != false ||
+        json['independentEconomicPerformanceVerified'] != false) {
+      throw const ApiTransportFailure('INVALID_MATCHED_EVIDENCE_AUTHORITY', null);
+    }
+    final state = json['sessionSafetyState'];
+    if (state != 'ACTIVE' && state != 'PAUSED' && state != 'QUARANTINED') {
+      throw const ApiTransportFailure('INVALID_MATCHED_SESSION_SAFETY', null);
+    }
+    final reasons = json['reasonCodes'];
+    if (reasons is! List || reasons.isEmpty ||
+        reasons.any((item) => item is! String || item.isEmpty)) {
+      throw const ApiTransportFailure('INVALID_MATCHED_EVIDENCE_REASONS', null);
+    }
+    return MatchedSessionAggregateEvidence(
+      sessionId: _value(json, 'sessionId'),
+      enrollmentFingerprint: _value(json, 'enrollmentFingerprint'),
+      sessionSafetyState: state as String,
+      sessionStateRevision: _count(json, 'sessionStateRevision'),
+      matchedCases: _count(json, 'matchedCases'),
+      championEnterCases: _count(json, 'championEnterCases'),
+      shadowDisagreementCases: _count(json, 'shadowDisagreementCases'),
+      linkedPaperOrders: _count(json, 'linkedPaperOrders'),
+      unlinkedChampionEnters: _count(json, 'unlinkedChampionEnters'),
+      paperFillQuantityMismatchOrders:
+          _count(json, 'paperFillQuantityMismatchOrders'),
+      recordedFillQuantity: _count(json, 'recordedFillQuantity'),
+      recordedPaperFees: _decimal(json, 'recordedPaperFees'),
+      recordedPaperSlippage: _decimal(json, 'recordedPaperSlippage'),
+      reasonCodes: reasons.cast<String>().toList(growable: false),
+    );
+  }
+}
+
 abstract interface class ModelControlCenterRepository {
   Future<List<RegisteredModelEvidence>> models();
   Future<List<ModelVersionEvidence>> versions(String modelKey);
   Future<List<MatchedSessionEvidence>> recentSessions();
   Future<MatchedSessionEvidence> session(String sessionId);
+  Future<MatchedSessionAggregateEvidence> sessionEvidence(String sessionId);
   Future<List<MatchedCaseEvidence>> recentCases(String sessionId);
   Future<MatchedSessionSafetyState> safetyState(String sessionId);
   Future<MatchedSessionSafetyState> transitionSafety(
@@ -265,6 +347,15 @@ class HttpModelControlCenterRepository implements ModelControlCenterRepository {
     );
     return _records(response).map(MatchedSessionEvidence.fromJson)
         .toList(growable: false);
+  }
+
+  @override
+  Future<MatchedSessionAggregateEvidence> sessionEvidence(String sessionId) async {
+    final id = Uri.encodeComponent(sessionId);
+    final response = await api.getJson(
+      '/api/admin/model-governance/paper-shadow/sessions/$id/evidence',
+    );
+    return MatchedSessionAggregateEvidence.fromJson(_record(response));
   }
 
   @override
