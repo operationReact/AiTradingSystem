@@ -65,7 +65,7 @@ class WorkerTlsReadOnlyPolicyTest(unittest.TestCase):
     def test_workflow_collects_only_ephemeral_json_and_uploads_sanitized_report(self):
         w = self.workflow
         for allowed in (
-            "aws sts get-caller-identity",
+            "optional_read identity sts get-caller-identity",
             "elbv2 describe-load-balancers",
             "elbv2 describe-listeners",
             "elbv2 describe-rules",
