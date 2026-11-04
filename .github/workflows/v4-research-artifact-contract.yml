@@ -12,6 +12,7 @@ on:
       - 'intelligence/src/aitrading_intelligence/**'
       - 'intelligence/tests/**'
       - 'intelligence/pyproject.toml'
+      - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   push:
     branches: [dev]
@@ -24,6 +25,7 @@ on:
       - 'intelligence/src/aitrading_intelligence/**'
       - 'intelligence/tests/**'
       - 'intelligence/pyproject.toml'
+      - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   workflow_dispatch:
 
@@ -79,6 +81,78 @@ jobs:
           -Dtest=ResearchArtifactInferenceClientTest,ResearchInferenceDispatchServiceTest,ResearchRosterDispatchServiceTest
           test
 
-# This is synthetic model computation plus independently defined Java wire
-# validation at the same exact commit. It does NOT use external licensed feed
-# subscriptions, an actually deployed Java→Python route, broker data or LIVE.
+  java-to-real-python-http:
+    name: Java HttpClient to running Python CatBoost/LightGBM (synthetic)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@v4
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: intelligence/pyproject.toml
+      - name: Install real Python trained-artifact worker
+        working-directory: intelligence
+        run: pip install -e '.[dev]'
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Train ephemeral synthetic artifacts and run Java-to-Python HTTP
+        env:
+          ATS_V4_REAL_HTTP_SMOKE: 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          temporary="$(mktemp -d)"
+          worker_pid=""
+          cleanup() {
+            if [[ -n "$worker_pid" ]]; then
+              kill "$worker_pid" 2>/dev/null || true
+              wait "$worker_pid" 2>/dev/null || true
+            fi
+            rm -rf "$temporary"
+          }
+          trap cleanup EXIT
+
+          chmod 700 "$temporary"
+          python intelligence/scripts/build_v4_synthetic_worker_manifest.py "$temporary"
+          export AI_RESEARCH_MODEL_MANIFEST="$temporary/manifest.json"
+          export AI_RESEARCH_WORKER_TOKEN="ci-local-synthetic-$(openssl rand -hex 32)"
+          export ATS_V4_RESEARCH_SMOKE_TOKEN="$AI_RESEARCH_WORKER_TOKEN"
+          export ATS_V4_RESEARCH_SMOKE_MANIFEST="$AI_RESEARCH_MODEL_MANIFEST"
+          export ATS_V4_RESEARCH_SMOKE_BASE_URL="http://127.0.0.1:18721"
+
+          python -m uvicorn aitrading_intelligence.app:app \
+            --host 127.0.0.1 --port 18721 --no-access-log \
+            > "$temporary/worker.log" 2>&1 &
+          worker_pid=$!
+          healthy=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --max-time 1 \
+              http://127.0.0.1:18721/health > /dev/null; then
+              healthy=1
+              break
+            fi
+            if ! kill -0 "$worker_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "$healthy" != 1 ]]; then
+            echo "Runner-local Python trained-artifact worker failed startup"
+            exit 1
+          fi
+          cd backend
+          mvn --batch-mode --no-transfer-progress \
+            -Dtest=ResearchArtifactLiveWorkerSmokeTest test
+
+# The loopback integration uses real Java HTTP and a real Python process on
+# one CI runner with synthetic lab data. It is not a deployed production
+# service, independent licensed Indian-market feed, broker or LIVE acceptance.
