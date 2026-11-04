@@ -452,71 +452,7 @@ class HttpModelControlCenterRepository implements ModelControlCenterRepository {
   @override
   Future<ResearchReceiptReport> researchReceipts(
       String sessionId, String caseKey) async {
-    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,95}
-    final id = Uri.encodeComponent(sessionId);
-    final response = await api.getJson(
-      '/api/admin/model-governance/paper-shadow/sessions/$id',
-    );
-    return MatchedSessionEvidence.fromJson(_record(response));
-  }
-
-  static const _paperShadowPath =
-      '/api/admin/model-governance/paper-shadow/sessions';
-
-  @override
-  Future<MatchedSessionSafetyState> safetyState(String sessionId) async {
-    final id = Uri.encodeComponent(sessionId);
-    final result = await api.getJson('$_paperShadowPath/$id/control');
-    return MatchedSessionSafetyState.fromJson(_record(result));
-  }
-
-  @override
-  Future<List<MatchedSessionSafetyChange>> safetyHistory(String sessionId) async {
-    final id = Uri.encodeComponent(sessionId);
-    final result = await api.getJson(
-      '$_paperShadowPath/$id/control/history',
-      query: const {'limit': '20'},
-    );
-    return _records(result).map(MatchedSessionSafetyChange.fromJson)
-        .toList(growable: false);
-  }
-
-  @override
-  Future<MatchedSessionSafetyState> transitionSafety(
-      String sessionId, String action, String reason) async {
-    if (!const ['PAUSE', 'RESUME', 'QUARANTINE'].contains(action)) {
-      throw ArgumentError.value(action, 'action', 'Invalid safety transition');
-    }
-    final cleaned = reason.trim();
-    if (cleaned.length < 10 || cleaned.length > 512) {
-      throw ArgumentError.value(reason, 'reason', '10-512 characters required');
-    }
-    final id = Uri.encodeComponent(sessionId);
-    final result = await api.putJson(
-      '$_paperShadowPath/$id/control',
-      body: {'action': action, 'reason': cleaned},
-    );
-    final state = MatchedSessionSafetyState.fromJson(_record(result));
-    const outcomes = {'PAUSE': 'PAUSED', 'RESUME': 'ACTIVE',
-      'QUARANTINE': 'QUARANTINED'};
-    if (state.state != outcomes[action] || state.sessionId != sessionId) {
-      throw const ApiTransportFailure('MATCHED_SAFETY_TRANSITION_NOT_CONFIRMED', null);
-    }
-    return state;
-  }
-
-  @override
-  Future<List<MatchedCaseEvidence>> recentCases(String sessionId) async {
-    final id = Uri.encodeComponent(sessionId);
-    final response = await api.getJson(
-      '/api/admin/model-governance/paper-shadow/sessions/$id/observations',
-      query: const {'limit': '50'},
-    );
-    return _records(response).map(MatchedCaseEvidence.fromJson)
-        .toList(growable: false);
-  }
-}
-).hasMatch(caseKey)) {
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,95}$').hasMatch(caseKey)) {
       throw ArgumentError.value(caseKey, 'caseKey', 'Invalid research case key');
     }
     final id = Uri.encodeComponent(sessionId);
