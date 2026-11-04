@@ -166,6 +166,18 @@ class RuntimePostureTest(unittest.TestCase):
                 "name": "APP_RESEARCH_ROSTER_DISPATCH_ENABLED", "value": "true",
             })
         self.assert_blocked(f, "RESEARCH_OPT_IN_ON_EXISTING_BACKEND")
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "environment"].append({
+                "name": "APP_TRADING_MODE", "value": "LIVE",
+            })
+        self.assert_blocked(f, "UNVERIFIED_SPRING_CONFIGURATION_OVERRIDE")
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "secrets"].append({
+                "name": "TRADING_MODE", "valueFrom": "PRIVATE",
+            })
+        self.assert_blocked(f, "ECS_SECRET_REFERENCE_AMBIGUOUS")
 
     def test_partial_rollout_and_unhealthy_alb_and_http_health_are_blocked(self):
         f = fixtures()
