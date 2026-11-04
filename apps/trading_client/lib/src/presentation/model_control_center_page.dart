@@ -271,10 +271,25 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           if (_versions != null)
             ..._versions!.map((version) => Card(
               key: ValueKey('model-version-${version.id}'),
-              child: ListTile(
-                title: Text(version.label),
-                subtitle: Text('Version: ${_short(version.fingerprint)}\nArtifact: ${_short(version.artifactFingerprint)}'),
-                isThreeLine: true,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(version.label, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 6),
+                    Text('Version: ${_short(version.fingerprint)}'),
+                    Text('Artifact: ${_short(version.artifactFingerprint)}'),
+                    Text('Feature schema: ${_short(version.featureSchemaFingerprint)}'),
+                    Text('Training dataset: ${_short(version.trainingDatasetFingerprint)}'),
+                    Text('Training config: ${_short(version.trainingConfigFingerprint)}'),
+                    Text('Code: ${_short(version.codeSha)}'),
+                    if (version.researchRegistryFingerprint != null)
+                      Text('Research: ${_short(version.researchRegistryFingerprint!)}'),
+                    if (version.trainingCutoff != null)
+                      Text('Training cutoff: ${version.trainingCutoff!.toIso8601String()}'),
+                  ],
+                ),
               ),
             )),
         ],
