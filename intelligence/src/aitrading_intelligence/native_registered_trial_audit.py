@@ -155,6 +155,18 @@ class NativeRegisteredTrialAuditEvidence(BaseModel):
             != cohort.holdout_export_fingerprint
         ):
             raise ValueError("native audit holdout export differs from frozen source")
+        if [
+            item.directional.candidate.prediction.candidate_id
+            for item in self.evaluated_native_models
+        ] != sorted(
+            item.directional.candidate.prediction.candidate_id
+            for item in self.evaluated_native_models
+        ):
+            raise ValueError("native audit evaluated trials must be sorted")
+        if [item.candidate_id for item in self.trial_dispositions] != sorted(
+            item.candidate_id for item in self.trial_dispositions
+        ):
+            raise ValueError("native audit disposition ledger must be sorted")
         _check_native_registration(
             self.freeze, self.trial_budget, self.native_baseline,
             self.evaluated_native_models, self.trial_dispositions,
@@ -209,6 +221,8 @@ def audit_native_registered_trials(
         TrialOutcome.model_validate(item.model_dump(mode="python"))
         for item in dispositions
     ]
+    challengers.sort(key=lambda item: item.directional.candidate.prediction.candidate_id)
+    outcomes.sort(key=lambda item: item.candidate_id)
     market_binding = bind_india_holdout_to_plan(
         frozen, training_export, holdout_export,
         fee_book, target, holdout_config,
