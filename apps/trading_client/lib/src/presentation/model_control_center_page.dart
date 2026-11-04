@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/model_control_center_repository.dart';
 
-/// Connected, read-only V4 Admin evidence; never exposes a LIVE or model-promotion action.
+/// Connected ADMIN V4 evidence and bounded session de-risk controls; no LIVE or model promotion.
 class ModelControlCenterPage extends StatefulWidget {
   const ModelControlCenterPage({required this.repository, super.key});
   final ModelControlCenterRepository repository;
@@ -19,6 +19,11 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
+  MatchedSessionSafetyState? _safety;
+  List<MatchedSessionSafetyChange>? _safetyHistory;
+  ApiFailure? _safetyError;
+  bool _loadingSafety = false;
+  bool _updatingSafety = false;
   List<MatchedSessionEvidence>? _recentSessions;
   ApiFailure? _recentSessionsError;
   bool _loadingRecentSessions = false;
@@ -46,6 +51,11 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _selected = null;
       _session = null;
       _cases = null;
+      _safety = null;
+      _safetyHistory = null;
+      _safetyError = null;
+      _loadingSafety = false;
+      _updatingSafety = false;
       _recentSessions = null;
       _modelsError = error;
       _versionsError = null;
@@ -163,6 +173,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _loadingSession = true;
       _session = null;
       _cases = null;
+      _safety = null;
+      _safetyHistory = null;
+      _safetyError = null;
       _sessionError = null;
       _sessionValidation = null;
     });
@@ -172,6 +185,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       final cases = await widget.repository.recentCases(id);
       if (!mounted || generation != _authGeneration) return;
       setState(() { _session = session; _cases = cases; });
+      await _loadSafety(id);
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration) return;
       if (_isAccessDenied(error)) {
@@ -182,6 +196,131 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     } finally {
       if (mounted && generation == _authGeneration) {
         setState(() => _loadingSession = false);
+      }
+    }
+  }
+
+  Future<void> _loadSafety(String id) async {
+    if (_loadingSafety || _updatingSafety) return;
+    final generation = _authGeneration;
+    setState(() {
+      _loadingSafety = true;
+      _safetyError = null;
+    });
+    try {
+      final state = await widget.repository.safetyState(id);
+      if (!mounted || generation != _authGeneration || _session?.id != id) return;
+      final history = await widget.repository.safetyHistory(id);
+      if (!mounted || generation != _authGeneration || _session?.id != id) return;
+      setState(() { _safety = state; _safetyHistory = history; });
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() {
+          _safety = null;
+          _safetyHistory = null;
+          _safetyError = error;
+        });
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingSafety = false);
+      }
+    }
+  }
+
+  Future<void> _transitionSafety(String action) async {
+    final session = _session;
+    final old = _safety;
+    if (session == null || old == null || _updatingSafety ||
+        _safetyError != null) {
+      return;
+    }
+    final expected = switch (action) {
+      'PAUSE' => 'PAUSED',
+      'RESUME' => 'ACTIVE',
+      'QUARANTINE' => 'QUARANTINED',
+      _ => '',
+    };
+    if (expected.isEmpty || old.state == 'QUARANTINED' ||
+        (action == 'PAUSE' && old.state != 'ACTIVE') ||
+        (action == 'RESUME' && old.state != 'PAUSED')) {
+      return;
+    }
+
+    String reasonDraft = '';
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Confirm $action session control'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(action == 'QUARANTINE'
+              ? 'Quarantine is permanent. This session cannot resume or accept new decisions.'
+              : 'This changes Java PAPER/SHADOW evidence intake only. It does not control broker orders.'),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('matched-safety-reason'),
+            onChanged: (value) => reasonDraft = value,
+            maxLength: 512, maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Audit reason (at least 10 characters)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ]),
+        actions: [
+          TextButton(
+            key: const ValueKey('matched-safety-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('matched-safety-confirm'),
+            onPressed: () {
+              final cleaned = reasonDraft.trim();
+              if (cleaned.length < 10 || cleaned.length > 512) return;
+              Navigator.of(dialogContext).pop(cleaned);
+            },
+            child: Text('Confirm $action'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || reason == null || _session?.id != session.id) return;
+    final generation = _authGeneration;
+    setState(() { _updatingSafety = true; _safetyError = null; });
+    try {
+      final changed = await widget.repository.transitionSafety(session.id, action, reason);
+      if (!mounted || generation != _authGeneration) return;
+      if (changed.state != expected || changed.revision <= old.revision) {
+        throw const ApiTransportFailure('MATCHED_SAFETY_NOT_CONFIRMED', null);
+      }
+      final confirmed = await widget.repository.safetyState(session.id);
+      if (!mounted || generation != _authGeneration) return;
+      final history = await widget.repository.safetyHistory(session.id);
+      if (!mounted || generation != _authGeneration) return;
+      if (confirmed.state != expected ||
+          confirmed.fingerprint != changed.fingerprint ||
+          confirmed.revision != changed.revision ||
+          history.isEmpty || history.first.revision != confirmed.revision) {
+        throw const ApiTransportFailure('MATCHED_SAFETY_READBACK_MISMATCH', null);
+      }
+      setState(() { _safety = confirmed; _safetyHistory = history; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server confirmed $expected session control.')),
+      );
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() { _safety = null; _safetyError = error; });
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _updatingSafety = false);
       }
     }
   }
@@ -331,6 +470,89 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     );
   }
 
+  Widget _sessionSafetyPanel() {
+    final session = _session;
+    if (session == null) return const SizedBox.shrink();
+    final safety = _safety;
+    return Card(
+      key: const ValueKey('matched-safety-panel'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text('Session intake safety',
+                style: Theme.of(context).textTheme.titleMedium)),
+            IconButton(
+              key: const ValueKey('matched-safety-refresh'),
+              tooltip: 'Refresh Java safety state',
+              onPressed: _loadingSafety || _updatingSafety
+                  ? null : () => _loadSafety(session.id),
+              icon: const Icon(Icons.refresh),
+            ),
+          ]),
+          const Text(
+            'Java safety state controls matched evidence intake only. '
+            'It does not halt separate PAPER automation or authorize LIVE orders.',
+          ),
+          if (_loadingSafety || _updatingSafety)
+            const LinearProgressIndicator(key: ValueKey('matched-safety-loading')),
+          if (_safetyError != null)
+            _problem(_safetyError!, stale: false),
+          if (safety != null && _safetyError == null) ...[
+            const SizedBox(height: 8),
+            Text('Intake: ${safety.state}',
+                key: const ValueKey('matched-safety-state')),
+            Text('Revision ${safety.revision} · ${safety.updatedBy}'),
+            Text('Reason: ${safety.reason}'),
+            Text('Safety hash: ${_short(safety.fingerprint)}'),
+            const Text('Capital authority: NONE'),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (safety.state == 'ACTIVE')
+                OutlinedButton.icon(
+                  key: const ValueKey('matched-safety-pause'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('PAUSE'),
+                  icon: const Icon(Icons.pause_circle_outline),
+                  label: const Text('Pause intake'),
+                ),
+              if (safety.state == 'PAUSED')
+                OutlinedButton.icon(
+                  key: const ValueKey('matched-safety-resume'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('RESUME'),
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('Resume intake'),
+                ),
+              if (safety.state != 'QUARANTINED')
+                FilledButton.tonalIcon(
+                  key: const ValueKey('matched-safety-quarantine'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('QUARANTINE'),
+                  icon: const Icon(Icons.report_gmailerrorred_outlined),
+                  label: const Text('Quarantine permanently'),
+                ),
+            ]),
+            if (safety.state == 'QUARANTINED')
+              const Text('Terminal quarantine: enroll a new session to recover.',
+                  key: ValueKey('matched-safety-terminal')),
+          ],
+          if (_safetyHistory != null && _safetyHistory!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Immutable transition history',
+                style: Theme.of(context).textTheme.titleSmall),
+            ..._safetyHistory!.take(5).map((change) => Text(
+              'Revision ${change.revision}: '
+              '${change.previousState ?? 'START'} → ${change.newState} · '
+              '${change.changedBy} · ${change.reason}',
+              key: ValueKey('matched-safety-history-${change.revision}'),
+            )),
+          ],
+        ]),
+      ),
+    );
+  }
+
   Widget _paperShadow(BuildContext context) {
     final theme = Theme.of(context);
     final session = _session;
@@ -438,6 +660,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
               ),
             ),
           ),
+        ],
+        if (session != null) ...[
+          const SizedBox(height: 10),
+          _sessionSafetyPanel(),
         ],
         if (cases != null && cases.isEmpty)
           const Card(

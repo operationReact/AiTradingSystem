@@ -166,12 +166,74 @@ class MatchedCaseEvidence {
       );
 }
 
+/// Java V58 safety state. Administrative evidence only, never capital authority.
+class MatchedSessionSafetyState {
+  const MatchedSessionSafetyState({
+    required this.sessionId, required this.state, required this.revision,
+    required this.fingerprint, required this.reason, required this.updatedBy,
+    required this.canAuthorizeCapital,
+  });
+  final String sessionId, state, fingerprint, reason, updatedBy;
+  final int revision;
+  final bool canAuthorizeCapital;
+
+  factory MatchedSessionSafetyState.fromJson(Map<String, dynamic> json) {
+    final state = _value(json, 'state');
+    final revision = json['revision'];
+    if (!const ['ACTIVE', 'PAUSED', 'QUARANTINED'].contains(state) ||
+        revision is! int || revision < 0 ||
+        json['canAuthorizeCapital'] != false ||
+        _value(json, 'stateFingerprint').length != 64) {
+      throw const ApiTransportFailure('INVALID_MATCHED_SAFETY_STATE', null);
+    }
+    return MatchedSessionSafetyState(
+      sessionId: _value(json, 'sessionId'),
+      state: state, revision: revision,
+      fingerprint: _value(json, 'stateFingerprint'),
+      reason: _value(json, 'reason'),
+      updatedBy: _value(json, 'updatedBy'),
+      canAuthorizeCapital: false,
+    );
+  }
+}
+
+class MatchedSessionSafetyChange {
+  const MatchedSessionSafetyChange({
+    required this.revision, required this.previousState,
+    required this.newState, required this.reason,
+    required this.changedBy, required this.fingerprint,
+  });
+  final int revision;
+  final String? previousState;
+  final String newState, reason, changedBy, fingerprint;
+
+  factory MatchedSessionSafetyChange.fromJson(Map<String, dynamic> json) {
+    final revision = json['revision'];
+    if (revision is! int || revision < 0 || json['canAuthorizeCapital'] != false) {
+      throw const ApiTransportFailure('INVALID_MATCHED_SAFETY_HISTORY', null);
+    }
+    return MatchedSessionSafetyChange(
+      revision: revision,
+      previousState: json['previousState']?.toString(),
+      newState: _value(json, 'newState'),
+      reason: _value(json, 'reason'),
+      changedBy: _value(json, 'changedBy'),
+      fingerprint: _value(json, 'stateFingerprint'),
+    );
+  }
+}
+
 abstract interface class ModelControlCenterRepository {
   Future<List<RegisteredModelEvidence>> models();
   Future<List<ModelVersionEvidence>> versions(String modelKey);
   Future<List<MatchedSessionEvidence>> recentSessions();
   Future<MatchedSessionEvidence> session(String sessionId);
   Future<List<MatchedCaseEvidence>> recentCases(String sessionId);
+  Future<MatchedSessionSafetyState> safetyState(String sessionId);
+  Future<MatchedSessionSafetyState> transitionSafety(
+    String sessionId, String action, String reason);
+  Future<List<MatchedSessionSafetyChange>> safetyHistory(String sessionId);
+
 }
 
 class HttpModelControlCenterRepository implements ModelControlCenterRepository {
@@ -212,6 +274,51 @@ class HttpModelControlCenterRepository implements ModelControlCenterRepository {
       '/api/admin/model-governance/paper-shadow/sessions/$id',
     );
     return MatchedSessionEvidence.fromJson(_record(response));
+  }
+
+  static const _paperShadowPath =
+      '/api/admin/model-governance/paper-shadow/sessions';
+
+  @override
+  Future<MatchedSessionSafetyState> safetyState(String sessionId) async {
+    final id = Uri.encodeComponent(sessionId);
+    final result = await api.getJson('$_paperShadowPath/$id/control');
+    return MatchedSessionSafetyState.fromJson(_record(result));
+  }
+
+  @override
+  Future<List<MatchedSessionSafetyChange>> safetyHistory(String sessionId) async {
+    final id = Uri.encodeComponent(sessionId);
+    final result = await api.getJson(
+      '$_paperShadowPath/$id/control/history',
+      query: const {'limit': '20'},
+    );
+    return _records(result).map(MatchedSessionSafetyChange.fromJson)
+        .toList(growable: false);
+  }
+
+  @override
+  Future<MatchedSessionSafetyState> transitionSafety(
+      String sessionId, String action, String reason) async {
+    if (!const ['PAUSE', 'RESUME', 'QUARANTINE'].contains(action)) {
+      throw ArgumentError.value(action, 'action', 'Invalid safety transition');
+    }
+    final cleaned = reason.trim();
+    if (cleaned.length < 10 || cleaned.length > 512) {
+      throw ArgumentError.value(reason, 'reason', '10-512 characters required');
+    }
+    final id = Uri.encodeComponent(sessionId);
+    final result = await api.putJson(
+      '$_paperShadowPath/$id/control',
+      body: {'action': action, 'reason': cleaned},
+    );
+    final state = MatchedSessionSafetyState.fromJson(_record(result));
+    const outcomes = {'PAUSE': 'PAUSED', 'RESUME': 'ACTIVE',
+      'QUARANTINE': 'QUARANTINED'};
+    if (state.state != outcomes[action] || state.sessionId != sessionId) {
+      throw const ApiTransportFailure('MATCHED_SAFETY_TRANSITION_NOT_CONFIRMED', null);
+    }
+    return state;
   }
 
   @override

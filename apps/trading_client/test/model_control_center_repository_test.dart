@@ -117,6 +117,101 @@ void main() {
     expect(paths.length, 5);
   });
 
+  test('ADMIN session safety uses readback, versioned history and reason-gated PUT',
+      () async {
+    final operator = OperatorSession()..setOperatorKey('admin-session-key');
+    final requests = <http.Request>[];
+    var mode = 'ACTIVE';
+    var revision = 0;
+    final api = AuthenticatedApiClient(
+      session: operator,
+      baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async {
+        requests.add(request);
+        expect(request.headers['X-API-Key'], 'admin-session-key');
+        final root =
+            '/api/admin/model-governance/paper-shadow/sessions/$sessionId/control';
+        if (request.url.path == root && request.method == 'PUT') {
+          expect(jsonDecode(request.body), {
+            'action': 'PAUSE',
+            'reason': 'market source delayed',
+          });
+          mode = 'PAUSED';
+          revision = 1;
+        }
+        if (request.url.path == '$root/history') {
+          expect(request.url.queryParameters, {'limit': '20'});
+          return http.Response(jsonEncode([{
+            'sessionId': sessionId,
+            'revision': revision,
+            'previousState': revision == 0 ? null : 'ACTIVE',
+            'newState': mode,
+            'reason': 'market source delayed',
+            'stateFingerprint': 'a'.padRight(64, 'a'),
+            'changedBy': 'admin',
+            'canAuthorizeCapital': false,
+          }]), 200);
+        }
+        expect(request.url.path, root);
+        return http.Response(jsonEncode({
+          'sessionId': sessionId,
+          'state': mode,
+          'revision': revision,
+          'reason': 'market source delayed',
+          'stateFingerprint': 'a'.padRight(64, 'a'),
+          'updatedBy': 'admin',
+          'canAuthorizeCapital': false,
+        }), 200);
+      }),
+    );
+    final repository = HttpModelControlCenterRepository(api);
+    expect((await repository.safetyState(sessionId)).state, 'ACTIVE');
+    final changed = await repository.transitionSafety(
+        sessionId, 'PAUSE', ' market source delayed ');
+    expect(changed.state, 'PAUSED');
+    expect(changed.canAuthorizeCapital, false);
+    final history = await repository.safetyHistory(sessionId);
+    expect(history.single.revision, 1);
+    expect(history.single.newState, 'PAUSED');
+    expect(requests.map((r) => r.method).toList(), ['GET', 'PUT', 'GET']);
+    await expectLater(
+      repository.transitionSafety(sessionId, 'DROP', 'market source delayed'),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      repository.transitionSafety(sessionId, 'PAUSE', 'short'),
+      throwsA(isA<ArgumentError>()),
+    );
+    expect(requests.length, 3);
+  });
+
+  test('PAPER/SHADOW safety refuses forged LIVE authority or unconfirmed transition',
+      () async {
+    final operator = OperatorSession()..setOperatorKey('admin-session-key');
+    final api = AuthenticatedApiClient(
+      session: operator,
+      baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async => http.Response(jsonEncode({
+        'sessionId': sessionId,
+        'state': 'ACTIVE',
+        'revision': 1,
+        'stateFingerprint': 'a'.padRight(64, 'a'),
+        'reason': 'not confirmed',
+        'updatedBy': 'admin',
+        'canAuthorizeCapital': true,
+      }), 200)),
+    );
+    final repository = HttpModelControlCenterRepository(api);
+    await expectLater(
+      repository.safetyState(sessionId),
+      throwsA(isA<ApiTransportFailure>()),
+    );
+    await expectLater(
+      repository.transitionSafety(sessionId, 'PAUSE', 'market source delayed'),
+      throwsA(isA<ApiTransportFailure>()),
+    );
+  });
+
   test('rejects malformed evidence rather than fabricating defaults', () async {
     final operator = OperatorSession()..setOperatorKey('admin-key');
     final api = AuthenticatedApiClient(
