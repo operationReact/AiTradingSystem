@@ -22,6 +22,7 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -99,6 +100,7 @@ public class ResearchWorkerReadinessService {
     private final boolean enabled;
     private final Transport transport;
 
+    @Autowired
     public ResearchWorkerReadinessService(JdbcClient jdbc, ObjectMapper mapper,
             TradingExecutionAuthority authority,
             @Value("${app.research.artifact-worker.base-url:}") String baseUrl,
