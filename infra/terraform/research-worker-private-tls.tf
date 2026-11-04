@@ -94,15 +94,15 @@ resource "aws_vpc_security_group_ingress_rule" "worker_from_tls_alb" {
 }
 
 resource "aws_lb" "research_worker_tls" {
-  count                            = local.worker_tls_count
-  name                             = "aitrading-rsrch-private"
-  internal                         = true
-  load_balancer_type               = "application"
-  security_groups                  = [aws_security_group.research_worker_tls_alb[0].id]
-  subnets                          = aws_subnet.private[*].id
-  drop_invalid_header_fields       = true
-  idle_timeout                     = 30
-  enable_http2                     = true
+  count                      = local.worker_tls_count
+  name                       = "aitrading-rsrch-private"
+  internal                   = true
+  load_balancer_type         = "application"
+  security_groups            = [aws_security_group.research_worker_tls_alb[0].id]
+  subnets                    = aws_subnet.private[*].id
+  drop_invalid_header_fields = true
+  idle_timeout               = 30
+  enable_http2               = true
 
   lifecycle {
     precondition {
