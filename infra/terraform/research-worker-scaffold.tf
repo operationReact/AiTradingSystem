@@ -210,9 +210,6 @@ resource "aws_ecs_service" "research_worker" {
     aws_iam_role_policy_attachment.research_worker_execution_managed,
     aws_iam_role_policy.research_worker_token_read
   ]
-  lifecycle {
-    ignore_changes = [desired_count]
-  }
   tags = local.worker_tags
 }
 
