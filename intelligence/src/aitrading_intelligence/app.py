@@ -10,7 +10,9 @@ from .research_artifact_inference import (
     BoundedInferenceRequest,
     BoundedInferenceResponse,
     InferenceUnavailable,
+    VerifiedWorkerRoster,
     authorize_research_worker,
+    inspect_worker_roster,
     score_allowlisted_request,
 )
 from .selective_presentation import (
@@ -54,6 +56,26 @@ def rank_opportunity(request: FusionRequest) -> RankedOpportunity:
 @app.post("/v1/selective/presentation", response_model=SelectivePresentationV1)
 def selective_presentation(request: SelectivePresentationRequest) -> SelectivePresentationV1:
     return build_selective_presentation(request.decision, request.evaluation)
+
+
+@app.get(
+    "/v1/research/artifact-readiness",
+    response_model=VerifiedWorkerRoster,
+)
+def verified_artifact_readiness(
+    x_research_worker_token: str | None = Header(default=None, alias="X-Research-Worker-Token"),
+) -> VerifiedWorkerRoster:
+    """Authenticated local artifact/allowlist probe, research-only and read-only."""
+    try:
+        manifest = authorize_research_worker(x_research_worker_token)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail="Research worker unauthorized") from exc
+    except InferenceUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Research worker not configured") from exc
+    try:
+        return inspect_worker_roster(manifest)
+    except InferenceUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Research worker roster unavailable") from exc
 
 
 @app.post(
