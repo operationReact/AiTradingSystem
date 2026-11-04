@@ -105,6 +105,76 @@ void main() {
     expect(paths.length, 5);
   });
 
+  test('ADMIN emergency disable uses exact Java PUT and immutable audit reason',
+      () async {
+    final operator = OperatorSession()..setOperatorKey('admin-key');
+    final requests = <http.Request>[];
+    final api = AuthenticatedApiClient(
+      session: operator,
+      baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async {
+        requests.add(request);
+        expect(request.headers['X-API-Key'], 'admin-key');
+        expect(request.url.path,
+            '/api/admin/model-governance/emergency-controls/models/12345678-1234-1234-1234-123456789abc' +
+            (request.method == 'GET' ? '/effective' : ''));
+        if (request.method == 'GET') {
+          return http.Response(jsonEncode({
+            'versionId': '12345678-1234-1234-1234-123456789abc',
+            'allowed': true,
+            'modelVersionDisabled': false,
+            'modelFamilyDisabled': false,
+            'staticFallbackEnabled': false,
+            'canAuthorizeCapital': false,
+          }), 200);
+        }
+        expect(request.method, 'PUT');
+        expect(jsonDecode(request.body),
+            {'disabled': true, 'reason': 'unexpected latency'});
+        return http.Response(jsonEncode({
+          'active': true,
+          'reason': 'unexpected latency',
+          'stateFingerprint': 'a'.padRight(64, 'a'),
+          'canAuthorizeCapital': false,
+        }), 200);
+      }),
+    );
+    final repository = HttpModelControlCenterRepository(api);
+    final status = await repository.effectiveModelStatus(
+        '12345678-1234-1234-1234-123456789abc');
+    expect(status.allowed, isTrue);
+    expect(status.canAuthorizeCapital, isFalse);
+    final receipt = await repository.disableModelVersion(
+        '12345678-1234-1234-1234-123456789abc', '  unexpected latency  ');
+    expect(receipt.active, isTrue);
+    expect(receipt.canAuthorizeCapital, isFalse);
+    expect(requests.length, 2);
+  });
+
+  test('emergency disable cannot submit empty reason or accept fake success',
+      () async {
+    final operator = OperatorSession()..setOperatorKey('admin-key');
+    final api = AuthenticatedApiClient(
+      session: operator,
+      baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async => http.Response(jsonEncode({
+        'active': false,
+        'reason': 'not applied',
+        'stateFingerprint': 'a'.padRight(64, 'a'),
+        'canAuthorizeCapital': false,
+      }), 200)),
+    );
+    final repository = HttpModelControlCenterRepository(api);
+    await expectLater(
+      repository.disableModelVersion('test', ' '),
+      throwsA(isA<ArgumentError>()),
+    );
+    await expectLater(
+      repository.disableModelVersion('test', 'reason'),
+      throwsA(isA<ApiTransportFailure>()),
+    );
+  });
+
   test('rejects malformed evidence rather than fabricating defaults', () async {
     final operator = OperatorSession()..setOperatorKey('admin-key');
     final api = AuthenticatedApiClient(
