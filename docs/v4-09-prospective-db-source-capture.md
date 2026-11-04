@@ -23,7 +23,7 @@ The new API reports:
 - `inferenceExecuted=false`
 - `canAuthorizeCapital=false`
 
-Java database custody **does not** establish: a provider signature, an NSE/BSE or Indian news redistribution licence, non-simulated market feed timeliness, independent provider reconciliation, a running model inference, registered forecast calibration, PAPER fill, or LIVE release readiness. Historical `market_candle` is updateable in the current schema; the frozen SHA-256 is the snapshot observed at capture, not a claim that the upstream database row will never change.
+Java database custody **does not** establish: a provider signature, an NSE/BSE or Indian news redistribution licence, non-simulated market feed timeliness, independent provider reconciliation, a running model inference, registered forecast calibration, PAPER fill, or LIVE release readiness. Historical `market_candle` and `news_item` rows are mutable and may be removed under existing retention/test-cleanup rules. V59 intentionally retains their IDs and independently frozen SHA-256 fingerprints **without physical FKs** to those mutable source tables: the audit capture survives upstream deletions. This is the snapshot observed at capture, not a claim that the original data will never change.
 
 ## Next PR
 
