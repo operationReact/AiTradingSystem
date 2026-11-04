@@ -10,6 +10,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.support.AbstractApprovalPaperIT;
+import in.aitradingsystem.risk.RiskPolicyBootstrap;
+import in.aitradingsystem.risk.RiskPolicyConfigRepository;
+import in.aitradingsystem.risk.RiskPolicySnapshot;
+import in.aitradingsystem.config.RiskProperties;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +24,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +39,28 @@ class PaperTradeApiIT extends AbstractApprovalPaperIT {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired JdbcClient jdbc;
+    @Autowired RiskPolicyBootstrap riskBootstrap;
+    @Autowired RiskPolicyConfigRepository policyRepository;
+    @Autowired RiskProperties defaultRisk;
+
+    @BeforeEach
+    void isolateExpectedPaperRiskPolicy() {
+        // This legacy paper-trade suite requires the application default fee
+        // and risk budget, but other PostgreSQL suites intentionally activate
+        // stricter policies. Shared CI database ordering must not determine
+        // PAPER fill accounting or whether a high-risk order gets accepted.
+        jdbc.sql("DELETE FROM audit_event WHERE entity_type='RISK_POLICY_CONFIG'")
+            .update();
+        jdbc.sql("DELETE FROM risk_policy_config").update();
+        riskBootstrap.run(null);
+        RiskPolicySnapshot baseline = policyRepository.requireActive();
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            baseline.riskPerTradePercent().compareTo(defaultRisk.riskPerTradePercent()));
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            baseline.feeRate().compareTo(defaultRisk.feeRate()));
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            baseline.slippageRate().compareTo(defaultRisk.slippageRate()));
+    }
 
     @AfterEach
     void restoreState() throws Exception {
