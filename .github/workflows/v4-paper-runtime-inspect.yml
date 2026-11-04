@@ -1,0 +1,102 @@
+name: Inspect V4 PAPER runtime posture (read-only, not release acceptance)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: v4-paper-posture-inspect
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    name: Independently inspect existing PAPER backend; do not deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_REGION: us-east-1
+      EXPECTED_AWS_ACCOUNT: '816344830716'
+      ECS_CLUSTER: ai-trading-system
+      ECS_BACKEND_SERVICE: ai-trading-system-backend
+      BACKEND_TASK_FAMILY: ai-trading-system-backend
+      RESEARCH_SERVICE: ai-trading-system-research-worker
+      PAPER_DOMAIN: maargglobal.com
+    steps:
+      - name: Check out selected dev commit
+        uses: actions/checkout@v4
+
+      - name: Validate inspection scope before assuming AWS credentials
+        env:
+          ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/dev" || {
+            echo "::error::V73 runtime inspection only supports dev"; exit 1;
+          }
+          test -n "$ROLE_ARN" || {
+            echo "::error::Connect configured read-only AWS role first"; exit 1;
+          }
+          test "$AWS_REGION" = "us-east-1"
+          test "$EXPECTED_AWS_ACCOUNT" = "816344830716"
+          test "$PAPER_DOMAIN" = "maargglobal.com"
+
+      - name: Assume configured AWS role using short-lived OIDC
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: github-v73-paper-inspect-${{ github.run_id }}
+          allowed-account-ids: '816344830716'
+          action-timeout-s: 120
+
+      - name: Read AWS and HTTPS state; produce sanitized research-blocked report
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          temp="$(mktemp -d)"
+          chmod 700 "$temp"
+          trap 'rm -rf "$temp"' EXIT
+
+          # Read-only AWS CLI calls. Task definitions may include sensitive
+          # plaintext environment; retain them only in ephemeral private files,
+          # never stdout, GitHub artifacts or the job summary.
+          aws sts get-caller-identity > "$temp/identity.json"
+          aws ecs describe-clusters --clusters "$ECS_CLUSTER"             > "$temp/clusters.json"
+          aws ecs describe-services --cluster "$ECS_CLUSTER"             --services "$ECS_BACKEND_SERVICE" > "$temp/services.json"
+          aws ecs describe-task-definition --task-definition "$BACKEND_TASK_FAMILY"             > "$temp/task.json"
+
+          # Presence of a named worker is an observation, never attestation.
+          if ! aws ecs describe-services --cluster "$ECS_CLUSTER"               --services "$RESEARCH_SERVICE" > "$temp/worker-services.json"; then
+            printf '%s\n' '{"services":[],"failures":[]}'               > "$temp/worker-services.json"
+          fi
+
+          target_arn="$(aws elbv2 describe-target-groups --names aitrading-api             --query 'TargetGroups[0].TargetGroupArn' --output text 2>/dev/null || true)"
+          if [[ -n "$target_arn" && "$target_arn" != "None" ]]; then
+            aws elbv2 describe-target-health --target-group-arn "$target_arn"               > "$temp/targets.json" || printf '%s\n' '{}' > "$temp/targets.json"
+          else
+            printf '%s\n' '{}' > "$temp/targets.json"
+          fi
+
+          if ! curl --fail --silent --show-error --max-time 10               --max-filesize 4096 --proto '=https'               "https://$PAPER_DOMAIN/api/health" > "$temp/public-health.json"; then
+            printf '%s\n' '{}' > "$temp/public-health.json"
+          fi
+
+          python3 scripts/v4_paper_runtime_posture.py             --identity "$temp/identity.json"             --clusters "$temp/clusters.json"             --services "$temp/services.json"             --task "$temp/task.json"             --targets "$temp/targets.json"             --public-health "$temp/public-health.json"             --worker-services "$temp/worker-services.json"             --expected-sha "$GITHUB_SHA"             --output "$GITHUB_WORKSPACE/v4-paper-runtime-posture.json"
+
+      - name: Retain only sanitized V73 read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v4-paper-runtime-posture-readonly
+          path: v4-paper-runtime-posture.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+# This workflow is manually invoked and cannot deploy, change ECS desired
+# count, rotate secrets, enable research dispatch or place a broker order.
+# A green backend posture never verifies licensed feeds, trained worker identity,
+# deployed Python inference or LIVE readiness.
