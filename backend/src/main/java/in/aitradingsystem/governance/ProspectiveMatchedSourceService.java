@@ -76,9 +76,10 @@ public class ProspectiveMatchedSourceService {
                 || input.candleId() <= 0 || input.newsId() == null) {
             throw new IllegalArgumentException("Valid caseKey, candleId and newsId are required");
         }
-        // Reuse V58's FOR SHARE lock so pause/quarantine serializes with source capture.
-        safety.requireActiveForAppend(sessionId);
+        // Resolve unknown immutable enrollment as NOT_FOUND, then acquire V58's
+        // FOR SHARE safety lock before any mutable capture write.
         var session = intake.session(sessionId);
+        safety.requireActiveForAppend(sessionId);
         for (var model : session.models()) {
             emergency.requireModelAllowed(model.modelVersionId());
         }
