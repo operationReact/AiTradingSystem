@@ -91,6 +91,66 @@ def _create_manifest(tmp_path, artifacts):
     return manifest
 
 
+def test_authenticated_worker_roster_readiness_checks_every_local_artifact(
+    trained_artifacts, tmp_path, monkeypatch
+):
+    from aitrading_intelligence.research_artifact_inference import (
+        VerifiedWorkerRoster,
+        inspect_worker_roster,
+    )
+
+    cat, light = trained_artifacts
+    manifest = _create_manifest(tmp_path, [
+        (MODEL_ID, "CATBOOST", cat),
+        (SHADOW_ID, "LIGHTGBM", light),
+    ])
+    monkeypatch.setenv("AI_RESEARCH_WORKER_TOKEN", TOKEN)
+    monkeypatch.setenv("AI_RESEARCH_MODEL_MANIFEST", str(manifest))
+    with TestClient(app) as client:
+        route = "/v1/research/artifact-readiness"
+        assert client.get(route).status_code == 401
+        assert client.get(route, headers={
+            "X-Research-Worker-Token": "wrong"
+        }).status_code == 401
+        ready = client.get(route, headers={
+            "X-Research-Worker-Token": TOKEN
+        })
+        assert ready.status_code == 200
+        response = VerifiedWorkerRoster.model_validate(ready.json())
+        assert response == inspect_worker_roster(manifest)
+        assert response.local_artifacts_validated is True
+        assert response.independently_verified_deployment is False
+        assert response.source_rights_verified is False
+        assert response.paper_shadow_soak_accepted is False
+        assert response.broker_reconciliation_accepted is False
+        assert response.can_authorize_capital is False
+        assert [m.model_version_id for m in response.models] == [
+            MODEL_ID, SHADOW_ID,
+        ]
+        assert [m.model_family for m in response.models] == [
+            "CATBOOST", "LIGHTGBM",
+        ]
+        assert all(len(m.artifact_fingerprint) == 64 for m in response.models)
+        assert len(response.manifest_sha256) == 64
+        assert len(response.response_fingerprint) == 64
+        assert "artifact_filename" not in ready.text
+        assert "artifact_sha256" not in ready.text
+        assert str(tmp_path) not in ready.text
+        assert TOKEN not in ready.text
+
+        # No partial readiness when just one pinned file changes.
+        path = tmp_path / (SHADOW_ID + ".json")
+        path.write_bytes(path.read_bytes() + b" ")
+        assert client.get(route, headers={
+            "X-Research-Worker-Token": TOKEN
+        }).status_code == 503
+
+        monkeypatch.delenv("AI_RESEARCH_MODEL_MANIFEST")
+        assert client.get(route, headers={
+            "X-Research-Worker-Token": TOKEN
+        }).status_code == 503
+
+
 @pytest.mark.parametrize("which", [0, 1])
 def test_real_serialized_weights_score_and_replay(trained_artifacts, tmp_path, which):
     cat, light = trained_artifacts

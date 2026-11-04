@@ -10,6 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.support.AbstractApprovalPaperIT;
+import in.aitradingsystem.risk.RiskPolicyConfigRepository;
+import in.aitradingsystem.risk.CreateRiskPolicyRequest;
+import in.aitradingsystem.risk.RiskPolicyConfigService;
+import in.aitradingsystem.risk.RiskPolicySnapshot;
+import in.aitradingsystem.config.RiskProperties;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -20,6 +25,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +40,60 @@ class PaperTradeApiIT extends AbstractApprovalPaperIT {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired JdbcClient jdbc;
+    @Autowired RiskPolicyConfigService riskPolicyConfig;
+    @Autowired RiskPolicyConfigRepository policyRepository;
+    @Autowired RiskProperties defaultRisk;
+
+    @BeforeEach
+    void isolateExpectedPaperRiskPolicy() {
+        // Other integration suites may activate stricter policies. Never
+        // DELETE referenced immutable policies: historical risk_decision
+        // rows depend on their FK. The supported versioned activation API
+        // preserves original auditability and complete prior risk history.
+        RiskPolicySnapshot active = policyRepository.requireActive();
+        boolean canonical = active.riskPerTradePercent().compareTo(
+                    defaultRisk.riskPerTradePercent()) == 0
+            && active.maxDailyDrawdownPercent().compareTo(
+                    defaultRisk.maxDailyDrawdownPercent()) == 0
+            && active.maxOpenPositions() == defaultRisk.maxOpenPositions()
+            && active.feeRate().compareTo(defaultRisk.feeRate()) == 0
+            && active.slippageRate().compareTo(defaultRisk.slippageRate()) == 0
+            && active.signalMaxAgeMinutes() == defaultRisk.signalMaxAgeMinutes()
+            && active.minRewardRiskRatio().compareTo(BigDecimal.ONE) == 0
+            && active.maxOrderNotional().compareTo(
+                new BigDecimal("999999999999999.99")) == 0
+            && !active.enforceMarketSession()
+            && active.rejectExistingSymbolPosition()
+            && !active.rejectDuplicatePendingExposure();
+        if (!canonical) {
+            riskPolicyConfig.createAndActivate(new CreateRiskPolicyRequest(
+                "PAPER API integration canonical baseline",
+                defaultRisk.riskPerTradePercent(),
+                defaultRisk.maxDailyDrawdownPercent(),
+                defaultRisk.maxOpenPositions(),
+                BigDecimal.ONE,
+                new BigDecimal("999999999999999.99"),
+                new BigDecimal("100"),
+                new BigDecimal("100"),
+                1000,
+                defaultRisk.signalMaxAgeMinutes(),
+                3600,
+                false,
+                true,
+                false,
+                defaultRisk.feeRate(),
+                defaultRisk.slippageRate(),
+                "legacy-risk-v1-bootstrap"
+            ), "PAPER_TRADE_API_IT");
+        }
+        RiskPolicySnapshot actual = policyRepository.requireActive();
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            actual.riskPerTradePercent().compareTo(defaultRisk.riskPerTradePercent()));
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            actual.feeRate().compareTo(defaultRisk.feeRate()));
+        org.junit.jupiter.api.Assertions.assertEquals(0,
+            actual.slippageRate().compareTo(defaultRisk.slippageRate()));
+    }
 
     @AfterEach
     void restoreState() throws Exception {

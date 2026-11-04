@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -50,7 +51,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @EnabledIfEnvironmentVariable(named = "ATS_V4_REAL_HTTP_SMOKE", matches = "true")
 @TestPropertySource(properties = {
     "app.research.artifact-worker.enabled=true",
-    "app.research.roster-dispatch.enabled=true"
+    "app.research.roster-dispatch.enabled=true",
+    "app.research.worker-readiness.enabled=true"
 })
 class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
     private static final UUID CAT = UUID.fromString(
@@ -76,6 +78,60 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
             () -> System.getenv("ATS_V4_RESEARCH_SMOKE_PROXY_URL"));
         registry.add("app.research.artifact-worker.token",
             () -> System.getenv("ATS_V4_RESEARCH_SMOKE_TOKEN"));
+    }
+
+    @Test
+    void actualAuthenticatedWorkerReadinessMatchesOriginalJavaEnrollmentOnly()
+            throws Exception {
+        JsonNode manifest = mapper.readTree(Files.readString(
+            Path.of(System.getenv("ATS_V4_RESEARCH_SMOKE_MANIFEST"))));
+        assertEquals(2, manifest.path("models").size());
+        for (JsonNode member : manifest.path("models")) {
+            registerVersion(UUID.fromString(member.path("model_version_id").asText()),
+                member.path("family").asText(),
+                member.path("artifact_fingerprint").asText());
+        }
+        SyntheticCase enrolled = createSyntheticCase(CAT, LIGHT);
+        String readinessUrl = ENDPOINT + "/sessions/" + enrolled.session()
+            + "/worker-readiness";
+        mvc.perform(get(readinessUrl).with(user("read-only-viewer").roles("VIEWER")))
+            .andExpect(status().isForbidden());
+        mvc.perform(get(readinessUrl).with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.contractVersion")
+                .value("v4-research-worker-readiness.v1"))
+            .andExpect(jsonPath("$.status").value("MATCHED_RESEARCH_ONLY"))
+            .andExpect(jsonPath("$.expectedModels").value(2))
+            .andExpect(jsonPath("$.workerAllowlistedModels").value(2))
+            .andExpect(jsonPath("$.extraWorkerModels").value(0))
+            .andExpect(jsonPath("$.workerRosterMatched").value(true))
+            .andExpect(jsonPath("$.localWorkerArtifactsValidated").value(true))
+            .andExpect(jsonPath("$.independentlyVerifiedDeployment").value(false))
+            .andExpect(jsonPath("$.sourceRightsVerified").value(false))
+            .andExpect(jsonPath("$.paperShadowSoakAccepted").value(false))
+            .andExpect(jsonPath("$.brokerReconciliationAccepted").value(false))
+            .andExpect(jsonPath("$.liveExecutionEnabled").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+
+        assertEquals(0, count("v4_research_inference_reservation",
+            enrolled.session(), enrolled.caseKey()));
+        assertEquals(0, count("v4_matched_case",
+            enrolled.session(), enrolled.caseKey()));
+
+        UUID unallowlisted = UUID.randomUUID();
+        registerVersion(unallowlisted, "LIGHTGBM", "f".repeat(64));
+        SyntheticCase mismatch = createSyntheticCase(CAT, unallowlisted);
+        mvc.perform(get(ENDPOINT + "/sessions/" + mismatch.session()
+                + "/worker-readiness").with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("MISMATCH_NO_DISPATCH_AUTHORITY"))
+            .andExpect(jsonPath("$.workerRosterMatched").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false))
+            .andExpect(jsonPath("$.independentlyVerifiedDeployment").value(false));
+        assertEquals(0, count("v4_research_inference_reservation",
+            mismatch.session(), mismatch.caseKey()));
+        assertEquals(0, count("v4_matched_case",
+            mismatch.session(), mismatch.caseKey()));
     }
 
     @Test
