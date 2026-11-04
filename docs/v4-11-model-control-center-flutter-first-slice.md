@@ -15,6 +15,12 @@ Tests use mocked HTTP for wire-contract checks and a typed fake repository for w
 
 The next V4-11 increment adds an ADMIN-only `GET /api/admin/model-governance/paper-shadow/sessions?limit=20` backed by the immutable V56 session table (maximum 50 results, ordered by recorded session creation). The Flutter PAPER/SHADOW tab now has a recent-session dropdown which loads the existing Java roster and candidate actions without manual UUID lookup. Each entry remains explicitly read-only, and no session is automatically enrolled or traded. New Java, repository and widget tests cover role restrictions, result bounds, exact route and selecting an existing session.
 
+## Safe emergency model disable control
+
+The next V4-11 increment connects the existing ADMIN-only Java `ModelGovernanceEmergencyController` to the Flutter inventory's immutable model-version rows. It reads `GET /api/admin/model-governance/emergency-controls/models/{versionId}/effective` for *effective* eligibility. Only an effective allowed version offers a **Disable** action, never a re-enable action. Users must provide a bounded non-empty audit reason in a confirmation dialog; cancellation/blank reason never contacts Java. Confirmed requests issue `PUT /api/admin/model-governance/emergency-controls/models/{versionId}` with `{"disabled":true,"reason":"..."}`. Flutter verifies returned active-disable evidence, fetches fresh effective status and only then shows success. Backend RBAC, audit, model/family/static-fallback policy and risk boundaries remain authoritative.
+
+This is a *reduce model influence only* control. The UI cannot register a version, enable an ineligible model, activate LIVE, promote a champion, change capital limits or submit orders. Operator cannot re-enable from this view. The UI fails closed if status is unavailable and includes tests for confirmation, cancellation, empty audit reasons, exact authenticated PUT, and forged response rejection.
+
 ## Not complete
 
 This is **not** the full V4-11 Admin control center. It lacks model registration forms, experiment launcher, ensemble weights, confidence/latency/drift dashboards, PAPER/SHADOW enrollment/pause/quarantine, promotion and rollback, cost/retraining, full audit search and platform-specific production acceptance. The V4-09 Java ledger still needs authenticated inference publisher, actual PAPER fills/transaction cost/reconciliation and genuine SHADOW runtime.
