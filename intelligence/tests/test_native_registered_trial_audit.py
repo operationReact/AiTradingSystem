@@ -236,6 +236,14 @@ def test_evidence_replay_detects_tampered_source_ledger_and_authority(native_tri
     with pytest.raises(ValidationError):
         NativeRegisteredTrialAuditEvidence.model_validate(modified)
     modified = result.model_dump(mode="json")
+    modified["training_export"]["candles"][10]["volume"] += 250
+    with pytest.raises(ValidationError, match="training export changed"):
+        NativeRegisteredTrialAuditEvidence.model_validate(modified)
+    modified = result.model_dump(mode="json")
+    modified["holdout_export"]["candles"][10]["volume"] += 250
+    with pytest.raises(ValidationError, match="binding differs from raw market evidence"):
+        NativeRegisteredTrialAuditEvidence.model_validate(modified)
+    modified = result.model_dump(mode="json")
     modified["can_authorize_capital"] = True
     with pytest.raises(ValidationError):
         NativeRegisteredTrialAuditEvidence.model_validate(modified)
