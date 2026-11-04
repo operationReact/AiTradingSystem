@@ -410,6 +410,156 @@ class MatchedPaperShadowControllerIT extends AbstractPostgresIT {
             .andExpect(status().isForbidden());
     }
 
+    @Test
+    void operatorPauseBlocksNewEvidenceAndGovernedResumeRestoresOnlyPaperIntake()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = UUID.randomUUID();
+        enroll(sessionId, champion, challenger);
+        String control = API + "/sessions/" + sessionId + "/control";
+
+        mvc.perform(get(control).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("ACTIVE"))
+            .andExpect(jsonPath("$.revision").value(0))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"market source freshness alert\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("PAUSED"))
+            .andExpect(jsonPath("$.revision").value(1));
+
+        mvc.perform(post(API + "/sessions/" + sessionId + "/observations")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observationJson(champion, challenger, Instant.now(),
+                    "ENTER", "WAIT", A, A)))
+            .andExpect(status().isConflict());
+        assertEquals(0, countCases(sessionId));
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"RESUME\",\"reason\":\"verified governance recovered\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("ACTIVE"))
+            .andExpect(jsonPath("$.revision").value(2));
+
+        mvc.perform(post(API + "/sessions/" + sessionId + "/observations")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observationJson(champion, challenger, Instant.now(),
+                    "ENTER", "WAIT", A, A)))
+            .andExpect(status().isCreated());
+        assertEquals(1, countCases(sessionId));
+
+        mvc.perform(get(control + "/history?limit=3")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.length()").value(3))
+            .andExpect(jsonPath("$[0].newState").value("ACTIVE"))
+            .andExpect(jsonPath("$[0].previousState").value("PAUSED"))
+            .andExpect(jsonPath("$[1].newState").value("PAUSED"))
+            .andExpect(jsonPath("$[2].newState").value("ACTIVE"))
+            .andExpect(jsonPath("$[2].previousState").doesNotExist())
+            .andExpect(jsonPath("$[0].canAuthorizeCapital").value(false));
+
+        Integer auditCount = jdbc.sql("""
+                SELECT count(*) FROM audit_event
+                 WHERE event_type = 'V4_MATCHED_SESSION_SAFETY_CHANGED'
+                   AND entity_id = :id AND actor = 'matched-admin'
+                """)
+            .param("id", sessionId.toString())
+            .query(Integer.class).single();
+        assertEquals(2, auditCount);
+    }
+
+    @Test
+    void quarantinedSessionNeverResumesAndDoesNotAcceptAnyMatchedDecisions()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = UUID.randomUUID();
+        enroll(sessionId, champion, challenger);
+        String control = API + "/sessions/" + sessionId + "/control";
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"QUARANTINE\",\"reason\":\"irreversible evidence custody incident\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("QUARANTINED"));
+
+        for (String action : new String[]{"RESUME", "PAUSE", "QUARANTINE"}) {
+            mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"action\":\"" + action
+                        + "\",\"reason\":\"cannot undo quarantined session\"}"))
+                .andExpect(status().isConflict());
+        }
+        mvc.perform(post(API + "/sessions/" + sessionId + "/observations")
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observationJson(champion, challenger, Instant.now(),
+                    "ENTER", "WAIT", A, A)))
+            .andExpect(status().isConflict());
+        assertEquals(0, countCases(sessionId));
+
+        mvc.perform(get(control + "/history?limit=101")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get(control).with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
+        mvc.perform(put(control).with(user("trader").roles("TRADER"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"unauthorized mutation request\"}"))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void disabledModelPreventsPausedSessionFromResumingAndUnknownStateFailsClosed()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = UUID.randomUUID();
+        enroll(sessionId, champion, challenger);
+        String control = API + "/sessions/" + sessionId + "/control";
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"unreviewed challenger provenance\"}"))
+            .andExpect(status().isOk());
+        mvc.perform(put("/api/admin/model-governance/emergency-controls/models/" + challenger)
+                .with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"disabled\":true,\"reason\":\"quarantine failing challenger\"}"))
+            .andExpect(status().isOk());
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"RESUME\",\"reason\":\"attempt unsafe model restart\"}"))
+            .andExpect(status().isConflict());
+        mvc.perform(get(control).with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("PAUSED"))
+            .andExpect(jsonPath("$.revision").value(1));
+
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"QUARANTINE\",\"reason\":\"disabled model unsafe for resumed session\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("QUARANTINED"));
+
+        mvc.perform(get(API + "/sessions/" + UUID.randomUUID() + "/control")
+                .with(user("matched-admin").roles("ADMIN")))
+            .andExpect(status().isNotFound());
+        mvc.perform(put(control).with(user("matched-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"PAUSE\",\"reason\":\"short\"}"))
+            .andExpect(status().isBadRequest());
+    }
+
     private int countCases(UUID id) {
         return jdbc.sql("SELECT count(*) FROM v4_matched_case WHERE session_id = :id")
             .param("id", id).query(Integer.class).single();
