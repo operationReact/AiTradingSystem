@@ -70,6 +70,8 @@ def _replace_sample(events, index: int, **updates):
     samples = list(events.samples)
     payload = samples[index].model_dump(mode="json", exclude={"sample_fingerprint"})
     payload.update(updates)
+    # Schema normalizes numerical forward returns to float before fingerprinting.
+    payload["forward_return_bps"] = float(payload["forward_return_bps"])
     payload["sample_fingerprint"] = canonical_fingerprint(payload)
     samples[index] = IndiaFinancialEventSample.model_validate(payload)
     return freeze_india_financial_event_corpus(
@@ -232,6 +234,7 @@ def test_report_cannot_forge_counts_holdout_membership_or_capital():
     payload["holdout_causal_slice"]["cases"].append(
         full.cases[0].model_dump(mode="json")
     )
+    payload["holdout_causal_slice"]["cases"].sort(key=lambda case: case["source_id"])
     payload["holdout_causal_slice"]["report_fingerprint"] = canonical_fingerprint({
         k: v for k, v in payload["holdout_causal_slice"].items()
         if k != "report_fingerprint"
