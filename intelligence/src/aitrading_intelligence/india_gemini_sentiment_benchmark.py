@@ -9,7 +9,10 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .fingerprints import canonical_fingerprint
-from .india_financial_nlp_corpus import IndiaFinancialNlpCorpusReport
+from .india_financial_nlp_corpus import (
+    IndiaFinancialNlpCorpusConfig,
+    IndiaFinancialNlpCorpusReport,
+)
 from .india_nlp_event_corpus import IndiaFinancialEventCorpus
 
 VERSION = "india-gemini-advisory-heldout-benchmark.v1"
@@ -79,6 +82,8 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
     contract_version: Literal["india-gemini-advisory-heldout-benchmark.v1"] = VERSION
     annotated_corpus_fingerprint: Hash64
     causal_market_corpus_fingerprint: Hash64
+    source_advisory_config: IndiaFinancialNlpCorpusConfig
+    source_advisory_config_fingerprint: Hash64
     config: GeminiAdvisoryBenchmarkConfig
     config_fingerprint: Hash64
     imported_provider_category: Literal["GEMINI_ADVISORY"] = "GEMINI_ADVISORY"
@@ -105,6 +110,12 @@ class GeminiHeldoutBenchmarkReport(BaseModel):
 
     @model_validator(mode="after")
     def verify_report(self) -> GeminiHeldoutBenchmarkReport:
+        if self.source_advisory_config.advisory_provider != "GEMINI":
+            raise ValueError("Gemini holdout cannot attribute another provider's scores")
+        if self.source_advisory_config_fingerprint != (
+            self.source_advisory_config.fingerprint
+        ):
+            raise ValueError("Gemini source advisory configuration fingerprint mismatch")
         if self.config_fingerprint != self.config.fingerprint:
             raise ValueError("Gemini benchmark configuration fingerprint mismatch")
         if [r.source_id for r in self.rows] != sorted(r.source_id for r in self.rows):
@@ -198,6 +209,7 @@ def benchmark_heldout_gemini_advisory(
     imported_causal_news: IndiaFinancialNlpCorpusReport,
     *,
     config: GeminiAdvisoryBenchmarkConfig | None = None,
+    source_config: IndiaFinancialNlpCorpusConfig | None = None,
 ) -> GeminiHeldoutBenchmarkReport:
     """Join only future-label heldout annotations and already-causal Gemini evidence.
 
@@ -211,6 +223,13 @@ def benchmark_heldout_gemini_advisory(
     causal = IndiaFinancialNlpCorpusReport.model_validate(
         imported_causal_news.model_dump(mode="python")
     )
+    advisory_config = IndiaFinancialNlpCorpusConfig.model_validate(
+        (source_config or IndiaFinancialNlpCorpusConfig()).model_dump(mode="python")
+    )
+    if advisory_config.advisory_provider != "GEMINI":
+        raise ValueError("Gemini benchmark requires GEMINI as source advisory provider")
+    if advisory_config.fingerprint != causal.config_fingerprint:
+        raise ValueError("Gemini source advisory configuration differs from causal corpus")
     if causal.status != "CAUSAL_RESEARCH_CORPUS_ONLY":
         raise ValueError("Gemini benchmark requires completed causal news corpus")
     samples = [
@@ -295,6 +314,8 @@ def benchmark_heldout_gemini_advisory(
         "contract_version": VERSION,
         "annotated_corpus_fingerprint": labeled.corpus_fingerprint,
         "causal_market_corpus_fingerprint": causal.report_fingerprint,
+        "source_advisory_config": advisory_config.model_dump(mode="json"),
+        "source_advisory_config_fingerprint": advisory_config.fingerprint,
         "config": policy.model_dump(mode="json"),
         "config_fingerprint": policy.fingerprint,
         "imported_provider_category": "GEMINI_ADVISORY",
@@ -330,6 +351,10 @@ def main() -> None:
     parser.add_argument("human_labeled_event_corpus", type=Path)
     parser.add_argument("causal_news_ai_market_corpus", type=Path)
     parser.add_argument("--minimum-evaluable", type=int, default=20)
+    parser.add_argument(
+        "--causal-source-config", type=Path,
+        help="JSON containing the exact PR #374 source policy; defaults to its standard GEMINI policy",
+    )
     args = parser.parse_args()
     report = benchmark_heldout_gemini_advisory(
         IndiaFinancialEventCorpus.model_validate_json(
@@ -340,6 +365,11 @@ def main() -> None:
         ),
         config=GeminiAdvisoryBenchmarkConfig(
             minimum_evaluable_predictions=args.minimum_evaluable,
+        ),
+        source_config=(
+            IndiaFinancialNlpCorpusConfig.model_validate_json(
+                args.causal_source_config.read_text(encoding="utf-8")
+            ) if args.causal_source_config is not None else None
         ),
     )
     print(json.dumps(report.model_dump(mode="json"), sort_keys=True))
