@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/model-governance/paper-shadow")
 @PreAuthorize("hasRole('ADMIN')")
-public final class ResearchInferenceDispatchController {
+public class ResearchInferenceDispatchController {
     private final ResearchInferenceDispatchService dispatch;
 
     public ResearchInferenceDispatchController(ResearchInferenceDispatchService dispatch) {
