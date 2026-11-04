@@ -30,14 +30,14 @@ jobs:
 
       - name: Validate inspection scope before assuming AWS credentials
         env:
-          ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          ROLE_ARN: ${{ vars.AWS_READONLY_ROLE_ARN }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/heads/dev" || {
             echo "::error::V73 runtime inspection only supports dev"; exit 1;
           }
           test -n "$ROLE_ARN" || {
-            echo "::error::Connect configured read-only AWS role first"; exit 1;
+            echo "::error::Repository variable AWS_READONLY_ROLE_ARN is required for read-only OIDC inspection"; exit 1;
           }
           test "$AWS_REGION" = "us-east-1"
           test "$EXPECTED_AWS_ACCOUNT" = "816344830716"
@@ -46,7 +46,7 @@ jobs:
       - name: Assume configured AWS role using short-lived OIDC
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ vars.AWS_READONLY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
           role-session-name: github-v73-paper-inspect-${{ github.run_id }}
           allowed-account-ids: '816344830716'
