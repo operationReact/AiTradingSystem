@@ -325,7 +325,104 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
             .andExpect(status().isConflict());
     }
 
+    @Test
+    void rejectsPreviousCandleFromAnotherSymbolTokenEvenIfTickerMatches()
+            throws Exception {
+        UUID sessionId = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId(), true);
+        seedAiEvidence(rows.newsId(), false);
+        String sourceEndpoint = ENROLL + "/" + sessionId + "/source-cases";
+        mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        mvc.perform(post(sourceEndpoint + "/case-0001/features")
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_projection
+                 WHERE session_id = :id
+                """).param("id", sessionId).query(Integer.class).single());
+    }
+
+    @Test
+    void rejectsLateFeatureProjectionAfterMatchedDecisionsExist()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = enroll(champion, challenger);
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), false);
+        String sourceEndpoint = ENROLL + "/" + sessionId + "/source-cases";
+        String captured = mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        JsonNode frozen = mapper.readTree(captured);
+        Instant predicted = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        mvc.perform(post(ENROLL + "/" + sessionId + "/observations")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observation(frozen, champion, challenger,
+                    frozen.path("inputFingerprint").asText(), predicted)))
+            .andExpect(status().isCreated());
+        String features = sourceEndpoint + "/case-0001/features";
+        mvc.perform(post(features).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        mvc.perform(get(features).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isNotFound());
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_projection
+                 WHERE session_id = :id
+                """).param("id", sessionId).query(Integer.class).single());
+    }
+
+    @Test
+    void cannotRecalculatePreviouslyFrozenFeaturesAfterDecisionAppend()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID sessionId = enroll(champion, challenger);
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), false);
+        String sourceEndpoint = ENROLL + "/" + sessionId + "/source-cases";
+        JsonNode frozen = mapper.readTree(mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString());
+        String features = sourceEndpoint + "/case-0001/features";
+        String first = mvc.perform(post(features)
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        Instant predicted = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        mvc.perform(post(ENROLL + "/" + sessionId + "/observations")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observation(frozen, champion, challenger,
+                    frozen.path("inputFingerprint").asText(), predicted)))
+            .andExpect(status().isCreated());
+        mvc.perform(post(features).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        mvc.perform(get(features).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.featurePayloadFingerprint")
+                .value(mapper.readTree(first).path("featurePayloadFingerprint").asText()));
+    }
+
     private void seedPreviousCandle(long currentId) {
+        seedPreviousCandle(currentId, false);
+    }
+
+    private void seedPreviousCandle(long currentId, boolean mismatchedToken) {
         Instant currentCandleAt = jdbc.sql("""
                 SELECT candle_time FROM market_candle WHERE candle_id = :id
                 """).param("id", currentId)
@@ -336,6 +433,12 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                 """).param("id", currentId)
             .query((rs, n) -> rs.getObject("fetched_at", OffsetDateTime.class).toInstant())
             .single();
+        String actualToken = jdbc.sql("""
+                SELECT symbol_token FROM market_candle WHERE candle_id = :id
+                """).param("id", currentId).query(String.class).single();
+        String priorToken = mismatchedToken
+            ? "different-" + UUID.randomUUID().toString().substring(0, 8)
+            : actualToken;
         jdbc.sql("""
                 INSERT INTO market_candle (
                     instrument_id, exchange, trading_symbol, symbol_token,
@@ -345,7 +448,7 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                     :candleTime, 100.000000, 101.000000, 99.000000,
                     100.000000, 7000, 'TEST_PREVIOUS_CANDLE', :fetchedAt)
                 """)
-            .param("token", UUID.randomUUID().toString().substring(0, 8))
+            .param("token", priorToken)
             .param("candleTime", OffsetDateTime.ofInstant(
                 currentCandleAt.minus(1, ChronoUnit.MICROS), ZoneOffset.UTC))
             .param("fetchedAt", OffsetDateTime.ofInstant(
