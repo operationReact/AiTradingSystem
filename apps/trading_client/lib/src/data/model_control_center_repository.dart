@@ -47,11 +47,24 @@ class RegisteredModelEvidence {
 
 class ModelVersionEvidence {
   const ModelVersionEvidence({
-    required this.id, required this.label, required this.fingerprint,
-    required this.artifactFingerprint, required this.createdAt,
+    required this.id,
+    required this.label,
+    required this.fingerprint,
+    required this.artifactFingerprint,
+    required this.featureSchemaFingerprint,
+    required this.trainingDatasetFingerprint,
+    required this.trainingConfigFingerprint,
+    required this.codeSha,
+    required this.createdAt,
+    this.researchRegistryFingerprint,
+    this.trainingCutoff,
   });
+
   final String id, label, fingerprint, artifactFingerprint;
-  final DateTime? createdAt;
+  final String featureSchemaFingerprint, trainingDatasetFingerprint;
+  final String trainingConfigFingerprint, codeSha;
+  final String? researchRegistryFingerprint;
+  final DateTime? createdAt, trainingCutoff;
 
   factory ModelVersionEvidence.fromJson(Map<String, dynamic> json) =>
       ModelVersionEvidence(
@@ -59,6 +72,12 @@ class ModelVersionEvidence {
         label: _value(json, 'versionLabel'),
         fingerprint: _value(json, 'versionFingerprint'),
         artifactFingerprint: _value(json, 'artifactFingerprint'),
+        featureSchemaFingerprint: _value(json, 'featureSchemaFingerprint'),
+        trainingDatasetFingerprint: _value(json, 'trainingDatasetFingerprint'),
+        trainingConfigFingerprint: _value(json, 'trainingConfigFingerprint'),
+        codeSha: _value(json, 'codeSha'),
+        researchRegistryFingerprint: json['researchRegistryFingerprint']?.toString(),
+        trainingCutoff: _date(json, 'trainingCutoff'),
         createdAt: _date(json, 'createdAt'),
       );
 }
