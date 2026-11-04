@@ -157,7 +157,7 @@ def stage_bundle(source_manifest: Path, destination: Path, code_sha: str) -> dic
     if source_manifest.name != MANIFEST_NAME:
         raise ReleaseBundleBlocked("manifest filename is not canonical")
     source = source_manifest.parent
-    manifest, _ = _manifest_entries(source)
+    manifest, original_manifest = _manifest_entries(source)
     # Validate real pinned trained model bytes BEFORE copying anything.
     inspect_worker_roster(source_manifest)
     if destination.exists() or destination.is_symlink():
@@ -179,6 +179,8 @@ def stage_bundle(source_manifest: Path, destination: Path, code_sha: str) -> dic
             (temp / name).write_bytes(content)
             os.chmod(temp / name, 0o600)
         staged_manifest, raw = _manifest_entries(temp)
+        if raw != original_manifest:
+            raise ReleaseBundleBlocked("source manifest changed during staging")
         roster = inspect_worker_roster(temp / MANIFEST_NAME)
         receipt = _receipt(roster, staged_manifest, raw, code_sha)
         (temp / RECEIPT_NAME).write_bytes(_canonical(receipt) + b"\n")
