@@ -12,6 +12,30 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
   final bool empty;
   int sessionRequests = 0;
 
+  bool disabled = false;
+  int disableRequests = 0;
+  String? lastDisableReason;
+
+  @override
+  Future<EffectiveModelEmergencyStatus> effectiveModelStatus(String versionId) async =>
+      EffectiveModelEmergencyStatus(
+        versionId: versionId, allowed: !disabled,
+        modelVersionDisabled: disabled, modelFamilyDisabled: false,
+        staticFallbackEnabled: false, canAuthorizeCapital: false,
+      );
+
+  @override
+  Future<DisabledModelReceipt> disableModelVersion(
+      String versionId, String reason) async {
+    disableRequests++;
+    lastDisableReason = reason;
+    disabled = true;
+    return const DisabledModelReceipt(
+      active: true, reason: 'Drift incident',
+      stateFingerprint: 'test-hash', canAuthorizeCapital: false,
+    );
+  }
+
   @override
   Future<List<RegisteredModelEvidence>> models() async {
     if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
@@ -108,6 +132,52 @@ void main() {
     expect(find.byKey(const ValueKey('model-version-version-1')), findsOneWidget);
     expect(find.text('v1'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Switch to LIVE'), findsNothing);
+  });
+
+  testWidgets('emergency model control requires explicit reason and confirms backend disable',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('model-inventory-catboost-alpha')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('model-disable-version-1')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('model-disable-version-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Emergency model disable'), findsOneWidget);
+    expect(repository.disableRequests, 0);
+    await tester.tap(find.byKey(const ValueKey('model-disable-confirm')));
+    await tester.pumpAndSettle();
+    expect(repository.disableRequests, 0);
+
+    await tester.enterText(find.byKey(const ValueKey('model-disable-reason')),
+        'Drift incident');
+    await tester.tap(find.byKey(const ValueKey('model-disable-confirm')));
+    await tester.pumpAndSettle();
+    expect(repository.disableRequests, 1);
+    expect(repository.lastDisableReason, 'Drift incident');
+    expect(find.byKey(const ValueKey('model-version-disabled')), findsOneWidget);
+    expect(find.byKey(const ValueKey('model-disable-version-1')), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
+  });
+
+  testWidgets('emergency control cancellation never calls backend',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('model-inventory-catboost-alpha')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('model-disable-version-1')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(repository.disableRequests, 0);
   });
 
   testWidgets('read-only PAPER/SHADOW displays source uncertainty and disagreement',
