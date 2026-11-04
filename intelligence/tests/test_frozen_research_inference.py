@@ -14,7 +14,6 @@ from test_lightgbm_model import _examples
 
 from aitrading_intelligence.app import app
 from aitrading_intelligence.catboost_model import train_catboost_challenger
-from aitrading_intelligence.features import FeatureRow
 from aitrading_intelligence.fingerprints import canonical_fingerprint
 from aitrading_intelligence.frozen_research_inference import (
     FrozenResearchRegistry,
