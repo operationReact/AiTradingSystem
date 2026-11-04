@@ -62,6 +62,11 @@ sensitive environment values). It is removed when the verification ends.
    plaintext ECS environment values.
 6. Research client, roster dispatcher and worker-readiness opt-ins are
    explicitly `false` or absent (all application defaults are false).
+   Java/Spring relaxed-binding variable aliases and secret-reference names
+   are checked too. **Unknown Spring configuration overrides are blocked**:
+   `SPRING_APPLICATION_JSON`, `JAVA_TOOL_OPTIONS`, `JDK_JAVA_OPTIONS`,
+   active custom profiles, Spring configuration overrides, ECS environment
+   files, and container command/entrypoint replacements.
 7. Exactly one ALB target is healthy and the public HTTPS health JSON
    explicitly reports `status=UP`, `mode=PAPER`, and the backend service.
 
