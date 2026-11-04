@@ -46,7 +46,7 @@ public class MatchedPaperShadowSessionEvidenceService {
         boolean canAuthorizeCapital) {}
 
     private record CaseTotals(long count, Instant first, Instant last) {}
-    private record ActionTotals(long enter, long wait, long abstain) {}
+    private record ActionTotals(long enter, long waits, long abstain) {}
     private record FillTotals(
         long links, long mismatches, long quantity, BigDecimal fees, BigDecimal slippage) {}
 
@@ -146,7 +146,7 @@ public class MatchedPaperShadowSessionEvidenceService {
 
         var reasons = new ArrayList<String>();
         if (cases.count() == 0) reasons.add("NO_MATCHED_CASES");
-        if (incomplete > 0 || actions.enter() + actions.wait() + actions.abstain() != cases.count()) {
+        if (incomplete > 0 || actions.enter() + actions.waits() + actions.abstain() != cases.count()) {
             reasons.add("INCOMPLETE_MODEL_DECISION_COHORT");
         }
         if (linked.links() > actions.enter()) reasons.add("PAPER_LINK_COUNT_EXCEEDS_ENTERS");
@@ -168,7 +168,7 @@ public class MatchedPaperShadowSessionEvidenceService {
         return new SessionEvidence(
             CONTRACT, sessionId, session.enrollmentFingerprint(),
             session.models().size(), cases.count(), incomplete,
-            actions.enter(), actions.wait(), actions.abstain(), disagreements,
+            actions.enter(), actions.waits(), actions.abstain(), disagreements,
             linked.links(), Math.max(0, actions.enter() - linked.links()),
             linked.mismatches(), linked.quantity(), linked.fees(),
             linked.slippage(), cases.first(), cases.last(), spanSeconds,
