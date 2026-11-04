@@ -207,6 +207,183 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
             .andExpect(status().isNotFound());
     }
 
+    @Test
+    void freezesSixCausalNumericFeaturesFromRealPersistedMarketAndNewsAnalysis()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), false);
+        String sourceUrl = ENROLL + "/" + session + "/source-cases";
+        mvc.perform(post(sourceUrl)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = sourceUrl + "/case-0001/features";
+        String original = mvc.perform(post(endpoint)
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.contractVersion")
+                .value("v4-java-causal-feature-projection.v1"))
+            .andExpect(jsonPath("$.featureSchemaVersion").value("features.market.v1"))
+            .andExpect(jsonPath("$.symbol").value("RELIANCE-EQ"))
+            .andExpect(jsonPath("$.features.size()").value(6))
+            .andExpect(jsonPath("$.features['market.return_1']")
+                .value(org.hamcrest.Matchers.closeTo(0.005, 1e-8)))
+            .andExpect(jsonPath("$.features['event.AI_NEWS_EVIDENCE.direction_score']")
+                .value(org.hamcrest.Matchers.closeTo(0.6, 1e-8)))
+            .andExpect(jsonPath("$.features['event.AI_NEWS_EVIDENCE.confidence']")
+                .value(org.hamcrest.Matchers.closeTo(0.85, 1e-8)))
+            .andExpect(jsonPath("$.javaDatabaseBound").value(true))
+            .andExpect(jsonPath("$.sourceRightsVerified").value(false))
+            .andExpect(jsonPath("$.independentlyVerifiedModelInference").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false))
+            .andReturn().getResponse().getContentAsString();
+        String fingerprint = mapper.readTree(original)
+            .path("featurePayloadFingerprint").asText();
+        assertEquals(64, fingerprint.length());
+        mvc.perform(post(endpoint)
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.featurePayloadFingerprint").value(fingerprint));
+        mvc.perform(get(endpoint)
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.featurePayloadFingerprint").value(fingerprint));
+        assertEquals(1, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_projection
+                 WHERE session_id = :id AND case_key = 'case-0001'
+                """).param("id", session).query(Integer.class).single());
+        mvc.perform(get(endpoint).with(user("viewer").roles("VIEWER")))
+            .andExpect(status().isForbidden());
+        mvc.perform(post(endpoint).with(user("trader").roles("TRADER")))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void incompleteOrPostCaptureNewsEvidenceAndMissingHistoryFailClosed()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        String source = ENROLL + "/" + session + "/source-cases";
+        mvc.perform(post(source)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = source + "/case-0001/features";
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        seedPreviousCandle(rows.candleId());
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        seedAiEvidence(rows.newsId(), true);
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_projection
+                 WHERE session_id = :id
+                """).param("id", session).query(Integer.class).single());
+    }
+
+    @Test
+    void pauseAndModifiedCapturedMarketPricesCannotRecreateFrozenFeatures()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), false);
+        String source = ENROLL + "/" + session + "/source-cases";
+        mvc.perform(post(source)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        String endpoint = source + "/case-0001/features";
+        mvc.perform(put(ENROLL + "/" + session + "/control")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"action":"PAUSE","reason":"Feed drift investigation"}
+                    """))
+            .andExpect(status().isOk());
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        mvc.perform(put(ENROLL + "/" + session + "/control")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"action":"RESUME","reason":"Investigation cleared feed checks"}
+                    """))
+            .andExpect(status().isOk());
+        jdbc.sql("""
+                UPDATE market_candle SET close_price = 105.000000
+                 WHERE candle_id = :id
+                """).param("id", rows.candleId()).update();
+        mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+    }
+
+    private void seedPreviousCandle(long currentId) {
+        Instant currentCandleAt = jdbc.sql("""
+                SELECT candle_time FROM market_candle WHERE candle_id = :id
+                """).param("id", currentId)
+            .query((rs, n) -> rs.getObject("candle_time", OffsetDateTime.class).toInstant())
+            .single();
+        Instant currentFetchedAt = jdbc.sql("""
+                SELECT fetched_at FROM market_candle WHERE candle_id = :id
+                """).param("id", currentId)
+            .query((rs, n) -> rs.getObject("fetched_at", OffsetDateTime.class).toInstant())
+            .single();
+        jdbc.sql("""
+                INSERT INTO market_candle (
+                    instrument_id, exchange, trading_symbol, symbol_token,
+                    interval, candle_time, open_price, high_price, low_price,
+                    close_price, volume, source, fetched_at)
+                VALUES (1, 'NSE', 'RELIANCE-EQ', :token, 'ONE_MINUTE',
+                    :candleTime, 100.000000, 101.000000, 99.000000,
+                    100.000000, 7000, 'TEST_PREVIOUS_CANDLE', :fetchedAt)
+                """)
+            .param("token", UUID.randomUUID().toString().substring(0, 8))
+            .param("candleTime", OffsetDateTime.ofInstant(
+                currentCandleAt.minus(1, ChronoUnit.MICROS), ZoneOffset.UTC))
+            .param("fetchedAt", OffsetDateTime.ofInstant(
+                currentFetchedAt.minusSeconds(2), ZoneOffset.UTC))
+            .update();
+    }
+
+    private void seedAiEvidence(UUID newsId, boolean late) {
+        Instant fetchedAt = jdbc.sql("""
+                SELECT fetched_at FROM news_item WHERE id = :id
+                """).param("id", newsId)
+            .query((rs, n) -> rs.getObject("fetched_at", OffsetDateTime.class).toInstant())
+            .single();
+        Instant generated = fetchedAt.plusSeconds(late ? 900 : 1);
+        String unique = UUID.randomUUID().toString().replace("-", "").repeat(2);
+        jdbc.sql("""
+                INSERT INTO news_ai_evidence (
+                    id, news_id, provider, model, source_available_at, generated_at,
+                    prompt_hash, request_fingerprint, response_fingerprint,
+                    sentiment, direction_score, category, confidence,
+                    materiality, horizon, novelty, contradiction, ambiguity,
+                    impacted_symbols, evidence, risks, latency_ms)
+                VALUES (
+                    :id, :newsId, 'SYNTHETIC_TEST', 'FAKE_GEMINI',
+                    :sourceAt, :generatedAt, :promptHash, :requestHash, :responseHash,
+                    'POSITIVE', 0.600, 'EARNINGS', 0.850, 0.750,
+                    'INTRADAY', 0.200, FALSE, FALSE, ARRAY['RELIANCE-EQ']::text[],
+                    'Synthetic test evidence', ARRAY[]::text[], 3)
+                """)
+            .param("id", UUID.randomUUID())
+            .param("newsId", newsId)
+            .param("sourceAt", OffsetDateTime.ofInstant(fetchedAt, ZoneOffset.UTC))
+            .param("generatedAt", OffsetDateTime.ofInstant(generated, ZoneOffset.UTC))
+            .param("promptHash", A).param("requestHash", unique)
+            .param("responseHash", B)
+            .update();
+    }
+
     private int countSources(UUID id) {
         return jdbc.sql("SELECT count(*) FROM v4_matched_source_capture WHERE session_id = :id")
             .param("id", id).query(Integer.class).single();
