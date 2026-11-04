@@ -65,19 +65,10 @@ resource "aws_security_group" "research_worker" {
   description = "Research HTTP ingress from Java backend tasks only; no ALB or internet ingress"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    description     = "Private Java-to-research-worker HTTP only"
-    from_port       = 8090
-    to_port         = 8090
-    protocol        = "tcp"
-    security_groups = [aws_security_group.tasks.id]
-  }
-
-  # No blanket egress. When V77 endpoints are separately enabled, standalone
-  # restricted HTTPS rules permit only the endpoint SG and S3 prefix list.
-  # Default-disabled scaffold alone remains deliberately network-isolated.
-  egress = []
-  tags   = local.worker_tags
+  # Rules are standalone aws_vpc_security_group_*_rule resources.
+  # Terraform removes the AWS default ALLOW ALL egress on creation; without
+  # the separate V77 endpoint opt-in, no outgoing rule is provisioned.
+  tags = local.worker_tags
 }
 
 resource "aws_iam_role" "research_worker_execution" {
