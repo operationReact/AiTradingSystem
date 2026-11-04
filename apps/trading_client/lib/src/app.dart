@@ -6,6 +6,7 @@ import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
 import 'data/model_control_center_repository.dart';
+import 'data/model_emergency_control_repository.dart';
 import 'data/operator_session.dart';
 import 'data/operations_evidence_repository.dart';
 import 'data/paper_trading_repository.dart';
@@ -17,6 +18,7 @@ import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
 import 'presentation/model_control_center_page.dart';
+import 'presentation/model_emergency_controls_page.dart';
 import 'presentation/operations_evidence_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
@@ -130,6 +132,9 @@ class _TradingAppState extends State<TradingApp> {
             ),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
+        '/admin/model-emergency': (_) => ModelEmergencyControlsPage(
+              repository: HttpModelEmergencyControlRepository(_api),
+            ),
         '/admin/models': (_) => ModelControlCenterPage(
               repository: HttpModelControlCenterRepository(_api),
             ),
@@ -308,6 +313,7 @@ class _DesktopProductRail extends StatelessWidget {
           _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
           _RailAction(label: 'Portfolio', icon: Icons.account_balance_wallet_rounded, active: selectedRoute == '/portfolio', onTap: () => onNavigate('/portfolio')),
           _RailAction(label: 'Model control', icon: Icons.hub_rounded, active: selectedRoute == '/admin/models', onTap: () => onNavigate('/admin/models')),
+          _RailAction(label: 'Emergency controls', icon: Icons.shield_rounded, active: selectedRoute == '/admin/model-emergency', onTap: () => onNavigate('/admin/model-emergency')),
           const Spacer(),
           _RailAction(label: 'Settings', icon: Icons.settings_rounded, active: selectedRoute == '/settings', onTap: () => onNavigate('/settings')),
         ],
@@ -354,6 +360,7 @@ class _MoreProductSheet extends StatelessWidget {
     ('/risk', Icons.shield_rounded, 'Risk controls', 'Trading limits and safety controls'),
     ('/backtests', Icons.science_rounded, 'Backtests', 'Review strategy simulations'),
     ('/admin/models', Icons.hub_rounded, 'Model control', 'ADMIN model registry and PAPER/SHADOW evidence'),
+    ('/admin/model-emergency', Icons.shield_rounded, 'Emergency model controls', 'Reduce model influence with audited confirmation'),
     ('/notifications', Icons.notifications_rounded, 'Notifications', 'Important account and trading updates'),
     ('/settings', Icons.tune_rounded, 'Settings', 'Trading mode, execution mode and appearance'),
   ];
