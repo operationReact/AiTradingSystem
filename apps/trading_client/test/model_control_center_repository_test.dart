@@ -72,6 +72,31 @@ void main() {
               }],
               'canAuthorizeCapital': false,
             }), 200);
+          case '/api/admin/model-governance/paper-shadow/sessions/$sessionId/evidence':
+            return http.Response(jsonEncode({
+              'contractVersion': 'v4-matched-paper-shadow-session-evidence.v1',
+              'sessionId': sessionId,
+              'enrollmentFingerprint': 'd'.padRight(64, 'd'),
+              'sessionSafetyState': 'PAUSED',
+              'sessionStateRevision': 1,
+              'matchedCases': 2,
+              'championEnterCases': 1,
+              'shadowDisagreementCases': 1,
+              'linkedPaperOrders': 0,
+              'unlinkedChampionEnters': 1,
+              'paperFillQuantityMismatchOrders': 0,
+              'recordedFillQuantity': 0,
+              'recordedPaperFees': 0.0,
+              'recordedPaperSlippage': 0.0,
+              'reasonCodes': ['UNLINKED_CHAMPION_ENTER_CASES'],
+              'originalLicensedSourceCustodyVerified': false,
+              'actualInferenceProducerAttested': false,
+              'paperShadowSoakAccepted': false,
+              'brokerReconciliationAccepted': false,
+              'independentEconomicPerformanceVerified': false,
+              'liveOrderExecutionEnabled': false,
+              'canAuthorizeCapital': false,
+            }), 200);
           case '/api/admin/model-governance/paper-shadow/sessions/$sessionId/observations':
             expect(request.url.queryParameters, {'limit': '50'});
             return http.Response(jsonEncode([{
@@ -110,11 +135,15 @@ void main() {
     final session = await repository.session(sessionId);
     expect(session.canAuthorizeCapital, false);
     expect(session.participants.single.role, 'PAPER_CHAMPION');
+    final aggregate = await repository.sessionEvidence(sessionId);
+    expect(aggregate.sessionSafetyState, 'PAUSED');
+    expect(aggregate.sessionStateRevision, 1);
+    expect(aggregate.unlinkedChampionEnters, 1);
     final cases = await repository.recentCases(sessionId);
     expect(cases.single.hasDisagreement, true);
     expect(cases.single.verified, false);
     expect(cases.single.canAuthorizeCapital, false);
-    expect(paths.length, 5);
+    expect(paths.length, 6);
   });
 
   test('ADMIN session safety uses readback, versioned history and reason-gated PUT',
