@@ -325,7 +325,66 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
             .andExpect(status().isConflict());
     }
 
+
+    @Test
+    void neverMixesUnrelatedInstrumentTokensIntoEarlierReturnFeature()
+            throws Exception {
+        UUID session = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        // Same exchange/symbol text but a different exchange instrument token.
+        seedPreviousCandle(rows.candleId(), false);
+        seedAiEvidence(rows.newsId(), false);
+        String base = ENROLL + "/" + session + "/source-cases";
+        mvc.perform(post(base)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        mvc.perform(post(base + "/case-0001/features")
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT COUNT(*) FROM v4_matched_feature_projection WHERE session_id = :id
+                """).param("id", session).query(Integer.class).single());
+    }
+
+    @Test
+    void forbidsBackfilledFeatureSnapshotAfterModelDecisionsAlreadyExist()
+            throws Exception {
+        UUID champion = registerModel();
+        UUID challenger = registerModel();
+        UUID session = enroll(champion, challenger);
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId());
+        seedAiEvidence(rows.newsId(), false);
+        String base = ENROLL + "/" + session + "/source-cases";
+        String payload = mvc.perform(post(base)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated())
+            .andReturn().getResponse().getContentAsString();
+        JsonNode frozen = mapper.readTree(payload);
+        Instant predictionAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        mvc.perform(post(ENROLL + "/" + session + "/observations")
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(observation(frozen, champion, challenger,
+                    frozen.path("inputFingerprint").asText(), predictionAt)))
+            .andExpect(status().isCreated());
+        mvc.perform(post(base + "/case-0001/features")
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT COUNT(*) FROM v4_matched_feature_projection WHERE session_id = :id
+                """).param("id", session).query(Integer.class).single());
+    }
+
     private void seedPreviousCandle(long currentId) {
+        seedPreviousCandle(currentId, true);
+    }
+
+    private void seedPreviousCandle(long currentId, boolean sameToken) {
         Instant currentCandleAt = jdbc.sql("""
                 SELECT candle_time FROM market_candle WHERE candle_id = :id
                 """).param("id", currentId)
@@ -345,7 +404,10 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                     :candleTime, 100.000000, 101.000000, 99.000000,
                     100.000000, 7000, 'TEST_PREVIOUS_CANDLE', :fetchedAt)
                 """)
-            .param("token", UUID.randomUUID().toString().substring(0, 8))
+            .param("token", sameToken
+                ? jdbc.sql("SELECT symbol_token FROM market_candle WHERE candle_id = :id")
+                    .param("id", currentId).query(String.class).single()
+                : UUID.randomUUID().toString().substring(0, 8))
             .param("candleTime", OffsetDateTime.ofInstant(
                 currentCandleAt.minus(1, ChronoUnit.MICROS), ZoneOffset.UTC))
             .param("fetchedAt", OffsetDateTime.ofInstant(
