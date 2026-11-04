@@ -37,6 +37,12 @@ void main() {
               'versionLabel': '1.0',
               'versionFingerprint': 'b'.padRight(64, 'b'),
               'artifactFingerprint': 'c'.padRight(64, 'c'),
+              'featureSchemaFingerprint': 'd'.padRight(64, 'd'),
+              'trainingDatasetFingerprint': 'e'.padRight(64, 'e'),
+              'trainingConfigFingerprint': 'f'.padRight(64, 'f'),
+              'codeSha': '1234567890abcdef1234567890abcdef12345678',
+              'researchRegistryFingerprint': 'a'.padRight(64, 'a'),
+              'trainingCutoff': '2026-11-01T09:00:00Z',
               'createdAt': '2026-11-04T09:00:00Z',
             }]), 200);
           case '/api/admin/model-governance/paper-shadow/sessions/$sessionId':
@@ -78,6 +84,12 @@ void main() {
     expect(models.single.licenseStatus, 'RESEARCH_ONLY');
     final versions = await repository.versions(models.single.key);
     expect(versions.single.id, 'model-1');
+    expect(versions.single.featureSchemaFingerprint, 'd'.padRight(64, 'd'));
+    expect(versions.single.trainingDatasetFingerprint, 'e'.padRight(64, 'e'));
+    expect(versions.single.trainingConfigFingerprint, 'f'.padRight(64, 'f'));
+    expect(versions.single.codeSha, '1234567890abcdef1234567890abcdef12345678');
+    expect(versions.single.researchRegistryFingerprint, 'a'.padRight(64, 'a'));
+    expect(versions.single.trainingCutoff, DateTime.utc(2026, 11, 1, 9));
     final session = await repository.session(sessionId);
     expect(session.canAuthorizeCapital, false);
     expect(session.participants.single.role, 'PAPER_CHAMPION');
