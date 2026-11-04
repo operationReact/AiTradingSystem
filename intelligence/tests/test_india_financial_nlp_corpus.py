@@ -109,7 +109,7 @@ def _run(*, news=None, ai=None, market=None, target=None, texts=None, config=Non
     n, a, m, t, x = _fixture()
     return build_india_financial_nlp_corpus(
         news or n,
-        ai if ai is not None else a,
+        a if ai is None else None if ai is False else ai,
         market or m,
         target or t,
         x if texts is None else texts,
@@ -192,7 +192,7 @@ def test_non_cash_equity_or_wrong_horizon_cannot_be_benchmarked() -> None:
 def test_horizon_does_not_cross_market_session_or_reuse_missing_candles() -> None:
     at = _at(0, 12, 59)
     n = _news([_article("late-news", at)])
-    corpus = _run(news=n, texts=[_licensed("late-news", at)], ai=_ai([]))
+    corpus = _run(news=n, texts=[_licensed("late-news", at)], ai=False)
     assert corpus.status == "INCONCLUSIVE"
     assert corpus.excluded == {"late-news": "SESSION_BOUNDARY_OR_MISSING_CANDLES"}
 
