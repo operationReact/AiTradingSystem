@@ -106,7 +106,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   }
 
   Future<void> _emergencyDisable(ModelVersionEvidence version) async {
-    final reasonController = TextEditingController();
+    String reasonDraft = '';
     final reason = await showDialog<String>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -119,7 +119,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
             const SizedBox(height: 12),
             TextField(
               key: const ValueKey('model-disable-reason'),
-              controller: reasonController,
+              onChanged: (value) => reasonDraft = value,
               maxLength: 512,
               maxLines: 2,
               decoration: const InputDecoration(
@@ -137,7 +137,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           FilledButton(
             key: const ValueKey('model-disable-confirm'),
             onPressed: () {
-              final text = reasonController.text.trim();
+              final text = reasonDraft.trim();
               if (text.isEmpty) return;
               Navigator.of(dialogContext).pop(text);
             },
@@ -146,7 +146,6 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         ],
       ),
     );
-    reasonController.dispose();
     if (!mounted || reason == null) return;
     setState(() { _disablingVersionId = version.id; _emergencyError = null; });
     try {
