@@ -4,10 +4,11 @@ import importlib.util
 
 import pytest
 from pydantic import ValidationError
+from test_india_bounded_tft import _run as tft_run
 from test_india_patch_transformer import _run as patch_run
 from test_india_time_mixer import _run as mixer_run
-from test_india_bounded_tft import _run as tft_run
 
+from aitrading_intelligence.fingerprints import canonical_fingerprint
 from aitrading_intelligence.india_patch_transformer import PatchForecastConfig
 from aitrading_intelligence.native_forecast_tournament import (
     NativeForecastTournamentSubmission,
@@ -47,9 +48,7 @@ def test_actual_trained_model_generates_directional_tournament_evidence(runner) 
         model.report_fingerprint
     )
     assert artifact.directional.calibration.heldout_forecast_input_fingerprint == (
-        model.native_trace.candidate_forecast_fingerprint
-        if hasattr(model.native_trace, "candidate_forecast_fingerprint")
-        else artifact.directional.calibration.heldout_forecast_input_fingerprint
+        canonical_fingerprint(model.native_trace.holdout_predictions)
     )
     assert artifact.directional.calibration.holdout_fitted_or_tuned is False
     assert artifact.independently_attested_binary_execution is False
