@@ -44,6 +44,12 @@ management:
       application: ai-trading-system
 app:
   trading-mode: ${TRADING_MODE:PAPER}
+  research:
+    artifact-worker:
+      # Never opt in by accident; this client has no trading/order authority.
+      enabled: ${AI_RESEARCH_WORKER_CLIENT_ENABLED:false}
+      base-url: ${AI_RESEARCH_WORKER_URL:}
+      token: ${AI_RESEARCH_WORKER_TOKEN:}
   security:
     # Legacy operator key for local/dev and automation compatibility only. Empty rejects all API-key auth.
     api-key: ${APP_API_KEY:}
