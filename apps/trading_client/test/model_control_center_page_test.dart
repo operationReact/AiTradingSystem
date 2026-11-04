@@ -125,6 +125,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
     await tester.pumpAndSettle();
     expect(repository.sessionRequests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-session-summary')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
     expect(find.textContaining('Source and runtime independently verified: NO'),
         findsOneWidget);
@@ -158,6 +166,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.sessionRequests, 1);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-session-summary')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
   });
 
