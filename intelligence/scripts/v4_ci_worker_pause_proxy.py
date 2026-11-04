@@ -11,12 +11,22 @@ from __future__ import annotations
 import http.client
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 lock = threading.Lock()
 released = threading.Event()
 released.set()
-state = {"armed": False, "held": 0, "total": 0}
+state = {"armed": False, "held": 0, "total": 0, "fault": None,
+         "fault_count": 0}
+# Fixed CI-only identity of a trained LightGBM challenger in the private manifest.
+FAULT_TARGET = "22222222-2222-4222-8222-222222222222"
+FAULT_MODES = {
+    "/ci/fault/http-503": "http_503",
+    "/ci/fault/timeout": "timeout",
+    "/ci/fault/malformed": "malformed",
+    "/ci/fault/clear": None,
+}
 
 
 class LocalGate(BaseHTTPRequestHandler):
@@ -32,7 +42,11 @@ class LocalGate(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.wfile.write(body)
+        except (BrokenPipeError, ConnectionResetError):
+            # A Java HttpRequest timeout can close the TCP socket first.
+            pass
 
     def do_GET(self) -> None:
         if self.path == "/health":
@@ -41,11 +55,19 @@ class LocalGate(BaseHTTPRequestHandler):
             with lock:
                 held = state["held"]
                 total = state["total"]
-            self.send_json(200, {"held": held, "total": total})
+                fault_count = state["fault_count"]
+            self.send_json(200, {"held": held, "total": total,
+                                 "fault_count": fault_count})
         else:
             self.send_json(404, {"error": "not_found"})
 
     def do_POST(self) -> None:
+        if self.path in FAULT_MODES:
+            with lock:
+                state["fault"] = FAULT_MODES[self.path]
+                state["fault_count"] = 0
+            self.send_json(200, {"fault_mode": FAULT_MODES[self.path]})
+            return
         if self.path == "/ci/arm":
             released.clear()
             with lock:
@@ -73,11 +95,33 @@ class LocalGate(BaseHTTPRequestHandler):
             return
         payload = self.rfile.read(length)
 
+        try:
+            model_id = json.loads(payload).get("model_version_id")
+        except (UnicodeDecodeError, ValueError, AttributeError):
+            self.send_json(400, {"error": "invalid_synthetic_request"})
+            return
+
         with lock:
             state["total"] += 1
             pause = state["armed"]
             if pause:
                 state["held"] += 1
+            fault = state["fault"] if model_id == FAULT_TARGET else None
+            if fault is not None:
+                state["fault_count"] += 1
+        if fault == "http_503":
+            self.send_json(503, {"error": "ci_only_worker_unavailable"})
+            return
+        if fault == "malformed":
+            # HTTP 200 with syntactically valid but invalid response schema.
+            self.send_json(200, {"status": "missing_verified_model_evidence"})
+            return
+        if fault == "timeout":
+            # Exceeds Java HttpRequest's 10-second timeout, without contacting
+            # the real worker. The Java-side outcome must remain UNKNOWN.
+            time.sleep(11.5)
+            self.send_json(504, {"error": "ci_only_timeout"})
+            return
         if pause and not released.wait(timeout=8):
             self.send_json(504, {"error": "synthetic_gate_timeout"})
             return
