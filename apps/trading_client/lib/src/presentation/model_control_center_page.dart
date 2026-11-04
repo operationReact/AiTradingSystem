@@ -284,7 +284,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                 children: [
                   Text('Session ${_short(session.id)}',
                       style: theme.textTheme.titleMedium),
-                  Text('Captured by ${session.createdBy} · ${session.createdAt?.toIso8601String() ?? 'Unknown time}'),
+                  Text("Captured by ${session.createdBy} · ${session.createdAt?.toIso8601String() ?? 'Unknown time'}"),
                   Text('Enrollment ${_short(session.fingerprint)}'),
                   Text('Participants: ${session.participants.length}'),
                   const SizedBox(height: 6),
