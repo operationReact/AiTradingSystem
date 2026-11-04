@@ -19,6 +19,11 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
+  MatchedSessionSafetyState? _safety;
+  List<MatchedSessionSafetyChange>? _safetyHistory;
+  ApiFailure? _safetyError;
+  bool _loadingSafety = false;
+  bool _updatingSafety = false;
   List<MatchedSessionEvidence>? _recentSessions;
   ApiFailure? _recentSessionsError;
   bool _loadingRecentSessions = false;
@@ -46,6 +51,11 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _selected = null;
       _session = null;
       _cases = null;
+      _safety = null;
+      _safetyHistory = null;
+      _safetyError = null;
+      _loadingSafety = false;
+      _updatingSafety = false;
       _recentSessions = null;
       _modelsError = error;
       _versionsError = null;
@@ -163,6 +173,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _loadingSession = true;
       _session = null;
       _cases = null;
+      _safety = null;
+      _safetyHistory = null;
+      _safetyError = null;
       _sessionError = null;
       _sessionValidation = null;
     });
@@ -172,6 +185,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       final cases = await widget.repository.recentCases(id);
       if (!mounted || generation != _authGeneration) return;
       setState(() { _session = session; _cases = cases; });
+      await _loadSafety(id);
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration) return;
       if (_isAccessDenied(error)) {
@@ -182,6 +196,127 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     } finally {
       if (mounted && generation == _authGeneration) {
         setState(() => _loadingSession = false);
+      }
+    }
+  }
+
+  Future<void> _loadSafety(String id) async {
+    if (_loadingSafety || _updatingSafety) return;
+    final generation = _authGeneration;
+    setState(() {
+      _loadingSafety = true;
+      _safetyError = null;
+    });
+    try {
+      final state = await widget.repository.safetyState(id);
+      if (!mounted || generation != _authGeneration || _session?.id != id) return;
+      final history = await widget.repository.safetyHistory(id);
+      if (!mounted || generation != _authGeneration || _session?.id != id) return;
+      setState(() { _safety = state; _safetyHistory = history; });
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() {
+          _safety = null;
+          _safetyHistory = null;
+          _safetyError = error;
+        });
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingSafety = false);
+      }
+    }
+  }
+
+  Future<void> _transitionSafety(String action) async {
+    final session = _session;
+    final old = _safety;
+    if (session == null || old == null || _updatingSafety ||
+        _safetyError != null) return;
+    final expected = switch (action) {
+      'PAUSE' => 'PAUSED',
+      'RESUME' => 'ACTIVE',
+      'QUARANTINE' => 'QUARANTINED',
+      _ => '',
+    };
+    if (expected.isEmpty || old.state == 'QUARANTINED' ||
+        (action == 'PAUSE' && old.state != 'ACTIVE') ||
+        (action == 'RESUME' && old.state != 'PAUSED')) return;
+
+    String reasonDraft = '';
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Confirm $action session control'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text(action == 'QUARANTINE'
+              ? 'Quarantine is permanent. This session cannot resume or accept new decisions.'
+              : 'This changes Java PAPER/SHADOW evidence intake only. It does not control broker orders.'),
+          const SizedBox(height: 12),
+          TextField(
+            key: const ValueKey('matched-safety-reason'),
+            onChanged: (value) => reasonDraft = value,
+            maxLength: 512, maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Audit reason (at least 10 characters)',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ]),
+        actions: [
+          TextButton(
+            key: const ValueKey('matched-safety-cancel'),
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('matched-safety-confirm'),
+            onPressed: () {
+              final cleaned = reasonDraft.trim();
+              if (cleaned.length < 10 || cleaned.length > 512) return;
+              Navigator.of(dialogContext).pop(cleaned);
+            },
+            child: Text('Confirm $action'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted || reason == null || _session?.id != session.id) return;
+    final generation = _authGeneration;
+    setState(() { _updatingSafety = true; _safetyError = null; });
+    try {
+      final changed = await widget.repository.transitionSafety(session.id, action, reason);
+      if (!mounted || generation != _authGeneration) return;
+      if (changed.state != expected || changed.revision <= old.revision) {
+        throw const ApiTransportFailure('MATCHED_SAFETY_NOT_CONFIRMED', null);
+      }
+      final confirmed = await widget.repository.safetyState(session.id);
+      if (!mounted || generation != _authGeneration) return;
+      final history = await widget.repository.safetyHistory(session.id);
+      if (!mounted || generation != _authGeneration) return;
+      if (confirmed.state != expected ||
+          confirmed.fingerprint != changed.fingerprint ||
+          confirmed.revision != changed.revision ||
+          history.isEmpty || history.first.revision != confirmed.revision) {
+        throw const ApiTransportFailure('MATCHED_SAFETY_READBACK_MISMATCH', null);
+      }
+      setState(() { _safety = confirmed; _safetyHistory = history; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Server confirmed $expected session control.')),
+      );
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() { _safety = null; _safetyError = error; });
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _updatingSafety = false);
       }
     }
   }
