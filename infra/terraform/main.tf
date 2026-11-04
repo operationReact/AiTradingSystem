@@ -424,7 +424,7 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "SPRING_DATASOURCE_USERNAME", value = var.db_username },
       { name = "APP_CORS_ALLOWED_ORIGINS", value = "https://${local.app_fqdn},https://www.${var.domain_name}" },
       { name = "NEWS_ANALYSIS_PROVIDER", value = "NONE" }
-    ], var.research_worker_java_secret_prep_enabled ? [
+      ], var.research_worker_java_secret_prep_enabled ? [
       # No client/readiness opt-in: preparing a credential must NEVER enable
       # model scoring or expose a dispatch path, even after an operator apply.
       { name = "AI_RESEARCH_WORKER_URL", value = "https://${local.worker_tls_fqdn}" },
@@ -434,7 +434,7 @@ resource "aws_ecs_task_definition" "backend" {
     secrets = concat([
       { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${aws_db_instance.postgres.master_user_secret[0].secret_arn}:password::" },
       { name = "APP_API_KEY", valueFrom = aws_secretsmanager_secret.app_api_key.arn }
-    ], var.research_worker_java_secret_prep_enabled ? [
+      ], var.research_worker_java_secret_prep_enabled ? [
       { name = "AI_RESEARCH_WORKER_TOKEN", valueFrom = var.research_worker_token_secret_arn }
     ] : [])
     logConfiguration = {
