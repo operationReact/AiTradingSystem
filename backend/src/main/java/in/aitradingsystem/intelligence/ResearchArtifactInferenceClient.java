@@ -51,6 +51,12 @@ public final class ResearchArtifactInferenceClient {
     /** No redirects (including credential-bearing 3xx); no retries after UNKNOWN. */
     private static final Transport HTTP_TRANSPORT = (endpoint, payload, token) -> {
         HttpClient client = HttpClient.newBuilder()
+            // Python Uvicorn/h11 accepts HTTP/1.1, not Java's default cleartext
+            // h2c upgrade. With h2c Upgrade + Content-Length, Uvicorn sees an
+            // empty body (FastAPI 422) despite the client publishing bytes.
+            // Explicit HTTP/1.1 also works with our HTTPS-only nonloopback
+            // policy and preserves the no-redirect/no-retry safety boundary.
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(3))
             .followRedirects(HttpClient.Redirect.NEVER)
             .build();
