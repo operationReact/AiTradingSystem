@@ -96,6 +96,7 @@ public class ResearchWorkerReadinessService {
     private final TradingExecutionAuthority authority;
     private final String baseUrl;
     private final String token;
+    private final String trustedHost;
     private final boolean workerEnabled;
     private final boolean enabled;
     private final Transport transport;
@@ -106,18 +107,30 @@ public class ResearchWorkerReadinessService {
             @Value("${app.research.artifact-worker.base-url:}") String baseUrl,
             @Value("${app.research.artifact-worker.token:}") String token,
             @Value("${app.research.artifact-worker.enabled:false}") boolean workerEnabled,
-            @Value("${app.research.worker-readiness.enabled:false}") boolean enabled) {
-        this(jdbc, mapper, authority, baseUrl, token, workerEnabled, enabled, HTTP);
+            @Value("${app.research.worker-readiness.enabled:false}") boolean enabled,
+            @Value("${app.research.artifact-worker.trusted-host:}") String trustedHost) {
+        this(jdbc, mapper, authority, baseUrl, token, workerEnabled, enabled,
+            trustedHost, HTTP);
+    }
+
+    // Package-private seam preserves historical localhost/synthetic tests.
+    ResearchWorkerReadinessService(JdbcClient jdbc, ObjectMapper mapper,
+            TradingExecutionAuthority authority, String baseUrl, String token,
+            boolean workerEnabled, boolean enabled, Transport transport) {
+        this(jdbc, mapper, authority, baseUrl, token, workerEnabled, enabled,
+            ResearchWorkerTlsOrigin.syntheticTestPin(baseUrl), transport);
     }
 
     ResearchWorkerReadinessService(JdbcClient jdbc, ObjectMapper mapper,
             TradingExecutionAuthority authority, String baseUrl, String token,
-            boolean workerEnabled, boolean enabled, Transport transport) {
+            boolean workerEnabled, boolean enabled, String trustedHost,
+            Transport transport) {
         this.jdbc = jdbc;
         this.mapper = mapper;
         this.authority = authority;
         this.baseUrl = baseUrl;
         this.token = token;
+        this.trustedHost = trustedHost;
         this.workerEnabled = workerEnabled;
         this.enabled = enabled;
         this.transport = transport;
@@ -135,6 +148,7 @@ public class ResearchWorkerReadinessService {
             throw new IllegalStateException("Research readiness requires PAPER mode");
         }
         URI url = validatedEndpoint(baseUrl);
+        ResearchWorkerTlsOrigin.requirePinned(url, trustedHost);
         // All JDBC reads finish before any remote HTTP request.
         Roster header = jdbc.sql("""
                 SELECT s.enrollment_fingerprint, st.state
