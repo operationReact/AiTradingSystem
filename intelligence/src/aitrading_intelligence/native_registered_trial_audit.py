@@ -126,6 +126,11 @@ class NativeRegisteredTrialAuditEvidence(BaseModel):
 
     contract_version: Literal["india-native-registered-trial-audit.v1"] = VERSION
     freeze: IndiaHoldoutFreezePlan
+    training_export: MarketResearchExport
+    holdout_export: MarketResearchExport
+    fee_book: IndiaFeeTaxBookV1
+    target: ForwardReturnTargetSpec
+    holdout_config: IndiaHoldoutConfig
     holdout_binding: IndiaHoldoutPlanBinding
     trial_budget: RegisteredTrialBudget
     native_baseline: NativeCausalBaselineTournamentSubmission
@@ -145,8 +150,12 @@ class NativeRegisteredTrialAuditEvidence(BaseModel):
 
     @model_validator(mode="after")
     def validate_native_audit(self) -> NativeRegisteredTrialAuditEvidence:
-        if self.holdout_binding.plan_fingerprint != self.freeze.plan_fingerprint:
-            raise ValueError("native audit holdout binding differs from plan")
+        replayed_binding = bind_india_holdout_to_plan(
+            self.freeze, self.training_export, self.holdout_export,
+            self.fee_book, self.target, self.holdout_config,
+        )
+        if self.holdout_binding != replayed_binding:
+            raise ValueError("native audit source binding differs from raw market evidence")
         cohort = self.native_baseline.baseline.cohort
         if (
             self.holdout_binding.training_export_fingerprint
@@ -249,6 +258,11 @@ def audit_native_registered_trials(
     payload = {
         "contract_version": VERSION,
         "freeze": frozen.model_dump(mode="json"),
+        "training_export": training_export.model_dump(mode="json"),
+        "holdout_export": holdout_export.model_dump(mode="json"),
+        "fee_book": fee_book.model_dump(mode="json"),
+        "target": target.model_dump(mode="json"),
+        "holdout_config": holdout_config.model_dump(mode="json"),
         "holdout_binding": market_binding.model_dump(mode="json"),
         "trial_budget": plan.model_dump(mode="json"),
         "native_baseline": baseline.model_dump(mode="json"),
