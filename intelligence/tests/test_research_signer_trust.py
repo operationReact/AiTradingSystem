@@ -4,7 +4,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from test_research_context_signature import (
@@ -23,7 +23,7 @@ from aitrading_intelligence.research_signer_trust import (
     verify_trusted_policy,
 )
 
-NOW = datetime(2026, 11, 5, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
 KEY_SHA = "a" * 64
 
 
