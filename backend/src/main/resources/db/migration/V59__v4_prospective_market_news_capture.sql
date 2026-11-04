@@ -4,8 +4,8 @@ CREATE TABLE v4_matched_source_capture (
     session_id UUID NOT NULL REFERENCES v4_matched_session(session_id),
     case_key VARCHAR(96) NOT NULL
         CHECK (case_key ~ '^[A-Za-z0-9][A-Za-z0-9._-]{2,95}$'),
-    candle_id BIGINT NOT NULL REFERENCES market_candle(candle_id),
-    news_id UUID NOT NULL REFERENCES news_item(id),
+    candle_id BIGINT NOT NULL,
+    news_id UUID NOT NULL,
     symbol VARCHAR(30) NOT NULL,
     market_available_at TIMESTAMPTZ NOT NULL,
     news_available_at TIMESTAMPTZ NOT NULL,
@@ -31,4 +31,6 @@ CREATE INDEX ix_v4_matched_source_recent
 
 -- This is a database-backed evidence snapshot. Existing upstream data rows can
 -- subsequently be updated; the immutable capture hashes preserve the bytes seen
--- during intake. They do NOT establish provider signatures or source usage rights.
+-- during intake. Deliberately no FK to the mutable/retained source tables: deleting
+-- a candle or news row later must not cascade-delete immutable capture history.
+-- They do NOT establish provider signatures or source usage rights.
