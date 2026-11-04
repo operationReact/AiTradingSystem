@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from aitrading_intelligence.fingerprints import canonical_fingerprint
 from aitrading_intelligence.india_financial_nlp_corpus import (
+    IndiaFinancialNlpCorpusConfig,
     IndiaFinancialNlpCorpusReport,
     IndiaNlpCausalCase,
 )
@@ -99,7 +100,7 @@ def _causal_report(cases: list[IndiaNlpCausalCase],
     ordered = sorted(cases, key=lambda case: case.source_id)
     payload = {
         "contract_version": "india-financial-nlp-causal-corpus.v1",
-        "config_fingerprint": HASH,
+        "config_fingerprint": IndiaFinancialNlpCorpusConfig().fingerprint,
         "market_export_fingerprint": HASH,
         "news_export_fingerprint": HASH,
         "ai_export_fingerprint": HASH,
@@ -163,6 +164,9 @@ def test_gemini_holdout_benchmark_is_replayable_and_never_proves_real_performanc
     assert report.sentiment_accuracy == 1
     assert report.sentiment_macro_f1 == 1
     assert report.ordered_confusion_counts == [1, 0, 0, 0, 1, 0, 0, 0, 1]
+    assert report.source_advisory_config.advisory_provider == "GEMINI"
+    assert (report.source_advisory_config_fingerprint ==
+            IndiaFinancialNlpCorpusConfig().fingerprint)
     assert report.independent_gemini_api_execution_verified is False
     assert report.sentiment_labels_independently_adjudicated is False
     assert report.independent_news_and_content_rights_verified is False
@@ -268,3 +272,32 @@ def test_no_future_sentiment_or_market_labels_are_model_inputs():
     assert "market_label_available_at" not in model_fields
     result = benchmark_heldout_gemini_advisory(events, causal, config=_policy())
     assert result.status == "DESCRIPTIVE_RESEARCH_ONLY"
+
+
+def test_wrong_upstream_provider_or_advisory_model_cannot_be_called_gemini():
+    events, causal = _fixture()
+    with pytest.raises(ValueError, match="requires GEMINI"):
+        benchmark_heldout_gemini_advisory(
+            events, causal, config=_policy(),
+            source_config=IndiaFinancialNlpCorpusConfig(advisory_provider="OPENAI"),
+        )
+    with pytest.raises(ValueError, match="configuration differs"):
+        benchmark_heldout_gemini_advisory(
+            events, causal, config=_policy(),
+            source_config=IndiaFinancialNlpCorpusConfig(advisory_model="gemini-other"),
+        )
+
+
+def test_provider_identity_in_immutable_report_cannot_be_rewritten():
+    events, causal = _fixture()
+    original = benchmark_heldout_gemini_advisory(events, causal, config=_policy())
+    payload = original.model_dump(mode="json")
+    payload["source_advisory_config"]["advisory_provider"] = "OPENAI"
+    payload["source_advisory_config_fingerprint"] = canonical_fingerprint(
+        payload["source_advisory_config"]
+    )
+    payload["report_fingerprint"] = canonical_fingerprint({
+        k: v for k, v in payload.items() if k != "report_fingerprint"
+    })
+    with pytest.raises(ValidationError, match="cannot attribute another provider"):
+        GeminiHeldoutBenchmarkReport.model_validate(payload)
