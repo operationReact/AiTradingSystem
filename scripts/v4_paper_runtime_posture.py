@@ -37,6 +37,10 @@ UNVERIFIED_CONFIG_OVERRIDE_NAMES = {
     "SPRING_CONFIG_LOCATION",
     "SPRING_CONFIG_ADDITIONAL_LOCATION",
     "SPRING_PROFILES_ACTIVE",
+    "SPRING_CONFIG_IMPORT",
+    "SPRING_CONFIG_NAME",
+    "SPRING_CLOUD_CONFIG_URI",
+    "APP_TRADING_MODE",
 }
 SENSITIVE_NAMES = {
     "APP_API_KEY",
@@ -137,7 +141,8 @@ def evaluate(
                     if isinstance(row, dict)]
     require(
         len(secret_names) == len(set(secret_names))
-        and all(isinstance(n, str) for n in secret_names),
+        and all(isinstance(n, str) for n in secret_names)
+        and not (set(names) & set(secret_names)),
         "ECS_SECRET_REFERENCE_AMBIGUOUS",
     )
     all_names = set(names) | set(secret_names)
