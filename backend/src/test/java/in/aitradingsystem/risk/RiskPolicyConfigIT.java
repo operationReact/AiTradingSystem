@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import in.aitradingsystem.config.RiskProperties;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -17,6 +18,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +36,7 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
     @Autowired RiskPolicyConfigRepository repository;
     @Autowired RiskPolicyConfigService service;
     @Autowired RiskPolicyBootstrap bootstrap;
+    @Autowired RiskProperties configuredRisk;
     @Autowired MockMvc mvc;
     @Autowired PlatformTransactionManager transactions;
 
@@ -45,6 +48,30 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
         jdbc.update("DELETE FROM risk_policy_config");
         activeId = UUID.randomUUID();
         repository.insert(snapshot(activeId, 1, new BigDecimal("0.25")), "Policy v1", true, "TEST");
+    }
+
+    /**
+     * This test class deliberately deletes and activates versioned risk policies
+     * in a runner-local database shared by subsequent Spring integration tests.
+     * Leaving the final test's policy active changes PAPER risk limits and fees,
+     * causing the unrelated PaperTradeApiIT assertions to become order-dependent.
+     *
+     * Restore the canonical application bootstrap after EVERY test. Never relax
+     * the production risk checks, modify PAPER balances, or skip assertions.
+     */
+    @AfterEach
+    void restoreApplicationRiskBaseline() {
+        jdbc.update("DELETE FROM audit_event WHERE entity_type = 'RISK_POLICY_CONFIG'");
+        jdbc.update("DELETE FROM risk_policy_config");
+        bootstrap.run(null);
+        RiskPolicySnapshot baseline = repository.requireActive();
+        assertThat(baseline.riskPerTradePercent())
+            .isEqualByComparingTo(configuredRisk.riskPerTradePercent());
+        assertThat(baseline.feeRate())
+            .isEqualByComparingTo(configuredRisk.feeRate());
+        assertThat(baseline.slippageRate())
+            .isEqualByComparingTo(configuredRisk.slippageRate());
+        assertThat(repository.requireActiveView().createdBy()).isEqualTo("SYSTEM_BOOTSTRAP");
     }
 
     @Test
