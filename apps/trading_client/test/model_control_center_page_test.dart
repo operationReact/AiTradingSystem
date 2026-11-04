@@ -130,6 +130,27 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
   }
 
   @override
+  Future<MatchedSessionAggregateEvidence> sessionEvidence(String id) async {
+    if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    return const MatchedSessionAggregateEvidence(
+      sessionId: sessionId,
+      enrollmentFingerprint: 'enrollment-fingerprint',
+      sessionSafetyState: 'PAUSED',
+      sessionStateRevision: 1,
+      matchedCases: 1,
+      championEnterCases: 1,
+      shadowDisagreementCases: 1,
+      linkedPaperOrders: 0,
+      unlinkedChampionEnters: 1,
+      paperFillQuantityMismatchOrders: 0,
+      recordedFillQuantity: 0,
+      recordedPaperFees: '0',
+      recordedPaperSlippage: '0',
+      reasonCodes: ['UNLINKED_CHAMPION_ENTER_CASES', 'LIVE_CAPITAL_AUTHORITY_DISABLED'],
+    );
+  }
+
+  @override
   Future<List<MatchedCaseEvidence>> recentCases(String id) async {
     if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
     return const [
@@ -202,6 +223,18 @@ void main() {
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
     expect(find.textContaining('Source and runtime independently verified: NO'),
         findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-session-evidence')),
+      220,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    expect(find.byKey(const ValueKey('model-session-evidence')), findsOneWidget);
+    expect(find.textContaining('Safety state: PAUSED'), findsOneWidget);
+    expect(find.textContaining('Unlinked ENTER: 1'), findsOneWidget);
+    expect(find.byKey(const ValueKey('model-evidence-unverified')), findsOneWidget);
     await tester.scrollUntilVisible(
       find.byKey(const ValueKey('model-case-event-001')),
       250,
