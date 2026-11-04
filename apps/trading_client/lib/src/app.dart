@@ -5,6 +5,7 @@ import 'data/backtest_repository.dart';
 import 'data/health_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
+import 'data/model_control_repository.dart';
 import 'data/operator_session.dart';
 import 'data/operations_evidence_repository.dart';
 import 'data/paper_trading_repository.dart';
@@ -15,6 +16,7 @@ import 'features/trading_control/data/trading_control_repository.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
+import 'presentation/model_control_center_page.dart';
 import 'presentation/operations_evidence_page.dart';
 import 'presentation/operations_health_page.dart';
 import 'presentation/overview_page.dart';
@@ -104,6 +106,7 @@ class _TradingAppState extends State<TradingApp> {
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
+        '/admin/models': (_) => ModelControlCenterPage(repository: HttpModelControlRepository(_api)),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
         '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api)),
         '/orders': (_) => PaperOrdersPage(
@@ -301,6 +304,7 @@ class _DesktopProductRail extends StatelessWidget {
           _RailAction(label: 'Home', icon: Icons.space_dashboard_rounded, active: selectedRoute == '/', onTap: () => onNavigate('/')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),
           _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
+          _RailAction(label: 'Model Control', icon: Icons.hub_rounded, active: selectedRoute == '/admin/models', onTap: () => onNavigate('/admin/models')),
           _RailAction(label: 'Portfolio', icon: Icons.account_balance_wallet_rounded, active: selectedRoute == '/portfolio', onTap: () => onNavigate('/portfolio')),
           const Spacer(),
           _RailAction(label: 'Settings', icon: Icons.settings_rounded, active: selectedRoute == '/settings', onTap: () => onNavigate('/settings')),
@@ -347,6 +351,7 @@ class _MoreProductSheet extends StatelessWidget {
     ('/orders', Icons.receipt_long_rounded, 'PAPER orders', 'Create and review simulated trades'),
     ('/risk', Icons.shield_rounded, 'Risk controls', 'Trading limits and safety controls'),
     ('/backtests', Icons.science_rounded, 'Backtests', 'Review strategy simulations'),
+    ('/admin/models', Icons.hub_rounded, 'Model Control Center', 'Review models, versions and emergency state'),
     ('/notifications', Icons.notifications_rounded, 'Notifications', 'Important account and trading updates'),
     ('/settings', Icons.tune_rounded, 'Settings', 'Trading mode, execution mode and appearance'),
   ];
