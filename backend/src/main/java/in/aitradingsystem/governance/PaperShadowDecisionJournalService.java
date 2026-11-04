@@ -193,7 +193,8 @@ public class PaperShadowDecisionJournalService {
                 || !enrolled.containsKey(signal.modelVersionId()) || !seen.add(signal.modelVersionId())) {
                 throw new IllegalArgumentException("Duplicate or unregistered model in decision cohort");
             }
-            if (signal.predictedAt() == null || signal.predictedAt().isBefore(input.marketAvailableAt())
+            if (signal.predictedAt() == null || signal.predictedAt().isBefore(session.createdAt())
+                || signal.predictedAt().isBefore(input.marketAvailableAt())
                 || signal.predictedAt().isBefore(input.newsAvailableAt())
                 || signal.predictedAt().isAfter(input.decisionAt())) {
                 throw new IllegalArgumentException("Candidate prediction is late or predates available market/news evidence");
