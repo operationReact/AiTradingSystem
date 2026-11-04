@@ -100,6 +100,15 @@ public final class ResearchArtifactInferenceClient {
         this(mapper, baseUrl, token, enabled, trustedHost, HTTP_TRANSPORT);
     }
 
+    // Historical four-argument test seam used by running-Python smoke tests.
+    // Production Spring uses the @Autowired constructor with the independent
+    // trusted-host configuration; this overload never receives Spring injection.
+    ResearchArtifactInferenceClient(
+            ObjectMapper mapper, String baseUrl, String token, boolean enabled) {
+        this(mapper, baseUrl, token, enabled,
+            ResearchWorkerTlsOrigin.syntheticTestPin(baseUrl), HTTP_TRANSPORT);
+    }
+
     // Package-private seam for deterministic local/synthetic tests only.
     ResearchArtifactInferenceClient(
             ObjectMapper mapper, String baseUrl, String token,
