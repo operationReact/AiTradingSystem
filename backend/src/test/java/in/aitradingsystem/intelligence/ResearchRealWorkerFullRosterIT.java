@@ -82,6 +82,99 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
                 model.path("artifact_fingerprint").asText());
         }
 
+        SyntheticCase successful = createSyntheticCase(CAT, LIGHT);
+        UUID session = successful.session();
+        String caseKey = successful.caseKey();
+        String route = successful.route();
+
+        mvc.perform(post(route).with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("FINALIZED_RESEARCH_ONLY"))
+            .andExpect(jsonPath("$.expectedModels").value(2))
+            .andExpect(jsonPath("$.succeeded").value(2))
+            .andExpect(jsonPath("$.unresolved").value(0))
+            .andExpect(jsonPath("$.matchedEvidenceFinalized").value(true))
+            .andExpect(jsonPath("$.paperOrdersSubmitted").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
+
+        assertEquals(2, count("v4_research_inference_reservation", session, caseKey));
+        assertEquals(2, jdbc.sql("""
+                SELECT count(*) FROM v4_research_inference_receipt rc
+                JOIN v4_research_inference_reservation rs
+                  ON rs.reservation_id=rc.reservation_id
+                WHERE rs.session_id=:session AND rs.case_key=:caseKey
+                  AND rc.status='SUCCEEDED'
+                  AND rc.can_authorize_capital=FALSE
+                """).param("session", session).param("caseKey", caseKey)
+            .query(Integer.class).single());
+        assertEquals(1, count("v4_research_matched_case_link", session, caseKey));
+        assertEquals(1, count("v4_matched_case", session, caseKey));
+        assertEquals(2, count("v4_matched_decision", session, caseKey));
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM paper_order
+                 WHERE correlation_id=:correlation
+                """).param("correlation", session.toString())
+            .query(Integer.class).single());
+        // Every identical case/model is terminally reserved: a repeated batch
+        // must not resend models or rewrite original V56/V62 observations.
+        mvc.perform(post(route).with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(2, count("v4_research_inference_reservation", session, caseKey));
+        assertEquals(1, count("v4_matched_case", session, caseKey));
+
+        // Negative end-to-end scenario with the SAME real Python process:
+        // an otherwise valid enrolled LightGBM model has no pinned manifest
+        // entry. Python responds with a non-200/503. Java must preserve
+        // one UNKNOWN receipt and must not manufacture or finalize a match.
+        UUID missingWorkerModel = UUID.randomUUID();
+        registerVersion(missingWorkerModel, "LIGHTGBM", "f".repeat(64));
+        SyntheticCase incomplete = createSyntheticCase(CAT, missingWorkerModel);
+        mvc.perform(post(incomplete.route()).with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.status").value("INCOMPLETE_NO_RETRY"))
+            .andExpect(jsonPath("$.expectedModels").value(2))
+            .andExpect(jsonPath("$.succeeded").value(1))
+            .andExpect(jsonPath("$.unresolved").value(1))
+            .andExpect(jsonPath("$.matchedEvidenceFinalized").value(false))
+            .andExpect(jsonPath("$.canAuthorizeCapital").value(false))
+            .andExpect(jsonPath("$.paperOrdersSubmitted").value(false));
+        assertEquals(2, count("v4_research_inference_reservation",
+            incomplete.session(), incomplete.caseKey()));
+        assertEquals(1, jdbc.sql("""
+                SELECT count(*) FROM v4_research_inference_receipt receipt
+                JOIN v4_research_inference_reservation reservation
+                    ON reservation.reservation_id=receipt.reservation_id
+                WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                  AND reservation.model_version_id=:model AND receipt.status='UNKNOWN'
+                  AND receipt.reason_code='TRANSPORT_UNKNOWN'
+                  AND receipt.response_fingerprint IS NULL
+                """)
+            .param("session", incomplete.session()).param("caseKey", incomplete.caseKey())
+            .param("model", missingWorkerModel).query(Integer.class).single());
+        assertEquals(0, count("v4_matched_case",
+            incomplete.session(), incomplete.caseKey()));
+        assertEquals(0, count("v4_research_matched_case_link",
+            incomplete.session(), incomplete.caseKey()));
+        assertEquals(0, count("v4_matched_decision",
+            incomplete.session(), incomplete.caseKey()));
+        mvc.perform(post(incomplete.route()).with(user(ACTOR).roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(2, count("v4_research_inference_reservation",
+            incomplete.session(), incomplete.caseKey()));
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM paper_order WHERE correlation_id=:correlation
+                """).param("correlation", incomplete.session().toString())
+            .query(Integer.class).single());
+    }
+
+    private record SyntheticCase(UUID session, String caseKey, String route) {}
+
+    /**
+     * Construct strictly synthetic prospective evidence for an independently
+     * enrolled research case, with no exchange/news licensing claims.
+     */
+    private SyntheticCase createSyntheticCase(UUID champion, UUID challenger)
+            throws Exception {
         UUID session = UUID.randomUUID();
         String caseKey = "ci-v67-" + UUID.randomUUID().toString().substring(0, 8);
         mvc.perform(post(ENDPOINT + "/sessions")
@@ -92,7 +185,7 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
                      "models":[
                        {"modelVersionId":"%s","role":"PAPER_CHAMPION"},
                        {"modelVersionId":"%s","role":"SHADOW_CHALLENGER"}]}
-                    """.formatted(session, C, CAT, LIGHT)))
+                    """.formatted(session, C, champion, challenger)))
             .andExpect(status().isCreated());
         var enrollment = jdbc.sql("""
                 SELECT created_at FROM v4_matched_session
@@ -163,40 +256,8 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
 
         String route = ENDPOINT + "/sessions/" + session
             + "/cases/" + caseKey + "/dispatch-research-roster";
-        mvc.perform(post(route).with(user(ACTOR).roles("ADMIN")))
-            .andExpect(status().isOk())
-            .andExpect(jsonPath("$.status").value("FINALIZED_RESEARCH_ONLY"))
-            .andExpect(jsonPath("$.expectedModels").value(2))
-            .andExpect(jsonPath("$.succeeded").value(2))
-            .andExpect(jsonPath("$.unresolved").value(0))
-            .andExpect(jsonPath("$.matchedEvidenceFinalized").value(true))
-            .andExpect(jsonPath("$.paperOrdersSubmitted").value(false))
-            .andExpect(jsonPath("$.canAuthorizeCapital").value(false));
 
-        assertEquals(2, count("v4_research_inference_reservation", session, caseKey));
-        assertEquals(2, jdbc.sql("""
-                SELECT count(*) FROM v4_research_inference_receipt rc
-                JOIN v4_research_inference_reservation rs
-                  ON rs.reservation_id=rc.reservation_id
-                WHERE rs.session_id=:session AND rs.case_key=:caseKey
-                  AND rc.status='SUCCEEDED'
-                  AND rc.can_authorize_capital=FALSE
-                """).param("session", session).param("caseKey", caseKey)
-            .query(Integer.class).single());
-        assertEquals(1, count("v4_research_matched_case_link", session, caseKey));
-        assertEquals(1, count("v4_matched_case", session, caseKey));
-        assertEquals(2, count("v4_matched_decision", session, caseKey));
-        assertEquals(0, jdbc.sql("""
-                SELECT count(*) FROM paper_order
-                 WHERE correlation_id=:correlation
-                """).param("correlation", session.toString())
-            .query(Integer.class).single());
-        // Every identical case/model is terminally reserved: a repeated batch
-        // must not resend models or rewrite original V56/V62 observations.
-        mvc.perform(post(route).with(user(ACTOR).roles("ADMIN")))
-            .andExpect(status().isConflict());
-        assertEquals(2, count("v4_research_inference_reservation", session, caseKey));
-        assertEquals(1, count("v4_matched_case", session, caseKey));
+        return new SyntheticCase(session, caseKey, route);
     }
 
     private void registerVersion(UUID modelId, String family, String artifactHash) {
