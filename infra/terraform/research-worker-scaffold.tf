@@ -37,9 +37,9 @@ variable "research_worker_token_secret_arn" {
 locals {
   worker_scaffold_count = var.research_worker_scaffold_enabled ? 1 : 0
   worker_tags = merge(local.tags, {
-    RuntimeMode     = "PAPER"
+    RuntimeMode      = "PAPER"
     TradingAuthority = "NONE"
-    DeploymentStage = "DORMANT"
+    DeploymentStage  = "DORMANT"
   })
 }
 
@@ -189,14 +189,14 @@ resource "aws_ecs_task_definition" "research_worker" {
 }
 
 resource "aws_ecs_service" "research_worker" {
-  count                   = local.worker_scaffold_count
-  name                    = "${local.name}-research-worker"
-  cluster                 = aws_ecs_cluster.main.id
-  task_definition         = aws_ecs_task_definition.research_worker[0].arn
-  desired_count           = 0
-  launch_type             = "FARGATE"
-  platform_version        = "LATEST"
-  enable_execute_command  = false
+  count                  = local.worker_scaffold_count
+  name                   = "${local.name}-research-worker"
+  cluster                = aws_ecs_cluster.main.id
+  task_definition        = aws_ecs_task_definition.research_worker[0].arn
+  desired_count          = 0
+  launch_type            = "FARGATE"
+  platform_version       = "LATEST"
+  enable_execute_command = false
   deployment_circuit_breaker {
     enable   = true
     rollback = true
