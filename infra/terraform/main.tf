@@ -478,7 +478,12 @@ resource "aws_ecs_service" "backend" {
   }
   network_configuration {
     subnets          = aws_subnet.public[*].id
-    security_groups  = [aws_security_group.tasks.id]
+    # The dedicated identity SG is attached ONLY to Java backend tasks.
+    # Default-disabled V81 leaves the original SG set unchanged.
+    security_groups = concat(
+      [aws_security_group.tasks.id],
+      aws_security_group.research_worker_java_identity[*].id
+    )
     assign_public_ip = true
   }
   load_balancer {
