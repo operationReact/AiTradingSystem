@@ -160,6 +160,11 @@ public class ResearchInferenceAttemptLedger {
             throw new IllegalArgumentException("Only research-only validated inference may succeed");
         }
         Reservation r = reservation(reservationId);
+        String frozenSymbol = jdbc.sql("""
+                SELECT symbol FROM v4_matched_source_capture
+                 WHERE session_id = :sessionId AND case_key = :caseKey
+                """).param("sessionId", r.sessionId()).param("caseKey", r.caseKey())
+            .query(String.class).single();
         safety.requireActiveForAppend(r.sessionId());
         emergency.requireModelAllowed(r.modelVersionId());
         Instant now = clock.instant();
@@ -167,11 +172,14 @@ public class ResearchInferenceAttemptLedger {
                 || result.modelVersionId() == null
                 || !r.modelVersionId().equals(result.modelVersionId())
                 || !r.caseKey().equals(result.caseKey())
+                || !frozenSymbol.equals(result.symbol())
                 || !r.sourceInputFingerprint().equals(result.sourceInputFingerprint())
                 || !r.artifactFingerprint().equals(result.artifactFingerprint())
                 || !validHash(result.requestFingerprint())
                 || !validHash(result.responseFingerprint())
+                || result.modelFamily() == null
                 || !Set.of("CATBOOST", "LIGHTGBM").contains(result.modelFamily())
+                || result.action() == null
                 || !Set.of("ENTER", "WAIT", "ABSTAIN").contains(result.action())
                 || !Double.isFinite(result.probability())
                 || result.probability() < 0 || result.probability() > 1
