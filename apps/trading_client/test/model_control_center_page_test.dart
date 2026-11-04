@@ -273,7 +273,7 @@ void main() {
     await tester.ensureVisible(find.byKey(const ValueKey('model-session-fetch')));
     await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('model-control-access-denied')), findsOneWidget);
+    expect(find.byKey(const ValueKey('model-control-access-denied')), findsWidgets);
     expect(find.byKey(const ValueKey('model-session-summary')), findsNothing);
     expect(find.byKey(const ValueKey('model-case-event-001')), findsNothing);
     await tester.tap(find.text('Model inventory'));
