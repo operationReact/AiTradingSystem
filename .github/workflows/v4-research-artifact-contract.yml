@@ -81,10 +81,6 @@ jobs:
           -Dtest=ResearchArtifactInferenceClientTest,ResearchInferenceDispatchServiceTest,ResearchRosterDispatchServiceTest
           test
 
-# This is synthetic model computation plus independently defined Java wire
-# validation at the same exact commit. It does NOT use external licensed feed
-# subscriptions, an actually deployed Java→Python route, broker data or LIVE.
-
   java-to-real-python-http:
     name: Java HttpClient to running Python CatBoost/LightGBM (synthetic)
     runs-on: ubuntu-24.04
@@ -156,3 +152,7 @@ jobs:
           cd backend
           mvn --batch-mode --no-transfer-progress \
             -Dtest=ResearchArtifactLiveWorkerSmokeTest test
+
+# The loopback integration uses real Java HTTP and a real Python process on
+# one CI runner with synthetic lab data. It is not a deployed production
+# service, independent licensed Indian-market feed, broker or LIVE acceptance.
