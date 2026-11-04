@@ -158,7 +158,8 @@ class IndiaPatchForecastReport(BaseModel):
                 trace.candidate_id != "bounded-patch-transformer"
                 or trace.model_version_ref != CONTRACT
                 or trace.model_state_fingerprint != self.model_state_fingerprint
-                or trace.causal_baseline_report_fingerprint != self.baseline_parent_report_fingerprint
+                or trace.causal_baseline_report_fingerprint
+                != self.baseline_parent_report_fingerprint
                 or trace.cohort.holdout_export_fingerprint
                 != self.holdout_export_fingerprint
                 or trace.cohort.training_export_fingerprint
