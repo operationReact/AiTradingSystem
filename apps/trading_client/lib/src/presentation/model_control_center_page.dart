@@ -235,7 +235,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     final session = _session;
     final old = _safety;
     if (session == null || old == null || _updatingSafety ||
-        _safetyError != null) return;
+        _safetyError != null) {
+      return;
+    }
     final expected = switch (action) {
       'PAUSE' => 'PAUSED',
       'RESUME' => 'ACTIVE',
@@ -244,7 +246,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     };
     if (expected.isEmpty || old.state == 'QUARANTINED' ||
         (action == 'PAUSE' && old.state != 'ACTIVE') ||
-        (action == 'RESUME' && old.state != 'PAUSED')) return;
+        (action == 'RESUME' && old.state != 'PAUSED')) {
+      return;
+    }
 
     String reasonDraft = '';
     final reason = await showDialog<String>(
