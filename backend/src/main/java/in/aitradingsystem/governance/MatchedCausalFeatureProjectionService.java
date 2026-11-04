@@ -8,6 +8,7 @@ import in.aitradingsystem.execution.TradingExecutionAuthority;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -106,13 +107,14 @@ public class MatchedCausalFeatureProjectionService {
                        source, fetched_at
                   FROM market_candle
                  WHERE trading_symbol = :symbol AND exchange = :exchange
-                   AND symbol_token = :token AND interval = :interval AND candle_time < :candleTime
+                   AND symbol_token = :token AND interval = :interval AND candle_time <= :candleTime
                    AND fetched_at <= :capturedAt
                  ORDER BY candle_time DESC, candle_id DESC
                  LIMIT 1
                 """)
             .param("symbol", source.symbol()).param("exchange", candle.exchange())
-            .param("token", candle.symbolToken()).param("interval", candle.interval()).param("candleTime", at(candle.candleAt()))
+            .param("token", candle.symbolToken()).param("interval", candle.interval())
+            .param("candleTime", at(candle.candleAt().minus(intervalDuration(candle.interval()))))
             .param("capturedAt", at(source.capturedAt()))
             .query((rs, n) -> mapCandle(rs))
             .optional()
@@ -332,6 +334,20 @@ public class MatchedCausalFeatureProjectionService {
                 instant(rs, "captured_at")))
             .optional()
             .orElseThrow(() -> new NoSuchElementException("Missing V59 source capture"));
+    }
+
+    private static Duration intervalDuration(String value) {
+        return switch (value) {
+            case "ONE_MINUTE" -> Duration.ofMinutes(1);
+            case "THREE_MINUTE" -> Duration.ofMinutes(3);
+            case "FIVE_MINUTE" -> Duration.ofMinutes(5);
+            case "TEN_MINUTE" -> Duration.ofMinutes(10);
+            case "FIFTEEN_MINUTE" -> Duration.ofMinutes(15);
+            case "THIRTY_MINUTE" -> Duration.ofMinutes(30);
+            case "ONE_HOUR" -> Duration.ofHours(1);
+            case "ONE_DAY" -> Duration.ofDays(1);
+            default -> throw new IllegalArgumentException("Unsupported previous candle interval");
+        };
     }
 
     private Candle candle(long id) {
