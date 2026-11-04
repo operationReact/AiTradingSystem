@@ -35,10 +35,15 @@ class PrivateEndpointsContractTest(unittest.TestCase):
         self.assertIn('referenced_security_group_id = aws_security_group.research_worker_endpoints[0].id', self.net)
         self.assertIn('prefix_list_id    = data.aws_prefix_list.worker_s3[0].id', self.net)
         self.assertIn('referenced_security_group_id = aws_security_group.research_worker[0].id', self.net)
-        self.assertIn('egress = []', self.worker)
+        # Do not combine inline SG rules and standalone rule resources:
+        # Terraform AWS provider documents that this causes perpetual diffs.
+        self.assertNotRegex(self.worker, r"(?m)^\\s*(?:ingress|egress)\\s*(?:=|\\{)")
+        self.assertNotRegex(self.net, r"(?m)^\\s*(?:ingress|egress)\\s*(?:=|\\{)")
+        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_java"', self.net)
+        self.assertIn("referenced_security_group_id = aws_security_group.tasks.id", self.net)
         self.assertNotIn('cidr_blocks = ["0.0.0.0/0"]', self.worker)
         self.assertNotIn('cidr_blocks = ["0.0.0.0/0"]', self.net)
-        self.assertIn('egress = []', self.net)
+
 
     def test_endpoints_never_scale_or_grant_live_trading(self):
         self.assertRegex(self.worker, r"desired_count\s*=\s*0")
