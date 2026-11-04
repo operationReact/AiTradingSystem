@@ -52,16 +52,19 @@ public class ProspectiveMatchedSourceService {
     private final TradingExecutionAuthority authority;
     private final MatchedPaperShadowIntakeService intake;
     private final ModelEmergencyControlService emergency;
+    private final MatchedSessionSafetyService safety;
 
     public ProspectiveMatchedSourceService(
             JdbcClient jdbc, Clock clock, AuditService audit, TradingExecutionAuthority authority,
-            MatchedPaperShadowIntakeService intake, ModelEmergencyControlService emergency) {
+            MatchedPaperShadowIntakeService intake, ModelEmergencyControlService emergency,
+            MatchedSessionSafetyService safety) {
         this.jdbc = jdbc;
         this.clock = clock;
         this.audit = audit;
         this.authority = authority;
         this.intake = intake;
         this.emergency = emergency;
+        this.safety = safety;
     }
 
     @Transactional
@@ -73,6 +76,8 @@ public class ProspectiveMatchedSourceService {
                 || input.candleId() <= 0 || input.newsId() == null) {
             throw new IllegalArgumentException("Valid caseKey, candleId and newsId are required");
         }
+        // Reuse V58's FOR SHARE lock so pause/quarantine serializes with source capture.
+        safety.requireActiveForAppend(sessionId);
         var session = intake.session(sessionId);
         for (var model : session.models()) {
             emergency.requireModelAllowed(model.modelVersionId());
