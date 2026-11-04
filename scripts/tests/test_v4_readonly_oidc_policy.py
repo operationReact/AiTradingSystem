@@ -53,8 +53,8 @@ class ReadonlyOidcContract(unittest.TestCase):
             "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-backend",
             "arn:aws:ecs:us-east-1:816344830716:service/ai-trading-system/ai-trading-system-research-worker",
         })
-        self.assertEqual(resources["ReadOnlyBackendTaskDefinition"],
-                         "arn:aws:ecs:us-east-1:816344830716:task-definition/ai-trading-system-backend:*")
+        # AWS service-authorization table has no resource type for this action.
+        self.assertEqual(resources["ReadOnlyBackendTaskDefinition"], "*")
         self.assertEqual(resources["ReadOnlyALBTargetHealth"], "*")
         self.assertEqual(resources["VerifyCallerAccount"], "*")
 
