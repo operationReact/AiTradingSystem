@@ -78,6 +78,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('emergency-confirm')));
     await tester.pumpAndSettle();
     expect(repo.mutatingCalls, 1);
+    await tester.drag(find.byKey(const ValueKey('emergency-controls-page')),
+      const Offset(0, 700));
+    await tester.pumpAndSettle();
     expect(find.textContaining('1 active safety overrides'), findsOneWidget);
     expect(find.text('Enable LIVE'), findsNothing);
   });
@@ -99,8 +102,12 @@ void main() {
       ModelEmergencyControlsPage(repository: repo)));
     await tester.pumpAndSettle();
     final review = find.byKey(const ValueKey('emergency-review'));
-    await tester.ensureVisible(review);
+    await tester.scrollUntilVisible(review, 180,
+      scrollable: find.byType(Scrollable).first);
     await tester.tap(review);
+    await tester.pumpAndSettle();
+    await tester.drag(find.byKey(const ValueKey('emergency-controls-page')),
+      const Offset(0, 700));
     await tester.pumpAndSettle();
     expect(find.textContaining('between 10 and 512 characters'), findsWidgets);
     expect(find.byKey(const ValueKey('emergency-confirm')), findsNothing);
