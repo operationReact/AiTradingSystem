@@ -13,6 +13,7 @@ on:
       - 'intelligence/tests/**'
       - 'intelligence/pyproject.toml'
       - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
+      - 'intelligence/scripts/v4_ci_worker_pause_proxy.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   push:
     branches: [dev]
@@ -26,6 +27,7 @@ on:
       - 'intelligence/tests/**'
       - 'intelligence/pyproject.toml'
       - 'intelligence/scripts/build_v4_synthetic_worker_manifest.py'
+      - 'intelligence/scripts/v4_ci_worker_pause_proxy.py'
       - '.github/workflows/v4-research-artifact-contract.yml'
   workflow_dispatch:
 
@@ -112,7 +114,12 @@ jobs:
           set -euo pipefail
           temporary="$(mktemp -d)"
           worker_pid=""
+          proxy_pid=""
           cleanup() {
+            if [[ -n "$proxy_pid" ]]; then
+              kill "$proxy_pid" 2>/dev/null || true
+              wait "$proxy_pid" 2>/dev/null || true
+            fi
             if [[ -n "$worker_pid" ]]; then
               kill "$worker_pid" 2>/dev/null || true
               wait "$worker_pid" 2>/dev/null || true
@@ -128,6 +135,7 @@ jobs:
           export ATS_V4_RESEARCH_SMOKE_TOKEN="$AI_RESEARCH_WORKER_TOKEN"
           export ATS_V4_RESEARCH_SMOKE_MANIFEST="$AI_RESEARCH_MODEL_MANIFEST"
           export ATS_V4_RESEARCH_SMOKE_BASE_URL="http://127.0.0.1:18721"
+          export ATS_V4_RESEARCH_SMOKE_PROXY_URL="http://127.0.0.1:18722"
 
           python -m uvicorn aitrading_intelligence.app:app \
             --host 127.0.0.1 --port 18721 --no-access-log \
@@ -149,11 +157,30 @@ jobs:
             echo "Runner-local Python trained-artifact worker failed startup"
             exit 1
           fi
+          python intelligence/scripts/v4_ci_worker_pause_proxy.py \
+            > "$temporary/pause-proxy.log" 2>&1 &
+          proxy_pid=$!
+          proxy_healthy=0
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail --max-time 1 \
+              http://127.0.0.1:18722/health > /dev/null; then
+              proxy_healthy=1
+              break
+            fi
+            if ! kill -0 "$proxy_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "$proxy_healthy" != 1 ]]; then
+            echo "CI-only research pause proxy failed startup"
+            exit 1
+          fi
           cd backend
           mvn --batch-mode --no-transfer-progress \
             -Dtest=ResearchArtifactLiveWorkerSmokeTest test
 
-          # V67 extends the same real worker with an isolated ephemeral
+          # V67-V69 extend the same real worker with an isolated ephemeral
           # PostgreSQL instance. Only synthetic V56–V63 evidence is inserted.
           if ! command -v psql >/dev/null 2>&1; then
             sudo apt-get update

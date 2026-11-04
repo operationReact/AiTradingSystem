@@ -2,8 +2,10 @@ package in.aitradingsystem.intelligence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,12 +13,20 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.governance.ModelRegistryService;
 import in.aitradingsystem.support.AbstractPostgresIT;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import org.springframework.test.web.servlet.MvcResult;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,7 +70,7 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
     @DynamicPropertySource
     static void researchWorker(DynamicPropertyRegistry registry) {
         registry.add("app.research.artifact-worker.base-url",
-            () -> System.getenv("ATS_V4_RESEARCH_SMOKE_BASE_URL"));
+            () -> System.getenv("ATS_V4_RESEARCH_SMOKE_PROXY_URL"));
         registry.add("app.research.artifact-worker.token",
             () -> System.getenv("ATS_V4_RESEARCH_SMOKE_TOKEN"));
     }
@@ -167,6 +177,133 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
             .query(Integer.class).single());
     }
 
+
+    @Test
+    void adminPauseDuringActualWorkerFlightRejectsLateScoresAndPreventsReplay()
+            throws Exception {
+        JsonNode manifest = mapper.readTree(Files.readString(
+            Path.of(System.getenv("ATS_V4_RESEARCH_SMOKE_MANIFEST"))));
+        for (JsonNode model : manifest.path("models")) {
+            registerVersion(UUID.fromString(model.path("model_version_id").asText()),
+                model.path("family").asText(),
+                model.path("artifact_fingerprint").asText());
+        }
+        SyntheticCase paused = createSyntheticCase(CAT, LIGHT);
+        String url = System.getenv("ATS_V4_RESEARCH_SMOKE_PROXY_URL");
+        assertTrue(url.startsWith("http://127.0.0.1:"),
+            "Synthetic pause gate must be loopback only");
+        URI gate = URI.create(url);
+        HttpClient http = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(3)).build();
+        assertEquals(200, gatePost(http, gate, "/ci/arm").statusCode());
+
+        var runner = Executors.newSingleThreadExecutor();
+        try {
+            // MockMvc POST runs in its own thread, and V64's real Python
+            // requests are intentionally held AFTER their V61 commits.
+            var future = runner.submit(() -> mvc.perform(
+                post(paused.route()).with(user(ACTOR).roles("ADMIN")))
+                .andReturn());
+            boolean allHeld = false;
+            int originalRequestCount = -1;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(7);
+            while (System.nanoTime() < deadline) {
+                JsonNode telemetry = gateStatus(http, gate);
+                if (telemetry.path("held").asInt() >= 2
+                        && count("v4_research_inference_reservation",
+                            paused.session(), paused.caseKey()) == 2) {
+                    allHeld = true;
+                    originalRequestCount = telemetry.path("total").asInt();
+                    break;
+                }
+                Thread.sleep(50);
+            }
+            assertTrue(allHeld,
+                "Both research model requests must be held after durable reservations");
+
+            mvc.perform(put(ENDPOINT + "/sessions/" + paused.session() + "/control")
+                    .with(user(ACTOR).roles("ADMIN"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content("""
+                        {"action":"PAUSE",
+                         "reason":"Operator revokes model evidence during worker flight"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.state").value("PAUSED"));
+
+            // Only NOW allow actual Python trained-model responses to return.
+            assertEquals(200, gatePost(http, gate, "/ci/release").statusCode());
+            MvcResult completed = future.get(15, TimeUnit.SECONDS);
+            assertEquals(200, completed.getResponse().getStatus());
+            JsonNode report = mapper.readTree(
+                completed.getResponse().getContentAsString());
+            assertEquals("INCOMPLETE_NO_RETRY", report.path("status").asText());
+            assertFalse(report.path("matchedEvidenceFinalized").asBoolean());
+            assertFalse(report.path("canAuthorizeCapital").asBoolean());
+            assertFalse(report.path("paperOrdersSubmitted").asBoolean());
+
+            assertEquals(2, count("v4_research_inference_reservation",
+                paused.session(), paused.caseKey()));
+            assertEquals(0, jdbc.sql("""
+                    SELECT count(*) FROM v4_research_inference_receipt receipt
+                     JOIN v4_research_inference_reservation reservation
+                       ON reservation.reservation_id=receipt.reservation_id
+                    WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                      AND receipt.status='SUCCEEDED'
+                    """)
+                .param("session", paused.session())
+                .param("caseKey", paused.caseKey())
+                .query(Integer.class).single());
+            assertEquals(2, jdbc.sql("""
+                    SELECT count(*) FROM v4_research_inference_receipt receipt
+                     JOIN v4_research_inference_reservation reservation
+                       ON reservation.reservation_id=receipt.reservation_id
+                    WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                      AND receipt.status='REJECTED'
+                      AND receipt.reason_code='SESSION_REVOKED'
+                      AND receipt.can_authorize_capital=FALSE
+                    """)
+                .param("session", paused.session())
+                .param("caseKey", paused.caseKey())
+                .query(Integer.class).single());
+            assertEquals(0, count("v4_matched_case",
+                paused.session(), paused.caseKey()));
+            assertEquals(0, count("v4_research_matched_case_link",
+                paused.session(), paused.caseKey()));
+            assertEquals(0, count("v4_matched_decision",
+                paused.session(), paused.caseKey()));
+            assertEquals(0, jdbc.sql("""
+                    SELECT count(*) FROM paper_order WHERE correlation_id=:correlation
+                    """).param("correlation", paused.session().toString())
+                .query(Integer.class).single());
+
+            mvc.perform(post(paused.route()).with(user(ACTOR).roles("ADMIN")))
+                .andExpect(status().isConflict());
+            assertEquals(originalRequestCount,
+                gateStatus(http, gate).path("total").asInt(),
+                "Replayed paused case must not re-contact real Python worker");
+        } finally {
+            // Never strand delayed HTTP requests on a failing test.
+            gatePost(http, gate, "/ci/release");
+            runner.shutdownNow();
+        }
+    }
+
+    private static HttpResponse<String> gatePost(HttpClient http, URI base, String path)
+            throws Exception {
+        return http.send(HttpRequest.newBuilder(base.resolve(path))
+            .timeout(Duration.ofSeconds(3))
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private JsonNode gateStatus(HttpClient http, URI base) throws Exception {
+        return mapper.readTree(http.send(HttpRequest.newBuilder(
+            base.resolve("/ci/held")).timeout(Duration.ofSeconds(3))
+            .GET().build(), HttpResponse.BodyHandlers.ofString()).body());
+    }
+
     private record SyntheticCase(UUID session, String caseKey, String route) {}
 
     /**
@@ -264,6 +401,23 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
         if (!java.util.Set.of("CATBOOST", "LIGHTGBM").contains(family)
                 || artifactHash == null || !artifactHash.matches("^[a-f0-9]{64}$")) {
             throw new IllegalArgumentException("Invalid synthetic trained-model identity");
+        }
+        // The success/UNKNOWN and PAUSE tests share one PostgreSQL database.
+        // A duplicate fixed fixture ID is acceptable only for the same exact
+        // model family and immutable artifact fingerprint, never a replacement.
+        var registered = jdbc.sql("""
+                SELECT d.family, v.artifact_fingerprint
+                  FROM model_version v JOIN model_definition d
+                    ON d.definition_id = v.definition_id
+                 WHERE v.version_id=:id
+                """).param("id", modelId)
+            .query((rs, row) -> new String[]{
+                rs.getString("family"), rs.getString("artifact_fingerprint")})
+            .optional();
+        if (registered.isPresent()) {
+            assertEquals(family, registered.get()[0]);
+            assertEquals(artifactHash, registered.get()[1]);
+            return;
         }
         UUID definitionId = UUID.randomUUID();
         String key = "ci-v67-" + family.toLowerCase() + "-"
