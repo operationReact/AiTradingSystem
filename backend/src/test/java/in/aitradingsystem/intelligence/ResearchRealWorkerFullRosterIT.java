@@ -428,7 +428,6 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
                 "observed_held_concurrency", 4,
                 "bound_max_parallel_per_case", 4,
                 "wall_clock_ms", elapsedMs,
-                "one_shot_budget_ms", 45_000,
                 "success_receipts", 10,
                 "paper_orders", 0,
                 "can_authorize_capital", false)));
