@@ -145,7 +145,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         ? 'ADMIN access is required. No model evidence was changed.'
         : stale
             ? 'Refresh failed. Existing information is stale.'
-            : 'Model evidence unavailable: ' + error.code;
+            : 'Model evidence unavailable: ${error.code}';
     return Card(
       key: ValueKey(denied
           ? 'model-control-access-denied'
@@ -195,11 +195,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           ),
         if (models != null)
           ...models.map((model) => Card(
-            key: ValueKey('model-inventory-' + model.key),
+            key: ValueKey('model-inventory-${model.key}'),
             child: ListTile(
               title: Text(model.displayName),
-              subtitle: Text(model.family + ' · ' + model.role +
-                  '\n' + model.provider + ' · License: ' + model.licenseStatus),
+              subtitle: Text('${model.family} · ${model.role}\n${model.provider} · License: ${model.licenseStatus}'),
               isThreeLine: true,
               trailing: const Icon(Icons.chevron_right),
               selected: _selected?.key == model.key,
@@ -208,9 +207,9 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           )),
         if (_selected != null) ...[
           const SizedBox(height: 16),
-          Text('Versions · ' + _selected!.displayName,
+          Text('Versions · ${_selected!.displayName}',
               style: theme.textTheme.titleMedium),
-          Text('Definition: ' + _short(_selected!.fingerprint)),
+          Text('Definition: ${_short(_selected!.fingerprint)}'),
           if (_loadingVersions)
             const LinearProgressIndicator(key: ValueKey('model-versions-loading')),
           if (_versionsError != null)
@@ -221,11 +220,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
             )),
           if (_versions != null)
             ..._versions!.map((version) => Card(
-              key: ValueKey('model-version-' + version.id),
+              key: ValueKey('model-version-${version.id}'),
               child: ListTile(
                 title: Text(version.label),
-                subtitle: Text('Version: ' + _short(version.fingerprint) +
-                    '\nArtifact: ' + _short(version.artifactFingerprint)),
+                subtitle: Text('Version: ${_short(version.fingerprint)}\nArtifact: ${_short(version.artifactFingerprint)}'),
                 isThreeLine: true,
               ),
             )),
@@ -284,15 +282,14 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Session ' + _short(session.id),
+                  Text('Session ${_short(session.id)}',
                       style: theme.textTheme.titleMedium),
-                  Text('Captured by ' + session.createdBy +
-                      ' · ' + (session.createdAt?.toIso8601String() ?? 'Unknown time')),
-                  Text('Enrollment ' + _short(session.fingerprint)),
-                  Text('Participants: ' + session.participants.length.toString()),
+                  Text('Captured by ${session.createdBy} · ${session.createdAt?.toIso8601String() ?? 'Unknown time}'),
+                  Text('Enrollment ${_short(session.fingerprint)}'),
+                  Text('Participants: ${session.participants.length}'),
                   const SizedBox(height: 6),
                   ...session.participants.map((item) => Text(
-                    item.role + ' · ' + _short(item.versionId),
+                    '${item.role} · ${_short(item.versionId)}',
                   )),
                   const SizedBox(height: 6),
                   const Text(
@@ -315,27 +312,26 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
           ),
         if (cases != null && cases.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('Recorded decisions: ' + cases.length.toString(),
+          Text('Recorded decisions: ${cases.length}',
               style: theme.textTheme.titleMedium),
           ...cases.map((event) => Card(
-            key: ValueKey('model-case-' + event.id),
+            key: ValueKey('model-case-${event.id}'),
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(event.symbol + ' · ' + event.id,
+                Text('${event.symbol} · ${event.id}',
                     style: theme.textTheme.titleMedium),
                 Text(event.decisionAt?.toIso8601String() ?? 'Unknown decision time'),
                 const SizedBox(height: 6),
                 Text(event.hasDisagreement
                     ? 'Champion/challenger disagreement'
                     : 'No reported candidate disagreement',
-                    key: ValueKey('model-case-disagreement-' + event.id)),
+                    key: ValueKey('model-case-disagreement-${event.id}')),
                 ...event.candidates.map((decision) => Text(
-                  decision.role + ' · ' + decision.action +
-                      ' · ' + _short(decision.versionId),
+                  '${decision.role} · ${decision.action} · ${_short(decision.versionId)}',
                 )),
                 const SizedBox(height: 6),
-                Text('Case hash: ' + _short(event.caseFingerprint)),
+                Text('Case hash: ${_short(event.caseFingerprint)}'),
                 const Text('Independent source validation: NOT VERIFIED'),
               ]),
             ),
@@ -346,5 +342,5 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   }
 
   static String _short(String id) =>
-      id.length <= 16 ? id : id.substring(0, 12) + '…';
+      id.length <= 16 ? id : '${id.substring(0, 12)}…';
 }
