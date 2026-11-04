@@ -174,7 +174,11 @@ def test_strict_predecision_feature_schema_causality_and_bounded_values(trained_
         )
     with pytest.raises(ValueError, match="before its trained artifact"):
         infer_from_trained_artifact(
-            _request(cat, feature_as_of=cat.training_as_of),
+            _request(
+                cat,
+                feature_as_of=cat.training_as_of,
+                latest_feature_available_at=cat.training_as_of - timedelta(seconds=2),
+            ),
             member, cat, evaluated_at=request.feature_as_of + timedelta(seconds=2),
         )
 
