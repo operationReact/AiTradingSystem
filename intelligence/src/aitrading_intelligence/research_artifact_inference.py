@@ -226,7 +226,7 @@ def infer_from_trained_artifact(
         "feature_payload_fingerprint": canonical_fingerprint(
             request.model_dump(mode="json")
         ),
-        "evaluated_at": evaluated_at.isoformat(),
+        "evaluated_at": evaluated_at,
         "probability": probability,
         "action": action,
         "status": "ACTUAL_MODEL_COMPUTATION_RESEARCH_ONLY",
