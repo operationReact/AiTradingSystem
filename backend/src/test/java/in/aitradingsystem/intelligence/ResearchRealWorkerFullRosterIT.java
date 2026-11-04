@@ -308,6 +308,153 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
     }
 
 
+    /**
+     * Bounded synthetic failure soak: three independent original sessions,
+     * one real trained champion and three different transport/response
+     * failures for the already registered LightGBM challenger.
+     *
+     * The timeout is genuine Java HttpRequest timeout after proxy delay.
+     * It remains UNKNOWN because the worker might have scored a request.
+     */
+    @Test
+    @EnabledIfEnvironmentVariable(named = "ATS_V4_FAULT_SOAK", matches = "true")
+    void multipleDistinctWorkerFaultsCannotCreateMatchedEvidenceOrRetry()
+            throws Exception {
+        JsonNode manifest = mapper.readTree(Files.readString(
+            Path.of(System.getenv("ATS_V4_RESEARCH_SMOKE_MANIFEST"))));
+        assertEquals(2, manifest.path("models").size());
+        for (JsonNode model : manifest.path("models")) {
+            registerVersion(UUID.fromString(model.path("model_version_id").asText()),
+                model.path("family").asText(),
+                model.path("artifact_fingerprint").asText());
+        }
+        URI gate = URI.create(System.getenv("ATS_V4_RESEARCH_SMOKE_PROXY_URL"));
+        assertEquals("127.0.0.1", gate.getHost(),
+            "Fault injection must stay isolated to local ephemeral CI");
+        HttpClient http = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(3)).build();
+
+        String[] faults = {"http-503", "timeout", "malformed"};
+        String[] receiptStatuses = {"UNKNOWN", "UNKNOWN", "REJECTED"};
+        String[] reasons = {
+            "TRANSPORT_UNKNOWN", "TRANSPORT_UNKNOWN", "RESPONSE_REJECTED"
+        };
+        var outcomes = new ArrayList<Map<String, Object>>();
+        try {
+            for (int index = 0; index < faults.length; index++) {
+                String fault = faults[index];
+                String expectedStatus = receiptStatuses[index];
+                String expectedReason = reasons[index];
+                SyntheticCase testCase = createSyntheticCase(CAT, LIGHT);
+                int before = gateStatus(http, gate).path("total").asInt();
+                assertEquals(200, gatePost(http, gate,
+                    "/ci/fault/" + fault).statusCode());
+                long start = System.nanoTime();
+                MvcResult response = mvc.perform(post(testCase.route())
+                    .with(user(ACTOR).roles("ADMIN"))).andReturn();
+                long elapsedMs = TimeUnit.NANOSECONDS.toMillis(
+                    System.nanoTime() - start);
+                assertEquals(200, response.getResponse().getStatus());
+                JsonNode body = mapper.readTree(
+                    response.getResponse().getContentAsString());
+                assertEquals("INCOMPLETE_NO_RETRY", body.path("status").asText());
+                assertEquals(2, body.path("expectedModels").asInt());
+                assertEquals(1, body.path("succeeded").asInt());
+                assertEquals(1, body.path("unresolved").asInt());
+                assertFalse(body.path("matchedEvidenceFinalized").asBoolean());
+                assertFalse(body.path("paperOrdersSubmitted").asBoolean());
+                assertFalse(body.path("canAuthorizeCapital").asBoolean());
+
+                assertEquals(2, count("v4_research_inference_reservation",
+                    testCase.session(), testCase.caseKey()));
+                assertEquals(1, jdbc.sql("""
+                        SELECT count(*) FROM v4_research_inference_receipt receipt
+                        JOIN v4_research_inference_reservation reservation
+                          ON reservation.reservation_id=receipt.reservation_id
+                        WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                          AND reservation.model_version_id=:model
+                          AND receipt.status='SUCCEEDED'
+                          AND receipt.can_authorize_capital=FALSE
+                        """)
+                    .param("session", testCase.session())
+                    .param("caseKey", testCase.caseKey())
+                    .param("model", CAT).query(Integer.class).single());
+                assertEquals(1, jdbc.sql("""
+                        SELECT count(*) FROM v4_research_inference_receipt receipt
+                        JOIN v4_research_inference_reservation reservation
+                          ON reservation.reservation_id=receipt.reservation_id
+                        WHERE reservation.session_id=:session AND reservation.case_key=:caseKey
+                          AND reservation.model_version_id=:model
+                          AND receipt.status=:status
+                          AND receipt.reason_code=:reason
+                          AND receipt.response_fingerprint IS NULL
+                          AND receipt.can_authorize_capital=FALSE
+                        """)
+                    .param("session", testCase.session())
+                    .param("caseKey", testCase.caseKey())
+                    .param("model", LIGHT)
+                    .param("status", expectedStatus)
+                    .param("reason", expectedReason)
+                    .query(Integer.class).single());
+                assertEquals(0, count("v4_matched_case",
+                    testCase.session(), testCase.caseKey()));
+                assertEquals(0, count("v4_matched_decision",
+                    testCase.session(), testCase.caseKey()));
+                assertEquals(0, count("v4_research_matched_case_link",
+                    testCase.session(), testCase.caseKey()));
+                assertEquals(0, jdbc.sql("""
+                        SELECT count(*) FROM paper_order
+                        WHERE correlation_id=:correlation
+                        """).param("correlation", testCase.session().toString())
+                    .query(Integer.class).single());
+
+                JsonNode telemetry = gateStatus(http, gate);
+                assertEquals(before + 2, telemetry.path("total").asInt(),
+                    "One real HTTP request per roster member, no hidden retries");
+                assertEquals(1, telemetry.path("fault_count").asInt(),
+                    "Exactly one LightGBM fault injected on this synthetic case");
+                mvc.perform(post(testCase.route()).with(user(ACTOR).roles("ADMIN")))
+                    .andExpect(status().isConflict());
+                assertEquals(before + 2, gateStatus(http, gate)
+                    .path("total").asInt(), "No worker replay after an uncertain case");
+
+                // Only counts, bounded wall time and synthetic reason names;
+                // never persist session/case IDs, hashes, scores or tokens.
+                outcomes.add(Map.of(
+                    "fault_mode", fault,
+                    "lightgbm_terminal_status", expectedStatus,
+                    "reason_code", expectedReason,
+                    "wall_clock_ms", elapsedMs,
+                    "committed_reservations", 2,
+                    "success_receipts", 1,
+                    "matched_cases", 0,
+                    "paper_orders", 0,
+                    "no_retry_verified", true));
+                assertEquals(200,
+                    gatePost(http, gate, "/ci/fault/clear").statusCode());
+            }
+
+            String outputPath = System.getenv("ATS_V4_FAULT_REPORT_PATH");
+            if (outputPath == null || outputPath.isBlank()) {
+                throw new IllegalStateException("Private synthetic fault report path missing");
+            }
+            Files.writeString(Path.of(outputPath),
+                mapper.writeValueAsString(Map.of(
+                    "contract", "v4-synthetic-worker-fault-soak.v1",
+                    "synthetic_only", true,
+                    "case_count", outcomes.size(),
+                    "real_model_families", 2,
+                    "injected_faults", outcomes,
+                    "capital_authorized", false,
+                    "orders_submitted", 0)));
+        } finally {
+            // A failure cannot leave the CI worker in fault-injection mode.
+            assertEquals(200,
+                gatePost(http, gate, "/ci/fault/clear").statusCode());
+        }
+    }
+
     @Test
     @EnabledIfEnvironmentVariable(named = "ATS_V4_10_MODEL_SOAK", matches = "true")
     void tenModelOneShotRosterProvesBoundedParallelismAndEmitsSyntheticLatency()
