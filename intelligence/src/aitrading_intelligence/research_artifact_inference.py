@@ -12,7 +12,14 @@ from typing import Annotated, Literal
 
 import catboost as cb
 import lightgbm as lgb
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .catboost_model import CatBoostModelArtifact
 from .fingerprints import canonical_fingerprint
@@ -158,7 +165,7 @@ def load_allowlisted_model(
             raise InferenceUnavailable("research artifact byte hash mismatch")
         kind = CatBoostModelArtifact if member.family == "CATBOOST" else LightGBMModelArtifact
         artifact = kind.model_validate_json(raw)
-    except (ValueError, OSError) as exc:
+    except (ValidationError, OSError) as exc:
         raise InferenceUnavailable("research artifact integrity check failed") from exc
     if artifact.model_fingerprint != member.artifact_fingerprint:
         raise InferenceUnavailable("model identity differs from trusted manifest")
