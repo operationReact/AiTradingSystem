@@ -7,6 +7,15 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from test_research_artifact_inference import (
+    trained_artifacts as trained_artifacts,  # real ephemeral CatBoost/LightGBM fixture
+)
+from test_research_image_context import (
+    committed_repository as committed_repository,  # ephemeral committed Git fixture
+)
+from test_research_image_context import (
+    prepared_input as prepared_input,  # model bundle fixture dependency
+)
 from test_research_context_signature import (
     signed_context as signed_context,  # real V85/V84/V80 synthetic fixture
 )
