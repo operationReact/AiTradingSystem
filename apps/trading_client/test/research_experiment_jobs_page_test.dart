@@ -99,7 +99,7 @@ Future<void> _scrollTo(WidgetTester tester, String key) async {
 Future<void> _selectAndEnter(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('research-job-spec-picker')));
   await tester.pumpAndSettle();
-  await tester.tap(find.textContaining('11111111-2222').last);
+  await tester.tap(find.textContaining('11111111-222').last);
   await tester.pumpAndSettle();
   await _scrollTo(tester, 'research-job-version');
   await tester.enterText(
