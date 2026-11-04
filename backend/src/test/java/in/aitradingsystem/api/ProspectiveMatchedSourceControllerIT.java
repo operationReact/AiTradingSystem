@@ -318,7 +318,7 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                     """))
             .andExpect(status().isOk());
         jdbc.sql("""
-                UPDATE market_candle SET close_price = 105.000000
+                UPDATE market_candle SET close_price = 100.750000
                  WHERE candle_id = :id
                 """).param("id", rows.candleId()).update();
         mvc.perform(post(endpoint).with(user("source-admin").roles("ADMIN")))
