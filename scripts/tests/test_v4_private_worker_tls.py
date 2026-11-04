@@ -40,7 +40,16 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
         self.assertRegex(self.tls, r'load_balancer_type\s*=\s*"application"')
         self.assertIn('resource "aws_vpc_security_group_ingress_rule" "backend_to_worker_tls"',
                       self.tls)
-        self.assertIn('referenced_security_group_id = aws_security_group.tasks.id', self.tls)
+        self.assertNotIn('referenced_security_group_id = aws_security_group.tasks.id', self.tls)
+        self.assertIn('resource "aws_security_group" "research_worker_java_identity"', self.tls)
+        self.assertIn(
+            'referenced_security_group_id = aws_security_group.research_worker_java_identity[0].id',
+            self.tls,
+        )
+        self.assertIn("aws_security_group.research_worker_java_identity[*].id", self.backend)
+        # A separate SG must not be accidentally shared with frontend ECS tasks.
+        frontend = self.backend.split('resource "aws_ecs_service" "frontend"')[1]
+        self.assertNotIn("aws_security_group.research_worker_java_identity[*].id", frontend)
         self.assertIn('resource "aws_vpc_security_group_egress_rule" "worker_tls_to_target"',
                       self.tls)
         self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_tls_alb"',
@@ -68,8 +77,11 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
         self.assertIn("zone_id = aws_route53_zone.research_worker_private[0].zone_id",
                       self.tls)
         self.assertIn('type    = "A"', self.tls)
-        self.assertIn("name                   = aws_lb.research_worker_tls[0].dns_name",
-                      self.tls)
+        self.assertIn("evaluate_target_health = false", self.tls)
+        self.assertRegex(
+            self.tls,
+            r"name\s*=\s*aws_lb\.research_worker_tls\[0\]\.dns_name",
+        )
         self.assertIn('output "research_worker_private_https_url"', self.tls)
         self.assertIn('"https://${local.worker_tls_fqdn}"', self.tls)
         self.assertNotIn('http://${local.worker_tls_fqdn}', self.tls)
@@ -85,6 +97,12 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
         self.assertIn('target_type          = "ip"', self.tls)
         self.assertIn('protocol             = "HTTP"', self.tls)
         self.assertIn('path                = "/health"', self.tls)
+        self.assertIn('type = "fixed-response"', self.tls)
+        self.assertIn('status_code  = "403"', self.tls)
+        self.assertIn('resource "aws_lb_listener_rule" "research_worker_private_api_only"', self.tls)
+        self.assertIn('"/v1/research/artifact-readiness"', self.tls)
+        self.assertIn('"/v1/research/artifact-inference"', self.tls)
+        self.assertNotIn("aws_lb_listener_rule\" \"any_path", self.tls)
 
     def test_python_worker_never_scales_and_java_research_client_stays_off(self):
         self.assertRegex(self.worker, r"desired_count\s*=\s*0")
