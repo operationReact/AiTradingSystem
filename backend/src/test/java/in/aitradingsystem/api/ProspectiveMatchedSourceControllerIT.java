@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.support.AbstractPostgresIT;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -348,6 +349,26 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
     }
 
     @Test
+    void rejectsIncompleteEarlierBarAsPreviousCandle() throws Exception {
+        UUID sessionId = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(6));
+        seedPreviousCandle(rows.candleId(), false, Duration.ofSeconds(30));
+        seedAiEvidence(rows.newsId(), false);
+        String sourceEndpoint = ENROLL + "/" + sessionId + "/source-cases";
+        mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+        mvc.perform(post(sourceEndpoint + "/case-0001/features")
+                .with(user("source-admin").roles("ADMIN")))
+            .andExpect(status().isConflict());
+        assertEquals(0, jdbc.sql("""
+                SELECT count(*) FROM v4_matched_feature_projection WHERE session_id = :id
+                """).param("id", sessionId).query(Integer.class).single());
+    }
+
+    @Test
     void rejectsLateFeatureProjectionAfterMatchedDecisionsExist()
             throws Exception {
         UUID champion = registerModel();
@@ -423,6 +444,11 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
     }
 
     private void seedPreviousCandle(long currentId, boolean mismatchedToken) {
+        seedPreviousCandle(currentId, mismatchedToken, Duration.ofMinutes(1));
+    }
+
+    private void seedPreviousCandle(
+            long currentId, boolean mismatchedToken, Duration previousGap) {
         Instant currentCandleAt = jdbc.sql("""
                 SELECT candle_time FROM market_candle WHERE candle_id = :id
                 """).param("id", currentId)
@@ -450,7 +476,7 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
                 """)
             .param("token", priorToken)
             .param("candleTime", OffsetDateTime.ofInstant(
-                currentCandleAt.minus(1, ChronoUnit.MICROS), ZoneOffset.UTC))
+                currentCandleAt.minus(previousGap), ZoneOffset.UTC))
             .param("fetchedAt", OffsetDateTime.ofInstant(
                 currentFetchedAt.minusSeconds(2), ZoneOffset.UTC))
             .update();
