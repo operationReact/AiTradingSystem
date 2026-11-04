@@ -170,8 +170,7 @@ jobs:
           fi
           sudo -u postgres dropdb --if-exists aitrading_v4_realworker
           sudo -u postgres createdb --owner=aitrading aitrading_v4_realworker
-          export ATS_TEST_POSTGRES_JDBC_URL=\
-            "jdbc:postgresql://127.0.0.1:5432/aitrading_v4_realworker"
+          export ATS_TEST_POSTGRES_JDBC_URL="jdbc:postgresql://127.0.0.1:5432/aitrading_v4_realworker"
           export ATS_TEST_POSTGRES_USERNAME=aitrading
           export ATS_TEST_POSTGRES_PASSWORD=aitrading
           mvn --batch-mode --no-transfer-progress \
