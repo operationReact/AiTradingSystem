@@ -7,8 +7,25 @@ from datetime import datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from test_catboost_model import (
+    _config as cat_config,
+)
+from test_catboost_model import (
+    _examples as cat_examples,
+)
+from test_catboost_model import (
+    _series as cat_series,
+)
+from test_lightgbm_model import (
+    _config as light_config,
+)
+from test_lightgbm_model import (
+    _examples as light_examples,
+)
 
 from aitrading_intelligence.app import app
+from aitrading_intelligence.catboost_model import train_catboost_challenger
+from aitrading_intelligence.lightgbm_model import train_lightgbm_challenger
 from aitrading_intelligence.research_artifact_inference import (
     BoundedInferenceRequest,
     BoundedInferenceResponse,
@@ -18,18 +35,6 @@ from aitrading_intelligence.research_artifact_inference import (
     load_allowlisted_model,
     score_allowlisted_request,
 )
-from test_catboost_model import (
-    _config as cat_config,
-    _examples as cat_examples,
-    _series as cat_series,
-)
-from test_lightgbm_model import (
-    _config as light_config,
-    _examples as light_examples,
-)
-from aitrading_intelligence.catboost_model import train_catboost_challenger
-from aitrading_intelligence.lightgbm_model import train_lightgbm_challenger
-
 
 MODEL_ID = "00000000-0000-4000-8000-000000000001"
 SHADOW_ID = "00000000-0000-4000-8000-000000000002"
