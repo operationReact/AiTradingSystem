@@ -1,7 +1,5 @@
 package in.aitradingsystem.support;
 
-import static org.mockito.Mockito.when;
-
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -11,12 +9,21 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.convention.TestBean;
 
 /** Real persisted policy, catalogue and market evidence for tests that actually settle PAPER orders. */
 public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
     protected static final Instant NOW = Instant.parse("2026-10-30T04:30:00Z"); // Friday, 10:00 IST
-    @MockitoBean Clock approvalClock;
+    // A fixed test Clock must be available while ApplicationRunner beans
+    // bootstrap account/audit rows. Mockito's default unstubbed Clock.instant()
+    // is null before @BeforeEach and intermittently crashed fresh contexts.
+    @TestBean(methodName = "fixedApprovalClock")
+    Clock approvalClock;
+
+    static Clock fixedApprovalClock() {
+        return Clock.fixed(NOW, ZoneOffset.UTC);
+    }
+
     @Autowired protected JdbcClient approvalJdbc;
     protected UUID executionPolicyId;
     private UUID catalogue;
@@ -24,10 +31,6 @@ public abstract class AbstractApprovalPaperIT extends AbstractPostgresIT {
 
     @BeforeEach
     void seedApprovalEnvironment() {
-        when(approvalClock.instant()).thenReturn(NOW);
-        when(approvalClock.getZone()).thenReturn(ZoneOffset.UTC);
-        when(approvalClock.withZone(org.mockito.ArgumentMatchers.any(java.time.ZoneId.class)))
-            .thenAnswer(invocation -> Clock.fixed(NOW, invocation.getArgument(0)));
         executionPolicyId = UUID.randomUUID();
         int version = approvalJdbc.sql("SELECT COALESCE(max(policy_version),0) + 1 FROM execution_policy")
             .query(Integer.class).single();
