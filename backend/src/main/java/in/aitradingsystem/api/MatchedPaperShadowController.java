@@ -38,6 +38,11 @@ public class MatchedPaperShadowController {
         return ResponseEntity.status(HttpStatus.CREATED).body(intake.enroll(request));
     }
 
+    @GetMapping("/sessions")
+    public List<SessionView> sessions(@RequestParam(defaultValue = "20") int limit) {
+        return intake.recentSessions(limit);
+    }
+
     @GetMapping("/sessions/{sessionId}")
     public SessionView session(@PathVariable UUID sessionId) {
         return intake.session(sessionId);
