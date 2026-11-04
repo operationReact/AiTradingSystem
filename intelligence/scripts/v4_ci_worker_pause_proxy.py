@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 lock = threading.Lock()
 released = threading.Event()
 released.set()
-state = {"armed": False, "held": 0}
+state = {"armed": False, "held": 0, "total": 0}
 
 
 class LocalGate(BaseHTTPRequestHandler):
@@ -40,7 +40,8 @@ class LocalGate(BaseHTTPRequestHandler):
         elif self.path == "/ci/held":
             with lock:
                 held = state["held"]
-            self.send_json(200, {"held": held})
+                total = state["total"]
+            self.send_json(200, {"held": held, "total": total})
         else:
             self.send_json(404, {"error": "not_found"})
 
@@ -73,6 +74,7 @@ class LocalGate(BaseHTTPRequestHandler):
         payload = self.rfile.read(length)
 
         with lock:
+            state["total"] += 1
             pause = state["armed"]
             if pause:
                 state["held"] += 1
