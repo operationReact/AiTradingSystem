@@ -477,7 +477,7 @@ resource "aws_ecs_service" "backend" {
     rollback = true
   }
   network_configuration {
-    subnets          = aws_subnet.public[*].id
+    subnets = aws_subnet.public[*].id
     # The dedicated identity SG is attached ONLY to Java backend tasks.
     # Default-disabled V81 leaves the original SG set unchanged.
     security_groups = concat(
