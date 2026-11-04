@@ -253,10 +253,14 @@ def audit_native_registered_trials(
         "promoted_to_paper_or_live": False,
         "can_authorize_capital": False,
     }
+    # Pydantic emits canonical aware timestamps in JSON mode (UTC as Z),
+    # which must agree with the validator's subsequent model_dump(mode="json").
+    unvalidated = NativeRegisteredTrialAuditEvidence.model_construct(
+        **payload, evidence_fingerprint="0" * 64,
+    )
     return NativeRegisteredTrialAuditEvidence(
         **payload,
-        evidence_fingerprint=canonical_fingerprint({
-            **payload,
-            "evaluation_started_at": evaluation_started_at.isoformat(),
-        }),
+        evidence_fingerprint=canonical_fingerprint(
+            unvalidated.model_dump(mode="json", exclude={"evidence_fingerprint"})
+        ),
     )
