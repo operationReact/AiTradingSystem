@@ -188,6 +188,16 @@ resource "aws_ecs_service" "research_worker" {
     enable   = true
     rollback = true
   }
+  # A dormant service can be bound to the private HTTPS ALB target group,
+  # without starting a task. No load balancer is created by default.
+  dynamic "load_balancer" {
+    for_each = var.research_worker_private_tls_enabled ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.research_worker_private_tls[0].arn
+      container_name   = "research-worker"
+      container_port   = 8090
+    }
+  }
   network_configuration {
     subnets          = aws_subnet.private[*].id
     security_groups  = [aws_security_group.research_worker[0].id]
@@ -195,7 +205,8 @@ resource "aws_ecs_service" "research_worker" {
   }
   depends_on = [
     aws_iam_role_policy_attachment.research_worker_execution_managed,
-    aws_iam_role_policy.research_worker_token_read
+    aws_iam_role_policy.research_worker_token_read,
+    aws_lb_listener.research_worker_private_tls
   ]
   tags = local.worker_tags
 }
