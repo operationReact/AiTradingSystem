@@ -1,11 +1,18 @@
 from datetime import UTC, datetime
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 
 from . import CONTRACT_VERSION
 from .contracts import EvidenceContractRequest, EvidenceContractResponse
 from .fingerprints import request_fingerprint
 from .fusion import FusionRequest, RankedOpportunity, fuse_signals
+from .research_artifact_inference import (
+    BoundedInferenceRequest,
+    BoundedInferenceResponse,
+    InferenceUnavailable,
+    authorize_research_worker,
+    score_allowlisted_request,
+)
 from .selective_presentation import (
     SelectivePresentationRequest,
     SelectivePresentationV1,
@@ -47,3 +54,26 @@ def rank_opportunity(request: FusionRequest) -> RankedOpportunity:
 @app.post("/v1/selective/presentation", response_model=SelectivePresentationV1)
 def selective_presentation(request: SelectivePresentationRequest) -> SelectivePresentationV1:
     return build_selective_presentation(request.decision, request.evaluation)
+
+
+@app.post(
+    "/v1/research/artifact-inference",
+    response_model=BoundedInferenceResponse,
+)
+def actual_artifact_inference(
+    request: BoundedInferenceRequest,
+    x_research_worker_token: str | None = Header(default=None, alias="X-Research-Worker-Token"),
+) -> BoundedInferenceResponse:
+    """Internal, opt-in research scoring; never an API to place trades."""
+    try:
+        manifest = authorize_research_worker(x_research_worker_token)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail="Research worker unauthorized") from exc
+    except InferenceUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Research inference unavailable") from exc
+    try:
+        return score_allowlisted_request(request, manifest_path=manifest)
+    except InferenceUnavailable as exc:
+        raise HTTPException(status_code=503, detail="Research artifact unavailable") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Research snapshot not eligible") from exc
