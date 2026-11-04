@@ -266,4 +266,50 @@ void main() {
       throwsA(isA<ApiHttpFailure>().having((error) => error.statusCode, 'status', 403)),
     );
   });
+  test('ADMIN research receipt endpoint is authenticated and fail-closed',
+      () async {
+    final session = OperatorSession()..setOperatorKey('research-admin-key');
+    bool forgeAuthority = false;
+    final api = AuthenticatedApiClient(
+      session: session, baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async {
+        expect(request.headers['X-API-Key'], 'research-admin-key');
+        expect(request.method, 'GET');
+        expect(request.url.path,
+            '/api/admin/model-governance/paper-shadow/sessions/$sessionId/cases/case-v63/research-receipts');
+        return http.Response(jsonEncode({
+          'contractVersion': 'v4-research-receipt-diagnostics.v1',
+          'sessionId': sessionId, 'caseKey': 'case-v63',
+          'enrollmentFingerprint': 'a'.padRight(64, 'a'),
+          'sessionSafetyState': 'PAUSED', 'sessionSafetyRevision': 1,
+          'sourceCaptured': true, 'featuresFrozen': true,
+          'matchedCaseFinalized': false, 'expectedModels': 2,
+          'successfulReceipts': 1, 'unresolvedModels': 1,
+          'independentlyVerifiedRuntime': false,
+          'sourceRightsVerified': false, 'paperShadowSoakAccepted': false,
+          'brokerReconciliationAccepted': false,
+          'liveExecutionEnabled': forgeAuthority, 'canAuthorizeCapital': false,
+          'models': [
+            {'modelVersionId':'v1','role':'PAPER_CHAMPION',
+             'family':'CATBOOST','status':'SUCCEEDED',
+             'reasonCode':'VALIDATED_RESEARCH_RESPONSE','identityBound':true},
+            {'modelVersionId':'v2','role':'SHADOW_CHALLENGER',
+             'family':'LIGHTGBM','status':'UNKNOWN_UNRESOLVED',
+             'reasonCode':'NO_TERMINAL_RECEIPT','identityBound':true}
+          ]
+        }), 200);
+      }),
+    );
+    final repository = HttpModelControlCenterRepository(api);
+    final report = await repository.researchReceipts(sessionId, 'case-v63');
+    expect(report.successfulReceipts, 1);
+    expect(report.unresolvedModels, 1);
+    expect(report.matchedCaseFinalized, false);
+    expect(report.models.last.status, 'UNKNOWN_UNRESOLVED');
+    forgeAuthority = true;
+    expect(() => repository.researchReceipts(sessionId, 'case-v63'),
+        throwsA(isA<ApiTransportFailure>()));
+  });
+
+
 }
