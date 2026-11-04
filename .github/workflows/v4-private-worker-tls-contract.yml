@@ -1,0 +1,46 @@
+name: V81 private research worker TLS-only network contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-tls.tf'
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_private_worker_tls.py'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-private-worker-tls-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-tls.tf'
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'scripts/tests/test_v4_private_worker_tls.py'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-private-worker-tls-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-worker-tls:
+    name: Reject public ALB, plaintext Java bypass or non-dormant worker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Check V81 and inherited V76/V77 worker network invariants
+        run: |
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_private_worker_tls.py
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_dormant_worker_terraform.py
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_private_worker_endpoints.py
+
+# Static source contracts only: no AWS credentials, plan, apply, DNS change,
+# model promotion, task scale-up or broker operations.
