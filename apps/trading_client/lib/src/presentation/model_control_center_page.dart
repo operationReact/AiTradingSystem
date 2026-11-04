@@ -19,6 +19,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
+  MatchedSessionAggregateEvidence? _aggregateEvidence;
   List<MatchedSessionEvidence>? _recentSessions;
   ApiFailure? _recentSessionsError;
   bool _loadingRecentSessions = false;
@@ -46,6 +47,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _selected = null;
       _session = null;
       _cases = null;
+      _aggregateEvidence = null;
       _recentSessions = null;
       _modelsError = error;
       _versionsError = null;
@@ -163,6 +165,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _loadingSession = true;
       _session = null;
       _cases = null;
+      _aggregateEvidence = null;
       _sessionError = null;
       _sessionValidation = null;
     });
@@ -171,7 +174,17 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       if (!mounted || generation != _authGeneration) return;
       final cases = await widget.repository.recentCases(id);
       if (!mounted || generation != _authGeneration) return;
-      setState(() { _session = session; _cases = cases; });
+      final aggregate = await widget.repository.sessionEvidence(id);
+      if (!mounted || generation != _authGeneration) return;
+      if (aggregate.sessionId != session.id ||
+          aggregate.enrollmentFingerprint != session.fingerprint) {
+        throw const ApiTransportFailure('MATCHED_SESSION_IDENTITY_MISMATCH', null);
+      }
+      setState(() {
+        _session = session;
+        _cases = cases;
+        _aggregateEvidence = aggregate;
+      });
     } on ApiFailure catch (error) {
       if (!mounted || generation != _authGeneration) return;
       if (_isAccessDenied(error)) {
@@ -434,6 +447,47 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                     'LIVE / capital authority: DISABLED.',
                     key: ValueKey('model-session-no-live'),
                   ),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (_aggregateEvidence != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            key: const ValueKey('model-session-evidence'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Recorded PAPER/SHADOW evidence',
+                      style: theme.textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Text('Safety state: ${_aggregateEvidence!.sessionSafetyState} '
+                      '(revision ${_aggregateEvidence!.sessionStateRevision})'),
+                  Text('Matched cases: ${_aggregateEvidence!.matchedCases} · '
+                      'Champion ENTER: ${_aggregateEvidence!.championEnterCases}'),
+                  Text('Challenger disagreements: '
+                      '${_aggregateEvidence!.shadowDisagreementCases}'),
+                  Text('Linked PAPER orders: ${_aggregateEvidence!.linkedPaperOrders} '
+                      '· Unlinked ENTER: ${_aggregateEvidence!.unlinkedChampionEnters}'),
+                  Text('Fill-quantity mismatches: '
+                      '${_aggregateEvidence!.paperFillQuantityMismatchOrders}'),
+                  Text('Recorded PAPER fills: '
+                      '${_aggregateEvidence!.recordedFillQuantity}'),
+                  Text('Recorded PAPER fees: '
+                      '${_aggregateEvidence!.recordedPaperFees} · '
+                      'Slippage: ${_aggregateEvidence!.recordedPaperSlippage}'),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Independent data, inference, broker reconciliation, soak '
+                    'and LIVE acceptance: NOT VERIFIED.',
+                    key: ValueKey('model-evidence-unverified'),
+                  ),
+                  const SizedBox(height: 8),
+                  Text('Pending/failed checks: '
+                      '${_aggregateEvidence!.reasonCodes.join(', ')}'),
                 ],
               ),
             ),
