@@ -49,6 +49,9 @@ app:
       # Never opt in by accident; this client has no trading/order authority.
       enabled: ${AI_RESEARCH_WORKER_CLIENT_ENABLED:false}
       base-url: ${AI_RESEARCH_WORKER_URL:}
+      # Required for any non-loopback HTTPS origin. Independently pinned by
+      # V83 Terraform to the private ACM DNS hostname when the TLS opt-in runs.
+      trusted-host: ${AI_RESEARCH_WORKER_TRUSTED_HOST:}
       token: ${AI_RESEARCH_WORKER_TOKEN:}
     worker-readiness:
       # Independent ADMIN-only read-only worker inventory opt-in.
