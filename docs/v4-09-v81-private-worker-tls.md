@@ -5,12 +5,12 @@ V80 introduced an **operator-only, verified local research model bundle** but di
 ## Network architecture and precise TLS boundary
 
 ```text
-Java backend ECS task (current public subnet, existing backend SG)
+Java backend ECS task (current public subnet, dedicated V82 backend-only identity SG)
     HTTPS 443, SNI and JVM certificate validation to research-worker.<domain>
     private Route 53 A alias (private hosted zone, associated VPC only)
         -> INTERNAL Application Load Balancer (private subnets, ACM TLS cert)
            TLS termination + standard Java HTTP client trust verification
-           Internal ALB SG inbound HTTPS 443 ONLY from Java backend SG
+           Internal ALB SG inbound HTTPS 443 ONLY from dedicated Java backend identity SG
            Internal ALB SG outbound port 8090 ONLY to Python worker SG
                -> HTTP 8090 over VPC-local subnet path
                   Python worker SG inbound ONLY from internal ALB SG
@@ -31,7 +31,10 @@ The ALB and Python target have **no public listener, internet-facing IP, direct 
 - The public certificate is issued in the **same AWS region** as the ALB. The V81 Terraform lifecycle precondition permits only account `816344830716`, region `us-east-1`. Use an existing, actually delegated `domain_name` (the application currently references `maargglobal.com` in its deployment workflow). Do not infer DNS authority or assume certificate validation has succeeded from a plan.
 - Private ALB, private hosted zone, endpoints and related data transfer incur charges when explicitly enabled. Review current AWS pricing and an exact account/region Terraform plan **before** any apply. This PR never enables these switches, runs Terraform apply, or creates AWS resources.
 - V81 deliberately leaves the worker ECS service `desired_count=0` and `enable_execute_command=false`. An empty target group is **expected** until a separate deployment is authorized. A healthy ALB listener is **not** proof of a running or model-ready worker.
-- V81 does **not** inject a worker URL, research token, readiness flag or model inference flag into the backend's ECS task definition. Java client opt-in remains disabled. Do not enable `AI_RESEARCH_WORKER_CLIENT_ENABLED` or `AI_RESEARCH_WORKER_READINESS_ENABLED` based on the existence of DNS alone.
+- V82 adds a **backend-only ECS identity security group** because the prior `aws_security_group.tasks` is shared by Java and Flutter. The internal TLS listener now admits only this distinct backend SG. This optional SG attachment can cause a backend task/service update if the cost-bearing TLS toggle is enabled; review the actual Terraform plan and traffic impact independently.
+- V82 switches the ALB listener default to **403 deny-by-default** and permits only `/v1/research/artifact-readiness` and `/v1/research/artifact-inference` via an exact path allowlist. The worker never exposes docs, catch-all routes, metrics or admin endpoints through this ALB merely because Python adds a new route.
+- V82 changes the private A alias to `evaluate_target_health=false` so the hostname resolves for certificate/DNS preflight while the dormant ECS service has zero targets. DNS resolution is never evidence that the worker is healthy or model-ready.
+- V81/V82 do **not** inject a worker URL, research token, readiness flag or model inference flag into the backend's ECS task definition. Java client opt-in remains disabled. Do not enable `AI_RESEARCH_WORKER_CLIENT_ENABLED` or `AI_RESEARCH_WORKER_READINESS_ENABLED` based on the existence of DNS alone.
 
 ## Offline acceptance and runtime follow-up
 
