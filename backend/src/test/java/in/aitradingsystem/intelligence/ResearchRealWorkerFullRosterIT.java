@@ -103,14 +103,17 @@ class ResearchRealWorkerFullRosterIT extends AbstractPostgresIT {
 
         // All synthetic V59/V60 snapshots are time-bound AFTER enrollment.
         // Actual market/news license and upstream custody are NOT asserted.
-        Instant captured = Instant.now().plusMillis(50);
+        // Use exact UTC seconds, because the Python/Pydantic canonical JSON
+        // hash normalizes fractional seconds to microsecond precision.
+        Instant captured = Instant.now().plusSeconds(2)
+            .truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         if (!captured.isAfter(enrollment)) {
             throw new IllegalStateException("Invalid lab enrollment chronology");
         }
-        Instant marketAt = enrollment.minusSeconds(2);
-        Instant newsAt = enrollment.minusSeconds(3);
-        Instant featureAsOf = captured.plusMillis(100);
-        Instant projectedAt = featureAsOf.plusMillis(100);
+        Instant marketAt = captured.minusSeconds(2);
+        Instant newsAt = captured.minusSeconds(3);
+        Instant featureAsOf = captured.plusSeconds(1);
+        Instant projectedAt = featureAsOf.plusSeconds(1);
         jdbc.sql("""
                 INSERT INTO v4_matched_source_capture (
                     session_id, case_key, candle_id, news_id, symbol,
