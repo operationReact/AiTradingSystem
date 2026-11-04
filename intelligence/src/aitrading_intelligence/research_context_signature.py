@@ -10,12 +10,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import hmac
-import json
+import os
 import re
 import sys
 from pathlib import Path
 
-from .research_artifact_inference import InferenceUnavailable
 from .research_image_context import _canonical, _read, verify_context
 from .research_release_bundle import ReleaseBundleBlocked
 
@@ -66,8 +65,6 @@ def emit_claim(context: Path, code_sha: str, destination: Path) -> dict:
     if len(data) > MAX_CLAIM:
         raise ReleaseBundleBlocked("signed-claim data outside bound")
     # O_EXCL prevents replacing an existing claim during approval review.
-    import os
-
     fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "wb") as output:
         output.write(data)
@@ -162,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             result = verification["context_evidence_fingerprint"]
             message = "V85 independently pinned signature verified; image release NOT authorized"
-    except (Exception, InferenceUnavailable):
+    except Exception:
         # Fail closed without printing private directories, signer PEM, model
         # files, tokens, remote responses or untrusted exception text.
         print("V85 research source signature BLOCKED (sanitized)", file=sys.stderr)
