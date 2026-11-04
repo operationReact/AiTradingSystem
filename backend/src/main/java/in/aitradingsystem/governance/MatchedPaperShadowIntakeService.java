@@ -54,6 +54,10 @@ public class MatchedPaperShadowIntakeService {
         boolean independentlyVerifiedRuntime, boolean paperOrdersSubmitted,
         boolean canAuthorizeCapital) {}
 
+    private record FrozenSource(
+        String symbol, Instant capturedAt, Instant marketAt, Instant newsAt,
+        String marketHash, String newsHash, String inputHash) {}
+
     private final JdbcClient jdbc;
     private final AuditService audit;
     private final Clock clock;
@@ -205,6 +209,37 @@ public class MatchedPaperShadowIntakeService {
                 || marketAt.isAfter(atDecision) || newsAt.isAfter(atDecision)) {
             throw new IllegalArgumentException("Decision must follow registration/source capture and predate intake");
         }
+        // Once an immutable server-DB source bundle exists, old client-authored
+        // fingerprints and pre-capture predictions cannot be passed off as that bundle.
+        var frozen = jdbc.sql("""
+                SELECT symbol, captured_at, market_available_at, news_available_at,
+                       market_snapshot_fingerprint, news_snapshot_fingerprint,
+                       input_fingerprint
+                  FROM v4_matched_source_capture
+                 WHERE session_id = :sessionId AND case_key = :caseKey
+                """)
+            .param("sessionId", sessionId).param("caseKey", input.caseKey())
+            .query((rs, row) -> new FrozenSource(
+                rs.getString("symbol"),
+                rs.getObject("captured_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("market_available_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("news_available_at", OffsetDateTime.class).toInstant(),
+                rs.getString("market_snapshot_fingerprint"),
+                rs.getString("news_snapshot_fingerprint"),
+                rs.getString("input_fingerprint")))
+            .optional();
+        if (frozen.isPresent()) {
+            FrozenSource source = frozen.get();
+            if (!source.symbol().equals(input.symbol())
+                    || !source.marketAt().equals(marketAt)
+                    || !source.newsAt().equals(newsAt)
+                    || !source.marketHash().equals(input.marketSourceFingerprint())
+                    || !source.newsHash().equals(input.newsSourceFingerprint())
+                    || !source.inputHash().equals(input.inputFingerprint())
+                    || atDecision.isBefore(source.capturedAt())) {
+                throw new IllegalArgumentException("Matched decision conflicts with server-captured source evidence");
+            }
+        }
         if (input.decisions() == null || input.decisions().size() != enrollment.models().size()) {
             throw new IllegalArgumentException("Each matched case requires all enrolled model decisions");
         }
@@ -233,6 +268,7 @@ public class MatchedPaperShadowIntakeService {
                 throw new IllegalArgumentException("Candidates must share the exact frozen input fingerprint");
             }
             if (predicted.isBefore(marketAt) || predicted.isBefore(newsAt)
+                    || (frozen.isPresent() && predicted.isBefore(frozen.get().capturedAt()))
                     || predicted.isAfter(atDecision)) {
                 throw new IllegalArgumentException("Model decision is late or predates available source data");
             }
