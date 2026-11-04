@@ -59,15 +59,18 @@ public class MatchedPaperShadowIntakeService {
     private final Clock clock;
     private final ModelEmergencyControlService emergency;
     private final TradingExecutionAuthority authority;
+    private final MatchedSessionSafetyService safety;
 
     public MatchedPaperShadowIntakeService(
             JdbcClient jdbc, AuditService audit, Clock clock,
-            ModelEmergencyControlService emergency, TradingExecutionAuthority authority) {
+            ModelEmergencyControlService emergency, TradingExecutionAuthority authority,
+            MatchedSessionSafetyService safety) {
         this.jdbc = jdbc;
         this.audit = audit;
         this.clock = clock;
         this.emergency = emergency;
         this.authority = authority;
+        this.safety = safety;
     }
 
     @Transactional
@@ -141,6 +144,7 @@ public class MatchedPaperShadowIntakeService {
                 .param("fingerprint", part.modelFingerprint())
                 .update();
         }
+        safety.registerEnrollment(input.sessionId(), enrollmentFingerprint, now, actor);
         audit.record("V4_PAPER_SHADOW_SESSION_ENROLLED", "V4_PAPER_SHADOW_SESSION",
             input.sessionId().toString(), Map.of(
                 "enrollmentFingerprint", enrollmentFingerprint,
@@ -183,6 +187,8 @@ public class MatchedPaperShadowIntakeService {
     @Transactional
     public ObservationView append(UUID sessionId, ObservationInput input) {
         requirePaper();
+        // Hold a shared row lock until commit; pause/quarantine uses FOR UPDATE.
+        safety.requireActiveForAppend(sessionId);
         SessionView enrollment = session(sessionId);
         if (input == null || input.caseKey() == null || !input.caseKey().matches(CASE_KEY)
                 || input.symbol() == null || !input.symbol().matches("^[A-Z0-9._-]{2,30}$")) {
