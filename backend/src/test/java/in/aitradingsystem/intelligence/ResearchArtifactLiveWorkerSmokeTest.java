@@ -102,10 +102,21 @@ class ResearchArtifactLiveWorkerSmokeTest {
                 MAPPER.writeValueAsString(preflightBody)))
             .build();
         var preflightReply = HttpClient.newHttpClient().send(
-            preflight, HttpResponse.BodyHandlers.discarding());
-        assertEquals(200, preflightReply.statusCode(),
-            "Synthetic Python worker rejected valid CatBoost request, HTTP "
-                + preflightReply.statusCode());
+            preflight, HttpResponse.BodyHandlers.ofString());
+        if (preflightReply.statusCode() != 200) {
+            // Only JSON validation field paths/types are safe in CI output.
+            // Never print remote body, request, tokens or Python stack traces.
+            var errors = MAPPER.readTree(preflightReply.body()).path("detail");
+            var safeFields = new java.util.ArrayList<String>();
+            if (errors.isArray()) {
+                for (JsonNode error : errors) {
+                    safeFields.add(error.path("loc").toString()
+                        + ":" + error.path("type").asText());
+                }
+            }
+            fail("Synthetic Python worker HTTP " + preflightReply.statusCode()
+                + "; rejected field paths/types: " + safeFields);
+        }
 
         for (UUID modelId : new UUID[]{CAT, LIGHT}) {
             var result = client.score(modelId, original);
