@@ -78,8 +78,10 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
                       self.tls)
         self.assertIn('type    = "A"', self.tls)
         self.assertIn("evaluate_target_health = false", self.tls)
-        self.assertIn("name                   = aws_lb.research_worker_tls[0].dns_name",
-                      self.tls)
+        self.assertRegex(
+            self.tls,
+            r"name\\s*=\\s*aws_lb\\.research_worker_tls\\[0\\]\\.dns_name",
+        )
         self.assertIn('output "research_worker_private_https_url"', self.tls)
         self.assertIn('"https://${local.worker_tls_fqdn}"', self.tls)
         self.assertNotIn('http://${local.worker_tls_fqdn}', self.tls)
