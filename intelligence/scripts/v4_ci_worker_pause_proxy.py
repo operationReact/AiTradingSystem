@@ -55,7 +55,9 @@ class LocalGate(BaseHTTPRequestHandler):
             with lock:
                 held = state["held"]
                 total = state["total"]
-            self.send_json(200, {"held": held, "total": total})
+                fault_count = state["fault_count"]
+            self.send_json(200, {"held": held, "total": total,
+                                 "fault_count": fault_count})
         else:
             self.send_json(404, {"error": "not_found"})
 
