@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/authenticated_api_client.dart';
 import '../data/model_control_center_repository.dart';
 
-/// Connected, read-only V4 Admin evidence; never exposes a LIVE or model-promotion action.
+/// Connected ADMIN V4 evidence and bounded session de-risk controls; no LIVE or model promotion.
 class ModelControlCenterPage extends StatefulWidget {
   const ModelControlCenterPage({required this.repository, super.key});
   final ModelControlCenterRepository repository;
@@ -466,6 +466,89 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     );
   }
 
+  Widget _sessionSafetyPanel() {
+    final session = _session;
+    if (session == null) return const SizedBox.shrink();
+    final safety = _safety;
+    return Card(
+      key: const ValueKey('matched-safety-panel'),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text('Session intake safety',
+                style: Theme.of(context).textTheme.titleMedium)),
+            IconButton(
+              key: const ValueKey('matched-safety-refresh'),
+              tooltip: 'Refresh Java safety state',
+              onPressed: _loadingSafety || _updatingSafety
+                  ? null : () => _loadSafety(session.id),
+              icon: const Icon(Icons.refresh),
+            ),
+          ]),
+          const Text(
+            'Java safety state controls matched evidence intake only. '
+            'It does not halt separate PAPER automation or authorize LIVE orders.',
+          ),
+          if (_loadingSafety || _updatingSafety)
+            const LinearProgressIndicator(key: ValueKey('matched-safety-loading')),
+          if (_safetyError != null)
+            _problem(_safetyError!, stale: false),
+          if (safety != null && _safetyError == null) ...[
+            const SizedBox(height: 8),
+            Text('Intake: ${safety.state}',
+                key: const ValueKey('matched-safety-state')),
+            Text('Revision ${safety.revision} · ${safety.updatedBy}'),
+            Text('Reason: ${safety.reason}'),
+            Text('Safety hash: ${_short(safety.fingerprint)}'),
+            const Text('Capital authority: NONE'),
+            const SizedBox(height: 10),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              if (safety.state == 'ACTIVE')
+                OutlinedButton.icon(
+                  key: const ValueKey('matched-safety-pause'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('PAUSE'),
+                  icon: const Icon(Icons.pause_circle_outline),
+                  label: const Text('Pause intake'),
+                ),
+              if (safety.state == 'PAUSED')
+                OutlinedButton.icon(
+                  key: const ValueKey('matched-safety-resume'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('RESUME'),
+                  icon: const Icon(Icons.play_circle_outline),
+                  label: const Text('Resume intake'),
+                ),
+              if (safety.state != 'QUARANTINED')
+                FilledButton.tonalIcon(
+                  key: const ValueKey('matched-safety-quarantine'),
+                  onPressed: _updatingSafety
+                      ? null : () => _transitionSafety('QUARANTINE'),
+                  icon: const Icon(Icons.report_gmailerrorred_outlined),
+                  label: const Text('Quarantine permanently'),
+                ),
+            ]),
+            if (safety.state == 'QUARANTINED')
+              const Text('Terminal quarantine: enroll a new session to recover.',
+                  key: ValueKey('matched-safety-terminal')),
+          ],
+          if (_safetyHistory != null && _safetyHistory!.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text('Immutable transition history',
+                style: Theme.of(context).textTheme.titleSmall),
+            ..._safetyHistory!.take(5).map((change) => Text(
+              'Revision ${change.revision}: '
+              '${change.previousState ?? 'START'} → ${change.newState} · '
+              '${change.changedBy} · ${change.reason}',
+              key: ValueKey('matched-safety-history-${change.revision}'),
+            )),
+          ],
+        ]),
+      ),
+    );
+  }
+
   Widget _paperShadow(BuildContext context) {
     final theme = Theme.of(context);
     final session = _session;
@@ -573,6 +656,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
               ),
             ),
           ),
+        ],
+        if (session != null) ...[
+          const SizedBox(height: 10),
+          _sessionSafetyPanel(),
         ],
         if (cases != null && cases.isEmpty)
           const Card(
