@@ -36,8 +36,8 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
     def test_only_private_tls_alb_and_exact_backend_to_tls_ingress(self):
         self.assertIn('resource "aws_lb" "research_worker_tls"', self.tls)
         self.assertRegex(self.tls, r"(?m)^\s*internal\s*=\s*true$")
-        self.assertIn("subnets                          = aws_subnet.private[*].id", self.tls)
-        self.assertIn('load_balancer_type               = "application"', self.tls)
+        self.assertRegex(self.tls, r"subnets\\s*=\\s*aws_subnet.private\\[\\*\\].id")
+        self.assertRegex(self.tls, r'load_balancer_type\\s*=\\s*"application"')
         self.assertIn('resource "aws_vpc_security_group_ingress_rule" "backend_to_worker_tls"',
                       self.tls)
         self.assertIn('referenced_security_group_id = aws_security_group.tasks.id', self.tls)
