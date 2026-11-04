@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
 from .fingerprints import canonical_fingerprint
 
@@ -23,6 +23,11 @@ def _aware(timestamp: datetime) -> datetime:
     if timestamp.tzinfo is None or timestamp.utcoffset() is None:
         raise ValueError("counterfactual timestamps must be timezone-aware")
     return timestamp
+
+
+def _iso(timestamp: datetime) -> str:
+    """Use the same UTC/Z timestamp format as Pydantic JSON fingerprints."""
+    return TypeAdapter(datetime).dump_python(_aware(timestamp), mode="json")
 
 
 class RegisteredPaperShadowModel(BaseModel):
@@ -82,7 +87,7 @@ def freeze_paper_shadow_enrollment(
 ) -> PaperShadowEnrollment:
     payload = {
         "contract_version": VERSION,
-        "registered_at": _aware(registered_at).isoformat(),
+        "registered_at": _iso(registered_at),
         "target_spec_fingerprint": target_spec_fingerprint,
         "models": [
             model.model_dump(mode="json")
@@ -90,7 +95,7 @@ def freeze_paper_shadow_enrollment(
         ],
         "minimum_cases": minimum_cases,
         "minimum_enter_decisions": minimum_enter_decisions,
-        "assumed_round_trip_cost_bps": assumed_round_trip_cost_bps,
+        "assumed_round_trip_cost_bps": float(assumed_round_trip_cost_bps),
         "external_registration_witnessed": False,
         "live_order_authority": False,
     }
@@ -138,7 +143,7 @@ def build_matched_model_decision(
     payload = {
         "model_id": model_id,
         "registry_fingerprint": registry_fingerprint,
-        "predicted_at": _aware(predicted_at).isoformat(),
+        "predicted_at": _iso(predicted_at),
         "action": action,
         "input_fingerprint": input_fingerprint,
     }
@@ -381,7 +386,7 @@ def evaluate_matched_paper_shadow(
                 for model in plan.models if model.role == "SHADOW_CHALLENGER"
             ),
             "source_input_fingerprint": case.input_fingerprint,
-            "future_outcome_available_at": case.future_outcome_available_at.isoformat(),
+            "future_outcome_available_at": _iso(case.future_outcome_available_at),
         }
         rows.append(PaperShadowCaseResult(
             **payload, row_fingerprint=canonical_fingerprint(payload)
@@ -403,7 +408,7 @@ def evaluate_matched_paper_shadow(
         "contract_version": VERSION,
         "enrollment_fingerprint": plan.enrollment_fingerprint,
         "capture_origin": capture_origin,
-        "evaluated_at": evaluated_at.isoformat(),
+        "evaluated_at": _iso(evaluated_at),
         "matched_case_count": len(ordered),
         "case_rows": [row.model_dump(mode="json") for row in rows],
         "model_metrics": [metric.model_dump(mode="json") for metric in metrics],
