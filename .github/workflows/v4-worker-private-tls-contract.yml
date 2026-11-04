@@ -1,0 +1,48 @@
+name: V81 backend-only private TLS worker topology contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-tls.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/main.tf'
+      - 'scripts/tests/test_v4_private_worker_tls.py'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-worker-private-tls-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/terraform/research-worker-private-tls.tf'
+      - 'infra/terraform/research-worker-scaffold.tf'
+      - 'infra/terraform/research-worker-private-endpoints.tf'
+      - 'infra/terraform/main.tf'
+      - 'scripts/tests/test_v4_private_worker_tls.py'
+      - 'scripts/tests/test_v4_dormant_worker_terraform.py'
+      - 'scripts/tests/test_v4_private_worker_endpoints.py'
+      - '.github/workflows/v4-worker-private-tls-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-private-tls:
+    name: Fail closed on public, direct HTTP or active worker
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify V76 dormant safety
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_dormant_worker_terraform.py
+      - name: Verify V77 private endpoint safety
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_private_worker_endpoints.py
+      - name: Verify V81 Java-only private TLS ingress and DNS
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_private_worker_tls.py
+
+# This CI workflow NEVER obtains AWS credentials or creates infrastructure.
