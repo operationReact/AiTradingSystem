@@ -42,7 +42,6 @@ public class ResearchWorkerReadinessService {
         "v4-research-worker-roster-readiness.v1";
     private static final String PATH = "/v1/research/artifact-readiness";
     private static final String HASH = "^[a-f0-9]{64}$";
-    private static final String CASE_ID = "^[a-zA-Z0-9_.-]{2,128}$";
     private static final Set<String> WORKER_FIELDS = Set.of(
         "contract_version", "manifest_sha256", "models",
         "local_artifacts_validated", "independently_verified_deployment",
@@ -234,13 +233,12 @@ public class ResearchWorkerReadinessService {
                 return actual != null && model.family().equals(actual[0])
                     && model.artifactFingerprint().equals(actual[1]);
             });
+            Set<UUID> originalVersionIds = new HashSet<>();
+            roster.forEach(model -> originalVersionIds.add(model.versionId()));
+            int extraModels = (int) workerModels.keySet().stream()
+                .filter(id -> !originalVersionIds.contains(id)).count();
             return new ReadinessView(CONTRACT, sessionId, header.state(),
-                roster.size(), workerModels.size(),
-                workerModels.size() - roster.stream()
-                    .filter(m -> workerModels.containsKey(m.versionId())).count() < 0
-                    ? 0
-                    : (int) (workerModels.size() - roster.stream()
-                        .filter(m -> workerModels.containsKey(m.versionId())).count()),
+                roster.size(), workerModels.size(), extraModels,
                 requiredText(response, "manifest_sha256"), returnedHash,
                 matched ? "MATCHED_RESEARCH_ONLY" : "MISMATCH_NO_DISPATCH_AUTHORITY",
                 matched, true, false, false, false, false, false, false);
