@@ -1,7 +1,6 @@
 """Contract tests for read-only V73 ECS posture; synthetic, no AWS credentials."""
 from __future__ import annotations
 
-import copy
 import sys
 import unittest
 from pathlib import Path
@@ -134,6 +133,39 @@ class RuntimePostureTest(unittest.TestCase):
             {"name": "TRADING_MODE", "value": "LIVE"}
         )
         self.assert_blocked(f, "ECS_ENVIRONMENT_AMBIGUOUS")
+
+    def test_uninspected_spring_overrides_and_secret_flags_are_blocked(self):
+        for name in ("SPRING_APPLICATION_JSON", "JAVA_TOOL_OPTIONS",
+                     "JDK_JAVA_OPTIONS", "SPRING_CONFIG_ADDITIONAL_LOCATION",
+                     "SPRING_PROFILES_ACTIVE"):
+            f = fixtures()
+            f["task"]["taskDefinition"]["containerDefinitions"][0][
+                "environment"].append({"name": name, "value": "PRIVATE"})
+            report = self.assert_blocked(
+                f, "UNVERIFIED_SPRING_CONFIGURATION_OVERRIDE"
+            )
+            self.assertNotIn("PRIVATE", str(report))
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "environmentFiles"] = [{"type": "s3", "value": "PRIVATE-S3-URI"}]
+        self.assert_blocked(f, "UNVERIFIED_SPRING_CONFIGURATION_OVERRIDE")
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "command"] = ["--app.research.roster-dispatch.enabled=true"]
+        self.assert_blocked(f, "UNVERIFIED_SPRING_CONFIGURATION_OVERRIDE")
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "secrets"].append({
+                "name": "APP_RESEARCH_ROSTER_DISPATCH_ENABLED",
+                "valueFrom": "PRIVATE",
+            })
+        self.assert_blocked(f, "RESEARCH_OPT_IN_ON_EXISTING_BACKEND")
+        f = fixtures()
+        f["task"]["taskDefinition"]["containerDefinitions"][0][
+            "environment"].append({
+                "name": "APP_RESEARCH_ROSTER_DISPATCH_ENABLED", "value": "true",
+            })
+        self.assert_blocked(f, "RESEARCH_OPT_IN_ON_EXISTING_BACKEND")
 
     def test_partial_rollout_and_unhealthy_alb_and_http_health_are_blocked(self):
         f = fixtures()
