@@ -58,6 +58,30 @@ class LocalGate(BaseHTTPRequestHandler):
                 fault_count = state["fault_count"]
             self.send_json(200, {"held": held, "total": total,
                                  "fault_count": fault_count})
+        elif self.path == "/v1/research/artifact-readiness":
+            # GET-only runner-local forwarding to real authenticated Python.
+            # No fault injection, no retries, and no auth headers are logged.
+            upstream = http.client.HTTPConnection("127.0.0.1", 18721, timeout=5)
+            try:
+                upstream.request("GET", self.path, headers={
+                    "X-Research-Worker-Token":
+                        self.headers.get("X-Research-Worker-Token", ""),
+                    "Accept": "application/json",
+                })
+                response = upstream.getresponse()
+                body = response.read(16_385)
+                if len(body) > 16_384:
+                    self.send_json(502, {"error": "oversized_readiness"})
+                    return
+                self.send_response(response.status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            except (OSError, http.client.HTTPException):
+                self.send_json(503, {"error": "synthetic_worker_unavailable"})
+            finally:
+                upstream.close()
         else:
             self.send_json(404, {"error": "not_found"})
 
