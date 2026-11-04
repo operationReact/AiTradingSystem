@@ -86,6 +86,7 @@ public final class ResearchArtifactInferenceClient {
     private final ObjectMapper mapper;
     private final String baseUrl;
     private final String token;
+    private final String trustedHost;
     private final boolean enabled;
     private final Transport transport;
 
@@ -94,17 +95,35 @@ public final class ResearchArtifactInferenceClient {
             ObjectMapper mapper,
             @Value("${app.research.artifact-worker.base-url:}") String baseUrl,
             @Value("${app.research.artifact-worker.token:}") String token,
-            @Value("${app.research.artifact-worker.enabled:false}") boolean enabled) {
-        this(mapper, baseUrl, token, enabled, HTTP_TRANSPORT);
+            @Value("${app.research.artifact-worker.enabled:false}") boolean enabled,
+            @Value("${app.research.artifact-worker.trusted-host:}") String trustedHost) {
+        this(mapper, baseUrl, token, enabled, trustedHost, HTTP_TRANSPORT);
     }
 
-    // Package-private seam for deterministic contract tests; not a public endpoint.
+    // Historical four-argument test seam used by running-Python smoke tests.
+    // Production Spring uses the @Autowired constructor with the independent
+    // trusted-host configuration; this overload never receives Spring injection.
+    ResearchArtifactInferenceClient(
+            ObjectMapper mapper, String baseUrl, String token, boolean enabled) {
+        this(mapper, baseUrl, token, enabled,
+            ResearchWorkerTlsOrigin.syntheticTestPin(baseUrl), HTTP_TRANSPORT);
+    }
+
+    // Package-private seam for deterministic local/synthetic tests only.
     ResearchArtifactInferenceClient(
             ObjectMapper mapper, String baseUrl, String token,
             boolean enabled, Transport transport) {
+        this(mapper, baseUrl, token, enabled,
+            ResearchWorkerTlsOrigin.syntheticTestPin(baseUrl), transport);
+    }
+
+    ResearchArtifactInferenceClient(
+            ObjectMapper mapper, String baseUrl, String token,
+            boolean enabled, String trustedHost, Transport transport) {
         this.mapper = mapper;
         this.baseUrl = baseUrl;
         this.token = token;
+        this.trustedHost = trustedHost;
         this.enabled = enabled;
         this.transport = transport;
     }
@@ -114,6 +133,7 @@ public final class ResearchArtifactInferenceClient {
             throw new IntelligenceUnavailableException("Research artifact inference is disabled");
         }
         URI endpoint = validatedEndpoint(baseUrl);
+        ResearchWorkerTlsOrigin.requirePinned(endpoint, trustedHost);
         if (modelVersionId == null || frozen == null || !frozen.javaDatabaseBound()
                 || frozen.canAuthorizeCapital() || frozen.independentlyVerifiedModelInference()
                 || !"features.market.v1".equals(frozen.featureSchemaVersion())

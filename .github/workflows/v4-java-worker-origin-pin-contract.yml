@@ -1,0 +1,45 @@
+name: V83 Java worker HTTPS origin pin (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchArtifactInferenceClient.java'
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchWorkerReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchWorkerTlsOrigin.java'
+      - 'backend/src/test/java/in/aitradingsystem/intelligence/ResearchWorkerTlsOriginTest.java'
+      - 'backend/src/main/resources/application.yml'
+      - 'infra/terraform/main.tf'
+      - 'scripts/tests/test_v4_worker_origin_pin.py'
+      - '.github/workflows/v4-java-worker-origin-pin-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchArtifactInferenceClient.java'
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchWorkerReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/intelligence/ResearchWorkerTlsOrigin.java'
+      - 'backend/src/test/java/in/aitradingsystem/intelligence/ResearchWorkerTlsOriginTest.java'
+      - 'backend/src/main/resources/application.yml'
+      - 'infra/terraform/main.tf'
+      - 'scripts/tests/test_v4_worker_origin_pin.py'
+      - '.github/workflows/v4-java-worker-origin-pin-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-origin-policy:
+    name: Reject remote token destination without fixed private DNS pin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Offline source and Terraform constraints
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_worker_origin_pin.py
+
+# Java real unit/integration tests run under the existing Phase 0 workflow.
+# No AWS credentials, worker token, broker call or Java research opt-in.

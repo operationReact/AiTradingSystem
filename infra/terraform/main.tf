@@ -430,6 +430,10 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "AI_RESEARCH_WORKER_URL", value = "https://${local.worker_tls_fqdn}" },
       { name = "AI_RESEARCH_WORKER_CLIENT_ENABLED", value = "false" },
       { name = "AI_RESEARCH_WORKER_READINESS_ENABLED", value = "false" }
+      ] : [], var.research_worker_tls_enabled ? [
+      # V83 independently pins the trusted HTTPS DNS identity to V81's
+      # private ACM hostname; does not enable any worker request.
+      { name = "AI_RESEARCH_WORKER_TRUSTED_HOST", value = local.worker_tls_fqdn }
     ] : [])
     secrets = concat([
       { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${aws_db_instance.postgres.master_user_secret[0].secret_arn}:password::" },
