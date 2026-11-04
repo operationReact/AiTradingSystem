@@ -73,15 +73,10 @@ resource "aws_security_group" "research_worker" {
     security_groups = [aws_security_group.tasks.id]
   }
 
-  # A future approved worker release needs route/VPC endpoint checks. No NAT
-  # or public IP is granted here. AWS private route tables have local routes only.
-  egress {
-    description = "Only HTTPS egress when a reviewed private route becomes available"
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # No blanket egress. When V77 endpoints are separately enabled, standalone
+  # restricted HTTPS rules permit only the endpoint SG and S3 prefix list.
+  # Default-disabled scaffold alone remains deliberately network-isolated.
+  egress = []
   tags = local.worker_tags
 }
 
