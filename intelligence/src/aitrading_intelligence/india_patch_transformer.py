@@ -11,6 +11,10 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .cross_model_causal_cohort import bind_common_causal_tournament_cohort
+from .native_forecast_trace import (
+    NativeForecastDecisionTrace,
+    build_native_forecast_trace,
+)
 from .fingerprints import canonical_fingerprint
 from .incremental_economic_value import (
     IncrementalValueConfig,
@@ -123,6 +127,7 @@ class IndiaPatchForecastReport(BaseModel):
     model_licence_production_approved: Literal[False] = False
     promotion_allowed: Literal[False] = False
     can_authorize_capital: Literal[False] = False
+    native_trace: NativeForecastDecisionTrace | None
     report_fingerprint: Hash64
 
     @model_validator(mode="after")
@@ -143,6 +148,40 @@ class IndiaPatchForecastReport(BaseModel):
             or self.reason_codes
         ):
             raise ValueError("research challenger status requires positive paired evidence")
+        if self.native_trace is None:
+            if self.model_state_fingerprint is not None:
+                raise ValueError("model run must include its native decision trace")
+        else:
+            trace = self.native_trace
+            candidate = self.challenger
+            if (
+                trace.candidate_id != "bounded-patch-transformer"
+                or trace.model_version_ref != CONTRACT
+                or trace.model_state_fingerprint != self.model_state_fingerprint
+                or trace.causal_baseline_report_fingerprint != self.baseline_parent_report_fingerprint
+                or trace.cohort.holdout_export_fingerprint
+                != self.holdout_export_fingerprint
+                or trace.cohort.training_export_fingerprint
+                != self.training_export_fingerprint
+                or trace.cohort.fee_book_fingerprint != self.fee_book_fingerprint
+                or trace.target.fingerprint != self.target_spec_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.calibration_rows
+                ]) != self.calibration_membership_fingerprint
+                or canonical_fingerprint([
+                    row.row_fingerprint for row in trace.holdout_rows
+                ]) != self.holdout_membership_fingerprint
+                or candidate is None
+                or candidate.forecast_fingerprint
+                != canonical_fingerprint(trace.holdout_predictions)
+                or candidate.trade_count != trace.reported_trade_count
+                or not math.isclose(
+                    candidate.net_return_after_assumed_costs,
+                    sum(trace.holdout_net_returns_after_costs),
+                    rel_tol=1e-9, abs_tol=1e-12,
+                )
+            ):
+                raise ValueError("model summary and native decision trace disagree")
         if self.report_fingerprint != canonical_fingerprint(
             self.model_dump(mode="json", exclude={"report_fingerprint"})
         ):
@@ -353,6 +392,7 @@ def evaluate_bounded_patch_forecast(
     base_metrics = challenger_metrics = None
     state_hash = paired_hash = paired_assessment = None
     status = "INCONCLUSIVE"
+    native_trace = None
     if not reasons:
         fit_x = [window for _, window in fit]
         fit_y = [row.observed_forward_return for row, _ in fit]
@@ -368,9 +408,25 @@ def evaluate_bounded_patch_forecast(
             calibration, candidate_calib, hold_rows, candidate_hold,
             target=target, interval_coverage=policy.interval_coverage,
         )
-        common = bind_common_causal_tournament_cohort(
+        native_cohort = bind_common_causal_tournament_cohort(
             baseline, hold_rows, target
-        ).series_kwargs()
+        )
+        native_trace = build_native_forecast_trace(
+            candidate_id="bounded-patch-transformer",
+            model_version_ref=CONTRACT,
+            model_state_fingerprint=state_hash,
+            causal_baseline_report_fingerprint=baseline.report_fingerprint,
+            cohort=native_cohort,
+            target=target,
+            interval_coverage=policy.interval_coverage,
+            calibration_rows=calibration,
+            calibration_predictions=candidate_calib,
+            holdout_rows=hold_rows,
+            holdout_predictions=candidate_hold,
+            holdout_net_returns_after_costs=challenger_returns,
+            reported_trade_count=challenger_metrics.trade_count,
+        )
+        common = native_cohort.series_kwargs()
         first = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
@@ -440,6 +496,7 @@ def evaluate_bounded_patch_forecast(
         "external_market_source_verified": False,
         "holdout_pre_registration_verified": False,
         "model_licence_production_approved": False,
+        "native_trace": native_trace.model_dump(mode="json") if native_trace else None,
         "promotion_allowed": False,
         "can_authorize_capital": False,
     }
