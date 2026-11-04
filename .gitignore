@@ -46,3 +46,7 @@ Thumbs.db
 tfplan*
 crash.log
 crash.*.log
+
+# Never commit private trained research model build contexts
+intelligence/.research-release/
+intelligence/.research-staging-*/

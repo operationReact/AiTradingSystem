@@ -1,0 +1,31 @@
+# V80: separate *operator-built only* research worker image with checked model bytes.
+# This Dockerfile intentionally fails unless the local .research-release bundle
+# has been prepared from actual pinned models. It is never built/pushed by the
+# existing deployment workflows.
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN pip install --no-cache-dir .
+
+# Unlike the everyday Dockerfile, only this explicitly selected Dockerfile
+# can see the independently staged research model release build context.
+COPY --chown=65532:65532 .research-release/ /opt/research/
+ARG RESEARCH_SOURCE_SHA
+
+# Fail build on missing/tampered/extra model files, forged authority fields,
+# incorrect code SHA or receipt/manifest hashes, without printing file bytes.
+RUN python -m aitrading_intelligence.research_release_bundle verify \
+    --bundle /opt/research --code-sha "${RESEARCH_SOURCE_SHA}"
+
+USER 65532:65532
+ENV TRADING_MODE=PAPER \
+    AI_RESEARCH_STRICT_BOOT_REQUIRED=true \
+    AI_RESEARCH_MODEL_MANIFEST=/opt/research/manifest.json
+
+LABEL org.opencontainers.image.description="Research-only PAPER Python worker with checked local model artifacts"
+EXPOSE 8090
+
+# Runtime private token must arrive through ECS Secrets Manager, never at build.
+CMD ["sh", "-c", "python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]
