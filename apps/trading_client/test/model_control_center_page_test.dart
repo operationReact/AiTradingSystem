@@ -109,10 +109,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(repository.sessionRequests, 1);
     expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
-    expect(find.byKey(const ValueKey('model-case-event-001')), findsOneWidget);
-    expect(find.text('Champion/challenger disagreement'), findsOneWidget);
     expect(find.textContaining('Source and runtime independently verified: NO'),
         findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-case-event-001')),
+      250,
+      scrollable: find.descendant(
+        of: find.byKey(const ValueKey('model-control-paper-shadow')),
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    expect(find.byKey(const ValueKey('model-case-event-001')), findsOneWidget);
+    expect(find.text('Champion/challenger disagreement'), findsOneWidget);
     expect(find.text('Independent source validation: NOT VERIFIED'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
   });
