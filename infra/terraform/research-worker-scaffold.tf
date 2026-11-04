@@ -140,6 +140,7 @@ resource "aws_ecs_task_definition" "research_worker" {
     }]
     environment = [
       { name = "TRADING_MODE", value = "PAPER" },
+      { name = "AI_RESEARCH_STRICT_BOOT_REQUIRED", value = "true" },
       { name = "AI_RESEARCH_MODEL_MANIFEST", value = "/opt/research/manifest.json" }
     ]
     secrets = [
