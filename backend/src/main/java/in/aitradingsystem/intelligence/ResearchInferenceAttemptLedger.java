@@ -160,11 +160,23 @@ public class ResearchInferenceAttemptLedger {
             throw new IllegalArgumentException("Only research-only validated inference may succeed");
         }
         Reservation r = reservation(reservationId);
-        String frozenSymbol = jdbc.sql("""
-                SELECT symbol FROM v4_matched_source_capture
-                 WHERE session_id = :sessionId AND case_key = :caseKey
-                """).param("sessionId", r.sessionId()).param("caseKey", r.caseKey())
-            .query(String.class).single();
+        // A valid Python payload for CatBoost must never be recorded as a
+        // LightGBM roster member (or vice versa), even if IDs/hash fields match.
+        String[] identity = jdbc.sql("""
+                SELECT sc.symbol, md.family, mv.artifact_fingerprint
+                  FROM v4_matched_source_capture sc
+                  JOIN v4_matched_participant p ON p.session_id = sc.session_id
+                  JOIN model_version mv ON mv.version_id = p.model_version_id
+                  JOIN model_definition md ON md.definition_id = mv.definition_id
+                 WHERE sc.session_id = :sessionId AND sc.case_key = :caseKey
+                   AND p.model_version_id = :modelId
+                """)
+            .param("sessionId", r.sessionId()).param("caseKey", r.caseKey())
+            .param("modelId", r.modelVersionId())
+            .query((rs, row) -> new String[]{
+                rs.getString("symbol"), rs.getString("family"),
+                rs.getString("artifact_fingerprint")})
+            .single();
         safety.requireActiveForAppend(r.sessionId());
         emergency.requireModelAllowed(r.modelVersionId());
         Instant now = clock.instant();
@@ -172,7 +184,9 @@ public class ResearchInferenceAttemptLedger {
                 || result.modelVersionId() == null
                 || !r.modelVersionId().equals(result.modelVersionId())
                 || !r.caseKey().equals(result.caseKey())
-                || !frozenSymbol.equals(result.symbol())
+                || !identity[0].equals(result.symbol())
+                || !identity[1].equals(result.modelFamily())
+                || !identity[2].equals(r.artifactFingerprint())
                 || !r.sourceInputFingerprint().equals(result.sourceInputFingerprint())
                 || !r.artifactFingerprint().equals(result.artifactFingerprint())
                 || !validHash(result.requestFingerprint())
