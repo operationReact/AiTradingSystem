@@ -195,9 +195,9 @@ class RuntimePostureTest(unittest.TestCase):
         workflow = (Path(__file__).resolve().parents[2] /
                     ".github/workflows/v4-paper-runtime-inspect.yml"
                     ).read_text(encoding="utf-8")
-        self.assertIn("on:\\n  workflow_dispatch:", workflow)
-        self.assertNotIn("\\n  push:", workflow)
-        self.assertNotIn("\\n  pull_request:", workflow)
+        self.assertIn("on:\n  workflow_dispatch:", workflow)
+        self.assertNotIn("\n  push:", workflow)
+        self.assertNotIn("\n  pull_request:", workflow)
         self.assertIn("vars.AWS_READONLY_ROLE_ARN", workflow)
         self.assertNotIn("vars.AWS_ROLE_ARN", workflow)
         self.assertIn("allowed-account-ids: '816344830716'", workflow)
