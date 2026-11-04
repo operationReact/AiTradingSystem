@@ -304,12 +304,103 @@ class MatchedSessionAggregateEvidence {
   }
 }
 
+/// Server-derived research receipt status, never model/market/live acceptance.
+class ResearchReceiptModelEvidence {
+  const ResearchReceiptModelEvidence({
+    required this.versionId, required this.role, required this.family,
+    required this.status, required this.reasonCode, required this.identityBound,
+  });
+  final String versionId, role, family, status, reasonCode;
+  final bool identityBound;
+
+  factory ResearchReceiptModelEvidence.fromJson(Map<String, dynamic> json) {
+    final status = _value(json, 'status');
+    if (!const [
+      'NOT_ATTEMPTED', 'UNKNOWN_UNRESOLVED', 'SUCCEEDED',
+      'SUCCEEDED_EXPIRED', 'REJECTED', 'TIMEOUT', 'UNKNOWN',
+    ].contains(status) ||
+        !const ['PAPER_CHAMPION', 'SHADOW_CHALLENGER'].contains(_value(json, 'role')) ||
+        json['identityBound'] is! bool ||
+        _value(json, 'modelVersionId').isEmpty) {
+      throw const ApiTransportFailure('INVALID_RESEARCH_RECEIPT_MODEL', null);
+    }
+    return ResearchReceiptModelEvidence(
+      versionId: _value(json, 'modelVersionId'),
+      role: _value(json, 'role'),
+      family: _value(json, 'family'),
+      status: status, reasonCode: _value(json, 'reasonCode'),
+      identityBound: json['identityBound'] as bool,
+    );
+  }
+}
+
+class ResearchReceiptReport {
+  const ResearchReceiptReport({
+    required this.sessionId, required this.caseKey,
+    required this.enrollmentFingerprint, required this.sessionSafetyState,
+    required this.sessionSafetyRevision, required this.sourceCaptured,
+    required this.featuresFrozen, required this.matchedCaseFinalized,
+    required this.expectedModels, required this.successfulReceipts,
+    required this.unresolvedModels, required this.models,
+  });
+  final String sessionId, caseKey, enrollmentFingerprint, sessionSafetyState;
+  final int sessionSafetyRevision, expectedModels, successfulReceipts, unresolvedModels;
+  final bool sourceCaptured, featuresFrozen, matchedCaseFinalized;
+  final List<ResearchReceiptModelEvidence> models;
+
+  factory ResearchReceiptReport.fromJson(Map<String, dynamic> json) {
+    if (json['contractVersion'] != 'v4-research-receipt-diagnostics.v1' ||
+        json['canAuthorizeCapital'] != false ||
+        json['liveExecutionEnabled'] != false ||
+        json['independentlyVerifiedRuntime'] != false ||
+        json['sourceRightsVerified'] != false ||
+        json['paperShadowSoakAccepted'] != false ||
+        json['brokerReconciliationAccepted'] != false ||
+        json['sourceCaptured'] is! bool ||
+        json['featuresFrozen'] is! bool ||
+        json['matchedCaseFinalized'] is! bool ||
+        !const ['ACTIVE','PAUSED','QUARANTINED'].contains(json['sessionSafetyState'])) {
+      throw const ApiTransportFailure('INVALID_RESEARCH_RECEIPT_AUTHORITY', null);
+    }
+    final models = _records(json['models'])
+        .map(ResearchReceiptModelEvidence.fromJson).toList(growable: false);
+    final expected = json['expectedModels'];
+    final success = json['successfulReceipts'];
+    final unresolved = json['unresolvedModels'];
+    final revision = json['sessionSafetyRevision'];
+    if (expected is! int || expected < 2 || expected > 10 ||
+        models.length != expected || revision is! int || revision < 0 ||
+        success is! int || success < 0 ||
+        unresolved is! int || unresolved < 0 ||
+        success + unresolved != expected ||
+        _value(json, 'sessionId').isEmpty ||
+        _value(json, 'caseKey').isEmpty ||
+        _value(json, 'enrollmentFingerprint').length != 64 ||
+        (json['featuresFrozen'] == true && json['sourceCaptured'] != true)) {
+      throw const ApiTransportFailure('INVALID_RESEARCH_RECEIPT_ROSTER', null);
+    }
+    return ResearchReceiptReport(
+      sessionId: _value(json, 'sessionId'),
+      caseKey: _value(json, 'caseKey'),
+      enrollmentFingerprint: _value(json, 'enrollmentFingerprint'),
+      sessionSafetyState: _value(json, 'sessionSafetyState'),
+      sessionSafetyRevision: revision,
+      sourceCaptured: json['sourceCaptured'] as bool,
+      featuresFrozen: json['featuresFrozen'] as bool,
+      matchedCaseFinalized: json['matchedCaseFinalized'] as bool,
+      expectedModels: expected, successfulReceipts: success,
+      unresolvedModels: unresolved, models: models,
+    );
+  }
+}
+
 abstract interface class ModelControlCenterRepository {
   Future<List<RegisteredModelEvidence>> models();
   Future<List<ModelVersionEvidence>> versions(String modelKey);
   Future<List<MatchedSessionEvidence>> recentSessions();
   Future<MatchedSessionEvidence> session(String sessionId);
   Future<MatchedSessionAggregateEvidence> sessionEvidence(String sessionId);
+  Future<ResearchReceiptReport> researchReceipts(String sessionId, String caseKey);
   Future<List<MatchedCaseEvidence>> recentCases(String sessionId);
   Future<MatchedSessionSafetyState> safetyState(String sessionId);
   Future<MatchedSessionSafetyState> transitionSafety(
@@ -356,6 +447,20 @@ class HttpModelControlCenterRepository implements ModelControlCenterRepository {
       '/api/admin/model-governance/paper-shadow/sessions/$id/evidence',
     );
     return MatchedSessionAggregateEvidence.fromJson(_record(response));
+  }
+
+  @override
+  Future<ResearchReceiptReport> researchReceipts(
+      String sessionId, String caseKey) async {
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,95}$').hasMatch(caseKey)) {
+      throw ArgumentError.value(caseKey, 'caseKey', 'Invalid research case key');
+    }
+    final id = Uri.encodeComponent(sessionId);
+    final key = Uri.encodeComponent(caseKey);
+    final result = await api.getJson(
+      '/api/admin/model-governance/paper-shadow/sessions/$id/cases/$key/research-receipts',
+    );
+    return ResearchReceiptReport.fromJson(_record(result));
   }
 
   @override

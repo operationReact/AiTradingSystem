@@ -151,6 +151,31 @@ class _ModelEvidenceFake implements ModelControlCenterRepository {
   }
 
   @override
+  Future<ResearchReceiptReport> researchReceipts(
+      String id, String caseKey) async {
+    if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    return ResearchReceiptReport(
+      sessionId: sessionId, caseKey: caseKey,
+      enrollmentFingerprint: 'enrollment-fingerprint',
+      sessionSafetyState: safetyMode,
+      sessionSafetyRevision: safetyRevision,
+      sourceCaptured: true, featuresFrozen: true,
+      matchedCaseFinalized: false, expectedModels: 2,
+      successfulReceipts: 1, unresolvedModels: 1,
+      models: const [
+        ResearchReceiptModelEvidence(
+          versionId: 'version-1', role: 'PAPER_CHAMPION',
+          family: 'CATBOOST', status: 'SUCCEEDED',
+          reasonCode: 'VALIDATED_RESEARCH_RESPONSE', identityBound: true),
+        ResearchReceiptModelEvidence(
+          versionId: 'version-2', role: 'SHADOW_CHALLENGER',
+          family: 'LIGHTGBM', status: 'UNKNOWN_UNRESOLVED',
+          reasonCode: 'NO_TERMINAL_RECEIPT', identityBound: true),
+      ],
+    );
+  }
+
+  @override
   Future<List<MatchedCaseEvidence>> recentCases(String id) async {
     if (denied) throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
     return const [
@@ -457,4 +482,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('model-inventory-catboost-alpha')), findsNothing);
   });
+  testWidgets('ADMIN research inspector shows missing model receipt and no LIVE acceptance',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAPER / SHADOW'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('model-session-input')), sessionId);
+    await tester.tap(find.byKey(const ValueKey('model-session-fetch')));
+    await tester.pumpAndSettle();
+
+    final scroll = find.descendant(
+      of: find.byKey(const ValueKey('model-control-paper-shadow')),
+      matching: find.byType(Scrollable),
+    ).first;
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-research-case-input')), 220,
+      scrollable: scroll,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('model-research-case-input')), 'case-001');
+    await tester.ensureVisible(find.byKey(const ValueKey('model-research-case-fetch')));
+    await tester.tap(find.byKey(const ValueKey('model-research-case-fetch')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('model-research-receipts-unverified')), 220,
+      scrollable: scroll,
+    );
+    expect(find.textContaining('Validated current receipts: 1/2'), findsOneWidget);
+    expect(find.textContaining('UNKNOWN_UNRESOLVED'), findsWidgets);
+    expect(find.textContaining('V62 matched evidence finalized: NO'), findsOneWidget);
+    expect(find.byKey(const ValueKey('model-research-receipts-unverified')),
+        findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
+  });
+
+
 }

@@ -14,12 +14,17 @@ class ModelControlCenterPage extends StatefulWidget {
 
 class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   final TextEditingController _sessionController = TextEditingController();
+  final TextEditingController _researchCaseController = TextEditingController();
   List<RegisteredModelEvidence>? _models;
   List<ModelVersionEvidence>? _versions;
   RegisteredModelEvidence? _selected;
   MatchedSessionEvidence? _session;
   List<MatchedCaseEvidence>? _cases;
   MatchedSessionAggregateEvidence? _aggregateEvidence;
+  ResearchReceiptReport? _researchReport;
+  ApiFailure? _researchError;
+  bool _loadingResearch = false;
+  String? _researchValidation;
   MatchedSessionSafetyState? _safety;
   List<MatchedSessionSafetyChange>? _safetyHistory;
   ApiFailure? _safetyError;
@@ -46,6 +51,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   void _clearRevokedEvidence(ApiFailure error) {
     _authGeneration++;
     _sessionController.clear();
+    _researchCaseController.clear();
     setState(() {
       _models = null;
       _versions = null;
@@ -53,6 +59,10 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
       _session = null;
       _cases = null;
       _aggregateEvidence = null;
+      _researchReport = null;
+      _researchError = null;
+      _researchValidation = null;
+      _loadingResearch = false;
       _safety = null;
       _safetyHistory = null;
       _safetyError = null;
@@ -82,6 +92,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   @override
   void dispose() {
     _sessionController.dispose();
+    _researchCaseController.dispose();
     super.dispose();
   }
 
@@ -173,9 +184,14 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     final generation = _authGeneration;
     setState(() {
       _loadingSession = true;
+      _researchCaseController.clear();
       _session = null;
       _cases = null;
       _aggregateEvidence = null;
+      _researchReport = null;
+      _researchError = null;
+      _researchValidation = null;
+      _loadingResearch = false;
       _safety = null;
       _safetyHistory = null;
       _safetyError = null;
@@ -232,6 +248,12 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
             (_aggregateEvidence!.sessionSafetyState != state.state ||
              _aggregateEvidence!.sessionStateRevision != state.revision)) {
           _aggregateEvidence = null;
+          _researchReport = null;
+        }
+        if (_researchReport != null &&
+            (_researchReport!.sessionSafetyState != state.state ||
+             _researchReport!.sessionSafetyRevision != state.revision)) {
+          _researchReport = null;
         }
         _safety = state;
         _safetyHistory = history;
@@ -250,6 +272,54 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
     } finally {
       if (mounted && generation == _authGeneration) {
         setState(() => _loadingSafety = false);
+      }
+    }
+  }
+
+  Future<void> _loadResearchReceipts() async {
+    final session = _session;
+    if (session == null || _loadingResearch || _loadingSession) return;
+    final key = _researchCaseController.text.trim();
+    if (!RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{2,95}$').hasMatch(key)) {
+      setState(() => _researchValidation = 'Enter a valid research case key.');
+      return;
+    }
+    final generation = _authGeneration;
+    setState(() {
+      _loadingResearch = true;
+      _researchReport = null;
+      _researchError = null;
+      _researchValidation = null;
+    });
+    try {
+      final report = await widget.repository.researchReceipts(session.id, key);
+      if (!mounted || generation != _authGeneration ||
+          _session?.id != session.id ||
+          _researchCaseController.text.trim() != key) {
+        return;
+      }
+      if (report.sessionId != session.id ||
+          report.caseKey != key ||
+          report.enrollmentFingerprint != session.fingerprint ||
+          (_safety != null &&
+           (report.sessionSafetyState != _safety!.state ||
+            report.sessionSafetyRevision != _safety!.revision))) {
+        throw const ApiTransportFailure('RESEARCH_RECEIPT_SESSION_MISMATCH', null);
+      }
+      setState(() => _researchReport = report);
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration ||
+          _session?.id != session.id) {
+        return;
+      }
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() { _researchReport = null; _researchError = error; });
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingResearch = false);
       }
     }
   }
@@ -335,6 +405,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         _safetyHistory = history;
         // Any control mutation invalidates the previously loaded aggregate.
         _aggregateEvidence = null;
+        _researchReport = null;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Server confirmed $expected session control.')),
@@ -692,6 +763,77 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
         if (session != null) ...[
           const SizedBox(height: 10),
           _sessionSafetyPanel(),
+        ],
+        if (session != null) ...[
+          const SizedBox(height: 12),
+          Card(
+            key: const ValueKey('model-research-receipt-inspector'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Research model receipts',
+                      style: theme.textTheme.titleMedium),
+                  const Text('Inspect one frozen case. Missing or uncertain '
+                      'model outcomes cannot authorize PAPER decisions or LIVE trades.'),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('model-research-case-input'),
+                    controller: _researchCaseController,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration: const InputDecoration(
+                      labelText: 'Research case key',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  if (_researchValidation != null)
+                    Text(_researchValidation!,
+                        key: const ValueKey('model-research-case-validation')),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    key: const ValueKey('model-research-case-fetch'),
+                    onPressed: _loadingResearch ? null : _loadResearchReceipts,
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: const Text('Inspect model receipts'),
+                  ),
+                  if (_loadingResearch)
+                    const LinearProgressIndicator(
+                        key: ValueKey('model-research-case-loading')),
+                  if (_researchError != null)
+                    _problem(_researchError!, stale: false),
+                  if (_researchReport != null) ...[
+                    const SizedBox(height: 12),
+                    Text('Case: ${_researchReport!.caseKey}'),
+                    Text('Session: ${_researchReport!.sessionSafetyState} '
+                        '(revision ${_researchReport!.sessionSafetyRevision})'),
+                    Text('Source captured: ${_researchReport!.sourceCaptured ? 'YES' : 'NO'} '
+                        '· Features frozen: ${_researchReport!.featuresFrozen ? 'YES' : 'NO'}'),
+                    Text('Validated current receipts: '
+                        '${_researchReport!.successfulReceipts}/${_researchReport!.expectedModels}'),
+                    Text('Missing/uncertain/expired: '
+                        '${_researchReport!.unresolvedModels}'),
+                    Text('V62 matched evidence finalized: '
+                        '${_researchReport!.matchedCaseFinalized ? 'YES' : 'NO'}'),
+                    const SizedBox(height: 8),
+                    ..._researchReport!.models.map((model) => Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Text('${model.role} · ${model.family} '
+                          '· ${_short(model.versionId)} '
+                          '\n${model.status} · ${model.reasonCode} '
+                          '· identity ${model.identityBound ? 'BOUND' : 'UNVERIFIED'}'),
+                    )),
+                    const Text(
+                      'Independent licensed source, worker runtime, broker '
+                      'reconciliation, PAPER soak and LIVE: NOT VERIFIED.',
+                      key: ValueKey('model-research-receipts-unverified'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
         if (_aggregateEvidence != null) ...[
           const SizedBox(height: 12),
