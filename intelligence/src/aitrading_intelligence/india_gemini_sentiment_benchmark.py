@@ -353,7 +353,10 @@ def main() -> None:
     parser.add_argument("--minimum-evaluable", type=int, default=20)
     parser.add_argument(
         "--causal-source-config", type=Path,
-        help="JSON containing the exact PR #374 source policy; defaults to its standard GEMINI policy",
+        help=(
+            "JSON containing exact PR #374 source policy; "
+            "default is the standard GEMINI policy"
+        ),
     )
     args = parser.parse_args()
     report = benchmark_heldout_gemini_advisory(
