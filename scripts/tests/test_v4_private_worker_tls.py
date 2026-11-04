@@ -117,9 +117,30 @@ class PrivateWorkerHttpsContract(unittest.TestCase):
                       self.worker)
         self.assertIn('name = "AI_RESEARCH_WORKER_TOKEN", valueFrom = var.research_worker_token_secret_arn',
                       self.worker)
-        self.assertNotIn("AI_RESEARCH_WORKER_CLIENT_ENABLED", self.backend)
-        self.assertNotIn("AI_RESEARCH_WORKER_READINESS_ENABLED", self.backend)
-        self.assertNotIn("AI_RESEARCH_WORKER_URL", self.backend)
+        # V82 separately prepares the Java URL/token only with an operator
+        # flag; presence in a *conditional* must not be mistaken for enabled
+        # inference/readiness in the resulting backend task definition.
+        prep = (ROOT / "infra/terraform/research-worker-java-secret-prep.tf").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('variable "research_worker_java_secret_prep_enabled"', prep)
+        self.assertRegex(prep, r"default\s*=\s*false")
+        self.assertIn("var.research_worker_tls_enabled", prep)
+        self.assertIn("var.research_worker_java_secret_prep_enabled ? [", self.backend)
+        self.assertIn(
+            '{ name = "AI_RESEARCH_WORKER_URL", value = "https://${local.worker_tls_fqdn}" }',
+            self.backend,
+        )
+        for flag in ("AI_RESEARCH_WORKER_CLIENT_ENABLED",
+                     "AI_RESEARCH_WORKER_READINESS_ENABLED"):
+            self.assertIn('{ name = "' + flag + '", value = "false" }', self.backend)
+            self.assertNotIn('{ name = "' + flag + '", value = "true" }', self.backend)
+        self.assertIn(
+            '{ name = "AI_RESEARCH_WORKER_TOKEN", valueFrom = '
+            'var.research_worker_token_secret_arn }',
+            self.backend,
+        )
+        self.assertNotIn('name = "AI_RESEARCH_WORKER_TOKEN", value =', self.backend)
 
 
 if __name__ == "__main__":
