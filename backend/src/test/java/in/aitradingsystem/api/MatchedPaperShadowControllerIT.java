@@ -21,6 +21,9 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,6 +44,21 @@ class MatchedPaperShadowControllerIT extends AbstractPostgresIT {
     @Autowired ObjectMapper mapper;
     @Autowired JdbcClient jdbc;
     @Autowired PaperFillRepository fills;
+
+    private final List<UUID> linkedFixtureOrders = new ArrayList<>();
+
+    @AfterEach
+    void deleteLinkedPaperOrderFixtures() {
+        for (UUID orderId : linkedFixtureOrders) {
+            jdbc.sql("DELETE FROM v4_matched_paper_order_link WHERE paper_order_id = :id")
+                .param("id", orderId).update();
+            jdbc.sql("DELETE FROM paper_fill WHERE order_id = :id")
+                .param("id", orderId).update();
+            jdbc.sql("DELETE FROM paper_order WHERE id = :id")
+                .param("id", orderId).update();
+        }
+        linkedFixtureOrders.clear();
+    }
 
     @BeforeEach
     void removeGlobalTestQuarantine() throws Exception {
@@ -342,6 +360,7 @@ class MatchedPaperShadowControllerIT extends AbstractPostgresIT {
 
     private UUID seedAutomatedPaperOrder(String symbol, String origin, Instant createdAt) {
         UUID id = UUID.randomUUID();
+        linkedFixtureOrders.add(id);
         jdbc.sql("""
                 INSERT INTO paper_order (
                     id, idempotency_key, request_hash, symbol, side, quantity,
