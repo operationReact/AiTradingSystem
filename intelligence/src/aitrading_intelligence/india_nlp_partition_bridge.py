@@ -94,8 +94,14 @@ def freeze_nlp_partition_plan(
         "windows": [window.model_dump(mode="json") for window in windows],
         "independently_witnessed_registration": False,
     }
+    temporary = IndiaNlpProspectivePartitionPlan.model_construct(
+        **payload, plan_fingerprint="0" * 64
+    )
     return IndiaNlpProspectivePartitionPlan(
-        **payload, plan_fingerprint=canonical_fingerprint(payload)
+        **payload,
+        plan_fingerprint=canonical_fingerprint(
+            temporary.model_dump(mode="json", exclude={"plan_fingerprint"})
+        ),
     )
 
 
@@ -249,8 +255,14 @@ def bridge_nlp_prospective_partitions(
             "event_sample_fingerprint": sample.sample_fingerprint,
             "market_case_fingerprint": case.case_fingerprint,
         }
+        temporary = NlpPartitionJoinRow.model_construct(
+            **payload, row_fingerprint="0" * 64
+        )
         rows.append(NlpPartitionJoinRow(
-            **payload, row_fingerprint=canonical_fingerprint(payload)
+            **payload,
+            row_fingerprint=canonical_fingerprint(
+                temporary.model_dump(mode="json", exclude={"row_fingerprint"})
+            ),
         ))
     counts = {split: sum(item.split == split for item in rows) for split in SPLITS}
     if any(count < frozen.minimum_cases_per_split for count in counts.values()):
