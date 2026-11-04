@@ -274,6 +274,12 @@ def audit_native_registered_family(
         "production_promotion_allowed": False,
         "can_authorize_capital": False,
     }
+    preliminary = NativeRegisteredFamilyAudit.model_construct(
+        **payload, audit_fingerprint="0" * 64
+    )
     return NativeRegisteredFamilyAudit(
-        **payload, audit_fingerprint=canonical_fingerprint(payload)
+        **payload,
+        audit_fingerprint=canonical_fingerprint(
+            preliminary.model_dump(mode="json", exclude={"audit_fingerprint"})
+        ),
     )
