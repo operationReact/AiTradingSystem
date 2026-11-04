@@ -122,7 +122,8 @@ class TimeMixerResearchReport(BaseModel):
                 trace.candidate_id != "bounded-time-mixer-research"
                 or trace.model_version_ref != VERSION
                 or trace.model_state_fingerprint != self.model_state_fingerprint
-                or trace.causal_baseline_report_fingerprint != self.causal_baseline_report_fingerprint
+                or trace.causal_baseline_report_fingerprint
+                != self.causal_baseline_report_fingerprint
                 or trace.cohort.holdout_export_fingerprint
                 != self.holdout_export_fingerprint
                 or trace.cohort.training_export_fingerprint
