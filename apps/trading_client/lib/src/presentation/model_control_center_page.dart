@@ -150,7 +150,7 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
                     const SizedBox(height: 10),
                     Wrap(spacing: 8, runSpacing: 8, children: [
                       Chip(label: Text('${_models.length} models')),
-                      Chip(label: Text('${active} active controls')),
+                      Chip(label: Text('$active active controls')),
                       const Chip(label: Text('LIVE unavailable')),
                     ]),
                     if (_lastRefresh != null)
