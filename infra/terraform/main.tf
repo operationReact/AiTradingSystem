@@ -411,24 +411,32 @@ resource "aws_ecs_task_definition" "backend" {
   network_mode             = "awsvpc"
   cpu                      = var.ecs_cpu
   memory                   = var.ecs_memory
-  execution_role_arn       = aws_iam_role.ecs_execution.arn
+  execution_role_arn       = var.research_worker_java_secret_prep_enabled ? aws_iam_role.worker_java_backend_execution[0].arn : aws_iam_role.ecs_execution.arn
   task_role_arn            = aws_iam_role.ecs_task.arn
   container_definitions = jsonencode([{
     name         = "backend"
     image        = "${aws_ecr_repository.backend.repository_url}:bootstrap"
     essential    = true
     portMappings = [{ containerPort = 8080, hostPort = 8080, protocol = "tcp" }]
-    environment = [
+    environment = concat([
       { name = "TRADING_MODE", value = "PAPER" },
       { name = "SPRING_DATASOURCE_URL", value = "jdbc:postgresql://${aws_db_instance.postgres.address}:5432/${var.db_name}" },
       { name = "SPRING_DATASOURCE_USERNAME", value = var.db_username },
       { name = "APP_CORS_ALLOWED_ORIGINS", value = "https://${local.app_fqdn},https://www.${var.domain_name}" },
       { name = "NEWS_ANALYSIS_PROVIDER", value = "NONE" }
-    ]
-    secrets = [
+    ], var.research_worker_java_secret_prep_enabled ? [
+      # No client/readiness opt-in: preparing a credential must NEVER enable
+      # model scoring or expose a dispatch path, even after an operator apply.
+      { name = "AI_RESEARCH_WORKER_URL", value = "https://${local.worker_tls_fqdn}" },
+      { name = "AI_RESEARCH_WORKER_CLIENT_ENABLED", value = "false" },
+      { name = "AI_RESEARCH_WORKER_READINESS_ENABLED", value = "false" }
+    ] : [])
+    secrets = concat([
       { name = "SPRING_DATASOURCE_PASSWORD", valueFrom = "${aws_db_instance.postgres.master_user_secret[0].secret_arn}:password::" },
       { name = "APP_API_KEY", valueFrom = aws_secretsmanager_secret.app_api_key.arn }
-    ]
+    ], var.research_worker_java_secret_prep_enabled ? [
+      { name = "AI_RESEARCH_WORKER_TOKEN", valueFrom = var.research_worker_token_secret_arn }
+    ] : [])
     logConfiguration = {
       logDriver = "awslogs"
       options = {
@@ -492,7 +500,9 @@ resource "aws_ecs_service" "backend" {
     aws_lb_listener.https,
     aws_lb_listener_rule.api,
     aws_iam_role_policy_attachment.ecs_execution_managed,
-    aws_iam_role_policy.ecs_secrets
+    aws_iam_role_policy.ecs_secrets,
+    aws_iam_role_policy_attachment.worker_java_backend_execution_managed,
+    aws_iam_role_policy.worker_java_backend_secrets
   ]
   tags = local.tags
 }
