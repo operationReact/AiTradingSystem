@@ -4,7 +4,7 @@ This increment hardens the merged [PR #402](https://github.com/operationReact/Ai
 
 ## Exact instrument identity
 
-A ticker string alone cannot identify a particular tradable instrument over time. The previous-candle query is now constrained by **all** of the current V59 candle's instrument ID, symbol token, trading symbol, exchange and candle interval, plus the chronology and acquisition cutoffs. The model feature fingerprint now includes the frozen current candle's instrument ID and token. This prevents a feature from silently using another instrument's previous price with the same ticker symbol.
+A ticker string alone cannot identify a particular tradable instrument over time. The previous-candle query is now constrained by **all** of the current V59 candle's instrument ID, symbol token, trading symbol, exchange and candle interval, plus the chronology and acquisition cutoffs. The earlier candle must be at least **one full declared candle interval** before the current candle (ONE_MINUTE through ONE_DAY are explicitly handled); a just-started partial bar is not eligible for the previous-bar return. The model feature fingerprint now includes the frozen current candle's instrument ID and token. This prevents a feature from silently using another instrument's previous price with the same ticker symbol.
 
 The V59 source contract does not independently attest original exchange token and legal source custody. This patch remains a guard against internal identifier confusion, not an exchange signature.
 
@@ -18,6 +18,6 @@ A feature projection created before decisions remains immutable and readable thr
 
 ## Acceptance tests
 
-PostgreSQL/Flyway integration tests cover: same-instrument prior candle, different symbol token with matching ticker (rejected), POST after completed V56 decision with no feature record (rejected), POST replay after already frozen V60 feature and committed V56 decision (rejected), GET still reads the original frozen projection, and the existing malformed/stale/late news/market, PAUSE and ADMIN RBAC regression suite.
+PostgreSQL/Flyway integration tests cover: same-instrument prior candle, different symbol token with matching ticker (rejected), incomplete prior candle interval (rejected), POST after completed V56 decision with no feature record (rejected), POST replay after already frozen V60 feature and committed V56 decision (rejected), GET still reads the original frozen projection, and the existing malformed/stale/late news/market, PAUSE and ADMIN RBAC regression suite.
 
 This is a V4-09 **safety hardening step only**, not proof of genuine licensed NSE/BSE data, verified model runtime, economic edge, PAPER/SHADOW soak or LIVE authorization. Java remains sole broker/risk authority; Python scores research evidence only.
