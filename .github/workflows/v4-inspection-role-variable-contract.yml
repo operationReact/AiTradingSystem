@@ -1,0 +1,37 @@
+name: V89 offline GitHub inspection role variable policy contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_inspection_role_variables_preflight.py'
+      - 'scripts/tests/test_v4_inspection_role_variables_preflight.py'
+      - '.github/workflows/v4-inspection-role-variable-preflight.yml'
+      - '.github/workflows/v4-inspection-role-variable-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/v4_inspection_role_variables_preflight.py'
+      - 'scripts/tests/test_v4_inspection_role_variables_preflight.py'
+      - '.github/workflows/v4-inspection-role-variable-preflight.yml'
+      - '.github/workflows/v4-inspection-role-variable-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  role-variable-offline-contract:
+    name: Reject wrong role account, aliasing and unintended IAM access
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate V89 no-AWS role variable preflight
+        run: |
+          python3 -m unittest discover -v -s scripts/tests -p test_v4_inspection_role_variables_preflight.py
+
+# CI does not contact GitHub/AWS external APIs or access account credentials.
