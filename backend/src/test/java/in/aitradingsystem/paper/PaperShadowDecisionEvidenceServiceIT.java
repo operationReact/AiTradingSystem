@@ -28,6 +28,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 
 class PaperShadowDecisionEvidenceServiceIT extends AbstractPostgresIT {
@@ -54,6 +57,9 @@ class PaperShadowDecisionEvidenceServiceIT extends AbstractPostgresIT {
 
     @BeforeEach
     void setUp() {
+        SecurityContextHolder.getContext().setAuthentication(
+            new UsernamePasswordAuthenticationToken(
+                "v4-shadow-test-admin", "N/A", AuthorityUtils.createAuthorityList("ROLE_ADMIN")));
         champion = model("champion");
         challenger = model("challenger");
     }
@@ -87,6 +93,7 @@ class PaperShadowDecisionEvidenceServiceIT extends AbstractPostgresIT {
         for (UUID id : definitions) {
             jdbc.sql("DELETE FROM model_definition WHERE definition_id = :id").param("id", id).update();
         }
+        SecurityContextHolder.clearContext();
     }
 
     private CaseCapture request(String key, UUID linked) {
