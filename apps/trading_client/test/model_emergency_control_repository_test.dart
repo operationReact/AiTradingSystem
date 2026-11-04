@@ -67,9 +67,9 @@ void main() {
       session: session, baseUri: Uri.parse('https://example.test'),
       client: MockClient((_) async => throw StateError('HTTP must not be called')),
     ));
-    expect(repo.enableStaticFallback('too short'), throwsFormatException);
-    expect(repo.disableFamily('bad/../', 'Emergency market source outage'), throwsFormatException);
-    expect(repo.disableVersion('any-model', 'Emergency market source outage'), throwsFormatException);
+    expect(() => repo.enableStaticFallback('too short'), throwsFormatException);
+    expect(() => repo.disableFamily('bad/../', 'Emergency market source outage'), throwsFormatException);
+    expect(() => repo.disableVersion('any-model', 'Emergency market source outage'), throwsFormatException);
   });
 
   test('403 access denial is not translated into safe success', () async {
