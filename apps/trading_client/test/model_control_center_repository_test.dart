@@ -29,26 +29,26 @@ void main() {
               'role': 'ALPHA',
               'provider': 'IN_HOUSE',
               'licenseStatus': 'RESEARCH_ONLY',
-              'definitionFingerprint': 'a' * 64,
+              'definitionFingerprint': 'a'.padRight(64, 'a'),
             }]), 200);
           case '/api/admin/model-governance/models/catboost-alpha/versions':
             return http.Response(jsonEncode([{
               'versionId': 'model-1',
               'versionLabel': '1.0',
-              'versionFingerprint': 'b' * 64,
-              'artifactFingerprint': 'c' * 64,
+              'versionFingerprint': 'b'.padRight(64, 'b'),
+              'artifactFingerprint': 'c'.padRight(64, 'c'),
               'createdAt': '2026-11-04T09:00:00Z',
             }]), 200);
           case '/api/admin/model-governance/paper-shadow/sessions/$sessionId':
             return http.Response(jsonEncode({
               'sessionId': sessionId,
-              'enrollmentFingerprint': 'd' * 64,
+              'enrollmentFingerprint': 'd'.padRight(64, 'd'),
               'createdAt': '2026-11-04T09:10:00Z',
               'createdBy': 'admin',
               'models': [{
                 'modelVersionId': 'model-1',
                 'role': 'PAPER_CHAMPION',
-                'modelFingerprint': 'b' * 64,
+                'modelFingerprint': 'b'.padRight(64, 'b'),
               }],
               'canAuthorizeCapital': false,
             }), 200);
@@ -58,7 +58,7 @@ void main() {
               'caseKey': 'event-1',
               'symbol': 'RELIANCE-EQ',
               'decisionAt': '2026-11-04T09:11:00Z',
-              'caseFingerprint': 'e' * 64,
+              'caseFingerprint': 'e'.padRight(64, 'e'),
               'independentlyVerifiedRuntime': false,
               'canAuthorizeCapital': false,
               'decisions': [
