@@ -142,6 +142,25 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Enable LIVE'), findsNothing);
   });
 
+  testWidgets('recent-session picker opens persisted matched evidence',
+      (tester) async {
+    final repository = _ModelEvidenceFake();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelControlCenterPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PAPER / SHADOW'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey('model-session-picker')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Session 11111111-222').last);
+    await tester.pumpAndSettle();
+
+    expect(repository.sessionRequests, 1);
+    expect(find.byKey(const ValueKey('model-session-summary')), findsOneWidget);
+  });
+
   testWidgets('malformed session ID fails locally without any fetch',
       (tester) async {
     final repository = _ModelEvidenceFake();
