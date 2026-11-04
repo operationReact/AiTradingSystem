@@ -77,7 +77,7 @@ resource "aws_security_group" "research_worker" {
   # restricted HTTPS rules permit only the endpoint SG and S3 prefix list.
   # Default-disabled scaffold alone remains deliberately network-isolated.
   egress = []
-  tags = local.worker_tags
+  tags   = local.worker_tags
 }
 
 resource "aws_iam_role" "research_worker_execution" {
