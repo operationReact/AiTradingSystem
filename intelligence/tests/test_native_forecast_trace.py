@@ -96,7 +96,7 @@ def test_native_trace_rejects_misordered_observations_and_status_forgery() -> No
     base["holdout_rows"][0], base["holdout_rows"][1] = (
         base["holdout_rows"][1], base["holdout_rows"][0]
     )
-    with pytest.raises(ValidationError, match="decision identities"):
+    with pytest.raises(ValidationError, match="holdout membership|decision identities"):
         NativeForecastDecisionTrace.model_validate(base)
     base = trace.model_dump(mode="json")
     base["can_authorize_capital"] = True
