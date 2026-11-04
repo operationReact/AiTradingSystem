@@ -154,6 +154,43 @@ class ProspectiveMatchedSourceControllerIT extends AbstractPostgresIT {
     }
 
     @Test
+    void pausedMatchedSessionRejectsProspectiveSourceCaptureUntilExplicitResume() throws Exception {
+        UUID sessionId = enroll(registerModel(), registerModel());
+        SourceRows rows = sourceRows(Instant.now().minusSeconds(5));
+        String sourceEndpoint = ENROLL + "/" + sessionId + "/source-cases";
+        String control = ENROLL + "/" + sessionId + "/control";
+
+        mvc.perform(put(control)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"action":"PAUSE","reason":"Observed upstream feed drift"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("PAUSED"));
+        mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isConflict());
+        assertEquals(0, countSources(sessionId));
+
+        mvc.perform(put(control)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {"action":"RESUME","reason":"Feed data recovered and checked"}
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.state").value("ACTIVE"));
+        mvc.perform(post(sourceEndpoint)
+                .with(user("source-admin").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(request(rows.candleId(), rows.newsId())))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
     void sourceIntakeIsAdminOnlyAndCannotReferenceUnknownSession() throws Exception {
         SourceRows rows = sourceRows(Instant.now().minusSeconds(5));
         String endpoint = ENROLL + "/" + UUID.randomUUID() + "/source-cases";
