@@ -64,3 +64,4 @@ jobs:
           pytest -q tests/test_india_time_mixer.py
           pytest -q tests/test_india_bounded_tft.py
           pytest -q tests/test_native_forecast_trace.py
+          pytest -q tests/test_native_forecast_tournament.py
