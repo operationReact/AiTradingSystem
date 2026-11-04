@@ -12,7 +12,7 @@ import hmac
 import json
 import re
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .research_context_signature import (
@@ -48,7 +48,7 @@ def _timestamp(value: str) -> datetime:
     if not isinstance(value, str) or len(value) != 20:
         raise ReleaseBundleBlocked("trust-policy timestamp invalid")
     try:
-        return datetime.strptime(value, TIME_FORMAT).replace(tzinfo=timezone.utc)
+        return datetime.strptime(value, TIME_FORMAT).replace(tzinfo=UTC)
     except ValueError as error:
         raise ReleaseBundleBlocked("trust-policy timestamp invalid") from error
 
@@ -105,10 +105,10 @@ def verify_trusted_policy(
         policy["purpose"] != PURPOSE
     ) or any(policy[flag] is not False for flag in DENIED_POLICY_AUTHORITIES):
         raise ReleaseBundleBlocked("trust policy has unexpected authority or schema")
-    instant = now or datetime.now(timezone.utc)
+    instant = now or datetime.now(UTC)
     if instant.tzinfo is None or instant.utcoffset() is None:
         raise ReleaseBundleBlocked("trust evaluation requires timezone-aware clock")
-    instant = instant.astimezone(timezone.utc)
+    instant = instant.astimezone(UTC)
     policy_start, policy_end = _window(
         policy["valid_from_utc"], policy["valid_until_utc"], MAX_POLICY_AGE
     )
