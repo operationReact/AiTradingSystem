@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .cross_model_causal_cohort import bind_common_causal_tournament_cohort
 from .fingerprints import canonical_fingerprint
 from .incremental_economic_value import (
     IncrementalValueConfig,
@@ -367,28 +368,9 @@ def evaluate_bounded_patch_forecast(
             calibration, candidate_calib, hold_rows, candidate_hold,
             target=target, interval_coverage=policy.interval_coverage,
         )
-        cohort_fingerprints = [
-            canonical_fingerprint({
-                "history": row.history_fingerprint,
-                "target": row.target_fingerprint,
-                "time": row.decision_at.isoformat(),
-            })
-            for row in hold_rows
-        ]
-        common = {
-            "target_binding_fingerprint": target.fingerprint,
-            "fold_binding_fingerprint": canonical_fingerprint({
-                "training": baseline.train_export_fingerprint,
-                "holdout": baseline.holdout_export_fingerprint,
-                "cohort": cohort_fingerprints,
-            }),
-            "economic_cost_binding_fingerprint": canonical_fingerprint({
-                "fee_book": baseline.india_fee_book_fingerprint,
-                "round_trip_cost_bps": target.round_trip_cost_bps,
-            }),
-            "observation_fingerprints": cohort_fingerprints,
-            "decision_times": [row.decision_at for row in hold_rows],
-        }
+        common = bind_common_causal_tournament_cohort(
+            baseline, hold_rows, target
+        ).series_kwargs()
         first = create_net_return_series(
             candidate_id="causal-mean-baseline",
             model_version_ref="v4-04-causal-moving-average.v1",
