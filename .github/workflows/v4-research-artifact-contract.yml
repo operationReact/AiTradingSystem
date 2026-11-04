@@ -11,6 +11,7 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/api/Research*'
       - 'intelligence/src/aitrading_intelligence/**'
       - 'intelligence/tests/**'
+      - 'intelligence/scripts/create_v4_http_smoke_artifacts.py'
       - 'intelligence/pyproject.toml'
       - '.github/workflows/v4-research-artifact-contract.yml'
   push:
@@ -23,6 +24,7 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/api/Research*'
       - 'intelligence/src/aitrading_intelligence/**'
       - 'intelligence/tests/**'
+      - 'intelligence/scripts/create_v4_http_smoke_artifacts.py'
       - 'intelligence/pyproject.toml'
       - '.github/workflows/v4-research-artifact-contract.yml'
   workflow_dispatch:
@@ -53,7 +55,7 @@ jobs:
         run: pip install -e '.[dev]'
       - name: Lint actual inference and tests
         working-directory: intelligence
-        run: ruff check src/aitrading_intelligence/research_artifact_inference.py tests/test_research_artifact_inference.py
+        run: ruff check src/aitrading_intelligence/research_artifact_inference.py tests/test_research_artifact_inference.py scripts/create_v4_http_smoke_artifacts.py
       - name: Train tiny synthetic artifacts and exercise actual FastAPI scoring
         working-directory: intelligence
         run: pytest -q tests/test_research_artifact_inference.py
@@ -159,6 +161,6 @@ jobs:
 # certifies licensed Indian-market inputs, deployed/managed Python services,
 # registered Java V56 source custody, PAPER economic acceptance or LIVE trading.
 
-# This is synthetic model computation plus independently defined Java wire
-# validation at the same exact commit. It does NOT use external licensed feed
-# subscriptions, an actually deployed Java→Python route, broker data or LIVE.
+# These jobs now include a genuine local HTTP exchange between the production
+# Java adapter and a short-lived Python worker using synthetic trained weights.
+# They still provide no remote deployment, licensed feed or LIVE acceptance.
