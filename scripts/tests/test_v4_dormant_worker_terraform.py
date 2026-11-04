@@ -23,10 +23,14 @@ class DormantWorkerTerraformTests(unittest.TestCase):
         self.assertNotIn('aws_iam_role_policy_attachment" "research_worker_task', s)
         self.assertNotIn('aws_iam_role_policy" "research_worker_task', s)
         self.assertRegex(s, r"enable_execute_command\s*=\s*false")
-        # V77 manages the Java ingress with a standalone VPC SG rule.
+        # V81 forbids direct Java-to-worker HTTP; only the optional TLS ALB can connect.
         private_rules = (ROOT / "infra/terraform/research-worker-private-endpoints.tf").read_text(encoding="utf-8")
-        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_java"', private_rules)
-        self.assertIn("referenced_security_group_id = aws_security_group.tasks.id", private_rules)
+        tls = (ROOT / "infra/terraform/research-worker-private-tls.tf").read_text(encoding="utf-8")
+        self.assertNotIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_java"', private_rules)
+        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "worker_from_tls_alb"', tls)
+        self.assertIn('resource "aws_vpc_security_group_ingress_rule" "backend_to_worker_tls"', tls)
+        self.assertIn('dynamic "load_balancer"', s)
+        self.assertIn("aws_lb_listener.research_worker_tls", s)
         self.assertIn('name = "AI_RESEARCH_WORKER_TOKEN"', s)
         self.assertIn("valueFrom = var.research_worker_token_secret_arn", s)
         self.assertIn('name = "TRADING_MODE", value = "PAPER"', s)
