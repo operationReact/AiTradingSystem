@@ -62,7 +62,7 @@ resource "aws_cloudwatch_log_group" "research_worker" {
 resource "aws_security_group" "research_worker" {
   count       = local.worker_scaffold_count
   name        = "${local.name}-research-worker"
-  description = "Research HTTP ingress from Java backend tasks only; no ALB or internet ingress"
+  description = "Isolated worker receives HTTP only from optional internal TLS ALB"
   vpc_id      = aws_vpc.main.id
 
   # Rules are standalone aws_vpc_security_group_*_rule resources.
@@ -183,7 +183,20 @@ resource "aws_ecs_service" "research_worker" {
   desired_count          = 0
   launch_type            = "FARGATE"
   platform_version       = "LATEST"
-  enable_execute_command = false
+  enable_execute_command          = false
+  health_check_grace_period_seconds = 90
+
+  # This is deliberately attached ONLY if the independent V81 cost/TLS opt-in
+  # is enabled. In all cases the worker service desired_count remains ZERO.
+  dynamic "load_balancer" {
+    for_each = var.research_worker_tls_enabled ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.research_worker_tls[0].arn
+      container_name   = "research-worker"
+      container_port   = 8090
+    }
+  }
+
   deployment_circuit_breaker {
     enable   = true
     rollback = true
@@ -195,7 +208,8 @@ resource "aws_ecs_service" "research_worker" {
   }
   depends_on = [
     aws_iam_role_policy_attachment.research_worker_execution_managed,
-    aws_iam_role_policy.research_worker_token_read
+    aws_iam_role_policy.research_worker_token_read,
+    aws_lb_listener.research_worker_tls
   ]
   tags = local.worker_tags
 }
