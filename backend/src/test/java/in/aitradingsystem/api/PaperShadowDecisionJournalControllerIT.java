@@ -15,9 +15,11 @@ import in.aitradingsystem.support.AbstractPostgresIT;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -34,6 +36,41 @@ class PaperShadowDecisionJournalControllerIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
     @Autowired JdbcClient jdbc;
+
+    private final List<UUID> definitions = new ArrayList<>();
+    private final List<UUID> versions = new ArrayList<>();
+    private final List<UUID> sessions = new ArrayList<>();
+    private final List<UUID> paperOrders = new ArrayList<>();
+
+    /** Do not let synthetic PAPER fills or immutable FKs contaminate shared PostgreSQL ITs. */
+    @AfterEach
+    void removeOwnedFixtures() {
+        for (UUID sessionId : sessions) {
+            jdbc.sql("DELETE FROM v4_paper_shadow_order_link WHERE case_id IN "
+                    + "(SELECT case_id FROM v4_paper_shadow_case WHERE session_id = :id)")
+                .param("id", sessionId).update();
+            jdbc.sql("DELETE FROM v4_paper_shadow_decision WHERE session_id = :id")
+                .param("id", sessionId).update();
+            jdbc.sql("DELETE FROM v4_paper_shadow_case WHERE session_id = :id")
+                .param("id", sessionId).update();
+            jdbc.sql("DELETE FROM v4_paper_shadow_model WHERE session_id = :id")
+                .param("id", sessionId).update();
+            jdbc.sql("DELETE FROM v4_paper_shadow_session WHERE session_id = :id")
+                .param("id", sessionId).update();
+        }
+        for (UUID orderId : paperOrders) {
+            jdbc.sql("DELETE FROM paper_fill WHERE order_id = :id").param("id", orderId).update();
+            jdbc.sql("DELETE FROM paper_order WHERE id = :id").param("id", orderId).update();
+        }
+        for (UUID versionId : versions) {
+            jdbc.sql("DELETE FROM model_version WHERE version_id = :id")
+                .param("id", versionId).update();
+        }
+        for (UUID definitionId : definitions) {
+            jdbc.sql("DELETE FROM model_definition WHERE definition_id = :id")
+                .param("id", definitionId).update();
+        }
+    }
 
     @Test
     void adminRecordsImmutableMatchedCohortAndReadsEvidenceWithoutTrading() throws Exception {
@@ -214,6 +251,8 @@ class PaperShadowDecisionJournalControllerIT extends AbstractPostgresIT {
     private UUID modelVersion() {
         UUID definitionId = UUID.randomUUID();
         UUID versionId = UUID.randomUUID();
+        definitions.add(definitionId);
+        versions.add(versionId);
         String key = "journal-" + definitionId.toString().substring(0, 12);
         jdbc.sql("""
                 INSERT INTO model_definition
@@ -258,6 +297,7 @@ class PaperShadowDecisionJournalControllerIT extends AbstractPostgresIT {
         JsonNode parsed = mapper.readTree(json);
         UUID id = UUID.fromString(parsed.path("sessionId").asText());
         assertNotNull(id);
+        sessions.add(id);
         return id;
     }
 
@@ -277,6 +317,7 @@ class PaperShadowDecisionJournalControllerIT extends AbstractPostgresIT {
     }
 
     private void insertPaperOrder(UUID id, Instant createdAt, String origin, String symbol) {
+        paperOrders.add(id);
         jdbc.sql("""
                 INSERT INTO paper_order
                     (id, idempotency_key, request_hash, symbol, side, quantity,
