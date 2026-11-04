@@ -153,7 +153,40 @@ class _ModelControlCenterPageState extends State<ModelControlCenterPage> {
   Future<void> _loadSession() async {
     if (_loadingSession) return;
     final id = _sessionController.text.trim();
-    final uuid = RegExp(r'^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}  @override
+    final uuid = RegExp(r'^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$');
+    if (!uuid.hasMatch(id)) {
+      setState(() => _sessionValidation = 'Enter a valid session UUID.');
+      return;
+    }
+    final generation = _authGeneration;
+    setState(() {
+      _loadingSession = true;
+      _session = null;
+      _cases = null;
+      _sessionError = null;
+      _sessionValidation = null;
+    });
+    try {
+      final session = await widget.repository.session(id);
+      if (!mounted || generation != _authGeneration) return;
+      final cases = await widget.repository.recentCases(id);
+      if (!mounted || generation != _authGeneration) return;
+      setState(() { _session = session; _cases = cases; });
+    } on ApiFailure catch (error) {
+      if (!mounted || generation != _authGeneration) return;
+      if (_isAccessDenied(error)) {
+        _clearRevokedEvidence(error);
+      } else {
+        setState(() => _sessionError = error);
+      }
+    } finally {
+      if (mounted && generation == _authGeneration) {
+        setState(() => _loadingSession = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return DefaultTabController(
       length: 2,
