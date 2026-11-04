@@ -9,10 +9,6 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .cross_model_causal_cohort import bind_common_causal_tournament_cohort
-from .native_forecast_trace import (
-    NativeForecastDecisionTrace,
-    build_native_forecast_trace,
-)
 from .fingerprints import canonical_fingerprint
 from .incremental_economic_value import (
     IncrementalValueConfig,
@@ -27,6 +23,10 @@ from .india_causal_forecast_baseline import (
 from .india_fee_tax import IndiaFeeTaxBookV1
 from .india_patch_transformer import BoundedPatchMetrics, _metrics, _return_windows
 from .market_source import MarketResearchExport, load_market_export
+from .native_forecast_trace import (
+    NativeForecastDecisionTrace,
+    build_native_forecast_trace,
+)
 from .pytorch_target import ForwardReturnTargetSpec
 
 CONTRACT = "india-bounded-tft-quantile-cpu.v1"
