@@ -21,7 +21,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -50,8 +49,8 @@ public class MatchedCausalFeatureProjectionService {
         String inputHash, String captureHash, Instant capturedAt) {}
 
     private record Candle(
-        long id, String symbol, String exchange, String interval,
-        Instant candleAt, BigDecimal open, BigDecimal high, BigDecimal low,
+        long id, long instrumentId, String symbol, String symbolToken,
+        String exchange, String interval, Instant candleAt, BigDecimal open, BigDecimal high, BigDecimal low,
         BigDecimal close, long volume, String source, Instant fetchedAt) {}
 
     private record News(
@@ -82,7 +81,7 @@ public class MatchedCausalFeatureProjectionService {
         this.intake = intake;
     }
 
-    @Transactional(isolation = Isolation.REPEATABLE_READ)
+    @Transactional
     public ProjectionView freeze(UUID sessionId, String caseKey) {
         if (!TradingExecutionAuthority.PAPER.equals(authority.current().tradingMode())) {
             throw new IllegalStateException("Numerical feature projection requires PAPER mode");
@@ -94,24 +93,39 @@ public class MatchedCausalFeatureProjectionService {
         // Serializes PAUSE/QUARANTINE with new feature evidence.
         safety.requireActiveForAppend(sessionId);
         var session = intake.session(sessionId);
+        // Source row FOR UPDATE serializes with the V56 append's FOR SHARE lock.
         Source source = source(sessionId, caseKey);
+        int priorDecision = jdbc.sql("""
+                SELECT count(*) FROM v4_matched_case
+                 WHERE session_id = :sessionId AND case_key = :caseKey
+                """)
+            .param("sessionId", sessionId).param("caseKey", caseKey)
+            .query(Integer.class).single();
+        if (priorDecision != 0) {
+            throw new IllegalStateException(
+                "Cannot backfill features after matched model decisions exist");
+        }
         Instant now = clock.instant();
         if (source.capturedAt().isAfter(now)) {
             throw new IllegalStateException("Source capture timestamp is in the future");
         }
         Candle candle = candle(source.candleId());
         Candle previous = jdbc.sql("""
-                SELECT candle_id, trading_symbol, exchange, interval, candle_time,
+                SELECT candle_id, instrument_id, trading_symbol, symbol_token,
+                       exchange, interval, candle_time,
                        open_price, high_price, low_price, close_price, volume,
                        source, fetched_at
                   FROM market_candle
                  WHERE trading_symbol = :symbol AND exchange = :exchange
+                   AND instrument_id = :instrumentId AND symbol_token = :symbolToken
                    AND interval = :interval AND candle_time < :candleTime
                    AND fetched_at <= :capturedAt
                  ORDER BY candle_time DESC, candle_id DESC
                  LIMIT 1
                 """)
             .param("symbol", source.symbol()).param("exchange", candle.exchange())
+            .param("instrumentId", candle.instrumentId())
+            .param("symbolToken", candle.symbolToken())
             .param("interval", candle.interval()).param("candleTime", at(candle.candleAt()))
             .param("capturedAt", at(source.capturedAt()))
             .query((rs, n) -> mapCandle(rs))
@@ -218,6 +232,7 @@ public class MatchedCausalFeatureProjectionService {
         }
         List<String> parts = new ArrayList<>(List.of(
             CONTRACT, session.enrollmentFingerprint(), source.captureHash(),
+            Long.toString(candle.instrumentId()), candle.symbolToken(),
             Long.toString(previous.id()), analysis.id().toString(),
             analysis.responseFingerprint(), latestAvailableAt.toString()));
         for (var item : features.entrySet()) {
@@ -310,6 +325,7 @@ public class MatchedCausalFeatureProjectionService {
                        input_fingerprint, capture_fingerprint, captured_at
                   FROM v4_matched_source_capture
                  WHERE session_id = :sessionId AND case_key = :caseKey
+                 FOR UPDATE
                 """)
             .param("sessionId", sessionId).param("caseKey", caseKey)
             .query((rs, row) -> new Source(
@@ -326,7 +342,8 @@ public class MatchedCausalFeatureProjectionService {
 
     private Candle candle(long id) {
         return jdbc.sql("""
-                SELECT candle_id, trading_symbol, exchange, interval, candle_time,
+                SELECT candle_id, instrument_id, trading_symbol, symbol_token,
+                       exchange, interval, candle_time,
                        open_price, high_price, low_price, close_price, volume,
                        source, fetched_at
                   FROM market_candle WHERE candle_id = :id
@@ -339,7 +356,8 @@ public class MatchedCausalFeatureProjectionService {
 
     private static Candle mapCandle(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new Candle(
-            rs.getLong("candle_id"), rs.getString("trading_symbol"),
+            rs.getLong("candle_id"), rs.getLong("instrument_id"),
+            rs.getString("trading_symbol"), rs.getString("symbol_token"),
             rs.getString("exchange"), rs.getString("interval"),
             instant(rs, "candle_time"),
             rs.getBigDecimal("open_price"), rs.getBigDecimal("high_price"),
