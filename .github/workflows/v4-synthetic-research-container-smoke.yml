@@ -7,6 +7,7 @@ on:
       - 'intelligence/Dockerfile'
       - 'intelligence/Dockerfile.research-release'
       - 'intelligence/Dockerfile.research-release.dockerignore'
+      - 'intelligence/research-ci-base-image.txt'
       - 'intelligence/src/aitrading_intelligence/research_image_context.py'
       - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
       - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
@@ -26,6 +27,7 @@ on:
       - 'intelligence/Dockerfile'
       - 'intelligence/Dockerfile.research-release'
       - 'intelligence/Dockerfile.research-release.dockerignore'
+      - 'intelligence/research-ci-base-image.txt'
       - 'intelligence/src/aitrading_intelligence/research_image_context.py'
       - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
       - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
@@ -93,15 +95,13 @@ jobs:
           python3 -m aitrading_intelligence.research_image_context verify \
             --context "$work/private-build-context" --code-sha "$GITHUB_SHA"
 
-          # V98 synthetic-only: resolve the pulled official Python tag once,
-          # inspect the local Docker RepoDigests, and pass only an immutable
-          # canonical official-Python digest to Docker's mandatory FROM ARG.
-          # This does NOT approve the digest for a real operator release.
-          docker pull --platform linux/amd64 python:3.11-slim >/dev/null
-          base_image="$(docker image inspect python:3.11-slim --format '{{json .RepoDigests}}' \
-            | python3 intelligence/src/aitrading_intelligence/research_base_digest_gate.py select)"
+          # V99 synthetic CI-only digest pin taken from the successful V98
+          # Docker smoke; retain exactly this source-controlled base across
+          # runs. Release signer approval and image provenance remain separate.
+          base_image="$(cat intelligence/research-ci-base-image.txt)"
           python3 intelligence/src/aitrading_intelligence/research_base_digest_gate.py verify \
             --reference "$base_image" >/dev/null
+          docker pull --platform linux/amd64 "$base_image" >/dev/null
 
           # Public Python/PyPI dependencies may be downloaded DURING build.
           # Never publish this image, sign production releases or send weights.
