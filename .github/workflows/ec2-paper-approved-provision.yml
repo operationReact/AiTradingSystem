@@ -107,6 +107,7 @@ jobs:
           test -f "$PLAN_WORKDIR/approved.tfplan"
           test -f "$PLAN_WORKDIR/approved-plan.json"
           python3 verify_locked_apply.py plan "$PLAN_WORKDIR/approved-plan.json"
+          echo "DEPLOY_STARTED=true" >> "$GITHUB_ENV"
           terraform apply -input=false -no-color -lock=true -lock-timeout=2m \
             "$PLAN_WORKDIR/approved.tfplan"
           echo "PAPER infrastructure created; no app/DB containers or LIVE orders deployed"
@@ -155,6 +156,36 @@ jobs:
               raise SystemExit("automatic 22 IST stop verification BLOCKED")
           print("EventBridge Scheduler nightly stop at 22:00 IST is ENABLED")
           PY
+
+      - name: Stop exact newly tagged PAPER instance if provisioning partially fails
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only stop if the apply step was actually entered. Earlier IAM or
+          # preflight failures must not touch existing instances in this account.
+          if test "${DEPLOY_STARTED:-}" != "true"; then
+            echo "Apply never started: no running PAPER compute to stop"
+            exit 0
+          fi
+          if test "$(aws sts get-caller-identity --query Account --output text)" != "$AWS_ACCOUNT"; then
+            echo "::error::Account mismatch: cannot safely run cost shutdown"
+            exit 1
+          fi
+          ids="$(aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system \
+                      Name=tag:Environment,Values=paper \
+                      Name=tag:Name,Values=aitradingsystem-paper-ec2 \
+                      Name=instance-state-name,Values=pending,running \
+            --query 'Reservations[].Instances[].InstanceId' --output text)"
+          for id in $ids; do
+            if ! aws ec2 stop-instances --region "$AWS_REGION" --instance-ids "$id" >/dev/null; then
+              echo "::warning::Automatic STOP failed: inspect actual PAPER EC2 billing immediately"
+            else
+              echo "Stopped exact project-tagged PAPER host after partial provisioning failure"
+            fi
+          done
+          echo "::warning::If Terraform apply failed, reconcile remote state and any partial AWS resources before retrying"
 
       - name: Remove runner-local binary plan files and ephemeral observations
         if: always()
