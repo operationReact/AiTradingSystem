@@ -15,7 +15,7 @@
 
 1. In the **AI Trading** AWS account `816344830716`, confirm IAM > Identity providers contains `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. You said this provider already exists; **do not create a duplicate**.
 2. In IAM > Policies, create one customer-managed policy using the exact JSON at [iam-paper-provision-policy.json](../../infra/lightsail/iam-paper-provision-policy.json), e.g. name `aitradingsystem-lightsail-paper-policy`. The policy permits inspection of Lightsail regional plans and instance inventory, creation of a request-tagged PAPER instance, and access/port changes only to tagged AI Trading PAPER instances. It has no delete, RDS, ECS, EC2, IAM, Secrets Manager, LIVE trading, or billing permissions.
-3. In IAM > Roles, create a new **Web identity** GitHub OIDC role named `aitradingsystem-github-lightsail-paper`. Use the [iam-trust-dev.json](../../infra/lightsail/iam-trust-dev.json) as its trust policy (update via **Trust relationships > Edit trust policy** if the console generated a broader default). The `aud` and `sub` conditions must match the exact dev-branch GitHub OIDC token. Attach **only** the policy from step 2. Do not attach AdministratorAccess or AmazonLightsailFullAccess. This is a **new Lightsail-specific role**; the existing ECS role can remain untouched.
+3. In IAM > Roles, create a new **Web identity** GitHub OIDC role named `aitradingsystem-github-lightsail-paper`. Use the [iam-trust-dev.json](../../infra/lightsail/iam-trust-dev.json) as its trust policy (update via **Trust relationships > Edit trust policy** if the console generated a broader default). The `aud` and `sub` conditions must match the exact dev-branch GitHub OIDC token. Attach **only** the policy from step 2. The reviewed policy also includes `lightsail:GetInstanceAccessDetails` for tagged AI Trading PAPER instances so GitHub can retrieve temporary SSH certificates at rollout, rather than using permanent SSH keys. Do not attach AdministratorAccess or AmazonLightsailFullAccess. This is a **new Lightsail-specific role**; the existing ECS role can remain untouched.
 4. In GitHub > `operationReact/AiTradingSystem` > Settings > Secrets and variables > Actions > **Variables**, add `AWS_LIGHTSAIL_ROLE_ARN` with value:
 
    `arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper`
@@ -23,9 +23,39 @@
    No AWS access key, secret access key, SSH private key, broker token or database password is required in GitHub.
 5. Verify your GitHub OIDC subject format. New repositories / customized OIDC subjects can use immutable repository IDs. If an OIDC assume-role call is rejected, use the repository's existing *diagnostic* workflow to inspect nonsecret claims and update the trust policy to the exact subject; never replace it with a wildcard.
 
-## Provision through GitHub Actions
+## Starting the AWS workflows when the default branch is `main`
 
-Open [AI Trading PAPER Lightsail 4GB bootstrap](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-bootstrap.yml) and select `dev`.
+This repository's current default branch is **`main`**, but we deliberately deploy only code and GitHub OIDC from **`dev`**. GitHub's `workflow_dispatch` **Run workflow** button requires its workflow file on the default branch, so a manually selected workflow file existing only on `dev` might not have a usable button. Do **not** switch the default branch or merge the trading application to `main` just to launch deployment.
+
+Instead, after setting up the IAM role, trigger the audited dev-only workflows by committing exactly one small, nonsecret request file **to `dev`**, using GitHub's **Add file > Create new file** UI and choosing **Commit directly to the dev branch** (or a PR merged to dev). No request file is committed during this setup; no AWS workflow executes merely because the workflows were merged.
+
+For a **non-billable AWS inspection**, create `infra/lightsail/requests/bootstrap.request.json`:
+
+```json
+{"kind":"bootstrap","target":"aitradingsystem-paper-dev","operation":"preflight","confirmation":""}
+```
+
+Read the [bootstrap workflow runs](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-bootstrap.yml) on `dev`, and verify the expected $24 / 4GB / 2-vCPU Linux plan and account. Check Billing > Credits in **account 816344830716**, including eligible service, expiry, and available balance, before any paid action.
+
+Only after confirming the credit and preflight should you **edit the same file**, committing this exact paid-creation request to `dev`:
+
+```json
+{"kind":"bootstrap","target":"aitradingsystem-paper-dev","operation":"provision","confirmation":"CREATE_PAPER_4GB"}
+```
+
+The explicit confirmation is a gate to one named server and AWS charges may begin after this request merges. The workflow will reject any mismatched existing server and will not create a second instance of a different size. Wait until Ubuntu cloud-init completes before the next step.
+
+For **internal-only** Java/PostgreSQL/Flutter rollout, create `infra/lightsail/requests/deploy.request.json` as a new committed file on `dev`:
+
+```json
+{"kind":"deploy","target":"aitradingsystem-paper-dev","operation":"deploy","confirmation":"DEPLOY_PAPER_LOCAL_ONLY"}
+```
+
+This triggers [internal-only application deployment](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-app-deploy.yml). It requires an already-running tagged Lightsail instance and does not open a public app port. Re-running requires a new **real commit affecting that exact request path**; ordinary application merges and PRs do not trigger any paid or deployment workflow. Only the request file's exact shape and branch are accepted. Application logins remain inaccessible publicly until a separate HTTPS/domain rollout.
+
+## Provision through GitHub Actions (legacy manual-dispatch alternative)
+
+When/if the workflow becomes registered on the default branch, its `workflow_dispatch` option can also be used on `dev`; otherwise use the audited dev request files above. Do not assume a **Run workflow** button is present today.
 
 - First choose `operation=preflight`. It only checks OIDC, exact account/region, current Lightsail 4 GB bundle, Ubuntu image, availability zone and whether the dedicated named instance exists. It **cannot incur instance-creation charges**.
 - Once AWS credits are confirmed in the exact account, run the same workflow with `operation=provision` and enter the exact confirmation **`CREATE_PAPER_4GB`**. Creation is skipped when the correct instance already exists; it never resizes/adopts a different server, even if named similarly. Provisioning invokes one AWS Lightsail `CreateInstances` for the fixed 4 GB bundle.
