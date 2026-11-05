@@ -1,0 +1,54 @@
+name: PAPER EC2 - stop after confirmed connected deployment (save cost)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/paper-ec2-one-time-stop-after-smoke.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  stop:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-manual-control
+          role-session-name: paper-smoke-cost-stop-${{ github.run_id }}
+          role-duration-seconds: 1800
+          aws-region: ap-south-1
+      - name: Verify exact nightly shutdown; stop only existing PAPER EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import control_paper_host as ctl
+          ctl.verify_account()
+          ctl.verify_schedule()
+          state,detail=ctl.apply('stop')
+          if state!='stopped':
+              raise SystemExit('Exact protected PAPER EC2 was not stopped')
+          print('PASS: PAPER EC2 compute stopped after verified Java/PostgreSQL/Flutter smoke')
+          print('Persistent encrypted EBS volume and PostgreSQL Docker volume retained')
+          print('Use existing GitHub manual Start workflow to resume')
+          PY
+
+# One-time trigger only; does not alter scheduled nightly stop. No terminate,
+# EBS delete, network change, new cloud infrastructure, SSH or LIVE orders.
