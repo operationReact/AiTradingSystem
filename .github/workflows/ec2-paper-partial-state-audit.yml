@@ -90,6 +90,47 @@ jobs:
           terraform state list -no-color
           echo "Audited remote state without writes, import, plan, EC2 creation or deletes"
 
+      - name: Verify exact created EC2 host shutdown state and remaining scheduler
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          aws ec2 describe-instances --region "$AWS_REGION" \
+            --instance-ids i-09c01b470fb39b85a \
+            --query 'Reservations[0].Instances[0]' --output json > "$RUNNER_TEMP/paper-audited-instance.json"
+          python3 - "$RUNNER_TEMP/paper-audited-instance.json" <<'PY'
+          import json,sys
+          i=json.load(open(sys.argv[1],encoding="utf-8"))
+          tags={v["Key"]:v["Value"] for v in i.get("Tags",[])}
+          state=i.get("State",{}).get("Name")
+          if (i.get("InstanceId")!="i-09c01b470fb39b85a"
+              or i.get("InstanceType")!="t4g.medium"
+              or i.get("VpcId")!="vpc-04712728d857bb782"
+              or i.get("SubnetId")!="subnet-071ee24263e10fe7c"
+              or i.get("MetadataOptions",{}).get("HttpTokens")!="required"
+              or tags.get("Application")!="ai-trading-system"
+              or tags.get("Environment")!="paper"
+              or tags.get("Name")!="aitradingsystem-paper-ec2"):
+              raise SystemExit("Actual partial PAPER EC2 identity, size, network or IMDSv2 mismatch")
+          print("AUDITED_PAPER_INSTANCE_STATE="+str(state))
+          print("AUDITED_PAPER_INSTANCE_ROOT_EBS_COUNT="+str(len(i.get("BlockDeviceMappings",[]))))
+          if state not in ("stopped","stopping"):
+              raise SystemExit("PAPER EC2 not yet confirmed stopped; investigate hourly compute cost")
+          print("Exact PAPER EC2 verified stopped/stopping, not serving an app")
+          PY
+          if aws scheduler get-schedule --region "$AWS_REGION" \
+               --name aitrading-paper-nightly-stop \
+               --query '{State:State,Expression:ScheduleExpression,Timezone:ScheduleExpressionTimezone}' \
+               --output json > "$RUNNER_TEMP/paper-scheduler.json" 2>"$RUNNER_TEMP/paper-scheduler-error.txt"; then
+            python3 - "$RUNNER_TEMP/paper-scheduler.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf-8"))
+          print("PAPER_SCHEDULER="+json.dumps(x,sort_keys=True))
+          PY
+          else
+            echo "PAPER_SCHEDULER=NOT_PRESENT_OR_INACCESSIBLE; no nightly stop guarantee yet"
+          fi
+
       - name: Verify actual effective restricted provision role policy before any paid retry
         shell: bash
         run: |
@@ -122,7 +163,15 @@ jobs:
           for sid in ("ReadOnlyMumbaiInventory","ConfigureOnlyMumbaiPaperNetwork"):
               if sids[sid].get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion") != "ap-south-1":
                   raise SystemExit("actual provisioning policy is not region-restricted")
-          print("Actual AWS provision role policy verified: SG revoke, SG read, VPC read, deny ingress and Mumbai scope")
+          modification=sids.get("AllowUpdateOnlyExactStoppedPaperInstance",{})
+          target="arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a"
+          if ("ec2:ModifyInstanceAttribute" not in actions("AllowUpdateOnlyExactStoppedPaperInstance")
+              or modification.get("Effect")!="Allow"
+              or modification.get("Resource")!=target
+              or modification.get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion")!="ap-south-1"
+              or modification.get("Condition",{}).get("StringEquals",{}).get("ec2:ResourceTag/Environment")!="paper"):
+              raise SystemExit("New exact-PAPER-instance IAM permission not yet deployed via CloudFormation")
+          print("Actual AWS provision role policy verified including exact-paper-instance ModifyInstanceAttribute")
           PY
 
       - name: Verify exact partial VPC attribute read access after CloudFormation role update
