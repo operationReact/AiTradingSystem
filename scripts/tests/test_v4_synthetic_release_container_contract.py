@@ -59,7 +59,7 @@ class SyntheticResearchImageContract(unittest.TestCase):
         ):
             self.assertNotIn(forbidden, s.lower())
         self.assertNotIn("Ed25519PrivateKey", self.source)
-        self.assertNotIn("secrets.", s.split("env:", 1)[0])
+        self.assertNotIn("secrets.", s.split("jobs:", 1)[0])
 
     def test_local_probe_rejects_unauthenticated_calls_and_authority(self):
         script = smoke.LOCAL_PROBE
