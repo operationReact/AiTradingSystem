@@ -6,6 +6,9 @@ on:
     paths:
       - 'infra/lightsail/**'
       - 'scripts/tests/test_lightsail_paper_bootstrap.py'
+      - 'scripts/tests/test_lightsail_paper_rollout.py'
+      - 'apps/trading_client/Dockerfile.lightsail-paper'
+      - 'apps/trading_client/deploy/nginx.lightsail-paper.conf'
       - '.github/workflows/lightsail-paper-bootstrap.yml'
       - '.github/workflows/lightsail-paper-contract.yml'
   push:
@@ -31,8 +34,12 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_bootstrap.py
-          python3 -m py_compile infra/lightsail/verify_plan.py
-          bash -n infra/lightsail/user-data.sh
+          python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_rollout.py
+          python3 -m py_compile infra/lightsail/verify_plan.py infra/lightsail/prepare_ssh.py
+          bash -n infra/lightsail/user-data.sh infra/lightsail/run_paper.sh
+          RELEASE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+            POSTGRES_PASSWORD=dummy APP_API_KEY=dummy \
+            docker compose -f infra/lightsail/paper-compose.yml config --quiet
       - name: Verify no AWS access can occur in this offline job
         run: |
           set -euo pipefail
