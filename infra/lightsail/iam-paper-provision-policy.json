@@ -1,0 +1,53 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OnlyRegionLightsailInventory",
+      "Effect": "Allow",
+      "Action": [
+        "lightsail:GetInstances",
+        "lightsail:GetBundles",
+        "lightsail:GetBlueprints",
+        "lightsail:GetRegions"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1"
+        }
+      }
+    },
+    {
+      "Sid": "OneProjectTagForProvisionRequests",
+      "Effect": "Allow",
+      "Action": "lightsail:CreateInstances",
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1",
+          "aws:RequestTag/Application": "ai-trading-system",
+          "aws:RequestTag/Environment": "paper"
+        }
+      }
+    },
+    {
+      "Sid": "AccessOnlyTaggedPaperInstances",
+      "Effect": "Allow",
+      "Action": [
+        "lightsail:GetInstance",
+        "lightsail:GetInstanceState",
+        "lightsail:GetInstancePortStates",
+        "lightsail:GetInstanceAccessDetails",
+        "lightsail:PutInstancePublicPorts"
+      ],
+      "Resource": "arn:aws:lightsail:us-east-1:816344830716:Instance/*",
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "us-east-1",
+          "aws:ResourceTag/Application": "ai-trading-system",
+          "aws:ResourceTag/Environment": "paper"
+        }
+      }
+    }
+  ]
+}
