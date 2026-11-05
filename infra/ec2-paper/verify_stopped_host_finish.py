@@ -66,6 +66,8 @@ def validate_state_addresses(value: str) -> None:
 
 
 def validate_stopped_host_state(value: object) -> None:
+    # A previous recovery already cleared the taint marker. Do not attempt
+    # another state write; require the instance to be untainted.
     # This state file is read only inside the ephemeral GitHub runner and
     # must never be logged, uploaded or returned in a final message.
     if not isinstance(value, dict) or not isinstance(value.get("resources"), list):
@@ -81,11 +83,11 @@ def validate_stopped_host_state(value: object) -> None:
         raise ValueError("unexpected number of PAPER hosts in Terraform state")
     instance = instances[0]["instances"][0]
     if (instance.get("index_key") != 0
-        or instance.get("status") != "tainted"
+        or instance.get("status") is not None
         or not isinstance(instance.get("attributes"), dict)
         or instance["attributes"].get("id") != INSTANCE_ID
         or instance["attributes"].get("instance_type") != "t4g.medium"):
-        raise ValueError("unexpected state; no taint removal permitted")
+        raise ValueError("unexpected instance state; host must already be untainted")
 
 
 def _parse_policy_json(raw: object) -> None:
