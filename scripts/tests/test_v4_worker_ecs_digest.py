@@ -31,6 +31,7 @@ def fixture() -> dict:
         "services": {"services": [{"serviceName": NAME, "clusterArn": CLUSTER_ARN,
                       "status": "ACTIVE", "desiredCount": 1, "runningCount": 1,
                       "pendingCount": 0, "enableExecuteCommand": False,
+                      "launchType": "FARGATE",
                       "taskDefinition": DEFINITION_ARN,
                       "deployments": [{"status": "PRIMARY", "rolloutState": "COMPLETED",
                                        "desiredCount": 1, "runningCount": 1}]}],
@@ -45,6 +46,10 @@ def fixture() -> dict:
                                   "healthStatus": "HEALTHY"}]}], "failures": []},
         "definition": {"taskDefinition": {
             "family": NAME, "taskDefinitionArn": DEFINITION_ARN, "status": "ACTIVE",
+            "networkMode": "awsvpc", "requiresCompatibilities": ["FARGATE"],
+            "cpu": "512", "memory": "1024",
+            "taskRoleArn": f"arn:aws:iam::{ACCOUNT}:role/{NAME}-task",
+            "executionRoleArn": f"arn:aws:iam::{ACCOUNT}:role/{NAME}-execution",
             "containerDefinitions": [{
                 "name": "research-worker", "essential": True, "image": IMAGE,
                 "user": "65532:65532",
@@ -74,6 +79,7 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         self.assertTrue(result["running_image_digest_matches_ecr"])
         self.assertTrue(result["strict_worker_boot_declared"])
         self.assertTrue(result["worker_privilege_overrides_absent"])
+        self.assertTrue(result["bounded_fargate_runtime_declared"])
         self.assertEqual(result["verdict"], "PAPER_WORKER_IMAGE_POSTURE_ONLY_MODEL_UNVERIFIED")
         for field in ("worker_model_artifacts_verified",
                       "worker_secret_value_or_iam_access_verified",
@@ -144,6 +150,59 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         valid = fixture()
         valid["definition"]["taskDefinition"]["containerDefinitions"][0]["privileged"] = False
         self.assertTrue(evaluate(**valid)["worker_privilege_overrides_absent"])
+
+    def test_v94_bounded_fargate_runtime_and_role_separation(self):
+        root = Path(__file__).resolve().parents[2]
+        tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
+        for required in (
+            'requires_compatibilities = ["FARGATE"]',
+            'network_mode             = "awsvpc"',
+            "cpu                      = 512",
+            "memory                   = 1024",
+            "task_role_arn            = aws_iam_role.research_worker_task[0].arn",
+            "execution_role_arn       = aws_iam_role.research_worker_execution[0].arn",
+            'launch_type                       = "FARGATE"',
+            "desired_count                     = 0",
+            "enable_execute_command            = false",
+        ):
+            self.assertIn(required, tf)
+
+        for field, value in (
+            ("networkMode", "bridge"),
+            ("networkMode", "host"),
+            ("networkMode", None),
+            ("requiresCompatibilities", ["EC2"]),
+            ("requiresCompatibilities", ["FARGATE", "EC2"]),
+            ("requiresCompatibilities", []),
+            ("cpu", "1024"),
+            ("memory", "2048"),
+            ("taskRoleArn", f"arn:aws:iam::{ACCOUNT}:role/{NAME}-execution"),
+            ("executionRoleArn", f"arn:aws:iam::{ACCOUNT}:role/{NAME}-task"),
+            ("taskRoleArn", "arn:aws:iam::000000000000:role/other"),
+            ("volumes", [{"name": "sneaky-mount"}]),
+            ("pidMode", "task"),
+            ("ipcMode", "task"),
+            ("proxyConfiguration", {"type": "APPMESH"}),
+            ("inferenceAccelerators", [{"deviceName": "a", "deviceType": "eia1.medium"}]),
+            ("enableFaultInjection", True),
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"][field] = value
+            self.blocked(f, "WORKER_TASK_RUNTIME_UNVERIFIED")
+
+        for field, value in (
+            ("launchType", "EC2"),
+            ("launchType", None),
+            ("capacityProviderStrategy", [{"capacityProvider": "FARGATE_SPOT",
+                                          "weight": 1}]),
+        ):
+            f = fixture()
+            f["services"]["services"][0][field] = value
+            self.blocked(f, "WORKER_SERVICE_UNVERIFIED")
+
+        f = fixture()
+        f["definition"]["taskDefinition"]["volumes"] = []
+        self.assertTrue(evaluate(**f)["bounded_fargate_runtime_declared"])
 
     def test_running_image_must_match_ecr_digest_and_tag(self):
         f = fixture()
