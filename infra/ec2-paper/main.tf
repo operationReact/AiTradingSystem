@@ -9,8 +9,10 @@ locals {
   name      = "aitradingsystem-paper-ec2"
   stop_name = "aitrading-paper-nightly-stop"
   tags = {
-    Name       = local.name
-    CostCenter = "ai-trading-paper"
+    Name        = local.name
+    CostCenter  = "ai-trading-paper"
+    Application = "ai-trading-system"
+    Environment = "paper"
   }
 }
 
