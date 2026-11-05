@@ -25,7 +25,7 @@ class SyntheticResearchImageContract(unittest.TestCase):
 
     def test_runner_binds_exact_committed_source_to_both_real_models(self):
         for item in (
-            '"git rev-parse HEAD"', "--code-sha \"$GITHUB_SHA\"",
+            'git rev-parse HEAD', "--code-sha \"$GITHUB_SHA\"",
             "research_image_context verify", "docker build --no-cache",
             "RESEARCH_SOURCE_SHA=$GITHUB_SHA", "--file",
             "ci_research_release_container_smoke.py prepare",
