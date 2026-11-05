@@ -99,10 +99,10 @@ jobs:
             manifest.targets.sort((a,b)=>a.path.localeCompare(b.path));
             fs.writeFileSync('retired-workflow-run-purge-inventory.json',
               JSON.stringify(manifest,null,2)+'\n',{mode:0o600});
-            core.info('PASS: reviewed exactly 14 archived paths and '+total+
+            core.info('PASS: reviewed '+matches.length+' archived registry paths and '+total+
               ' completed historical runs; no AWS/deployment workflows included');
             await core.summary.addHeading('Historical workflow retirement — permanent metadata inventory')
-              .addRaw(matches.length+' of 14 approved archived registry targets found; '+total+' completed runs. 
+              .addRaw(matches.length+' of 14 approved archived registry targets found; '+total+' completed runs. '
                 +'All YAML files absent from both operating branches. '
                 +'Run metadata is archived before any deletion.')
               .addTable([['Retired workflow','Previous state','Runs'],
