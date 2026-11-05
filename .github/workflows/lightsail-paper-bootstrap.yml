@@ -39,7 +39,7 @@ jobs:
       AWS_ACCOUNT: "816344830716"
       AWS_REGION: us-east-1
       LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev
-      AWS_LIGHTSAIL_ROLE_ARN: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+      AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,7 +90,7 @@ jobs:
       - name: Assume dedicated scoped Lightsail role using ephemeral OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
           aws-region: us-east-1
           role-session-name: ats-paper-lightsail-${{ github.run_id }}
           role-duration-seconds: 900
