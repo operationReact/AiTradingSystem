@@ -5,6 +5,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/ec2-paper/**'
+      - 'docs/operations/archived-actions/**'
       - 'scripts/tests/test_ec2_paper_cost_policy.py'
       - 'scripts/tests/test_ec2_paper_preflight_contract.py'
       - 'scripts/tests/test_ec2_paper_oidc_claims.py'
@@ -37,6 +38,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/ec2-paper/**'
+      - 'docs/operations/archived-actions/**'
       - 'scripts/tests/test_ec2_paper_cost_policy.py'
       - 'scripts/tests/test_ec2_paper_application_runtime.py'
       - 'scripts/tests/test_ec2_paper_al2023_docker_bootstrap.py'
@@ -74,6 +76,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_manual_control.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_ssm_release.py -v
+          python3 -m unittest discover -s scripts/tests -p 'test_lightsail_paper_*.py' -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_al2023_docker_bootstrap.py -v
           python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
           bash -n infra/ec2-paper/bootstrap.sh
