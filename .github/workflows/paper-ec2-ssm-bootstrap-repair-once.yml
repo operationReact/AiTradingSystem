@@ -1,0 +1,100 @@
+name: PAPER EC2 - one-time safe SSM bootstrap repair and readiness
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/paper-ec2-ssm-bootstrap-repair-once.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+# Respect concurrent manual start/stop and any PAPER SSM deployment request.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  repair:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify existing bootstrap script is strict PAPER, local-only and syntax-valid
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/bootstrap.sh
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          grep -Fq 'systemctl enable --now docker' infra/ec2-paper/bootstrap.sh
+          grep -Fq 'systemctl enable --now amazon-ssm-agent' infra/ec2-paper/bootstrap.sh
+          grep -Fq '/opt/aitradingsystem-paper/runtime.env' infra/ec2-paper/bootstrap.sh
+          ! grep -Eq 'aws ec2|terraform apply|TRADING_MODE=LIVE|sshd|0\.0\.0\.0:8080' infra/ec2-paper/bootstrap.sh
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: paper-bootstrap-repair-${{ github.run_id }}
+          role-duration-seconds: 2700
+          aws-region: ap-south-1
+
+      - name: Repair only Docker/Compose and local secret bootstrap on existing PAPER EC2 via SSM
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,sys,time
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          import verify_ssm_release as gate
+          gate.verify_aws()  # exact account, role, tagged host, SSM Online, stop schedule
+
+          script=Path("infra/ec2-paper/bootstrap.sh").read_bytes()
+          if not script.startswith(b"#!/usr/bin/env bash\n") or len(script)>12000:
+              raise SystemExit("Unreviewed bootstrap script: no remote execution")
+          encoded=base64.b64encode(script).decode("ascii")
+          command=f"printf '%s' '{encoded}' | base64 -d | bash"
+          r=gate.aws_json("ssm","send-command",
+               "--document-name","AWS-RunShellScript",
+               "--instance-ids",gate.INSTANCE,
+               "--timeout-seconds","1800",
+               "--comment","One-time exact existing PAPER Docker-Compose and host-local credentials bootstrap",
+               "--parameters",json.dumps({"commands":[command],
+                                           "executionTimeout":["1800"]}))
+          command_id=r.get("Command",{}).get("CommandId")
+          if not command_id:
+              raise SystemExit("SSM bootstrap command was not submitted")
+          for i in range(220):
+              time.sleep(7)
+              try:
+                  result=gate.aws_json("ssm","get-command-invocation",
+                                      "--command-id",command_id,"--instance-id",gate.INSTANCE)
+              except gate.Rejected:
+                  if i<5: continue
+                  raise
+              status=result.get("Status")
+              if status=="Success":
+                  print("PASS: Existing EC2 Docker/Compose and runtime secret bootstrap completed")
+                  break
+              if status in {"Failed","Cancelled","TimedOut","Cancelling"}:
+                  raise SystemExit(f"SSM host bootstrap blocked ({status}); remote output deliberately not disclosed")
+          else:
+              raise SystemExit("Bootstrap SSM command timed out")
+
+          # Post-bootstrap read-only SSM acceptance uses the identical strict
+          # vetted script employed by the normal dev preflight workflow.
+          gate.verify_aws()
+          gate.send_command("preflight")
+          print("PASS: Exact protected PAPER EC2 is ready for ARM64 image deployment")
+          PY
+
+# No EC2 create/terminate/start/stop, public networking, database provisioning,
+# SSH, broker keys, ECR push or Terraform state modification.
