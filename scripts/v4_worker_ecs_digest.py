@@ -157,6 +157,34 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
                 for row in secretrows),
         "WORKER_CONFIG_AMBIGUOUS",
     )
+    # V95: allow only the three documented PAPER startup configuration
+    # variables and the single Secrets Manager token reference. Unreviewed
+    # flags or extra injected secrets must not inherit a healthy-image verdict.
+    allowlisted_env = check(
+        unique_ok
+        and set(envnames) == {
+            "TRADING_MODE", "AI_RESEARCH_STRICT_BOOT_REQUIRED",
+            "AI_RESEARCH_MODEL_MANIFEST",
+        }
+        and set(secret_names) == {"AI_RESEARCH_WORKER_TOKEN"}
+        and all(isinstance(row.get("value"), str) for row in envrows),
+        "WORKER_STARTUP_CONFIG_NOT_ALLOWLISTED",
+    )
+    # Private worker exposes only its reviewed container-local TCP 8090.
+    # This is not evidence that VPC/Security Groups or ALB paths are correct.
+    mappings = container.get("portMappings", [])
+    mapping = mappings[0] if isinstance(mappings, list) and len(mappings) == 1 else {}
+    port_surface_ok = check(
+        isinstance(mappings, list) and len(mappings) == 1
+        and isinstance(mapping, dict)
+        and mapping.get("containerPort") == 8090
+        and mapping.get("hostPort") == 8090
+        and mapping.get("protocol") == "tcp"
+        and not mapping.get("containerPortRange")
+        and not mapping.get("appProtocol")
+        and not mapping.get("name"),
+        "WORKER_PORT_SURFACE_UNVERIFIED",
+    )
     # V93: metadata-only privilege guard. Explicit non-root UID:GID is
     # required in the task definition, rather than inferred from an image tag.
     # No task-defined root, privileged process, interactive terminal, injected
@@ -233,6 +261,8 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "one_running_healthy_task": running_ok,
         "running_image_digest_matches_ecr": digest_ok,
         "environment_unambiguous": unique_ok,
+        "startup_config_names_allowlisted": allowlisted_env,
+        "single_private_tcp_port_declared": port_surface_ok,
         "paper_declaration_verified": mode_ok,
         "worker_privilege_overrides_absent": privilege_ok,
         "strict_worker_boot_declared": strict_boot_ok,
