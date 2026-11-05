@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "AI Trading PAPER EC2: encrypted versioned S3 state, exact dev GitHub OIDC read-only preflight and plan-only roles; no EC2 or Scheduler resources.",
+  "Description": "AI Trading PAPER EC2: existing encrypted versioned S3 state, strict immutable dev OIDC read-only preflight/plan roles and constrained create-only provision role. No EC2 resources created by this stack.",
   "Resources": {
     "PaperStateBucket": {
       "Type": "AWS::S3::Bucket",
@@ -293,6 +293,318 @@
           }
         ]
       }
+    },
+    "RestrictedGithubProvisionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "aitrading-paper-ec2-provision",
+        "Description": "One-host dev-branch Terraform provisioning only; exact paper state and locked plan; no LIVE resources, no termination.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "aitrading-paper-ec2-locked-provision-limited",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadAndLockOnlyExactTerraformState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/paper-ec2/terraform.tfstate",
+                    "arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/paper-ec2/terraform.tfstate.tflock"
+                  ]
+                },
+                {
+                  "Sid": "DeleteOnlyTransientS3LockNeverState",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:DeleteObject"
+                  ],
+                  "Resource": "arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/paper-ec2/terraform.tfstate.tflock"
+                },
+                {
+                  "Sid": "ReadDedicatedStateBucketMetadata",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PaperStateBucket",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadOnlyMumbaiInventory",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeVpcs",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeInstanceTypes",
+                    "ec2:DescribeInternetGateways",
+                    "ec2:DescribeRouteTables",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeAvailabilityZones",
+                    "ec2:DescribeInstanceTypeOfferings",
+                    "ec2:DescribeTags",
+                    "ec2:DescribeInstanceCreditSpecifications",
+                    "ec2:DescribeIamInstanceProfileAssociations"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateOnlyExpectedMumbaiNetworking",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:CreateVpc",
+                    "ec2:CreateInternetGateway",
+                    "ec2:CreateSubnet",
+                    "ec2:CreateRouteTable",
+                    "ec2:CreateSecurityGroup"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ConfigureOnlyMumbaiPaperNetwork",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:ModifyVpcAttribute",
+                    "ec2:ModifySubnetAttribute",
+                    "ec2:AttachInternetGateway",
+                    "ec2:CreateRoute",
+                    "ec2:AssociateRouteTable",
+                    "ec2:AuthorizeSecurityGroupEgress"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "TagOnlyCreatesInMumbaiPaper",
+                  "Effect": "Allow",
+                  "Action": "ec2:CreateTags",
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "aws:RequestTag/Application": "ai-trading-system",
+                      "aws:RequestTag/Environment": "paper"
+                    },
+                    "ForAnyValue:StringEquals": {
+                      "ec2:CreateAction": [
+                        "CreateVpc",
+                        "CreateInternetGateway",
+                        "CreateSubnet",
+                        "CreateRouteTable",
+                        "CreateSecurityGroup",
+                        "RunInstances"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "Sid": "LaunchOnlyT4gMediumPaperInstances",
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "ec2:InstanceType": "t4g.medium",
+                      "ec2:MetadataHttpTokens": "required",
+                      "aws:RequestTag/Application": "ai-trading-system",
+                      "aws:RequestTag/Environment": "paper"
+                    }
+                  }
+                },
+                {
+                  "Sid": "AllowRunInstancesOnlyRequiredLaunchArtifacts",
+                  "Effect": "Allow",
+                  "Action": "ec2:RunInstances",
+                  "Resource": [
+                    "arn:aws:ec2:ap-south-1::image/*",
+                    "arn:aws:ec2:ap-south-1:098859530205:subnet/*",
+                    "arn:aws:ec2:ap-south-1:098859530205:security-group/*",
+                    "arn:aws:ec2:ap-south-1:098859530205:network-interface/*",
+                    "arn:aws:ec2:ap-south-1:098859530205:volume/*"
+                  ],
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "PermitStandardCpuCreditsOnlyPaperInstances",
+                  "Effect": "Allow",
+                  "Action": "ec2:ModifyInstanceCreditSpecification",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "ec2:ResourceTag/Application": "ai-trading-system",
+                      "ec2:ResourceTag/Environment": "paper"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadExactPublicAL2023Arm64ImagePointer",
+                  "Effect": "Allow",
+                  "Action": "ssm:GetParameter",
+                  "Resource": "arn:aws:ssm:ap-south-1::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-arm64"
+                },
+                {
+                  "Sid": "CreateOrReadOnlyTwoDedicatedPaperRoles",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:CreateRole",
+                    "iam:TagRole",
+                    "iam:GetRole",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:GetRolePolicy"
+                  ],
+                  "Resource": [
+                    "arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm",
+                    "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop"
+                  ]
+                },
+                {
+                  "Sid": "AttachOnlySSMCoreToDedicatedInstanceRole",
+                  "Effect": "Allow",
+                  "Action": "iam:AttachRolePolicy",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm",
+                  "Condition": {
+                    "ArnEquals": {
+                      "iam:PolicyARN": "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+                    }
+                  }
+                },
+                {
+                  "Sid": "InlinePolicyOnlyForNightlyStopRole",
+                  "Effect": "Allow",
+                  "Action": "iam:PutRolePolicy",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop"
+                },
+                {
+                  "Sid": "CreateOnlyOnePaperInstanceProfile",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:CreateInstanceProfile",
+                    "iam:AddRoleToInstanceProfile",
+                    "iam:GetInstanceProfile",
+                    "iam:TagInstanceProfile"
+                  ],
+                  "Resource": "arn:aws:iam::098859530205:instance-profile/aitrading-paper-ec2-ssm"
+                },
+                {
+                  "Sid": "PassOnlyPaperInstanceRoleToEC2",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm",
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "ec2.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "PassOnlyStopRoleToScheduler",
+                  "Effect": "Allow",
+                  "Action": "iam:PassRole",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop",
+                  "Condition": {
+                    "StringEquals": {
+                      "iam:PassedToService": "scheduler.amazonaws.com"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CreateOnlyExactNightlyStopSchedule",
+                  "Effect": "Allow",
+                  "Action": [
+                    "scheduler:CreateSchedule",
+                    "scheduler:GetSchedule"
+                  ],
+                  "Resource": "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop"
+                },
+                {
+                  "Sid": "DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ec2:TerminateInstances",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "ec2:AllocateAddress",
+                    "ec2:CreateNatGateway",
+                    "ec2:CreateFleet",
+                    "ec2:RequestSpotInstances",
+                    "rds:CreateDBInstance",
+                    "lightsail:CreateInstances",
+                    "scheduler:DeleteSchedule",
+                    "scheduler:UpdateSchedule",
+                    "s3:DeleteBucket"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "Capability",
+            "Value": "locked-create-only"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -320,6 +632,15 @@
       "Value": {
         "Fn::GetAtt": [
           "ReadOnlyGithubPlanRole",
+          "Arn"
+        ]
+      }
+    },
+    "RestrictedProvisionRoleArn": {
+      "Description": "Create-only dev OIDC role for reviewed locked Terraform plan/apply; exact Mumbai PAPER resources only",
+      "Value": {
+        "Fn::GetAtt": [
+          "RestrictedGithubProvisionRole",
           "Arn"
         ]
       }
