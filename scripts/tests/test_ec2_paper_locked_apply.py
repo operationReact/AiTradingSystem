@@ -135,6 +135,10 @@ class PaperLockedProvisionContract(unittest.TestCase):
         })
         allowed = self.statements[:-1]
         self.assertTrue(all(x["Effect"] == "Allow" for x in allowed))
+        vpc_reads = next(x for x in allowed if x["Sid"] == "ReadOnlyMumbaiInventory")
+        self.assertIn("ec2:DescribeVpcAttribute", vpc_reads["Action"])
+        self.assertEqual(vpc_reads["Condition"]["StringEquals"]["aws:RequestedRegion"],
+                         "ap-south-1")
         self.assertEqual(self.statements[-1]["Effect"], "Deny")
         self.assertTrue(all(not act.endswith("*") for stmt in allowed
                             for act in (stmt["Action"] if isinstance(stmt["Action"], list)

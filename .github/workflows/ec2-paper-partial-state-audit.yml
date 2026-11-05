@@ -1,0 +1,80 @@
+name: EC2 PAPER partial provisioning audit (read-only, no changes)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-partial-state-audit.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  inspect:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_ACCOUNT: "098859530205"
+      AWS_REGION: ap-south-1
+      STATE_REGION: us-east-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Assume exact existing restricted PAPER role for read-only audit
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision
+          aws-region: ap-south-1
+          role-session-name: paper-partial-audit-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Audit only exact-account partial VPC, IAM and EC2 inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          echo "--- PROJECT PAPER VPCs with matching tags ---"
+          aws ec2 describe-vpcs --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Vpcs[].{Id:VpcId,CIDR:CidrBlock,State:State}' --output json
+          echo "--- Tagged PAPER EC2 inventory ---"
+          aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType}' --output json
+          echo "--- Exact dedicated PAPER IAM resource existence ---"
+          for name in aitrading-paper-ec2-ssm aitrading-paper-daily-stop; do
+            if aws iam get-role --role-name "$name" --query 'Role.RoleId' --output text >/dev/null 2>&1; then
+              echo "IAM role $name: PRESENT"
+            else
+              echo "IAM role $name: NOT_FOUND_OR_INACCESSIBLE"
+            fi
+          done
+          if aws iam get-instance-profile --instance-profile-name aitrading-paper-ec2-ssm \
+            --query 'InstanceProfile.InstanceProfileId' --output text >/dev/null 2>&1; then
+            echo "IAM instance profile: PRESENT"
+          else
+            echo "IAM instance profile: NOT_FOUND_OR_INACCESSIBLE"
+          fi
+
+      - name: Audit only isolated PAPER S3 Terraform state addresses
+        working-directory: infra/ec2-paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform init -input=false -no-color -backend-config=backend.hcl
+          echo "--- Terraform state managed addresses (no state or secrets printed) ---"
+          terraform state list -no-color
+          echo "Audited remote state without writes, import, plan, EC2 creation or deletes"
+
+# Never download or upload Terraform state artifacts and never mutate AWS state.
+# If partial resources exist, recover by reviewed import/reconciliation, not
+# re-running the original create-only thirteen-resource approval.
