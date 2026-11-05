@@ -14,7 +14,7 @@ CFN = TF / "bootstrap/state-preflight.cfn.json"
 READ = ROOT / ".github/workflows/ec2-paper-readonly-preflight.yml"
 BUCKET = "aitrading-paper-tfstate-098859530205-ap-south-1"
 ACCOUNT = "098859530205"
-GITHUB_SUB = "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+GITHUB_SUB = "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
 
 spec = importlib.util.spec_from_file_location(
     "ec2_paper_request", TF / "verify_preflight_request.py"

@@ -46,11 +46,30 @@ Bootstrapping uses Amazon Linux 2023 ARM64 with SSM Agent and Docker. Compose is
 Before a manual AWS provisioning or app deploy, perform these steps in order:
 
 1. Confirm EC2 t4g.medium availability, quota, AWS credit eligibility and acceptable disk/IPv4/network cost **inside account 098859530205, Mumbai**. Do not assume the earlier Lightsail restrictions also prevent (or permit) EC2.
-2. Correct/create a **separate restricted EC2 PAPER GitHub OIDC role** in this account with exact `repo:operationReact/AiTradingSystem:ref:refs/heads/dev` audience/subject. The previous Lightsail trust or a role for Bro & Bro is not transferable. Avoid `AdministratorAccess` and wildcard OIDC subjects.
+2. Correct/create a **separate restricted EC2 PAPER GitHub OIDC role** in this account with exact `repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev` audience/subject. The previous Lightsail trust or a role for Bro & Bro is not transferable. Avoid `AdministratorAccess` and wildcard OIDC subjects.
 3. Bootstrap dedicated encrypted S3 Terraform remote state with locking and least-privilege access. Configure a future **manual plan** GitHub Action. Validate `terraform fmt`, `init -backend=false`, `validate` offline first, then a real `plan` on the intended account. Review resources and estimated recurring charges.
 4. Only after credit/quota/plan approval, explicitly apply the intended resource set using the approval variable. Verify SSM reachability, 4 GiB memory, encrypted gp3 storage, strict no-ingress, 22:00 IST nightly stop and actual start/stop cycle.
 5. Build and deploy actual **ARM64** Java/Flutter Docker images and PostgreSQL over AWS SSM; run existing real Postgres/Flyway/Java/Flutter same-origin API integration smoke. Back up database to an independent store and test restore. Add a public HTTPS domain only after deliberate SSL/network design; no insecure HTTP auth.
 6. Use only PAPER and SHADOW after required safety, data licensing, audit and broker reconciliation checks. LIVE orders, research model promotion and capital authorization remain disabled.
+
+## Required in-place IAM trust update: immutable GitHub OIDC subject
+
+The first actual AWS preflight reached STS and failed `Not authorized to perform sts:AssumeRoleWithWebIdentity`. A subsequent runner-local OIDC diagnostic showed the exact `sub` issued by GitHub:
+
+```text
+repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev
+```
+
+This is the newer GitHub **immutable repository subject** format, containing stable owner and repository IDs, not a wildcard or a credential. It does **not** match the older name-only `sub` that was uploaded with the CloudFormation stack. Both existing OIDC roles must trust this exact immutable value, with `aud=sts.amazonaws.com` unchanged. See [GitHub's immutable subject documentation](https://docs.github.com/en/actions/reference/security/oidc).
+
+**Update the EXISTING stack in N. Virginia, do not create another stack:**
+
+1. Open the [existing CloudFormation stack in us-east-1](https://us-east-1.console.aws.amazon.com/cloudformation/home?region=us-east-1#/stacks), select `aitrading-paper-ec2-bootstrap` and choose **Update**.
+2. Choose **Replace current template → Upload a template file** and upload the latest [`state-preflight.cfn.json`](../../infra/ec2-paper/bootstrap/state-preflight.cfn.json) from `dev`. Leave other parameters unchanged.
+3. On the change-set preview, only `ReadOnlyGithubPreflightRole` and `ReadOnlyGithubPlanRole` should show **Update (no replacement)** for their trust policies. The S3 bucket and bucket policy should remain untouched; **stop if the preview proposes replacement/deletion or new paid resources**.
+4. Acknowledge **CAPABILITY_NAMED_IAM** and execute the reviewed stack update. Confirm `UPDATE_COMPLETE` in the same us-east-1 stack before retrying GitHub's read-only preflight. No new S3 bucket, IAM role or EC2 instance should be created by this change.
+
+The preflight request is **not retriggered by this PR**. Re-run it only after the successful in-place CloudFormation update; its GitHub token inspection now verifies this exact ID-bound `sub` and then attempts AWS role assumption. No change to the Mumbai EC2 provider, 4 GB budget, 22:00 IST stop, S3 state region or LIVE-off policy.
 
 ## Actual AWS bootstrap region — verified from console
 

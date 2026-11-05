@@ -103,7 +103,7 @@
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
                 }
               }
             }
@@ -190,7 +190,7 @@
               "Condition": {
                 "StringEquals": {
                   "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                  "token.actions.githubusercontent.com:sub": "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
                 }
               }
             }
