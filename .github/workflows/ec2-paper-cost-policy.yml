@@ -7,6 +7,7 @@ on:
       - 'infra/ec2-paper/**'
       - 'scripts/tests/test_ec2_paper_cost_policy.py'
       - 'scripts/tests/test_ec2_paper_preflight_contract.py'
+      - 'scripts/tests/test_ec2_paper_oidc_claims.py'
       - 'scripts/tests/test_ec2_paper_plan_only.py'
       - '.github/workflows/ec2-paper-plan-only.yml'
       - '.github/workflows/ec2-paper-readonly-preflight.yml'
@@ -41,6 +42,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_cost_policy.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_preflight_contract.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_oidc_claims.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_plan_only.py -v
           python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
           bash -n infra/ec2-paper/bootstrap.sh
