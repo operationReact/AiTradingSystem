@@ -160,7 +160,7 @@ class PaperSsmRelease(unittest.TestCase):
             self.assertIn("base64 -d | bash -s --",command)
             self.assertNotIn("AWS_SECRET_ACCESS_KEY",command)
             self.assertNotIn("TRADING_MODE=LIVE",command)
-            b64=command.split("'")[1]
+            b64=command.split("'")[3]
             decoded=base64.b64decode(b64).decode("utf-8")
             self.assertIn("#!/usr/bin/env bash",decoded)
             self.assertNotIn("aws ec2 start-instances",decoded)
