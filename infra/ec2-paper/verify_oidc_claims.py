@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import urllib.request
+import urllib.error
 from urllib.parse import urlencode
 
 EXPECTED = {
@@ -31,8 +32,16 @@ def verify(claims: object) -> None:
     invalid = [field for field, value in EXPECTED.items()
                if claims.get(field) != value]
     if invalid:
-        # Show only the mismatching claim names, not JWT or untrusted values.
-        raise ValueError("OIDC claims mismatched: " + ",".join(invalid))
+        # GitHub OIDC subject/audience are identity claims, NOT token material.
+        # Emit a limited sanitized subject only if it differs, to diagnose a
+        # customized repository OIDC subject without leaking any JWT.
+        details = "OIDC claims mismatched: " + ",".join(invalid)
+        for name in ("sub", "aud"):
+            if name in invalid:
+                observed = str(claims.get(name, "(missing)"))[:200]
+                observed = re.sub(r"[^A-Za-z0-9/:@._-]", "?", observed)
+                details += " observed_" + name + "=" + observed
+        raise ValueError(details)
 
 
 def decode_claims(token: str) -> dict:
@@ -66,9 +75,19 @@ def main() -> int:
             raise ValueError("OIDC response was not object")
         claims = decode_claims(data.get("value"))
         verify(claims)
-    except (ValueError, TypeError, KeyError, OSError, json.JSONDecodeError,
-            UnicodeDecodeError):
-        print("GitHub OIDC claim preflight BLOCKED (sanitized)", file=sys.stderr)
+    except urllib.error.HTTPError as err:
+        print("GitHub OIDC endpoint HTTP failure: status " + str(err.code),
+              file=sys.stderr)
+        return 2
+    except ValueError as err:
+        # These messages contain only locally authored error descriptions,
+        # missing field names, and tightly sanitized nonsecret identity claims.
+        print("GitHub OIDC claim preflight BLOCKED: " + str(err),
+              file=sys.stderr)
+        return 2
+    except (TypeError, KeyError, OSError, UnicodeDecodeError):
+        print("GitHub OIDC claim retrieval BLOCKED (environment/transport)",
+              file=sys.stderr)
         return 2
     print("GitHub OIDC iss/aud/sub/repository/ref/push all exactly match dev IAM trust")
     print("If AWS STS still denies role assumption, check AWS IAM provider/trust/account policy")
