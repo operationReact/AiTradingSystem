@@ -30,6 +30,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # A parent commit is required for the exact request-only diff check.
+          fetch-depth: 2
 
       - name: Refuse non-request commits and enforce exact user-approved scope
         shell: bash
@@ -138,7 +140,7 @@ jobs:
           tags={t["Key"]:t["Value"] for t in x.get("Tags",[])}
           if (x.get("InstanceType")!="t4g.medium"
               or x.get("MetadataOptions",{}).get("HttpTokens")!="required"
-              or x.get("State",{}).get("Name") not in ("pending","running")
+              or x.get("State",{}).get("Name") not in ("pending","running","stopping","stopped")
               or tags.get("Application")!="ai-trading-system"
               or tags.get("Environment")!="paper"):
               raise SystemExit("actual EC2 4GB/PAPER/IMDSv2 verification BLOCKED")
@@ -156,6 +158,27 @@ jobs:
               raise SystemExit("automatic 22 IST stop verification BLOCKED")
           print("EventBridge Scheduler nightly stop at 22:00 IST is ENABLED")
           PY
+
+      - name: Stop new PAPER host if today's 22 IST shutdown window has passed
+        shell: bash
+        run: |
+          set -euo pipefail
+          # If first provision finishes after tonight's scheduled stop, the
+          # next daily stop is tomorrow. Avoid almost 24h of idle EC2 billing.
+          hour="$(TZ=Asia/Kolkata date +%H)"
+          if (( 10#$hour >= 22 )); then
+            test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+            instance_id="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["paper_instance_id"]["value"])' "$PLAN_WORKDIR/outputs.json")"
+            instance_state="$(aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "$instance_id" --query 'Reservations[0].Instances[0].State.Name' --output text)"
+            if test "$instance_state" = "running" || test "$instance_state" = "pending"; then
+              aws ec2 stop-instances --region "$AWS_REGION" --instance-ids "$instance_id" >/dev/null
+              echo "New PAPER host stopped after 22:00 IST; restart on demand"
+            else
+              echo "New PAPER host already in state $instance_state; no stop required"
+            fi
+          else
+            echo "Before 22:00 IST; enabled nightly scheduler will stop the PAPER instance"
+          fi
 
       - name: Stop exact newly tagged PAPER instance if provisioning partially fails
         if: failure()
