@@ -41,6 +41,9 @@ jobs:
             infra/ec2-paper/requests/read-only-preflight.json
           echo "Read-only AWS inspection, NO provisioning"
 
+      - name: Validate actual GitHub OIDC claims without printing JWT
+        run: python3 infra/ec2-paper/verify_oidc_claims.py
+
       - name: Obtain short-lived, read-only dev-branch GitHub OIDC credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
