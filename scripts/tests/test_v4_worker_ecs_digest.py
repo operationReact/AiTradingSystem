@@ -53,6 +53,8 @@ def fixture() -> dict:
             "containerDefinitions": [{
                 "name": "research-worker", "essential": True, "image": IMAGE,
                 "user": "65532:65532",
+                "portMappings": [{"containerPort": 8090, "hostPort": 8090,
+                                  "protocol": "tcp"}],
                 "environment": [
                     {"name": "TRADING_MODE", "value": "PAPER"},
                     {"name": "AI_RESEARCH_STRICT_BOOT_REQUIRED", "value": "true"},
@@ -80,6 +82,8 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         self.assertTrue(result["strict_worker_boot_declared"])
         self.assertTrue(result["worker_privilege_overrides_absent"])
         self.assertTrue(result["bounded_fargate_runtime_declared"])
+        self.assertTrue(result["startup_config_names_allowlisted"])
+        self.assertTrue(result["single_private_tcp_port_declared"])
         self.assertEqual(result["verdict"], "PAPER_WORKER_IMAGE_POSTURE_ONLY_MODEL_UNVERIFIED")
         for field in ("worker_model_artifacts_verified",
                       "worker_secret_value_or_iam_access_verified",
@@ -203,6 +207,56 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         f = fixture()
         f["definition"]["taskDefinition"]["volumes"] = []
         self.assertTrue(evaluate(**f)["bounded_fargate_runtime_declared"])
+
+    def test_v95_no_extra_startup_flags_secrets_or_container_ports(self):
+        root = Path(__file__).resolve().parents[2]
+        tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
+        for item in (
+            'containerPort = 8090', 'hostPort      = 8090',
+            'protocol      = "tcp"',
+            '{ name = "TRADING_MODE", value = "PAPER" }',
+            '{ name = "AI_RESEARCH_STRICT_BOOT_REQUIRED", value = "true" }',
+            '{ name = "AI_RESEARCH_MODEL_MANIFEST", value = "/opt/research/manifest.json" }',
+            '{ name = "AI_RESEARCH_WORKER_TOKEN", valueFrom = var.research_worker_token_secret_arn }',
+        ):
+            self.assertIn(item, tf)
+
+        for name, value in (
+            ("PYTHONPATH", "/other/python"),
+            ("AI_RESEARCH_STRICT_BOOT_REQUIRED_OVERRIDE", "false"),
+            ("ENABLE_LIVE_TRADING", "true"),
+            ("AI_RESEARCH_WORKER_DEBUG", "true"),
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0]["environment"].append(
+                {"name": name, "value": value}
+            )
+            self.blocked(f, "WORKER_STARTUP_CONFIG_NOT_ALLOWLISTED")
+
+        for name in ("EXTRA_MODEL_TOKEN", "AWS_ACCESS_KEY_ID"):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0]["secrets"].append(
+                {"name": name,
+                 "valueFrom": f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:private"}
+            )
+            self.blocked(f, "WORKER_STARTUP_CONFIG_NOT_ALLOWLISTED")
+
+        for mappings in (
+            [], [{"containerPort": 8091, "hostPort": 8091, "protocol": "tcp"}],
+            [{"containerPort": 8090, "hostPort": 8090, "protocol": "udp"}],
+            [{"containerPort": 8090, "hostPort": 0, "protocol": "tcp"}],
+            [{"containerPort": 8090, "hostPort": 8090, "protocol": "tcp"},
+             {"containerPort": 9000, "hostPort": 9000, "protocol": "tcp"}],
+            [{"containerPort": 8090, "hostPort": 8090, "protocol": "tcp",
+              "containerPortRange": "8090-8100"}],
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0]["portMappings"] = mappings
+            self.blocked(f, "WORKER_PORT_SURFACE_UNVERIFIED")
+
+        f = fixture()
+        self.assertTrue(evaluate(**f)["startup_config_names_allowlisted"])
+        self.assertTrue(evaluate(**f)["single_private_tcp_port_declared"])
 
     def test_running_image_must_match_ecr_digest_and_tag(self):
         f = fixture()
