@@ -3,8 +3,9 @@
 
 The partial EC2 create reached AWS but failed when Terraform attempted an
 instance attribute write. The same exact instance was stopped on failure.
-Only the *taint marker* of that exact, independently audited instance may be
-cleared. No server start, replacement, broad network edits or LIVE trading.
+The previous recovery already cleared the taint marker of the independently
+audited instance. State MUST be clean before an immutable two-resource plan.
+No server start, replacement, broad network edits or LIVE trading.
 Only the missing stop-role IAM inline policy and nightly schedule are created.
 """
 from __future__ import annotations
