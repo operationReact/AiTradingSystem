@@ -7,7 +7,7 @@ data "aws_ssm_parameter" "al2023_arm64" {
 locals {
   enabled    = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"
   name       = "aitradingsystem-paper-ec2"
-  stop_name  = "aitrading-paper-stop-2200-ist"
+  stop_name  = "aitrading-paper-nightly-stop"
   tags = {
     Name       = local.name
     CostCenter = "ai-trading-paper"
@@ -31,7 +31,6 @@ resource "aws_subnet" "paper" {
   vpc_id                  = aws_vpc.paper[0].id
   cidr_block              = "10.87.0.0/26"
   map_public_ip_on_launch = false
-  availability_zone       = null
   tags                    = local.tags
 }
 resource "aws_route_table" "paper" {
