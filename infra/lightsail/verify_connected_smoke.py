@@ -39,16 +39,20 @@ def verify_network(containers: dict) -> None:
         ports = container.get("NetworkSettings", {}).get("Ports", {})
         if not isinstance(ports, dict):
             raise ValueError("container port inventory missing")
-        published = {
-            port: binding
-            for port, bindings in ports.items()
-            if bindings is not None
-            for binding in bindings
-        }
+        published = []
+        for port, bindings in ports.items():
+            if bindings is None:
+                continue
+            if not isinstance(bindings, list):
+                raise ValueError("invalid Docker binding inventory")
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    raise ValueError("invalid Docker published binding")
+                published.append((port, binding))
         allowed = expected[service]
         if len(published) != len(allowed):
             raise ValueError("unreviewed published container port")
-        for port, binding in published.items():
+        for port, binding in published:
             if port not in allowed or (
                 binding.get("HostIp"), binding.get("HostPort")
             ) != allowed[port]:
