@@ -151,7 +151,8 @@ class PaperLockedProvisionContract(unittest.TestCase):
                          "ap-south-1")
         instance_modify = next(x for x in allowed
                                if x["Sid"] == "AllowUpdateOnlyExactStoppedPaperInstance")
-        self.assertEqual(instance_modify["Action"], "ec2:ModifyInstanceAttribute")
+        self.assertEqual(set(instance_modify["Action"]),
+                         {"ec2:ModifyInstanceAttribute", "ec2:DescribeInstanceAttribute"})
         self.assertEqual(instance_modify["Resource"],
                          "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a")
         self.assertEqual(instance_modify["Condition"]["StringEquals"], {
