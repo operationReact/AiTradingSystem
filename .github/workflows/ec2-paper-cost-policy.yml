@@ -19,6 +19,7 @@ on:
       - 'scripts/tests/test_ec2_paper_manual_control.py'
       - 'scripts/tests/test_ec2_paper_application_runtime.py'
       - 'scripts/tests/test_ec2_paper_ssm_release.py'
+      - 'scripts/tests/test_ec2_paper_workflow_archive.py'
       - 'scripts/tests/test_ec2_paper_al2023_docker_bootstrap.py'
       - '.github/workflows/ec2-paper-approved-provision.yml'
       - '.github/workflows/ec2-paper-partial-resume.yml'
@@ -77,6 +78,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_ssm_release.py -v
           python3 -m unittest discover -s scripts/tests -p 'test_lightsail_paper_*.py' -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_workflow_archive.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_al2023_docker_bootstrap.py -v
           python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
           bash -n infra/ec2-paper/bootstrap.sh
