@@ -1,6 +1,12 @@
-name: AI Trading PAPER Lightsail 4GB bootstrap (explicit manual only)
+name: AI Trading PAPER Lightsail 4GB bootstrap (audited dev request)
 
 on:
+  # GitHub workflow_dispatch requires the file on default main; this audited
+  # dev request lets the dedicated dev-only OIDC role be used without main.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/requests/bootstrap.request.json'
   workflow_dispatch:
     inputs:
       operation:
@@ -39,10 +45,29 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve explicit on-dev Git request (or manual dispatch)
+        id: approval
+        env:
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              python3 infra/lightsail/verify_request.py \
+                --kind bootstrap \
+                --request infra/lightsail/requests/bootstrap.request.json \
+                --github-output "$GITHUB_OUTPUT" ;;
+            workflow_dispatch)
+              printf 'operation=%s\nconfirmation=%s\n' \
+                "$INPUT_OPERATION" "$INPUT_CONFIRMATION" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Unsupported event"; exit 1 ;;
+          esac
+
       - name: Enforce cost/role/branch/manual confirmation before AWS access
         env:
-          OPERATION: ${{ inputs.operation }}
-          CONFIRMATION: ${{ inputs.confirmation }}
+          OPERATION: ${{ steps.approval.outputs.operation }}
+          CONFIRMATION: ${{ steps.approval.outputs.confirmation }}
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
@@ -95,7 +120,7 @@ jobs:
             --github-output "$GITHUB_OUTPUT"
 
       - name: Provision only the approved 4GB PAPER host (no applications)
-        if: inputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
+        if: steps.approval.outputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
         run: |
           set -euo pipefail
           aws lightsail create-instances \
@@ -111,7 +136,7 @@ jobs:
           echo 'Host bootstrap runs once; app, database, broker and worker NOT deployed'
 
       - name: Close all public ports except Lightsail browser SSH
-        if: inputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
+        if: steps.approval.outputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
         run: |
           set -euo pipefail
           # Lightsail creation is asynchronous; do not leave default ports
@@ -134,7 +159,7 @@ jobs:
 
       - name: Report bounded result and credit check requirement
         env:
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ steps.approval.outputs.operation }}
           INSTANCE_STATE: ${{ steps.plan.outputs.paper_instance_state }}
         run: |
           set -euo pipefail

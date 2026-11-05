@@ -7,6 +7,7 @@ on:
       - 'infra/lightsail/**'
       - 'scripts/tests/test_lightsail_paper_bootstrap.py'
       - 'scripts/tests/test_lightsail_paper_rollout.py'
+      - 'scripts/tests/test_lightsail_paper_requests.py'
       - 'apps/trading_client/Dockerfile.lightsail-paper'
       - 'apps/trading_client/deploy/nginx.lightsail-paper.conf'
       - '.github/workflows/lightsail-paper-bootstrap.yml'
@@ -35,7 +36,8 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_bootstrap.py
           python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_rollout.py
-          python3 -m py_compile infra/lightsail/verify_plan.py infra/lightsail/prepare_ssh.py
+          python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_requests.py
+          python3 -m py_compile infra/lightsail/verify_plan.py infra/lightsail/prepare_ssh.py infra/lightsail/verify_request.py
           bash -n infra/lightsail/user-data.sh infra/lightsail/run_paper.sh
           RELEASE_SHA=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
             POSTGRES_PASSWORD=dummy APP_API_KEY=dummy \

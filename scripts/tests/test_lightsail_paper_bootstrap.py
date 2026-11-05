@@ -115,7 +115,10 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
     def test_manual_workflow_does_not_provision_without_confirmation(self):
         flow = (ROOT / ".github/workflows/lightsail-paper-bootstrap.yml").read_text()
         self.assertIn("workflow_dispatch:", flow)
-        self.assertNotIn("\n  push:", flow)
+        self.assertIn("  push:", flow)
+        self.assertIn("branches: [dev]", flow)
+        self.assertIn("infra/lightsail/requests/bootstrap.request.json", flow)
+        self.assertIn("verify_request.py", flow)
         self.assertNotIn("\n  pull_request:", flow)
         self.assertIn("CREATE_PAPER_4GB", flow)
         self.assertIn('AWS_ACCOUNT: "816344830716"', flow)

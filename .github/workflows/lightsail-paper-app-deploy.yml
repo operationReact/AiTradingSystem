@@ -1,6 +1,12 @@
 name: AI Trading PAPER Lightsail internal-only app deploy (manual)
 
 on:
+  # Default branch is main; explicit audited requests on dev provide a
+  # dev-only launch path with no main-branch deploy authority.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/requests/deploy.request.json'
   workflow_dispatch:
     inputs:
       confirmation:
@@ -30,15 +36,34 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Resolve explicit dev request (or manual dispatch)
+        id: approval
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$GITHUB_EVENT_NAME" in
+            push)
+              python3 infra/lightsail/verify_request.py \
+                --kind deploy \
+                --request infra/lightsail/requests/deploy.request.json \
+                --github-output "$GITHUB_OUTPUT" ;;
+            workflow_dispatch)
+              printf 'operation=deploy\nconfirmation=%s\n' \
+                "$INPUT_CONFIRMATION" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::Unsupported event"; exit 1 ;;
+          esac
+
       - name: Require exact branch/repo/account/manual authorization
         env:
-          CONFIRMATION: ${{ inputs.confirmation }}
+          CONFIRMATION: ${{ steps.approval.outputs.confirmation }}
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
           test "$GITHUB_REF" = 'refs/heads/dev'
           test "$AWS_REGION" = 'us-east-1'
           test "$AWS_LIGHTSAIL_ROLE_ARN" = 'arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper'
+          test "${{ steps.approval.outputs.operation }}" = 'deploy'
           test "$CONFIRMATION" = 'DEPLOY_PAPER_LOCAL_ONLY'
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$LIGHTSAIL_INSTANCE" = 'aitradingsystem-paper-dev'
