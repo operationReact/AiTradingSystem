@@ -50,6 +50,9 @@ jobs:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: intelligence/pyproject.toml
+      - name: Enforce no-AWS image smoke scope before installing ML dependencies
+        run: python3 -m unittest discover -v -s scripts/tests -p test_v4_synthetic_release_container_contract.py
+
       - name: Install test-only scientific models and verifier
         run: pip install -e 'intelligence[dev]'
 
