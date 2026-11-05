@@ -12,7 +12,8 @@ on:
       - 'apps/trading_client/deploy/flutter_service_worker.js'
       - 'apps/trading_client/lib/**'
       - 'apps/trading_client/pubspec.yaml'
-      - 'infra/ec2-paper/**'
+      - 'infra/ec2-paper/bootstrap.sh'
+      - 'infra/lightsail/paper-compose.yml'
       - 'scripts/tests/test_ec2_paper_arm64_contract.py'
       - '.github/workflows/ec2-paper-arm64-images.yml'
   push:
@@ -20,7 +21,8 @@ on:
     paths:
       - 'backend/Dockerfile.ec2-paper-arm64'
       - 'apps/trading_client/Dockerfile.lightsail-paper'
-      - 'infra/ec2-paper/**'
+      - 'infra/ec2-paper/bootstrap.sh'
+      - 'infra/lightsail/paper-compose.yml'
       - 'scripts/tests/test_ec2_paper_arm64_contract.py'
       - '.github/workflows/ec2-paper-arm64-images.yml'
 

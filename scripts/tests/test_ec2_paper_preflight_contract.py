@@ -34,7 +34,7 @@ class EC2PaperPreflightContract(unittest.TestCase):
     def test_only_state_bucket_policy_and_readonly_role_are_bootstrapped(self):
         self.assertEqual(set(self.resources), {
             "PaperStateBucket", "PaperStateBucketPolicy",
-            "ReadOnlyGithubPreflightRole",
+            "ReadOnlyGithubPreflightRole", "ReadOnlyGithubPlanRole",
         })
         self.assertEqual(self.resources["PaperStateBucket"]["Type"], "AWS::S3::Bucket")
         bucket = self.resources["PaperStateBucket"]
@@ -96,6 +96,46 @@ class EC2PaperPreflightContract(unittest.TestCase):
                        "s3:PutObject", "s3:DeleteObject", "scheduler:CreateSchedule",
                        "rds:CreateDBInstance"):
             self.assertNotIn(denied, allowed)
+
+    def test_second_oidc_role_only_reads_single_paper_state_and_ec2(self):
+        role = self.resources["ReadOnlyGithubPlanRole"]["Properties"]
+        self.assertEqual(role["RoleName"], "aitrading-paper-ec2-plan")
+        policy = role["AssumeRolePolicyDocument"]["Statement"][0]
+        self.assertEqual(
+            policy["Condition"]["StringEquals"], {
+                "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                "token.actions.githubusercontent.com:sub": GITHUB_SUB,
+            },
+        )
+        self.assertEqual(
+            policy["Principal"]["Federated"],
+            f"arn:aws:iam::{ACCOUNT}:oidc-provider/token.actions.githubusercontent.com",
+        )
+        statements = role["Policies"][0]["PolicyDocument"]["Statement"]
+        actions = [
+            action for statement in statements
+            for action in (statement["Action"] if isinstance(
+                statement["Action"], list) else [statement["Action"]])
+        ]
+        for action in actions:
+            self.assertTrue(action.startswith((
+                "s3:Get", "s3:List", "ec2:Describe", "ssm:Get",
+                "iam:Get", "iam:List", "scheduler:Get",
+            )), action)
+        self.assertFalse(any("*" in a for a in actions))
+        self.assertEqual(
+            statements[1]["Resource"],
+            f"arn:aws:s3:::{BUCKET}/ai-trading/paper-ec2/terraform.tfstate",
+        )
+        self.assertNotIn("s3:PutObject", actions)
+        self.assertNotIn("s3:DeleteObject", actions)
+        self.assertNotIn("ec2:RunInstances", actions)
+        self.assertNotIn("iam:PassRole", actions)
+        self.assertNotIn("scheduler:CreateSchedule", actions)
+        self.assertEqual(
+            statements[2]["Condition"]["StringEquals"]["aws:RequestedRegion"],
+            "ap-south-1",
+        )
 
     def test_backend_is_separate_from_old_ecs_no_dynamodb_required(self):
         backend = (TF / "backend.hcl").read_text(encoding="utf-8")

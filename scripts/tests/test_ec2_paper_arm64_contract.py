@@ -44,6 +44,9 @@ class PaperARM64RuntimeContract(unittest.TestCase):
         ):
             with self.subTest(part=part):
                 self.assertIn(part, wf)
+        self.assertIn("'infra/ec2-paper/bootstrap.sh'", wf)
+        self.assertIn("'infra/lightsail/paper-compose.yml'", wf)
+        self.assertNotIn("'infra/ec2-paper/**'", wf)
         self.assertIn("test", wf)
         self.assertIn("= \"arm64\"", wf)
         self.assertIn("= \"10001\"", wf)

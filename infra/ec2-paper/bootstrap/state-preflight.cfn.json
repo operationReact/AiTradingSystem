@@ -1,6 +1,6 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
-  "Description": "AI Trading System PAPER: encrypted S3 Terraform state, strict dev-branch GitHub OIDC read-only preflight role. No EC2, deployment, Scheduler or spending resources.",
+  "Description": "AI Trading PAPER EC2: encrypted versioned S3 state, exact dev GitHub OIDC read-only preflight and plan-only roles; no EC2 or Scheduler resources.",
   "Resources": {
     "PaperStateBucket": {
       "Type": "AWS::S3::Bucket",
@@ -171,6 +171,128 @@
           }
         ]
       }
+    },
+    "ReadOnlyGithubPlanRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "aitrading-paper-ec2-plan",
+        "Description": "Plan-only, no Terraform apply, no S3 write/lockfile, no resource mutations. Dev-branch OIDC only.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "aitrading-paper-ec2-plan-readonly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadExactDedicatedStateBucket",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket",
+                    "s3:GetBucketLocation"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PaperStateBucket",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadExactPaperStateKeyOnly",
+                  "Effect": "Allow",
+                  "Action": "s3:GetObject",
+                  "Resource": "arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/paper-ec2/terraform.tfstate"
+                },
+                {
+                  "Sid": "DescribeMumbaiEC2Only",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeVpcs",
+                    "ec2:DescribeInternetGateways",
+                    "ec2:DescribeRouteTables",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeVolumes",
+                    "ec2:DescribeInstanceTypes",
+                    "ec2:DescribeImages",
+                    "ec2:DescribeAvailabilityZones",
+                    "ec2:DescribeInstanceTypeOfferings",
+                    "ec2:DescribeTags"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "ReadSelectedARM64AL2023AMIOnly",
+                  "Effect": "Allow",
+                  "Action": "ssm:GetParameter",
+                  "Resource": "arn:aws:ssm:ap-south-1::parameter/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-arm64"
+                },
+                {
+                  "Sid": "ReadExpectedTerraformInstanceRolesOnly",
+                  "Effect": "Allow",
+                  "Action": [
+                    "iam:GetRole",
+                    "iam:GetInstanceProfile",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:ListRolePolicies",
+                    "iam:GetRolePolicy"
+                  ],
+                  "Resource": [
+                    "arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm",
+                    "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop",
+                    "arn:aws:iam::098859530205:instance-profile/aitrading-paper-ec2-ssm"
+                  ]
+                },
+                {
+                  "Sid": "ReadOnlyExactStopSchedule",
+                  "Effect": "Allow",
+                  "Action": "scheduler:GetSchedule",
+                  "Resource": "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "Capability",
+            "Value": "plan-only"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -192,6 +314,15 @@
     "ProvisionedEC2": {
       "Description": "No EC2 resources created by this CloudFormation bootstrap",
       "Value": "NONE"
+    },
+    "PlanOnlyRoleArn": {
+      "Description": "Used only by dev-branch GitHub -lock=false -refresh=false Terraform review plan; no apply",
+      "Value": {
+        "Fn::GetAtt": [
+          "ReadOnlyGithubPlanRole",
+          "Arn"
+        ]
+      }
     }
   }
 }
