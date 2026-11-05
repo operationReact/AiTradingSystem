@@ -98,9 +98,14 @@ jobs:
           print("Existing actual PAPER VPC CIDR, state and all required tags VERIFIED")
           PY
           for attribute in enableDnsHostnames enableDnsSupport; do
+            case "$attribute" in
+              enableDnsHostnames) result_key=EnableDnsHostnames ;;
+              enableDnsSupport) result_key=EnableDnsSupport ;;
+              *) echo "::error::Unknown VPC attribute"; exit 1 ;;
+            esac
             value="$(aws ec2 describe-vpc-attribute --region "$AWS_REGION" \
               --vpc-id vpc-04712728d857bb782 --attribute "$attribute" \
-              --query "${attribute}.Value" --output text)"
+              --query "$result_key.Value" --output text)"
             test "$value" = "True" || {
               echo "::error::Existing PAPER VPC $attribute is not enabled: refusing to untaint"
               exit 1
