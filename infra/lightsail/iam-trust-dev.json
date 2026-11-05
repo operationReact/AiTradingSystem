@@ -5,7 +5,7 @@
       "Sid": "OnlyAITradingDevGithubOIDC",
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::816344830716:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
