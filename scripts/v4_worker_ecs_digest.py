@@ -57,6 +57,8 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         and service.get("runningCount") == 1
         and service.get("pendingCount") == 0
         and service.get("enableExecuteCommand") is False
+        and service.get("launchType") == "FARGATE"
+        and not service.get("capacityProviderStrategy")
         and len(ds) == 1 and ds[0].get("status") == "PRIMARY"
         and ds[0].get("rolloutState") == "COMPLETED"
         and ds[0].get("runningCount") == 1
@@ -77,6 +79,26 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         and td["taskDefinitionArn"].startswith(DEFINITION_PREFIX)
         and td.get("taskDefinitionArn") == service.get("taskDefinition"),
         "WORKER_TASK_DEFINITION_UNVERIFIED",
+    )
+    # V94: a digest-matched task must still use the bounded, isolated
+    # Terraform runtime. Only metadata is inspected: role *permissions*,
+    # network reachability and the actual container filesystem are unverified.
+    task_runtime_ok = check(
+        td.get("networkMode") == "awsvpc"
+        and td.get("requiresCompatibilities") == ["FARGATE"]
+        and td.get("cpu") == "512"
+        and td.get("memory") == "1024"
+        and td.get("taskRoleArn")
+        == f"arn:aws:iam::{ACCOUNT}:role/{SERVICE}-task"
+        and td.get("executionRoleArn")
+        == f"arn:aws:iam::{ACCOUNT}:role/{SERVICE}-execution"
+        and not td.get("volumes")
+        and not td.get("pidMode")
+        and not td.get("ipcMode")
+        and not td.get("proxyConfiguration")
+        and not td.get("inferenceAccelerators")
+        and td.get("enableFaultInjection") in (None, False),
+        "WORKER_TASK_RUNTIME_UNVERIFIED",
     )
     containers = td.get("containerDefinitions", [])
     container = containers[0] if len(containers) == 1 else {}
@@ -205,6 +227,7 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "worker_service_stable": svc_ok,
         "task_inventory_verified": ids_ok,
         "task_definition_verified": def_ok,
+        "bounded_fargate_runtime_declared": task_runtime_ok,
         "expected_image_tag_verified": tag_ok,
         "ecr_image_digest_present": image_ok,
         "one_running_healthy_task": running_ok,
