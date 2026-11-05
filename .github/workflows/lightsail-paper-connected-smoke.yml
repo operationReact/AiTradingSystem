@@ -5,6 +5,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/lightsail/paper-compose.yml'
+      - 'infra/lightsail/run_paper.sh'
       - 'infra/lightsail/verify_connected_smoke.py'
       - 'scripts/tests/test_lightsail_paper_connected_smoke.py'
       - 'backend/Dockerfile'
@@ -15,6 +16,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/lightsail/paper-compose.yml'
+      - 'infra/lightsail/run_paper.sh'
       - 'infra/lightsail/verify_connected_smoke.py'
       - 'scripts/tests/test_lightsail_paper_connected_smoke.py'
       - '.github/workflows/lightsail-paper-connected-smoke.yml'
