@@ -11,10 +11,12 @@ on:
       - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
       - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
       - 'intelligence/src/aitrading_intelligence/research_dependency_gate.py'
+      - 'intelligence/src/aitrading_intelligence/research_base_digest_gate.py'
       - 'intelligence/src/aitrading_intelligence/research_artifact_inference.py'
       - 'intelligence/src/aitrading_intelligence/app.py'
       - 'intelligence/tests/ci_research_release_container_smoke.py'
       - 'intelligence/tests/test_research_dependency_gate.py'
+      - 'intelligence/tests/test_research_base_digest_gate.py'
       - 'intelligence/pyproject.toml'
       - 'scripts/tests/test_v4_synthetic_release_container_contract.py'
       - '.github/workflows/v4-synthetic-research-container-smoke.yml'
@@ -28,10 +30,12 @@ on:
       - 'intelligence/src/aitrading_intelligence/research_release_bundle.py'
       - 'intelligence/src/aitrading_intelligence/research_startup_gate.py'
       - 'intelligence/src/aitrading_intelligence/research_dependency_gate.py'
+      - 'intelligence/src/aitrading_intelligence/research_base_digest_gate.py'
       - 'intelligence/src/aitrading_intelligence/research_artifact_inference.py'
       - 'intelligence/src/aitrading_intelligence/app.py'
       - 'intelligence/tests/ci_research_release_container_smoke.py'
       - 'intelligence/tests/test_research_dependency_gate.py'
+      - 'intelligence/tests/test_research_base_digest_gate.py'
       - 'intelligence/pyproject.toml'
       - 'scripts/tests/test_v4_synthetic_release_container_contract.py'
       - '.github/workflows/v4-synthetic-research-container-smoke.yml'
@@ -89,10 +93,21 @@ jobs:
           python3 -m aitrading_intelligence.research_image_context verify \
             --context "$work/private-build-context" --code-sha "$GITHUB_SHA"
 
+          # V98 synthetic-only: resolve the pulled official Python tag once,
+          # inspect the local Docker RepoDigests, and pass only an immutable
+          # canonical official-Python digest to Docker's mandatory FROM ARG.
+          # This does NOT approve the digest for a real operator release.
+          docker pull --platform linux/amd64 python:3.11-slim >/dev/null
+          base_image="$(docker image inspect python:3.11-slim --format '{{json .RepoDigests}}' \
+            | python3 intelligence/src/aitrading_intelligence/research_base_digest_gate.py select)"
+          python3 intelligence/src/aitrading_intelligence/research_base_digest_gate.py verify \
+            --reference "$base_image" >/dev/null
+
           # Public Python/PyPI dependencies may be downloaded DURING build.
           # Never publish this image, sign production releases or send weights.
-          docker build --no-cache \
+          docker build --no-cache --platform linux/amd64 \
             --file "$work/private-build-context/Dockerfile.research-release" \
+            --build-arg "RESEARCH_PYTHON_BASE_IMAGE=$base_image" \
             --build-arg "RESEARCH_SOURCE_SHA=$GITHUB_SHA" \
             --tag "$image" "$work/private-build-context"
 

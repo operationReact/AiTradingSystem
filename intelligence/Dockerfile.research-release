@@ -2,7 +2,12 @@
 # This Dockerfile intentionally fails unless the local .research-release bundle
 # has been prepared from actual pinned models. It is never built/pushed by the
 # existing deployment workflows.
-FROM python:3.11-slim
+# V98: mandatory immutable base image identity. No default mutable tag.
+# CI binds the just-pulled official Python image digest for synthetic tests.
+# Real releases still require an independently reviewed and approved digest.
+ARG RESEARCH_PYTHON_BASE_IMAGE
+FROM ${RESEARCH_PYTHON_BASE_IMAGE}
+ARG RESEARCH_PYTHON_BASE_IMAGE
 
 # LightGBM's native runtime requires GNU OpenMP; python:3.11-slim omits
 # libgomp.so.1. Without it even offline artifact receipt verification fails.
@@ -19,7 +24,9 @@ RUN pip install --no-cache-dir .
 # V97: fail image BUILD before private model bytes enter this context when the
 # resolved graph is broken, reviewed direct ML pins drift, or dev tools leak.
 # This does NOT attest the still-floating Python base / transitive wheel lock.
-RUN python -m aitrading_intelligence.research_dependency_gate
+RUN python -m aitrading_intelligence.research_base_digest_gate verify \
+    --reference "${RESEARCH_PYTHON_BASE_IMAGE}" && \
+    python -m aitrading_intelligence.research_dependency_gate
 
 # Unlike the everyday Dockerfile, only this explicitly selected Dockerfile
 # can see the independently staged research model release build context.
