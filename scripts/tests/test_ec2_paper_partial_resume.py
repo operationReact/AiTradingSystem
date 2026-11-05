@@ -108,7 +108,7 @@ class ExactPaperResume(unittest.TestCase):
                 gate.validate_plan(p)
 
     def test_workflow_is_separate_request_only_and_locked(self):
-        w = (ROOT / ".github/workflows/ec2-paper-partial-resume.yml").read_text(encoding="utf-8")
+        w = (ROOT / "docs/operations/archived-actions/ec2-paper-partial-resume.yml").read_text(encoding="utf-8")
         for required in (
             "'infra/ec2-paper/requests/resume-provision.json'",
             "fetch-depth: 2",

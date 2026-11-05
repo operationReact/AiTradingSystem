@@ -97,7 +97,7 @@ class TaintedVpcReconciliationTest(unittest.TestCase):
                 gate.validate_request({**gate.EXPECTED_REQUEST, key: value})
 
     def test_workflow_verifies_live_vpc_before_terraform_untaint(self):
-        w = (ROOT / ".github/workflows/ec2-paper-tainted-vpc-resume.yml").read_text()
+        w = (ROOT / "docs/operations/archived-actions/ec2-paper-tainted-vpc-resume.yml").read_text()
         required = (
             "branches: [dev]", "fetch-depth: 2",
             "'infra/ec2-paper/requests/resume-tainted-vpc.json'",

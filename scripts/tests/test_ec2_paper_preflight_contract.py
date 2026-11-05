@@ -11,7 +11,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 TF = ROOT / "infra/ec2-paper"
 CFN = TF / "bootstrap/state-preflight.cfn.json"
-READ = ROOT / ".github/workflows/ec2-paper-readonly-preflight.yml"
+READ = ROOT / "docs/operations/archived-actions/ec2-paper-readonly-preflight.yml"
 BUCKET = "aitrading-paper-tfstate-098859530205-ap-south-1"
 ACCOUNT = "098859530205"
 GITHUB_SUB = "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"

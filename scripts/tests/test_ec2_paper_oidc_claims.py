@@ -54,7 +54,7 @@ class EC2OIDCClaims(unittest.TestCase):
                 gate.decode_claims(bad)
 
     def test_preflight_only_check_before_sts_no_account_mutations(self):
-        wf=(ROOT / ".github/workflows/ec2-paper-readonly-preflight.yml").read_text()
+        wf=(ROOT / "docs/operations/archived-actions/ec2-paper-readonly-preflight.yml").read_text()
         self.assertIn("verify_oidc_claims.py",wf)
         self.assertLess(wf.index("verify_oidc_claims.py"),
                         wf.index("aws-actions/configure-aws-credentials@v4"))

@@ -81,7 +81,7 @@ class PaperConnectedRuntimeContract(unittest.TestCase):
 
     def test_workflow_is_real_disposable_local_and_has_no_cloud_access(self):
         workflow = (
-            ROOT / ".github/workflows/lightsail-paper-connected-smoke.yml"
+            ROOT / ".github/workflows/paper-connected-db-e2e.yml"
         ).read_text()
         expected = (
             "pull_request:", "permissions:", "contents: read",

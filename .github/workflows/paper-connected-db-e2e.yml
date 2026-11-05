@@ -1,0 +1,162 @@
+name: PAPER Java/Postgres/Flutter connected integration smoke (no AWS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/paper-compose.yml'
+      - 'infra/lightsail/run_paper.sh'
+      - 'infra/lightsail/verify_connected_smoke.py'
+      - 'scripts/tests/test_lightsail_paper_connected_smoke.py'
+      - 'backend/Dockerfile'
+      - 'apps/trading_client/Dockerfile.lightsail-paper'
+      - 'apps/trading_client/deploy/nginx.lightsail-paper.conf'
+      - '.github/workflows/paper-connected-db-e2e.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/paper-compose.yml'
+      - 'infra/lightsail/run_paper.sh'
+      - 'infra/lightsail/verify_connected_smoke.py'
+      - 'scripts/tests/test_lightsail_paper_connected_smoke.py'
+      - '.github/workflows/paper-connected-db-e2e.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-connected-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  connected-paper:
+    name: Actual disposable Postgres Flyway Java and Flutter proxy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify offline fail-closed smoke contract before installing tools
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p test_lightsail_paper_connected_smoke.py -v
+          python3 -m unittest discover -s scripts/tests -p test_lightsail_paper_rollout.py -v
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Build real Flutter Web release for local-only backend
+        working-directory: apps/trading_client
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL=http://localhost:8088
+
+      - name: Build real Java and Flutter image layers; smoke local PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          image_api="aitradingsystem-paper-backend:$GITHUB_SHA"
+          image_web="aitradingsystem-paper-web:$GITHUB_SHA"
+          work="$RUNNER_TEMP/ats-paper-connected-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -m 0700 "$work"
+          cleanup() {
+            if test -f "$work/.env"; then
+              docker compose --env-file "$work/.env" \
+                -f infra/lightsail/paper-compose.yml down -v --remove-orphans \
+                >/dev/null 2>&1 || true
+            fi
+            docker image rm "$image_api" "$image_web" >/dev/null 2>&1 || true
+            rm -rf -- "$work"
+          }
+          trap cleanup EXIT
+
+          python3 - "$work/.env" "$GITHUB_SHA" <<'PY'
+          import secrets,sys
+          from pathlib import Path
+          path=Path(sys.argv[1])
+          path.write_text(
+              f"RELEASE_SHA={sys.argv[2]}\n"
+              f"POSTGRES_PASSWORD={secrets.token_hex(32)}\n"
+              f"APP_API_KEY={secrets.token_hex(32)}\n")
+          path.chmod(0o600)
+          PY
+
+          docker build --file backend/Dockerfile \
+            --tag "$image_api" backend
+          docker build --file apps/trading_client/Dockerfile.lightsail-paper \
+            --tag "$image_web" apps/trading_client
+
+          # The postgres_data named volume is disposable in this runner;
+          # never reuse live/test customer database volumes.
+          docker compose --env-file "$work/.env" \
+            -f infra/lightsail/paper-compose.yml config --quiet
+          docker compose --env-file "$work/.env" \
+            -f infra/lightsail/paper-compose.yml up -d --no-build
+
+          # Docker starts before Spring Boot/Flyway are fully ready. Curl's
+          # --retry-connrefused does NOT cover a TCP reset (exit 56), which
+          # real CI exposed. Fail closed after a bounded attempt count.
+          await_health() {
+            local label="$1" url="$2" output="$3"
+            for attempt in $(seq 1 45); do
+              if curl --connect-timeout 2 --max-time 6 -fSs "$url" \
+                -o "$output" 2>/dev/null && test -s "$output"; then
+                return 0
+              fi
+              sleep 3
+            done
+            echo "::error::PAPER $label not ready after bounded checks"
+            return 1
+          }
+          await_health java-api http://127.0.0.1:8080/api/health "$work/direct.json"
+          await_health flutter-proxy http://127.0.0.1:8088/api/health "$work/proxy.json"
+          await_health flutter-health http://127.0.0.1:8088/health "$work/web.txt"
+
+          docker compose --env-file "$work/.env" \
+            -f infra/lightsail/paper-compose.yml exec -T postgres \
+            psql -U aitrading -d aitrading -qAt \
+            -c 'SELECT COUNT(*) FROM flyway_schema_history WHERE success = true' \
+            > "$work/migrations.txt"
+
+          # Verify the same local Postgres can produce a logical schema backup.
+          docker compose --env-file "$work/.env" \
+            -f infra/lightsail/paper-compose.yml exec -T postgres \
+            pg_dump -U aitrading --schema-only aitrading > "$work/schema.sql"
+          grep -q '^CREATE TABLE ' "$work/schema.sql"
+
+          python3 - "$work/containers.json" "$work/.env" <<'PY'
+          import json,subprocess,sys
+          from pathlib import Path
+          out, env_file = Path(sys.argv[1]), sys.argv[2]
+          base=["docker","compose","--env-file",env_file,
+                "-f","infra/lightsail/paper-compose.yml"]
+          report={}
+          for service in ("postgres","backend","web"):
+              container_id=subprocess.run(
+                  [*base,"ps","-q",service],capture_output=True,
+                  text=True,check=True).stdout.strip()
+              if not container_id:
+                  raise SystemExit("missing expected real Compose service")
+              inspect=subprocess.run(["docker","inspect",container_id],
+                                     capture_output=True,text=True,check=True)
+              report[service]=json.loads(inspect.stdout)[0]
+          out.write_text(json.dumps(report))
+          out.chmod(0o600)
+          PY
+
+          python3 infra/lightsail/verify_connected_smoke.py \
+            "$work/direct.json" "$work/proxy.json" "$work/web.txt" \
+            "$work/migrations.txt" "$work/containers.json"
+          echo 'Actual PAPER Flyway/Java/Flutter Docker integration PASS; no AWS deployment'
+
+# No OIDC token, AWS SDK/CLI, ECR, model weights, brokerage keys, networked
+# application runtime, LIVE execution, upload artifact or retained database.

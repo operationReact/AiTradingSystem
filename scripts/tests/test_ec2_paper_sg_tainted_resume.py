@@ -111,7 +111,7 @@ class PaperSgTaintRecoveryTest(unittest.TestCase):
                 gate.validate_request({**gate.REQUEST,key:value})
 
     def test_workflow_never_applies_a_destructive_plan(self):
-        w=(ROOT/".github/workflows/ec2-paper-sg-tainted-resume.yml").read_text()
+        w=(ROOT/"docs/operations/archived-actions/ec2-paper-sg-tainted-resume.yml").read_text()
         for required in (
             "branches: [dev]", "fetch-depth: 2",
             "'infra/ec2-paper/requests/resume-tainted-sg.json'",
