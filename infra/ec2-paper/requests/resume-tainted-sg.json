@@ -1,0 +1,12 @@
+{
+  "kind": "ec2-paper-sg-taint-reconciliation",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "target": "aitradingsystem-paper-ec2",
+  "instance_type": "t4g.medium",
+  "root_volume_gib": 35,
+  "daily_stop_hour_ist": 22,
+  "daily_stop_enabled": true,
+  "operation": "untaint-sg-and-resume-once",
+  "confirmation": "RECONCILE_AUDITED_SG_TAINT_AND_RESUME_PAPER_4GB"
+}
