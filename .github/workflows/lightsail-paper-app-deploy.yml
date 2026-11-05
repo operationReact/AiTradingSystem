@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 50
     env:
       AWS_REGION: us-east-1
-      AWS_LIGHTSAIL_ROLE_ARN: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+      AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
       LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev
     steps:
       - uses: actions/checkout@v4
@@ -97,7 +97,7 @@ jobs:
       - name: Assume short-lived dedicated Lightsail OIDC role
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
           aws-region: us-east-1
           role-session-name: ats-paper-app-${{ github.run_id }}
           role-duration-seconds: 3600
