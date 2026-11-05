@@ -120,6 +120,7 @@ def prepare(repo: Path, sha: str, destination: Path) -> None:
         train_catboost_challenger,
         train_lightgbm_challenger,
     )
+
     from aitrading_intelligence.research_image_context import prepare_context
     from aitrading_intelligence.research_release_bundle import stage_bundle
 
