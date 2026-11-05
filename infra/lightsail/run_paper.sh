@@ -39,10 +39,19 @@ docker compose --env-file .env -f paper-compose.yml up -d --no-build --remove-or
 
 # A deployed Nginx static health alone is NOT connected backend acceptance.
 # Verify Postgres-backed Java API both directly and through the Flutter proxy.
-curl -fSs --retry 20 --retry-delay 5 --retry-connrefused \
-  http://127.0.0.1:8080/api/health >/dev/null
-curl -fSs --retry 10 --retry-delay 3 --retry-connrefused \
-  http://127.0.0.1:8088/health >/dev/null
-curl -fSs --retry 10 --retry-delay 3 --retry-connrefused \
-  http://127.0.0.1:8088/api/health >/dev/null
+wait_local_health() {
+  local name="$1" url="$2"
+  for attempt in $(seq 1 45); do
+    if curl --connect-timeout 2 --max-time 6 -fSs "$url" \
+      -o /dev/null 2>/dev/null; then
+      return 0
+    fi
+    sleep 3
+  done
+  echo "PAPER $name local readiness BLOCKED (sanitized)" >&2
+  return 1
+}
+wait_local_health java-api http://127.0.0.1:8080/api/health
+wait_local_health flutter-health http://127.0.0.1:8088/health
+wait_local_health flutter-proxy http://127.0.0.1:8088/api/health
 echo 'PAPER Java/PostgreSQL/Flutter proxy LOCAL-only smoke passed; PUBLIC not deployed'
