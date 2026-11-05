@@ -134,6 +134,15 @@ class PaperLockedProvisionContract(unittest.TestCase):
                        "ec2:CreateNatGateway", "rds:CreateDBInstance",
                        "scheduler:DeleteSchedule", "s3:DeleteBucket"):
             self.assertIn(action, deny)
+        stop_only = next(x for x in allowed if x["Sid"] ==
+                         "FailSafeStopOnlyTaggedPaperHostOnApplyError")
+        self.assertEqual(stop_only["Action"], "ec2:StopInstances")
+        self.assertEqual(stop_only["Resource"],
+                         "arn:aws:ec2:ap-south-1:098859530205:instance/*")
+        self.assertEqual(stop_only["Condition"]["StringEquals"][
+            "ec2:ResourceTag/Name"], "aitradingsystem-paper-ec2")
+        self.assertEqual(stop_only["Condition"]["StringEquals"][
+            "ec2:ResourceTag/Environment"], "paper")
         self.assertLess(len(json.dumps(self.role["Policies"][0]["PolicyDocument"],
                                        separators=(",", ":"))), 10240)
 
@@ -160,6 +169,11 @@ class PaperLockedProvisionContract(unittest.TestCase):
             "cron(0 22 * * ? *)",
             "State",
             "Asia/Kolkata",
+            "if: failure()",
+            'test "${DEPLOY_STARTED:-}" != "true"',
+            "aws ec2 stop-instances --region",
+            "Name=tag:Name,Values=aitradingsystem-paper-ec2",
+            "DEPLOY_STARTED=true",
             "if: always()",
         ):
             with self.subTest(required=required):
