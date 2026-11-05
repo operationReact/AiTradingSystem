@@ -37,5 +37,8 @@ EXPOSE 8090
 # Runtime private token must arrive through ECS Secrets Manager, never at build.
 # This dedicated model-containing image refuses to start when an ECS/runtime
 # override sets strict bootstrap to false; the ordinary dev image stays lenient.
-# A privileged task-definition override of the full CMD is outside this guard.
-CMD ["sh", "-c", "test \"$AI_RESEARCH_STRICT_BOOT_REQUIRED\" = true && python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]
+# Fixed ENTRYPOINT rather than CMD: an ECS `command` override is only
+# appended as unused arguments to sh -c, never substituted for this gate.
+# An explicitly overridden ECS `entryPoint` remains outside image-only controls
+# and must be governed by independent IAM/task-definition review.
+ENTRYPOINT ["sh", "-c", "test \"$AI_RESEARCH_STRICT_BOOT_REQUIRED\" = true && python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]
