@@ -1,0 +1,63 @@
+name: PAPER EC2 - SSM bootstrap readiness (exact host, no app changes)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/ssm-preflight.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+# Coordinate with manual Start/Stop and future PAPER SSM deployments.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  readiness:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT: "098859530205"
+      INSTANCE_ID: i-09c01b470fb39b85a
+      APPROVAL_FILE: infra/ec2-paper/requests/ssm-preflight.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require exact single-file dev-branch readiness request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$INSTANCE_ID" = "i-09c01b470fb39b85a"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$APPROVAL_FILE"
+          python3 infra/ec2-paper/verify_ssm_release.py request preflight "$APPROVAL_FILE"
+          bash -n infra/ec2-paper/ssm_preflight.sh
+
+      - name: Assume narrow dev-only SSM deployment role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: paper-ssm-readiness-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify exact running host, SSM Online, schedule; execute read-only host readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/verify_ssm_release.py run preflight
+
+# This workflow never launches or stops EC2, changes IAM or deploys containers.
+# EC2 must be started separately via the verified main-branch manual control.
