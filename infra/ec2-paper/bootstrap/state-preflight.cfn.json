@@ -478,7 +478,10 @@
                 {
                   "Sid": "AllowUpdateOnlyExactStoppedPaperInstance",
                   "Effect": "Allow",
-                  "Action": "ec2:ModifyInstanceAttribute",
+                  "Action": [
+                    "ec2:ModifyInstanceAttribute",
+                    "ec2:DescribeInstanceAttribute"
+                  ],
                   "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a",
                   "Condition": {
                     "StringEquals": {
