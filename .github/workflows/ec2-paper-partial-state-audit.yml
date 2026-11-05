@@ -75,6 +75,21 @@ jobs:
           terraform state list -no-color
           echo "Audited remote state without writes, import, plan, EC2 creation or deletes"
 
+      - name: Verify exact partial VPC attribute read access after CloudFormation role update
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          # Fixed ID is sourced from real, previous read-only audit, not from a guess.
+          value="$(aws ec2 describe-vpc-attribute --region "$AWS_REGION" \
+            --vpc-id vpc-04712728d857bb782 --attribute enableDnsHostnames \
+            --query 'EnableDnsHostnames.Value' --output text)"
+          test "$value" = "True" || {
+            echo "::error::Partial VPC DNS hostnames differ from the approved Terraform configuration"
+            exit 1
+          }
+          echo "Confirmed IAM ec2:DescribeVpcAttribute and expected VPC DNS setting"
+
 # Never download or upload Terraform state artifacts and never mutate AWS state.
 # If partial resources exist, recover by reviewed import/reconciliation, not
 # re-running the original create-only thirteen-resource approval.
