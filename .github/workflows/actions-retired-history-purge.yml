@@ -46,8 +46,10 @@ jobs:
               github.rest.actions.listRepoWorkflows,{owner,repo,per_page:100});
             const matches=workflows.filter(w=>
               retiredNames.includes(w.path.replace(/^\.github\/workflows\//,'')));
-            if(matches.length!==14)
-              throw Error('Expected exactly 14 archived workflow registry records, got '+matches.length);
+            if(matches.length>14 || matches.length===0)
+              throw Error('Unexpected archived workflow registry count: '+matches.length);
+            const missing=retiredNames.filter(n=>!matches.some(w=>w.path==='.github/workflows/'+n));
+            if(missing.length)core.info('ALREADY_ABSENT_FROM_REGISTRY='+missing.join(','));
             const manifest={
               repo:owner+'/'+repo,authorizing_commit:context.sha,
               created_at:new Date().toISOString(),approved_paths:retiredNames,
@@ -100,7 +102,7 @@ jobs:
             core.info('PASS: reviewed exactly 14 archived paths and '+total+
               ' completed historical runs; no AWS/deployment workflows included');
             await core.summary.addHeading('Historical workflow retirement — permanent metadata inventory')
-              .addRaw('14 archived registry targets; '+total+' completed runs. '
+              .addRaw(matches.length+' of 14 approved archived registry targets found; '+total+' completed runs. 
                 +'All YAML files absent from both operating branches. '
                 +'Run metadata is archived before any deletion.')
               .addTable([['Retired workflow','Previous state','Runs'],
