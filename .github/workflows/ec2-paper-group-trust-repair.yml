@@ -1,17 +1,17 @@
-name: EC2 PAPER schedule-group trust repair and nightly stop (stopped existing host)
+name: EC2 PAPER v2 schedule-group trust repair and nightly stop (stopped host)
 
 on:
   push:
     branches: [dev]
     paths:
-      - 'infra/ec2-paper/requests/finish-group-trust.json'
+      - 'infra/ec2-paper/requests/finish-group-trust-v2.json'
 
 permissions:
   contents: read
   id-token: write
 
 concurrency:
-  group: aitrading-paper-ec2-scheduler-trust-final
+  group: aitrading-paper-ec2-scheduler-trust-v2
   cancel-in-progress: false
 
 jobs:
@@ -23,7 +23,7 @@ jobs:
       AWS_ACCOUNT: "098859530205"
       AWS_REGION: ap-south-1
       STATE_REGION: us-east-1
-      APPROVAL_REQUEST: infra/ec2-paper/requests/finish-group-trust.json
+      APPROVAL_REQUEST: infra/ec2-paper/requests/finish-group-trust-v2.json
       INSTANCE_ID: i-09c01b470fb39b85a
     steps:
       - uses: actions/checkout@v4

@@ -44,7 +44,7 @@ def plan() -> dict:
                     "schedule_expression":"cron(0 22 * * ? *)",
                     "schedule_expression_timezone":"Asia/Kolkata",
                     "state":"ENABLED",
-                    "flexible_time_window":[{"mode":"OFF"}],
+                    "flexible_time_window":[{"mode":"OFF","maximum_window_in_minutes":None}],
                     "target":[{
                         "arn":"arn:aws:scheduler:::aws-sdk:ec2:stopInstances",
                         "role_arn":gate.ROLE_ARN,
@@ -98,6 +98,24 @@ class StopGroupRecoveryContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.validate_plan(p)
 
+    def test_provider_optional_off_window_is_safe_but_other_windows_rejected(self):
+        gate.validate_plan(plan())
+        p=plan()
+        item=next(x for x in p["resource_changes"] if x["address"]==gate.SCHEDULE_ADDRESS)
+        item["change"]["after"]["flexible_time_window"]=[{"mode":"OFF","maximum_window_in_minutes":0}]
+        gate.validate_plan(p)
+        for window in (
+            [{"mode":"FLEXIBLE","maximum_window_in_minutes":1}],
+            [{"mode":"OFF","maximum_window_in_minutes":5}],
+            [{"mode":"OFF","extra":"override"}],
+            [{"mode":"OFF"},{"mode":"OFF"}],
+        ):
+            p=plan()
+            item=next(x for x in p["resource_changes"] if x["address"]==gate.SCHEDULE_ADDRESS)
+            item["change"]["after"]["flexible_time_window"]=window
+            with self.subTest(window=window),self.assertRaises(ValueError):
+                gate.validate_plan(p)
+
     def test_schedule_cannot_run_ec2_start_or_change_time(self):
         for key,value in (
             ("state","DISABLED"),("schedule_expression","cron(0 23 * * ? *)"),
@@ -114,7 +132,7 @@ class StopGroupRecoveryContract(unittest.TestCase):
         workflow=(ROOT/".github/workflows/ec2-paper-group-trust-repair.yml").read_text(encoding="utf-8")
         for item in (
             "branches: [dev]","fetch-depth: 2",
-            "'infra/ec2-paper/requests/finish-group-trust.json'",
+            "'infra/ec2-paper/requests/finish-group-trust-v2.json'",
             "git diff-tree --no-commit-id --name-only -r HEAD",
             "verify_group_schedule_recovery.py request",
             "verify_group_schedule_recovery.py state",

@@ -122,12 +122,23 @@ def validate_plan(plan: object) -> None:
             if actions != ["create"] or not isinstance(change.get("after"), dict):
                 raise ValueError("only the missing exact nightly scheduler may be created")
             s = change["after"]
+            window = s.get("flexible_time_window")
+            # AWS provider 5.x can include the optional
+            # maximum_window_in_minutes=null on mode=OFF. This field is
+            # ignored by Scheduler for OFF; reject any nonzero window or
+            # additional settings, so the scheduler remains exact.
+            if (not isinstance(window,list) or len(window)!=1
+                or not isinstance(window[0],dict)
+                or window[0].get("mode")!="OFF"
+                or set(window[0]) - {"mode","maximum_window_in_minutes"}
+                or window[0].get("maximum_window_in_minutes") not in (None,0)):
+                raise ValueError("flexible window is not strictly OFF")
             if (s.get("name") != "aitrading-paper-nightly-stop"
                 or s.get("schedule_expression") != "cron(0 22 * * ? *)"
                 or s.get("schedule_expression_timezone") != "Asia/Kolkata"
                 or s.get("state") != "ENABLED"
-                or s.get("flexible_time_window") != [{"mode":"OFF"}]):
-                raise ValueError("schedule timing or activation mismatch")
+                or s.get("group_name") not in (None,"default")):
+                raise ValueError("schedule timing, group or activation mismatch")
             targets = s.get("target")
             if not isinstance(targets, list) or len(targets) != 1:
                 raise ValueError("exactly one stop target required")
@@ -156,8 +167,14 @@ def main(argv: list[str]) -> int:
             validate_state(raw)
         else:
             validate_plan(json.loads(raw))
-    except (ValueError,TypeError,KeyError,AttributeError,OSError,json.JSONDecodeError):
-        print("PAPER stopped-host schedule-group trust recovery BLOCKED (sanitized)",file=sys.stderr)
+    except ValueError as exc:
+        # All explicit ValueErrors in this gate have constant, nonsecret
+        # messages. Surface a static reason to avoid blind paid retries.
+        reason = str(exc) if type(exc) is ValueError else "malformed-json"
+        print("PAPER Scheduler recovery BLOCKED: "+reason,file=sys.stderr)
+        return 2
+    except (TypeError,KeyError,AttributeError,OSError):
+        print("PAPER Scheduler recovery BLOCKED: malformed-input",file=sys.stderr)
         return 2
     print("Verified exact one-role-trust update and one stop-schedule creation; no EC2 action")
     return 0
