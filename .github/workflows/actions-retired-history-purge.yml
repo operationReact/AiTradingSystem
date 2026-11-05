@@ -1,0 +1,220 @@
+name: Actions maintenance - retire obsolete history with preserved inventory
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/actions-retired-history-purge.yml'
+
+permissions: {}
+
+jobs:
+  inventory:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Confirm only exact obsolete workflow paths absent from main and dev; export audit index
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs');
+            const {owner,repo}=context.repo;
+            if(owner!=='operationReact'||repo!=='AiTradingSystem')
+              throw Error('Not the approved repository');
+            const retiredNames=[
+              'deploy-live-aws.yml',
+              'deploy-paper-backend-on-request.yml',
+              'deploy-paper-budget-aws.yml',
+              'ec2-paper-ssm-iam-verification.yml',
+              'ec2-paper-ssm-oidc-differential.yml',
+              'paper-ec2-bootstrap-curl-minimal-fix-once.yml',
+              'paper-ec2-bootstrap-stepwise-repair-once.yml',
+              'paper-ec2-compose-pinned-integrity-fix-once.yml',
+              'paper-ec2-connected-smoke-audit-once.yml',
+              'paper-ec2-connected-smoke-stdin-fix-once.yml',
+              'paper-ec2-ssm-bootstrap-repair-once.yml',
+              'paper-ssm-bootstrap-audit-once.yml',
+              'provision-live-aws.yml',
+              'retired-action-run-audit.yml',
+              'actions-retired-single-probe.yml',
+            ];
+            if(new Set(retiredNames).size!==15) throw Error('Allowlist drift');
+            const workflows=await github.paginate(
+              github.rest.actions.listRepoWorkflows,{owner,repo,per_page:100});
+            const matches=workflows.filter(w=>
+              retiredNames.includes(w.path.replace(/^\.github\/workflows\//,'')));
+            if(matches.length!==15)
+              throw Error('Expected exactly 15 retired workflow registry records, got '+matches.length);
+            const manifest={
+              repo:owner+'/'+repo,authorizing_commit:context.sha,
+              created_at:new Date().toISOString(),approved_paths:retiredNames,
+              targets:[]
+            };
+            let total=0;
+            for(const wf of matches){
+              const name=wf.path.replace(/^\.github\/workflows\//,'');
+              if(!retiredNames.includes(name)||wf.path!=='.github/workflows/'+name)
+                throw Error('Unexpected registry path');
+              for(const ref of ['main','dev']){
+                try{
+                  await github.rest.repos.getContent({owner,repo,path:wf.path,ref});
+                  throw Error('Workflow still exists on '+ref+': '+wf.path);
+                }catch(e){if(e.status!==404)throw e;}
+              }
+              if(!['active','disabled_manually','deleted'].includes(wf.state))
+                throw Error('Unexpected registry state for '+name+': '+wf.state);
+              let runs;
+              try{
+                runs=await github.paginate(github.rest.actions.listWorkflowRuns,
+                  {owner,repo,workflow_id:wf.id,per_page:100});
+              }catch(e){
+                if(e.status===404)runs=[];
+                else throw e;
+              }
+              if(runs.some(r=>r.workflow_id!==wf.id || r.path!==wf.path ||
+                             r.status!=='completed'))
+                throw Error('In-progress or mismatched run detected: '+name);
+              total+=runs.length;
+              manifest.targets.push({
+                workflow_id:wf.id,path:wf.path,name:wf.name,state:wf.state,
+                run_count:runs.length,
+                runs:runs.map(r=>({id:r.id,status:r.status,
+                  conclusion:r.conclusion,event:r.event,head_sha:r.head_sha,
+                  head_branch:r.head_branch,created_at:r.created_at,
+                  html_url:r.html_url}))
+              });
+              core.info('RETIRED: '+wf.path+' state='+wf.state+' runs='+runs.length);
+            }
+            if(total>80 || total<0)
+              throw Error('Run count exceeded reviewed audit ceiling (80)');
+            manifest.total_runs=total;
+            manifest.targets.sort((a,b)=>a.path.localeCompare(b.path));
+            fs.writeFileSync('retired-workflow-run-purge-inventory.json',
+              JSON.stringify(manifest,null,2)+'\n',{mode:0o600});
+            core.info('PASS: reviewed exactly 15 retired paths and '+total+
+              ' completed historical runs; no AWS/deployment workflows included');
+            await core.summary.addHeading('Historical workflow retirement — permanent metadata inventory')
+              .addRaw('15 retired registry targets; '+total+' completed runs. '
+                +'All YAML files absent from both operating branches. '
+                +'Run metadata is archived before any deletion.')
+              .addTable([['Retired workflow','Previous state','Runs'],
+                ...manifest.targets.map(w=>[w.path,w.state,String(w.run_count)])])
+              .write();
+
+      - name: Preserve historical run metadata as GitHub artifact before deletion
+        uses: actions/upload-artifact@v4
+        with:
+          name: deleted-actions-run-index
+          path: retired-workflow-run-purge-inventory.json
+          retention-days: 90
+          if-no-files-found: error
+
+  purge:
+    needs: inventory
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Download immutable inventory produced by prerequisite read-only job
+        uses: actions/download-artifact@v4
+        with:
+          name: deleted-actions-run-index
+
+      - name: Disable only retired registrations and remove only prevalidated completed runs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs=require('fs');
+            const {owner,repo}=context.repo;
+            if(owner!=='operationReact'||repo!=='AiTradingSystem')
+              throw Error('Wrong repository, no writes');
+            const manifest=JSON.parse(fs.readFileSync(
+              'retired-workflow-run-purge-inventory.json','utf8'));
+            const exact=[
+              'deploy-live-aws.yml',
+              'deploy-paper-backend-on-request.yml',
+              'deploy-paper-budget-aws.yml',
+              'ec2-paper-ssm-iam-verification.yml',
+              'ec2-paper-ssm-oidc-differential.yml',
+              'paper-ec2-bootstrap-curl-minimal-fix-once.yml',
+              'paper-ec2-bootstrap-stepwise-repair-once.yml',
+              'paper-ec2-compose-pinned-integrity-fix-once.yml',
+              'paper-ec2-connected-smoke-audit-once.yml',
+              'paper-ec2-connected-smoke-stdin-fix-once.yml',
+              'paper-ec2-ssm-bootstrap-repair-once.yml',
+              'paper-ssm-bootstrap-audit-once.yml',
+              'provision-live-aws.yml',
+              'retired-action-run-audit.yml',
+              'actions-retired-single-probe.yml',
+            ];
+            if(manifest.repo!==owner+'/'+repo||
+               manifest.authorizing_commit!==context.sha||
+               manifest.targets.length!==15||
+               manifest.approved_paths.length!==15||
+               exact.length!==15 ||
+               exact.some((x,i)=>manifest.approved_paths[i]!==x)||
+               manifest.total_runs>80)
+              throw Error('Run inventory not tied to reviewed exact-sha allowlist');
+            let disabled=0,deleted=0,missing=0;
+            for(const t of manifest.targets){
+              if(!exact.includes(t.path.replace(/^\.github\/workflows\//,'')))
+                throw Error('Unapproved target path');
+              if(t.runs.length!==t.run_count)throw Error('Inventory count drift');
+              for(const ref of ['main','dev']){
+                try{
+                  await github.rest.repos.getContent({owner,repo,path:t.path,ref});
+                  throw Error('Refuse cleanup: workflow exists on '+ref);
+                }catch(e){if(e.status!==404)throw e;}
+              }
+              let workflow;
+              try{
+                workflow=(await github.rest.actions.getWorkflow({owner,repo,
+                  workflow_id:t.workflow_id})).data;
+              }catch(e){if(e.status===404){missing++;continue;}throw e;}
+              if(workflow.path!==t.path)throw Error('Workflow ID/path mismatch');
+              if(workflow.state==='active'){
+                await github.rest.actions.disableWorkflow({owner,repo,
+                  workflow_id:t.workflow_id});
+                disabled++;
+              } else if(!['disabled_manually','deleted'].includes(workflow.state)){
+                throw Error('Unexpected registry state: '+workflow.state);
+              }
+              for(const r of t.runs){
+                let current;
+                try{
+                  current=(await github.rest.actions.getWorkflowRun({owner,repo,
+                    run_id:r.id})).data;
+                }catch(e){if(e.status===404)continue;throw e;}
+                if(current.workflow_id!==t.workflow_id ||
+                   current.path!==t.path ||
+                   current.status!=='completed' ||
+                   current.head_sha!==r.head_sha)
+                  throw Error('Historical run mismatch; refusing destructive operation');
+                try{
+                  await github.rest.actions.deleteWorkflowRun({owner,repo,
+                    run_id:r.id});
+                  deleted++;
+                }catch(e){if(e.status!==404)throw e;}
+              }
+              core.info('RETIRED '+t.path+' — previous runs='+t.runs.length);
+            }
+            core.info('COMPLETED: disabled='+disabled+
+              ', permanently deleted run histories='+deleted+
+              ', already-absent records='+missing);
+            core.info('This operation had no AWS permissions or access. '
+              +'Manual EC2 control, active dev SSM deploy, CI tests and '
+              +'live application data were untouched.');
+            await core.summary.addHeading('Retired-workflow cleanup completed')
+              .addRaw('Disabled '+disabled+' stale registrations and deleted '+
+                deleted+' exact inventoried completed runs. '
+                +'Archived metadata in the prerequisite job artifact.')
+              .write();
+# Only approved obsolete workflow ids and completed run ids can be mutated.
+# No AWS auth, EC2 actions, source-file writes, or active CI deletion.
