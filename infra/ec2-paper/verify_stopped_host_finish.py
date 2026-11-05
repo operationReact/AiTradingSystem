@@ -64,6 +64,30 @@ def validate_state_addresses(value: str) -> None:
         raise ValueError("remote Terraform state differs from audited eleven existing resources")
 
 
+
+def validate_stopped_host_state(value: object) -> None:
+    # This state file is read only inside the ephemeral GitHub runner and
+    # must never be logged, uploaded or returned in a final message.
+    if not isinstance(value, dict) or not isinstance(value.get("resources"), list):
+        raise ValueError("invalid protected remote Terraform state")
+    instances = [
+        resource for resource in value["resources"]
+        if isinstance(resource, dict)
+        and resource.get("mode") == "managed"
+        and resource.get("type") == "aws_instance"
+        and resource.get("name") == "paper"
+    ]
+    if len(instances) != 1 or len(instances[0].get("instances", [])) != 1:
+        raise ValueError("unexpected number of PAPER hosts in Terraform state")
+    instance = instances[0]["instances"][0]
+    if (instance.get("index_key") != 0
+        or instance.get("status") != "tainted"
+        or not isinstance(instance.get("attributes"), dict)
+        or instance["attributes"].get("id") != INSTANCE_ID
+        or instance["attributes"].get("instance_type") != "t4g.medium"):
+        raise ValueError("unexpected state; no taint removal permitted")
+
+
 def _parse_policy_json(raw: object) -> None:
     # IAM policy may be computed during planning; if known, verify exact
     # stop-only policy. Final post-apply verification is mandatory regardless.
@@ -151,10 +175,10 @@ def validate_plan(plan: object, *, tainted: bool) -> None:
 
 def main(argv: list[str]) -> int:
     try:
-        if len(argv) != 3 or argv[1] not in ("request", "state", "tainted", "final"):
+        if len(argv) != 3 or argv[1] not in ("request", "state", "host-state", "final"):
             raise ValueError("invalid validation mode")
         mode, path = argv[1], Path(argv[2])
-        max_size = 30 * 1024 * 1024 if mode in ("tainted", "final") else 4096
+        max_size = 30 * 1024 * 1024 if mode in ("host-state", "final") else 4096
         if path.is_symlink() or not path.is_file() or path.stat().st_size > max_size:
             raise ValueError("invalid input file")
         source = path.read_text(encoding="utf-8")
@@ -162,8 +186,10 @@ def main(argv: list[str]) -> int:
             validate_request(json.loads(source))
         elif mode == "state":
             validate_state_addresses(source)
+        elif mode == "host-state":
+            validate_stopped_host_state(json.loads(source))
         else:
-            validate_plan(json.loads(source), tainted=(mode == "tainted"))
+            validate_plan(json.loads(source), tainted=False)
     except (ValueError, TypeError, KeyError, AttributeError, OSError, json.JSONDecodeError):
         print("PAPER exact stopped EC2 recovery BLOCKED (sanitized)", file=sys.stderr)
         return 2
