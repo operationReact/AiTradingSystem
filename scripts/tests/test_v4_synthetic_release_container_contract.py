@@ -41,6 +41,29 @@ class SyntheticResearchImageContract(unittest.TestCase):
         self.assertIn("libgomp1", (ROOT / "intelligence/Dockerfile").read_text())
         self.assertIn("'intelligence/Dockerfile'", self.workflow)
 
+    def test_v97_worker_image_enforces_installed_dependency_posture(self):
+        self.assertIn("python -m aitrading_intelligence.research_dependency_gate",
+                      self.dockerfile)
+        self.assertLess(
+            self.dockerfile.index("research_dependency_gate"),
+            self.dockerfile.index("COPY --chown=65532:65532 .research-release/"),
+        )
+        self.assertIn(
+            "'intelligence/src/aitrading_intelligence/research_dependency_gate.py'",
+            self.workflow,
+        )
+        self.assertIn(
+            "'intelligence/tests/test_research_dependency_gate.py'",
+            self.workflow,
+        )
+        gate = (ROOT / "intelligence/src/aitrading_intelligence"
+                / "research_dependency_gate.py").read_text()
+        self.assertIn('"catboost": "1.2.10"', gate)
+        self.assertIn('"hmmlearn": "0.3.3"', gate)
+        self.assertIn('"lightgbm": "4.7.0"', gate)
+        self.assertIn('"pip", "check"', gate)
+        self.assertIn("NOT attested", gate)
+
     def test_research_release_image_refuses_runtime_strict_off_bypass(self):
         # A valid research token cannot make the model-containing release image
         # start if the operator accidentally overrides strict boot to false.
