@@ -19,7 +19,7 @@ from urllib.parse import urlencode
 EXPECTED = {
     "iss": "https://token.actions.githubusercontent.com",
     "aud": "sts.amazonaws.com",
-    "sub": "repo:operationReact/AiTradingSystem:ref:refs/heads/dev",
+    "sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev",
     "repository": "operationReact/AiTradingSystem",
     "ref": "refs/heads/dev",
     "event_name": "push",
