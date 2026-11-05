@@ -185,6 +185,36 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         and not mapping.get("name"),
         "WORKER_PORT_SURFACE_UNVERIFIED",
     )
+    # V96: a healthy ECS status is not evidence that the task executes
+    # the reviewed in-container localhost health probe, nor that logs stay
+    # on the bounded regional CloudWatch destination. Metadata only.
+    health = container.get("healthCheck", {})
+    reviewed_health_ok = check(
+        isinstance(health, dict)
+        and health.get("command") == [
+            "CMD-SHELL",
+            "python -c \"import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).status == 200\"",
+        ]
+        and health.get("interval") == 30
+        and health.get("timeout") == 5
+        and health.get("retries") == 3
+        and health.get("startPeriod") == 30
+        and set(health) == {"command", "interval", "timeout", "retries", "startPeriod"},
+        "WORKER_HEALTHCHECK_UNVERIFIED",
+    )
+    logging = container.get("logConfiguration", {})
+    reviewed_logging_ok = check(
+        isinstance(logging, dict)
+        and logging.get("logDriver") == "awslogs"
+        and logging.get("options") == {
+            "awslogs-group": f"/ecs/{CLUSTER}/research-worker",
+            "awslogs-region": REGION,
+            "awslogs-stream-prefix": "ecs",
+        }
+        and not logging.get("secretOptions")
+        and set(logging).issubset({"logDriver", "options", "secretOptions"}),
+        "WORKER_LOG_ROUTING_UNVERIFIED",
+    )
     # V93: metadata-only privilege guard. Explicit non-root UID:GID is
     # required in the task definition, rather than inferred from an image tag.
     # No task-defined root, privileged process, interactive terminal, injected
@@ -222,10 +252,11 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "AI_RESEARCH_WORKER_TOKEN" not in env
         and len(refs) == 1
         and isinstance(refs[0], str)
-        and refs[0].startswith(f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:")
-        and "AI_RESEARCH_MODEL_MANIFEST" in env
-        and isinstance(env.get("AI_RESEARCH_MODEL_MANIFEST"), str)
-        and env["AI_RESEARCH_MODEL_MANIFEST"].startswith("/"),
+        and re.fullmatch(
+            rf"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:[A-Za-z0-9/_+=.@-]+",
+            refs[0],
+        ) is not None
+        and env.get("AI_RESEARCH_MODEL_MANIFEST") == "/opt/research/manifest.json",
         "WORKER_SECRET_OR_MANIFEST_DECLARATION_UNVERIFIED",
     )
     sensitive_plaintext = any(
@@ -263,6 +294,8 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "environment_unambiguous": unique_ok,
         "startup_config_names_allowlisted": allowlisted_env,
         "single_private_tcp_port_declared": port_surface_ok,
+        "reviewed_healthcheck_declared": reviewed_health_ok,
+        "reviewed_log_routing_declared": reviewed_logging_ok,
         "paper_declaration_verified": mode_ok,
         "worker_privilege_overrides_absent": privilege_ok,
         "strict_worker_boot_declared": strict_boot_ok,
