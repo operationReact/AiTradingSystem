@@ -51,6 +51,19 @@ class SyntheticResearchImageContract(unittest.TestCase):
         self.assertIn('--env "AI_RESEARCH_WORKER_TOKEN=$synthetic_token"', self.workflow)
         self.assertIn('docker run --rm --network none', self.workflow)
 
+    def test_v92_image_entrypoint_cannot_be_replaced_by_command_override(self):
+        # Docker/ECS command arguments must not bypass strict boot; an
+        # explicit entryPoint override still needs separate IAM governance.
+        self.assertIn('ENTRYPOINT ["sh", "-c",', self.dockerfile)
+        self.assertNotIn('CMD ["sh", "-c",', self.dockerfile)
+        self.assertIn("entryPoint", self.dockerfile)
+        self.assertIn('"$image" python -c \'print("V92_UNSAFE_COMMAND_RAN")\'', self.workflow)
+        self.assertIn('test "$command_denial_rc" -eq 2', self.workflow)
+        self.assertIn("V78 worker bootstrap BLOCKED (sanitized)", self.workflow)
+        self.assertIn('[[ "$command_denial" != *\'V92_UNSAFE_COMMAND_RAN\'* ]]', self.workflow)
+        self.assertIn('"$image" python -c \'raise SystemExit(86)\'', self.workflow)
+        self.assertIn('ci_research_release_container_smoke.py probe', self.workflow)
+
     def test_no_registry_aws_token_or_networked_runtime(self):
         s = self.workflow
         self.assertIn("on:\n  pull_request:", s)

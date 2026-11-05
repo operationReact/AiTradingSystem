@@ -102,6 +102,20 @@ jobs:
           test "$denial_rc" -eq 2
           [[ "$denial" == *'V78 worker bootstrap BLOCKED (sanitized)'* ]]
 
+          # V92: an ECS-style command override must not skip the immutable
+          # image ENTRYPOINT. With no token it must reach V78 and exit 2,
+          # not run arbitrary command text and not merely time out.
+          set +e
+          command_denial="$(timeout 35s docker run --rm --network none \
+            --cap-drop ALL --security-opt no-new-privileges --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev \
+            "$image" python -c 'print("V92_UNSAFE_COMMAND_RAN")' 2>&1)"
+          command_denial_rc=$?
+          set -e
+          test "$command_denial_rc" -eq 2
+          [[ "$command_denial" == *'V78 worker bootstrap BLOCKED (sanitized)'* ]]
+          [[ "$command_denial" != *'V92_UNSAFE_COMMAND_RAN'* ]]
+
           # Generated disposable token, never a real worker or broker secret.
           synthetic_token="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
           echo "::add-mask::$synthetic_token"
@@ -124,7 +138,7 @@ jobs:
             --cap-drop ALL --security-opt no-new-privileges --read-only \
             --tmpfs /tmp:rw,noexec,nosuid,nodev \
             --env "AI_RESEARCH_WORKER_TOKEN=$synthetic_token" \
-            "$image")"
+            "$image" python -c 'raise SystemExit(86)')"
           unset synthetic_token
           python3 intelligence/tests/ci_research_release_container_smoke.py probe \
             --container-id "$container_id"
