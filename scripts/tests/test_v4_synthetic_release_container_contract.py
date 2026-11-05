@@ -64,6 +64,33 @@ class SyntheticResearchImageContract(unittest.TestCase):
         self.assertIn('"pip", "check"', gate)
         self.assertIn("NOT attested", gate)
 
+    def test_v98_research_base_must_be_an_immutable_official_digest(self):
+        self.assertIn(
+            "ARG RESEARCH_PYTHON_BASE_IMAGE\\nFROM ${RESEARCH_PYTHON_BASE_IMAGE}",
+            self.dockerfile,
+        )
+        self.assertNotIn("FROM python:3.11-slim", self.dockerfile)
+        self.assertIn(
+            'research_base_digest_gate verify \\\n    --reference "${RESEARCH_PYTHON_BASE_IMAGE}"',
+            self.dockerfile,
+        )
+        self.assertLess(
+            self.dockerfile.index("research_base_digest_gate verify"),
+            self.dockerfile.index("COPY --chown=65532:65532 .research-release/"),
+        )
+        self.assertIn("docker pull --platform linux/amd64 python:3.11-slim", self.workflow)
+        self.assertIn("docker image inspect python:3.11-slim", self.workflow)
+        self.assertIn('research_base_digest_gate.py select', self.workflow)
+        self.assertIn('--build-arg "RESEARCH_PYTHON_BASE_IMAGE=$base_image"', self.workflow)
+        self.assertIn(
+            "'intelligence/src/aitrading_intelligence/research_base_digest_gate.py'",
+            self.workflow,
+        )
+        self.assertIn(
+            "'intelligence/tests/test_research_base_digest_gate.py'",
+            self.workflow,
+        )
+
     def test_research_release_image_refuses_runtime_strict_off_bypass(self):
         # A valid research token cannot make the model-containing release image
         # start if the operator accidentally overrides strict boot to false.
