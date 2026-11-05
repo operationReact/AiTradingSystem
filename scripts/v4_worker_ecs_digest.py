@@ -135,6 +135,21 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
                 for row in secretrows),
         "WORKER_CONFIG_AMBIGUOUS",
     )
+    # V93: metadata-only privilege guard. Explicit non-root UID:GID is
+    # required in the task definition, rather than inferred from an image tag.
+    # No task-defined root, privileged process, interactive terminal, injected
+    # Linux capability/security options, or runtime command/entrypoint overrides.
+    # Image contents are NOT attested by this metadata-only read.
+    privilege_ok = check(
+        container.get("user") == "65532:65532"
+        and container.get("privileged") in (None, False)
+        and container.get("interactive") in (None, False)
+        and container.get("pseudoTerminal") in (None, False)
+        and not container.get("linuxParameters")
+        and not container.get("dockerSecurityOptions")
+        and not container.get("extraHosts"),
+        "WORKER_PRIVILEGE_OVERRIDE_UNVERIFIED",
+    )
     mode_ok = check(
         env.get("TRADING_MODE") == "PAPER"
         and "APP_TRADING_MODE" not in env
@@ -196,6 +211,7 @@ def evaluate(identity: dict, clusters: dict, services: dict, task_ids: dict,
         "running_image_digest_matches_ecr": digest_ok,
         "environment_unambiguous": unique_ok,
         "paper_declaration_verified": mode_ok,
+        "worker_privilege_overrides_absent": privilege_ok,
         "strict_worker_boot_declared": strict_boot_ok,
         "worker_secret_reference_and_manifest_declared": token_ref_ok,
         "no_plaintext_credential_env_names": secret_safe,
