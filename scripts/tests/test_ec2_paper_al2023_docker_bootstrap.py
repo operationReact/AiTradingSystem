@@ -34,6 +34,22 @@ class Al2023DockerBootstrapContract(unittest.TestCase):
                 check=subprocess.run(["bash","-n",str(path)],capture_output=True,text=True)
                 self.assertEqual(check.returncode,0,check.stderr)
 
+    def test_arm64_compose_official_release_digest_pinned_and_verified(self):
+        # Official docker/compose v5.6.0 GitHub release asset metadata digest.
+        expected="733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"
+        for path in (BOOTSTRAP, REPAIR):
+            source=path.read_text()
+            with self.subTest(path=path):
+                self.assertIn('compose_sha256="'+expected+'"',source)
+                self.assertIn('docker-compose-linux-aarch64',source)
+                self.assertIn('sha256sum -c -',source)
+                self.assertNotIn('checksums.txt',source.replace(
+                    'checksums.txt formatting',''))
+                self.assertNotIn('sha256sum -c sha256.txt',source)
+                result=subprocess.run(["bash","-n",str(path)],
+                                      capture_output=True,text=True)
+                self.assertEqual(result.returncode,0,result.stderr)
+
     def test_host_bootstrap_never_resets_existing_credentials(self):
         for path in (BOOTSTRAP,REPAIR):
             source=path.read_text()
