@@ -153,7 +153,7 @@ class StoppedPaperFinishContract(unittest.TestCase):
         self.assertNotIn("ignore_changes = all",source)
 
     def test_exact_workflow_safe_recovery_order(self):
-        w=(ROOT/".github/workflows/ec2-paper-existing-host-finish.yml").read_text(encoding="utf-8")
+        w=(ROOT/"docs/operations/archived-actions/ec2-paper-existing-host-finish.yml").read_text(encoding="utf-8")
         required=(
             "branches: [dev]", "fetch-depth: 2",
             "git diff-tree --no-commit-id --name-only -r HEAD",
