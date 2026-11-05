@@ -121,8 +121,8 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
             "infra/lightsail/iam-trust-dev.json",
             "infra/lightsail/iam-paper-provision-policy.json",
             "infra/lightsail/verify_plan.py",
-            ".github/workflows/lightsail-paper-bootstrap.yml",
-            ".github/workflows/lightsail-paper-app-deploy.yml",
+            "docs/operations/archived-actions/lightsail-paper-bootstrap.yml",
+            "docs/operations/archived-actions/lightsail-paper-app-deploy.yml",
             "scripts/tests/test_lightsail_paper_rollout.py",
             "docs/deployment/lightsail-paper-4gb.md",
         )
@@ -141,7 +141,7 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
         )
 
     def test_manual_workflow_does_not_provision_without_confirmation(self):
-        flow = (ROOT / ".github/workflows/lightsail-paper-bootstrap.yml").read_text()
+        flow = (ROOT / "docs/operations/archived-actions/lightsail-paper-bootstrap.yml").read_text()
         self.assertIn("workflow_dispatch:", flow)
         self.assertIn("  push:", flow)
         self.assertIn("branches: [dev]", flow)
