@@ -125,6 +125,8 @@ class PaperLockedProvisionContract(unittest.TestCase):
             "ReadOnlyGithubPreflightRole", "ReadOnlyGithubPlanRole",
             "RestrictedGithubProvisionRole",
             "PaperManualGithubLifecycleRole",
+            "PaperReleaseArtifactBucket", "PaperReleaseArtifactBucketPolicy",
+            "PaperGithubSsmDeployRole",
         })
         self.assertEqual(self.role["RoleName"], "aitrading-paper-ec2-provision")
         rule = self.role["AssumeRolePolicyDocument"]["Statement"][0]
