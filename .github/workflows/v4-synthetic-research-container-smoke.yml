@@ -105,6 +105,21 @@ jobs:
           # Generated disposable token, never a real worker or broker secret.
           synthetic_token="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
           echo "::add-mask::$synthetic_token"
+
+          # Attempt to bypass strict bootstrap with a valid synthetic token.
+          # This must be rejected by the dedicated image BEFORE Uvicorn binds.
+          # A timeout (124) or Docker engine failure (125) is NOT a pass.
+          set +e
+          override_result="$(timeout 35s docker run --rm --network none \
+            --cap-drop ALL --security-opt no-new-privileges --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,nodev \
+            --env "AI_RESEARCH_WORKER_TOKEN=$synthetic_token" \
+            --env "AI_RESEARCH_STRICT_BOOT_REQUIRED=false" "$image" 2>&1)"
+          override_rc=$?
+          set -e
+          test "$override_rc" -eq 1
+          test -z "$override_result"
+
           container_id="$(docker run -d --rm --network none \
             --cap-drop ALL --security-opt no-new-privileges --read-only \
             --tmpfs /tmp:rw,noexec,nosuid,nodev \

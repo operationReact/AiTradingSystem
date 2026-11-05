@@ -41,6 +41,16 @@ class SyntheticResearchImageContract(unittest.TestCase):
         self.assertIn("libgomp1", (ROOT / "intelligence/Dockerfile").read_text())
         self.assertIn("'intelligence/Dockerfile'", self.workflow)
 
+    def test_research_release_image_refuses_runtime_strict_off_bypass(self):
+        # A valid research token cannot make the model-containing release image
+        # start if the operator accidentally overrides strict boot to false.
+        self.assertIn('test \\"$AI_RESEARCH_STRICT_BOOT_REQUIRED\\" = true', self.dockerfile)
+        self.assertIn('--env "AI_RESEARCH_STRICT_BOOT_REQUIRED=false"', self.workflow)
+        self.assertIn('test "$override_rc" -eq 1', self.workflow)
+        self.assertIn('test -z "$override_result"', self.workflow)
+        self.assertIn('--env "AI_RESEARCH_WORKER_TOKEN=$synthetic_token"', self.workflow)
+        self.assertIn('docker run --rm --network none', self.workflow)
+
     def test_no_registry_aws_token_or_networked_runtime(self):
         s = self.workflow
         self.assertIn("on:\n  pull_request:", s)
