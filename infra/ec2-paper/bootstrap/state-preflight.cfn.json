@@ -476,6 +476,20 @@
                   }
                 },
                 {
+                  "Sid": "AllowUpdateOnlyExactStoppedPaperInstance",
+                  "Effect": "Allow",
+                  "Action": "ec2:ModifyInstanceAttribute",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "ec2:ResourceTag/Application": "ai-trading-system",
+                      "ec2:ResourceTag/Environment": "paper",
+                      "ec2:ResourceTag/Name": "aitradingsystem-paper-ec2"
+                    }
+                  }
+                },
+                {
                   "Sid": "PermitStandardCpuCreditsOnlyPaperInstances",
                   "Effect": "Allow",
                   "Action": "ec2:ModifyInstanceCreditSpecification",
