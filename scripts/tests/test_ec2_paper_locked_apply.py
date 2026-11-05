@@ -59,7 +59,7 @@ class PaperLockedProvisionContract(unittest.TestCase):
         )["Resources"]
         cls.role = cls.resources["RestrictedGithubProvisionRole"]["Properties"]
         cls.statements = cls.role["Policies"][0]["PolicyDocument"]["Statement"]
-        cls.wf = (ROOT / ".github/workflows/ec2-paper-approved-provision.yml").read_text()
+        cls.wf = (ROOT / "docs/operations/archived-actions/ec2-paper-approved-provision.yml").read_text()
 
     def test_exact_user_approved_scope_and_no_unreviewed_variants(self):
         gate.validate_request(gate.EXPECTED.copy())
