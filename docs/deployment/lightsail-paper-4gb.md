@@ -32,7 +32,19 @@ Open [AI Trading PAPER Lightsail 4GB bootstrap](https://github.com/operationReac
 - The one-time launch script installs Ubuntu Docker and Docker Compose, generates a private root-owned database secret file on the VM, and does **not start the backend or worker**. It restricts instance public ports to Lightsail browser SSH only; application, database, model and broker ports remain closed. If firewall lockdown fails, the job fails with an explicit manual follow-up warning.
 - Provisioning is the point where AWS resource billing can begin. Merely merging this PR or running ordinary PR CI does not spend on Lightsail.
 
-## Before application rollout
+## Manual application rollout — internal PAPER acceptance first
+
+After the host's GitHub preflight/provision is complete and the Ubuntu bootstrap has finished, use [AI Trading PAPER Lightsail internal-only app deploy](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-app-deploy.yml) on the `dev` branch and type **`DEPLOY_PAPER_LOCAL_ONLY`**.
+
+This workflow builds the **actual Java Spring Boot backend** and **Flutter web release** on the GitHub-hosted runner (no model training on the 2-vCPU host), reads only the exact tagged 4GB host through the dedicated OIDC role and opens SSH **temporarily for the Actions runner's public IP**. It obtains short-lived SSH key/certificate and verified host keys via Lightsail's `GetInstanceAccessDetails`; no static SSH key or AWS key is saved in GitHub. In the `always()` cleanup it restores browser-SSH-only firewall rules and destroys temporary identity files.
+
+It streams the two image builds directly to the VM via SSH (no ECR charges), preserving the root-generated database password/API key in `/opt/aitradingsystem-paper/runtime.env`. `infra/lightsail/paper-compose.yml` starts PostgreSQL 16 with a named persistent Docker volume, a Java 21 backend with a 1 GiB JVM heap and 1.5 GiB container limit, and a Flutter Nginx frontend with 256 MiB limit. Ports 5432/8090 are **never published**, and both localhost API 8080 and localhost frontend 8088 bind only `127.0.0.1`; no public 80/443 endpoint is activated. CORS is localhost-only; the paper client still requires its legitimate operator authentication secret.
+
+The remote script validates the exact release SHA and local image tags, performs a local logical database backup on subsequent deployments (not a substitute for external snapshots), starts the stack and requires healthy `http://127.0.0.1:8080/api/health`, frontend `/health` and frontend-to-Java `http://127.0.0.1:8088/api/health` responses. Failure means **not accepted**; inspect the remote host via the Lightsail browser SSH console. Do not print DB/API credentials in support screenshots.
+
+This deliberately tests **only internal service integration**, not public browser login, domain/certificate correctness, real market-feed licensing, signed models, genuine paper/shadow soak or production readiness. It does not expose a public HTTP service. Use **external snapshots and a restore test** before entering valuable data, as on-VM SQL backups disappear with disk loss. Later configure an attached static IP, owned DNS hostname and verified HTTPS before allowing public login or remote clients.
+
+## Before public application rollout
 
 - Assign a Lightsail **static public IP** to this single instance (one attached IP is included at no extra Lightsail IP charge). Configure a real HTTPS hostname whose DNS points to that address. Avoid exposing login/cookie authentication over HTTP.
 - Review a separate backend + Flutter + PostgreSQL Docker Compose rollout, 4 GB memory caps, HTTPS proxy, data snapshots/backups, restore drill, restricted SSH, audit retention and rollback. Do not expose PostgreSQL 5432 or research worker port 8090 publicly.
