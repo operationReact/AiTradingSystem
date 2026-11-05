@@ -108,7 +108,7 @@ class CheapPaperEC2Policy(unittest.TestCase):
         self.assertIn("permissions:\n  contents: read", wf)
         self.assertIn("terraform init -backend=false", wf)
         self.assertIn("terraform validate", wf)
-        self.assertIn("terraform fmt -check", wf)
+        self.assertIn("terraform fmt -diff -check", wf)
         for forbidden in ("configure-aws-credentials", "terraform apply",
                           "aws ec2 run-instances", "id-token: write",
                           "workflow_dispatch:", "sts:AssumeRoleWithWebIdentity"):
