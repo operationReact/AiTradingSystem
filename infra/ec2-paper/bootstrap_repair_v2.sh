@@ -10,7 +10,8 @@ test "$(uname -m)" = "aarch64" || { echo "STEP_ARM64:FAIL"; exit 2; }
 echo "STEP_IDENTITY:PASS"
 
 if ! rpm -q docker >/dev/null 2>&1; then
-  if dnf install -y --setopt=install_weak_deps=False docker curl openssl ca-certificates >/dev/null 2>&1; then
+  # AL2023 already includes curl-minimal; installing full curl conflicts with it.
+  if dnf install -y --setopt=install_weak_deps=False docker openssl ca-certificates >/dev/null 2>&1; then
     echo "STEP_DOCKER_PACKAGE:PASS"
   else
     echo "STEP_DOCKER_PACKAGE:FAIL"
