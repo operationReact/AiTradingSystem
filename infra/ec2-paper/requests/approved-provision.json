@@ -1,0 +1,12 @@
+{
+  "kind": "ec2-paper-provision",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "target": "aitradingsystem-paper-ec2",
+  "instance_type": "t4g.medium",
+  "root_volume_gib": 35,
+  "daily_stop_hour_ist": 22,
+  "daily_stop_enabled": true,
+  "operation": "provision-once",
+  "confirmation": "PROVISION_PAPER_EC2_4GB"
+}
