@@ -1,0 +1,155 @@
+name: PAPER EC2 - deploy Java PostgreSQL Flutter over SSM (no public ports)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/ssm-release.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+# Serialize host mutations with main-branch manual Start/Stop.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  deploy:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT: "098859530205"
+      INSTANCE_ID: i-09c01b470fb39b85a
+      ARTIFACT_BUCKET: aitrading-paper-releases-098859530205
+      APPROVAL_FILE: infra/ec2-paper/requests/ssm-release.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require single-file exact PAPER release request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$INSTANCE_ID" = "i-09c01b470fb39b85a"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$APPROVAL_FILE"
+          python3 infra/ec2-paper/verify_ssm_release.py request deploy "$APPROVAL_FILE"
+          bash -n infra/ec2-paper/ssm_apply_release.sh
+          bash -n infra/ec2-paper/run_paper.sh
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
+
+      - name: Install Flutter for real production Web build
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Compile exact Git SHA Flutter Web for localhost PAPER proxy
+        working-directory: apps/trading_client
+        shell: bash
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL=http://localhost:8088
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and execute exact ARM64 Java and Nginx runtime images on CI runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="aitradingsystem-paper-backend-arm64:$GITHUB_SHA"
+          web="aitradingsystem-paper-web-arm64:$GITHUB_SHA"
+          docker buildx build --platform linux/arm64 --load \
+            --file backend/Dockerfile.ec2-paper-arm64 --tag "$api" backend
+          docker buildx build --platform linux/arm64 --load \
+            --file apps/trading_client/Dockerfile.lightsail-paper \
+            --tag "$web" apps/trading_client
+          test "$(docker image inspect "$api" --format '{{.Architecture}}')" = "arm64"
+          test "$(docker image inspect "$web" --format '{{.Architecture}}')" = "arm64"
+          test "$(docker image inspect "$api" --format '{{.Config.User}}')" = "10001"
+          docker run --rm --platform linux/arm64 --network none --entrypoint java "$api" -version
+          docker run --rm --platform linux/arm64 --network none --entrypoint nginx "$web" -v
+
+      - name: Make one SHA256-verified, content-addressed image+manifest tar archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/paper-ec2-release"
+          mkdir -m 0700 "$work"
+          docker save "aitradingsystem-paper-backend-arm64:$GITHUB_SHA" \
+            "aitradingsystem-paper-web-arm64:$GITHUB_SHA" | gzip -1 > "$work/images.tar.gz"
+          test -s "$work/images.tar.gz"
+          cp infra/ec2-paper/paper-compose.yml "$work/paper-compose.yml"
+          cp infra/ec2-paper/run_paper.sh "$work/run_paper.sh"
+          tar -cf "$RUNNER_TEMP/release.tar" -C "$work" \
+            images.tar.gz paper-compose.yml run_paper.sh
+          sha256sum "$RUNNER_TEMP/release.tar" | cut -d' ' -f1 > "$RUNNER_TEMP/release.sha256"
+          test "$(wc -c < "$RUNNER_TEMP/release.sha256")" -eq 65
+          export POSTGRES_PASSWORD="temporary-ci-only" APP_API_KEY="temporary-ci-only" RELEASE_SHA="$GITHUB_SHA"
+          docker compose -f infra/ec2-paper/paper-compose.yml config --quiet
+          echo 'Verified offline exact SHA ARM64 images; package has no runtime secrets'
+
+      - name: Assume separate dev-only one-host SSM delivery role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: paper-ssm-release-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Check account, running EC2, instance tags and nightly stop before upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release as gate
+          gate.verify_aws()
+          PY
+
+      - name: Upload immutable encrypted short-retention S3 release asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(cat "$RUNNER_TEMP/release.sha256")"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          aws s3 cp "$RUNNER_TEMP/release.tar" \
+            "s3://$ARTIFACT_BUCKET/releases/$GITHUB_SHA/$digest/release.tar" \
+            --region "$AWS_REGION" --sse AES256 --no-progress --only-show-errors
+          echo 'Encrypted release asset staged using both exact commit SHA and artifact SHA256'
+
+      - name: Send only reviewed SSM release command; verify actual Java/DB/Flutter health
+        shell: bash
+        run: |
+          set -euo pipefail
+          digest="$(cat "$RUNNER_TEMP/release.sha256")"
+          python3 infra/ec2-paper/verify_ssm_release.py run deploy "$GITHUB_SHA" "$digest"
+
+      - name: Remove temporary CI release archive, images and digests
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf -- "$RUNNER_TEMP/paper-ec2-release"
+          rm -f -- "$RUNNER_TEMP/release.tar" "$RUNNER_TEMP/release.sha256"
+          echo "Runner transient release files removed; S3 releases expire after three days"
+
+# No AWS EC2 Start/Stop/RunInstances, SSH, public listener, RDS, LIVE broker
+# credentials, Terraform change, or internet-accessible web release.
