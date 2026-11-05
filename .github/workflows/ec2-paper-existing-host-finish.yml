@@ -1,10 +1,10 @@
-name: EC2 PAPER finish stopped host with two resources (locked state, no EC2 launch)
+name: EC2 PAPER v2 finish existing stopped host (no EC2 replacement)
 
 on:
   push:
     branches: [dev]
     paths:
-      - 'infra/ec2-paper/requests/finish-stopped-host.json'
+      - 'infra/ec2-paper/requests/finish-stopped-host-v2.json'
 
 permissions:
   contents: read
@@ -23,7 +23,7 @@ jobs:
       AWS_ACCOUNT: "098859530205"
       AWS_REGION: ap-south-1
       STATE_REGION: us-east-1
-      APPROVAL_REQUEST: infra/ec2-paper/requests/finish-stopped-host.json
+      APPROVAL_REQUEST: infra/ec2-paper/requests/finish-stopped-host-v2.json
       INSTANCE_ID: i-09c01b470fb39b85a
     steps:
       - uses: actions/checkout@v4
@@ -136,7 +136,7 @@ jobs:
           fi
           echo "Missing two exact resources confirmed; no duplication"
 
-      - name: Verify existing state, reconcile only tainted stopped host, and lock two-create plan
+      - name: Verify already untainted stopped host and lock exact two-create plan
         working-directory: infra/ec2-paper
         shell: bash
         run: |
@@ -154,11 +154,11 @@ jobs:
           # private and deleted after use; do not log/upload its contents.
           terraform state pull > "$work/state.json"
           python3 verify_stopped_host_finish.py host-state "$work/state.json"
-          # Host is independently confirmed STOPPED, exactly tagged, with
-          # correct real EBS and attributes. This removes only the state
-          # taint marker; it NEVER starts or replaces AWS EC2.
-          terraform untaint -lock=true -lock-timeout=2m 'aws_instance.paper[0]'
-          echo "Existing stopped EC2 state taint cleared without AWS host mutation"
+          # The previous recovery already cleared the taint marker. The
+          # state check above REQUIRES the existing host to be untainted.
+          # No Terraform state modification or AWS host mutation is allowed
+          # before the final, refreshed and fail-closed two-create plan.
+          echo "Existing stopped host already untainted; no state write needed"
           terraform plan -input=false -no-color -lock=true -lock-timeout=2m -refresh=true \
             -var="approve_paid_provision=PROVISION_PAPER_EC2_4GB" \
             -var="instance_type=t4g.medium" \
