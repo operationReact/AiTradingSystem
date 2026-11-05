@@ -159,7 +159,7 @@ class StoppedPaperFinishContract(unittest.TestCase):
             "verify_stopped_host_finish.py final",
             "terraform apply -input=false -no-color -lock=true",
             'x.get("State",{}).get("Name")!="stopped"',
-            "delete_on_termination", # lowercase in source docs/state semantics
+            "DeleteOnTermination",
             "cron(0 22 * * ? *)",
             "Asia/Kolkata",
             "if: failure()",
