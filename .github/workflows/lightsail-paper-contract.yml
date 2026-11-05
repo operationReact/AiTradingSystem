@@ -1,0 +1,41 @@
+name: Lightsail PAPER 4GB IaC safety (offline, no AWS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/**'
+      - 'scripts/tests/test_lightsail_paper_bootstrap.py'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/lightsail/**'
+      - 'scripts/tests/test_lightsail_paper_bootstrap.py'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify isolated scoped OIDC and $24/4GB plan contracts
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_bootstrap.py
+          python3 -m py_compile infra/lightsail/verify_plan.py
+          bash -n infra/lightsail/user-data.sh
+      - name: Verify no AWS access can occur in this offline job
+        run: |
+          set -euo pipefail
+          test -z "${AWS_ACCESS_KEY_ID:-}"
+          test -z "${AWS_SESSION_TOKEN:-}"
+          echo 'PAPER Lightsail bootstrap source validated; no instance created'
