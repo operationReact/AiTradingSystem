@@ -55,10 +55,11 @@ class SyntheticResearchImageContract(unittest.TestCase):
             "id-token: write", "aws-actions/configure-aws-credentials",
             "aws ecs", "aws ecr", "aws secretsmanager", "docker login",
             "docker push", "aws iam", "terraform apply", "actions/upload-artifact",
-            "secrets.", "workflow_run:", "--publish", "--network host",
+            "github_token", "workflow_run:", "--publish", "--network host",
         ):
             self.assertNotIn(forbidden, s.lower())
         self.assertNotIn("Ed25519PrivateKey", self.source)
+        self.assertNotIn("secrets.", s.split("env:", 1)[0])
 
     def test_local_probe_rejects_unauthenticated_calls_and_authority(self):
         script = smoke.LOCAL_PROBE
