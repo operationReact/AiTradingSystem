@@ -136,7 +136,7 @@ class EC2PaperReadOnlyPlanTests(unittest.TestCase):
             self.assertEqual(gate.main(["review", "plan", str(path)]), 2)
 
     def test_actions_job_cannot_write_state_or_apply(self):
-        wf = (ROOT / ".github/workflows/ec2-paper-plan-only.yml").read_text()
+        wf = (ROOT / "docs/operations/archived-actions/ec2-paper-plan-only.yml").read_text()
         for expected in (
             "push:", "branches: [dev]", "id-token: write",
             "'infra/ec2-paper/requests/plan-only.json'",
