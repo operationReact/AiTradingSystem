@@ -47,6 +47,7 @@ def fixture() -> dict:
             "family": NAME, "taskDefinitionArn": DEFINITION_ARN, "status": "ACTIVE",
             "containerDefinitions": [{
                 "name": "research-worker", "essential": True, "image": IMAGE,
+                "user": "65532:65532",
                 "environment": [
                     {"name": "TRADING_MODE", "value": "PAPER"},
                     {"name": "AI_RESEARCH_STRICT_BOOT_REQUIRED", "value": "true"},
@@ -72,6 +73,7 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         self.assertTrue(result["ecs_worker_image_posture_verified"])
         self.assertTrue(result["running_image_digest_matches_ecr"])
         self.assertTrue(result["strict_worker_boot_declared"])
+        self.assertTrue(result["worker_privilege_overrides_absent"])
         self.assertEqual(result["verdict"], "PAPER_WORKER_IMAGE_POSTURE_ONLY_MODEL_UNVERIFIED")
         for field in ("worker_model_artifacts_verified",
                       "worker_secret_value_or_iam_access_verified",
@@ -119,6 +121,29 @@ class WorkerImageEvidenceTest(unittest.TestCase):
             "valueFrom": f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:strict",
         })
         self.blocked(f, "WORKER_STRICT_BOOT_NOT_REQUIRED")
+
+    def test_v93_explicit_nonroot_and_no_ecs_privilege_overrides(self):
+        root = Path(__file__).resolve().parents[2]
+        tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
+        docker = (root / "intelligence/Dockerfile.research-release").read_text()
+        self.assertIn('user = "65532:65532"', tf)
+        self.assertIn("desired_count                     = 0", tf)
+        self.assertIn("USER 65532:65532", docker)
+        for field, value in (
+            ("user", "0"), ("user", "0:0"), ("user", "65532"),
+            ("user", None), ("privileged", True),
+            ("interactive", True), ("pseudoTerminal", True),
+            ("linuxParameters", {"capabilities": {"add": ["SYS_ADMIN"]}}),
+            ("dockerSecurityOptions", ["no-new-privileges:false"]),
+            ("extraHosts", [{"hostname": "bad", "ipAddress": "127.0.0.1"}]),
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0][field] = value
+            self.blocked(f, "WORKER_PRIVILEGE_OVERRIDE_UNVERIFIED")
+
+        valid = fixture()
+        valid["definition"]["taskDefinition"]["containerDefinitions"][0]["privileged"] = False
+        self.assertTrue(evaluate(**valid)["worker_privilege_overrides_absent"])
 
     def test_running_image_must_match_ecr_digest_and_tag(self):
         f = fixture()
