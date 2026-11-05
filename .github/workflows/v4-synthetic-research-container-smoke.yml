@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [dev]
     paths:
+      - 'intelligence/Dockerfile'
       - 'intelligence/Dockerfile.research-release'
       - 'intelligence/Dockerfile.research-release.dockerignore'
       - 'intelligence/src/aitrading_intelligence/research_image_context.py'
@@ -18,6 +19,7 @@ on:
   push:
     branches: [dev]
     paths:
+      - 'intelligence/Dockerfile'
       - 'intelligence/Dockerfile.research-release'
       - 'intelligence/Dockerfile.research-release.dockerignore'
       - 'intelligence/src/aitrading_intelligence/research_image_context.py'
