@@ -1,0 +1,169 @@
+name: EC2 PAPER one-time paid 4GB provisioning with locked Terraform plan
+
+on:
+  # Only a separately reviewed, request-only PR merged to dev may trigger
+  # provisioning. This file is inactive until approved-provision.json exists.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/approved-provision.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-paid-provision
+  cancel-in-progress: false
+
+jobs:
+  provision:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      AWS_ACCOUNT: "098859530205"
+      AWS_REGION: ap-south-1
+      STATE_REGION: us-east-1
+      APPROVAL_REQUEST: infra/ec2-paper/requests/approved-provision.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Refuse non-request commits and enforce exact user-approved scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_ACCOUNT" = "098859530205"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$STATE_REGION" = "us-east-1"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          # A one-file, reviewed approval PR prevents opportunistic changes
+          # to IAM, instance size or network in the triggering commit.
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$APPROVAL_REQUEST"
+          python3 infra/ec2-paper/verify_locked_apply.py request "$APPROVAL_REQUEST"
+          echo "Exact single-use PAPER 4GB approval verified; no LIVE access"
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Obtain narrow AWS create-only dev GitHub OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision
+          role-session-name: paper-ec2-create-${{ github.run_id }}
+          role-duration-seconds: 1800
+          aws-region: ap-south-1
+
+      - name: Refuse cross-account access or pre-existing PAPER deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          existing="$(aws ec2 describe-instances --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system \
+                      Name=tag:Environment,Values=paper \
+            --query 'length(Reservations)' --output text)"
+          test "$existing" = "0" || {
+            echo "::error::PAPER resource already exists; no duplicate provisioning"
+            exit 1
+          }
+          echo "AWS identity and single PAPER deployment guard PASS"
+
+      - name: Create fresh locked, refreshed plan and verify exact 13 resources
+        working-directory: infra/ec2-paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/aitrading-paper-ec2-approved-$GITHUB_RUN_ID"
+          mkdir -m 0700 "$work"
+          echo "PLAN_WORKDIR=$work" >> "$GITHUB_ENV"
+          terraform fmt -check
+          terraform init -input=false -no-color -backend-config=backend.hcl
+          terraform validate -no-color
+          # The plan role was deliberately read-only; this PAID workflow
+          # instead obtains the exact lockfile/state write permissions.
+          terraform plan -input=false -no-color -lock=true -lock-timeout=2m -refresh=true \
+            -var="approve_paid_provision=PROVISION_PAPER_EC2_4GB" \
+            -var="instance_type=t4g.medium" \
+            -var="root_volume_gib=35" \
+            -var="daily_stop_hour_ist=22" \
+            -var="daily_stop_enabled=true" \
+            -out="$work/approved.tfplan"
+          terraform show -json "$work/approved.tfplan" > "$work/approved-plan.json"
+          python3 verify_locked_apply.py plan "$work/approved-plan.json"
+          echo "Exact fresh create-only plan verified; apply uses same saved binary plan"
+
+      - name: Apply same reviewed Terraform plan to isolated remote state
+        working-directory: infra/ec2-paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$PLAN_WORKDIR/approved.tfplan"
+          test -f "$PLAN_WORKDIR/approved-plan.json"
+          python3 verify_locked_apply.py plan "$PLAN_WORKDIR/approved-plan.json"
+          terraform apply -input=false -no-color -lock=true -lock-timeout=2m \
+            "$PLAN_WORKDIR/approved.tfplan"
+          echo "PAPER infrastructure created; no app/DB containers or LIVE orders deployed"
+
+      - name: Verify exact running ARM64 instance and 22 IST automatic stop
+        working-directory: infra/ec2-paper
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform output -json > "$PLAN_WORKDIR/outputs.json"
+          python3 - "$PLAN_WORKDIR/outputs.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1], encoding="utf-8"))
+          iid=x.get("paper_instance_id",{}).get("value")
+          sched=x.get("paper_auto_stop_name",{}).get("value")
+          if not isinstance(iid,str) or not iid.startswith("i-"):
+              raise SystemExit("missing or invalid EC2 instance output")
+          if sched != "aitrading-paper-nightly-stop":
+              raise SystemExit("missing expected nightly stop schedule output")
+          print("Terraform returned exact PAPER EC2 instance and stop schedule outputs")
+          PY
+          instance_id="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["paper_instance_id"]["value"])' "$PLAN_WORKDIR/outputs.json")"
+          aws ec2 describe-instances --region "$AWS_REGION" --instance-ids "$instance_id" \
+            --query 'Reservations[0].Instances[0]' --output json > "$PLAN_WORKDIR/instance.json"
+          python3 - "$PLAN_WORKDIR/instance.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf-8"))
+          tags={t["Key"]:t["Value"] for t in x.get("Tags",[])}
+          if (x.get("InstanceType")!="t4g.medium"
+              or x.get("MetadataOptions",{}).get("HttpTokens")!="required"
+              or x.get("State",{}).get("Name") not in ("pending","running")
+              or tags.get("Application")!="ai-trading-system"
+              or tags.get("Environment")!="paper"):
+              raise SystemExit("actual EC2 4GB/PAPER/IMDSv2 verification BLOCKED")
+          print("Actual AWS EC2 PAPER instance/IMDSv2/size verified")
+          PY
+          aws scheduler get-schedule --region "$AWS_REGION" \
+            --name aitrading-paper-nightly-stop \
+            --query '{State:State,Expression:ScheduleExpression,Timezone:ScheduleExpressionTimezone}' \
+            --output json > "$PLAN_WORKDIR/stop.json"
+          python3 - "$PLAN_WORKDIR/stop.json" <<'PY'
+          import json,sys
+          x=json.load(open(sys.argv[1],encoding="utf-8"))
+          if x != {"State":"ENABLED","Expression":"cron(0 22 * * ? *)",
+                  "Timezone":"Asia/Kolkata"}:
+              raise SystemExit("automatic 22 IST stop verification BLOCKED")
+          print("EventBridge Scheduler nightly stop at 22:00 IST is ENABLED")
+          PY
+
+      - name: Remove runner-local binary plan files and ephemeral observations
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -n "${PLAN_WORKDIR:-}" && test -d "$PLAN_WORKDIR"; then
+            rm -rf -- "$PLAN_WORKDIR"
+          fi
+
+# Never upload a Terraform plan, state, EC2 credentials or private parameters.
+# No LIVE trades, public HTTP ports, RDS, NAT, ALB, ECR, AWS keys or broker tokens.
