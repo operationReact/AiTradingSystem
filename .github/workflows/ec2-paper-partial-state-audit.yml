@@ -50,6 +50,21 @@ jobs:
           aws ec2 describe-instances --region "$AWS_REGION" \
             --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
             --query 'Reservations[].Instances[].{Id:InstanceId,State:State.Name,Type:InstanceType}' --output json
+          echo "--- Tagged PAPER subnets ---"
+          aws ec2 describe-subnets --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'Subnets[].{Id:SubnetId,Vpc:VpcId,CIDR:CidrBlock,State:State}' --output json
+          echo "--- Tagged PAPER security groups, including default egress rule count ---"
+          aws ec2 describe-security-groups --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'SecurityGroups[].{Id:GroupId,Vpc:VpcId,IngressCount:length(IpPermissions),EgressCount:length(IpPermissionsEgress)}' --output json
+          echo "--- Tagged PAPER internet gateways and route tables ---"
+          aws ec2 describe-internet-gateways --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'InternetGateways[].{Id:InternetGatewayId,Attachments:Attachments[].VpcId}' --output json
+          aws ec2 describe-route-tables --region "$AWS_REGION" \
+            --filters Name=tag:Application,Values=ai-trading-system Name=tag:Environment,Values=paper \
+            --query 'RouteTables[].{Id:RouteTableId,Vpc:VpcId,Associations:Associations[].SubnetId}' --output json
           echo "--- Exact dedicated PAPER IAM resource existence ---"
           for name in aitrading-paper-ec2-ssm aitrading-paper-daily-stop; do
             if aws iam get-role --role-name "$name" --query 'Role.RoleId' --output text >/dev/null 2>&1; then
