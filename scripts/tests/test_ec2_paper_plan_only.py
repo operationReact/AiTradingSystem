@@ -156,9 +156,14 @@ class EC2PaperReadOnlyPlanTests(unittest.TestCase):
             "workflow_dispatch:"
         ):
             self.assertNotIn(forbidden, wf)
-        self.assertFalse(
-            (ROOT / "infra/ec2-paper/requests/plan-only.json").exists()
-        )
+        # A reviewed, explicitly committed request must be accepted by CI.
+        # Normal application PRs may omit the request entirely.
+        request = ROOT / "infra/ec2-paper/requests/plan-only.json"
+        if request.exists():
+            self.assertTrue(request.is_file())
+            self.assertFalse(request.is_symlink())
+            self.assertLessEqual(request.stat().st_size, 1024)
+            gate.verify_request(json.loads(request.read_text(encoding="utf-8")))
 
 
 if __name__ == "__main__":

@@ -61,10 +61,13 @@ jobs:
           test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
           # Terraform backend region is the real S3 bucket location in N.
           # Virginia, independent of the Mumbai AWS provider region.
-          test "$(aws s3api get-bucket-versioning \
+          # The read-only preflight already verified S3 versioning and block-public-access.
+          # The plan role deliberately has only S3 List/GetObject permissions,
+          # not GetBucketVersioning. Recheck account and backend identity, not IAM.
+          test "$(aws s3api get-bucket-location \
             --bucket aitrading-paper-tfstate-098859530205-ap-south-1 \
             --region "$STATE_BUCKET_REGION" \
-            --query Status --output text)" = "Enabled"
+            --output json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("LocationConstraint"))')" = "None"
           terraform fmt -check
           terraform init -input=false -no-color \
             -backend-config=backend.hcl
