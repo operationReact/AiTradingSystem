@@ -298,7 +298,7 @@
       "Type": "AWS::IAM::Role",
       "Properties": {
         "RoleName": "aitrading-paper-ec2-provision",
-        "Description": "One-host dev-branch Terraform provisioning only; exact paper state and locked plan; no LIVE resources, no termination.",
+        "Description": "Dev-branch one-host locked Terraform provision plus fail-safe tagged-instance STOP only; exact paper state, no LIVE/terminate.",
         "MaxSessionDuration": 3600,
         "AssumeRolePolicyDocument": {
           "Version": "2012-10-17",
@@ -482,6 +482,20 @@
                       "aws:RequestedRegion": "ap-south-1",
                       "ec2:ResourceTag/Application": "ai-trading-system",
                       "ec2:ResourceTag/Environment": "paper"
+                    }
+                  }
+                },
+                {
+                  "Sid": "FailSafeStopOnlyTaggedPaperHostOnApplyError",
+                  "Effect": "Allow",
+                  "Action": "ec2:StopInstances",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "ec2:ResourceTag/Application": "ai-trading-system",
+                      "ec2:ResourceTag/Environment": "paper",
+                      "ec2:ResourceTag/Name": "aitradingsystem-paper-ec2"
                     }
                   }
                 },
