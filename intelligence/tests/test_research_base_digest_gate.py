@@ -46,7 +46,7 @@ class BaseImageDigestGateTest(unittest.TestCase):
     def test_docker_pull_metadata_cannot_pick_ambiguous_or_foreign_digests(self):
         for metadata in (
             [], None, {}, "python:3.11-slim",
-            [f"python:3.11-slim"],
+            ["python:3.11-slim"],
             [f"evil.example/python@sha256:{DIGEST}"],
             [f"python@sha256:{DIGEST}", f"python@sha256:{'b' * 64}"],
             [f"python@sha256:{DIGEST}", 42],
