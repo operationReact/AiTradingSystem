@@ -1,0 +1,186 @@
+name: AI Trading PAPER Lightsail internal-only app deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY_PAPER_LOCAL_ONLY (no public endpoint / broker orders)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitradingsystem-paper-lightsail-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      AWS_REGION: us-east-1
+      AWS_LIGHTSAIL_ROLE_ARN: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+      LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Require exact branch/repo/account/manual authorization
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$AWS_REGION" = 'us-east-1'
+          test "$AWS_LIGHTSAIL_ROLE_ARN" = 'arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper'
+          test "$CONFIRMATION" = 'DEPLOY_PAPER_LOCAL_ONLY'
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$LIGHTSAIL_INSTANCE" = 'aitradingsystem-paper-dev'
+
+      - name: Check offline PAPER-only deployment and API-proxy safety
+        run: python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_rollout.py
+
+      # All CPU-intensive build work is on GitHub hosted runner, never the
+      # budget 2-vCPU 4GB Lightsail server. No AWS role during builds.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Build Flutter Web for SSH-tunneled localhost-only access
+        working-directory: apps/trading_client
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL=http://localhost:8088
+
+      - name: Build exact-commit Java and Flutter Docker images (not research worker)
+        run: |
+          set -euo pipefail
+          docker build --file backend/Dockerfile \
+            --tag "aitradingsystem-paper-backend:$GITHUB_SHA" backend
+          docker build --file apps/trading_client/Dockerfile.lightsail-paper \
+            --tag "aitradingsystem-paper-web:$GITHUB_SHA" apps/trading_client
+
+      - name: Assume short-lived dedicated Lightsail OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: ats-paper-app-${{ github.run_id }}
+          role-duration-seconds: 3600
+
+      - name: Verify AI Trading account and exact running tagged 4GB PAPER VM
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '816344830716'
+          umask 077
+          mkdir -m 0700 "$RUNNER_TEMP/ats-paper-ssh"
+          aws lightsail get-instance --instance-name "$LIGHTSAIL_INSTANCE" \
+            --output json > "$RUNNER_TEMP/ats-paper-ssh/instance.json"
+          python3 - "$RUNNER_TEMP/ats-paper-ssh/instance.json" <<'PY'
+          import json, sys, importlib.util
+          spec = importlib.util.spec_from_file_location("sshcheck", "infra/lightsail/prepare_ssh.py")
+          module = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          module.check_instance(json.load(open(sys.argv[1], encoding="utf-8")))
+          print("Verified exact running 4GB PAPER host; no cross-project use")
+          PY
+          aws lightsail get-instance-port-states --instance-name "$LIGHTSAIL_INSTANCE" \
+            --output json > "$RUNNER_TEMP/ats-paper-ssh/ports.json"
+          python3 - "$RUNNER_TEMP/ats-paper-ssh/ports.json" <<'PY'
+          import json, sys
+          d=json.load(open(sys.argv[1], encoding="utf-8"))
+          p=d.get("portStates", [])
+          if not isinstance(p, list) or any(
+              row.get("state") == "open" and (
+                  row.get("protocol") != "tcp" or row.get("fromPort") != 22
+                  or row.get("toPort") != 22
+              ) for row in p
+          ):
+              raise SystemExit("Unexpected public port; deploy blocked")
+          PY
+
+      - name: Temporarily allow only this Actions runner to use SSH
+        id: open_port
+        run: |
+          set -euo pipefail
+          runner_ip="$(curl -fSs --max-time 10 https://checkip.amazonaws.com | tr -d '\n')"
+          port_json="$(python3 - "$runner_ip" <<'PY'
+          import ipaddress,json,sys
+          ip=ipaddress.ip_address(sys.argv[1])
+          if ip.version != 4 or not ip.is_global:
+              raise SystemExit("Invalid runner egress IP")
+          print(json.dumps([{
+              "fromPort":22,"toPort":22,"protocol":"tcp",
+              "cidrs":[str(ip)+"/32"],"cidrListAliases":["lightsail-connect"]
+          }],separators=(",",":")))
+          PY
+          )"
+          aws lightsail put-instance-public-ports \
+            --instance-name "$LIGHTSAIL_INSTANCE" --port-infos "$port_json" >/dev/null
+          echo 'SSH access limited to current runner IPv4 plus Lightsail browser client'
+
+      - name: Retrieve temporary AWS SSH certificate and pin server host keys
+        run: |
+          set -euo pipefail
+          umask 077
+          aws lightsail get-instance-access-details \
+            --instance-name "$LIGHTSAIL_INSTANCE" --protocol ssh \
+            --output json > "$RUNNER_TEMP/ats-paper-ssh/access.json"
+          python3 infra/lightsail/prepare_ssh.py \
+            --instance "$RUNNER_TEMP/ats-paper-ssh/instance.json" \
+            --access-details "$RUNNER_TEMP/ats-paper-ssh/access.json" \
+            --output-dir "$RUNNER_TEMP/ats-paper-ssh"
+          rm -f "$RUNNER_TEMP/ats-paper-ssh/access.json"
+
+      - name: Transfer exact-head application images; execute connected local API smoke
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/ats-paper-ssh"
+          ip="$(python3 - "$work/instance.json" <<'PY'
+          import json,sys
+          print(json.load(open(sys.argv[1],encoding="utf-8"))["instance"]["publicIpAddress"])
+          PY
+          )"
+          host="ubuntu@$ip"
+          opts=(-i "$work/id" -o "CertificateFile=$work/id-cert.pub"
+                -o "UserKnownHostsFile=$work/known_hosts"
+                -o StrictHostKeyChecking=yes -o IdentitiesOnly=yes
+                -o BatchMode=yes -o ConnectTimeout=15)
+          scp "${opts[@]}" infra/lightsail/paper-compose.yml \
+            "$host:/tmp/aitradingsystem-paper-compose.yml"
+          ssh "${opts[@]}" "$host" \
+            "sudo install -o root -g root -m 0600 /tmp/aitradingsystem-paper-compose.yml /opt/aitradingsystem-paper/paper-compose.yml && rm /tmp/aitradingsystem-paper-compose.yml"
+          docker save "aitradingsystem-paper-backend:$GITHUB_SHA" \
+                       "aitradingsystem-paper-web:$GITHUB_SHA" |
+            gzip -1 | ssh "${opts[@]}" "$host" 'gzip -dc | sudo docker load >/dev/null'
+          ssh "${opts[@]}" "$host" "sudo bash -s -- '$GITHUB_SHA'" \
+            < infra/lightsail/run_paper.sh
+
+      - name: Close runner SSH access; keep browser SSH only
+        if: always() && steps.open_port.outcome == 'success'
+        run: |
+          set -euo pipefail
+          aws lightsail put-instance-public-ports \
+            --instance-name "$LIGHTSAIL_INSTANCE" \
+            --port-infos '[{"fromPort":22,"toPort":22,"protocol":"tcp","cidrListAliases":["lightsail-connect"]}]' >/dev/null
+          echo 'Temporary GitHub runner SSH ingress closed'
+
+      - name: Erase ephemeral certificates and SSH host inventory
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -rf -- "$RUNNER_TEMP/ats-paper-ssh"
+          echo 'No SSH private keys or server access details persisted in GitHub'
+
+# IMPORTANT: this manually dispatched job creates NO Lightsail instances,
+# static IPs, public HTTP endpoints, registry images, research workers or trades.
