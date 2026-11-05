@@ -135,6 +135,13 @@ class PaperLockedProvisionContract(unittest.TestCase):
         })
         allowed = self.statements[:-1]
         self.assertTrue(all(x["Effect"] == "Allow" for x in allowed))
+        network = next(x for x in allowed
+                       if x["Sid"] == "ConfigureOnlyMumbaiPaperNetwork")
+        self.assertIn("ec2:RevokeSecurityGroupEgress", network["Action"])
+        self.assertIn("ec2:AuthorizeSecurityGroupEgress", network["Action"])
+        self.assertNotIn("ec2:AuthorizeSecurityGroupIngress", network["Action"])
+        self.assertEqual(network["Condition"]["StringEquals"]["aws:RequestedRegion"],
+                         "ap-south-1")
         vpc_reads = next(x for x in allowed if x["Sid"] == "ReadOnlyMumbaiInventory")
         self.assertIn("ec2:DescribeVpcAttribute", vpc_reads["Action"])
         self.assertEqual(vpc_reads["Condition"]["StringEquals"]["aws:RequestedRegion"],
