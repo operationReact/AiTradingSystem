@@ -1,0 +1,96 @@
+name: Actions - audit retired workflow history (read-only)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/retired-action-run-audit.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inventory:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Inventory only the 22 already-removed retired workflow files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const {owner, repo} = context.repo;
+            if (owner !== 'operationReact' || repo !== 'AiTradingSystem')
+              throw Error('Wrong repository');
+            const retiredNames = [
+              'paper-ec2-manual-readonly-smoke.yml',
+              'paper-ec2-one-time-start-for-ssm.yml',
+              'paper-ec2-one-time-stop-after-smoke.yml',
+              'diagnose-oidc-claims.yml',
+              'verify-aws-oidc.yml',
+              'paper-ec2-bootstrap-curl-minimal-fix-once.yml',
+              'paper-ec2-bootstrap-stepwise-repair-once.yml',
+              'paper-ec2-compose-pinned-integrity-fix-once.yml',
+              'paper-ec2-connected-smoke-audit-once.yml',
+              'paper-ec2-connected-smoke-stdin-fix-once.yml',
+              'paper-ec2-dnf-package-diagnosis-once.yml',
+              'paper-ec2-ssm-bootstrap-repair-once.yml',
+              'paper-ssm-bootstrap-audit-once.yml',
+              'ec2-paper-ssm-iam-verification.yml',
+              'ec2-paper-ssm-oidc-differential.yml',
+              'deploy-flutter-web-on-request.yml',
+              'deploy-paper-backend-on-request.yml',
+              'deploy-paper-budget-aws.yml',
+              'deploy-live-aws.yml',
+              'provision-live-aws.yml'
+            ];
+            if (new Set(retiredNames).size !== 20)
+              throw Error('Retired filename list not unique and exact');
+            const workflows = await github.paginate(
+              github.rest.actions.listRepoWorkflows, {owner, repo, per_page: 100});
+            const matches = workflows.filter(w => retiredNames.some(
+              name => w.path === '.github/workflows/' + name));
+            const report = {repo: owner + '/' + repo, created_at: new Date().toISOString(),
+              expected_paths: retiredNames, workflows: []};
+            for (const w of matches) {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRuns,
+                {owner, repo, workflow_id: w.id, per_page: 100});
+              report.workflows.push({
+                id: w.id, name: w.name, path: w.path, state: w.state,
+                run_count: runs.length,
+                runs: runs.map(r => ({
+                  id:r.id, status:r.status, conclusion:r.conclusion,
+                  branch:r.head_branch, sha:r.head_sha, created_at:r.created_at,
+                  url:r.html_url, event:r.event
+                }))
+              });
+              core.info('INVENTORY: ' + w.path +
+                ' state=' + w.state + ' runs=' + runs.length);
+            }
+            const seen = new Set(matches.map(w => w.path.replace('.github/workflows/', '')));
+            const missing = retiredNames.filter(n => !seen.has(n));
+            core.info('RETIRED_WORKFLOWS_FOUND=' + matches.length);
+            core.info('RETIRED_WORKFLOWS_MISSING=' + missing.length);
+            core.info('RETIRED_RUNS=' + report.workflows.reduce((n,w)=>n+w.run_count,0));
+            if (missing.length) core.info('MISSING_FILES=' + missing.join(','));
+            fs.writeFileSync('retired-workflow-inventory.json',
+              JSON.stringify(report,null,2)+'\n',{mode:0o600});
+            await core.summary.addHeading('Retired workflow inventory — read-only')
+              .addRaw('Expected retired workflows: '+retiredNames.length+'; observed: '+matches.length+
+                '; historical runs: '+report.workflows.reduce((n,w)=>n+w.run_count,0))
+              .addTable([['Workflow','State','Historical runs'],
+                ...report.workflows.map(w=>[w.path,w.state,String(w.run_count)])])
+              .write();
+            core.info('READ ONLY: No workflow runs, artifacts, workflow files or resources deleted.');
+
+      - name: Preserve metadata inventory before any future deletion
+        uses: actions/upload-artifact@v4
+        with:
+          name: retired-actions-history-audit
+          path: retired-workflow-inventory.json
+          retention-days: 90
+          if-no-files-found: error
+
+# No GitHub Actions write permission, AWS OIDC, cloud access or deletions.
