@@ -31,12 +31,14 @@ class EC2PaperPreflightContract(unittest.TestCase):
         cls.resources = cls.cfn["Resources"]
         cls.wf = READ.read_text(encoding="utf-8")
 
-    def test_only_state_bucket_policy_and_four_explicit_oidc_roles_are_bootstrapped(self):
+    def test_only_state_bucket_policy_and_five_explicit_oidc_roles_are_bootstrapped(self):
         self.assertEqual(set(self.resources), {
             "PaperStateBucket", "PaperStateBucketPolicy",
             "ReadOnlyGithubPreflightRole", "ReadOnlyGithubPlanRole",
             "RestrictedGithubProvisionRole",
             "PaperManualGithubLifecycleRole",
+            "PaperReleaseArtifactBucket", "PaperReleaseArtifactBucketPolicy",
+            "PaperGithubSsmDeployRole",
         })
         self.assertEqual(self.resources["PaperStateBucket"]["Type"], "AWS::S3::Bucket")
         bucket = self.resources["PaperStateBucket"]
