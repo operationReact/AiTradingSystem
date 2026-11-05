@@ -42,6 +42,8 @@ def sample_plan() -> dict:
             after = {"ingress": []}
         else:
             after = {}
+        if address in gate.TAGGED_CREATE_RESOURCES:
+            after["tags"] = {**gate.REQUIRED_TAGS, "Name": "aitradingsystem-paper-ec2"}
         changes.append({
             "address": address, "mode": "managed",
             "change": {"actions": ["create"], "after": after},
@@ -97,6 +99,25 @@ class PaperLockedProvisionContract(unittest.TestCase):
             p["resource_changes"][0]["change"]["actions"] = value
             with self.subTest(actions=value), self.assertRaises(ValueError):
                 gate.validate_fresh_plan(p)
+
+    def test_terraform_create_tags_match_restricted_iam_policy(self):
+        source = (TF / "main.tf").read_text(encoding="utf-8")
+        self.assertIn('Application = "ai-trading-system"', source)
+        self.assertIn('Environment = "paper"', source)
+        for address in sorted(gate.TAGGED_CREATE_RESOURCES):
+            with self.subTest(address=address):
+                plan = sample_plan()
+                resource = next(x for x in plan["resource_changes"]
+                                if x["address"] == address)
+                resource["change"]["after"]["tags"].pop("Application")
+                with self.assertRaises(ValueError):
+                    gate.validate_fresh_plan(plan)
+        p = sample_plan()
+        instance = next(x for x in p["resource_changes"]
+                        if x["address"] == "aws_instance.paper[0]")
+        instance["change"]["after"]["tags"]["Environment"] = "live"
+        with self.assertRaises(ValueError):
+            gate.validate_fresh_plan(p)
 
     def test_exact_iam_trust_one_paper_state_lock_and_no_admin(self):
         self.assertEqual(set(self.resources), {
