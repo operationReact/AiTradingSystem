@@ -1,0 +1,197 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "AI Trading System PAPER: encrypted S3 Terraform state, strict dev-branch GitHub OIDC read-only preflight role. No EC2, deployment, Scheduler or spending resources.",
+  "Resources": {
+    "PaperStateBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": "aitrading-paper-tfstate-098859530205-ap-south-1",
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "ManagedBy",
+            "Value": "cloudformation-bootstrap"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "terraform-state"
+          }
+        ]
+      }
+    },
+    "PaperStateBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "PaperStateBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyUnencryptedTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${PaperStateBucket}"
+                },
+                {
+                  "Fn::Sub": "arn:${AWS::Partition}:s3:::${PaperStateBucket}/*"
+                }
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "ReadOnlyGithubPreflightRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "aitrading-paper-ec2-preflight",
+        "Description": "Dev-only GitHub OIDC AWS account and EC2 ARM64 availability/state configuration checks, no creation, termination or paid resources.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "aitrading-paper-preflight-readonly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "ReadOwnStateBucketMetadata",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetBucketLocation",
+                    "s3:GetBucketVersioning",
+                    "s3:GetEncryptionConfiguration",
+                    "s3:GetBucketPublicAccessBlock",
+                    "s3:GetBucketOwnershipControls",
+                    "s3:ListBucket"
+                  ],
+                  "Resource": {
+                    "Fn::GetAtt": [
+                      "PaperStateBucket",
+                      "Arn"
+                    ]
+                  }
+                },
+                {
+                  "Sid": "ReadOnlyEC2InventoryInMumbai",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ec2:DescribeInstanceTypes",
+                    "ec2:DescribeInstanceTypeOfferings",
+                    "ec2:DescribeVpcs",
+                    "ec2:DescribeSubnets",
+                    "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeAvailabilityZones"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "Capability",
+            "Value": "read-only-preflight"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "PreflightRoleArn": {
+      "Description": "Use only by reviewed dev-branch GitHub preflight, never Terraform apply",
+      "Value": {
+        "Fn::GetAtt": [
+          "ReadOnlyGithubPreflightRole",
+          "Arn"
+        ]
+      }
+    },
+    "StateBucket": {
+      "Description": "Versioned SSE-S3 state bucket, backend lock via use_lockfile",
+      "Value": {
+        "Ref": "PaperStateBucket"
+      }
+    },
+    "ProvisionedEC2": {
+      "Description": "No EC2 resources created by this CloudFormation bootstrap",
+      "Value": "NONE"
+    }
+  }
+}
