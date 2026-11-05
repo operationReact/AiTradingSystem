@@ -62,6 +62,14 @@ When/if the workflow becomes registered on the default branch, its `workflow_dis
 - The one-time launch script installs Ubuntu Docker and Docker Compose, generates a private root-owned database secret file on the VM, and does **not start the backend or worker**. It restricts instance public ports to Lightsail browser SSH only; application, database, model and broker ports remain closed. If firewall lockdown fails, the job fails with an explicit manual follow-up warning.
 - Provisioning is the point where AWS resource billing can begin. Merely merging this PR or running ordinary PR CI does not spend on Lightsail.
 
+## Connected Docker smoke — prove the actual 4 GB app stack before AWS deployment
+
+The repo now includes a separate [Lightsail PAPER connected Docker smoke workflow](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-connected-smoke.yml). It runs when the PAPER Compose/Nginx/Docker test contracts change, using GitHub-hosted Ubuntu and ephemeral **non-AWS** test credentials, with no OIDC token.
+
+It builds the actual Java 21 backend image and Flutter web image, starts the same `infra/lightsail/paper-compose.yml` stack with PostgreSQL 16, waits for Java `GET /api/health` and Flutter Nginx-proxied `GET /api/health` plus Nginx `/health`, queries the **real Flyway history** in PostgreSQL, validates a `pg_dump` schema-only backup, and inspects Docker's live port bindings for the required `127.0.0.1` restriction. The stack and disposable database volume are destroyed by the job cleanup. This is much stronger than YAML-only inspection but **not** an actual Lightsail deployment or authenticated login acceptance.
+
+Only merge changes to the deployment stack after this exact-head smoke and other required CI succeed. Passing it does not permit public application access or LIVE trading.
+
 ## Manual application rollout — internal PAPER acceptance first
 
 After the host's GitHub preflight/provision is complete and the Ubuntu bootstrap has finished, use [AI Trading PAPER Lightsail internal-only app deploy](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-app-deploy.yml) on the `dev` branch and type **`DEPLOY_PAPER_LOCAL_ONLY`**.
