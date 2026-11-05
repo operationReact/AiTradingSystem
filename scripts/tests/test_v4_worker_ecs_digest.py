@@ -58,10 +58,24 @@ def fixture() -> dict:
                 "environment": [
                     {"name": "TRADING_MODE", "value": "PAPER"},
                     {"name": "AI_RESEARCH_STRICT_BOOT_REQUIRED", "value": "true"},
-                    {"name": "AI_RESEARCH_MODEL_MANIFEST", "value": "/private/models.json"},
+                    {"name": "AI_RESEARCH_MODEL_MANIFEST", "value": "/opt/research/manifest.json"},
                 ],
                 "secrets": [{"name": "AI_RESEARCH_WORKER_TOKEN",
-                             "valueFrom": f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:private"}],
+                             "valueFrom": f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:private-ABC123"}],
+                "healthCheck": {
+                    "command": [
+                        "CMD-SHELL",
+                        "python -c \"import urllib.request; assert urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).status == 200\"",
+                    ],
+                    "interval": 30, "timeout": 5, "retries": 3, "startPeriod": 30,
+                },
+                "logConfiguration": {
+                    "logDriver": "awslogs",
+                    "options": {
+                        "awslogs-group": f"/ecs/{CLUSTER}/research-worker",
+                        "awslogs-region": REGION, "awslogs-stream-prefix": "ecs",
+                    },
+                },
             }],
         }},
         "images": {"imageDetails": [{"imageDigest": DIGEST, "imageTags": [SHA]}]},
@@ -84,6 +98,8 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         self.assertTrue(result["bounded_fargate_runtime_declared"])
         self.assertTrue(result["startup_config_names_allowlisted"])
         self.assertTrue(result["single_private_tcp_port_declared"])
+        self.assertTrue(result["reviewed_healthcheck_declared"])
+        self.assertTrue(result["reviewed_log_routing_declared"])
         self.assertEqual(result["verdict"], "PAPER_WORKER_IMAGE_POSTURE_ONLY_MODEL_UNVERIFIED")
         for field in ("worker_model_artifacts_verified",
                       "worker_secret_value_or_iam_access_verified",
@@ -257,6 +273,81 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         f = fixture()
         self.assertTrue(evaluate(**f)["startup_config_names_allowlisted"])
         self.assertTrue(evaluate(**f)["single_private_tcp_port_declared"])
+
+    def test_v96_health_probe_and_logs_are_exact_and_sanitized(self):
+        root = Path(__file__).resolve().parents[2]
+        tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
+        for expected in (
+            "http://127.0.0.1:8090/health",
+            "interval    = 30", "timeout     = 5",
+            "retries     = 3", "startPeriod = 30",
+            'logDriver = "awslogs"',
+            '"awslogs-group"         = aws_cloudwatch_log_group.research_worker[0].name',
+            '"awslogs-region"        = var.aws_region',
+            '"awslogs-stream-prefix" = "ecs"',
+        ):
+            self.assertIn(expected, tf)
+
+        for key, value in (
+            ("command", ["CMD-SHELL", "exit 0"]),
+            ("command", ["CMD-SHELL", "curl http://evil.invalid/ready"]),
+            ("command", None),
+            ("interval", 10),
+            ("timeout", 10),
+            ("retries", 1),
+            ("startPeriod", 0),
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0]["healthCheck"][key] = value
+            self.blocked(f, "WORKER_HEALTHCHECK_UNVERIFIED")
+
+        for key, value in (
+            ("logDriver", "awsfirelens"),
+            ("logDriver", None),
+            ("options", {"awslogs-group": "/ecs/unreviewed"}),
+            ("secretOptions", [{"name": "REDIRECT",
+                                "valueFrom": "arn:aws:secretsmanager:us-east-1:000000000000:secret:BAD"}]),
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0][
+                "logConfiguration"][key] = value
+            self.blocked(f, "WORKER_LOG_ROUTING_UNVERIFIED")
+
+        # AWS can return explicitly empty secretOptions; accept only absence or empty.
+        f = fixture()
+        f["definition"]["taskDefinition"]["containerDefinitions"][0][
+            "logConfiguration"]["secretOptions"] = []
+        self.assertTrue(evaluate(**f)["reviewed_log_routing_declared"])
+        raw = json.dumps(evaluate(**f))
+        self.assertNotIn("private-ABC123", raw)
+        self.assertNotIn("/ecs/ai-trading-system/research-worker", raw)
+
+    def test_v96_manifest_and_secret_reference_are_exact(self):
+        root = Path(__file__).resolve().parents[2]
+        tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
+        docker = (root / "intelligence/Dockerfile.research-release").read_text()
+        self.assertIn('value = "/opt/research/manifest.json"', tf)
+        self.assertIn('AI_RESEARCH_MODEL_MANIFEST=/opt/research/manifest.json', docker)
+
+        for value in (
+            "/tmp/other.json", "/opt/research/../test.json",
+            "relative.json", "", "/private/models.json",
+        ):
+            f = fixture()
+            rows = f["definition"]["taskDefinition"]["containerDefinitions"][0]["environment"]
+            next(row for row in rows if row["name"] == "AI_RESEARCH_MODEL_MANIFEST")[
+                "value"] = value
+            self.blocked(f, "WORKER_SECRET_OR_MANIFEST_DECLARATION_UNVERIFIED")
+
+        for bad in (
+            f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:",
+            f"arn:aws:secretsmanager:{REGION}:{ACCOUNT}:secret:private:json-key",
+            "arn:aws:secretsmanager:us-west-2:816344830716:secret:wrong",
+        ):
+            f = fixture()
+            f["definition"]["taskDefinition"]["containerDefinitions"][0]["secrets"][0][
+                "valueFrom"] = bad
+            self.blocked(f, "WORKER_SECRET_OR_MANIFEST_DECLARATION_UNVERIFIED")
 
     def test_running_image_must_match_ecr_digest_and_tag(self):
         f = fixture()
