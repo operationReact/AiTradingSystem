@@ -1,0 +1,12 @@
+{
+  "kind": "ec2-paper-scheduler-group-trust-repair",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "target": "aitradingsystem-paper-ec2",
+  "instance_id": "i-09c01b470fb39b85a",
+  "instance_type": "t4g.medium",
+  "daily_stop_hour_ist": 22,
+  "daily_stop_enabled": true,
+  "operation": "repair-exact-stop-role-trust-and-create-schedule",
+  "confirmation": "REPAIR_STOP_ROLE_GROUP_TRUST_EXISTING_PAPER_ONLY"
+}
