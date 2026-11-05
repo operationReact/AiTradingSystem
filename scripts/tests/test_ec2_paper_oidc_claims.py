@@ -38,6 +38,16 @@ class EC2OIDCClaims(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.verify({**gate.EXPECTED,"sub":["unexpected"]})
 
+    def test_mismatched_subject_is_safely_diagnostic(self):
+        claims={**gate.EXPECTED,"sub":
+                "repo:operationReact/AiTradingSystem:environment:paper live <token>"}
+        with self.assertRaises(ValueError) as caught:
+            gate.verify(claims)
+        message=str(caught.exception)
+        self.assertIn("OIDC claims mismatched: sub",message)
+        self.assertIn("observed_sub=",message)
+        self.assertNotIn("<token>",message)
+
     def test_reject_corrupt_jwt_without_ever_printing_it(self):
         for bad in ("", "a.b", "header.%%%%.sig", "not-a-jwt", 1, "a"*17000):
             with self.subTest(token=str(bad)[:20]),self.assertRaises(ValueError):
