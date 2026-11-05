@@ -187,12 +187,12 @@ def main(argv: list[str]) -> int:
     if path:
         with open(path, "a", encoding="utf-8") as output:
             output.write(
-                "### PAPER EC2 manual lifecycle\\n\\n"
-                f"- Operation: \`{action}\`\\n"
-                f"- Instance: \`{INSTANCE}\` ({REGION})\\n"
-                f"- Verified final state: \`{state}\`\\n"
-                f"- Result: {detail}\\n"
-                "- Daily 22:00 IST stop schedule remains independent of manual controls.\\n"
+                "### PAPER EC2 manual lifecycle\n\n"
+                f"- Operation: `{action}`\n"
+                f"- Instance: `{INSTANCE}` ({REGION})\n"
+                f"- Verified final state: `{state}`\n"
+                f"- Result: {detail}\n"
+                "- Daily 22:00 IST stop schedule remains independent of manual controls.\n"
             )
     return code
 
