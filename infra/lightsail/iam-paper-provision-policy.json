@@ -40,7 +40,7 @@
         "lightsail:GetInstanceAccessDetails",
         "lightsail:PutInstancePublicPorts"
       ],
-      "Resource": "arn:aws:lightsail:us-east-1:816344830716:Instance/*",
+      "Resource": "arn:aws:lightsail:us-east-1:098859530205:Instance/*",
       "Condition": {
         "StringEquals": {
           "aws:RequestedRegion": "us-east-1",
