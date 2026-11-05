@@ -114,9 +114,22 @@ jobs:
         if: inputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
         run: |
           set -euo pipefail
-          aws lightsail put-instance-public-ports \
-            --instance-name "$LIGHTSAIL_INSTANCE" \
-            --port-infos '[{"fromPort":22,"toPort":22,"protocol":"tcp","cidrListAliases":["lightsail-connect"]}]' >/dev/null
+          # Lightsail creation is asynchronous; do not leave default ports
+          # open simply because the first firewall API call races bootstrap.
+          closed=false
+          for attempt in $(seq 1 24); do
+            if aws lightsail put-instance-public-ports \
+              --instance-name "$LIGHTSAIL_INSTANCE" \
+              --port-infos '[{"fromPort":22,"toPort":22,"protocol":"tcp","cidrListAliases":["lightsail-connect"]}]' >/dev/null 2>&1; then
+              closed=true
+              break
+            fi
+            sleep 5
+          done
+          test "$closed" = true || {
+            echo "::error::Firewall did not close: inspect Lightsail manually before using VM";
+            exit 1;
+          }
           echo 'Public web, database, model and broker ports remain CLOSED'
 
       - name: Report bounded result and credit check requirement
