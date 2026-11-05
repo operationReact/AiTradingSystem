@@ -133,6 +133,9 @@ resource "aws_ecs_task_definition" "research_worker" {
     name      = "research-worker"
     image     = "${aws_ecr_repository.research_worker[0].repository_url}:${var.research_worker_image_sha}"
     essential = true
+    # V93: ECS must preserve the release Dockerfile's non-root UID and GID.
+    # The worker service remains default-disabled at desired_count=0.
+    user      = "65532:65532"
     portMappings = [{
       containerPort = 8090
       hostPort      = 8090
