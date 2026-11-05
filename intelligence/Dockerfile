@@ -1,5 +1,11 @@
 FROM python:3.11-slim
 
+# Shared research imports use native LightGBM/OpenMP even when inference is
+# disabled. The slim Python base omits libgomp.so.1 and fails on import.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
