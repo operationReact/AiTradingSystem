@@ -90,6 +90,41 @@ jobs:
           terraform state list -no-color
           echo "Audited remote state without writes, import, plan, EC2 creation or deletes"
 
+      - name: Verify actual effective restricted provision role policy before any paid retry
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          aws iam get-role-policy \
+            --role-name aitrading-paper-ec2-provision \
+            --policy-name aitrading-paper-ec2-locked-provision-limited \
+            --query PolicyDocument --output json > "$RUNNER_TEMP/actual-provision-role-policy.json"
+          python3 - "$RUNNER_TEMP/actual-provision-role-policy.json" <<'PY'
+          import json,sys
+          data=json.load(open(sys.argv[1],encoding="utf-8"))
+          statements=data.get("Statement",[])
+          if not isinstance(statements,list):
+              raise SystemExit("missing effective AWS provisioning policy")
+          sids={s.get("Sid"):s for s in statements if isinstance(s,dict)}
+          def actions(sid):
+              x=sids.get(sid,{})
+              a=x.get("Action",[])
+              return set(a if isinstance(a,list) else [a])
+          if (
+              "ec2:RevokeSecurityGroupEgress" not in actions("ConfigureOnlyMumbaiPaperNetwork")
+              or "ec2:AuthorizeSecurityGroupEgress" not in actions("ConfigureOnlyMumbaiPaperNetwork")
+              or "ec2:DescribeVpcAttribute" not in actions("ReadOnlyMumbaiInventory")
+              or "ec2:DescribeSecurityGroupRules" not in actions("ReadOnlyMumbaiInventory")
+              or "ec2:AuthorizeSecurityGroupIngress" not in actions("DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded")
+              or sids.get("DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded",{}).get("Effect") != "Deny"
+          ):
+              raise SystemExit("CloudFormation provisioning role inline policy is not yet up to date")
+          for sid in ("ReadOnlyMumbaiInventory","ConfigureOnlyMumbaiPaperNetwork"):
+              if sids[sid].get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion") != "ap-south-1":
+                  raise SystemExit("actual provisioning policy is not region-restricted")
+          print("Actual AWS provision role policy verified: SG revoke, SG read, VPC read, deny ingress and Mumbai scope")
+          PY
+
       - name: Verify exact partial VPC attribute read access after CloudFormation role update
         shell: bash
         run: |
