@@ -899,15 +899,16 @@
                   }
                 },
                 {
+                  "Sid": "CheckExactDailyStopScheduleBeforeAnyDeployment",
+                  "Effect": "Allow",
+                  "Action": "scheduler:GetSchedule",
+                  "Resource": "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop"
+                },
+                {
                   "Sid": "SendOnlyAWSLinuxShellSSMDocumentMumbai",
                   "Effect": "Allow",
                   "Action": "ssm:SendCommand",
-                  "Resource": "arn:aws:ssm:ap-south-1::document/AWS-RunShellScript",
-                  "Condition": {
-                    "StringEquals": {
-                      "aws:RequestedRegion": "ap-south-1"
-                    }
-                  }
+                  "Resource": "arn:aws:ssm:ap-south-1::document/AWS-RunShellScript"
                 },
                 {
                   "Sid": "SendOnlyExactTaggedPaperInstance",
@@ -916,7 +917,6 @@
                   "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a",
                   "Condition": {
                     "StringEquals": {
-                      "aws:RequestedRegion": "ap-south-1",
                       "ssm:resourceTag/Application": "ai-trading-system",
                       "ssm:resourceTag/Environment": "paper"
                     }
