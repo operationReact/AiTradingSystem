@@ -7,7 +7,8 @@ exec > >(tee -a /var/log/aitrading-paper-ec2-bootstrap.log) 2>&1
 
 test "$(id -u)" -eq 0
 test "$(uname -m)" = "aarch64"
-dnf install -y --setopt=install_weak_deps=False docker curl openssl ca-certificates
+# AL2023 already includes curl-minimal; adding full curl conflicts with it.
+dnf install -y --setopt=install_weak_deps=False docker openssl ca-certificates
 systemctl enable --now docker
 systemctl enable --now amazon-ssm-agent
 
