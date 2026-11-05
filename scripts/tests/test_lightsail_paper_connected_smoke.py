@@ -102,6 +102,13 @@ class PaperConnectedRuntimeContract(unittest.TestCase):
             "ssh ", "scp ", "TRADING_MODE=LIVE", "actions/upload-artifact",
         ):
             self.assertNotIn(forbidden, workflow)
+        self.assertIn("await_health java-api", workflow)
+        self.assertIn("for attempt in $(seq 1 45)", workflow)
+        self.assertIn("'infra/lightsail/run_paper.sh'", workflow)
+        script = (ROOT / "infra/lightsail/run_paper.sh").read_text()
+        self.assertIn("wait_local_health java-api", script)
+        self.assertIn("wait_local_health flutter-proxy", script)
+        self.assertIn("for attempt in $(seq 1 45)", script)
         self.assertIn("'infra/lightsail/paper-compose.yml'", workflow)
         self.assertIn("'apps/trading_client/Dockerfile.lightsail-paper'", workflow)
         # No synthetic claims of auth, licensed market data or broker readiness.
