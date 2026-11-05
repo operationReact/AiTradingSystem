@@ -98,7 +98,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.mutatingCalls, 0);
 
-    await tester.ensureVisible(review);
+    await tester.scrollUntilVisible(review, 160,
+      scrollable: find.byType(Scrollable).first);
     await tester.tap(review);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('emergency-confirm')));
