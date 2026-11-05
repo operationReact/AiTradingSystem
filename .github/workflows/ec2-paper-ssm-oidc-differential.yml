@@ -1,0 +1,58 @@
+name: PAPER EC2 - isolate new SSM role OIDC denial (read-only)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-ssm-oidc-differential.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  audit:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      AWS_REGION: ap-south-1
+      EXPECTED_OIDC_SUB: 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
+    steps:
+      - name: Check actual GitHub OIDC subject against fixed existing AWS role trust
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jwt = await core.getIDToken('sts.amazonaws.com');
+            const pieces = jwt.split('.');
+            if (pieces.length !== 3) throw Error('OIDC claim structure invalid');
+            const claims = JSON.parse(Buffer.from(pieces[1], 'base64url').toString('utf8'));
+            if (claims.sub !== process.env.EXPECTED_OIDC_SUB || claims.aud !== 'sts.amazonaws.com') {
+              throw Error('OIDC subject or audience differs from expected dev-branch claim');
+            }
+            core.info('PASS: GitHub OIDC sub/aud exactly match existing and new CloudFormation role trusts (token not printed)');
+
+      - name: Assume previously working dev-only PAPER provisioning role, without AWS changes
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision
+          role-session-name: paper-oidc-differential-${{ github.run_id }}
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+          action-timeout-s: 120
+
+      - name: Verify existing IAM role still accepts same OIDC token claims
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          arn="$(aws sts get-caller-identity --query Arn --output text)"
+          case "$arn" in
+            arn:aws:sts::098859530205:assumed-role/aitrading-paper-ec2-provision/*)
+              echo 'PASS: existing dev GitHub OIDC provisioning role accepts identical subject/audience'
+              echo 'Investigate why separate new aitrading-paper-ec2-ssm-deploy role rejects OIDC in CloudFormation'
+              ;;
+            *) echo "::error::Unexpected provisioning role"; exit 1;;
+          esac
+
+# No AWS role modifications, EC2 lifecycle, SSM commands, or S3 writes.
