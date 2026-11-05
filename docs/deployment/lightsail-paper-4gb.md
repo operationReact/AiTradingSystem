@@ -11,6 +11,14 @@
 - Separate 4 GB Alpha instance would add another ~$24/mo. Two base instance charges ~$48/mo **only if the services are eligible under applicable AWS account promotional credits**. Verify the exact credit balance, eligible services, account, expiry and billing scope in AWS Console > Billing and Cost Management > Credits *before* running `provision`. Credits are not assumed transferable between AWS accounts. Snapshot, bandwidth overages, domain, taxes and managed database costs are additional.
 - Lightsail instances incur usage charges while stopped as well as when running; deleting the instance ends its usage billing but risks data loss. No workflow here deletes any resource.
 
+## AWS account migration boundary — November 5, 2026
+
+The AI Trading System's deployment account is **`098859530205`**. This supersedes the earlier AI Trading account association. All **active Lightsail** trust, permission, 4 GB instance ownership and GitHub role references use the updated account. The existing fixed `us-east-1` region has deliberately **not** been changed by this account-only correction; choose a region explicitly if you want Mumbai (`ap-south-1`) instead.
+
+**Do not reuse an IAM role, OIDC provider or promotional-credit assumption from a different AWS account.** An identity provider or role created in an earlier account does not move to the new account. Verify or create the GitHub OIDC identity provider, exact dev-only role and attached policy inside `098859530205`. Check Billing > Credits *in this account*; the same credits cannot be assumed available across accounts.
+
+The older ECS/RDS/research-worker Terraform and operational workflows still contain account-specific legacy references. This change **does not migrate or authorize those workflows** to the new account; do not dispatch ECS, research-worker or LIVE workflows as part of Lightsail provisioning. No resources should be assumed to exist in the new account until an actual successful read-only AWS preflight confirms them. The source-controlled request file remains **`operation=preflight`** and carries no paid instance provisioning confirmation.
+
 ## One-time AWS/IAM steps (no local PC tooling)
 
 1. In the **AI Trading** AWS account `098859530205`, confirm IAM > Identity providers contains `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. You said this provider already exists; **do not create a duplicate**.
