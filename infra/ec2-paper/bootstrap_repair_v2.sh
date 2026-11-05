@@ -41,19 +41,16 @@ cleanup() { rm -rf -- "$directory"; }
 trap cleanup EXIT
 
 if curl --fail --location --retry 3 --max-time 180 --silent --show-error \
-  "$base/docker-compose-linux-aarch64" -o "$directory/docker-compose-linux-aarch64" >/dev/null 2>&1 && \
-  curl --fail --location --retry 3 --max-time 180 --silent --show-error \
-  "$base/checksums.txt" -o "$directory/checksums.txt" >/dev/null 2>&1; then
+  "$base/docker-compose-linux-aarch64" -o "$directory/docker-compose-linux-aarch64" >/dev/null 2>&1; then
   echo "STEP_COMPOSE_DOWNLOAD:PASS"
 else
   echo "STEP_COMPOSE_DOWNLOAD:FAIL"
   exit 1
 fi
 
-if grep -E '(^|[[:space:]])docker-compose-linux-aarch64$' \
-  "$directory/checksums.txt" > "$directory/sha256.txt" && \
-  test "$(wc -l < "$directory/sha256.txt")" -eq 1 && \
-  (cd "$directory" && sha256sum -c sha256.txt >/dev/null 2>&1); then
+# Official v5.6.0 docker-compose-linux-aarch64 asset digest from GitHub release API.
+compose_sha256="733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"
+if printf '%s  %s\n' "$compose_sha256" "$directory/docker-compose-linux-aarch64" | sha256sum -c - >/dev/null 2>&1; then
   echo "STEP_COMPOSE_CHECKSUM:PASS"
 else
   echo "STEP_COMPOSE_CHECKSUM:FAIL"
