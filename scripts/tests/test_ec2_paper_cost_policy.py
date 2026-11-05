@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 TF = ROOT / "infra/ec2-paper"
 WORKFLOWS = ROOT / ".github/workflows"
+ARCHIVED = ROOT / "docs/operations/archived-actions"
 
 
 class CheapPaperEC2Policy(unittest.TestCase):
@@ -93,7 +94,7 @@ class CheapPaperEC2Policy(unittest.TestCase):
 
     def test_legacy_lightsail_can_never_provision_after_plan_change(self):
         for name in ("lightsail-paper-bootstrap.yml", "lightsail-paper-app-deploy.yml"):
-            src = (WORKFLOWS / name).read_text()
+            src = (ARCHIVED / name).read_text()
             with self.subTest(name=name):
                 self.assertIn('if: ${{ false }}', src)
                 self.assertNotIn("if: github.ref == 'refs/heads/dev'", src)
