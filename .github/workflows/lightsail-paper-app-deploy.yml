@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 50
     env:
       AWS_REGION: us-east-1
-      AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
+      AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper
       LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +62,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
           test "$GITHUB_REF" = 'refs/heads/dev'
           test "$AWS_REGION" = 'us-east-1'
-          test "$AWS_LIGHTSAIL_ROLE_ARN" = 'arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper'
+          test "$AWS_LIGHTSAIL_ROLE_ARN" = 'arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper'
           test "${{ steps.approval.outputs.operation }}" = 'deploy'
           test "$CONFIRMATION" = 'DEPLOY_PAPER_LOCAL_ONLY'
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
@@ -97,7 +97,7 @@ jobs:
       - name: Assume short-lived dedicated Lightsail OIDC role
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper
+          role-to-assume: arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper
           aws-region: us-east-1
           role-session-name: ats-paper-app-${{ github.run_id }}
           role-duration-seconds: 3600
@@ -105,7 +105,7 @@ jobs:
       - name: Verify AI Trading account and exact running tagged 4GB PAPER VM
         run: |
           set -euo pipefail
-          test "$(aws sts get-caller-identity --query Account --output text)" = '816344830716'
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
           umask 077
           mkdir -m 0700 "$RUNNER_TEMP/ats-paper-ssh"
           aws lightsail get-instance --instance-name "$LIGHTSAIL_INSTANCE" \
