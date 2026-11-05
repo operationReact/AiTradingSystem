@@ -428,9 +428,7 @@
                     "StringEquals": {
                       "aws:RequestedRegion": "ap-south-1",
                       "aws:RequestTag/Application": "ai-trading-system",
-                      "aws:RequestTag/Environment": "paper"
-                    },
-                    "ForAnyValue:StringEquals": {
+                      "aws:RequestTag/Environment": "paper",
                       "ec2:CreateAction": [
                         "CreateVpc",
                         "CreateInternetGateway",
