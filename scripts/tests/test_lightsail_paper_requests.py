@@ -65,7 +65,7 @@ class LightsailExplicitDevRequests(unittest.TestCase):
             ("lightsail-paper-bootstrap.yml", "bootstrap.request.json"),
             ("lightsail-paper-app-deploy.yml", "deploy.request.json"),
         ):
-            src = (ROOT / ".github/workflows" / workflow).read_text()
+            src = (ROOT / "docs/operations/archived-actions" / workflow).read_text()
             self.assertIn("branches: [dev]", src)
             self.assertIn(f"infra/lightsail/requests/{allowed}", src)
             self.assertIn("--github-output", src)
