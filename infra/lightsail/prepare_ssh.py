@@ -49,25 +49,22 @@ def select_ssh(data: dict, expected_ip: str) -> dict[str, str]:
     d = data.get("accessDetails", {})
     private = d.get("privateKey", "")
     certificate = d.get("certKey", "")
-    if not (
-        d.get("instanceName") == INSTANCE
-        and d.get("protocol") == "ssh"
-        and d.get("username") == "ubuntu"
-        and d.get("ipAddress") == expected_ip
-        and isinstance(private, str)
-        and 100 <= len(private) <= 16384
-        and private.startswith("-----BEGIN ")
-        and "PRIVATE KEY-----" in private
-        and private.rstrip().endswith("-----END RSA PRIVATE KEY-----")
-        or False
-    ):
-        # OpenSSH key pairs are also supported, without printing raw bytes.
-        if not (d.get("instanceName") == INSTANCE and d.get("protocol") == "ssh"
-                and d.get("username") == "ubuntu" and d.get("ipAddress") == expected_ip
-                and isinstance(private, str) and 100 <= len(private) <= 16384
-                and private.startswith("-----BEGIN OPENSSH PRIVATE KEY-----")
-                and private.rstrip().endswith("-----END OPENSSH PRIVATE KEY-----")):
-            raise ValueError("invalid temporary SSH private key")
+    is_key = isinstance(private, str) and 100 <= len(private) <= 16384 and (
+        (
+            private.startswith("-----BEGIN RSA PRIVATE KEY-----")
+            and private.rstrip().endswith("-----END RSA PRIVATE KEY-----")
+        )
+        or (
+            private.startswith("-----BEGIN OPENSSH PRIVATE KEY-----")
+            and private.rstrip().endswith("-----END OPENSSH PRIVATE KEY-----")
+        )
+    )
+    if not (d.get("instanceName") == INSTANCE
+            and d.get("protocol") == "ssh"
+            and d.get("username") == "ubuntu"
+            and d.get("ipAddress") == expected_ip
+            and is_key):
+        raise ValueError("invalid temporary SSH identity")
     if not (isinstance(certificate, str)
             and len(certificate) < 8192
             and "-cert-v01@openssh.com " in certificate):
