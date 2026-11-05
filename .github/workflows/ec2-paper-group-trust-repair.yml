@@ -183,7 +183,7 @@ jobs:
         run: |
           set -euo pipefail
           test -f "$PLAN_WORKDIR/approved.tfplan"
-          python3 verify_group_schedule_recovery.py final "$PLAN_WORKDIR/approved-plan.json"
+          python3 verify_group_schedule_recovery.py plan "$PLAN_WORKDIR/approved-plan.json"
           echo "DEPLOY_STARTED=true" >> "$GITHUB_ENV"
           terraform apply -input=false -no-color -lock=true -lock-timeout=2m \
             "$PLAN_WORKDIR/approved.tfplan"
