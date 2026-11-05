@@ -5,7 +5,7 @@
 ## Targets and budget
 
 - GitHub repository: `operationReact/AiTradingSystem`; allowed branch: `dev` only.
-- AWS account: `816344830716`; region: `us-east-1` (the existing AI Trading infrastructure target). **Do not confuse with Alpha Vidhyarthi's AWS account or Mumbai region.**
+- AWS account: `098859530205`; region: `us-east-1` (retained from the existing AI Trading deployment configuration because only the AWS account was changed). This is not an assumption that Lightsail is in Mumbai; confirm the target region before provisioning. Keep AI Trading infrastructure isolated from Alpha Vidhyarthi.
 - Single named server: `aitradingsystem-paper-dev`, Ubuntu 24.04 LTS, Lightsail Linux/Unix `medium_3_0`, **4 GB RAM / 2 vCPU / 80 GB disk / $24 USD per month** with public IPv4.
 - The initial plan deliberately contains no managed Lightsail PostgreSQL, RDS, ALB, NAT Gateway, ECS cluster, Python trained-model worker or LIVE execution. Later deployment may run a local PostgreSQL volume on this **non-high-availability pilot**; backups are mandatory before accepting actual user data.
 - Separate 4 GB Alpha instance would add another ~$24/mo. Two base instance charges ~$48/mo **only if the services are eligible under applicable AWS account promotional credits**. Verify the exact credit balance, eligible services, account, expiry and billing scope in AWS Console > Billing and Cost Management > Credits *before* running `provision`. Credits are not assumed transferable between AWS accounts. Snapshot, bandwidth overages, domain, taxes and managed database costs are additional.
@@ -13,10 +13,10 @@
 
 ## One-time AWS/IAM steps (no local PC tooling)
 
-1. In the **AI Trading** AWS account `816344830716`, confirm IAM > Identity providers contains `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. You said this provider already exists; **do not create a duplicate**.
+1. In the **AI Trading** AWS account `098859530205`, confirm IAM > Identity providers contains `token.actions.githubusercontent.com` with audience `sts.amazonaws.com`. You said this provider already exists; **do not create a duplicate**.
 2. In IAM > Policies, create one customer-managed policy using the exact JSON at [iam-paper-provision-policy.json](../../infra/lightsail/iam-paper-provision-policy.json), e.g. name `aitradingsystem-lightsail-paper-policy`. The policy permits inspection of Lightsail regional plans and instance inventory, creation of a request-tagged PAPER instance, and access/port changes only to tagged AI Trading PAPER instances. It has no delete, RDS, ECS, EC2, IAM, Secrets Manager, LIVE trading, or billing permissions.
 3. In IAM > Roles, create a new **Web identity** GitHub OIDC role named `aitradingsystem-github-lightsail-paper`. Use the [iam-trust-dev.json](../../infra/lightsail/iam-trust-dev.json) as its trust policy (update via **Trust relationships > Edit trust policy** if the console generated a broader default). The `aud` and `sub` conditions must match the exact dev-branch GitHub OIDC token. Attach **only** the policy from step 2. The reviewed policy also includes `lightsail:GetInstanceAccessDetails` for tagged AI Trading PAPER instances so GitHub can retrieve temporary SSH certificates at rollout, rather than using permanent SSH keys. Do not attach AdministratorAccess or AmazonLightsailFullAccess. This is a **new Lightsail-specific role**; the existing ECS role can remain untouched.
-4. **No GitHub AWS role variable or access key is required.** The `dev` bootstrap and application workflow now reference the exact dedicated, non-secret role ARN `arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper` directly. Only IAM role creation/attachment is an AWS operator action; you do not need to enter `AWS_LIGHTSAIL_ROLE_ARN` under GitHub Variables. No AWS access key, secret access key, SSH private key, broker token or database password is required in GitHub.
+4. **No GitHub AWS role variable or access key is required.** The `dev` bootstrap and application workflow now reference the exact dedicated, non-secret role ARN `arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper` directly. Only IAM role creation/attachment is an AWS operator action; you do not need to enter `AWS_LIGHTSAIL_ROLE_ARN` under GitHub Variables. No AWS access key, secret access key, SSH private key, broker token or database password is required in GitHub.
 
 5. Verify your GitHub OIDC subject format. New repositories / customized OIDC subjects can use immutable repository IDs. If an OIDC assume-role call is rejected, use the repository's existing *diagnostic* workflow to inspect nonsecret claims and update the trust policy to the exact subject; never replace it with a wildcard.
 
@@ -32,7 +32,7 @@ For a **non-billable AWS inspection**, create `infra/lightsail/requests/bootstra
 {"kind":"bootstrap","target":"aitradingsystem-paper-dev","operation":"preflight","confirmation":""}
 ```
 
-Read the [bootstrap workflow runs](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-bootstrap.yml) on `dev`, and verify the expected $24 / 4GB / 2-vCPU Linux plan and account. Check Billing > Credits in **account 816344830716**, including eligible service, expiry, and available balance, before any paid action.
+Read the [bootstrap workflow runs](https://github.com/operationReact/AiTradingSystem/actions/workflows/lightsail-paper-bootstrap.yml) on `dev`, and verify the expected $24 / 4GB / 2-vCPU Linux plan and account. Check Billing > Credits in **account 098859530205**, including eligible service, expiry, and available balance, before any paid action.
 
 Only after confirming the credit and preflight should you **edit the same file**, committing this exact paid-creation request to `dev`:
 
