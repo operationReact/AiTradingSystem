@@ -22,7 +22,7 @@ cleanup() { rm -rf -- "$work"; }
 trap cleanup EXIT
 chmod 0700 "$work"
 bundle="$work/release.tar"
-aws s3 cp "s3://$bucket/releases/$sha/release.tar" "$bundle" \
+aws s3 cp "s3://$bucket/releases/$sha/$expected_hash/release.tar" "$bundle" \
   --region ap-south-1 --no-progress --only-show-errors
 printf '%s  %s\n' "$expected_hash" "$bundle" | sha256sum -c - >/dev/null || {
   echo "Release SHA256 mismatch; no Docker image will be loaded" >&2
