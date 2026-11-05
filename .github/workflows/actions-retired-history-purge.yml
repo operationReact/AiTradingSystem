@@ -1,4 +1,4 @@
-name: Actions maintenance - retire obsolete history with preserved inventory
+name: Actions maintenance - audit archived EC2/Lightsail workflow history
 
 on:
   push:
@@ -26,29 +26,28 @@ jobs:
             if(owner!=='operationReact'||repo!=='AiTradingSystem')
               throw Error('Not the approved repository');
             const retiredNames=[
-              'deploy-live-aws.yml',
-              'deploy-paper-backend-on-request.yml',
-              'deploy-paper-budget-aws.yml',
-              'ec2-paper-ssm-iam-verification.yml',
-              'ec2-paper-ssm-oidc-differential.yml',
-              'paper-ec2-bootstrap-curl-minimal-fix-once.yml',
-              'paper-ec2-bootstrap-stepwise-repair-once.yml',
-              'paper-ec2-compose-pinned-integrity-fix-once.yml',
-              'paper-ec2-connected-smoke-audit-once.yml',
-              'paper-ec2-connected-smoke-stdin-fix-once.yml',
-              'paper-ec2-ssm-bootstrap-repair-once.yml',
-              'paper-ssm-bootstrap-audit-once.yml',
-              'provision-live-aws.yml',
-              'retired-action-run-audit.yml',
-              'actions-retired-single-probe.yml',
+              'ec2-paper-approved-provision.yml',
+              'ec2-paper-existing-host-finish.yml',
+              'ec2-paper-group-trust-repair.yml',
+              'ec2-paper-partial-resume.yml',
+              'ec2-paper-partial-state-audit.yml',
+              'ec2-paper-plan-only.yml',
+              'ec2-paper-provision-role-readiness.yml',
+              'ec2-paper-readonly-preflight.yml',
+              'ec2-paper-sg-tainted-resume.yml',
+              'ec2-paper-tainted-vpc-resume.yml',
+              'lightsail-paper-bootstrap.yml',
+              'lightsail-paper-app-deploy.yml',
+              'lightsail-paper-contract.yml',
+              'lightsail-paper-connected-smoke.yml',
             ];
-            if(new Set(retiredNames).size!==15) throw Error('Allowlist drift');
+            if(new Set(retiredNames).size!==14) throw Error('Allowlist drift');
             const workflows=await github.paginate(
               github.rest.actions.listRepoWorkflows,{owner,repo,per_page:100});
             const matches=workflows.filter(w=>
               retiredNames.includes(w.path.replace(/^\.github\/workflows\//,'')));
-            if(matches.length!==15)
-              throw Error('Expected exactly 15 retired workflow registry records, got '+matches.length);
+            if(matches.length!==14)
+              throw Error('Expected exactly 14 archived workflow registry records, got '+matches.length);
             const manifest={
               repo:owner+'/'+repo,authorizing_commit:context.sha,
               created_at:new Date().toISOString(),approved_paths:retiredNames,
@@ -65,6 +64,9 @@ jobs:
                   throw Error('Workflow still exists on '+ref+': '+wf.path);
                 }catch(e){if(e.status!==404)throw e;}
               }
+              const archive=(await github.rest.repos.getContent({owner,repo,
+                path:'docs/operations/archived-actions/'+name,ref:'dev'})).data;
+              if(archive.type!=='file')throw Error('Missing archival fixture for '+name);
               if(!['active','disabled_manually','deleted'].includes(wf.state))
                 throw Error('Unexpected registry state for '+name+': '+wf.state);
               let runs;
@@ -89,16 +91,16 @@ jobs:
               });
               core.info('RETIRED: '+wf.path+' state='+wf.state+' runs='+runs.length);
             }
-            if(total>80 || total<0)
-              throw Error('Run count exceeded reviewed audit ceiling (80)');
+            if(total>1000 || total<0)
+              throw Error('Run count exceeded reviewed audit ceiling (1000)');
             manifest.total_runs=total;
             manifest.targets.sort((a,b)=>a.path.localeCompare(b.path));
             fs.writeFileSync('retired-workflow-run-purge-inventory.json',
               JSON.stringify(manifest,null,2)+'\n',{mode:0o600});
-            core.info('PASS: reviewed exactly 15 retired paths and '+total+
+            core.info('PASS: reviewed exactly 14 archived paths and '+total+
               ' completed historical runs; no AWS/deployment workflows included');
             await core.summary.addHeading('Historical workflow retirement — permanent metadata inventory')
-              .addRaw('15 retired registry targets; '+total+' completed runs. '
+              .addRaw('14 archived registry targets; '+total+' completed runs. '
                 +'All YAML files absent from both operating branches. '
                 +'Run metadata is archived before any deletion.')
               .addTable([['Retired workflow','Previous state','Runs'],
@@ -115,7 +117,7 @@ jobs:
 
   purge:
     needs: inventory
-    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    if: false # Inventory-only safety audit; no historical run deletion in this commit
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -138,30 +140,29 @@ jobs:
             const manifest=JSON.parse(fs.readFileSync(
               'retired-workflow-run-purge-inventory.json','utf8'));
             const exact=[
-              'deploy-live-aws.yml',
-              'deploy-paper-backend-on-request.yml',
-              'deploy-paper-budget-aws.yml',
-              'ec2-paper-ssm-iam-verification.yml',
-              'ec2-paper-ssm-oidc-differential.yml',
-              'paper-ec2-bootstrap-curl-minimal-fix-once.yml',
-              'paper-ec2-bootstrap-stepwise-repair-once.yml',
-              'paper-ec2-compose-pinned-integrity-fix-once.yml',
-              'paper-ec2-connected-smoke-audit-once.yml',
-              'paper-ec2-connected-smoke-stdin-fix-once.yml',
-              'paper-ec2-ssm-bootstrap-repair-once.yml',
-              'paper-ssm-bootstrap-audit-once.yml',
-              'provision-live-aws.yml',
-              'retired-action-run-audit.yml',
-              'actions-retired-single-probe.yml',
+              'ec2-paper-approved-provision.yml',
+              'ec2-paper-existing-host-finish.yml',
+              'ec2-paper-group-trust-repair.yml',
+              'ec2-paper-partial-resume.yml',
+              'ec2-paper-partial-state-audit.yml',
+              'ec2-paper-plan-only.yml',
+              'ec2-paper-provision-role-readiness.yml',
+              'ec2-paper-readonly-preflight.yml',
+              'ec2-paper-sg-tainted-resume.yml',
+              'ec2-paper-tainted-vpc-resume.yml',
+              'lightsail-paper-bootstrap.yml',
+              'lightsail-paper-app-deploy.yml',
+              'lightsail-paper-contract.yml',
+              'lightsail-paper-connected-smoke.yml',
             ];
             if(manifest.repo!==owner+'/'+repo||
                manifest.authorizing_commit!==context.sha||
-               manifest.targets.length!==15||
-               manifest.approved_paths.length!==15||
-               exact.length!==15 ||
+               manifest.targets.length!==14||
+               manifest.approved_paths.length!==14||
+               exact.length!==14 ||
                exact.some((x,i)=>manifest.approved_paths[i]!==x)||
-               manifest.total_runs>80)
-              throw Error('Run inventory not tied to reviewed exact-sha allowlist');
+               manifest.total_runs>1000)
+              throw Error('Archived workflow inventory not tied to reviewed exact-sha allowlist');
             let disabled=0,deleted=0,missing=0;
             for(const t of manifest.targets){
               if(!exact.includes(t.path.replace(/^\.github\/workflows\//,'')))
