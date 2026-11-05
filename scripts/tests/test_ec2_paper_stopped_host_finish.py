@@ -70,7 +70,7 @@ def sample_state() -> dict:
     return {"resources": [{
         "mode": "managed", "type": "aws_instance", "name": "paper",
         "instances": [{
-            "index_key": 0, "status": "tainted",
+            "index_key": 0,
             "attributes": {"id": gate.INSTANCE_ID, "instance_type": "t4g.medium"},
         }],
     }]}
@@ -97,7 +97,7 @@ class StoppedPaperFinishContract(unittest.TestCase):
     def test_only_exact_existing_tainted_host_may_be_untainted(self):
         gate.validate_stopped_host_state(sample_state())
         for key,value in (
-            ("status","ready"),("status",None),("index_key",1),
+            ("status","tainted"),("status","ready"),("index_key",1),
         ):
             p=sample_state()
             p["resources"][0]["instances"][0][key]=value
@@ -145,17 +145,23 @@ class StoppedPaperFinishContract(unittest.TestCase):
         with self.assertRaises(ValueError):
             gate.validate_plan(p,tainted=False)
 
+    def test_ignore_only_ephemeral_stopped_public_ipv4_drift(self):
+        source=(ROOT/"infra/ec2-paper/main.tf").read_text(encoding="utf-8")
+        self.assertIn("ignore_changes = [associate_public_ip_address]",source)
+        self.assertIn("prevent_destroy = true",source)
+        self.assertIn("associate_public_ip_address          = true",source)
+        self.assertNotIn("ignore_changes = all",source)
+
     def test_exact_workflow_safe_recovery_order(self):
         w=(ROOT/".github/workflows/ec2-paper-existing-host-finish.yml").read_text(encoding="utf-8")
         required=(
             "branches: [dev]", "fetch-depth: 2",
             "git diff-tree --no-commit-id --name-only -r HEAD",
-            "'infra/ec2-paper/requests/finish-stopped-host.json'",
+            "'infra/ec2-paper/requests/finish-stopped-host-v2.json'",
             "verify_stopped_host_finish.py request",
             "verify_stopped_host_finish.py state",
             "verify_stopped_host_finish.py host-state",
             "terraform state pull",
-            "terraform untaint -lock=true -lock-timeout=2m",
             "verify_stopped_host_finish.py final",
             "terraform apply -input=false -no-color -lock=true",
             'x.get("State",{}).get("Name")!="stopped"',
@@ -168,12 +174,11 @@ class StoppedPaperFinishContract(unittest.TestCase):
         for entry in required:
             with self.subTest(entry=entry):
                 self.assertIn(entry,w)
-        self.assertLess(w.index("Verify exact instance stopped"),w.index("terraform untaint"))
-        self.assertLess(w.index("verify_stopped_host_finish.py host-state"),w.index("terraform untaint"))
-        self.assertLess(w.index("terraform untaint"),w.index("verify_stopped_host_finish.py final"))
+        self.assertLess(w.index("Verify exact instance stopped"),w.index("verify_stopped_host_finish.py host-state"))
+        self.assertLess(w.index("verify_stopped_host_finish.py host-state"),w.index("verify_stopped_host_finish.py final"))
         self.assertLess(w.index("verify_stopped_host_finish.py final"),w.index("terraform apply"))
         for forbidden in (
-            "workflow_dispatch:", "terraform destroy", "aws ec2 run-instances",
+            "workflow_dispatch:", "terraform destroy", "terraform untaint", "aws ec2 run-instances",
             "aws ec2 start-instances", "terraform apply -auto-approve",
             "TRADING_MODE=LIVE", "AdministratorAccess", "actions/upload-artifact",
         ):
