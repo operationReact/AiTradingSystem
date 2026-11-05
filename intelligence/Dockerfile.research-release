@@ -35,4 +35,7 @@ LABEL org.opencontainers.image.description="Research-only PAPER Python worker wi
 EXPOSE 8090
 
 # Runtime private token must arrive through ECS Secrets Manager, never at build.
-CMD ["sh", "-c", "python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]
+# This dedicated model-containing image refuses to start when an ECS/runtime
+# override sets strict bootstrap to false; the ordinary dev image stays lenient.
+# A privileged task-definition override of the full CMD is outside this guard.
+CMD ["sh", "-c", "test \"$AI_RESEARCH_STRICT_BOOT_REQUIRED\" = true && python -m aitrading_intelligence.research_startup_gate && exec uvicorn aitrading_intelligence.app:app --host 0.0.0.0 --port 8090"]
