@@ -126,7 +126,7 @@ class WorkerImageEvidenceTest(unittest.TestCase):
         root = Path(__file__).resolve().parents[2]
         tf = (root / "infra/terraform/research-worker-scaffold.tf").read_text()
         docker = (root / "intelligence/Dockerfile.research-release").read_text()
-        self.assertIn('user      = "65532:65532"', tf)
+        self.assertIn('user = "65532:65532"', tf)
         self.assertIn("desired_count                     = 0", tf)
         self.assertIn("USER 65532:65532", docker)
         for field, value in (
