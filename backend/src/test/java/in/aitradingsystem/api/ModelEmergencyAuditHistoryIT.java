@@ -76,7 +76,7 @@ class ModelEmergencyAuditHistoryIT extends AbstractPostgresIT {
                 .with(user(actor).roles("ADMIN"))
                 .param("limit", "1"))
             .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
-        assertThat(one).hasSize(1);
+        assertThat(one.size()).isEqualTo(1);
     }
 
     @Test
