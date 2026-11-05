@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -72,8 +74,60 @@ class LightsailExplicitDevRequests(unittest.TestCase):
             self.assertNotIn("\n    branches: [main]", src)
             self.assertNotIn("workflow_run:", src)
             self.assertNotIn("pull_request_target:", src)
-        self.assertFalse((ROOT / "infra/lightsail/requests/bootstrap.request.json").exists())
-        self.assertFalse((ROOT / "infra/lightsail/requests/deploy.request.json").exists())
+    def test_committed_requests_are_valid_when_explicitly_present(self):
+        # Once a user intentionally commits a read-only preflight or later
+        # approved PAPER request on dev, PR/push CI must stay green without
+        # weakening the exact request constraints.
+        root = ROOT / "infra/lightsail/requests"
+        if not root.exists():
+            return
+        self.assertFalse(root.is_symlink())
+        self.assertTrue(root.is_dir())
+        expected = {
+            "bootstrap.request.json": "bootstrap",
+            "deploy.request.json": "deploy",
+        }
+        for entry in root.iterdir():
+            self.assertIn(entry.name, expected)
+            self.assertTrue(entry.is_file())
+            self.assertFalse(entry.is_symlink())
+            self.assertLessEqual(entry.stat().st_size, gate.MAX_BYTES)
+            payload = json.loads(entry.read_text(encoding="utf-8"))
+            operation, confirmation = gate.validate(payload, expected[entry.name])
+            self.assertEqual(payload["operation"], operation)
+            self.assertEqual(payload["confirmation"], confirmation)
+            self.assertNotIn("secret", entry.read_text(encoding="utf-8").lower())
+            self.assertNotIn("token", entry.read_text(encoding="utf-8").lower())
+
+    def test_preflight_file_can_be_committed_without_invalidating_ci(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            requests_dir = root / "infra/lightsail/requests"
+            requests_dir.mkdir(parents=True)
+            f = requests_dir / "bootstrap.request.json"
+            f.write_text(json.dumps(request()), encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            # Provision and app deploy are individually bound to their exact
+            # confirmations, even when the files exist in the checked-out tree.
+            f.write_text(json.dumps(request(
+                op="provision", confirmation="CREATE_PAPER_4GB")), encoding="utf-8")
+            (requests_dir / "deploy.request.json").write_text(json.dumps(
+                request("deploy", "deploy", "DEPLOY_PAPER_LOCAL_ONLY")),
+                encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            f.write_text(json.dumps(request(op="provision", confirmation="")),
+                         encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root), self.assertRaises(ValueError):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            f.unlink()
+            (requests_dir / "unreviewed.json").write_text("{}", encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root), self.assertRaises(AssertionError):
+                self.test_committed_requests_are_valid_when_explicitly_present()
 
     def test_example_json_contract_requires_no_secrets(self):
         for op in ("preflight", "provision"):
