@@ -162,7 +162,6 @@ class StoppedPaperFinishContract(unittest.TestCase):
             "verify_stopped_host_finish.py state",
             "verify_stopped_host_finish.py host-state",
             "terraform state pull",
-            "terraform state pull",
             "verify_stopped_host_finish.py final",
             "terraform apply -input=false -no-color -lock=true",
             'x.get("State",{}).get("Name")!="stopped"',
@@ -175,7 +174,7 @@ class StoppedPaperFinishContract(unittest.TestCase):
         for entry in required:
             with self.subTest(entry=entry):
                 self.assertIn(entry,w)
-        self.assertLess(w.index("Verify exact instance stopped"),w.index("terraform untaint"))
+        self.assertLess(w.index("Verify exact instance stopped"),w.index("verify_stopped_host_finish.py host-state"))
         self.assertLess(w.index("verify_stopped_host_finish.py host-state"),w.index("verify_stopped_host_finish.py final"))
         self.assertLess(w.index("verify_stopped_host_finish.py final"),w.index("terraform apply"))
         for forbidden in (
