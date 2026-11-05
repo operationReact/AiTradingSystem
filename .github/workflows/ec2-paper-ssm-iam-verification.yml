@@ -1,0 +1,79 @@
+name: PAPER EC2 - verify SSM deployment IAM after CloudFormation update (read-only)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-ssm-iam-verification.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  verify:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assume only new SSM deploy OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: paper-ssm-iam-verify-${{ github.run_id }}
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+
+      - name: Inspect exact caller, host state and nightly schedule without AWS writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, "infra/ec2-paper")
+          from verify_ssm_release import aws_json,ACCOUNT,REGION,INSTANCE,VPC,SUBNET,PROFILE,TAGS,ROLE,STOP_ROLE,STOP_TARGET
+
+          identity=aws_json("sts","get-caller-identity")
+          expected=f"arn:aws:sts::{ACCOUNT}:assumed-role/{ROLE}/"
+          if identity.get("Account")!=ACCOUNT or not identity.get("Arn","").startswith(expected):
+              raise SystemExit("Dedicated SSM dev OIDC role not assumed")
+          reservations=aws_json("ec2","describe-instances","--instance-ids",INSTANCE)["Reservations"]
+          if len(reservations)!=1 or len(reservations[0]["Instances"])!=1:
+              raise SystemExit("Expected one exact PAPER host")
+          host=reservations[0]["Instances"][0]
+          tags={t["Key"]:t["Value"] for t in host.get("Tags",[])}
+          if (host.get("InstanceId")!=INSTANCE
+              or host.get("InstanceType")!="t4g.medium"
+              or host.get("VpcId")!=VPC or host.get("SubnetId")!=SUBNET
+              or host.get("IamInstanceProfile",{}).get("Arn")!=PROFILE
+              or host.get("MetadataOptions",{}).get("HttpTokens")!="required"
+              or any(tags.get(k)!=v for k,v in TAGS.items())):
+              raise SystemExit("Unexpected PAPER instance identity or security")
+          state=host.get("State",{}).get("Name")
+          if state not in ("stopped","stopping","running","pending"):
+              raise SystemExit("Unsupported host state")
+          stop=aws_json("scheduler","get-schedule","--group-name","default","--name","aitrading-paper-nightly-stop")
+          import json
+          if (stop.get("State")!="ENABLED"
+              or stop.get("ScheduleExpression")!="cron(0 22 * * ? *)"
+              or stop.get("ScheduleExpressionTimezone")!="Asia/Kolkata"
+              or stop.get("Target",{}).get("RoleArn")!=STOP_ROLE
+              or stop.get("Target",{}).get("Arn")!=STOP_TARGET
+              or json.loads(stop.get("Target",{}).get("Input","null"))!={"InstanceIds":[INSTANCE]}):
+              raise SystemExit("The independent 22:00 IST PAPER shutdown changed")
+          print("PASS: SSM deployment role assumed in exact AWS account and Mumbai region")
+          print(f"PASS: one protected PAPER EC2 found; observed state={state}")
+          print("PASS: exact-instance nightly 22 IST shutdown remains enabled")
+          print("READ-ONLY audit: no application deployment, S3 write or EC2 lifecycle command")
+          PY
