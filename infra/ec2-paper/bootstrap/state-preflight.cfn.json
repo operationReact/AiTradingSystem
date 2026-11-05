@@ -366,6 +366,7 @@
                     "ec2:DescribeVpcAttribute",
                     "ec2:DescribeSubnets",
                     "ec2:DescribeSecurityGroups",
+                    "ec2:DescribeSecurityGroupRules",
                     "ec2:DescribeInstances",
                     "ec2:DescribeImages",
                     "ec2:DescribeInstanceTypes",
@@ -581,6 +582,12 @@
                     "scheduler:GetSchedule"
                   ],
                   "Resource": "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop"
+                },
+                {
+                  "Sid": "ReadOwnProvisioningInlinePolicy",
+                  "Effect": "Allow",
+                  "Action": "iam:GetRolePolicy",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision"
                 },
                 {
                   "Sid": "DenyDangerousLifecycleAndPublicIngressEvenIfOtherPolicyAdded",
