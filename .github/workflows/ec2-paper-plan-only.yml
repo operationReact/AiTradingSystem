@@ -23,6 +23,7 @@ jobs:
     timeout-minutes: 15
     env:
       AWS_REGION: ap-south-1
+      STATE_BUCKET_REGION: us-east-1
       AWS_ACCOUNT: "098859530205"
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +36,7 @@ jobs:
           test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
           test "$GITHUB_REF" = "refs/heads/dev"
           test "$AWS_REGION" = "ap-south-1"
+          test "$STATE_BUCKET_REGION" = "us-east-1"
           test "$AWS_ACCOUNT" = "098859530205"
           python3 infra/ec2-paper/verify_readonly_plan.py request \
             infra/ec2-paper/requests/plan-only.json
@@ -57,8 +59,11 @@ jobs:
         run: |
           set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          # Terraform backend region is the real S3 bucket location in N.
+          # Virginia, independent of the Mumbai AWS provider region.
           test "$(aws s3api get-bucket-versioning \
             --bucket aitrading-paper-tfstate-098859530205-ap-south-1 \
+            --region "$STATE_BUCKET_REGION" \
             --query Status --output text)" = "Enabled"
           terraform fmt -check
           terraform init -input=false -no-color \
