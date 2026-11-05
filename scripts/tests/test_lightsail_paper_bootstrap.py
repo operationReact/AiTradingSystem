@@ -96,7 +96,7 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
         self.assertEqual(eq["token.actions.githubusercontent.com:sub"],
                          "repo:operationReact/AiTradingSystem:ref:refs/heads/dev")
         self.assertEqual(statement["Principal"]["Federated"],
-                         "arn:aws:iam::816344830716:oidc-provider/token.actions.githubusercontent.com")
+                         "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com")
         all_actions = [a for entry in policy["Statement"]
                        for a in (entry["Action"] if isinstance(entry["Action"], list)
                                  else [entry["Action"]])]
@@ -121,10 +121,10 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
         self.assertIn("verify_request.py", flow)
         self.assertNotIn("\n  pull_request:", flow)
         self.assertIn("CREATE_PAPER_4GB", flow)
-        self.assertIn('AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper', flow)
-        self.assertIn('role-to-assume: arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper', flow)
+        self.assertIn('AWS_LIGHTSAIL_ROLE_ARN: arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper', flow)
+        self.assertIn('role-to-assume: arn:aws:iam::098859530205:role/aitradingsystem-github-lightsail-paper', flow)
         self.assertNotIn('vars.AWS_LIGHTSAIL_ROLE_ARN', flow)
-        self.assertIn('AWS_ACCOUNT: "816344830716"', flow)
+        self.assertIn('AWS_ACCOUNT: "098859530205"', flow)
         self.assertIn('LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev', flow)
         self.assertIn("lightsail create-instances", flow)
         self.assertIn("lightsail put-instance-public-ports", flow)
