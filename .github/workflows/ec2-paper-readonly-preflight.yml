@@ -24,6 +24,7 @@ jobs:
       AWS_REGION: ap-south-1
       AWS_ACCOUNT: "098859530205"
       STATE_BUCKET: aitrading-paper-tfstate-098859530205-ap-south-1
+      STATE_BUCKET_REGION: us-east-1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,13 +53,26 @@ jobs:
         run: |
           set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
-          test "$(aws s3api get-bucket-location --bucket "$STATE_BUCKET" --query LocationConstraint --output text)" = "ap-south-1"
-          test "$(aws s3api get-bucket-versioning --bucket "$STATE_BUCKET" --query Status --output text)" = "Enabled"
-          test "$(aws s3api get-bucket-encryption --bucket "$STATE_BUCKET" \
+          # The uploaded CloudFormation template created this S3 bucket in
+          # the STACK region us-east-1, despite its historical ap-south-1 name.
+          # For us-east-1 S3 returns JSON null LocationConstraint.
+          test "$STATE_BUCKET_REGION" = "us-east-1"
+          aws s3api get-bucket-location --bucket "$STATE_BUCKET" \
+            --region "$STATE_BUCKET_REGION" --output json > "$RUNNER_TEMP/paper-bucket-location.json"
+          python3 - "$RUNNER_TEMP/paper-bucket-location.json" <<'PY'
+          import json,sys
+          with open(sys.argv[1], encoding="utf-8") as f:
+              location=json.load(f).get("LocationConstraint")
+          if location is not None:
+              raise SystemExit("State bucket is not in existing us-east-1 stack region")
+          print("Existing state bucket in us-east-1; EC2 target stays ap-south-1")
+          PY
+          test "$(aws s3api get-bucket-versioning --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" --query Status --output text)" = "Enabled"
+          test "$(aws s3api get-bucket-encryption --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
             --query 'ServerSideEncryptionConfiguration.Rules[0].ApplyServerSideEncryptionByDefault.SSEAlgorithm' --output text)" = "AES256"
-          test "$(aws s3api get-bucket-ownership-controls --bucket "$STATE_BUCKET" \
+          test "$(aws s3api get-bucket-ownership-controls --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
             --query 'OwnershipControls.Rules[0].ObjectOwnership' --output text)" = "BucketOwnerEnforced"
-          aws s3api get-public-access-block --bucket "$STATE_BUCKET" \
+          aws s3api get-public-access-block --bucket "$STATE_BUCKET" --region "$STATE_BUCKET_REGION" \
             --query PublicAccessBlockConfiguration --output json > "$RUNNER_TEMP/paper-bucket-public-access.json"
           python3 - "$RUNNER_TEMP/paper-bucket-public-access.json" <<'PY'
           import json, sys
