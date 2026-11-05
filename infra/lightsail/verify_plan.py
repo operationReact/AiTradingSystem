@@ -12,7 +12,7 @@ import json
 import sys
 from pathlib import Path
 
-ACCOUNT = "816344830716"
+ACCOUNT = "098859530205"
 REGION = "us-east-1"
 AZ = "us-east-1a"
 INSTANCE = "aitradingsystem-paper-dev"
