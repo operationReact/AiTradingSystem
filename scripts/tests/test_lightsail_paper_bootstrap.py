@@ -112,6 +112,34 @@ class LightsailPaperBootstrapContract(unittest.TestCase):
         self.assertEqual(provision["Condition"]["StringEquals"]["aws:RequestedRegion"],
                          "us-east-1")
 
+    def test_active_lightsail_paths_cannot_target_retired_aws_account(self):
+        current = "098859530205"
+        retired = "816344830716"
+        # Legacy ECS/evidence files are intentionally outside this scope:
+        # only the new four-gigabyte Lightsail deployment is authorized.
+        paths = (
+            "infra/lightsail/iam-trust-dev.json",
+            "infra/lightsail/iam-paper-provision-policy.json",
+            "infra/lightsail/verify_plan.py",
+            ".github/workflows/lightsail-paper-bootstrap.yml",
+            ".github/workflows/lightsail-paper-app-deploy.yml",
+            "scripts/tests/test_lightsail_paper_rollout.py",
+            "docs/deployment/lightsail-paper-4gb.md",
+        )
+        for path in paths:
+            source = (ROOT / path).read_text(encoding="utf-8")
+            with self.subTest(path=path):
+                self.assertIn(current, source)
+                self.assertNotIn(retired, source)
+        self.assertIn(
+            "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com",
+            (ROOT / "infra/lightsail/iam-trust-dev.json").read_text(),
+        )
+        self.assertIn(
+            "arn:aws:lightsail:us-east-1:098859530205:Instance/*",
+            (ROOT / "infra/lightsail/iam-paper-provision-policy.json").read_text(),
+        )
+
     def test_manual_workflow_does_not_provision_without_confirmation(self):
         flow = (ROOT / ".github/workflows/lightsail-paper-bootstrap.yml").read_text()
         self.assertIn("workflow_dispatch:", flow)
