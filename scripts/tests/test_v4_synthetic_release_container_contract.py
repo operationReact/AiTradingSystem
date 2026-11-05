@@ -74,9 +74,6 @@ class SyntheticResearchImageContract(unittest.TestCase):
             self.dockerfile.index("research_base_digest_gate verify"),
             self.dockerfile.index("COPY --chown=65532:65532 .research-release/"),
         )
-        self.assertIn("docker pull --platform linux/amd64 python:3.11-slim", self.workflow)
-        self.assertIn("docker image inspect python:3.11-slim", self.workflow)
-        self.assertIn("research_base_digest_gate.py select", self.workflow)
         self.assertIn('--build-arg "RESEARCH_PYTHON_BASE_IMAGE=$base_image"', self.workflow)
         self.assertIn(
             "'intelligence/src/aitrading_intelligence/research_base_digest_gate.py'",
@@ -84,6 +81,29 @@ class SyntheticResearchImageContract(unittest.TestCase):
         )
         self.assertIn(
             "'intelligence/tests/test_research_base_digest_gate.py'",
+            self.workflow,
+        )
+
+    def test_v99_research_base_digest_is_fixed_across_ci_runs(self):
+        pin_path = ROOT / "intelligence/research-ci-base-image.txt"
+        expected = (
+            "docker.io/library/python@sha256:"
+            "db20d8506e2f15b6db39b40b6015ca46bae855dec6dd326d462cfe79ae972893"
+        )
+        self.assertEqual(pin_path.read_text().strip(), expected)
+        self.assertIn("'intelligence/research-ci-base-image.txt'", self.workflow)
+        self.assertIn('base_image="$(cat intelligence/research-ci-base-image.txt)"',
+                      self.workflow)
+        self.assertIn('docker pull --platform linux/amd64 "$base_image"', self.workflow)
+        self.assertNotIn('docker pull --platform linux/amd64 python:3.11-slim',
+                         self.workflow)
+        self.assertNotIn('docker image inspect python:3.11-slim', self.workflow)
+        self.assertIn(
+            'research_base_digest_gate.py verify',
+            self.workflow,
+        )
+        self.assertIn(
+            '--build-arg "RESEARCH_PYTHON_BASE_IMAGE=$base_image"',
             self.workflow,
         )
 
