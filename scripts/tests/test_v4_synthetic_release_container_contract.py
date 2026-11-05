@@ -37,6 +37,9 @@ class SyntheticResearchImageContract(unittest.TestCase):
         self.assertIn("stage_bundle(manifest, bundle, sha)", self.source)
         self.assertIn("prepare_context(repo, bundle, context, sha)", self.source)
         self.assertIn("research_release_bundle verify", self.dockerfile)
+        self.assertIn("libgomp1", self.dockerfile)
+        self.assertIn("libgomp1", (ROOT / "intelligence/Dockerfile").read_text())
+        self.assertIn("'intelligence/Dockerfile'", self.workflow)
 
     def test_no_registry_aws_token_or_networked_runtime(self):
         s = self.workflow
