@@ -7,7 +7,9 @@ Updated 2026-11-06. Repository `operationReact/AiTradingSystem`.
 **Workflows are executable automation, not an archive.** Completed rescue, temporary
 bootstrap, one-time diagnostics, and superseded deployment workflow YAML should be
 removed from `.github/workflows` after its success has been confirmed. Git
-history and prior GitHub Actions run URLs retain their provenance.
+history retains the source code. The approved Actions cleanup also permanently
+removed 80 old run histories; those run URLs no longer resolve. Its run metadata
+index was retained as a 90-day artifact on [cleanup run 42130915200](https://github.com/operationReact/AiTradingSystem/actions/runs/42130915200).
 
 Do not delete the underlying tested scripts, database migrations, Terraform,
 contracts, or safety tests simply to reduce the list of visible Actions.
@@ -80,18 +82,29 @@ into a different AWS account/region. The LIVE Terraform source and its offline
 validation may still be retained for future planning, but must not be deployed
 without separate authorization.
 
-## Not retired in this first, conservative cleanup
+## Archived historical EC2 and Lightsail automation
 
-The old Lightsail bootstrap/app deploy workflows are explicitly `if: false`.
-Their offline tests currently inspect those YAML source files; removing them
-without migrating test fixtures would break regression gates. Plan to move the
-inactive workflow files into a non-executable historical fixtures directory
-and migrate those tests in a separate PR.
+The ten one-time EC2 paid provisioning, drift recovery, plan, and preflight
+workflows, plus the retired Lightsail bootstrap/app deploy/contract, are retained
+as **non-executable regression fixtures** under
+`docs/operations/archived-actions/`. Their test references were redirected
+from `.github/workflows` to the archived copies, and
+`ec2-paper-cost-policy.yml` executes the offline tests during development.
+Do not reactivate those deployments by simply restoring YAML: the original
+AWS architecture and permissions are superseded.
 
-Historical EC2 one-time provisioning/recovery workflows likewise have
-concrete contract tests that read their workflow files; retire together with
-their test references, not with a blind deletion. Older v4 worker/research
-checks are offline CI contracts; preserve until consolidated by feature.
+The real disposable Java/PostgreSQL/Flutter connected integration test was
+retained as `.github/workflows/paper-connected-db-e2e.yml`. It does not
+use AWS or LIVE broker orders.
+
+GitHub Actions exposes only workflow files under `.github/workflows`, so
+the archived fixtures remain reviewable without appearing as actionable
+workflow options. Their previous run histories may remain until a separately
+reviewed metadata-preserving cleanup.
+
+The many v4 worker/research contract checks are preserved: they are
+offline application safety and regression checks, not cloud deployments.
+Further consolidation can combine them without discarding test coverage.
 
 ## Recovery and deployment safeguards
 
@@ -105,5 +118,6 @@ checks are offline CI contracts; preserve until consolidated by feature.
   a commit predating the cleanup (e.g. `dd8e90260a207ce3878003c0ba4387e67651c46b`
   for the original dev YAML); Git history stores its exact content.
   Re-introduction as executable GitHub Actions requires a reviewed PR.
-- GitHub can retain historical workflow run entries after workflow YAML is
-  removed; removing YAML is not equivalent to purging previous Actions runs.
+- GitHub can retain historical workflow registrations after YAML removal.
+  A separately reviewed cleanup can disable those obsolete registrations and
+  delete only their fully completed runs after archiving their metadata.
