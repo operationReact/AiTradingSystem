@@ -140,6 +140,13 @@ class PaperLockedProvisionContract(unittest.TestCase):
         self.assertIn("ec2:RevokeSecurityGroupEgress", network["Action"])
         self.assertIn("ec2:AuthorizeSecurityGroupEgress", network["Action"])
         self.assertNotIn("ec2:AuthorizeSecurityGroupIngress", network["Action"])
+        inventory = next(x for x in allowed if x["Sid"] == "ReadOnlyMumbaiInventory")
+        self.assertIn("ec2:DescribeSecurityGroupRules", inventory["Action"])
+        own_policy = next(x for x in allowed
+                          if x["Sid"] == "ReadOwnProvisioningInlinePolicy")
+        self.assertEqual(own_policy["Action"], "iam:GetRolePolicy")
+        self.assertEqual(own_policy["Resource"],
+                         "arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision")
         self.assertEqual(network["Condition"]["StringEquals"]["aws:RequestedRegion"],
                          "ap-south-1")
         vpc_reads = next(x for x in allowed if x["Sid"] == "ReadOnlyMumbaiInventory")
