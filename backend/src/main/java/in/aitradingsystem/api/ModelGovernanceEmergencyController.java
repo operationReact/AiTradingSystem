@@ -1,5 +1,6 @@
 package in.aitradingsystem.api;
 
+import in.aitradingsystem.governance.ModelEmergencyAuditHistoryService;
 import in.aitradingsystem.governance.ModelEmergencyControlService;
 import in.aitradingsystem.governance.ModelEmergencyControlService.ControlView;
 import in.aitradingsystem.governance.ModelEmergencyControlService.EffectiveModelControlView;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -29,9 +31,12 @@ import org.springframework.web.bind.annotation.RestController;
 @PreAuthorize("hasRole('ADMIN')")
 public class ModelGovernanceEmergencyController {
     private final ModelEmergencyControlService controls;
+    private final ModelEmergencyAuditHistoryService history;
 
-    public ModelGovernanceEmergencyController(ModelEmergencyControlService controls) {
+    public ModelGovernanceEmergencyController(
+            ModelEmergencyControlService controls, ModelEmergencyAuditHistoryService history) {
         this.controls = controls;
+        this.history = history;
     }
 
     public record DisabledRequest(boolean disabled, @NotBlank @Size(max = 512) String reason) {}
@@ -40,6 +45,15 @@ public class ModelGovernanceEmergencyController {
     @GetMapping
     public List<ControlView> controls() {
         return controls.controls();
+    }
+
+    /** Bounded, read-only timeline of Java-committed de-risk control changes. */
+    @GetMapping("/history")
+    public List<ModelEmergencyAuditHistoryService.HistoryEvent> history(
+            @RequestParam(required = false) String controlType,
+            @RequestParam(required = false) String scopeKey,
+            @RequestParam(defaultValue = "25") int limit) {
+        return history.recent(controlType, scopeKey, limit);
     }
 
     @GetMapping("/models/{versionId}/effective")

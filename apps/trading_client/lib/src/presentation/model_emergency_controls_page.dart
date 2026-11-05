@@ -24,11 +24,17 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
   bool _denied = false;
   bool _loading = false;
   bool _submitting = false;
+  bool _loadingHistory = false;
+  List<ModelEmergencyAuditEvent>? _history;
+  String? _historyError;
+  int _historyRequest = 0;
+  int _authorizationEpoch = 0;
 
   @override
   void initState() {
     super.initState();
     _refresh();
+    _refreshHistory();
   }
 
   @override
@@ -40,28 +46,78 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
 
   Future<void> _refresh() async {
     if (_loading || _submitting) return;
+    final epoch = _authorizationEpoch;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
       final result = await widget.repository.list();
-      if (!mounted) return;
+      if (!mounted || epoch != _authorizationEpoch) return;
       setState(() {
         _controls = result;
         _denied = false;
       });
     } on ApiFailure catch (failure) {
-      if (!mounted) return;
+      if (!mounted || epoch != _authorizationEpoch) return;
+      final denied = failure.statusCode == 401 || failure.statusCode == 403;
+      if (denied) _authorizationEpoch++;
       setState(() {
-        _denied = failure.statusCode == 401 || failure.statusCode == 403;
-        _error = _denied ? 'Admin access is required.' : 'Control read failed: ${failure.code}';
-        if (_denied) _controls = null;
+        _denied = denied;
+        _error = denied ? 'Admin access is required.' : 'Control read failed: ${failure.code}';
+        if (denied) {
+          _controls = null;
+          _history = null;
+        }
       });
     } catch (_) {
       if (mounted) setState(() => _error = 'Emergency-control evidence was invalid.');
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+
+  Future<void> _refreshHistory() async {
+    if (_denied) return;
+    final request = ++_historyRequest;
+    final epoch = _authorizationEpoch;
+    setState(() {
+      _loadingHistory = true;
+      _historyError = null;
+    });
+    try {
+      final events = await widget.repository.history();
+      if (!mounted || request != _historyRequest ||
+          epoch != _authorizationEpoch || _denied) {
+        return;
+      }
+      setState(() => _history = events);
+    } on ApiFailure catch (failure) {
+      if (!mounted || request != _historyRequest || epoch != _authorizationEpoch) return;
+      final denied = failure.statusCode == 401 || failure.statusCode == 403;
+      if (denied) _authorizationEpoch++;
+      setState(() {
+        _historyError = denied
+            ? 'Admin access was revoked.'
+            : 'Audit history unavailable: ${failure.code}';
+        if (denied) {
+          _denied = true;
+          _controls = null;
+          _history = null;
+          _error = 'Admin access was revoked.';
+        }
+      });
+    } catch (_) {
+      if (!mounted || request != _historyRequest || epoch != _authorizationEpoch) return;
+      setState(() {
+        _history = null;
+        _historyError = 'Unverified emergency audit history was rejected.';
+      });
+    } finally {
+      if (mounted && request == _historyRequest) {
+        setState(() => _loadingHistory = false);
+      }
     }
   }
 
@@ -125,12 +181,13 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
       if (!mounted) return;
       _reason.clear();
       await _refreshAfterMutation();
+      if (mounted && !_denied) await _refreshHistory();
     } on ApiFailure catch (failure) {
       if (!mounted) return;
       setState(() {
         _denied = failure.statusCode == 401 || failure.statusCode == 403;
         _error = _denied ? 'Admin access was revoked.' : 'Reduction failed: ${failure.code}';
-        if (_denied) _controls = null;
+        if (_denied) { _controls = null; _history = null; }
       });
     } catch (_) {
       if (mounted) setState(() => _error = 'Emergency reduction was not confirmed by the server.');
@@ -140,9 +197,10 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
   }
 
   Future<void> _refreshAfterMutation() async {
+    final epoch = _authorizationEpoch;
     try {
       final rows = await widget.repository.list();
-      if (!mounted) return;
+      if (!mounted || epoch != _authorizationEpoch) return;
       setState(() => _controls = rows);
     } on ApiFailure catch (failure) {
       if (!mounted) return;
@@ -208,6 +266,51 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
                     title: Text('${item.type} · ${item.scopeKey}'),
                     subtitle: Text(item.reason),
                     trailing: Text(item.active ? 'ACTIVE' : 'INACTIVE'),
+                  ),
+                )),
+
+              const SizedBox(height: 20),
+              Row(children: [
+                Expanded(child: Text('Recent safety changes',
+                    style: theme.textTheme.titleLarge)),
+                IconButton(
+                  key: const ValueKey('emergency-audit-refresh'),
+                  tooltip: 'Refresh committed audit history',
+                  onPressed: _loadingHistory ? null : _refreshHistory,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ]),
+              const Text('Only verified Java audit events from the last 31 days. '
+                'A recorded change is not LIVE or broker approval.'),
+              if (_loadingHistory && _history == null)
+                const DataStatePanel(kind: DataStateKind.loading,
+                  title: 'Loading audit trail',
+                  message: 'Reading committed Java emergency-control history.'),
+              if (_historyError != null)
+                DataStatePanel(kind: _history == null
+                    ? DataStateKind.error : DataStateKind.stale,
+                  title: 'Audit history needs review',
+                  message: _historyError!,
+                  actionLabel: _denied ? null : 'Retry',
+                  onAction: _denied ? null : _refreshHistory),
+              if (_history != null && _history!.isEmpty)
+                const DataStatePanel(kind: DataStateKind.empty,
+                  title: 'No recent emergency changes',
+                  message: 'No eligible audit entries were found in the last 31 days.'),
+              if (_history != null)
+                ..._history!.map((event) => Card(
+                  key: ValueKey('emergency-history-${event.id}'),
+                  child: ListTile(
+                    leading: Icon(event.active
+                        ? Icons.shield_rounded : Icons.history_rounded),
+                    title: Text('${event.type} · ${event.scopeKey}'),
+                    subtitle: Text(
+                      '${event.actor} · ${event.occurredAt.toLocal()}\n'
+                      '${event.previousActive ? 'ACTIVE' : 'INACTIVE'} → '
+                      '${event.active ? 'ACTIVE' : 'INACTIVE'}\n'
+                      '${event.reason}',
+                    ),
+                    isThreeLine: true,
                   ),
                 )),
               const SizedBox(height: 24),
