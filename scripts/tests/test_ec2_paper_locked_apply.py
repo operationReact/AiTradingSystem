@@ -149,6 +149,17 @@ class PaperLockedProvisionContract(unittest.TestCase):
                          "arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision")
         self.assertEqual(network["Condition"]["StringEquals"]["aws:RequestedRegion"],
                          "ap-south-1")
+        instance_modify = next(x for x in allowed
+                               if x["Sid"] == "AllowUpdateOnlyExactStoppedPaperInstance")
+        self.assertEqual(instance_modify["Action"], "ec2:ModifyInstanceAttribute")
+        self.assertEqual(instance_modify["Resource"],
+                         "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a")
+        self.assertEqual(instance_modify["Condition"]["StringEquals"], {
+            "aws:RequestedRegion": "ap-south-1",
+            "ec2:ResourceTag/Application": "ai-trading-system",
+            "ec2:ResourceTag/Environment": "paper",
+            "ec2:ResourceTag/Name": "aitradingsystem-paper-ec2",
+        })
         vpc_reads = next(x for x in allowed if x["Sid"] == "ReadOnlyMumbaiInventory")
         self.assertIn("ec2:DescribeVpcAttribute", vpc_reads["Action"])
         self.assertEqual(vpc_reads["Condition"]["StringEquals"]["aws:RequestedRegion"],
