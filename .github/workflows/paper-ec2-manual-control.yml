@@ -1,0 +1,73 @@
+name: PAPER EC2 - manual Start / Stop / Check status
+
+# This file must also exist on the repository's default main branch for
+# GitHub Actions to display the Run workflow button.
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: "EC2 operation (existing PAPER host only)"
+        type: choice
+        required: true
+        default: status
+        options:
+          - status
+          - start
+          - stop
+
+permissions:
+  contents: read
+  id-token: write
+
+# Queue up to 100 clicks without cancelling any earlier start/stop request.
+# The common group serializes all manual operations on this single host.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  control:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT: "098859530205"
+      REQUESTED_OPERATION: ${{ inputs.operation }}
+    steps:
+      - name: Validate fixed project identity and manual input
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/main"
+          test "$GITHUB_EVENT_NAME" = "workflow_dispatch"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$AWS_ACCOUNT" = "098859530205"
+          case "$REQUESTED_OPERATION" in
+            status|start|stop) ;;
+            *) echo "::error::Only status/start/stop supported"; exit 2 ;;
+          esac
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Assume dedicated exact-one-instance manual lifecycle role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-manual-control
+          role-session-name: paper-ec2-manual-${{ github.run_id }}
+          role-duration-seconds: 1800
+          aws-region: ap-south-1
+
+      - name: Start, Stop or Check PAPER EC2 state safely
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/control_paper_host.py "$REQUESTED_OPERATION"
+
+# No RunInstances / TerminateInstances / RebootInstances or Terraform writes.
+# Nightly EventBridge stop at 22:00 IST remains enabled and independent.
+# This workflow controls only the existing PAPER EC2, not an RDS database.
