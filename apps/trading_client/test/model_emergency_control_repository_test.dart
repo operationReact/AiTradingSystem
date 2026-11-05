@@ -83,4 +83,72 @@ void main() {
     await expectLater(repo.enableStaticFallback('Emergency market source outage'),
       throwsA(isA<ApiHttpFailure>().having((failure) => failure.statusCode, 'status', 403)));
   });
+
+  test('ADMIN audit history GET uses Java endpoint and keeps capital denied', () async {
+    final session = OperatorSession()..setOperatorKey('admin-key');
+    final repository = HttpModelEmergencyControlRepository(AuthenticatedApiClient(
+      session: session, baseUri: Uri.parse('https://example.test'),
+      client: MockClient((request) async {
+        expect(request.method, 'GET');
+        expect(request.url.path, '/api/admin/model-governance/emergency-controls/history');
+        expect(request.url.queryParameters['limit'], '25');
+        expect(request.headers['X-API-Key'], 'admin-key');
+        return http.Response(jsonEncode([{
+          'id': 123,
+          'controlType': 'STATIC_FALLBACK',
+          'scopeKey': 'GLOBAL',
+          'active': true,
+          'previousActive': false,
+          'reason': 'Market source validation incident',
+          'actor': 'governance-admin',
+          'occurredAt': '2026-11-05T10:00:00Z',
+          'stateFingerprint': 'a' * 64,
+          'canAuthorizeCapital': false,
+        }]), 200);
+      }),
+    ));
+    final events = await repository.history();
+    expect(events.single.id, 123);
+    expect(events.single.previousActive, false);
+    expect(events.single.active, true);
+    expect(events.single.actor, 'governance-admin');
+    expect(events.single.reason, 'Market source validation incident');
+  });
+
+  test('unverified audit entry or excess output is refused, never success', () async {
+    final session = OperatorSession()..setOperatorKey('admin-key');
+    final accepted = <String, dynamic>{
+      'id': 1, 'controlType': 'STATIC_FALLBACK', 'scopeKey': 'GLOBAL',
+      'active': true, 'previousActive': false,
+      'reason': 'Feed invalidated',
+      'actor': 'review-admin', 'occurredAt': '2026-11-05T10:00:00Z',
+      'stateFingerprint': 'a' * 64, 'canAuthorizeCapital': false,
+    };
+    final repo = HttpModelEmergencyControlRepository(AuthenticatedApiClient(
+      session: session, baseUri: Uri.parse('https://example.test'),
+      client: MockClient((_) async => http.Response(jsonEncode([{
+        ...accepted, 'canAuthorizeCapital': true,
+      }]), 200)),
+    ));
+    await expectLater(repo.history(), throwsFormatException);
+    for (final change in <Map<String, dynamic>>[
+      {'actor': ''}, {'active': 'true'}, {'stateFingerprint': 'not-a-sha'},
+      {'occurredAt': 'invalid'}, {'controlType': 'LIVE_ENABLED'},
+    ]) {
+      final copy = <String, dynamic>{...accepted, ...change};
+      expect(() => ModelEmergencyAuditEvent.fromJson(copy), throwsFormatException);
+    }
+    expect(() => repo.history(limit: 51), throwsFormatException);
+  });
+
+  test('history 403 rejects access rather than displaying cached events', () async {
+    final session = OperatorSession()..setOperatorKey('admin-key');
+    final repo = HttpModelEmergencyControlRepository(AuthenticatedApiClient(
+      session: session, baseUri: Uri.parse('https://example.test'),
+      client: MockClient((_) async => http.Response('Forbidden', 403)),
+    ));
+    await expectLater(repo.history(), throwsA(isA<ApiHttpFailure>()
+      .having((failure) => failure.statusCode, 'status', 403)));
+  });
+
 }
