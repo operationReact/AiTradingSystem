@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -96,6 +98,36 @@ class LightsailExplicitDevRequests(unittest.TestCase):
             self.assertEqual(payload["confirmation"], confirmation)
             self.assertNotIn("secret", entry.read_text(encoding="utf-8").lower())
             self.assertNotIn("token", entry.read_text(encoding="utf-8").lower())
+
+    def test_preflight_file_can_be_committed_without_invalidating_ci(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            requests_dir = root / "infra/lightsail/requests"
+            requests_dir.mkdir(parents=True)
+            f = requests_dir / "bootstrap.request.json"
+            f.write_text(json.dumps(request()), encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            # Provision and app deploy are individually bound to their exact
+            # confirmations, even when the files exist in the checked-out tree.
+            f.write_text(json.dumps(request(
+                op="provision", confirmation="CREATE_PAPER_4GB")), encoding="utf-8")
+            (requests_dir / "deploy.request.json").write_text(json.dumps(
+                request("deploy", "deploy", "DEPLOY_PAPER_LOCAL_ONLY")),
+                encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            f.write_text(json.dumps(request(op="provision", confirmation="")),
+                         encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root), self.assertRaises(ValueError):
+                self.test_committed_requests_are_valid_when_explicitly_present()
+
+            f.unlink()
+            (requests_dir / "unreviewed.json").write_text("{}", encoding="utf-8")
+            with patch(f"{__name__}.ROOT", root), self.assertRaises(AssertionError):
+                self.test_committed_requests_are_valid_when_explicitly_present()
 
     def test_example_json_contract_requires_no_secrets(self):
         for op in ("preflight", "provision"):
