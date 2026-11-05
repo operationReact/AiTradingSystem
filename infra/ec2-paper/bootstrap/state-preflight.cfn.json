@@ -743,6 +743,232 @@
           }
         ]
       }
+    },
+    "PaperReleaseArtifactBucket": {
+      "Type": "AWS::S3::Bucket",
+      "DeletionPolicy": "Retain",
+      "UpdateReplacePolicy": "Retain",
+      "Properties": {
+        "BucketName": "aitrading-paper-releases-098859530205",
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "OwnershipControls": {
+          "Rules": [
+            {
+              "ObjectOwnership": "BucketOwnerEnforced"
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "IgnorePublicAcls": true,
+          "BlockPublicPolicy": true,
+          "RestrictPublicBuckets": true
+        },
+        "VersioningConfiguration": {
+          "Status": "Enabled"
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireTransientReleaseAssets",
+              "Status": "Enabled",
+              "Prefix": "releases/",
+              "ExpirationInDays": 3,
+              "NoncurrentVersionExpiration": {
+                "NoncurrentDays": 3
+              },
+              "AbortIncompleteMultipartUpload": {
+                "DaysAfterInitiation": 1
+              }
+            }
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "CostCenter",
+            "Value": "ai-trading-paper"
+          },
+          {
+            "Key": "Purpose",
+            "Value": "ephemeral-arm64-release"
+          }
+        ]
+      }
+    },
+    "PaperReleaseArtifactBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "PaperReleaseArtifactBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "DenyInsecureReleaseObjectTransport",
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "s3:*",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "PaperReleaseArtifactBucket",
+                    "Arn"
+                  ]
+                },
+                "arn:aws:s3:::aitrading-paper-releases-098859530205/releases/*"
+              ],
+              "Condition": {
+                "Bool": {
+                  "aws:SecureTransport": "false"
+                }
+              }
+            },
+            {
+              "Sid": "AllowOnlyExistingSSMInstanceRoleReadTemporaryPaperReleases",
+              "Effect": "Allow",
+              "Principal": {
+                "AWS": "arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm"
+              },
+              "Action": "s3:GetObject",
+              "Resource": "arn:aws:s3:::aitrading-paper-releases-098859530205/releases/*"
+            }
+          ]
+        }
+      }
+    },
+    "PaperGithubSsmDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "aitrading-paper-ec2-ssm-deploy",
+        "Description": "Dev-only SSM command and temporary encrypted artifact upload to one existing Mumbai PAPER EC2; no EC2 lifecycle, Terraform or LIVE orders.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "aitrading-paper-ec2-ssm-deploy-locked",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "CheckExactPaperEC2AndSSMReadiness",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ssm:DescribeInstanceInformation",
+                    "ssm:GetCommandInvocation"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "SendOnlyAWSLinuxShellSSMDocumentMumbai",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": "arn:aws:ssm:ap-south-1::document/AWS-RunShellScript",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "SendOnlyExactTaggedPaperInstance",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1",
+                      "ssm:resourceTag/Application": "ai-trading-system",
+                      "ssm:resourceTag/Environment": "paper"
+                    }
+                  }
+                },
+                {
+                  "Sid": "UploadOnlyShortLivedPaperReleaseAssets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject"
+                  ],
+                  "Resource": "arn:aws:s3:::aitrading-paper-releases-098859530205/releases/*"
+                },
+                {
+                  "Sid": "ExplicitlyDenyCloudProvisionAndTrades",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ec2:StartInstances",
+                    "ec2:StopInstances",
+                    "ec2:RunInstances",
+                    "ec2:TerminateInstances",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "ssm:StartSession",
+                    "iam:PassRole",
+                    "iam:CreateRole",
+                    "rds:CreateDBInstance",
+                    "scheduler:UpdateSchedule",
+                    "s3:DeleteObject",
+                    "s3:DeleteBucket"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "Capability",
+            "Value": "ssm-locked-deploy"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -788,6 +1014,21 @@
       "Value": {
         "Fn::GetAtt": [
           "PaperManualGithubLifecycleRole",
+          "Arn"
+        ]
+      }
+    },
+    "PaperReleaseArtifactBucket": {
+      "Description": "Short-lived encrypted ARM64 image and release staging only, not Terraform state",
+      "Value": {
+        "Ref": "PaperReleaseArtifactBucket"
+      }
+    },
+    "PaperSsmDeployRoleArn": {
+      "Description": "Dev-branch GitHub OIDC with SSM command access to exact existing PAPER EC2 and temporary artifact staging only",
+      "Value": {
+        "Fn::GetAtt": [
+          "PaperGithubSsmDeployRole",
           "Arn"
         ]
       }
