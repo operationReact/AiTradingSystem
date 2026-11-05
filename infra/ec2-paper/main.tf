@@ -138,9 +138,12 @@ resource "aws_iam_role" "daily_stop" {
       Action    = "sts:AssumeRole"
       Principal = { Service = "scheduler.amazonaws.com" }
       Condition = {
-        StringEquals = { "aws:SourceAccount" = data.aws_caller_identity.current.account_id }
-        ArnEquals = {
-          "aws:SourceArn" = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule/default/${local.stop_name}"
+        # Scheduler presents its schedule-GROUP ARN as aws:SourceArn.
+        # A schedule-specific ARN fails CreateSchedule's trust validation.
+        # Keep account and exact default-group restrictions, no wildcard.
+        StringEquals = {
+          "aws:SourceAccount" = data.aws_caller_identity.current.account_id
+          "aws:SourceArn"     = "arn:aws:scheduler:${var.aws_region}:${data.aws_caller_identity.current.account_id}:schedule-group/default"
         }
       }
     }]

@@ -172,7 +172,52 @@ jobs:
               or modification.get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion")!="ap-south-1"
               or modification.get("Condition",{}).get("StringEquals",{}).get("ec2:ResourceTag/Environment")!="paper"):
               raise SystemExit("New exact-PAPER-instance IAM permission not yet deployed via CloudFormation")
-          print("Actual AWS provision role policy verified including exact-paper-instance ModifyInstanceAttribute")
+          trust_update=sids.get("FixOnlyDedicatedPaperSchedulerTrust",{})
+          if (trust_update.get("Effect")!="Allow"
+              or trust_update.get("Action")!="iam:UpdateAssumeRolePolicy"
+              or trust_update.get("Resource")!="arn:aws:iam::098859530205:role/aitrading-paper-daily-stop"):
+              raise SystemExit("Dedicated PAPER schedule-group trust repair permission not yet deployed")
+          print("Actual AWS provision role policy verified including exact stop-role trust repair")
+          PY
+
+      - name: Read dedicated stop-role trust and stop-only inline policy
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws iam get-role --role-name aitrading-paper-daily-stop \
+            --query 'Role.AssumeRolePolicyDocument' --output json > "$RUNNER_TEMP/stop-role-trust.json"
+          aws iam get-role-policy --role-name aitrading-paper-daily-stop \
+            --policy-name only-stop-aitrading-paper \
+            --query PolicyDocument --output json > "$RUNNER_TEMP/stop-role-inline.json"
+          python3 - "$RUNNER_TEMP/stop-role-trust.json" "$RUNNER_TEMP/stop-role-inline.json" <<'PY'
+          import json,sys
+          t=json.load(open(sys.argv[1],encoding="utf-8"))
+          p=json.load(open(sys.argv[2],encoding="utf-8"))
+          statements=t.get("Statement",[])
+          if len(statements)!=1:
+              raise SystemExit("Stop role trust has unexpected statements")
+          s=statements[0]
+          condition=s.get("Condition",{})
+          source=(condition.get("StringEquals",{}).get("aws:SourceArn")
+                  or condition.get("ArnEquals",{}).get("aws:SourceArn"))
+          candidates={
+              "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop",
+              "arn:aws:scheduler:ap-south-1:098859530205:schedule-group/default"
+          }
+          if (s.get("Principal")!={"Service":"scheduler.amazonaws.com"}
+              or s.get("Action")!="sts:AssumeRole"
+              or condition.get("StringEquals",{}).get("aws:SourceAccount")!="098859530205"
+              or source not in candidates):
+              raise SystemExit("Stop-role trust differs from expected restricted recovery states")
+          ps=p.get("Statement",[])
+          if (len(ps)!=1
+              or ps[0].get("Effect")!="Allow"
+              or ps[0].get("Action")!="ec2:StopInstances"
+              or ps[0].get("Resource")!="arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a"
+              or ps[0].get("Condition",{}).get("StringEquals")!={"ec2:ResourceTag/Application":"ai-trading-system","ec2:ResourceTag/Environment":"paper"}):
+              raise SystemExit("Actual dedicated stop-only IAM policy is too broad or missing")
+          print("Dedicated stop-only IAM policy PASS")
+          print("Current stop-role trust is", "schedule-group" if source.endswith(":schedule-group/default") else "schedule-specific (requires Terraform repair)")
           PY
 
       - name: Read exact stopped instance shutdown and termination attributes

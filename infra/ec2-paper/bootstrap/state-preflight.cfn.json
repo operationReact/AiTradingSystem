@@ -553,6 +553,12 @@
                   }
                 },
                 {
+                  "Sid": "FixOnlyDedicatedPaperSchedulerTrust",
+                  "Effect": "Allow",
+                  "Action": "iam:UpdateAssumeRolePolicy",
+                  "Resource": "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop"
+                },
+                {
                   "Sid": "InlinePolicyOnlyForNightlyStopRole",
                   "Effect": "Allow",
                   "Action": "iam:PutRolePolicy",

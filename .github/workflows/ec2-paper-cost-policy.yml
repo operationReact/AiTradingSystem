@@ -14,11 +14,13 @@ on:
       - 'scripts/tests/test_ec2_paper_tainted_resume.py'
       - 'scripts/tests/test_ec2_paper_sg_tainted_resume.py'
       - 'scripts/tests/test_ec2_paper_stopped_host_finish.py'
+      - 'scripts/tests/test_ec2_paper_schedule_group_recovery.py'
       - '.github/workflows/ec2-paper-approved-provision.yml'
       - '.github/workflows/ec2-paper-partial-resume.yml'
       - '.github/workflows/ec2-paper-tainted-vpc-resume.yml'
       - '.github/workflows/ec2-paper-sg-tainted-resume.yml'
       - '.github/workflows/ec2-paper-existing-host-finish.yml'
+      - '.github/workflows/ec2-paper-group-trust-repair.yml'
       - '.github/workflows/ec2-paper-plan-only.yml'
       - '.github/workflows/ec2-paper-readonly-preflight.yml'
       - '.github/workflows/ec2-paper-cost-policy.yml'
@@ -59,6 +61,7 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_tainted_resume.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_sg_tainted_resume.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_stopped_host_finish.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_schedule_group_recovery.py -v
           python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
           bash -n infra/ec2-paper/bootstrap.sh
       - name: Validate isolated Terraform without backend, OIDC or an AWS account session

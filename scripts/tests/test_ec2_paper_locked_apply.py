@@ -149,6 +149,14 @@ class PaperLockedProvisionContract(unittest.TestCase):
                          "arn:aws:iam::098859530205:role/aitrading-paper-ec2-provision")
         self.assertEqual(network["Condition"]["StringEquals"]["aws:RequestedRegion"],
                          "ap-south-1")
+        stop_trust_update = next(x for x in allowed
+                                 if x["Sid"] == "FixOnlyDedicatedPaperSchedulerTrust")
+        self.assertEqual(stop_trust_update["Action"], "iam:UpdateAssumeRolePolicy")
+        self.assertEqual(stop_trust_update["Resource"],
+                         "arn:aws:iam::098859530205:role/aitrading-paper-daily-stop")
+        tf_source = (TF / "main.tf").read_text(encoding="utf-8")
+        self.assertIn(":schedule-group/default", tf_source)
+        self.assertNotIn(":schedule/default/${local.stop_name}", tf_source)
         instance_modify = next(x for x in allowed
                                if x["Sid"] == "AllowUpdateOnlyExactStoppedPaperInstance")
         self.assertEqual(set(instance_modify["Action"]),
