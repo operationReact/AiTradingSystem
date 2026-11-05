@@ -16,6 +16,7 @@ on:
       - 'scripts/tests/test_ec2_paper_stopped_host_finish.py'
       - 'scripts/tests/test_ec2_paper_schedule_group_recovery.py'
       - 'scripts/tests/test_ec2_paper_manual_control.py'
+      - 'scripts/tests/test_ec2_paper_application_runtime.py'
       - '.github/workflows/ec2-paper-approved-provision.yml'
       - '.github/workflows/ec2-paper-partial-resume.yml'
       - '.github/workflows/ec2-paper-tainted-vpc-resume.yml'
@@ -33,6 +34,7 @@ on:
     paths:
       - 'infra/ec2-paper/**'
       - 'scripts/tests/test_ec2_paper_cost_policy.py'
+      - 'scripts/tests/test_ec2_paper_application_runtime.py'
       - '.github/workflows/ec2-paper-cost-policy.yml'
       - '.github/workflows/lightsail-paper-bootstrap.yml'
       - '.github/workflows/lightsail-paper-app-deploy.yml'
@@ -65,8 +67,10 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_stopped_host_finish.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_schedule_group_recovery.py -v
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_manual_control.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
           python3 -m json.tool infra/ec2-paper/bootstrap/state-preflight.cfn.json > /dev/null
           bash -n infra/ec2-paper/bootstrap.sh
+          bash -n infra/ec2-paper/run_paper.sh
       - name: Validate isolated Terraform without backend, OIDC or an AWS account session
         working-directory: infra/ec2-paper
         env:
