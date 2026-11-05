@@ -1,0 +1,143 @@
+name: AI Trading PAPER Lightsail 4GB bootstrap (explicit manual only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Read-only preflight or explicitly provision ONE 4 GB PAPER VM
+        required: true
+        type: choice
+        options:
+          - preflight
+          - provision
+      confirmation:
+        description: For provision, type CREATE_PAPER_4GB (may incur AWS charges)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitradingsystem-paper-lightsail-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    # The independent IAM trust policy also restricts the OIDC sub to dev.
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_ACCOUNT: "816344830716"
+      AWS_REGION: us-east-1
+      LIGHTSAIL_INSTANCE: aitradingsystem-paper-dev
+      AWS_LIGHTSAIL_ROLE_ARN: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Enforce cost/role/branch/manual confirmation before AWS access
+        env:
+          OPERATION: ${{ inputs.operation }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$LIGHTSAIL_INSTANCE" = 'aitradingsystem-paper-dev'
+          test "$AWS_REGION" = 'us-east-1'
+          test "$AWS_LIGHTSAIL_ROLE_ARN" = 'arn:aws:iam::816344830716:role/aitradingsystem-github-lightsail-paper'
+          case "$OPERATION" in
+            preflight) ;;
+            provision)
+              test "$CONFIRMATION" = 'CREATE_PAPER_4GB' || {
+                echo "::error::Explicit 4GB charge confirmation required"; exit 1;
+              } ;;
+            *) echo "::error::Unsupported operation"; exit 1 ;;
+          esac
+
+      - name: Offline fail-closed resource/IAM regression
+        run: python3 -m unittest discover -v -s scripts/tests -p test_lightsail_paper_bootstrap.py
+
+      - name: Assume dedicated scoped Lightsail role using ephemeral OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_LIGHTSAIL_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: ats-paper-lightsail-${{ github.run_id }}
+          role-duration-seconds: 900
+
+      - name: Verify exact AWS account
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          echo "OIDC account/region verified; no changes to other applications"
+
+      - name: Inspect actual regional 4GB plan, Ubuntu blueprint and existing instances
+        id: plan
+        run: |
+          set -euo pipefail
+          umask 077
+          work="$RUNNER_TEMP/lightsail-paper"
+          mkdir -m 0700 "$work"
+          aws lightsail get-bundles --output json > "$work/bundles.json"
+          aws lightsail get-blueprints --output json > "$work/blueprints.json"
+          aws lightsail get-regions --include-availability-zones --output json > "$work/regions.json"
+          aws lightsail get-instances --output json > "$work/instances.json"
+          python3 infra/lightsail/verify_plan.py \
+            --bundles "$work/bundles.json" \
+            --blueprints "$work/blueprints.json" \
+            --regions "$work/regions.json" \
+            --instances "$work/instances.json" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Provision only the approved 4GB PAPER host (no applications)
+        if: inputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
+        run: |
+          set -euo pipefail
+          aws lightsail create-instances \
+            --instance-names "$LIGHTSAIL_INSTANCE" \
+            --availability-zone us-east-1a \
+            --blueprint-id ubuntu_24_04 \
+            --bundle-id medium_3_0 \
+            --tags key=Application,value=ai-trading-system \
+                   key=Environment,value=paper \
+                   key=ManagedBy,value=github-actions \
+            --user-data file://infra/lightsail/user-data.sh >/dev/null
+          echo 'One $24/month list-price 4GB Lightsail PAPER instance requested'
+          echo 'Host bootstrap runs once; app, database, broker and worker NOT deployed'
+
+      - name: Close all public ports except Lightsail browser SSH
+        if: inputs.operation == 'provision' && steps.plan.outputs.paper_instance_state == 'absent'
+        run: |
+          set -euo pipefail
+          # Lightsail creation is asynchronous; do not leave default ports
+          # open simply because the first firewall API call races bootstrap.
+          closed=false
+          for attempt in $(seq 1 24); do
+            if aws lightsail put-instance-public-ports \
+              --instance-name "$LIGHTSAIL_INSTANCE" \
+              --port-infos '[{"fromPort":22,"toPort":22,"protocol":"tcp","cidrListAliases":["lightsail-connect"]}]' >/dev/null 2>&1; then
+              closed=true
+              break
+            fi
+            sleep 5
+          done
+          test "$closed" = true || {
+            echo "::error::Firewall did not close: inspect Lightsail manually before using VM";
+            exit 1;
+          }
+          echo 'Public web, database, model and broker ports remain CLOSED'
+
+      - name: Report bounded result and credit check requirement
+        env:
+          OPERATION: ${{ inputs.operation }}
+          INSTANCE_STATE: ${{ steps.plan.outputs.paper_instance_state }}
+        run: |
+          set -euo pipefail
+          echo "PAPER Lightsail $OPERATION: initial instance state $INSTANCE_STATE"
+          echo 'Check AWS Billing > Credits in the exact account before provisioning.'
+          echo 'No app deployment, TLS, static IP, DB backups or LIVE trading performed.'
