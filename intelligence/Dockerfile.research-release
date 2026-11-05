@@ -16,6 +16,11 @@ COPY pyproject.toml README.md ./
 COPY src ./src
 RUN pip install --no-cache-dir .
 
+# V97: fail image BUILD before private model bytes enter this context when the
+# resolved graph is broken, reviewed direct ML pins drift, or dev tools leak.
+# This does NOT attest the still-floating Python base / transitive wheel lock.
+RUN python -m aitrading_intelligence.research_dependency_gate
+
 # Unlike the everyday Dockerfile, only this explicitly selected Dockerfile
 # can see the independently staged research model release build context.
 COPY --chown=65532:65532 .research-release/ /opt/research/
