@@ -1,0 +1,102 @@
+name: EC2 PAPER ARM64 real backend and Flutter Docker image gate (no AWS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'backend/Dockerfile.ec2-paper-arm64'
+      - 'backend/pom.xml'
+      - 'backend/src/**'
+      - 'apps/trading_client/Dockerfile.lightsail-paper'
+      - 'apps/trading_client/deploy/nginx.lightsail-paper.conf'
+      - 'apps/trading_client/deploy/flutter_service_worker.js'
+      - 'apps/trading_client/lib/**'
+      - 'apps/trading_client/pubspec.yaml'
+      - 'infra/ec2-paper/**'
+      - 'scripts/tests/test_ec2_paper_arm64_contract.py'
+      - '.github/workflows/ec2-paper-arm64-images.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'backend/Dockerfile.ec2-paper-arm64'
+      - 'apps/trading_client/Dockerfile.lightsail-paper'
+      - 'infra/ec2-paper/**'
+      - 'scripts/tests/test_ec2_paper_arm64_contract.py'
+      - '.github/workflows/ec2-paper-arm64-images.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-arm64-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-ec2-arm64:
+    name: Build actual 64-bit ARM Java and Flutter runtime images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify no cloud, brokerage or publication permissions
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          python3 -m unittest discover -s scripts/tests \
+            -p test_ec2_paper_arm64_contract.py -v
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+
+      - name: Build actual Flutter Web release for loopback-only PAPER
+        working-directory: apps/trading_client
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter build web --release --dart-define=API_BASE_URL=http://localhost:8088
+
+      - name: Build exact GitHub commit backend and frontend for EC2 Graviton ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="aitradingsystem-paper-backend-arm64:$GITHUB_SHA"
+          web="aitradingsystem-paper-web-arm64:$GITHUB_SHA"
+          cleanup() {
+            docker image rm "$api" "$web" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          # Maven compiles pure Java on the hosted runner architecture; the
+          # final Java runtime layer is ARM64 on the cheaper EC2 t4g.medium.
+          docker buildx build --platform linux/arm64 --load \
+            --file backend/Dockerfile.ec2-paper-arm64 \
+            --tag "$api" backend
+          docker buildx build --platform linux/arm64 --load \
+            --file apps/trading_client/Dockerfile.lightsail-paper \
+            --tag "$web" apps/trading_client
+
+          test "$(docker image inspect "$api" --format '{{.Architecture}}')" = "arm64"
+          test "$(docker image inspect "$web" --format '{{.Architecture}}')" = "arm64"
+          test "$(docker image inspect "$api" --format '{{.Config.User}}')" = "10001"
+
+          # Actually execute the ARM64 JRE and Nginx binaries with QEMU,
+          # network disabled; the Postgres/Flyway/Java/Flutter connected
+          # integration is independently tested by the existing Docker smoke.
+          docker run --rm --platform linux/arm64 --network none \
+            --entrypoint java "$api" -version
+          docker run --rm --platform linux/arm64 --network none \
+            --entrypoint nginx "$web" -v
+          echo 'Actual ARM64 runtime binaries PASS; no AWS image push or deploy'
+
+# No GitHub OIDC, no ECR, no credentials or trading capital, no remote Docker.

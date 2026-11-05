@@ -64,6 +64,14 @@ The first prerequisite is AWS account **098859530205**, region **Asia Pacific (M
 
 This bootstrap and preflight **cannot** prove EC2 quota, billable credits, CloudFormation permissions, the correctness of deployment ARM64 image builds, or whether the user will be charged for other resources. Account billing and effective service-control policies must be inspected by the account operator. The preflight role is intentionally unable to create, start, stop, or terminate instances or alter Terraform state.
 
+## Real ARM64 image build gate (no AWS)
+
+The dedicated [EC2 PAPER ARM64 image workflow](https://github.com/operationReact/AiTradingSystem/actions/workflows/ec2-paper-arm64-images.yml) uses Docker Buildx and QEMU on a GitHub runner. It packages the actual Spring Boot JAR using runner-native Maven, selects Linux ARM64 for the Java 21 runtime and Flutter Nginx image, checks both image architectures, verifies Java is nonroot, and executes the ARM64 Java and Nginx binaries without network access. No AWS credentials or image publication are used.
+
+The new backend Dockerfile compiles Java using the BUILDPLATFORM and produces an ARM64 final runtime layer; the web bundle is compiled once on GitHub and copied into the existing multi-architecture Nginx runtime. Reusing the historically named Dockerfile.lightsail-paper does not re-enable Lightsail: those workflows remain hard-disabled.
+
+This is architecture and runtime-binary validation, NOT a real EC2 rollout, complete ARM64 Postgres/Flyway integration, model authorization, or an authenticated production web release. Follow-up work must implement an AWS Systems Manager rollout for exact pinned ARM64 images, PostgreSQL backups and restore tests, TLS when publicly exposed, and genuine PAPER-only acceptance.
+
 ## Deployment status
 
 **Only the source and offline CI exist.** No EC2, EBS, S3, Scheduler, SSM session, domain, model worker or RDS resources have been provisioned through this path. Existing Lightsail OIDC preflight in the corrected account failed with `sts:AssumeRoleWithWebIdentity`; therefore account-specific IAM setup is still a blocker for any new OIDC deployment and must not be circumvented by broadening trust permissions.
