@@ -112,7 +112,7 @@ class LightsailPaperRolloutContract(unittest.TestCase):
         self.assertIn('flutter_service_worker.js', dock)
 
     def test_deploy_is_manual_exact_head_keyless_and_no_broker(self):
-        wf = (ROOT / ".github/workflows/lightsail-paper-app-deploy.yml").read_text()
+        wf = (ROOT / "docs/operations/archived-actions/lightsail-paper-app-deploy.yml").read_text()
         run = (ROOT / "infra/lightsail/run_paper.sh").read_text()
         self.assertIn('workflow_dispatch:', wf)
         self.assertIn("  push:", wf)
