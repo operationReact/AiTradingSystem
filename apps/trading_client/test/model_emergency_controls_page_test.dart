@@ -5,10 +5,11 @@ import 'package:trading_client/src/data/model_emergency_control_repository.dart'
 import 'package:trading_client/src/presentation/model_emergency_controls_page.dart';
 
 class _Repository implements ModelEmergencyControlRepository {
-  _Repository({this.denied = false});
-  final bool denied;
+  _Repository({this.denied = false, this.historyDenied = false});
+  final bool denied, historyDenied;
   int mutatingCalls = 0;
   int loads = 0;
+  int historyLoads = 0;
 
   @override
   Future<List<ModelEmergencyControl>> list() async {
@@ -19,6 +20,29 @@ class _Repository implements ModelEmergencyControlRepository {
         type: 'STATIC_FALLBACK', scopeKey: 'GLOBAL',
         active: mutatingCalls > 0,
         reason: mutatingCalls > 0 ? 'Source feed degraded severely' : 'No override',
+        stateFingerprint: 'a' * 64,
+      ),
+    ];
+  }
+
+
+  @override
+  Future<List<ModelEmergencyAuditEvent>> history({int limit = 25}) async {
+    historyLoads++;
+    if (denied || historyDenied) {
+      throw const ApiHttpFailure('AUTHENTICATION_REJECTED', null, 403);
+    }
+    return [
+      ModelEmergencyAuditEvent(
+        id: 100 + mutatingCalls,
+        type: 'STATIC_FALLBACK',
+        scopeKey: 'GLOBAL',
+        active: mutatingCalls > 0,
+        previousActive: false,
+        reason: mutatingCalls > 0
+            ? 'Source feed degraded severely' : 'Test safety event',
+        actor: 'governance-admin',
+        occurredAt: DateTime.utc(2026, 11, 5, 10),
         stateFingerprint: 'a' * 64,
       ),
     ];
@@ -78,6 +102,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('emergency-confirm')));
     await tester.pumpAndSettle();
     expect(repo.mutatingCalls, 1);
+    expect(repo.historyLoads, greaterThanOrEqualTo(2));
     await tester.drag(find.byKey(const ValueKey('emergency-controls-page')),
       const Offset(0, 700));
     await tester.pumpAndSettle();
@@ -93,6 +118,38 @@ void main() {
 
     expect(find.text('Permission denied'), findsOneWidget);
     expect(find.byKey(const ValueKey('emergency-review')), findsNothing);
+    expect(repo.mutatingCalls, 0);
+  });
+
+
+  testWidgets('connected audit timeline displays verified actor, reason and state transition',
+      (tester) async {
+    final repo = _Repository();
+    await tester.pumpWidget(MaterialApp(
+      home: ModelEmergencyControlsPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(repo.historyLoads, 1);
+    await tester.ensureVisible(find.text('Recent safety changes'));
+    expect(find.byKey(const ValueKey('emergency-history-100')), findsOneWidget);
+    expect(find.textContaining('governance-admin'), findsOneWidget);
+    expect(find.textContaining('Test safety event'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('emergency-audit-refresh')));
+    await tester.pumpAndSettle();
+    expect(repo.historyLoads, 2);
+    expect(find.text('Enable LIVE'), findsNothing);
+  });
+
+  testWidgets('history 403 invalidates cached emergency controls',
+      (tester) async {
+    final repo = _Repository(historyDenied: true);
+    await tester.pumpWidget(MaterialApp(
+      home: ModelEmergencyControlsPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Permission denied'), findsOneWidget);
+    expect(find.byKey(const ValueKey('emergency-review')), findsNothing);
+    expect(find.byKey(const ValueKey('emergency-history-100')), findsNothing);
     expect(repo.mutatingCalls, 0);
   });
 
