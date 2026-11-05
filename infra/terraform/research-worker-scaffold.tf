@@ -135,7 +135,7 @@ resource "aws_ecs_task_definition" "research_worker" {
     essential = true
     # V93: ECS must preserve the release Dockerfile's non-root UID and GID.
     # The worker service remains default-disabled at desired_count=0.
-    user      = "65532:65532"
+    user = "65532:65532"
     portMappings = [{
       containerPort = 8090
       hostPort      = 8090
