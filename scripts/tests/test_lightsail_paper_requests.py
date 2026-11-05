@@ -72,8 +72,30 @@ class LightsailExplicitDevRequests(unittest.TestCase):
             self.assertNotIn("\n    branches: [main]", src)
             self.assertNotIn("workflow_run:", src)
             self.assertNotIn("pull_request_target:", src)
-        self.assertFalse((ROOT / "infra/lightsail/requests/bootstrap.request.json").exists())
-        self.assertFalse((ROOT / "infra/lightsail/requests/deploy.request.json").exists())
+    def test_committed_requests_are_valid_when_explicitly_present(self):
+        # Once a user intentionally commits a read-only preflight or later
+        # approved PAPER request on dev, PR/push CI must stay green without
+        # weakening the exact request constraints.
+        root = ROOT / "infra/lightsail/requests"
+        if not root.exists():
+            return
+        self.assertFalse(root.is_symlink())
+        self.assertTrue(root.is_dir())
+        expected = {
+            "bootstrap.request.json": "bootstrap",
+            "deploy.request.json": "deploy",
+        }
+        for entry in root.iterdir():
+            self.assertIn(entry.name, expected)
+            self.assertTrue(entry.is_file())
+            self.assertFalse(entry.is_symlink())
+            self.assertLessEqual(entry.stat().st_size, gate.MAX_BYTES)
+            payload = json.loads(entry.read_text(encoding="utf-8"))
+            operation, confirmation = gate.validate(payload, expected[entry.name])
+            self.assertEqual(payload["operation"], operation)
+            self.assertEqual(payload["confirmation"], confirmation)
+            self.assertNotIn("secret", entry.read_text(encoding="utf-8").lower())
+            self.assertNotIn("token", entry.read_text(encoding="utf-8").lower())
 
     def test_example_json_contract_requires_no_secrets(self):
         for op in ("preflight", "provision"):
