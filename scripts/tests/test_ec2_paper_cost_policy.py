@@ -38,14 +38,14 @@ class CheapPaperEC2Policy(unittest.TestCase):
             'volume_size           = var.root_volume_gib',
             'encrypted             = true',
             'http_tokens   = "required"',
-            'disable_api_termination     = true',
+            'disable_api_termination              = true',
             'prevent_destroy = true',
             'instance_initiated_shutdown_behavior = "stop"',
             'credit_specification {',
             'cpu_credits = "standard"',
             'AmazonSSMManagedInstanceCore',
             'No ingress rules',
-            'associate_public_ip_address = true',
+            'associate_public_ip_address          = true',
         ):
             with self.subTest(expected=text):
                 self.assertIn(text, main)
