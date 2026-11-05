@@ -129,7 +129,7 @@ class StopGroupRecoveryContract(unittest.TestCase):
                 gate.validate_plan(p)
 
     def test_workflow_requires_exact_saved_plan_and_never_starts_or_replaces_host(self):
-        workflow=(ROOT/".github/workflows/ec2-paper-group-trust-repair.yml").read_text(encoding="utf-8")
+        workflow=(ROOT/"docs/operations/archived-actions/ec2-paper-group-trust-repair.yml").read_text(encoding="utf-8")
         for item in (
             "branches: [dev]","fetch-depth: 2",
             "'infra/ec2-paper/requests/finish-group-trust-v2.json'",
