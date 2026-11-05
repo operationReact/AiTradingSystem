@@ -21,12 +21,10 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 curl --fail --location --retry 3 --silent --show-error \
   "$base/docker-compose-linux-aarch64" -o "$work/docker-compose-linux-aarch64"
-curl --fail --location --retry 3 --silent --show-error \
-  "$base/checksums.txt" -o "$work/checksums.txt"
-grep -E '(^|[[:space:]])docker-compose-linux-aarch64$' "$work/checksums.txt" \
-  > "$work/compose-target-checksum.txt"
-test "$(wc -l < "$work/compose-target-checksum.txt")" -eq 1
-(cd "$work" && sha256sum -c compose-target-checksum.txt)
+# GitHub's official v5.6.0 release API publishes this asset SHA256 digest.
+# Pin it directly instead of parsing release-specific checksums.txt formatting.
+compose_sha256="733ec76717ceb59052a9609b9dadfb523b2df8eab57a54212872d10a58078ea2"
+printf '%s  %s\n' "$compose_sha256" "$work/docker-compose-linux-aarch64" | sha256sum -c -
 install -d -m 0755 /usr/local/lib/docker/cli-plugins
 install -m 0755 "$work/docker-compose-linux-aarch64" \
   /usr/local/lib/docker/cli-plugins/docker-compose
