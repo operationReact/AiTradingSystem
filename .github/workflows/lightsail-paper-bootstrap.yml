@@ -159,7 +159,7 @@ jobs:
 
       - name: Report bounded result and credit check requirement
         env:
-          OPERATION: ${{ inputs.operation }}
+          OPERATION: ${{ steps.approval.outputs.operation }}
           INSTANCE_STATE: ${{ steps.plan.outputs.paper_instance_state }}
         run: |
           set -euo pipefail
