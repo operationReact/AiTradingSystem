@@ -5,9 +5,9 @@ data "aws_ssm_parameter" "al2023_arm64" {
 }
 
 locals {
-  enabled    = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"
-  name       = "aitradingsystem-paper-ec2"
-  stop_name  = "aitrading-paper-nightly-stop"
+  enabled   = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"
+  name      = "aitradingsystem-paper-ec2"
+  stop_name = "aitrading-paper-nightly-stop"
   tags = {
     Name       = local.name
     CostCenter = "ai-trading-paper"
@@ -87,19 +87,19 @@ resource "aws_iam_instance_profile" "paper" {
 }
 
 resource "aws_instance" "paper" {
-  count                       = local.enabled ? 1 : 0
-  ami                         = data.aws_ssm_parameter.al2023_arm64[0].value
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.paper[0].id
-  vpc_security_group_ids      = [aws_security_group.paper[0].id]
-  associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.paper[0].name
-  user_data                   = file("${path.module}/bootstrap.sh")
-  user_data_replace_on_change = false
-  disable_api_termination     = true
+  count                                = local.enabled ? 1 : 0
+  ami                                  = data.aws_ssm_parameter.al2023_arm64[0].value
+  instance_type                        = var.instance_type
+  subnet_id                            = aws_subnet.paper[0].id
+  vpc_security_group_ids               = [aws_security_group.paper[0].id]
+  associate_public_ip_address          = true
+  iam_instance_profile                 = aws_iam_instance_profile.paper[0].name
+  user_data                            = file("${path.module}/bootstrap.sh")
+  user_data_replace_on_change          = false
+  disable_api_termination              = true
   instance_initiated_shutdown_behavior = "stop"
-  monitoring                  = false
-  ebs_optimized               = true
+  monitoring                           = false
+  ebs_optimized                        = true
   credit_specification {
     cpu_credits = "standard"
   }
@@ -173,7 +173,7 @@ resource "aws_scheduler_schedule" "daily_stop" {
     role_arn = aws_iam_role.daily_stop[0].arn
     input    = jsonencode({ InstanceIds = [aws_instance.paper[0].id] })
     retry_policy {
-      maximum_retry_attempts = 3
+      maximum_retry_attempts       = 3
       maximum_event_age_in_seconds = 3600
     }
   }
