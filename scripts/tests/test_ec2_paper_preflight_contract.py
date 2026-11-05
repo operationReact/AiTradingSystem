@@ -142,7 +142,10 @@ class EC2PaperPreflightContract(unittest.TestCase):
         self.assertIn(f'bucket       = "{BUCKET}"', backend)
         self.assertIn('key          = "ai-trading/paper-ec2/terraform.tfstate"',
                       backend)
-        self.assertIn('region       = "ap-south-1"', backend)
+        self.assertIn('region       = "us-east-1"', backend)
+        self.assertIn("AWS provider in versions.tf remains ap-south-1", backend)
+        self.assertIn('default     = "ap-south-1"',
+                      (TF / "variables.tf").read_text(encoding="utf-8"))
         self.assertIn("use_lockfile = true", backend)
         self.assertIn("encrypt      = true", backend)
         self.assertNotIn("dynamodb_table", backend)
@@ -161,6 +164,11 @@ class EC2PaperPreflightContract(unittest.TestCase):
             "arn:aws:iam::098859530205:role/aitrading-paper-ec2-preflight", w
         )
         self.assertIn("verify_preflight_request.py", w)
+        self.assertIn("STATE_BUCKET_REGION: us-east-1", w)
+        self.assertIn("AWS_REGION: ap-south-1", w)
+        self.assertIn("get-bucket-location", w)
+        self.assertIn("location is not None", w)
+        self.assertIn('--region "$STATE_BUCKET_REGION"', w)
         self.assertIn("get-bucket-versioning", w)
         self.assertIn("get-bucket-encryption", w)
         self.assertIn("get-public-access-block", w)
@@ -194,9 +202,12 @@ class EC2PaperPreflightContract(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate(invalid)
 
-    def test_request_not_committed_until_aws_role_exists(self):
+    def test_explicit_read_only_request_is_safe_when_committed(self):
         request = TF / "requests/read-only-preflight.json"
-        self.assertFalse(request.exists())
+        if request.exists():
+            self.assertFalse(request.is_symlink())
+            self.assertLessEqual(request.stat().st_size, validator.MAX_BYTES)
+            validator.validate(json.loads(request.read_text(encoding="utf-8")))
         with tempfile.TemporaryDirectory() as folder:
             f = Path(folder) / "request.json"
             f.write_text(json.dumps(validator.EXPECTED), encoding="utf-8")
