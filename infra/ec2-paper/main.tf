@@ -117,6 +117,12 @@ resource "aws_instance" "paper" {
   }
   lifecycle {
     prevent_destroy = true
+    # An auto-assigned public IPv4 address is released while EC2 is stopped.
+    # Terraform must NEVER replace the stopped PAPER host because AWS reads
+    # associate_public_ip_address=false after shutdown; on a future start AWS
+    # may assign a new ephemeral address under the original launch behavior.
+    # Deliberately ignore this single launch-time attribute, not other drift.
+    ignore_changes = [associate_public_ip_address]
   }
   tags       = local.tags
   depends_on = [aws_route_table_association.paper, aws_iam_role_policy_attachment.ssm_core]
