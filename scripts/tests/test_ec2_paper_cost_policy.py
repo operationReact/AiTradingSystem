@@ -24,7 +24,7 @@ class CheapPaperEC2Policy(unittest.TestCase):
         self.assertIn('var.instance_type == "t4g.medium"', variables)
         self.assertIn('default     = ""', variables)
         self.assertIn('PROVISION_PAPER_EC2_4GB', variables)
-        self.assertIn('enabled    = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"', main)
+        self.assertIn('enabled   = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"', main)
         self.assertGreaterEqual(main.count('count = local.enabled ? 1 : 0'), 5)
         self.assertIn('backend "s3" {}', versions)
 
