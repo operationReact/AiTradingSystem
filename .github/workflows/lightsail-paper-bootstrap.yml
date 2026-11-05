@@ -32,7 +32,9 @@ concurrency:
 jobs:
   bootstrap:
     # The independent IAM trust policy also restricts the OIDC sub to dev.
-    if: github.ref == 'refs/heads/dev'
+    # User revoked Lightsail deployment plan. Fail-closed inactive until
+    # explicitly reintroduced through independently reviewed PR + tests.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:

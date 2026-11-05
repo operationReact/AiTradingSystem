@@ -24,7 +24,9 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.ref == 'refs/heads/dev'
+    # User revoked Lightsail deployment plan. Fail-closed inactive until
+    # explicitly reintroduced through independently reviewed PR + tests.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
