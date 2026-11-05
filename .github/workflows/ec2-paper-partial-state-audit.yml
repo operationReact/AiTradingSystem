@@ -165,7 +165,8 @@ jobs:
                   raise SystemExit("actual provisioning policy is not region-restricted")
           modification=sids.get("AllowUpdateOnlyExactStoppedPaperInstance",{})
           target="arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a"
-          if ("ec2:ModifyInstanceAttribute" not in actions("AllowUpdateOnlyExactStoppedPaperInstance")
+          if (not {"ec2:ModifyInstanceAttribute","ec2:DescribeInstanceAttribute"}.issubset(
+                    actions("AllowUpdateOnlyExactStoppedPaperInstance"))
               or modification.get("Effect")!="Allow"
               or modification.get("Resource")!=target
               or modification.get("Condition",{}).get("StringEquals",{}).get("aws:RequestedRegion")!="ap-south-1"
@@ -173,6 +174,20 @@ jobs:
               raise SystemExit("New exact-PAPER-instance IAM permission not yet deployed via CloudFormation")
           print("Actual AWS provision role policy verified including exact-paper-instance ModifyInstanceAttribute")
           PY
+
+      - name: Read exact stopped instance shutdown and termination attributes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$AWS_ACCOUNT"
+          for attr in instanceInitiatedShutdownBehavior disableApiTermination; do
+            echo "AUDITED_PAPER_EC2_ATTRIBUTE=$attr"
+            aws ec2 describe-instance-attribute --region "$AWS_REGION" \
+              --instance-id i-09c01b470fb39b85a --attribute "$attr" \
+              --query '{ShutdownBehavior:InstanceInitiatedShutdownBehavior.Value,TerminationProtection:DisableApiTermination.Value}' \
+              --output json
+          done
+          echo "Exact PAPER EC2 attribute reads passed; no AWS writes performed"
 
       - name: Verify exact partial VPC attribute read access after CloudFormation role update
         shell: bash
