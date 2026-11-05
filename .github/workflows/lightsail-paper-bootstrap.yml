@@ -1,4 +1,4 @@
-name: AI Trading PAPER Lightsail 4GB bootstrap (explicit manual only)
+name: AI Trading PAPER Lightsail 4GB bootstrap (audited dev request)
 
 on:
   # GitHub workflow_dispatch requires the file on default main; this audited
