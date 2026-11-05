@@ -30,6 +30,20 @@ EXPECTED = {
     "operation": "provision-once",
     "confirmation": "PROVISION_PAPER_EC2_4GB",
 }
+TAGGED_CREATE_RESOURCES = frozenset({
+    "aws_vpc.paper[0]",
+    "aws_internet_gateway.paper[0]",
+    "aws_subnet.paper[0]",
+    "aws_route_table.paper[0]",
+    "aws_security_group.paper[0]",
+    "aws_iam_role.instance_ssm[0]",
+    "aws_iam_role.daily_stop[0]",
+    "aws_instance.paper[0]",
+})
+REQUIRED_TAGS = {
+    "Application": "ai-trading-system",
+    "Environment": "paper",
+}
 MAX_REQUEST_BYTES = 2048
 MAX_PLAN_BYTES = 30 * 1024 * 1024
 
@@ -54,6 +68,16 @@ def validate_fresh_plan(plan: object) -> None:
     disk = inst["root_block_device"][0]
     if disk.get("volume_size") != 35:
         raise ValueError("not the approved 35 GiB encrypted root disk")
+    # The CloudFormation provisioning role requires these exact create-time
+    # tags. Missing tags cause AWS AccessDenied even on a valid Terraform plan.
+    for resource in changes:
+        if resource["address"] not in TAGGED_CREATE_RESOURCES:
+            continue
+        tags = resource["change"]["after"].get("tags")
+        if not isinstance(tags, dict) or any(
+            tags.get(key) != value for key, value in REQUIRED_TAGS.items()
+        ):
+            raise ValueError("PAPER create-time IAM tags missing or incorrect")
     # No unknown action fields, additional managed objects or other projects.
     # All secrets stay in Terraform/runner memory, never emitted in the result.
 
