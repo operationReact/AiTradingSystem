@@ -1,0 +1,51 @@
+name: EC2 PAPER 4GB cost and scheduled stop contract (no AWS access)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/**'
+      - 'scripts/tests/test_ec2_paper_cost_policy.py'
+      - '.github/workflows/ec2-paper-cost-policy.yml'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-app-deploy.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/**'
+      - 'scripts/tests/test_ec2_paper_cost_policy.py'
+      - '.github/workflows/ec2-paper-cost-policy.yml'
+      - '.github/workflows/lightsail-paper-bootstrap.yml'
+      - '.github/workflows/lightsail-paper-app-deploy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  no-cloud-cost-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+      - name: Source safety and automatic stop regression
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_cost_policy.py -v
+          bash -n infra/ec2-paper/bootstrap.sh
+      - name: Validate isolated Terraform without backend, OIDC or an AWS account session
+        working-directory: infra/ec2-paper
+        env:
+          AWS_ACCESS_KEY_ID: ""
+          AWS_SECRET_ACCESS_KEY: ""
+          AWS_SESSION_TOKEN: ""
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false -no-color
+          terraform validate -no-color
+          echo "No AWS resources, credentials, Terraform remote state or billable EC2 instance created"
