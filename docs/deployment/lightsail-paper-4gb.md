@@ -29,7 +29,7 @@ This repository's current default branch is **`main`**, but we deliberately depl
 
 Instead, after setting up the IAM role, trigger the audited dev-only workflows by committing exactly one small, nonsecret request file **to `dev`**, using GitHub's **Add file > Create new file** UI and choosing **Commit directly to the dev branch** (or a PR merged to dev). No request file is committed during this setup; no AWS workflow executes merely because the workflows were merged.
 
-For a **non-billable AWS inspection**, create `infra/lightsail/requests/bootstrap.request.json`:
+For a **non-billable AWS inspection**, create `infra/lightsail/requests/bootstrap.request.json`. The offline CI validator now accepts an explicitly committed, correctly scoped request file instead of incorrectly requiring all request files to remain absent:
 
 ```json
 {"kind":"bootstrap","target":"aitradingsystem-paper-dev","operation":"preflight","confirmation":""}
