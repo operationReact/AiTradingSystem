@@ -48,8 +48,8 @@ jobs:
       - name: Resolve explicit on-dev Git request (or manual dispatch)
         id: approval
         env:
-          INPUT_OPERATION: ${{ steps.approval.outputs.operation }}
-          INPUT_CONFIRMATION: ${{ steps.approval.outputs.confirmation }}
+          INPUT_OPERATION: ${{ inputs.operation }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
         run: |
           set -euo pipefail
           case "$GITHUB_EVENT_NAME" in
@@ -66,8 +66,8 @@ jobs:
 
       - name: Enforce cost/role/branch/manual confirmation before AWS access
         env:
-          OPERATION: ${{ inputs.operation }}
-          CONFIRMATION: ${{ inputs.confirmation }}
+          OPERATION: ${{ steps.approval.outputs.operation }}
+          CONFIRMATION: ${{ steps.approval.outputs.confirmation }}
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
