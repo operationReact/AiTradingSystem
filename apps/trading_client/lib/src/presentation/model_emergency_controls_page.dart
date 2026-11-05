@@ -89,7 +89,9 @@ class _ModelEmergencyControlsPageState extends State<ModelEmergencyControlsPage>
     try {
       final events = await widget.repository.history();
       if (!mounted || request != _historyRequest ||
-          epoch != _authorizationEpoch || _denied) return;
+          epoch != _authorizationEpoch || _denied) {
+        return;
+      }
       setState(() => _history = events);
     } on ApiFailure catch (failure) {
       if (!mounted || request != _historyRequest || epoch != _authorizationEpoch) return;
