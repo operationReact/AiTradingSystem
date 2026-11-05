@@ -1,0 +1,90 @@
+name: PAPER EC2 - one-time sanitized AL2023 Docker package diagnosis
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/paper-ec2-dnf-package-diagnosis-once.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  diagnose:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: paper-dnf-audit-${{ github.run_id }}
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Analyze read-only package resolution; output only fixed classifications
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,re,sys,time
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release as gate
+          gate.verify_aws()
+          script=r"""#!/usr/bin/env bash
+          set -u
+          if rpm -q docker >/dev/null 2>&1; then echo DIAG_DOCKER_INSTALLED:YES; else echo DIAG_DOCKER_INSTALLED:NO; fi
+          if rpm -q curl-minimal >/dev/null 2>&1; then echo DIAG_CURL_MINIMAL:YES; else echo DIAG_CURL_MINIMAL:NO; fi
+          if rpm -q curl >/dev/null 2>&1; then echo DIAG_FULL_CURL:YES; else echo DIAG_FULL_CURL:NO; fi
+          if command -v curl >/dev/null 2>&1; then echo DIAG_CURL_BINARY:YES; else echo DIAG_CURL_BINARY:NO; fi
+          if dnf -q repolist >/dev/null 2>&1; then echo DIAG_DNF_REPOS:PASS; else echo DIAG_DNF_REPOS:FAIL; fi
+          tmp="$(mktemp)"
+          trap 'rm -f -- "$tmp"' EXIT
+          dnf --assumeno --setopt=install_weak_deps=False install docker curl openssl ca-certificates > "$tmp" 2>&1 || true
+          if grep -Eiq 'curl-minimal.*conflict|conflict.*curl-minimal' "$tmp"; then echo DIAG_DNF_CURL_CONFLICT:YES; else echo DIAG_DNF_CURL_CONFLICT:NO; fi
+          if grep -Eiq 'No match for argument|Unable to find a match' "$tmp"; then echo DIAG_DNF_MISSING_PACKAGE:YES; else echo DIAG_DNF_MISSING_PACKAGE:NO; fi
+          if grep -Eiq 'Failed to download metadata|Curl error|Could not resolve host|cannot download repomd.xml' "$tmp"; then echo DIAG_DNF_NETWORK_PROBLEM:YES; else echo DIAG_DNF_NETWORK_PROBLEM:NO; fi
+          if grep -Eiq 'conflicting requests|problem with installed package|package .*conflicts' "$tmp"; then echo DIAG_DNF_DEPENDENCY_CONFLICT:YES; else echo DIAG_DNF_DEPENDENCY_CONFLICT:NO; fi
+          if grep -Eiq 'Dependencies resolved|Transaction Summary' "$tmp"; then echo DIAG_DNF_SOLVED_WITH_CURL:YES; else echo DIAG_DNF_SOLVED_WITH_CURL:NO; fi
+          dnf --assumeno --setopt=install_weak_deps=False install docker openssl ca-certificates > "$tmp" 2>&1 || true
+          if grep -Eiq 'Dependencies resolved|Transaction Summary' "$tmp"; then echo DIAG_DNF_SOLVED_NO_CURL:YES; else echo DIAG_DNF_SOLVED_NO_CURL:NO; fi
+          """
+          encoded=base64.b64encode(script.encode()).decode()
+          cmd=f"printf '%s' '{encoded}' | base64 -d | bash"
+          issued=gate.aws_json('ssm','send-command',
+            '--document-name','AWS-RunShellScript',
+            '--instance-ids',gate.INSTANCE,
+            '--timeout-seconds','300',
+            '--comment','Exact PAPER read-only Docker DNF dependency analysis',
+            '--parameters',json.dumps({'commands':[cmd]}))
+          command_id=issued.get('Command',{}).get('CommandId')
+          if not command_id: raise SystemExit('SSM package diagnosis not accepted')
+          for i in range(42):
+            time.sleep(5)
+            try:
+              result=gate.aws_json('ssm','get-command-invocation','--command-id',command_id,
+                                   '--instance-id',gate.INSTANCE)
+            except gate.Rejected:
+              if i<5: continue
+              raise
+            if result.get('Status') in {'Success','Failed','TimedOut','Cancelled'}:
+              markers=[x for x in result.get('StandardOutputContent','').splitlines()
+                       if re.fullmatch('DIAG_[A-Z_]+:(?:YES|NO|PASS|FAIL)',x)]
+              for x in markers: print(x,flush=True)
+              if not markers: raise SystemExit('SSM returned no sanitized DNF classifications')
+              print('Read-only DNF dependency diagnostics collected; no packages installed')
+              break
+          else:
+            raise SystemExit('SSM DNF diagnosis timed out')
+          PY
+# Read-only --assumeno package resolution, no changes to EC2 or app.
