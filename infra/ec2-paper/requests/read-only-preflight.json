@@ -1,0 +1,8 @@
+{
+  "kind": "ec2-paper",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "target": "aitradingsystem-paper-ec2",
+  "operation": "inspect",
+  "confirmation": "READ_ONLY_AWS_PREFLIGHT"
+}
