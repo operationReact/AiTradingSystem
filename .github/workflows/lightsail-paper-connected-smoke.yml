@@ -100,15 +100,24 @@ jobs:
           docker compose --env-file "$work/.env" \
             -f infra/lightsail/paper-compose.yml up -d --no-build
 
-          curl -fSs --max-time 6 --retry 35 --retry-delay 3 \
-            --retry-connrefused http://127.0.0.1:8080/api/health \
-            -o "$work/direct.json"
-          curl -fSs --max-time 6 --retry 15 --retry-delay 3 \
-            --retry-connrefused http://127.0.0.1:8088/api/health \
-            -o "$work/proxy.json"
-          curl -fSs --max-time 6 --retry 15 --retry-delay 3 \
-            --retry-connrefused http://127.0.0.1:8088/health \
-            -o "$work/web.txt"
+          # Docker starts before Spring Boot/Flyway are fully ready. Curl's
+          # --retry-connrefused does NOT cover a TCP reset (exit 56), which
+          # real CI exposed. Fail closed after a bounded attempt count.
+          await_health() {
+            local label="$1" url="$2" output="$3"
+            for attempt in $(seq 1 45); do
+              if curl --connect-timeout 2 --max-time 6 -fSs "$url" \
+                -o "$output" 2>/dev/null && test -s "$output"; then
+                return 0
+              fi
+              sleep 3
+            done
+            echo "::error::PAPER $label not ready after bounded checks"
+            return 1
+          }
+          await_health java-api http://127.0.0.1:8080/api/health "$work/direct.json"
+          await_health flutter-proxy http://127.0.0.1:8088/api/health "$work/proxy.json"
+          await_health flutter-health http://127.0.0.1:8088/health "$work/web.txt"
 
           docker compose --env-file "$work/.env" \
             -f infra/lightsail/paper-compose.yml exec -T postgres \
