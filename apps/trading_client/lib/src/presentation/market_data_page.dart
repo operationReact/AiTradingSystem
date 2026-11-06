@@ -4,7 +4,6 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../brand/minttick_brand.dart';
 import '../core/widgets/responsive_layout.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
@@ -159,16 +158,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Markets'),
-        actions: [
-          IconButton(
-            tooltip: 'Search stocks',
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () => FocusScope.of(context).requestFocus(FocusNode()) ,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Markets')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
