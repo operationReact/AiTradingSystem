@@ -194,9 +194,13 @@ class MultiobjectiveTournamentReportV1(BaseModel):
             raise ValueError("Pareto frontier must match nondominated decisions")
         if (self.status == "RESEARCH_PARETO_FRONT_ONLY") != bool(selected):
             raise ValueError("tournament status and Pareto frontier disagree")
-        if canonical_fingerprint(
-            self.model_dump(mode="json", exclude={"report_fingerprint"})
-        ) != self.report_fingerprint:
+        # Preserve producer datetime.isoformat() (+00:00) in canonical hash.
+        payload = self.model_dump(mode="python", exclude={"report_fingerprint"})
+        payload["evaluated_as_of"] = self.evaluated_as_of.isoformat()
+        payload["decisions"] = [
+            decision.model_dump(mode="json") for decision in self.decisions
+        ]
+        if canonical_fingerprint(payload) != self.report_fingerprint:
             raise ValueError("tournament report fingerprint mismatch")
         return self
 
