@@ -28,7 +28,8 @@ class RegimeAnomalyAdvisoryConfig(BaseModel):
 
     maximum_regime_age_seconds: Annotated[int, Field(ge=1, le=86_400)] = 1_800
     maximum_anomaly_age_seconds: Annotated[int, Field(ge=1, le=86_400)] = 1_800
-    stress_probability_threshold: Annotated[float, Field(gt=0.0, le=1.0)] = 0.70
+    # Research-only screening threshold; real Indian-market calibration is pending.
+    stress_probability_threshold: Annotated[float, Field(gt=0.0, le=1.0)] = 0.60
     reduce_on_regime_disagreement: bool = True
 
     @property
