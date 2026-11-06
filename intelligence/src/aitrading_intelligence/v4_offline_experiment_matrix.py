@@ -222,8 +222,10 @@ class OfflineExperimentMatrixReportV1(BaseModel):
             self.slot_results, key=lambda result: result.candidate_id
         ):
             raise ValueError("matrix run result order is not canonical")
+        if self.pareto_report is None:
+            raise ValueError("matrix must retain a complete inconclusive/Pareto report")
         if (self.status == "OFFLINE_RESEARCH_COMPARISON") != (
-            self.pareto_report is not None
+            self.pareto_report.status == "RESEARCH_PARETO_FRONT_ONLY"
         ):
             raise ValueError("comparison status must match attached Pareto report")
         payload = self.model_dump(mode="python", exclude={"report_fingerprint"})
