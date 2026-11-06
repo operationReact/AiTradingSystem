@@ -77,7 +77,18 @@ def _verify_source_fingerprint(
     source: RegimeSnapshot | IsolationAnomalyObservation,
     field: str,
 ) -> None:
-    payload = source.model_dump(mode="json", exclude={field})
+    # V3 source producers hashed datetime.isoformat() (+00:00), not Pydantic's
+    # JSON serialization (Z). Preserve that legacy canonical source contract.
+    payload = source.model_dump(mode="python", exclude={field})
+    timestamp_fields = (
+        ("as_of", "data_cutoff", "training_data_cutoff")
+        if isinstance(source, RegimeSnapshot)
+        else ("decision_at", "data_cutoff", "training_data_cutoff")
+    )
+    for key in timestamp_fields:
+        value = payload[key]
+        if value is not None:
+            payload[key] = value.isoformat()
     if canonical_fingerprint(payload) != getattr(source, field):
         raise ValueError(f"{field} mismatch: research source was modified")
 
