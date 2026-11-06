@@ -41,7 +41,7 @@ void main() {
     await tester.pump();
 
     expect(tester.takeException(), isNull);
-    expect(find.text('See the market. Find the setup. Test it safely.'), findsOneWidget);
+    expect(find.text('Make informed trading decisions.'), findsOneWidget);
     expect(find.text('Sign in required'), findsOneWidget);
     expect(find.text('Quick access'), findsOneWidget);
 
