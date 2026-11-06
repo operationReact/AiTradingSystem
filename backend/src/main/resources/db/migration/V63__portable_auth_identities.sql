@@ -1,3 +1,9 @@
+-- Customer accounts have a deliberately unprivileged role distinct from the
+-- legacy operator/viewer roles. Signup must never grant trading permissions.
+ALTER TABLE app_user DROP CONSTRAINT ck_app_user_role;
+ALTER TABLE app_user ADD CONSTRAINT ck_app_user_role
+    CHECK (role IN ('VIEWER', 'TRADER', 'ADMIN', 'CUSTOMER'));
+
 -- Provider-neutral identity directory. Application data always belongs to app_user.id.
 -- Authentication credentials and token material are never stored here.
 CREATE TABLE app_auth_identity (
