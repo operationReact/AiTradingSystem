@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../brand/minttick_brand.dart';
+import 'minttick_typography.dart';
 
 enum DesignStyle { neonFuturisticAi, cleanModern }
 
@@ -104,9 +105,11 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
+    textTheme: buildMintTickTextTheme(scheme),
+    materialTapTargetSize: MaterialTapTargetSize.padded,
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
-    visualDensity: const VisualDensity(horizontal: -0.5, vertical: -0.5),
+    visualDensity: VisualDensity.standard,
     focusColor: scheme.primary.withValues(alpha: 0.28),
     hoverColor: scheme.primary.withValues(alpha: 0.08),
     extensions: <ThemeExtension<dynamic>>[
@@ -159,7 +162,7 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
           )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             color: states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
-            fontSize: 10.5,
+            fontSize: 12,
             fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
           )),
     ),
@@ -174,14 +177,14 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        minimumSize: const Size(0, 44),
+        minimumSize: const Size(0, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
       ),
