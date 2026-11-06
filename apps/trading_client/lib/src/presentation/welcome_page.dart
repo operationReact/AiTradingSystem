@@ -99,7 +99,6 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final returningFromSettings = Navigator.of(context).canPop();
     return Scaffold(
       key: const ValueKey('minttick-welcome-screen'),
