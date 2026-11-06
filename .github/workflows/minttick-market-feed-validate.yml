@@ -1,0 +1,66 @@
+name: MintTick read-only market-feed contracts (offline)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'market-feed/**'
+      - 'infra/minttick-market-feed/**'
+      - '.github/workflows/minttick-market-feed-validate.yml'
+      - '.github/workflows/minttick-market-feed-deploy.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'market-feed/**'
+      - 'infra/minttick-market-feed/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run dependency-free read-only Lambda tests
+        run: python3 -m unittest discover -s market-feed -p 'test_*.py' -v
+      - name: Configure Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Check Terraform formatting
+        working-directory: infra/minttick-market-feed
+        run: terraform fmt -check -diff -recursive
+      - name: Validate Lambda IAM module without AWS access
+        working-directory: infra/minttick-market-feed
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Enforce private read-only market-data isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          handler = Path('market-feed/lambda_function.py').read_text()
+          infra = Path('infra/minttick-market-feed/main.tf').read_text()
+          bootstrap = Path('infra/minttick-market-feed/bootstrap-github-oidc-role.yml').read_text()
+          paper = Path('infra/ec2-paper/paper-compose.yml').read_text()
+          assert 'placeOrder' not in handler
+          assert 'modifyOrder' not in handler
+          assert 'cancelOrder' not in handler
+          # PAPER EC2 invoke permission is provisioned by the narrowly scoped
+          # CloudFormation bootstrap policy, not the Lambda Terraform module.
+          assert 'lambda:InvokeFunction' in bootstrap
+          assert 'arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed' in bootstrap
+          assert 'aitrading-paper-ec2-ssm' in bootstrap
+          assert 'ssm:GetParameters' in infra
+          assert 'aws_apigateway' not in infra and 'aws_lambda_function_url' not in infra
+          assert 'ANGELONE_API_KEY:' not in paper
+          assert 'TRADING_MODE: PAPER' in paper
+          print('MintTick read-only Lambda IAM/SSM isolation is preserved')
+          PY

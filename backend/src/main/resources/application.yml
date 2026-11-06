@@ -99,6 +99,8 @@ app:
   market-data:
     # Switching broker data requires only another MarketDataProvider implementation.
     provider: ${MARKET_DATA_PROVIDER:ANGEL_ONE}
+    # Required only when MARKET_DATA_PROVIDER=ANGEL_ONE_LAMBDA; not a secret.
+    lambda-function-name: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:}
     max-range-days: 366
     max-chunks-per-run: 5
     official-sources:

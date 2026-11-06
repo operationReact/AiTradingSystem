@@ -1,0 +1,76 @@
+name: MintTick market feed - explicit plan or apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'plan previews IAM/costs; apply creates the on-demand feed Lambda'
+        required: true
+        type: choice
+        default: plan
+        options: [plan, apply]
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: minttick-market-feed-terraform
+  cancel-in-progress: false
+
+jobs:
+  terraform:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ap-south-1
+      EXPECTED_ACCOUNT: "098859530205"
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_ssm_customer_kms_key_arn: ${{ vars.MINTTICK_FEED_SSM_CUSTOM_KMS_KEY_ARN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Require separate read-only feed deployment role
+        env:
+          ROLE: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
+        run: |
+          set -euo pipefail
+          test "$ROLE" = "arn:aws:iam::098859530205:role/minttick-feed-github-deploy"
+          test "$AWS_REGION" = "ap-south-1"
+          test "$GITHUB_REF" = "refs/heads/dev"
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Authenticate through branch-restricted GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: minttick-feed-${{ github.run_id }}
+      - name: Check target account and offline Lambda tests
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+          python3 -m unittest discover -s market-feed -p 'test_*.py' -v
+      - name: Initialize isolated encrypted Terraform state
+        working-directory: infra/minttick-market-feed
+        run: terraform init -input=false -backend-config=backend.hcl
+      - name: Validate and plan exact market-feed resources
+        working-directory: infra/minttick-market-feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive
+          terraform validate
+          terraform plan -input=false -lock-timeout=90s -out="$RUNNER_TEMP/minttick-feed.tfplan"
+          terraform show -no-color "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Deploy only on explicit apply request
+        if: inputs.operation == 'apply'
+        working-directory: infra/minttick-market-feed
+        run: terraform apply -input=false "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Delete transient plan
+        if: always()
+        run: rm -f "$RUNNER_TEMP/minttick-feed.tfplan"
