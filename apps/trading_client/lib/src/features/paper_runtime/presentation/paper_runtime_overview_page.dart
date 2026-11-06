@@ -30,8 +30,11 @@ class OverviewPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Guest users have no PAPER runtime authority. Show the single account
+    // sign-in CTA from Home without duplicating an unavailable runtime strip
+    // or making an unauthenticated API request.
     final hasProductShell = Theme.of(context).extension<TradingColors>() != null;
-    if (runtimeRepository == null && !hasProductShell) {
+    if (!session.isAuthenticated || (runtimeRepository == null && !hasProductShell)) {
       return existing.OverviewPage(
         session: session,
         dashboardRepository: dashboardRepository,
