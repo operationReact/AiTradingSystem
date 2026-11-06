@@ -57,7 +57,6 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   final neon = style == DesignStyle.neonFuturisticAi;
   const cyan = MintTickPalette.mint;
   const violet = MintTickPalette.teal;
-  const magenta = Color(0xFF28F4B4);
 
   final seed = MintTickPalette.teal;
   final generated = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
