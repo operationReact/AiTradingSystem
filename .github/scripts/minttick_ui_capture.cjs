@@ -38,6 +38,16 @@ const path = require('path');
   await page.goto(base+'#/settings', {waitUntil:'load',timeout:60000});
   await pause(4000);
   await save('07_settings_deeplink');
+  // Switch via MintTick's implemented Settings control, then capture the
+  // very same routes under the actual light-theme state. No theme injection.
+  await page.mouse.click(190, 666);
+  await save('09_settings_light');
+  await nav(39,'10_home_light');
+  await page.mouse.click(192, 502);
+  await save('11_sign_in_light');
+  await nav(117,'12_markets_light');
+  await nav(194,'13_ai_research_light');
+  await nav(271,'14_portfolio_light');
   // Desktop view from same compiled frontend
   const desktopContext = await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1,locale:'en-US',timezoneId:'Asia/Kolkata'});
   const desktop = await desktopContext.newPage();
