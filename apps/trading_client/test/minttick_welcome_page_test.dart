@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:trading_client/src/app.dart';
 import 'package:trading_client/src/brand/minttick_brand.dart';
+import 'package:trading_client/src/data/health_repository.dart';
+import 'package:trading_client/src/data/operator_session.dart';
+import 'package:trading_client/src/domain/health_snapshot.dart';
 import 'package:trading_client/src/presentation/welcome_page.dart';
+
+class _NoHealth implements HealthRepository {
+  @override
+  Future<HealthSnapshot> fetch() =>
+      throw StateError('Guest opening screen must not call backend.');
+}
 
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -45,6 +55,61 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+
+  testWidgets('real TradingApp first launch shows sign in and create account, not Done',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    // Mirrors main.dart: MaterialApp.initialRoute '/welcome' can create
+    // a '/' route underneath it, making Navigator.canPop() true.
+    await tester.pumpWidget(TradingApp(
+      repositoryFactory: _NoHealth.new,
+      session: OperatorSession(),
+      initialRoute: '/welcome',
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MintTickMark), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-welcome-create-account')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-welcome-done')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Settings replay explicitly shows Done and returns to Settings',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () => Navigator.of(context).pushNamed('/welcome-replay'),
+            child: const Text('Open brand replay'),
+          ),
+        ),
+      ),
+      routes: {
+        '/welcome-replay': (_) =>
+            const MintTickWelcomePage(replayFromSettings: true),
+      },
+    ));
+    await tester.tap(find.text('Open brand replay'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('minttick-welcome-done')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsNothing);
+    expect(find.byKey(const ValueKey('minttick-welcome-create-account')),
+        findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('minttick-welcome-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('Open brand replay'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('sign in navigates without waiting for the reveal or audio', (tester) async {
     await pumpWelcome(tester);

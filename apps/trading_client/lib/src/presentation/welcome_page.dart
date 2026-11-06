@@ -12,8 +12,16 @@ import '../theme/app_theme.dart';
 /// First-launch brand screen using the exact approved MintTick vector lockup.
 /// All navigation remains usable while motion, audio, or storage are unavailable.
 class MintTickWelcomePage extends StatefulWidget {
-  const MintTickWelcomePage({super.key, this.sound});
+  const MintTickWelcomePage({
+    super.key,
+    this.sound,
+    this.replayFromSettings = false,
+  });
   final BrandSonicLogo? sound;
+
+  /// Explicit caller intent. Do not infer replay from Navigator.canPop():
+  /// Flutter initialRoute '/welcome' can itself have an underlying '/' route.
+  final bool replayFromSettings;
 
   @override
   State<MintTickWelcomePage> createState() => _MintTickWelcomePageState();
@@ -240,7 +248,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
-    final replayFromSettings = Navigator.of(context).canPop();
+    final replayFromSettings = widget.replayFromSettings;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
