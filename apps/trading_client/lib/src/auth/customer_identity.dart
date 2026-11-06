@@ -16,6 +16,12 @@ abstract class CustomerIdentity {
 
   Future<void> confirmEmail({required String username, required String code});
   Future<void> resendEmailCode(String username);
+  Future<void> requestPasswordReset(String usernameOrEmail);
+  Future<void> confirmPasswordReset({
+    required String usernameOrEmail,
+    required String code,
+    required String newPassword,
+  });
   Future<LoginStep> signIn({required String username, required String password});
   Future<bool> hasSession();
   Future<String?> accessToken();
@@ -94,6 +100,16 @@ class UnavailableCustomerIdentity implements CustomerIdentity {
   Future<void> resendEmailCode(String username) async => _unavailable();
 
   @override
+  Future<void> requestPasswordReset(String usernameOrEmail) async => _unavailable();
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String usernameOrEmail,
+    required String code,
+    required String newPassword,
+  }) async => _unavailable();
+
+  @override
   Future<LoginStep> signIn({required String username, required String password}) async =>
       _unavailable();
 
@@ -157,6 +173,36 @@ class CognitoCustomerIdentity implements CustomerIdentity {
   Future<void> resendEmailCode(String username) async {
     try {
       await Amplify.Auth.resendSignUpCode(username: username);
+    } on AuthException {
+      throw const CustomerAuthenticationFailed();
+    }
+  }
+
+  @override
+  Future<void> requestPasswordReset(String usernameOrEmail) async {
+    try {
+      await Amplify.Auth.resetPassword(username: usernameOrEmail);
+    } on AuthException {
+      // Do not leak whether an account exists. UI uses a generic message.
+      throw const CustomerAuthenticationFailed();
+    }
+  }
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String usernameOrEmail,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      final result = await Amplify.Auth.confirmResetPassword(
+        username: usernameOrEmail,
+        confirmationCode: code,
+        newPassword: newPassword,
+      );
+      if (!result.isPasswordReset) {
+        throw const CustomerAuthenticationFailed();
+      }
     } on AuthException {
       throw const CustomerAuthenticationFailed();
     }
