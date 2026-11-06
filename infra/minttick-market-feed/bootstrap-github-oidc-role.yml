@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   MintTick isolated read-only market-data Lambda Terraform deployer.
-  Creates only an IAM role, no running resource or broker credential copies.
+  Creates IAM deployment and fixed read-only invoke permissions. No running resources or broker secrets.
 Resources:
   MintTickFeedGithubRole:
     Type: AWS::IAM::Role
@@ -78,10 +78,6 @@ Resources:
                 Condition:
                   StringEquals:
                     "iam:PassedToService": lambda.amazonaws.com
-              - Sid: OptionalPaperRoleInvokePolicyOnly
-                Effect: Allow
-                Action: [iam:GetRole, iam:PutRolePolicy, iam:GetRolePolicy, iam:DeleteRolePolicy]
-                Resource: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm
               - Sid: ManageFeedLogGroupOnly
                 Effect: Allow
                 Action:
@@ -97,6 +93,18 @@ Resources:
                 Effect: Allow
                 Action: logs:DescribeLogGroups
                 Resource: "*"
+  MintTickFeedPaperInvokeOnly:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: minttick-invoke-read-only-feed-only
+      Roles:
+        - aitrading-paper-ec2-ssm
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed
 Outputs:
   RoleArn:
     Description: Set GitHub repository variable MINTTICK_FEED_DEPLOY_ROLE_ARN to this ARN.
