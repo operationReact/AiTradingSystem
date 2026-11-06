@@ -22,6 +22,7 @@ class _ResearchPageState extends State<ResearchPage> {
   ResearchCandidateDetail? _selected;
   List<ResearchEvaluation> _evaluations = const [];
   String? _error;
+  bool _signInRequired = false;
   bool _runningScan = false;
   bool _loadingCandidate = false;
   bool _evaluating = false;
@@ -30,6 +31,7 @@ class _ResearchPageState extends State<ResearchPage> {
     setState(() {
       _runningScan = true;
       _error = null;
+      _signInRequired = false;
       _scan = null;
       _candidates = const [];
       _selected = null;
@@ -42,6 +44,20 @@ class _ResearchPageState extends State<ResearchPage> {
       setState(() {
         _scan = scan;
         _candidates = candidates;
+      });
+    } on ApiAuthenticationRequired {
+      if (!mounted) return;
+      setState(() {
+        _signInRequired = true;
+        _error = 'Sign in to run AI research.';
+      });
+    } on ApiHttpFailure catch (failure) {
+      if (!mounted) return;
+      setState(() {
+        _signInRequired = failure.statusCode == 401 || failure.statusCode == 403;
+        _error = _signInRequired
+            ? 'Your session is required to run AI research.'
+            : 'Research is temporarily unavailable.';
       });
     } on ApiFailure {
       if (!mounted) return;
@@ -131,9 +147,8 @@ class _ResearchPageState extends State<ResearchPage> {
                   padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
-                    gradient: LinearGradient(
-                      colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
-                    ),
+                    color: theme.colorScheme.surfaceContainerLow,
+                    border: Border.all(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -141,13 +156,13 @@ class _ResearchPageState extends State<ResearchPage> {
                       Semantics(
                         header: true,
                         child: Text(
-                          'AI opportunity scanner',
+                          'Research opportunities',
                           style: (mobile ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.w900),
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Rank potential setups, inspect risk, and review evidence before any PAPER action.',
+                        'Study potential setups and the evidence behind them. Research results are not guaranteed returns.',
                         style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                           height: mobile ? 1.3 : 1.45,
@@ -162,7 +177,20 @@ class _ResearchPageState extends State<ResearchPage> {
                     key: const ValueKey('research-error'),
                     child: Padding(
                       padding: EdgeInsets.all(mobile ? 12 : 16),
-                      child: Text(_error!),
+                      child: Row(
+                        children: [
+                          Icon(_signInRequired ? Icons.lock_outline : Icons.info_outline,
+                              color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(_error!)),
+                          TextButton(
+                            onPressed: _signInRequired
+                                ? () => Navigator.of(context).pushNamed('/sign-in')
+                                : _runScan,
+                            child: Text(_signInRequired ? 'Sign in' : 'Retry'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -300,7 +328,19 @@ class _ResearchPageState extends State<ResearchPage> {
               if (_runningScan)
                 const Center(child: CircularProgressIndicator())
               else if (_scan == null)
-                Text('Run a scan to discover ranked trade ideas.', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant))
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.insights_outlined, color: Theme.of(context).colorScheme.primary, size: 26),
+                    const SizedBox(height: 10),
+                    Text('No research results yet', style: Theme.of(context).textTheme.titleMedium),
+                    const SizedBox(height: 5),
+                    Text('Choose a timeframe and run a scan to review evidence-based candidates.',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        )),
+                  ],
+                )
               else if (_candidates.isEmpty)
                 const Text('No setups met the current research criteria.')
               else
