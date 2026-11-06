@@ -126,6 +126,10 @@ def test_scoring_rejects_training_time_and_tampered_fitted_trees() -> None:
     with pytest.raises(ValueError, match="tree identity"):
         score_isolation_anomaly(tampered, _context(81))
 
+    fitted.scaler.mean_[0] += 1.0
+    with pytest.raises(ValueError, match="scaler identity"):
+        score_isolation_anomaly(fitted, _context(81))
+
 
 def test_training_rejects_stale_flagged_invalid_and_duplicate_inputs() -> None:
     clean = _contexts()
