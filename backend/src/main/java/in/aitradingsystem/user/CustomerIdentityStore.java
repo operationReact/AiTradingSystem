@@ -64,6 +64,10 @@ public class CustomerIdentityStore {
             var newUser = users.createUser(
                 externalSubject, username == null ? "MintTick user" : username,
                 verifiedEmail, "system:cognito-verified");
+            // Ordinary public registrations must never inherit the legacy VIEWER
+            // API permissions (which can include internal operational data).
+            jdbc.sql("UPDATE app_user SET role = 'CUSTOMER' WHERE id = :userId")
+                .param("userId", newUser.id()).update();
             jdbc.sql("""
                     INSERT INTO app_auth_identity
                         (provider, issuer, subject, user_id)
