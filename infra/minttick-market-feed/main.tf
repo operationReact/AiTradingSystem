@@ -84,18 +84,3 @@ resource "aws_lambda_function" "feed" {
   architectures                  = ["arm64"]
   depends_on                     = [aws_iam_role_policy.read_only_ssm, aws_cloudwatch_log_group.feed]
 }
-
-# No broker credentials on the PAPER host; only Lambda invocation for approved quotes.
-resource "aws_iam_role_policy" "paper_invoke" {
-  count = var.enable_paper_invoke ? 1 : 0
-  role  = "aitrading-paper-ec2-ssm"
-  name  = "minttick-invoke-read-only-feed-only"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["lambda:InvokeFunction"]
-      Resource = aws_lambda_function.feed.arn
-    }]
-  })
-}
