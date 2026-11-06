@@ -3,6 +3,7 @@ package in.aitradingsystem.security;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.util.List;
 import org.springframework.core.convert.converter.Converter;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Component;
  * A new Cognito identity has no app roles until /api/auth/cognito/provision.
  */
 @Component
+@ConditionalOnProperty(prefix = "app.security.cognito", name = "enabled", havingValue = "true")
 public class CognitoJwtAuthenticationConverter implements Converter<Jwt, AbstractAuthenticationToken> {
     private final CustomerIdentityStore identities;
 
