@@ -109,6 +109,17 @@ jobs:
               raise SystemExit('Expected generated Flutter Gradle block was not found')
           updated = updated.replace(marker, modern_kotlin + marker, 1)
           gradle_path.write_text(updated)
+          # Cognito's AWS crypto dependency (Tink) references these runtime
+          # annotation classes; R8 requires the types to be present. Never
+          # disable shrinker checks or use blanket -dontwarn rules.
+          updated = gradle_path.read_text()
+          updated += '''
+dependencies {
+    implementation("com.google.errorprone:error_prone_annotations:2.36.0")
+    implementation("com.google.code.findbugs:jsr305:3.0.2")
+}
+'''
+          gradle_path.write_text(updated)
 
           activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
           activity_text = activity_path.read_text()
