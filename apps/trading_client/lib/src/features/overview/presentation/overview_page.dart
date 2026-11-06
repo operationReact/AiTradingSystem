@@ -70,7 +70,7 @@ class OverviewPage extends StatelessWidget {
                           mainAxisSpacing: mobile ? 8 : 12,
                           crossAxisSpacing: mobile ? 8 : 12,
                           childAspectRatio: switch (layout) {
-                            ResponsiveClass.mobile => width >= 360 ? 4.3 : 3.75,
+                            ResponsiveClass.mobile => width >= 360 ? 4.3 : 3.35,
                             ResponsiveClass.adaptive => 1.45,
                             ResponsiveClass.desktop => 1.2,
                           },
@@ -290,21 +290,19 @@ class _AccountPanelState extends State<_AccountPanel> {
             ),
             SizedBox(height: mobile ? 6 : 8),
             if (!signedIn)
-              Container(
+              Padding(
                 key: const ValueKey('dashboard-sign-in-required'),
-                width: double.infinity,
-                padding: EdgeInsets.all(mobile ? 12 : 18),
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(mobile ? 14 : 18), color: theme.colorScheme.primaryContainer.withValues(alpha: 0.32)),
+                padding: const EdgeInsets.only(top: 4),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Secure sign-in is required', style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
                     Text(
-                      mobile ? 'Sign in for your PAPER portfolio, AI ideas, and trading controls.' : 'Sign in to view your PAPER portfolio, AI opportunities, and account-specific trading controls.',
-                      style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant, height: mobile ? 1.3 : 1.45),
+                      'Connect your account to view PAPER balances, AI research and trading controls.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                    SizedBox(height: mobile ? 9 : 14),
+                    const SizedBox(height: 12),
                     SizedBox(
                       width: mobile ? double.infinity : null,
                       child: FilledButton.icon(
