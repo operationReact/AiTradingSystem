@@ -61,7 +61,7 @@ resource "aws_iam_role_policy" "read_only_ssm" {
             "kms:ViaService" = "ssm.ap-south-1.amazonaws.com"
           }
         }
-      }])
+    }])
   })
 }
 
