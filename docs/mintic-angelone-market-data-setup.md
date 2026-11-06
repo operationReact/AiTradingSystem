@@ -34,33 +34,47 @@ Do not label it as an exchange-real-time timestamp. Streaming remains a separate
 Never commit actual values, paste them into chat, put them in Flutter/dart-defines, or
 put them into public GitHub Actions output. The backend generates each short-lived TOTP.
 
-## Secure runtime injection — current EC2 dev pilot
+## Secure runtime configuration — no local setup
 
-For the existing EC2 PAPER backend, `infra/ec2-paper/paper-compose.yml` now forwards
-the four environment variables to **the backend container only**. The existing
-`infra/ec2-paper/run_paper.sh` reads host-local
-`/opt/aitradingsystem-paper/runtime.env` (permission 0600) and builds a restricted
-runtime Compose env file. The web container receives none of the credentials.
+For an initial private development pilot, create four AWS Systems Manager Parameter Store
+**SecureString** parameters in **ap-south-1** (AWS Console → Systems Manager →
+Application Management → Parameter Store → Create parameter):
 
-Use AWS Systems Manager **Session Manager**, not a public SSH listener, to access the
-already-authorized instance and update that root-owned file in a restricted shell.
-Do not enable a verbose shell, copy secrets into command arguments, log them, or use
-unrestricted CI job variables. The next EC2 release must contain the updated Compose
-file; simply changing the repository does **not** change the deployed container.
+| Name | Purpose |
+|---|---|
+| `/mintic/dev/angelone/api-key` | SmartAPI application's API key |
+| `/mintic/dev/angelone/client-code` | Trading client code |
+| `/mintic/dev/angelone/login-pin` | Trading account login PIN |
+| `/mintic/dev/angelone/totp-secret` | Base32 TOTP enrollment secret |
 
-Recommended durable secret storage for future automated provisioning: AWS Systems
-Manager Parameter Store, `SecureString` (KMS), in **ap-south-1** under four paths:
-`/mintic/dev/angelone/api-key`, `/mintic/dev/angelone/client-code`,
-`/mintic/dev/angelone/login-pin`, `/mintic/dev/angelone/totp-secret`.
-A role-scoped, non-logging deployment retrieval step is still required before these
-parameters automatically populate `runtime.env`. **Creating the parameters alone
-does not wire them to the app.** Restrict `ssm:GetParameters` and `kms:Decrypt`
-to the EC2 instance role and relevant parameter ARNs/key; audit access and rotate
-on compromise. GitHub repository secrets are not a runtime secret store for EC2.
+Set **Tier = Standard** (subject to account limits) and **Type = SecureString**.
+Prefer a scoped customer-managed KMS key if fine-grained access control is needed.
+Never paste values into a chat, repository, Flutter app, Terraform state, or GitHub
+Actions build logs. Restrict future runtime role permissions to these four parameter
+ARNs; restrict `kms:Decrypt` to the selected key and approved SSM context. Do not
+grant write permissions to ordinary application processes.
+
+**Critical deployment boundary:** the existing `infra/ec2-paper/paper-compose.yml`
+and its cost/safety policy explicitly forbid `ANGELONE_API_KEY` and other broker
+credentials. This PR intentionally **does not** change that stack. It remains
+PAPER-only and localhost-bound; it is not a broker-connected runtime.
+
+The Spring Boot application already accepts the four environment names, but
+Parameter Store is **not automatically wired to this app**. A later, separately
+approved read-only market-data runtime must fetch the four SecureStrings at
+startup, inject them as server-only environment variables without logging,
+and use a role restricted to those specific SSM parameters. That runtime must
+not have order execution permission or user-facing public credential exposure.
+Only after this injection should `POST /api/providers/angel-one/test-connection`
+be used to validate the authorized SmartAPI session.
+
+For local experiments only, ignored process environment variables are supported
+via `application.yml`; do not add actual secrets to `.env.example` or commit them.
+The current PR is code integration, not a live broker login or AWS deployment.
 
 ## Validation plan
 
-After a reviewed deployment and runtime injection:
+After a reviewed deployment to a *separate read-only market-data runtime* and verified secret injection:
 
 1. `GET /api/providers/angel-one/status` — confirms configuration state without
    returning secret values.
