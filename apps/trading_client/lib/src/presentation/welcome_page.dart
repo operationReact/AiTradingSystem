@@ -4,18 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../auth/customer_identity.dart';
 import '../brand/minttick_brand.dart';
 import '../theme/app_theme.dart';
 
-/// Brand-first, single-screen login. The identity-provider handshake is not
-/// implemented yet: no credentials are transmitted, stored or authenticated.
+/// Brand-first, single-screen customer login. Cognito validates credentials;
+/// MintTick backend must independently provision a verified permanent user ID.
 class MintTickWelcomePage extends StatefulWidget {
   const MintTickWelcomePage({
     super.key,
     this.replayFromSettings = false,
+    this.onAuthenticated,
   });
 
   final bool replayFromSettings;
+  final VoidCallback? onAuthenticated;
 
   @override
   State<MintTickWelcomePage> createState() => _MintTickWelcomePageState();
@@ -34,6 +37,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
 
   bool _passwordVisible = false;
   bool _rememberMe = false;
+  bool _busy = false;
 
   @override
   void dispose() {
@@ -51,18 +55,53 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     }
   }
 
-  void _signIn() {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
-    // Never send credentials to an unauthenticated or placeholder endpoint.
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Secure sign-in is not connected yet. Your credentials were not sent or saved.'),
-    ));
+  Future<void> _signIn() async {
+    if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
+    setState(() => _busy = true);
+    try {
+      final login = await MintTickIdentity.current.signIn(
+        username: _username.text.trim(),
+        password: _password.text,
+      );
+      if (!mounted) return;
+      switch (login) {
+        case LoginStep.complete:
+          // Cognito success does not grant MintTick access: the backend must
+          // validate the JWT, verify email, and provision the persistent UUID.
+          await MintTickCustomerAccountApi().provision();
+          // A user preference only, never store passwords or tokens here.
+          // The Cognito SDK persists credentials securely on supported devices.
+          await SharedPreferencesAsync().setBool(
+            'minttick.auth.remember_me.v1', _rememberMe);
+          if (!mounted) return;
+          _password.clear();
+          if (widget.onAuthenticated != null) {
+            widget.onAuthenticated!();
+          } else {
+            Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+          }
+        case LoginStep.emailConfirmationRequired:
+          _showMessage('Verify your email before signing in.');
+        case LoginStep.additionalChallenge:
+          _showMessage('Additional account verification is required. Sign-in is not complete.');
+      }
+    } on CustomerAuthenticationUnavailable {
+      if (mounted) _showMessage('Secure sign-in is not configured yet.');
+    } catch (_) {
+      if (mounted) _showMessage('Unable to sign in. Check your details or account verification.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   void _forgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Password recovery will be available when secure account access is connected.'),
-    ));
+    Navigator.of(context).pushNamed('/forgot-password');
   }
 
   Future<void> _createAccount() async {
@@ -139,8 +178,8 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             controller: _username,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.username],
-            decoration: _fieldDecoration('Username', Icons.person_outline_rounded),
-            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your username' : null,
+            decoration: _fieldDecoration('Email or username', Icons.person_outline_rounded),
+            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your email or username' : null,
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -151,7 +190,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             autocorrect: false,
             autofillHints: const [AutofillHints.password],
             textInputAction: TextInputAction.done,
-            onFieldSubmitted: (_) => _signIn(),
+            onFieldSubmitted: (_) { _signIn(); },
             decoration: _fieldDecoration(
               'Password',
               Icons.lock_outline_rounded,
@@ -192,7 +231,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
               ),
               TextButton(
                 key: const ValueKey('minttick-forgot-password'),
-                onPressed: _forgotPassword,
+                onPressed: _busy ? null : _forgotPassword,
                 child: const Text('Forgot password?', style: TextStyle(fontSize: 13)),
               ),
             ],
@@ -202,14 +241,16 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             height: 54,
             child: FilledButton(
               key: const ValueKey('minttick-welcome-sign-in'),
-              onPressed: _signIn,
+              onPressed: _busy ? null : _signIn,
               style: FilledButton.styleFrom(
                 backgroundColor: MintTickPalette.teal,
                 foregroundColor: MintTickPalette.navy,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
-              child: const Text('Sign in'),
+              child: _busy
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Sign in'),
             ),
           ),
           const SizedBox(height: 20),
@@ -228,7 +269,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             height: 54,
             child: OutlinedButton(
               key: const ValueKey('minttick-welcome-create-account'),
-              onPressed: _createAccount,
+              onPressed: _busy ? null : _createAccount,
               style: OutlinedButton.styleFrom(
                 foregroundColor: MintTickPalette.ice,
                 backgroundColor: const Color(0xFF14232D),

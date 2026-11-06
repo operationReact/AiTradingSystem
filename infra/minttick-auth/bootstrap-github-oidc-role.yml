@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  Bootstrap least-privilege GitHub dev-branch identity Terraform role for MintTick
+  Cognito Essentials. No persistent compute, public ports, or app credentials.
+
+Resources:
+  MintTickAuthGithubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: minttick-auth-github-deploy
+      Description: Only dev-branch MintTick Cognito user pools and isolated encrypted Terraform state
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub":
+                  # Standard GitHub sub and immutable-ID custom sub used by
+                  # this project's existing GitHub OIDC deployment template.
+                  - "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                  - "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+      Policies:
+        - PolicyName: minttick-auth-terraform-state-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InspectDedicatedStateBucketLocation
+                Effect: Allow
+                Action: s3:GetBucketLocation
+                Resource: arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1
+              - Sid: ListOnlyDedicatedStatePrefix
+                Effect: Allow
+                Action: s3:ListBucket
+                Resource: arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1
+                Condition:
+                  StringLike:
+                    "s3:prefix": ["ai-trading/minttick-auth/dev/*"]
+              - Sid: ReadWriteDedicatedEncryptedStateAndLock
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject]
+                Resource:
+                  - arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/minttick-auth/dev/terraform.tfstate
+                  - arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/minttick-auth/dev/terraform.tfstate.tflock
+              - Sid: DeleteOnlyTransientLock
+                Effect: Allow
+                Action: s3:DeleteObject
+                Resource: arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1/ai-trading/minttick-auth/dev/terraform.tfstate.tflock
+        - PolicyName: minttick-auth-cognito-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CreateOnlyMintTickTaggedUserPools
+                Effect: Allow
+                Action: cognito-idp:CreateUserPool
+                Resource: "*"
+                Condition:
+                  StringEquals:
+                    "aws:RequestTag/Application": MintTick
+                    "aws:RequestTag/Environment": dev
+              - Sid: ReadPoolInventory
+                Effect: Allow
+                Action: cognito-idp:ListUserPools
+                Resource: "*"
+              - Sid: ManageOnlyDevTaggedUserPoolsAndAppClients
+                Effect: Allow
+                Action:
+                  - cognito-idp:DescribeUserPool
+                  - cognito-idp:UpdateUserPool
+                  - cognito-idp:GetUserPoolMfaConfig
+                  - cognito-idp:SetUserPoolMfaConfig
+                  - cognito-idp:ListTagsForResource
+                  - cognito-idp:TagResource
+                  - cognito-idp:UntagResource
+                  - cognito-idp:ListUserPoolClients
+                  - cognito-idp:CreateUserPoolClient
+                  - cognito-idp:DescribeUserPoolClient
+                  - cognito-idp:UpdateUserPoolClient
+                  - cognito-idp:DeleteUserPoolClient
+                Resource: arn:aws:cognito-idp:ap-south-1:098859530205:userpool/ap-south-1_*
+                Condition:
+                  StringEquals:
+                    "aws:ResourceTag/Application": MintTick
+                    "aws:ResourceTag/Environment": dev
+              # DeleteUserPool intentionally NOT allowed to this CI role.
+
+Outputs:
+  RoleArn:
+    Description: >-
+      Dedicated OIDC role for MintTick auth Terraform. The role is trusted
+      exclusively by the AiTradingSystem dev branch.
+    Value: !GetAtt MintTickAuthGithubRole.Arn

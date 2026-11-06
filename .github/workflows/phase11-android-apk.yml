@@ -12,6 +12,14 @@ on:
         description: 'HTTPS base URL reachable from the physical Android device (for example https://api.example.com)'
         required: true
         type: string
+      cognito_user_pool_id:
+        description: 'Cognito User Pool ID from the MintTick Terraform output (ap-south-1_...)'
+        required: true
+        type: string
+      cognito_client_id:
+        description: 'Cognito public Flutter app client ID; never a client secret'
+        required: true
+        type: string
 
 concurrency:
   group: phase11-android-apk-${{ github.event.pull_request.number || github.ref }}
@@ -29,6 +37,8 @@ jobs:
         working-directory: apps/trading_client
     env:
       API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://apk-ci.invalid' }}
+      MINTTICK_COGNITO_USER_POOL_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_user_pool_id || '' }}
+      MINTTICK_COGNITO_CLIENT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_client_id || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +48,7 @@ jobs:
           python3 - <<'PY'
           import os
           from urllib.parse import urlparse
+          import re
 
           raw = os.environ['API_BASE_URL'].strip()
           parsed = urlparse(raw)
@@ -46,7 +57,14 @@ jobs:
               raise SystemExit('api_base_url must be an absolute HTTPS URL reachable from the Android phone')
           if parsed.hostname.lower() in blocked:
               raise SystemExit('api_base_url cannot target localhost or the Android-emulator host alias')
+          pool = os.environ['MINTTICK_COGNITO_USER_POOL_ID'].strip()
+          client = os.environ['MINTTICK_COGNITO_CLIENT_ID'].strip()
+          if not re.fullmatch(r'ap-south-1_[A-Za-z0-9]+', pool):
+              raise SystemExit('cognito_user_pool_id must be a Mumbai Cognito pool ID')
+          if not re.fullmatch(r'[a-z0-9]{16,}', client):
+              raise SystemExit('cognito_client_id must be a public Cognito app client ID')
           print(f'Validated physical-device endpoint: {parsed.scheme}://{parsed.hostname}')
+          print('Validated public Cognito User Pool and client identifiers (no secrets)')
           PY
 
       - name: Mark CI-only endpoint
@@ -91,6 +109,17 @@ jobs:
               raise SystemExit('Expected generated Flutter Gradle block was not found')
           updated = updated.replace(marker, modern_kotlin + marker, 1)
           gradle_path.write_text(updated)
+          # Cognito's AWS crypto dependency (Tink) references these runtime
+          # annotation classes; R8 requires the types to be present. Never
+          # disable shrinker checks or use blanket -dontwarn rules.
+          updated = gradle_path.read_text()
+          updated += '''
+          dependencies {
+              implementation("com.google.errorprone:error_prone_annotations:2.36.0")
+              implementation("com.google.code.findbugs:jsr305:3.0.2")
+          }
+          '''
+          gradle_path.write_text(updated)
 
           activity_path = Path('android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt')
           activity_text = activity_path.read_text()
@@ -98,11 +127,24 @@ jobs:
           if expected not in activity_text:
               raise SystemExit('Expected generated MainActivity package declaration was not found')
           activity_path.write_text(activity_text.replace(expected, 'package `in`.aitradingsystem.trading_client', 1))
+
+          # Flutter's generated release manifest may omit INTERNET permission.
+          # A customer authentication APK cannot contact Cognito or MintTick without it.
+          manifest_path = Path('android/app/src/main/AndroidManifest.xml')
+          manifest = manifest_path.read_text()
+          permission = '<uses-permission android:name="android.permission.INTERNET" />'
+          if permission not in manifest:
+              root_close = manifest.find('>', manifest.find('<manifest'))
+              if root_close == -1:
+                  raise SystemExit('Generated Android manifest has no <manifest> root')
+              manifest = manifest[:root_close + 1] + '\n    ' + permission + manifest[root_close + 1:]
+              manifest_path.write_text(manifest)
           PY
           grep -q '^android.newDsl=false$' android/gradle.properties
           grep -q 'compilerOptions' android/app/build.gradle.kts
           ! grep -q 'kotlinOptions' android/app/build.gradle.kts
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
       - name: Resolve dependencies
         run: flutter pub get
@@ -114,7 +156,12 @@ jobs:
         run: flutter test
 
       - name: Build sideloadable release APK
-        run: flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+        run: |
+          flutter build apk --release \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID"
 
       - name: Record APK checksum
         run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256

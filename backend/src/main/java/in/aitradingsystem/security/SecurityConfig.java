@@ -4,6 +4,7 @@ import java.net.URI;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -31,6 +32,8 @@ public class SecurityConfig {
             ApiKeyAuthenticationFilter apiKeyFilter,
             SessionAuthenticationFilter sessionFilter,
             SessionCsrfFilter sessionCsrfFilter,
+            ObjectProvider<CognitoJwtAuthenticationConverter> cognitoConverter,
+            @Value("${app.security.cognito.enabled:false}") boolean cognitoEnabled,
             CorsConfigurationSource corsSource) throws Exception {
         http.csrf(csrf -> csrf.disable())
             .cors(cors -> cors.configurationSource(corsSource))
@@ -55,6 +58,9 @@ public class SecurityConfig {
                     .hasAnyRole("ADMIN", "OPERATOR")
                 .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
                     .hasAnyRole("TRADER", "ADMIN", "OPERATOR")
+                // A valid, verified Cognito access JWT can provision an
+                // account, but has no VIEWER role until locally linked.
+                .requestMatchers("/api/auth/cognito/provision", "/api/auth/cognito/me").authenticated()
                 .requestMatchers("/api/auth/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
                 .requestMatchers(HttpMethod.GET, "/api/**").hasAnyRole("VIEWER", "TRADER", "ADMIN", "OPERATOR")
                 .requestMatchers("/api/**").hasAnyRole("ADMIN", "OPERATOR")
@@ -63,6 +69,10 @@ public class SecurityConfig {
             .addFilterAfter(apiKeyFilter, SecurityHardeningFilter.class)
             .addFilterBefore(sessionFilter, ApiKeyAuthenticationFilter.class)
             .addFilterAfter(sessionCsrfFilter, ApiKeyAuthenticationFilter.class);
+        if (cognitoEnabled) {
+            http.oauth2ResourceServer(oauth2 -> oauth2
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(cognitoConverter.getObject())));
+        }
         return http.build();
     }
 
@@ -87,7 +97,7 @@ public class SecurityConfig {
         config.setAllowedOrigins(normalizedOrigins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of(
-            "Content-Type", ApiKeyAuthenticationFilter.HEADER, SessionAuthenticationFilter.CSRF_HEADER,
+            "Content-Type", "Authorization", ApiKeyAuthenticationFilter.HEADER, SessionAuthenticationFilter.CSRF_HEADER,
             "Idempotency-Key", "X-Correlation-Id"));
         config.setExposedHeaders(List.of("X-Correlation-Id"));
         config.setAllowCredentials(true);

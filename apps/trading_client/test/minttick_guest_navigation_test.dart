@@ -33,9 +33,10 @@ void main() {
   for (final width in [320.0, 390.0, 411.0]) {
     testWidgets('Sign-in has no trading tab bar at ${width.toInt()}dp', (tester) async {
       await _pumpGuest(tester, '/sign-in', width: width);
-      expect(find.text('Welcome to MintTick'), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-inline-username')), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsOneWidget);
       expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
-      expect(find.byKey(const ValueKey('secure-sign-in-continue')), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-inline-password')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -46,7 +47,8 @@ void main() {
     expect(find.byKey(const ValueKey('market-stock-list')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('market-guest-sign-in')));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to MintTick'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-username')), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsOneWidget);
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -57,7 +59,8 @@ void main() {
     expect(find.byKey(const ValueKey('research-run-scan')), findsNothing);
     await tester.tap(find.byKey(const ValueKey('research-guest-sign-in')));
     await tester.pumpAndSettle();
-    expect(find.text('Welcome to MintTick'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-username')), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsOneWidget);
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsNothing);
     expect(tester.takeException(), isNull);
   });

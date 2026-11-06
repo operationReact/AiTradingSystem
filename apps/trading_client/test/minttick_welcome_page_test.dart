@@ -117,13 +117,13 @@ void main() {
     await pumpWelcome(tester);
     await tester.tap(find.byKey(const ValueKey('minttick-welcome-sign-in')));
     await tester.pumpAndSettle();
-    expect(find.text('Enter your username'), findsOneWidget);
+    expect(find.text('Enter your email or username'), findsOneWidget);
     expect(find.text('Enter your password'), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('minttick-inline-username')), 'sample-user');
     await tester.enterText(find.byKey(const ValueKey('minttick-inline-password')), 'not-a-real-password');
     await tester.tap(find.byKey(const ValueKey('minttick-welcome-sign-in')));
     await tester.pump();
-    expect(find.textContaining('not connected yet'), findsOneWidget);
+    expect(find.textContaining('not configured yet'), findsOneWidget);
     expect(find.text('Sign in destination'), findsNothing);
     expect(tester.takeException(), isNull);
   });

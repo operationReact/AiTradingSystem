@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'auth/customer_identity.dart';
 
 import 'brand/minttick_brand.dart';
 import 'data/authenticated_api_client.dart';
@@ -32,7 +35,9 @@ import 'presentation/research_experiment_jobs_page.dart';
 import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
-import 'presentation/sign_in_page.dart';
+import 'presentation/create_account_page.dart';
+import 'presentation/customer_account_page.dart';
+import 'presentation/password_recovery_page.dart';
 import 'presentation/welcome_page.dart';
 import 'theme/app_theme.dart';
 
@@ -85,7 +90,7 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay') {
+          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account') {
             return child ?? const SizedBox.shrink();
           }
           if (constraints.maxWidth >= 900) {
@@ -115,9 +120,20 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
-        '/sign-in': (_) => const SignInPage(),
-        '/sign-up': (_) => const SignInPage(isRegistration: true),
-        '/welcome': (_) => const MintTickWelcomePage(),
+        '/account': (_) => CustomerAccountPage(
+          loadAccount: () async {
+            final data = await _api.getJson('/api/auth/cognito/me');
+            if (data is! Map<String, dynamic>) {
+              throw const FormatException('Invalid account profile');
+            }
+            return data;
+          },
+          onSignOut: _signOut,
+        ),
+        '/sign-in': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
+        '/sign-up': (_) => const CreateAccountPage(),
+        '/forgot-password': (_) => const PasswordRecoveryPage(),
+        '/welcome': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/welcome-replay': (_) => const MintTickWelcomePage(replayFromSettings: true),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
         '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
@@ -143,6 +159,7 @@ class _TradingAppState extends State<TradingApp> {
         '/settings': (_) => SettingsPage(
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
+              onSignOut: _signOut,
               tradingControlRepository: HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
@@ -159,6 +176,28 @@ class _TradingAppState extends State<TradingApp> {
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(builder: (_) => _overviewPage()),
     );
+  }
+
+  Future<void> _signOut() async {
+    // Clear local access first even if the provider cannot be contacted.
+    widget.session.clear();
+    try {
+      await SharedPreferencesAsync().setBool('minttick.auth.remember_me.v1', false);
+    } catch (_) {
+      // Never depend on a stored preference to revoke local access.
+    }
+    try {
+      await MintTickIdentity.current.signOut();
+    } catch (_) {
+      // User must still return to login. Access JWTs expire on the server.
+    }
+    if (!mounted) return;
+    _navigate('/welcome');
+  }
+
+  void _onCustomerAuthenticated() {
+    widget.session.markCustomerAuthenticated();
+    _navigate('/account');
   }
 
   void _navigate(String route) {

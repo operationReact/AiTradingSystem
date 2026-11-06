@@ -10,12 +10,14 @@ class SettingsPage extends StatelessWidget {
     required this.themeMode,
     required this.onThemeModeChanged,
     this.tradingControlRepository,
+    this.onSignOut,
     super.key,
   });
 
   final ThemeMode themeMode;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final TradingControlRepository? tradingControlRepository;
+  final Future<void> Function()? onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -84,11 +86,23 @@ class SettingsPage extends StatelessWidget {
                 key: const ValueKey('settings-replay-brand-intro'),
                 leading: const Icon(Icons.animation_outlined),
                 title: const Text('Brand introduction'),
-                subtitle: const Text('Replay the original MintTick logo and optional sound.'),
+                subtitle: const Text('View the approved MintTick brand logo.'),
                 trailing: const Icon(Icons.chevron_right_rounded),
                 onTap: () => Navigator.of(context).pushNamed('/welcome-replay'),
               ),
             ),
+            if (onSignOut != null) ...[
+              const SizedBox(height: 14),
+              Card(
+                child: ListTile(
+                  key: const ValueKey('minttick-settings-sign-out'),
+                  leading: const Icon(Icons.logout_rounded),
+                  title: const Text('Sign out'),
+                  subtitle: const Text('End your MintTick session on this device.'),
+                  onTap: () async => onSignOut?.call(),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             Text('Trading controls',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
