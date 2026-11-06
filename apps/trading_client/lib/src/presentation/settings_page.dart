@@ -86,7 +86,7 @@ class SettingsPage extends StatelessWidget {
                 title: const Text('Brand introduction'),
                 subtitle: const Text('Replay the original MintTick logo and optional sound.'),
                 trailing: const Icon(Icons.chevron_right_rounded),
-                onTap: () => Navigator.of(context).pushNamed('/welcome'),
+                onTap: () => Navigator.of(context).pushNamed('/welcome-replay'),
               ),
             ),
             const SizedBox(height: 24),
