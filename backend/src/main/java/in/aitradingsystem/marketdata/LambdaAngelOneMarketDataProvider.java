@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import in.aitradingsystem.instrument.Instrument;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
@@ -109,7 +110,7 @@ public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
             }
             if (!source().equals(root.path("source").asText())) throw invalidResponse();
             return root;
-        } catch (JsonProcessingException ex) {
+        } catch (IOException ex) {
             throw invalidResponse();
         }
     }
