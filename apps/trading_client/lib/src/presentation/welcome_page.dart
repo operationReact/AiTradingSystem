@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../brand/minttick_brand.dart';
 import '../brand/minttick_sonic_logo.dart';
 import '../theme/app_theme.dart';
 
-/// Guest-first brand experience. Never blocks access on animation/audio and
-/// never requests broker credentials or public market data.
+/// First-launch brand screen using the exact approved MintTick vector lockup.
+/// All navigation remains usable while motion, audio, or storage are unavailable.
 class MintTickWelcomePage extends StatefulWidget {
   const MintTickWelcomePage({super.key, this.sound});
   final BrandSonicLogo? sound;
@@ -28,7 +30,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   );
   BrandSonicLogo? _ownedSound;
   bool _soundEnabled = false;
-  bool _interacted = false;
+  bool _soundPreferenceTouched = false;
 
   BrandSonicLogo get _sound => widget.sound ?? (_ownedSound ??= BrandSonicLogo());
 
@@ -42,21 +44,27 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   Future<void> _restoreSoundPreference() async {
     try {
       final enabled = await SharedPreferencesAsync().getBool(soundKey) ?? false;
-      if (mounted && !_interacted) setState(() => _soundEnabled = enabled);
+      if (mounted && !_soundPreferenceTouched) {
+        setState(() => _soundEnabled = enabled);
+      }
     } catch (_) {
-      // Launch remains fully usable when preferences are unavailable.
+      // The opening screen must render even without a local preferences plugin.
     }
   }
 
   Future<void> _toggleSound() async {
-    _interacted = true;
+    _soundPreferenceTouched = true;
     final enabled = !_soundEnabled;
     setState(() => _soundEnabled = enabled);
     unawaited(_saveSoundPreference(enabled));
     if (enabled) {
       await _playSound();
     } else {
-      await _sound.stop();
+      try {
+        await _sound.stop();
+      } catch (_) {
+        // Audio is never a prerequisite for interacting with the app.
+      }
     }
   }
 
@@ -64,7 +72,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     try {
       await SharedPreferencesAsync().setBool(soundKey, enabled);
     } catch (_) {
-      // Audio opt-in remains optional if local storage is unavailable.
+      // The local preference is best effort, not an authentication state.
     }
   }
 
@@ -72,7 +80,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     try {
       await _sound.play();
     } catch (_) {
-      // This is an optional flourish; unsupported audio must not block login.
+      // Devices without an audio engine still display the approved logo.
     }
   }
 
@@ -81,19 +89,14 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     if (_soundEnabled) unawaited(_playSound());
   }
 
-  Future<void> _continue() async {
+  Future<void> _enter(String route) async {
     try {
       await SharedPreferencesAsync().setBool(seenKey, true);
     } catch (_) {
-      // Failing to persist a cosmetic preference must not block navigation.
+      // Never block sign-in/create-account navigation on local storage.
     }
     if (!mounted) return;
-    final navigator = Navigator.of(context);
-    if (navigator.canPop()) {
-      navigator.pop();
-    } else {
-      navigator.pushNamedAndRemoveUntil('/sign-in', (_) => false);
-    }
+    Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
   }
 
   @override
@@ -103,162 +106,211 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     super.dispose();
   }
 
+  Widget _logo({required double availableWidth, required bool reduceMotion}) {
+    final compact = availableWidth < 350;
+    final markWidth = compact ? 82.0 : 104.0;
+    final fontSize = compact ? 31.0 : 39.0;
+    final width = math.min(availableWidth - 28, compact ? 280.0 : 350.0);
+    return AnimatedBuilder(
+      animation: _reveal,
+      builder: (context, child) {
+        final progress = reduceMotion
+            ? 1.0
+            : Curves.easeOutCubic.transform(_reveal.value);
+        return Opacity(
+          opacity: progress.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1 - progress) * 14),
+            child: Transform(
+              alignment: Alignment.center,
+              transform: Matrix4.identity()
+                ..setEntry(3, 2, 0.0005)
+                ..rotateY((1 - progress) * 0.06),
+              child: Transform.scale(
+                scale: 0.975 + 0.025 * progress,
+                child: child,
+              ),
+            ),
+          ),
+        );
+      },
+      // The mark and lettering are the real MintTickMark/MintTickLockup
+      // widgets. Never synthesize or recolor the approved logo for mockups.
+      child: SizedBox(
+        width: width,
+        child: Theme(
+          data: buildTheme(Brightness.dark),
+          child: MintTickLockup(markWidth: markWidth, fontSize: fontSize),
+        ),
+      ),
+    );
+  }
+
+  Widget _actions(BuildContext context, {required bool replayFromSettings}) {
+    final primaryStyle = FilledButton.styleFrom(
+      minimumSize: const Size(double.infinity, 54),
+      foregroundColor: MintTickPalette.navy,
+      backgroundColor: MintTickPalette.mint,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+    );
+    final secondaryStyle = OutlinedButton.styleFrom(
+      minimumSize: const Size(double.infinity, 54),
+      foregroundColor: MintTickPalette.ice,
+      backgroundColor: const Color(0xFF19232D),
+      side: const BorderSide(color: Color(0xFF789A9C)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (replayFromSettings)
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const ValueKey('minttick-welcome-done'),
+              onPressed: () => Navigator.of(context).pop(),
+              style: primaryStyle,
+              child: const Text('Done'),
+            ),
+          )
+        else ...[
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              key: const ValueKey('minttick-welcome-sign-in'),
+              onPressed: () => _enter('/sign-in'),
+              style: primaryStyle,
+              child: const Text('Sign in'),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              key: const ValueKey('minttick-welcome-create-account'),
+              onPressed: () => _enter('/sign-up'),
+              style: secondaryStyle,
+              child: const Text('Create account'),
+            ),
+          ),
+        ],
+        const SizedBox(height: 18),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextButton(
+              key: const ValueKey('minttick-welcome-sound-toggle'),
+              onPressed: _toggleSound,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF94A5AD),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(44, 44),
+              ),
+              child: Text(_soundEnabled ? 'Sound on' : 'Sound off'),
+            ),
+            const Text('·', style: TextStyle(color: Color(0xFF94A5AD))),
+            TextButton(
+              key: const ValueKey('minttick-welcome-replay'),
+              onPressed: _replay,
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF94A5AD),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(44, 44),
+              ),
+              child: const Text('Replay intro'),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
-    final theme = Theme.of(context);
-    final returningFromSettings = Navigator.of(context).canPop();
-    return Scaffold(
-      key: const ValueKey('minttick-welcome-screen'),
-      backgroundColor: MintTickPalette.navy,
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, box) => SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: box.maxHeight - 40),
-              child: Center(
+    final replayFromSettings = Navigator.of(context).canPop();
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        key: const ValueKey('minttick-welcome-screen'),
+        backgroundColor: MintTickPalette.navy,
+        body: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, bounds) {
+              final horizontal = bounds.maxWidth < 380 ? 22.0 : 26.0;
+              return SingleChildScrollView(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 440),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        height: 250,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // A stationary, muted halo adds depth without
-                            // recoloring or distorting the canonical SVG mark.
-                            Container(
-                              width: 280,
-                              height: 230,
-                              decoration: BoxDecoration(
-                                gradient: RadialGradient(
-                                  colors: [
-                                    MintTickPalette.teal.withValues(alpha: 0.11),
-                                    Colors.transparent,
-                                  ],
-                                ),
-                              ),
+                  constraints: BoxConstraints(minHeight: bounds.maxHeight),
+                  child: Padding(
+                    padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 26),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: math.max(0, bounds.maxHeight - 38),
+                      ),
+                      child: Column(
+                        children: [
+                          SizedBox(
+                            height: math.max(
+                              280,
+                              bounds.maxHeight < 630
+                                  ? 300
+                                  : bounds.maxHeight - (replayFromSettings ? 150 : 210),
                             ),
-                            AnimatedBuilder(
-                              animation: _reveal,
-                              builder: (context, child) {
-                                final progress = reduceMotion
-                                    ? 1.0
-                                    : Curves.easeOutCubic.transform(_reveal.value);
-                                return Opacity(
-                                  opacity: progress.clamp(0, 1),
-                                  child: Transform.translate(
-                                    offset: Offset(0, (1 - progress) * 14),
-                                    child: Transform(
-                                      alignment: Alignment.center,
-                                      transform: Matrix4.identity()
-                                        ..setEntry(3, 2, 0.0005)
-                                        ..rotateY((1 - progress) * 0.08),
-                                      child: Transform.scale(
-                                        scale: 0.975 + 0.025 * progress,
-                                        child: child,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                Positioned.fill(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: RadialGradient(
+                                        center: const Alignment(0, 0.07),
+                                        radius: 0.75,
+                                        colors: [
+                                          MintTickPalette.teal.withValues(alpha: 0.095),
+                                          MintTickPalette.navy.withValues(alpha: 0),
+                                        ],
                                       ),
                                     ),
                                   ),
-                                );
-                              },
-                              // Always render the canonical brand's white/green
-                              // wordmark against the fixed dark intro surface,
-                              // even when the user's app theme is light.
-                              child: Theme(
-                                data: buildTheme(Brightness.dark),
-                                child: const MintTickLockup(
-                                  markWidth: 96,
-                                  fontSize: 39,
                                 ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'MARKETS  ·  INTELLIGENCE  ·  CONTROL',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: MintTickPalette.ice.withValues(alpha: 0.65),
-                          letterSpacing: 1.15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Trade with clarity.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          color: MintTickPalette.ice,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.6,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        'Thoughtful market tools and intelligent research, in one place.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: MintTickPalette.ice.withValues(alpha: 0.74),
-                        ),
-                      ),
-                      const SizedBox(height: 36),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 52,
-                        child: FilledButton(
-                          key: const ValueKey('minttick-welcome-continue'),
-                          onPressed: _continue,
-                          child: Text(returningFromSettings
-                              ? 'Done'
-                              : 'Continue to sign in'),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        spacing: 10,
-                        children: [
-                          TextButton.icon(
-                            key: const ValueKey('minttick-welcome-sound-toggle'),
-                            onPressed: _toggleSound,
-                            icon: Icon(_soundEnabled
-                                ? Icons.volume_up_outlined
-                                : Icons.volume_off_outlined, size: 18),
-                            label: Text(_soundEnabled ? 'Sound on' : 'Sound off'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: MintTickPalette.ice,
+                                Align(
+                                  alignment: const Alignment(0, 0.19),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _logo(
+                                        availableWidth: bounds.maxWidth - horizontal * 2,
+                                        reduceMotion: reduceMotion,
+                                      ),
+                                      const SizedBox(height: 26),
+                                      Container(
+                                        width: math.min(190, bounds.maxWidth * 0.5),
+                                        height: 1,
+                                        color: MintTickPalette.teal.withValues(alpha: 0.11),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          TextButton.icon(
-                            key: const ValueKey('minttick-welcome-replay'),
-                            onPressed: _replay,
-                            icon: const Icon(Icons.replay_rounded, size: 18),
-                            label: const Text('Replay'),
-                            style: TextButton.styleFrom(
-                              foregroundColor: MintTickPalette.ice,
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 440),
+                            child: _actions(
+                              context,
+                              replayFromSettings: replayFromSettings,
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Sound is optional and respects your device settings.',
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: MintTickPalette.ice.withValues(alpha: 0.52),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       ),

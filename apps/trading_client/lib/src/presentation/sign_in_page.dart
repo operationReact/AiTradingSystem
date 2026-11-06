@@ -5,7 +5,11 @@ import '../brand/minttick_brand.dart';
 /// Premium customer sign-in shell. Authentication is deliberately fail-closed:
 /// enabling provider configuration does not create a fake sign-in session.
 class SignInPage extends StatelessWidget {
-  const SignInPage({super.key});
+  const SignInPage({this.isRegistration = false, super.key});
+
+  /// Registration is a distinct route, but unavailable until secure IdP
+  /// integration; never capture user credentials with a fake form.
+  final bool isRegistration;
 
   static const _providerName = String.fromEnvironment('AUTH_PROVIDER_NAME');
   static const _authConfigured = bool.fromEnvironment(
@@ -23,7 +27,7 @@ class SignInPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Sign in'),
+        title: Text(isRegistration ? 'Create account' : 'Sign in'),
       ),
       body: SafeArea(
         child: LayoutBuilder(
@@ -44,7 +48,7 @@ class SignInPage extends StatelessWidget {
                       Semantics(
                         header: true,
                         child: Text(
-                          'Welcome to MintTick',
+                          isRegistration ? 'Create your account' : 'Welcome to MintTick',
                           style: theme.textTheme.headlineLarge?.copyWith(
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.7,
@@ -53,7 +57,9 @@ class SignInPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'One place for markets, research, and your PAPER portfolio.',
+                        isRegistration
+                            ? 'Set up secure access to MintTick.'
+                            : 'One place for markets, research, and your PAPER portfolio.',
                         style: theme.textTheme.bodyLarge?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -85,8 +91,12 @@ class SignInPage extends StatelessWidget {
                                   const SizedBox(height: 6),
                                   Text(
                                     _authConfigured
-                                        ? 'Identity provider configuration is present, but the secure sign-in handoff is not connected yet.'
-                                        : 'Account sign-in is not available in this build. We are completing the secure identity integration.',
+                                        ? isRegistration
+                                            ? 'Secure account registration is not connected yet.'
+                                            : 'Identity provider configuration is present, but the secure sign-in handoff is not connected yet.'
+                                        : isRegistration
+                                            ? 'Account creation is not available in this build. A secure identity provider must be connected first.'
+                                            : 'Account sign-in is not available in this build. We are completing the secure identity integration.',
                                     style: theme.textTheme.bodyMedium?.copyWith(
                                       color: scheme.onSurfaceVariant,
                                     ),
@@ -104,15 +114,16 @@ class SignInPage extends StatelessWidget {
                           key: const ValueKey('secure-sign-in-continue'),
                           // A provider-name flag is not an authentication client.
                           onPressed: null,
-                          child: const Text('Continue securely'),
+                          child: Text(isRegistration ? 'Create account securely' : 'Continue securely'),
                         ),
                       ),
                       const SizedBox(height: 12),
                       Center(
                         child: TextButton(
-                          key: const ValueKey('sign-in-explore-first'),
-                          onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false),
-                          child: const Text('Explore MintTick first'),
+                          key: ValueKey(isRegistration ? 'sign-up-return-to-sign-in' : 'sign-in-explore-first'),
+                          onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil(
+                            isRegistration ? '/sign-in' : '/', (route) => false),
+                          child: Text(isRegistration ? 'Already have an account? Sign in' : 'Explore MintTick first'),
                         ),
                       ),
                       const SizedBox(height: 24),

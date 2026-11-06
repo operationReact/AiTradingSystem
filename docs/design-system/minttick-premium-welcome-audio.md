@@ -1,28 +1,32 @@
-# MintTick — understated welcome and original sonic identity
+# MintTick: approved brand-first opening screen
 
-## Product direction
-- Uses the **existing approved rising-M vector mark and MintTick wordmark**
-  from `minttick_brand.dart`. No new symbol, arrow, candles, typography or spelling.
-- Only a subtle 1.45-second fade/translate/perspective settle with a muted teal
-  halo. No particle field, lens flare, strobe or metallic 3D re-render.
-- Original ~1.55-second two-note sound locally bundled as PCM WAV. Playback
-  requires explicit opt-in, uses a conservative volume, respects silent mode,
-  and is never a requirement for authentication.
-- On first launch a guest sees the introduction. It is marked as seen
-  only after continuing; subsequent launches go directly to the sign-in
-  screen (until real identity sessions are integrated). Returning authenticated
-  users will be routed to Home when session restoration exists.
-- Replay is available through Settings -> Brand introduction. Never open
-  unlicensed market-data endpoints or request secrets on the welcome screen.
-- Reduced-motion platform preference removes the visual movement.
-- Silent-device behavior and Android/iOS/web audio playback still require
-  real-device acceptance. Browser autoplay is intentionally avoided.
-- Sign-in backend remains a separate implementation milestone; this PR
-  does not invent a working identity provider or enable real-money trading.
+**Visual source:** owner-approved opening mockup from 2026-11-06. Use the
+repository's canonical `MintTickMark` / `MintTickLockup` unchanged; the
+`minttick_brand.dart` mark remains the source of truth. Do not redraw,
+restyle, add candles/arrows or change the MintTick wordmark.
 
-## Why understated
-The visual identity should remain legible at small sizes and the sound should
-be recognizable without competing with the user's music or system focus.
-High-frequency chirps, aggressive bass, rising-volume sweeps, and automated
-sound on every opening would make this look like a game rather than a financial
-tool. Audio preference is stored only on device.
+## Experience
+- Quiet navy surface; faint teal radial ambient glow behind the logo.
+- Approved original mark and wordmark centered approximately in the upper
+  half, with a nearly invisible grounding line. No headlines, slogans,
+  product claims, chart decorations, or extra brand labels.
+- Bottom fixed visual hierarchy: **Sign in**, **Create account**, and
+  restrained **Sound off · Replay intro** controls.
+- The logo animates in over 1.45 seconds with a restrained fade/translate,
+  <=0.06 rad perspective settle. The original vectors never change shape.
+- Optional locally bundled two-note audio is OFF initially. It only plays
+  after a direct user interaction, never on silent unwanted autoplay. It
+  respects device silent mode.
+- Small screens scroll rather than overflow; reduced motion bypasses
+  visible animation. Login controls are never delayed by animation/audio.
+- A welcome replay opened from Settings has a Done CTA to return safely,
+  rather than signing out an already authenticated account.
+
+## Boundaries and follow-on
+- Distinct Sign in and Create account routes are wired, but both remain
+  fail-closed placeholders until the production identity-provider flows
+  have been implemented. Do not claim login/registration is complete.
+- The first-run intro state is stored locally (best effort); returning
+  visitors are sent directly to Sign in. Never gate launch on preferences.
+- This UI change does not deploy AWS, enable live trading or share Angel
+  One market data with unauthenticated users.
