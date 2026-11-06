@@ -40,6 +40,8 @@ Future<void> main() async {
   runApp(TradingApp(
     repositoryFactory: () => HttpHealthRepository(session: session),
     session: session,
-    initialRoute: session.isAuthenticated ? '/' : '/welcome',
+    initialRoute: session.isCustomerAuthenticated
+        ? '/account'
+        : (session.isAuthenticated ? '/' : '/welcome'),
   ));
 }
