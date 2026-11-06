@@ -23,6 +23,7 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
   final _confirmPassword = TextEditingController();
   bool _busy = false;
   bool _passwordVisible = false;
+  bool _termsAccepted = false;
 
   CustomerIdentity get _identity => widget.identity ?? MintTickIdentity.current;
 
@@ -37,6 +38,10 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
 
   Future<void> _submit() async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
+    if (!_termsAccepted) {
+      _message('Review and accept the Terms and Privacy Policy to continue.');
+      return;
+    }
     setState(() => _busy = true);
     try {
       final username = _username.text.trim().toLowerCase();
@@ -222,7 +227,36 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
                                 ? 'Passwords do not match'
                                 : null,
                           ),
-                          const SizedBox(height: 27),
+                          const SizedBox(height: 18),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                height: 42,
+                                width: 42,
+                                child: Checkbox(
+                                  key: const ValueKey('minttick-accept-terms'),
+                                  value: _termsAccepted,
+                                  activeColor: MintTickPalette.teal,
+                                  onChanged: _busy
+                                      ? null
+                                      : (v) => setState(() => _termsAccepted = v ?? false),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Expanded(
+                                child: Padding(
+                                  padding: EdgeInsets.only(top: 5),
+                                  child: Text(
+                                    'I agree to the MintTick Terms of Service and Privacy Policy.',
+                                    style: TextStyle(
+                                        color: Color(0xFFAEBEC9), fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
                           SizedBox(
                             height: 54,
                             child: FilledButton(
@@ -310,10 +344,9 @@ class _VerifyAccountEmailPageState extends State<VerifyAccountEmailPage> {
         code: _code.text.trim(),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Email verified. Sign in to continue.'),
+      Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+        builder: (_) => const MintTickEmailVerifiedPage(),
       ));
-      Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -377,23 +410,59 @@ class _VerifyAccountEmailPageState extends State<VerifyAccountEmailPage> {
                       style: const TextStyle(color: Color(0xFFAFBFCA)),
                     ),
                     const SizedBox(height: 28),
-                    TextField(
-                      key: const ValueKey('minttick-email-otp'),
-                      controller: _code,
-                      enabled: !_busy,
-                      keyboardType: TextInputType.number,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.oneTimeCode],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
-                      decoration: InputDecoration(
-                        labelText: '6-digit verification code',
-                        filled: true,
-                        fillColor: const Color(0xFF15232D),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(14),
+                    Semantics(
+                      label: 'Six-digit email verification code',
+                      child: SizedBox(
+                        height: 58,
+                        child: Stack(
+                          children: [
+                            Row(
+                              children: List.generate(6, (i) {
+                                final digits = _code.text;
+                                return Expanded(
+                                  child: Container(
+                                    key: ValueKey('minttick-otp-box-$i'),
+                                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF15232D),
+                                      border: Border.all(color: const Color(0xFF34525D)),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      i < digits.length ? digits[i] : '',
+                                      style: const TextStyle(
+                                          fontSize: 24, fontWeight: FontWeight.w700),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                            Positioned.fill(
+                              child: Opacity(
+                                opacity: 0.0,
+                                alwaysIncludeSemantics: true,
+                                child: TextField(
+                                  key: const ValueKey('minttick-email-otp'),
+                                  controller: _code,
+                                  enabled: !_busy,
+                                  autofocus: true,
+                                  keyboardType: TextInputType.number,
+                                  textInputAction: TextInputAction.done,
+                                  autofillHints: const [AutofillHints.oneTimeCode],
+                                  onChanged: (_) => setState(() {}),
+                                  onSubmitted: (_) => _confirm(),
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly,
+                                    LengthLimitingTextInputFormatter(6),
+                                  ],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Verification code',
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -415,6 +484,77 @@ class _VerifyAccountEmailPageState extends State<VerifyAccountEmailPage> {
                       onPressed: _busy ? null : _resend,
                       child: const Text('Resend code'),
                     ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Post-confirmation state: no trading or broker access is granted here.
+class MintTickEmailVerifiedPage extends StatelessWidget {
+  const MintTickEmailVerifiedPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Theme(
+      data: buildTheme(Brightness.dark),
+      child: Scaffold(
+        key: const ValueKey('minttick-email-verified-screen'),
+        backgroundColor: MintTickPalette.navy,
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 420),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 64),
+                    const Center(
+                      child: MintTickLockup(markWidth: 72, fontSize: 28),
+                    ),
+                    const Spacer(),
+                    const Center(
+                      child: Icon(Icons.check_circle_outline_rounded,
+                          color: MintTickPalette.teal, size: 80),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text('Email verified',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 9),
+                    const Text(
+                      'Your MintTick account is ready. You can now sign in securely.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFFAFBFCA), fontSize: 14),
+                    ),
+                    const Spacer(),
+                    SizedBox(
+                      height: 54,
+                      child: FilledButton(
+                        key: const ValueKey('minttick-verified-to-login'),
+                        onPressed: () => Navigator.of(context)
+                            .pushNamedAndRemoveUntil('/welcome', (_) => false),
+                        style: FilledButton.styleFrom(
+                          backgroundColor: MintTickPalette.teal,
+                          foregroundColor: MintTickPalette.navy,
+                        ),
+                        child: const Text('Continue to sign in'),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      'No brokerage account is required to use MintTick.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Color(0xFF98AAB7), fontSize: 11),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
