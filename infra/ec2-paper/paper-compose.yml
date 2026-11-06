@@ -45,6 +45,13 @@ services:
       APP_API_KEY: ${APP_API_KEY:?required}
       APP_DEV_SESSION_BOOTSTRAP_ENABLED: "false"
       APP_SESSION_COOKIE_SECURE: "true"
+      # Identity-provider integration. Values must be installed securely on
+      # the running PAPER host from the isolated Cognito Terraform outputs.
+      # No client secret, password, broker key or token is ever stored here.
+      MINTTICK_COGNITO_ENABLED: ${MINTTICK_COGNITO_ENABLED:-false}
+      MINTTICK_COGNITO_REGION: ap-south-1
+      MINTTICK_COGNITO_ISSUER: ${MINTTICK_COGNITO_ISSUER:-}
+      MINTTICK_COGNITO_CLIENT_ID: ${MINTTICK_COGNITO_CLIENT_ID:-}
       APP_CORS_ALLOWED_ORIGINS: http://localhost:8088
       APP_SECURITY_TRUST_FORWARDED_FOR: "false"
       AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"
