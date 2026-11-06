@@ -1,0 +1,47 @@
+name: MintTick UX review captures (actual Flutter)
+
+on:
+  push:
+    branches:
+      - feature/minttick-mobile-screen-experience-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build exact Flutter web client
+        run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
+      - name: Capture real 390x844 mobile and desktop UI
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/.github/scripts"
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE/apps/trading_client"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          node "$GITHUB_WORKSPACE/.github/scripts/minttick_premium_screen_review.cjs"
+      - name: Upload exact screenshot evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: minttick-premium-actual-flutter-screens
+          path: apps/trading_client/captured-screens/*.png
+          if-no-files-found: error
+          retention-days: 7
