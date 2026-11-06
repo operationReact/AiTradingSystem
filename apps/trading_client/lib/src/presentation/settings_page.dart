@@ -78,6 +78,17 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Card(
+              child: ListTile(
+                key: const ValueKey('settings-replay-brand-intro'),
+                leading: const Icon(Icons.animation_outlined),
+                title: const Text('Brand introduction'),
+                subtitle: const Text('Replay the original MintTick logo and optional sound.'),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                onTap: () => Navigator.of(context).pushNamed('/welcome'),
+              ),
+            ),
             const SizedBox(height: 24),
             Text('Trading controls',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),

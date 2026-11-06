@@ -33,6 +33,7 @@ import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
 import 'presentation/sign_in_page.dart';
+import 'presentation/welcome_page.dart';
 import 'theme/app_theme.dart';
 
 class TradingApp extends StatefulWidget {
@@ -84,7 +85,7 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/sign-in') {
+          if (_selectedRoute == '/sign-in' || _selectedRoute == '/welcome') {
             return child ?? const SizedBox.shrink();
           }
           if (constraints.maxWidth >= 900) {
@@ -115,6 +116,7 @@ class _TradingAppState extends State<TradingApp> {
       routes: {
         '/': (_) => _overviewPage(),
         '/sign-in': (_) => const SignInPage(),
+        '/welcome': (_) => const MintTickWelcomePage(),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
         '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
