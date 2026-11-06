@@ -5,7 +5,6 @@ import '../../../core/session/operator_session.dart';
 import '../../../core/widgets/data_state_panel.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../data/health_repository.dart';
-import '../../../presentation/sign_in_page.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
@@ -67,11 +66,11 @@ class OverviewPage extends StatelessWidget {
                         physics: const NeverScrollableScrollPhysics(),
                         itemCount: _modules.length,
                         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: ResponsiveLayout.workspaceColumns(width),
+                          crossAxisCount: mobile ? 1 : ResponsiveLayout.workspaceColumns(width),
                           mainAxisSpacing: mobile ? 8 : 12,
                           crossAxisSpacing: mobile ? 8 : 12,
                           childAspectRatio: switch (layout) {
-                            ResponsiveClass.mobile => width >= 360 ? 1.35 : 1.9,
+                            ResponsiveClass.mobile => width >= 360 ? 4.3 : 3.75,
                             ResponsiveClass.adaptive => 1.45,
                             ResponsiveClass.desktop => 1.2,
                           },
@@ -171,24 +170,6 @@ class _AiPulseHero extends StatelessWidget {
           Text(
             'Explore Indian equities, evaluate research, and test strategies with virtual funds.',
             style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: FilledButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/market'),
-                  child: const Text('Explore markets'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).pushNamed('/research'),
-                  child: const Text('AI research'),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -328,7 +309,7 @@ class _AccountPanelState extends State<_AccountPanel> {
                       width: mobile ? double.infinity : null,
                       child: FilledButton.icon(
                         key: const ValueKey('dashboard-secure-sign-in'),
-                        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SignInPage())),
+                        onPressed: () => Navigator.of(context).pushNamed('/sign-in'),
                         icon: const Icon(Icons.lock_open_rounded, size: 19),
                         label: const Text('Secure sign in'),
                       ),
@@ -411,6 +392,7 @@ class _HomeModuleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final mobile = MediaQuery.sizeOf(context).width < ResponsiveLayout.mobileBreakpoint;
     return Semantics(
       button: true,
@@ -420,19 +402,55 @@ class _HomeModuleCard extends StatelessWidget {
         child: InkWell(
           key: ValueKey('workspace-${module.route}'),
           onTap: () => Navigator.of(context).pushNamed(module.route),
-          child: Padding(
-            padding: EdgeInsets.all(mobile ? 11 : 18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [Icon(module.icon, color: theme.colorScheme.primary, size: mobile ? 22 : 27), const Spacer(), Icon(Icons.arrow_forward_rounded, size: mobile ? 16 : 19)]),
-                const Spacer(),
-                Text(module.title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 3),
-                Text(module.description, maxLines: mobile ? 2 : 3, overflow: TextOverflow.ellipsis, style: mobile ? theme.textTheme.bodySmall : null),
-              ],
-            ),
-          ),
+          child: mobile
+              ? Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 36,
+                        height: 36,
+                        child: Icon(module.icon, color: scheme.primary, size: 23),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(module.title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                            Text(
+                              module.description,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Icon(Icons.chevron_right_rounded, size: 20, color: scheme.onSurfaceVariant),
+                    ],
+                  ),
+                )
+              : Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(module.icon, color: scheme.primary, size: 27),
+                        const Spacer(),
+                        const Icon(Icons.arrow_forward_rounded, size: 19),
+                      ]),
+                      const Spacer(),
+                      Text(module.title, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 3),
+                      Text(module.description, maxLines: 3, overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
