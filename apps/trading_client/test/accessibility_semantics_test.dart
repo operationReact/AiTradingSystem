@@ -34,7 +34,7 @@ void main() {
         findsOneWidget,
       );
 
-      final hero = tester.getSemantics(find.text('See the market. Find the setup. Test it safely.'));
+      final hero = tester.getSemantics(find.text('Make informed trading decisions.'));
       final quickAccess = tester.getSemantics(find.text('Quick access'));
       final signIn = tester.getSemantics(find.text('Sign in required'));
       expect(hero.getSemanticsData().flagsCollection.isHeader, isTrue);
