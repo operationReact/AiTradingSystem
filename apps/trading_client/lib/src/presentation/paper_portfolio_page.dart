@@ -84,9 +84,8 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
                     padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
-                      gradient: LinearGradient(
-                        colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
-                      ),
+                      color: theme.colorScheme.surfaceContainerLow,
+                       border: Border.all(color: theme.colorScheme.outlineVariant),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,7 +99,7 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          'Track simulated cash, positions, exposure, and profit or loss in one place.',
+                          'Virtual cash, positions, exposure, and P&L—with clear PAPER-only labeling.',
                           style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
                             height: mobile ? 1.3 : 1.45,
@@ -154,13 +153,31 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Portfolio unavailable', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(failure.code.toUpperCase().contains('AUTH')
+                      ? Icons.lock_outline_rounded : Icons.cloud_off_outlined,
+                      size: 28, color: Theme.of(context).colorScheme.primary),
+                  const SizedBox(height: 9),
+                  Text(failure.code.toUpperCase().contains('AUTH')
+                          ? 'Your PAPER portfolio' : 'Portfolio unavailable',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+                ],
+              ),
               const SizedBox(height: 6),
               Text(_failureMessage(failure), style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
               const SizedBox(height: 10),
               SizedBox(
                 width: compact ? double.infinity : null,
-                child: FilledButton(onPressed: _refresh, child: const Text('Try again')),
+                child: FilledButton(
+                    key: const ValueKey('portfolio-state-action'),
+                    onPressed: failure.code.toUpperCase().contains('AUTH')
+                        ? () => Navigator.of(context).pushNamed('/sign-in')
+                        : _refresh,
+                    child: Text(failure.code.toUpperCase().contains('AUTH')
+                        ? 'Sign in securely' : 'Try again'),
+                  ),
               ),
             ],
           ),
