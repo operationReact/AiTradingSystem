@@ -48,11 +48,16 @@ jobs:
           from pathlib import Path
           handler = Path('market-feed/lambda_function.py').read_text()
           infra = Path('infra/minttick-market-feed/main.tf').read_text()
+          bootstrap = Path('infra/minttick-market-feed/bootstrap-github-oidc-role.yml').read_text()
           paper = Path('infra/ec2-paper/paper-compose.yml').read_text()
           assert 'placeOrder' not in handler
           assert 'modifyOrder' not in handler
           assert 'cancelOrder' not in handler
-          assert 'lambda:InvokeFunction' in infra
+          # PAPER EC2 invoke permission is provisioned by the narrowly scoped
+          # CloudFormation bootstrap policy, not the Lambda Terraform module.
+          assert 'lambda:InvokeFunction' in bootstrap
+          assert 'arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed' in bootstrap
+          assert 'aitrading-paper-ec2-ssm' in bootstrap
           assert 'ssm:GetParameters' in infra
           assert 'aws_apigateway' not in infra and 'aws_lambda_function_url' not in infra
           assert 'ANGELONE_API_KEY:' not in paper
