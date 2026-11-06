@@ -47,7 +47,7 @@ Future<void> _pumpGolden(
   expect(find.text('MintTick'), findsWidgets, reason: designLabel);
   expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
   expect(find.text('Sign in required'), findsOneWidget);
-  expect(find.text('Secure sign-in is required'), findsOneWidget);
+  expect(find.text('Connect your account to view PAPER balances, AI research and trading controls.'), findsOneWidget);
   expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
   expect(find.text('Operator access'), findsNothing);
 }
