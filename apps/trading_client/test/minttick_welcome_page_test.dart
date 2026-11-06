@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trading_client/src/brand/minttick_brand.dart';
 import 'package:trading_client/src/presentation/welcome_page.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
+
   testWidgets('approved logo and exact spelling appear without unsolicited audio',
       (tester) async {
     await tester.pumpWidget(MaterialApp(
