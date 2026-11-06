@@ -106,6 +106,8 @@ def build_regime_anomaly_advisory(
         raise ValueError("fusion request must include its original V3 heuristic regime")
     if checked_request.regime.snapshot_fingerprint != checked_heuristic.snapshot_fingerprint:
         raise ValueError("fusion regime and heuristic source fingerprints mismatch")
+    if checked_request.regime.model_dump(mode="json") != checked_heuristic.model_dump(mode="json"):
+        raise ValueError("fusion regime is not the exact frozen heuristic evidence")
     if checked_request.regime.method != "HEURISTIC_BASELINE":
         raise ValueError("fusion regime cannot be substituted with a challenger")
 
