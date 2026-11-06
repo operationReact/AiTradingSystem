@@ -3,12 +3,12 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from test_learned_meta_model_readiness import BASE, _report
 
 from aitrading_intelligence.v4_decision_fusion_baseline import (
     FusionBaselineFreezeConfig,
     freeze_v4_static_fusion_baseline,
 )
-from test_learned_meta_model_readiness import BASE, _report
 
 
 def _config(**kwargs) -> FusionBaselineFreezeConfig:
