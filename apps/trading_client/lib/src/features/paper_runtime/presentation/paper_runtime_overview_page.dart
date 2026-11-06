@@ -67,7 +67,6 @@ class OverviewPage extends StatelessWidget {
               session: session,
               dashboardRepository: dashboardRepository,
               marketQuoteRepository: marketQuoteRepository,
-        marketQuoteRepository: marketQuoteRepository,
             ),
           ),
         ],
