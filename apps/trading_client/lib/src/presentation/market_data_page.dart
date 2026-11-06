@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/widgets/responsive_layout.dart';
+import '../data/authenticated_api_client.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
 
@@ -31,6 +32,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
   InstrumentRecord? _selected;
   String? _exchange;
   String? _error;
+  bool _signInRequired = false;
   String? _nextPageError;
   bool _loading = false;
   bool _loadingMore = false;
@@ -73,6 +75,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
       _loading = true;
       _loadingMore = false;
       _error = null;
+      _signInRequired = false;
       _nextPageError = null;
       _lastPage = null;
       _instruments.clear();
@@ -96,6 +99,20 @@ class _MarketDataPageState extends State<MarketDataPage> {
         if (results.length == 2) _status = results.first as InstrumentCatalogueStatus;
         _lastPage = page;
         _instruments.addAll(page.content);
+      });
+    } on ApiAuthenticationRequired {
+      if (!mounted || version != _requestVersion) return;
+      setState(() {
+        _signInRequired = true;
+        _error = 'Sign in to load the equity catalogue.';
+      });
+    } on ApiHttpFailure catch (failure) {
+      if (!mounted || version != _requestVersion) return;
+      setState(() {
+        _signInRequired = failure.statusCode == 401 || failure.statusCode == 403;
+        _error = _signInRequired
+            ? 'Your account session is required to browse the catalogue.'
+            : 'Market data is temporarily unavailable.';
       });
     } catch (_) {
       if (!mounted || version != _requestVersion) return;
@@ -332,7 +349,12 @@ class _MarketDataPageState extends State<MarketDataPage> {
         Icon(Icons.cloud_off_rounded, size: 19, color: scheme.error),
         const SizedBox(width: 8),
         Expanded(child: Text(_error!, style: const TextStyle(fontSize: 12.5))),
-        TextButton(onPressed: _loadInstruments, child: const Text('Try again')),
+        TextButton(
+          onPressed: _signInRequired
+              ? () => Navigator.of(context).pushNamed('/sign-in')
+              : _loadInstruments,
+          child: Text(_signInRequired ? 'Sign in' : 'Try again'),
+        ),
       ]),
     );
   }
@@ -375,7 +397,33 @@ class _MarketDataPageState extends State<MarketDataPage> {
           else if (_loading && _instruments.isEmpty)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else if (_error != null && _instruments.isEmpty)
-            Expanded(child: Center(child: Text('Stock list unavailable.', style: TextStyle(color: scheme.onSurfaceVariant))))
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_signInRequired ? Icons.lock_outline_rounded : Icons.cloud_off_outlined,
+                          size: 30, color: scheme.onSurfaceVariant),
+                      const SizedBox(height: 10),
+                      Text(
+                        _signInRequired ? 'Your market catalogue awaits' : 'Unable to load stocks',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: scheme.onSurface),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _signInRequired
+                            ? 'Sign in to browse NSE and BSE equities.'
+                            : 'Check your connection or try again shortly.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
             Expanded(
               child: RefreshIndicator(
