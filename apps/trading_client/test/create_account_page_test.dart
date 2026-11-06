@@ -99,6 +99,8 @@ void main() {
         'correct-horse-battery-staple');
     await tester.enterText(find.byKey(const ValueKey('minttick-register-confirm')),
         'correct-horse-battery-staple');
+    await tester.ensureVisible(find.byKey(const ValueKey('minttick-accept-terms')));
+    await tester.tap(find.byKey(const ValueKey('minttick-accept-terms')));
     await tester.ensureVisible(find.byKey(const ValueKey('minttick-register-submit')));
     await tester.tap(find.byKey(const ValueKey('minttick-register-submit')));
     await tester.pumpAndSettle();
@@ -111,6 +113,9 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('minttick-confirm-email')));
     await tester.pumpAndSettle();
     expect(fake.confirmed, isTrue);
+    expect(find.byKey(const ValueKey('minttick-email-verified-screen')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('minttick-verified-to-login')));
+    await tester.pumpAndSettle();
     expect(find.text('Returned to login'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -130,6 +135,8 @@ void main() {
         'correct-horse-battery-staple');
     await tester.enterText(find.byKey(const ValueKey('minttick-register-confirm')),
         'correct-horse-battery-staple');
+    await tester.ensureVisible(find.byKey(const ValueKey('minttick-accept-terms')));
+    await tester.tap(find.byKey(const ValueKey('minttick-accept-terms')));
     await tester.ensureVisible(find.byKey(const ValueKey('minttick-register-submit')));
     await tester.tap(find.byKey(const ValueKey('minttick-register-submit')));
     await tester.pump();
