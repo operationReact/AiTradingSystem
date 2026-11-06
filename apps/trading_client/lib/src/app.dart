@@ -36,6 +36,7 @@ import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
 import 'presentation/create_account_page.dart';
+import 'presentation/customer_account_page.dart';
 import 'presentation/password_recovery_page.dart';
 import 'presentation/welcome_page.dart';
 import 'theme/app_theme.dart';
@@ -89,7 +90,7 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password') {
+          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account') {
             return child ?? const SizedBox.shrink();
           }
           if (constraints.maxWidth >= 900) {
@@ -119,6 +120,16 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
+        '/account': (_) => CustomerAccountPage(
+          loadAccount: () async {
+            final data = await _api.getJson('/api/auth/cognito/me');
+            if (data is! Map<String, dynamic>) {
+              throw const FormatException('Invalid account profile');
+            }
+            return data;
+          },
+          onSignOut: _signOut,
+        ),
         '/sign-in': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/sign-up': (_) => const CreateAccountPage(),
         '/forgot-password': (_) => const PasswordRecoveryPage(),
@@ -186,7 +197,7 @@ class _TradingAppState extends State<TradingApp> {
 
   void _onCustomerAuthenticated() {
     widget.session.markCustomerAuthenticated();
-    _navigate('/');
+    _navigate('/account');
   }
 
   void _navigate(String route) {
