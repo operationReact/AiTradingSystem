@@ -1,0 +1,106 @@
+name: MintTick Cognito customer authentication - validate and deploy
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-auth/**'
+      - '.github/workflows/minttick-auth-terraform.yml'
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: 'Preview Terraform or apply approved dev Cognito resources'
+        required: true
+        type: choice
+        default: plan
+        options: [plan, apply]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-auth-terraform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Validate isolated identity infrastructure without AWS access
+        working-directory: infra/minttick-auth
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false
+          terraform validate
+
+  plan-or-apply:
+    if: github.event_name == 'workflow_dispatch' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      EXPECTED_ACCOUNT: "098859530205"
+      TF_IN_AUTOMATION: "true"
+      MINTTICK_AUTH_ROLE: ${{ vars.MINTTICK_AUTH_DEPLOY_ROLE_ARN }}
+      MINTTICK_AUTH_STATE_BUCKET: ${{ vars.MINTTICK_AUTH_TF_STATE_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm dedicated limited identity role, state storage and branch
+        run: |
+          set -euo pipefail
+          test "$MINTTICK_AUTH_ROLE" = "arn:aws:iam::098859530205:role/minttick-auth-github-deploy"
+          test -n "$MINTTICK_AUTH_STATE_BUCKET"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$AWS_REGION" = "ap-south-1"
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.MINTTICK_AUTH_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: minttick-auth-${{ github.run_id }}
+      - name: Reject wrong AWS account
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+      - name: Initialize encrypted remote Terraform state with lockfile
+        working-directory: infra/minttick-auth
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform init -input=false -backend-config="bucket=$MINTTICK_AUTH_STATE_BUCKET"
+      - name: Preview identity changes
+        working-directory: infra/minttick-auth
+        run: |
+          set -euo pipefail
+          terraform validate
+          terraform plan -input=false -var="environment=dev" -out="$RUNNER_TEMP/minttick-auth.tfplan"
+          terraform show -no-color "$RUNNER_TEMP/minttick-auth.tfplan"
+      - name: Apply only when operation=apply
+        if: inputs.operation == 'apply'
+        working-directory: infra/minttick-auth
+        run: |
+          set -euo pipefail
+          terraform apply -input=false "$RUNNER_TEMP/minttick-auth.tfplan"
+          terraform output cognito_region
+          terraform output cognito_user_pool_id
+          terraform output cognito_client_id
+          terraform output cognito_issuer
+      - name: Remove sensitive Terraform plan from runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/minttick-auth.tfplan"
