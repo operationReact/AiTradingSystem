@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../brand/minttick_brand.dart';
 import '../brand/minttick_sonic_logo.dart';
+import '../theme/app_theme.dart';
 
 /// Guest-first brand experience. Never blocks access on animation/audio and
 /// never requests broker credentials or public market data.
@@ -157,9 +158,15 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
                                   ),
                                 );
                               },
-                              child: const MintTickLockup(
-                                markWidth: 96,
-                                fontSize: 39,
+                              // Always render the canonical brand's white/green
+                              // wordmark against the fixed dark intro surface,
+                              // even when the user's app theme is light.
+                              child: Theme(
+                                data: buildTheme(Brightness.dark),
+                                child: const MintTickLockup(
+                                  markWidth: 96,
+                                  fontSize: 39,
+                                ),
                               ),
                             ),
                           ],
