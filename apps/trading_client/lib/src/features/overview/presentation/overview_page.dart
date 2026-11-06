@@ -46,14 +46,14 @@ class OverviewPage extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const _ProductHeader(),
-                      SizedBox(height: mobile ? 12 : 22),
+                      SizedBox(height: mobile ? 14 : 20),
                       _AiPulseHero(layout: layout),
                       SizedBox(height: sectionGap),
                       _AccountPanel(session: session, repository: dashboardRepository),
-                      SizedBox(height: mobile ? 18 : 28),
+                      SizedBox(height: mobile ? 16 : 24),
                       Semantics(
                         header: true,
-                        child: Text('Quick access', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w900)),
+                        child: Text('Quick access', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w700)),
                       ),
                       const SizedBox(height: 4),
                       if (!mobile)
@@ -137,72 +137,59 @@ class _AiPulseHero extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final mobile = layout == ResponsiveClass.mobile;
-    final width = MediaQuery.sizeOf(context).width;
     return Container(
+      key: const ValueKey('minttick-home-introduction'),
       width: double.infinity,
-      padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
+      padding: EdgeInsets.symmetric(
+        horizontal: mobile ? 16 : 24,
+        vertical: mobile ? 18 : 24,
+      ),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [scheme.primaryContainer.withValues(alpha: 0.95), scheme.secondaryContainer.withValues(alpha: 0.62), scheme.surfaceContainerHighest]),
-        border: Border.all(color: scheme.primary.withValues(alpha: 0.32)),
-        boxShadow: [BoxShadow(color: scheme.primary.withValues(alpha: 0.08), blurRadius: mobile ? 18 : 34, spreadRadius: mobile ? 0 : 2)],
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: mobile ? 9 : 12, vertical: mobile ? 4 : 7),
-            decoration: BoxDecoration(color: scheme.primary.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(999)),
-            child: Text('AI MARKET PULSE', style: theme.textTheme.labelSmall?.copyWith(color: scheme.primary, fontWeight: FontWeight.w900, letterSpacing: 0.7)),
-          ),
-          SizedBox(height: mobile ? 10 : 18),
+          Text('MARKETS  /  AI RESEARCH  /  PAPER',
+              style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: 0.8,
+                color: scheme.primary,
+                fontWeight: FontWeight.w700,
+              )),
+          const SizedBox(height: 8),
           Semantics(
             header: true,
             child: Text(
-              'See the market. Find the setup. Test it safely.',
-              style: (layout == ResponsiveClass.desktop ? theme.textTheme.displaySmall : mobile ? theme.textTheme.titleLarge : theme.textTheme.headlineMedium)?.copyWith(fontWeight: FontWeight.w900, height: mobile ? 1.12 : 1.08),
+              'Make informed trading decisions.',
+              style: (mobile ? theme.textTheme.headlineSmall : theme.textTheme.headlineMedium)
+                  ?.copyWith(fontWeight: FontWeight.w800, height: 1.14),
             ),
           ),
-          SizedBox(height: mobile ? 7 : 12),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: Text(
-              mobile
-                  ? 'Find AI trade ideas, review risk, and test them with virtual money in PAPER mode.'
-                  : 'Use AI research to surface potential trades, review the risk, then execute with virtual money in PAPER mode before real-money trading is ever enabled.',
-              style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(color: scheme.onSurfaceVariant, height: mobile ? 1.3 : 1.5),
-            ),
+          const SizedBox(height: 7),
+          Text(
+            'Explore Indian equities, evaluate research, and test strategies with virtual funds.',
+            style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
-          SizedBox(height: mobile ? 10 : 18),
-          if (mobile)
-            Row(
-              children: [
-                Expanded(
-                  child: FilledButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed('/research'),
-                    icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                    label: const Text('AI ideas'),
-                  ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/market'),
+                  child: const Text('Explore markets'),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => Navigator.of(context).pushNamed('/market'),
-                    icon: const Icon(Icons.candlestick_chart_rounded, size: 18),
-                    label: const Text('Markets'),
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pushNamed('/research'),
+                  child: const Text('AI research'),
                 ),
-              ],
-            )
-          else
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                FilledButton.icon(onPressed: () => Navigator.of(context).pushNamed('/research'), icon: const Icon(Icons.auto_awesome_rounded), label: const Text('Find AI opportunities')),
-                OutlinedButton.icon(onPressed: () => Navigator.of(context).pushNamed('/market'), icon: const Icon(Icons.candlestick_chart_rounded), label: const Text('Explore markets')),
-              ],
-            ),
+              ),
+            ],
+          ),
         ],
       ),
     );
