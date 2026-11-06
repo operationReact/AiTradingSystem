@@ -107,10 +107,9 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   }
 
   Widget _logo({required double availableWidth, required bool reduceMotion}) {
-    final compact = availableWidth < 350;
-    final markWidth = compact ? 82.0 : 104.0;
-    final fontSize = compact ? 31.0 : 39.0;
-    final width = math.min(availableWidth - 28, compact ? 280.0 : 350.0);
+    // Scale the *entire* canonical lockup uniformly so its painter and
+    // wordmark retain their exact approved proportions on 320dp devices.
+    final width = math.min(availableWidth, 350.0);
     return AnimatedBuilder(
       animation: _reveal,
       builder: (context, child) {
@@ -138,9 +137,16 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
       // widgets. Never synthesize or recolor the approved logo for mockups.
       child: SizedBox(
         width: width,
-        child: Theme(
-          data: buildTheme(Brightness.dark),
-          child: MintTickLockup(markWidth: markWidth, fontSize: fontSize),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: 390,
+            child: Theme(
+              data: buildTheme(Brightness.dark),
+              child: const MintTickLockup(markWidth: 104, fontSize: 39),
+            ),
+          ),
         ),
       ),
     );
