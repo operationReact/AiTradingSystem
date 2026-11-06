@@ -1,9 +1,3 @@
-variable "enable_paper_invoke" {
-  description = "Opt in: grant existing PAPER instance role InvokeFunction only, never SSM credential access."
-  type        = bool
-  default     = false
-}
-
 variable "ssm_customer_kms_key_arn" {
   description = "Optional customer-managed KMS key ARN for SecureStrings; empty for AWS managed aws/ssm."
   type        = string
