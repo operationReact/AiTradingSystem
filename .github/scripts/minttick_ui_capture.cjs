@@ -6,10 +6,11 @@ const path = require('path');
   const base = 'http://127.0.0.1:8765/';
   const folder = path.resolve(__dirname, '../../apps/trading_client/captured-screens');
   fs.mkdirSync(folder, { recursive: true });
-  const browser = await chromium.launch({headless: true, args:['--no-sandbox','--disable-dev-shm-usage']});
-  const context = await browser.newContext({viewport: {width:390,height:844}, deviceScaleFactor:1, reducedMotion:'reduce'});
+  const browser = await chromium.launch({headless: true, args:['--no-sandbox','--disable-dev-shm-usage','--lang=en-US']});
+  const context = await browser.newContext({viewport: {width:390,height:844}, deviceScaleFactor:1, reducedMotion:'reduce', locale:'en-US', timezoneId:'Asia/Kolkata'});
   const page = await context.newPage();
-  page.on('pageerror',error => console.log('PAGE ERROR',error.message.slice(0,300)));
+  page.on('pageerror',error => console.log('PAGE ERROR',String(error.stack || error.message).slice(0,1800)));
+  page.on('console',message => { if (message.type()==='error') console.log('CONSOLE ERROR',message.text().slice(0,900)); });
   const pause = (ms) => page.waitForTimeout(ms);
   const save = async (name) => {
     await pause(1400);
@@ -18,6 +19,8 @@ const path = require('path');
   };
   await page.goto(base, {waitUntil:'load',timeout:60000});
   await pause(7000);
+  console.log('BROWSER LOCALE', await page.evaluate(() => ({language:navigator.language, languages:navigator.languages, tz:Intl.DateTimeFormat().resolvedOptions().timeZone, root:!!document.querySelector('flutter-view')})));
+  if (!(await page.evaluate(() => !!document.querySelector('flutter-view')))) throw new Error('Flutter view was not created; refusing blank screenshots');
   await save('01_home_dark');
   // Bottom nav is fixed at the bottom of the actual 390x844 Flutter shell.
   const nav = async (x,name) => {
@@ -36,7 +39,9 @@ const path = require('path');
   await pause(4000);
   await save('07_settings_deeplink');
   // Desktop view from same compiled frontend
-  const desktop = await browser.newPage({viewport:{width:1440,height:900}, deviceScaleFactor:1});
+  const desktopContext = await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1,locale:'en-US',timezoneId:'Asia/Kolkata'});
+  const desktop = await desktopContext.newPage();
+  desktop.on('pageerror',error => console.log('DESKTOP ERROR', String(error.stack || error.message).slice(0,1500)));
   await desktop.goto(base,{waitUntil:'load',timeout:60000});
   await desktop.waitForTimeout(5000);
   await desktop.screenshot({path:path.join(folder,'08_home_desktop_dark.png')});
