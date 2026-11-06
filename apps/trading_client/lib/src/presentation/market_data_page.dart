@@ -221,6 +221,11 @@ class _MarketDataPageState extends State<MarketDataPage> {
                     const SizedBox(height: 8),
                     _errorPanel(scheme),
                   ],
+                  const SizedBox(height: 5),
+                  Text(
+                    'Choose a stock to view recent price action.',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
                   const SizedBox(height: 8),
                   Expanded(
                     child: mobile
@@ -428,14 +433,6 @@ class _MarketDataPageState extends State<MarketDataPage> {
                     );
                   },
                 ),
-              ),
-            ),
-          if (!_loading && _instruments.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              child: Text(
-                'Choose a stock to view recent price action.',
-                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),
             ),
         ],
