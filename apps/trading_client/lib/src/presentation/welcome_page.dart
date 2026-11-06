@@ -204,15 +204,17 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
           ),
         ],
         const SizedBox(height: 18),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             TextButton(
               key: const ValueKey('minttick-welcome-sound-toggle'),
               onPressed: _toggleSound,
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF94A5AD),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 minimumSize: const Size(44, 44),
               ),
               child: Text(_soundEnabled ? 'Sound on' : 'Sound off'),
@@ -223,7 +225,8 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
               onPressed: _replay,
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF94A5AD),
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                textStyle: const TextStyle(fontSize: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
                 minimumSize: const Size(44, 44),
               ),
               child: const Text('Replay intro'),
