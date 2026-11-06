@@ -34,7 +34,7 @@ function Breadcrumbs() {
   const label = CRUMBS[first] ?? 'Overview';
   return (
     <nav aria-label="Breadcrumb" className="text-xs text-muted">
-      <span>MintTick</span><span className="mx-1.5">/</span><span className="text-text">{label}</span>
+      <span>SignalForge</span><span className="mx-1.5">/</span><span className="text-text">{label}</span>
     </nav>
   );
 }
@@ -42,8 +42,8 @@ function Breadcrumbs() {
 function Brand({ compact }) {
   return (
     <div className="flex items-center gap-2.5 overflow-hidden">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-[rgb(var(--accent-contrast))]">MT</div>
-      {!compact && <div className="min-w-0"><p className="truncate text-sm font-semibold text-text">MintTick</p><p className="truncate text-[10px] uppercase tracking-widest text-muted">AI Trading Platform</p></div>}
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent text-xs font-bold text-[rgb(var(--accent-contrast))]">SF</div>
+      {!compact && <div className="min-w-0"><p className="truncate text-sm font-semibold text-text">SignalForge</p><p className="truncate text-[10px] uppercase tracking-widest text-muted">AI Trading Lab</p></div>}
     </div>
   );
 }

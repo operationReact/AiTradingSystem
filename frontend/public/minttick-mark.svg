@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="280" height="170" viewBox="0 0 280 170" role="img" aria-label="MintTick">
-<defs><linearGradient id="minttick" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#00BFA5"/><stop offset="1" stop-color="#00E676"/></linearGradient></defs>
-<path fill="url(#minttick)" d="M6 151 64 30Q72 13 91 13H110Q125 13 136 26L174 74 273 6 229 84 178 128Q167 138 157 126L100 57 63 144Q59 153 48 153Z"/>
-<g fill="url(#minttick)"><rect x="174" y="130" width="19" height="24" rx="2.5"/><rect x="202" y="110" width="19" height="44" rx="2.5"/><rect x="230" y="90" width="19" height="64" rx="2.5"/></g>
-</svg>

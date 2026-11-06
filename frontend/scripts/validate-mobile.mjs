@@ -10,7 +10,7 @@ const html = read('index.html');
 assert.equal(manifest.display, 'standalone', 'Mobile installation must use standalone display');
 assert.equal(manifest.start_url, '/', 'App must launch at the root route');
 assert.equal(manifest.scope, '/', 'Navigation scope must include the app routes');
-assert.equal(manifest.name, 'MintTick AI Trading Platform');
+assert.equal(manifest.name, 'SignalForge AI Trading Lab');
 assert.match(manifest.theme_color, /^#[0-9a-fA-F]{6}$/);
 assert.match(manifest.background_color, /^#[0-9a-fA-F]{6}$/);
 assert.ok(Array.isArray(manifest.icons) && manifest.icons.length > 0, 'At least one icon is required');
