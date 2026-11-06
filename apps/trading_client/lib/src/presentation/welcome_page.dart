@@ -83,7 +83,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             width: 390,
             child: Theme(
               data: buildTheme(Brightness.dark),
-              child: const MintTickLockup(markWidth: 104, fontSize: 39),
+              child: const MintTickLockup(markWidth: 82, fontSize: 32),
             ),
           ),
         ),
