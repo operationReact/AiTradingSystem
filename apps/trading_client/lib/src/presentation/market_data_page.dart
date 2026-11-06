@@ -12,9 +12,10 @@ import '../data/market_data_repository.dart';
 /// A catalogue-first Markets experience. Quotes are not invented: the current
 /// backend contract supplies instruments and historical candles, not live LTPs.
 class MarketDataPage extends StatefulWidget {
-  const MarketDataPage({required this.repository, super.key});
+  const MarketDataPage({required this.repository, this.isAuthenticated = true, super.key});
 
   final MarketDataRepository repository;
+  final bool isAuthenticated;
 
   @override
   State<MarketDataPage> createState() => _MarketDataPageState();
@@ -42,7 +43,7 @@ class _MarketDataPageState extends State<MarketDataPage> {
   void initState() {
     super.initState();
     _listController.addListener(_onScroll);
-    _loadInstruments();
+    if (widget.isAuthenticated) _loadInstruments();
   }
 
   @override
@@ -177,7 +178,9 @@ class _MarketDataPageState extends State<MarketDataPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Markets')),
       body: SafeArea(
-        child: LayoutBuilder(
+        child: !widget.isAuthenticated
+            ? const _GuestMarketView()
+            : LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final mobile = width < 900;
@@ -753,4 +756,65 @@ class _HistoricalClosePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _HistoricalClosePainter oldDelegate) =>
       oldDelegate.records != records || oldDelegate.lineColor != lineColor || oldDelegate.gridColor != gridColor;
+}
+
+class _GuestMarketView extends StatelessWidget {
+  const _GuestMarketView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return LayoutBuilder(
+      builder: (context, bounds) => SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text('Explore Indian equities', style: theme.textTheme.headlineSmall),
+                ),
+                const SizedBox(height: 7),
+                Text('Search the NSE and BSE catalogue, then inspect historical price action.',
+                    style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(Icons.lock_outline_rounded, color: scheme.primary, size: 27),
+                        const SizedBox(height: 13),
+                        Text('Sign in to browse markets', style: theme.textTheme.titleLarge),
+                        const SizedBox(height: 6),
+                        Text(
+                          'The stock catalogue is linked to your secure account. '
+                          'No live prices or simulated quotes are shown while signed out.',
+                          style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            key: const ValueKey('market-guest-sign-in'),
+                            onPressed: () => Navigator.of(context).pushNamed('/sign-in'),
+                            child: const Text('Sign in securely'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

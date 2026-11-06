@@ -6,9 +6,10 @@ import '../data/research_repository.dart';
 import 'customer_lifecycle_state.dart';
 
 class ResearchPage extends StatefulWidget {
-  const ResearchPage({required this.repository, super.key});
+  const ResearchPage({required this.repository, this.isAuthenticated = true, super.key});
 
   final ResearchRepository repository;
+  final bool isAuthenticated;
 
   @override
   State<ResearchPage> createState() => _ResearchPageState();
@@ -133,7 +134,9 @@ class _ResearchPageState extends State<ResearchPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('AI Research')),
       body: SafeArea(
-        child: LayoutBuilder(
+        child: !widget.isAuthenticated
+            ? const _GuestResearchView()
+            : LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
             final wide = width >= 960;
@@ -462,4 +465,65 @@ class _Metric extends StatelessWidget {
           ),
         ),
       );
+}
+
+class _GuestResearchView extends StatelessWidget {
+  const _GuestResearchView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 28),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Semantics(
+                header: true,
+                child: Text('Evidence-led research', style: theme.textTheme.headlineSmall),
+              ),
+              const SizedBox(height: 7),
+              Text(
+                'Evaluate candidate setups, stop levels, scenarios and their limitations.',
+                style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.insights_outlined, color: scheme.primary, size: 29),
+                      const SizedBox(height: 13),
+                      Text('Sign in to start research', style: theme.textTheme.titleLarge),
+                      const SizedBox(height: 6),
+                      Text(
+                        'AI scans are linked to your account and real backend evidence. '
+                        'No speculative scores or trade recommendations are displayed here.',
+                        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          key: const ValueKey('research-guest-sign-in'),
+                          onPressed: () => Navigator.of(context).pushNamed('/sign-in'),
+                          child: const Text('Sign in securely'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

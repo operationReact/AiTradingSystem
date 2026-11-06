@@ -57,7 +57,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
-    expect(find.text('Secure sign-in is required'), findsOneWidget);
+    expect(find.text('Connect your account to view PAPER balances, AI research and trading controls.'), findsOneWidget);
     expect(find.byKey(const ValueKey('dashboard-access-key')), findsNothing);
     expect(find.byKey(const ValueKey('dashboard-connect')), findsNothing);
     expect(find.textContaining('operator access-key'), findsNothing);

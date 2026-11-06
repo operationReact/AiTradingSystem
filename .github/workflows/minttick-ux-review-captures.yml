@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/minttick-mobile-screen-experience-20261106
+      - feature/minttick-route-aware-guest-experience-20261106
   workflow_dispatch:
 
 permissions:
