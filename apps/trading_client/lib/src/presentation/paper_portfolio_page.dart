@@ -6,9 +6,10 @@ import '../data/paper_trading_repository.dart';
 import 'customer_lifecycle_state.dart';
 
 class PaperPortfolioPage extends StatefulWidget {
-  const PaperPortfolioPage({required this.repository, super.key});
+  const PaperPortfolioPage({required this.repository, this.isAuthenticated = true, super.key});
 
   final PaperTradingRepository repository;
+  final bool isAuthenticated;
 
   @override
   State<PaperPortfolioPage> createState() => _PaperPortfolioPageState();
@@ -22,11 +23,15 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
   @override
   void initState() {
     super.initState();
-    _refresh();
+    if (widget.isAuthenticated) {
+      _refresh();
+    } else {
+      _failure = const ApiAuthenticationRequired();
+    }
   }
 
   Future<void> _refresh() async {
-    if (_loading) return;
+    if (!widget.isAuthenticated || _loading) return;
     setState(() {
       _loading = true;
       _failure = null;
@@ -60,7 +65,7 @@ class _PaperPortfolioPageState extends State<PaperPortfolioPage> {
           IconButton(
             key: const ValueKey('paper-portfolio-refresh'),
             tooltip: 'Refresh portfolio',
-            onPressed: _loading ? null : _refresh,
+            onPressed: _loading || !widget.isAuthenticated ? null : _refresh,
             icon: _loading
                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.refresh_rounded),
