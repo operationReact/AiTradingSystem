@@ -34,7 +34,7 @@ jobs:
           terraform_version: '1.10.5'
       - name: Check Terraform formatting
         working-directory: infra/minttick-market-feed
-        run: terraform fmt -check -recursive
+        run: terraform fmt -check -diff -recursive
       - name: Validate Lambda IAM module without AWS access
         working-directory: infra/minttick-market-feed
         run: |
