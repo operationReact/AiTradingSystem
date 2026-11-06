@@ -32,9 +32,11 @@ LTP_PATH = "/rest/secure/angelbroking/order/v1/getLtpData"
 CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData"
 REAUTH_CODES = {"AG8001", "AG8003", "AB8050", "AB8051", "AB1010"}
 EXCHANGES = {"NSE", "BSE"}
+# Must match backend HistoricalCandleInterval maxDaysPerRequest.
 INTERVALS = {
-    "ONE_MINUTE", "THREE_MINUTE", "FIVE_MINUTE", "TEN_MINUTE",
-    "FIFTEEN_MINUTE", "THIRTY_MINUTE", "ONE_HOUR", "ONE_DAY",
+    "ONE_MINUTE": 30, "THREE_MINUTE": 60, "FIVE_MINUTE": 100,
+    "TEN_MINUTE": 100, "FIFTEEN_MINUTE": 200, "THIRTY_MINUTE": 200,
+    "ONE_HOUR": 400, "ONE_DAY": 2000,
 }
 _LOCK = Lock()
 _CACHE = {"secrets": None, "secrets_loaded_at": 0.0, "jwt": None, "jwt_expires": 0.0}
@@ -197,7 +199,7 @@ def _candles(event, credentials):
             raise ValueError()
         from_date = datetime.strptime(start, "%Y-%m-%d %H:%M")
         to_date = datetime.strptime(end, "%Y-%m-%d %H:%M")
-        if to_date < from_date or to_date - from_date > timedelta(days=31):
+        if to_date < from_date or to_date - from_date > timedelta(days=INTERVALS[interval]):
             raise ValueError()
     except (ValueError, TypeError):
         raise FeedError("INVALID_CANDLE_REQUEST") from None
