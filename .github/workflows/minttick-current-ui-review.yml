@@ -26,6 +26,25 @@ jobs:
       - run: flutter pub get
       - name: Build actual Flutter web UI (no backend required)
         run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
+      - name: Capture exact implemented screens in Chromium
+        run: |
+          set -euo pipefail
+          cd "$GITHUB_WORKSPACE/.github/scripts"
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install chromium
+          cd "$GITHUB_WORKSPACE/apps/trading_client"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory build/web &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          sleep 2
+          node "$GITHUB_WORKSPACE/.github/scripts/minttick_ui_capture.cjs"
+      - name: Upload real-rendered screenshot evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: minttick-current-flutter-screens
+          path: apps/trading_client/captured-screens/*.png
+          if-no-files-found: error
+          retention-days: 3
       - name: Package reviewable current UI
         uses: actions/upload-artifact@v4
         with:
