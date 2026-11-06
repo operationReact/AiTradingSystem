@@ -1,11 +1,15 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/widgets/responsive_layout.dart';
-import '../data/authenticated_api_client.dart';
 import '../data/instrument_repository.dart';
 import '../data/market_data_repository.dart';
-import '../theme/app_theme.dart';
 
+/// A catalogue-first Markets experience. Quotes are not invented: the current
+/// backend contract supplies instruments and historical candles, not live LTPs.
 class MarketDataPage extends StatefulWidget {
   const MarketDataPage({required this.repository, super.key});
 
@@ -16,172 +20,236 @@ class MarketDataPage extends StatefulWidget {
 }
 
 class _MarketDataPageState extends State<MarketDataPage> {
+  static const _pageSize = 25;
+
   final _instrumentQuery = TextEditingController();
+  final _listController = ScrollController();
+  Timer? _searchDebounce;
   InstrumentCatalogueStatus? _status;
-  InstrumentSearchPage? _instruments;
+  InstrumentSearchPage? _lastPage;
+  final List<InstrumentRecord> _instruments = [];
   InstrumentRecord? _selected;
-  MarketCandlePage? _candles;
-  String _interval = 'ONE_DAY';
+  String? _exchange;
   String? _error;
+  String? _nextPageError;
   bool _loading = false;
+  bool _loadingMore = false;
+  int _requestVersion = 0;
 
   @override
   void initState() {
     super.initState();
+    _listController.addListener(_onScroll);
     _loadInstruments();
   }
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _requestVersion++;
+    _listController.dispose();
     _instrumentQuery.dispose();
     super.dispose();
   }
 
+  void _onScroll() {
+    if (!_listController.hasClients || _loading || _loadingMore || _nextPageError != null) return;
+    if (_listController.position.extentAfter < 260) _loadMore();
+  }
+
+  void _onQueryChanged(String _) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 350), _loadInstruments);
+  }
+
   Future<void> _loadInstruments() async {
+    _searchDebounce?.cancel();
+    final version = ++_requestVersion;
+    final query = _instrumentQuery.text.trim();
+    final exchange = _exchange;
+
+    if (_listController.hasClients) _listController.jumpTo(0);
     setState(() {
       _loading = true;
+      _loadingMore = false;
       _error = null;
+      _nextPageError = null;
+      _lastPage = null;
+      _instruments.clear();
     });
+
     try {
-      final results = await Future.wait([
-        widget.repository.instrumentStatus(),
+      // Keep catalogue failures visible, rather than reporting a misleading zero.
+      final results = await Future.wait<Object>([
+        if (_status == null) widget.repository.instrumentStatus(),
         widget.repository.searchInstruments(
-          query: _instrumentQuery.text.trim().isEmpty ? null : _instrumentQuery.text.trim(),
-          size: 25,
+          query: query.isEmpty ? null : query,
+          exchange: exchange,
+          type: 'EQ',
+          page: 0,
+          size: _pageSize,
         ),
       ]);
-      if (!mounted) return;
-      final page = results[1] as InstrumentSearchPage;
+      if (!mounted || version != _requestVersion) return;
+      final page = results.last as InstrumentSearchPage;
       setState(() {
-        _status = results[0] as InstrumentCatalogueStatus;
-        _instruments = page;
-        if (_selected != null && !page.content.any((item) => item.id == _selected!.id)) {
-          _selected = null;
-          _candles = null;
-        }
+        if (results.length == 2) _status = results.first as InstrumentCatalogueStatus;
+        _lastPage = page;
+        _instruments.addAll(page.content);
       });
-    } on ApiFailure {
-      if (!mounted) return;
+    } catch (_) {
+      if (!mounted || version != _requestVersion) return;
       setState(() => _error = 'Market data is temporarily unavailable.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && version == _requestVersion) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadCandles(InstrumentRecord instrument) async {
+  Future<void> _loadMore() async {
+    final current = _lastPage;
+    if (_loading || _loadingMore || current == null || !current.hasNext) return;
+    final version = _requestVersion;
     setState(() {
-      _selected = instrument;
-      _loading = true;
-      _error = null;
+      _loadingMore = true;
+      _nextPageError = null;
     });
     try {
-      final today = DateTime.now();
-      final from = today.subtract(const Duration(days: 30));
-      final page = await widget.repository.candles(
-        instrumentId: instrument.id,
-        interval: _interval,
-        fromDate: from,
-        toDate: today,
-        size: 100,
+      final result = await widget.repository.searchInstruments(
+        query: _instrumentQuery.text.trim().isEmpty ? null : _instrumentQuery.text.trim(),
+        exchange: _exchange,
+        type: 'EQ',
+        page: current.page + 1,
+        size: _pageSize,
       );
-      if (!mounted) return;
-      setState(() => _candles = page);
-    } on ApiFailure {
-      if (!mounted) return;
-      setState(() => _error = 'Price history could not be loaded.');
+      if (!mounted || version != _requestVersion) return;
+      final ids = _instruments.map((instrument) => instrument.id).toSet();
+      setState(() {
+        _instruments.addAll(result.content.where((record) => ids.add(record.id)));
+        _lastPage = result;
+      });
+    } catch (_) {
+      if (!mounted || version != _requestVersion) return;
+      setState(() => _nextPageError = 'More stocks could not be loaded.');
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && version == _requestVersion) setState(() => _loadingMore = false);
+    }
+  }
+
+  void _setExchange(String? exchange) {
+    if (_exchange == exchange) return;
+    setState(() => _exchange = exchange);
+    _loadInstruments();
+  }
+
+  void _selectInstrument(InstrumentRecord instrument, {required bool mobile}) {
+    if (mobile) {
+      Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => _MarketInstrumentDetailPage(
+          instrument: instrument,
+          repository: widget.repository,
+        ),
+      ));
+    } else {
+      setState(() => _selected = instrument);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<TradingColors>();
-    final status = _status;
-    final instruments = _instruments;
-
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('Markets')),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
             final width = constraints.maxWidth;
-            final wide = width >= 900;
-            final mobile = width < ResponsiveLayout.mobileBreakpoint;
-            final pagePadding = ResponsiveLayout.horizontalPadding(width);
-            final sectionGap = ResponsiveLayout.sectionGap(width);
-            final searchPane = _buildInstrumentPane(context, status, instruments, mobile: mobile);
-            final chartPane = _buildCandlePane(context, mobile: mobile);
-            return ListView(
-              padding: EdgeInsets.fromLTRB(pagePadding, ResponsiveLayout.topPadding(width), pagePadding, 24),
-              children: [
-                Container(
-                  padding: EdgeInsets.all(ResponsiveLayout.heroPadding(width)),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(ResponsiveLayout.heroRadius(width)),
-                    gradient: LinearGradient(
-                      colors: [
-                        theme.colorScheme.primaryContainer.withValues(alpha: 0.72),
-                        theme.colorScheme.surfaceContainerHighest,
-                      ],
-                    ),
-                    border: Border.all(color: colors?.neonCyan.withValues(alpha: 0.35) ?? theme.colorScheme.outlineVariant),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          'Explore the market',
-                          style: (mobile ? theme.textTheme.titleLarge : theme.textTheme.headlineSmall)?.copyWith(fontWeight: FontWeight.w900),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'Search stocks, review price action, then move into AI research.',
-                        style: (mobile ? theme.textTheme.bodyMedium : theme.textTheme.bodyLarge)?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: mobile ? 1.3 : 1.45,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_error != null) ...[
-                  SizedBox(height: mobile ? 10 : 16),
-                  Card(
-                    key: const ValueKey('market-data-error'),
-                    child: Padding(
-                      padding: EdgeInsets.all(mobile ? 12 : 16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.cloud_off_rounded, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(child: Text(_error!)),
-                          TextButton(onPressed: _loadInstruments, child: const Text('Try again')),
-                        ],
-                      ),
+            final mobile = width < 900;
+            final padding = ResponsiveLayout.horizontalPadding(width);
+            return Padding(
+              padding: EdgeInsets.fromLTRB(padding, 4, padding, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    header: true,
+                    child: Text(
+                      'Explore the market',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontSize: mobile ? 19 : 24,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.4,
+                          ),
                     ),
                   ),
-                ],
-                SizedBox(height: sectionGap),
-                if (wide)
+                  const SizedBox(height: 3),
+                  Text(
+                    'Find Indian equities and review historical price action.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 13,
+                          color: scheme.onSurfaceVariant,
+                        ),
+                    maxLines: 2,
+                  ),
+                  const SizedBox(height: 10),
+                  _buildSearch(scheme),
+                  const SizedBox(height: 10),
+                  _buildFilters(scheme),
+                  const SizedBox(height: 8),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(child: searchPane),
-                      const SizedBox(width: 16),
-                      Expanded(child: chartPane),
+                      Expanded(
+                        child: Text(
+                          _loading ? 'Loading stocks…' : 'Showing ${_instruments.length} of ${_lastPage?.totalElements ?? '—'} equities',
+                          key: const ValueKey('market-list-count'),
+                          style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'This screen provides an instrument catalogue and historical candles; not live prices.',
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.info_outline_rounded, size: 15, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text('No live quotes', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+                        ]),
+                      ),
                     ],
-                  )
-                else ...[
-                  searchPane,
-                  SizedBox(height: sectionGap),
-                  chartPane,
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: 8),
+                    _errorPanel(scheme),
+                  ],
+                  const SizedBox(height: 5),
+                  Text(
+                    'Choose a stock to view recent price action.',
+                    style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: mobile
+                        ? _buildInstrumentPane(scheme, mobile: true)
+                        : Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(flex: 5, child: _buildInstrumentPane(scheme, mobile: false)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                flex: 6,
+                                child: _selected == null
+                                    ? _emptyDetail(scheme)
+                                    : _MarketHistoryPane(
+                                        key: ValueKey('market-detail-${_selected!.id}'),
+                                        instrument: _selected!,
+                                        repository: widget.repository,
+                                      ),
+                              ),
+                            ],
+                          ),
+                  ),
                 ],
-              ],
+              ),
             );
           },
         ),
@@ -189,117 +257,452 @@ class _MarketDataPageState extends State<MarketDataPage> {
     );
   }
 
-  Widget _buildInstrumentPane(
-    BuildContext context,
-    InstrumentCatalogueStatus? status,
-    InstrumentSearchPage? instruments, {
-    required bool mobile,
-  }) {
-    final theme = Theme.of(context);
-    return Card(
+  Widget _buildSearch(ColorScheme scheme) {
+    return TextField(
+      key: const ValueKey('market-instrument-search'),
+      controller: _instrumentQuery,
+      textInputAction: TextInputAction.search,
+      inputFormatters: [
+        LengthLimitingTextInputFormatter(100),
+        FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9 .&/_-]')),
+      ],
+      onChanged: _onQueryChanged,
+      onSubmitted: (_) => _loadInstruments(),
+      style: const TextStyle(fontSize: 15),
+      decoration: InputDecoration(
+        hintText: 'Search symbol or company',
+        prefixIcon: const Icon(Icons.search_rounded, size: 21),
+        suffixIcon: IconButton(
+          key: const ValueKey('market-instrument-search-button'),
+          tooltip: 'Search market',
+          onPressed: _loading ? null : _loadInstruments,
+          icon: const Icon(Icons.arrow_forward_rounded, size: 21),
+        ),
+        filled: true,
+        fillColor: scheme.surfaceContainer,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+    );
+  }
+
+  Widget _buildFilters(ColorScheme scheme) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _filterChip('All stocks', null, scheme),
+          const SizedBox(width: 8),
+          _filterChip('NSE', 'NSE', scheme),
+          const SizedBox(width: 8),
+          _filterChip('BSE', 'BSE', scheme),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterChip(String label, String? exchange, ColorScheme scheme) {
+    final selected = _exchange == exchange;
+    return ChoiceChip(
+      key: ValueKey('market-exchange-${exchange ?? 'all'}'),
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => _setExchange(exchange),
+      showCheckmark: false,
+      backgroundColor: scheme.surfaceContainer,
+      selectedColor: scheme.primary,
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
+        color: selected ? scheme.onPrimary : scheme.onSurface,
+      ),
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      side: BorderSide(color: selected ? scheme.primary : scheme.outlineVariant),
+    );
+  }
+
+  Widget _errorPanel(ColorScheme scheme) {
+    return Container(
+      key: const ValueKey('market-data-error'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.error.withValues(alpha: 0.4)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(children: [
+        Icon(Icons.cloud_off_rounded, size: 19, color: scheme.error),
+        const SizedBox(width: 8),
+        Expanded(child: Text(_error!, style: const TextStyle(fontSize: 12.5))),
+        TextButton(onPressed: _loadInstruments, child: const Text('Try again')),
+      ]),
+    );
+  }
+
+  Widget _buildInstrumentPane(ColorScheme scheme, {required bool mobile}) {
+    final hasFooter = _lastPage?.hasNext == true || _nextPageError != null || _loadingMore;
+    return Container(
       key: const ValueKey('market-data-instruments'),
-      child: Padding(
-        padding: EdgeInsets.all(mobile ? 12 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Find a stock', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w800)),
-            if (status != null) ...[
-              const SizedBox(height: 3),
-              Text('${status.activeCount} tradable instruments', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            ],
-            SizedBox(height: mobile ? 8 : 12),
-            TextField(
-              key: const ValueKey('market-instrument-search'),
-              controller: _instrumentQuery,
-              textInputAction: TextInputAction.search,
-              decoration: const InputDecoration(labelText: 'Symbol or company', prefixIcon: Icon(Icons.search_rounded)),
-              onSubmitted: (_) => _loadInstruments(),
-            ),
-            const SizedBox(height: 8),
-            SizedBox(
-              width: mobile ? double.infinity : null,
-              child: FilledButton.icon(
-                key: const ValueKey('market-instrument-search-button'),
-                onPressed: _loading ? null : _loadInstruments,
-                icon: const Icon(Icons.search_rounded, size: 19),
-                label: const Text('Search market'),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.6)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
+            child: Row(children: [
+              Expanded(
+                child: Text('Equity catalogue', style: TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w800, color: scheme.onSurface,
+                )),
+              ),
+              Text('PRICE', style: TextStyle(
+                fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: scheme.onSurfaceVariant,
+              )),
+            ]),
+          ),
+          Divider(height: 1, color: scheme.outlineVariant),
+          if (!_loading && _instruments.isEmpty && _error == null)
+            Expanded(
+              child: Center(child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('No matching stocks found.', textAlign: TextAlign.center,
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+              )),
+            )
+          else if (_loading && _instruments.isEmpty)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null && _instruments.isEmpty)
+            Expanded(child: Center(child: Text('Stock list unavailable.', style: TextStyle(color: scheme.onSurfaceVariant))))
+          else
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadInstruments,
+                child: ListView.builder(
+                  key: const ValueKey('market-stock-list'),
+                  controller: _listController,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: _instruments.length + (hasFooter ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == _instruments.length) return _paginationFooter(scheme);
+                    final instrument = _instruments[index];
+                    final selected = _selected?.id == instrument.id;
+                    return Material(
+                      color: selected ? scheme.primary.withValues(alpha: 0.07) : Colors.transparent,
+                      child: InkWell(
+                        key: ValueKey('market-instrument-${instrument.id}'),
+                        onTap: () => _selectInstrument(instrument, mobile: mobile),
+                        child: SizedBox(
+                          height: 66,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: Row(children: [
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      instrument.tradingSymbol,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5, color: scheme.onSurface),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      '${instrument.name.isEmpty ? 'Company name unavailable' : instrument.name} · ${instrument.exchange}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text('—', style: TextStyle(
+                                fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurfaceVariant,
+                              )),
+                              const SizedBox(width: 5),
+                              Icon(Icons.chevron_right_rounded, size: 19, color: scheme.onSurfaceVariant),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
             ),
-            SizedBox(height: mobile ? 8 : 12),
-            if (_loading && instruments == null)
-              const Center(child: Padding(padding: EdgeInsets.all(8), child: CircularProgressIndicator()))
-            else if (instruments == null || instruments.content.isEmpty)
-              Text('No matching stocks found.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))
-            else
-              ...instruments.content.take(mobile ? 6 : 12).map(
-                    (instrument) => ListTile(
-                      key: ValueKey('market-instrument-${instrument.id}'),
-                      dense: true,
-                      selected: _selected?.id == instrument.id,
-                      title: Text(instrument.tradingSymbol),
-                      subtitle: Text('${instrument.exchange} • ${instrument.instrumentType}'),
-                      trailing: const Icon(Icons.chevron_right_rounded),
-                      onTap: () => _loadCandles(instrument),
-                    ),
-                  ),
-          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _paginationFooter(ColorScheme scheme) {
+    if (_loadingMore) {
+      return const SizedBox(height: 58, child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+    }
+    return SizedBox(
+      height: 62,
+      child: Center(
+        child: TextButton(
+          key: const ValueKey('market-load-more'),
+          onPressed: _loadMore,
+          child: Text(_nextPageError ?? 'Load more stocks'),
         ),
       ),
     );
   }
 
-  Widget _buildCandlePane(BuildContext context, {required bool mobile}) {
-    final selected = _selected;
-    final candles = _candles;
-    final theme = Theme.of(context);
-    return Card(
+  Widget _emptyDetail(ColorScheme scheme) {
+    return Container(
       key: const ValueKey('market-data-candles'),
-      child: Padding(
-        padding: EdgeInsets.all(mobile ? 12 : 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Price action', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              key: const ValueKey('market-data-interval'),
-              initialValue: _interval,
-              decoration: const InputDecoration(labelText: 'Timeframe'),
-              items: const [
-                DropdownMenuItem(value: 'ONE_DAY', child: Text('1 day')),
-                DropdownMenuItem(value: 'ONE_HOUR', child: Text('1 hour')),
-                DropdownMenuItem(value: 'FIFTEEN_MINUTE', child: Text('15 minutes')),
-                DropdownMenuItem(value: 'FIVE_MINUTE', child: Text('5 minutes')),
-              ],
-              onChanged: (value) {
-                if (value == null) return;
-                setState(() => _interval = value);
-                if (selected != null) _loadCandles(selected);
-              },
-            ),
-            const SizedBox(height: 8),
-            if (selected == null)
-              Text('Choose a stock to view recent price action.', style: theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant))
-            else if (_loading && candles == null)
-              const Center(child: CircularProgressIndicator())
-            else if (candles == null || candles.items.isEmpty)
-              Text('No price history is available for ${selected.tradingSymbol} in this timeframe.')
-            else ...[
-              Text('${selected.tradingSymbol} • ${candles.totalItems} points', style: const TextStyle(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              ...candles.items.take(mobile ? 10 : 20).map(
-                    (candle) => ListTile(
-                      dense: true,
-                      title: Text('${candle.candleTime?.toLocal() ?? '—'}'),
-                      subtitle: Text('O ${candle.open}  H ${candle.high}  L ${candle.low}  C ${candle.close}'),
-                      trailing: Text('${candle.volume} vol'),
-                    ),
-                  ),
-            ],
-          ],
-        ),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Text(
+        'Choose a stock to view recent price action.',
+        textAlign: TextAlign.center,
+        style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 14),
       ),
     );
   }
+}
+
+class _MarketInstrumentDetailPage extends StatelessWidget {
+  const _MarketInstrumentDetailPage({required this.instrument, required this.repository});
+  final InstrumentRecord instrument;
+  final MarketDataRepository repository;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: Text(instrument.tradingSymbol)),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(14),
+            child: _MarketHistoryPane(instrument: instrument, repository: repository),
+          ),
+        ),
+      );
+}
+
+class _MarketHistoryPane extends StatefulWidget {
+  const _MarketHistoryPane({required this.instrument, required this.repository, super.key});
+  final InstrumentRecord instrument;
+  final MarketDataRepository repository;
+
+  @override
+  State<_MarketHistoryPane> createState() => _MarketHistoryPaneState();
+}
+
+class _MarketHistoryPaneState extends State<_MarketHistoryPane> {
+  MarketCandlePage? _candles;
+  String _interval = 'ONE_DAY';
+  String? _error;
+  bool _loading = true;
+  int _generation = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MarketHistoryPane oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.instrument.id != widget.instrument.id) {
+      _candles = null;
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _generation++;
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final version = ++_generation;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final today = DateTime.now();
+      final result = await widget.repository.candles(
+        instrumentId: widget.instrument.id,
+        interval: _interval,
+        fromDate: today.subtract(const Duration(days: 30)),
+        toDate: today,
+        size: 100,
+      );
+      if (!mounted || version != _generation) return;
+      setState(() => _candles = result);
+    } catch (_) {
+      if (!mounted || version != _generation) return;
+      setState(() => _error = 'Price history could not be loaded.');
+    } finally {
+      if (mounted && version == _generation) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final candles = _candles;
+    return Container(
+      key: const ValueKey('market-data-candles'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Price action', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w800, color: scheme.onSurface)),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.instrument.name} · ${widget.instrument.exchange}',
+            maxLines: 2,
+            style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 14),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('market-data-interval'),
+            initialValue: _interval,
+            decoration: const InputDecoration(labelText: 'Historical timeframe'),
+            items: const [
+              DropdownMenuItem(value: 'ONE_DAY', child: Text('1 day')),
+              DropdownMenuItem(value: 'ONE_HOUR', child: Text('1 hour')),
+              DropdownMenuItem(value: 'FIFTEEN_MINUTE', child: Text('15 minutes')),
+              DropdownMenuItem(value: 'FIVE_MINUTE', child: Text('5 minutes')),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              setState(() {
+                _interval = value;
+                _candles = null;
+              });
+              _load();
+            },
+          ),
+          const SizedBox(height: 16),
+          if (_loading && candles == null)
+            const SizedBox(height: 180, child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Row(children: [
+              Expanded(child: Text(_error!, style: TextStyle(color: scheme.error))),
+              TextButton(onPressed: _load, child: const Text('Retry')),
+            ])
+          else if (candles == null || candles.items.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 22),
+              child: Text('No price history is available for this stock and timeframe.'),
+            )
+          else ...[
+            Text(
+              '${widget.instrument.tradingSymbol} • ${candles.totalItems} points',
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 6),
+            Text('Historical close · Not a live price', style: TextStyle(
+              fontSize: 12, color: scheme.onSurfaceVariant,
+            )),
+            const SizedBox(height: 8),
+            Semantics(
+              label: 'Historical close chart with ${candles.items.length} data points',
+              image: true,
+              child: SizedBox(
+                width: double.infinity,
+                height: 164,
+                child: CustomPaint(
+                  painter: _HistoricalClosePainter(
+                    candles.items,
+                    scheme.primary,
+                    scheme.outlineVariant,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text('Latest returned historical candle', style: TextStyle(
+              fontSize: 12, color: scheme.onSurfaceVariant,
+            )),
+            const SizedBox(height: 5),
+            Builder(builder: (context) {
+              final latest = candles.items.reduce((a, b) =>
+                  (a.candleTime ?? DateTime.fromMillisecondsSinceEpoch(0)).isAfter(
+                    b.candleTime ?? DateTime.fromMillisecondsSinceEpoch(0)) ? a : b);
+              return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text('O ${latest.open}  H ${latest.high}  L ${latest.low}  C ${latest.close}',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 5),
+                Text('${latest.volume} vol · ${latest.source.isEmpty ? 'Source unavailable' : latest.source}',
+                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant)),
+                Text(
+                  latest.candleTime == null ? 'Candle time unavailable' : 'Candle: ${latest.candleTime!.toLocal()}',
+                  style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
+                ),
+              ]);
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoricalClosePainter extends CustomPainter {
+  const _HistoricalClosePainter(this.records, this.lineColor, this.gridColor);
+
+  final List<MarketCandleRecord> records;
+  final Color lineColor;
+  final Color gridColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final data = records.toList()
+      ..sort((a, b) => (a.candleTime ?? DateTime.fromMillisecondsSinceEpoch(0))
+          .compareTo(b.candleTime ?? DateTime.fromMillisecondsSinceEpoch(0)));
+    if (data.isEmpty) return;
+    final closes = data.map((c) => c.close.toDouble()).where((c) => c.isFinite).toList();
+    if (closes.isEmpty) return;
+    final minValue = closes.reduce(math.min);
+    final maxValue = closes.reduce(math.max);
+    const inset = 8.0;
+    final width = math.max(1.0, size.width - inset * 2);
+    final height = math.max(1.0, size.height - inset * 2);
+    final grid = Paint()..color = gridColor.withValues(alpha: 0.4)..strokeWidth = 0.75;
+    for (var i = 1; i <= 3; i++) {
+      final y = inset + height * i / 4;
+      canvas.drawLine(Offset(inset, y), Offset(inset + width, y), grid);
+    }
+    final line = Path();
+    for (var i = 0; i < closes.length; i++) {
+      final x = inset + width * (closes.length == 1 ? 0.5 : i / (closes.length - 1));
+      final y = inset + height * (maxValue == minValue ? 0.5 : (maxValue - closes[i]) / (maxValue - minValue));
+      if (i == 0) { line.moveTo(x, y); } else { line.lineTo(x, y); }
+    }
+    final paint = Paint()..color = lineColor..strokeWidth = 2.25
+      ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round..isAntiAlias = true;
+    canvas.drawPath(line, paint);
+    if (closes.length == 1) {
+      final pointPaint = Paint()..color = lineColor;
+      canvas.drawCircle(Offset(inset + width / 2, inset + height / 2), 3.5, pointPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HistoricalClosePainter oldDelegate) =>
+      oldDelegate.records != records || oldDelegate.lineColor != lineColor || oldDelegate.gridColor != gridColor;
 }
