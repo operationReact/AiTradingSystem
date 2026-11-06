@@ -48,8 +48,10 @@ void main() {
       expect(find.byType(MintTickMark), findsOneWidget);
       expect(find.text('Sign in'), findsOneWidget);
       expect(find.text('Create account'), findsOneWidget);
-      expect(find.text('Sound off'), findsOneWidget);
-      expect(find.text('Replay intro'), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-inline-username')), findsOneWidget);
+      expect(find.byKey(const ValueKey('minttick-inline-password')), findsOneWidget);
+      expect(find.text('Sound off'), findsNothing);
+      expect(find.text('Replay intro'), findsNothing);
       expect(find.text('Trade with clarity.'), findsNothing);
       expect(find.textContaining('market tools'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -111,11 +113,18 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('sign in navigates without waiting for the reveal or audio', (tester) async {
+  testWidgets('inline sign-in validates without navigating or sending credentials', (tester) async {
     await pumpWelcome(tester);
     await tester.tap(find.byKey(const ValueKey('minttick-welcome-sign-in')));
     await tester.pumpAndSettle();
-    expect(find.text('Sign in destination'), findsOneWidget);
+    expect(find.text('Enter your username'), findsOneWidget);
+    expect(find.text('Enter your password'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('minttick-inline-username')), 'sample-user');
+    await tester.enterText(find.byKey(const ValueKey('minttick-inline-password')), 'not-a-real-password');
+    await tester.tap(find.byKey(const ValueKey('minttick-welcome-sign-in')));
+    await tester.pump();
+    expect(find.textContaining('not connected yet'), findsOneWidget);
+    expect(find.text('Sign in destination'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -125,6 +134,15 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Create account destination'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('password visibility toggles and never reveals plaintext by default', (tester) async {
+    await pumpWelcome(tester);
+    final field = find.byKey(const ValueKey('minttick-inline-password'));
+    expect(tester.widget<TextFormField>(field).obscureText, isTrue);
+    await tester.tap(find.byKey(const ValueKey('minttick-password-visibility')));
+    await tester.pump();
+    expect(tester.widget<TextFormField>(field).obscureText, isFalse);
   });
 
   testWidgets('reduced motion renders approved logo and both actions', (tester) async {
