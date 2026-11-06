@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../brand/minttick_brand.dart';
+
 class SignInPage extends StatelessWidget {
   const SignInPage({super.key});
 
@@ -48,13 +50,13 @@ class SignInPage extends StatelessWidget {
                         shape: BoxShape.circle,
                         color: scheme.primary.withValues(alpha: 0.14),
                       ),
-                      child: Icon(Icons.lock_person_rounded, color: scheme.primary, size: 30),
+                      child: const Center(child: MintTickMark(width: 48)),
                     ),
                     const SizedBox(height: 20),
                     Semantics(
                       header: true,
                       child: Text(
-                        'Welcome back',
+                        'Welcome to MintTick',
                         style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
                       ),
                     ),

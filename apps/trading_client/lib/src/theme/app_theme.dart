@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../brand/minttick_brand.dart';
+
 enum DesignStyle { neonFuturisticAi, cleanModern }
 
 @immutable
@@ -20,10 +22,10 @@ class TradingColors extends ThemeExtension<TradingColors> {
   final Color unsafe;
   final Color panel;
 
-  Color get neonCyan => const Color(0xFF0DEBFF);
-  Color get neonViolet => const Color(0xFF6E40FF);
-  Color get neonMagenta => const Color(0xFFFF24C7);
-  Color get neonNavy => const Color(0xFF050D20);
+  Color get neonCyan => MintTickPalette.mint;
+  Color get neonViolet => MintTickPalette.teal;
+  Color get neonMagenta => const Color(0xFF28F4B4);
+  Color get neonNavy => MintTickPalette.navy;
 
   @override
   TradingColors copyWith({Color? healthy, Color? degraded, Color? unknown, Color? halted, Color? unsafe, Color? panel}) =>
@@ -53,30 +55,34 @@ class TradingColors extends ThemeExtension<TradingColors> {
 ThemeData buildTheme(DesignStyle style, Brightness brightness) {
   final isDark = brightness == Brightness.dark;
   final neon = style == DesignStyle.neonFuturisticAi;
-  const cyan = Color(0xFF0DEBFF);
-  const violet = Color(0xFF6E40FF);
-  const magenta = Color(0xFFFF24C7);
+  const cyan = MintTickPalette.mint;
+  const violet = MintTickPalette.teal;
 
-  final seed = neon ? violet : const Color(0xFF1E6FD9);
+  final seed = MintTickPalette.teal;
   final generated = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
   final scheme = neon
       ? generated.copyWith(
-          primary: isDark ? cyan : const Color(0xFF006A75),
-          secondary: isDark ? magenta : const Color(0xFF8B176D),
+          primary: isDark ? cyan : MintTickPalette.readableGreen,
+          secondary: isDark ? violet : const Color(0xFF007A70),
           tertiary: violet,
-          surface: isDark ? const Color(0xFF030817) : const Color(0xFFF8FAFF),
-          surfaceContainer: isDark ? const Color(0xFF071326) : const Color(0xFFF1F4FC),
-          surfaceContainerHigh: isDark ? const Color(0xFF09172C) : const Color(0xFFE9EEF9),
-          surfaceContainerHighest: isDark ? const Color(0xFF0C1C35) : const Color(0xFFE2E8F4),
-          onSurface: isDark ? const Color(0xFFF3F7FF) : const Color(0xFF101828),
-          onSurfaceVariant: isDark ? const Color(0xFF8FA8CC) : const Color(0xFF52627A),
-          outline: isDark ? cyan.withValues(alpha: 0.58) : const Color(0xFF7EA6B7),
-          outlineVariant: isDark ? cyan.withValues(alpha: 0.22) : const Color(0xFFC6D3DE),
+          surface: isDark ? MintTickPalette.navy : MintTickPalette.ice,
+          surfaceContainer: isDark ? const Color(0xFF102019) : const Color(0xFFF0F7F4),
+          surfaceContainerHigh: isDark ? const Color(0xFF182B22) : const Color(0xFFE6F1EC),
+          surfaceContainerHighest: isDark ? const Color(0xFF203629) : const Color(0xFFDDEBE4),
+          onSurface: isDark ? MintTickPalette.ice : MintTickPalette.navy,
+          onSurfaceVariant: isDark ? const Color(0xFFB0C9BF) : const Color(0xFF52645C),
+          outline: isDark ? cyan.withValues(alpha: 0.58) : const Color(0xFF7BA89A),
+          outlineVariant: isDark ? cyan.withValues(alpha: 0.22) : const Color(0xFFC0D6CB),
         )
-      : generated;
+      : generated.copyWith(
+          primary: isDark ? cyan : MintTickPalette.readableGreen,
+          secondary: isDark ? violet : const Color(0xFF007A70),
+          surface: isDark ? MintTickPalette.navy : MintTickPalette.ice,
+          onSurface: isDark ? MintTickPalette.ice : MintTickPalette.navy,
+        );
 
   final panel = neon
-      ? (isDark ? const Color(0xE8071326) : const Color(0xFFF4F7FC))
+      ? (isDark ? const Color(0xFF102019) : const Color(0xFFF0F7F4))
       : (isDark ? const Color(0xFF171A1F) : const Color(0xFFF4F6F8));
 
   final statusColors = isDark

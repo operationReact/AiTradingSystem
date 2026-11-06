@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'brand/minttick_brand.dart';
 import 'data/authenticated_api_client.dart';
 import 'data/backtest_repository.dart';
 import 'data/health_repository.dart';
@@ -68,7 +69,7 @@ class _TradingAppState extends State<TradingApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
-      title: 'AI Trading System',
+      title: 'MintTick',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: buildTheme(_style, Brightness.light),
@@ -229,7 +230,7 @@ class _MobileProductNavigation extends StatelessWidget {
 
     return Material(
       key: const ValueKey('product-mobile-navigation'),
-      color: const Color(0xF2071020),
+      color: theme.colorScheme.surfaceContainer,
       elevation: 0,
       child: SafeArea(
         top: false,
@@ -299,19 +300,20 @@ class _DesktopProductRail extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(colors: [Color(0xF0051326), Color(0xF009051C)]),
+        gradient: LinearGradient(
+          colors: theme.brightness == Brightness.dark
+              ? const [Color(0xFF0B0F1A), Color(0xFF10251F)]
+              : const [Color(0xFFF2FAF6), Color(0xFFE4F4EB)],
+        ),
         border: Border.all(color: colors.neonCyan.withValues(alpha: 0.48)),
         boxShadow: [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.14), blurRadius: 30), BoxShadow(color: colors.neonMagenta.withValues(alpha: 0.08), blurRadius: 42)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(colors: [colors.neonCyan, colors.neonViolet, colors.neonMagenta]).createShader(bounds),
-            child: const Text('ATS', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
-          ),
-          const SizedBox(height: 6),
-          Text('AI Trading System', style: theme.textTheme.labelMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+          const MintTickLockup(markWidth: 36, fontSize: 18),
+          const SizedBox(height: 8),
+          Text('AI TRADING PLATFORM · PAPER', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 10.5, letterSpacing: 0.7)),
           const SizedBox(height: 22),
           _RailAction(label: 'Home', icon: Icons.space_dashboard_rounded, active: selectedRoute == '/', onTap: () => onNavigate('/')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),

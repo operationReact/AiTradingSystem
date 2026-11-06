@@ -1,13 +1,13 @@
 {
-  "name": "AI Trading System",
-  "short_name": "AI Trading",
-  "description": "Fail-closed PAPER trading operations client",
+  "name": "MintTick — AI Trading Platform",
+  "short_name": "MintTick",
+  "description": "AI trading research and PAPER trading platform",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#0A101C",
-  "theme_color": "#0A101C",
+  "background_color": "#0B0F1A",
+  "theme_color": "#0B0F1A",
   "icons": [
     {
       "src": "icons/Icon-192.png",

@@ -54,7 +54,7 @@ void main() {
   testWidgets('1024px mandatory viewport enters customer desktop layout', (tester) async {
     await _pumpAt(tester, const Size(1024, 900));
 
-    expect(find.text('AI Trading System'), findsOneWidget);
+    expect(find.text('MintTick'), findsWidgets);
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Markets'), findsWidgets);
     expect(find.text('AI Research'), findsWidgets);

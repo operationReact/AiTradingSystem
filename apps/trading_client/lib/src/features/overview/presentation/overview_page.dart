@@ -112,7 +112,7 @@ class _ProductHeader extends StatelessWidget {
             children: [
               Semantics(
                 header: true,
-                child: Text('AiTradingSystem', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w900)),
+                child: Text('MintTick', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w900)),
               ),
               Text('AI-powered PAPER trading', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],

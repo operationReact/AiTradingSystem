@@ -44,7 +44,7 @@ Future<void> _pumpGolden(
   );
   await tester.pumpAndSettle();
 
-  expect(find.text('AiTradingSystem'), findsOneWidget, reason: designLabel);
+  expect(find.text('MintTick'), findsWidgets, reason: designLabel);
   expect(find.byKey(const ValueKey('dashboard-sign-in-required')), findsOneWidget);
   expect(find.text('Sign in required'), findsOneWidget);
   expect(find.text('Secure sign-in is required'), findsOneWidget);
