@@ -3,8 +3,8 @@ package in.aitradingsystem.security;
 import java.net.URI;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.config.Customizer;
 import org.springframework.context.annotation.Bean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -32,7 +32,7 @@ public class SecurityConfig {
             ApiKeyAuthenticationFilter apiKeyFilter,
             SessionAuthenticationFilter sessionFilter,
             SessionCsrfFilter sessionCsrfFilter,
-            CognitoJwtAuthenticationConverter cognitoConverter,
+            ObjectProvider<CognitoJwtAuthenticationConverter> cognitoConverter,
             @Value("${app.security.cognito.enabled:false}") boolean cognitoEnabled,
             CorsConfigurationSource corsSource) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -71,7 +71,7 @@ public class SecurityConfig {
             .addFilterAfter(sessionCsrfFilter, ApiKeyAuthenticationFilter.class);
         if (cognitoEnabled) {
             http.oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(cognitoConverter)));
+                .jwt(jwt -> jwt.jwtAuthenticationConverter(cognitoConverter.getObject())));
         }
         return http.build();
     }
