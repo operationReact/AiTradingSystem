@@ -182,6 +182,8 @@ class _CompletePasswordResetPageState extends State<CompletePasswordResetPage> {
         code: _code.text.trim(),
         newPassword: _password.text,
       );
+      _password.clear();
+      _confirmation.clear();
       if (!mounted) return;
       Navigator.of(context).pushNamedAndRemoveUntil('/welcome', (_) => false);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
