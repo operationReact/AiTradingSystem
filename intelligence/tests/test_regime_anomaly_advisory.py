@@ -75,7 +75,9 @@ def _anomaly(regime, *, elevated=False, anomalous_score=None):
 
 
 def _hmm(regime, *, stress=False):
-    payload = regime.model_dump(mode="json", exclude={"snapshot_fingerprint"})
+    payload = regime.model_dump(mode="python", exclude={"snapshot_fingerprint"})
+    for key in ("as_of", "data_cutoff"):
+        payload[key] = payload[key].isoformat()
     payload["method"] = "HMM_CHALLENGER"
     payload["model_fingerprint"] = "e" * 64
     payload["training_data_cutoff"] = (regime.as_of - timedelta(days=10)).isoformat()
@@ -195,7 +197,9 @@ def test_causal_sources_are_bound_to_exact_same_snapshot_identity():
 
 def test_tampered_frozen_regime_anomaly_and_fusion_contents_are_rejected():
     request, regime = _fixture()
-    bad_regime = regime.model_copy(update={"confidence": 0.7})
+    bad_regime = regime.model_copy(
+        update={"evidence": {**regime.evidence, "zz-test": 1.0}}
+    )
     with pytest.raises(ValueError, match="snapshot_fingerprint mismatch"):
         build_regime_anomaly_advisory(
             request, heuristic=bad_regime, anomaly=_anomaly(regime),
