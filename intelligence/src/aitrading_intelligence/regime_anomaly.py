@@ -53,6 +53,7 @@ class IsolationAnomalyModelEvidence(BaseModel):
     source_snapshot_fingerprints: list[Hash64] = Field(min_length=1, max_length=5_000)
     config_fingerprint: Hash64
     fitted_tree_fingerprint: Hash64
+    fitted_scaler_fingerprint: Hash64
     anomaly_score_threshold: float
     model_fingerprint: Hash64
     status: Literal["RESEARCH_ISOLATION_FOREST_CHALLENGER"] = (
@@ -135,6 +136,15 @@ def _context_vector(
     return values
 
 
+def _scaler_fingerprint(scaler: StandardScaler) -> str:
+    """Keep the exact fitted preprocessing identity with the fitted trees."""
+    return canonical_fingerprint({
+        "mean": [round(float(value), 12) for value in scaler.mean_],
+        "scale": [round(float(value), 12) for value in scaler.scale_],
+        "n_features": int(scaler.n_features_in_),
+    })
+
+
 def _tree_fingerprint(estimator: IsolationForest) -> str:
     """Commit to exact fitted tree structure without unsafe pickle exchange."""
     return canonical_fingerprint([
@@ -200,6 +210,7 @@ def train_isolation_anomaly_challenger(
         ],
         "config_fingerprint": cfg.fingerprint,
         "fitted_tree_fingerprint": tree_fingerprint,
+        "fitted_scaler_fingerprint": _scaler_fingerprint(scaler),
         "anomaly_score_threshold": threshold,
         "status": "RESEARCH_ISOLATION_FOREST_CHALLENGER",
         "promotion_allowed": False,
@@ -224,6 +235,8 @@ def score_isolation_anomaly(
         raise ValueError("anomaly evidence cannot include future information")
     if _tree_fingerprint(fitted.estimator) != evidence.fitted_tree_fingerprint:
         raise ValueError("fitted model tree identity changed since freeze")
+    if _scaler_fingerprint(fitted.scaler) != evidence.fitted_scaler_fingerprint:
+        raise ValueError("fitted model scaler identity changed since freeze")
     vector = _context_vector(
         snapshot, max_age_minutes=fitted.config.max_feature_age_minutes
     )
