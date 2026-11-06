@@ -25,6 +25,9 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
 
+      - name: Enforce canonical MintTick brand spelling
+        run: python3 -m unittest discover -s scripts/tests -p test_minttick_brand_consistency.py -v
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
