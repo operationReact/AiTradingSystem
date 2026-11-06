@@ -26,7 +26,6 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     vsync: this,
     duration: const Duration(milliseconds: 1450),
   );
-  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
   BrandSonicLogo? _ownedSound;
   bool _soundEnabled = false;
   bool _interacted = false;
@@ -42,7 +41,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
 
   Future<void> _restoreSoundPreference() async {
     try {
-      final enabled = await _preferences.getBool(soundKey) ?? false;
+      final enabled = await SharedPreferencesAsync().getBool(soundKey) ?? false;
       if (mounted && !_interacted) setState(() => _soundEnabled = enabled);
     } catch (_) {
       // Launch remains fully usable when preferences are unavailable.
@@ -53,11 +52,19 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     _interacted = true;
     final enabled = !_soundEnabled;
     setState(() => _soundEnabled = enabled);
-    unawaited(_preferences.setBool(soundKey, enabled).catchError((Object _) {}));
+    unawaited(_saveSoundPreference(enabled));
     if (enabled) {
       await _playSound();
     } else {
       await _sound.stop();
+    }
+  }
+
+  Future<void> _saveSoundPreference(bool enabled) async {
+    try {
+      await SharedPreferencesAsync().setBool(soundKey, enabled);
+    } catch (_) {
+      // Audio opt-in remains optional if local storage is unavailable.
     }
   }
 
@@ -76,7 +83,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
 
   Future<void> _continue() async {
     try {
-      await _preferences.setBool(seenKey, true);
+      await SharedPreferencesAsync().setBool(seenKey, true);
     } catch (_) {
       // Failing to persist a cosmetic preference must not block navigation.
     }
