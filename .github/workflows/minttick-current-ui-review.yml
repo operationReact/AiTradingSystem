@@ -1,0 +1,35 @@
+name: Review captures — current MintTick Flutter web UI
+
+on:
+  push:
+    branches:
+      - feature/minttick-actual-ui-captures-20261106
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-current-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build actual Flutter web UI (no backend required)
+        run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
+      - name: Package reviewable current UI
+        uses: actions/upload-artifact@v4
+        with:
+          name: minttick-flutter-current-dev-ui
+          path: apps/trading_client/build/web/**
+          if-no-files-found: error
+          retention-days: 3
