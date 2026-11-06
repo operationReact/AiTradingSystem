@@ -50,6 +50,10 @@ class _CreateAccountPageState extends State<CreateAccountPage> {
         email: _email.text.trim().toLowerCase(),
         password: _password.text,
       );
+      // Email confirmation may remain open for minutes; never retain the
+      // signup password in a form controller beneath that route.
+      _password.clear();
+      _confirmPassword.clear();
       if (!mounted) return;
       if (step == RegistrationStep.emailCodeRequired) {
         await Navigator.of(context).push(MaterialPageRoute<void>(
