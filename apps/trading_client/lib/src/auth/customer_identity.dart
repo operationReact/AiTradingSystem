@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_core/amplify_core.dart';
-import 'package:amplify_flutter/amplify_flutter.dart';
+import 'package:amplify_core/amplify_core.dart' hide Amplify;
+import 'package:amplify_flutter/amplify_flutter.dart' show Amplify;
 import 'package:http/http.dart' as http;
 
 /// Authentication is deliberately independent of MintTick app-user IDs.
@@ -40,13 +40,19 @@ abstract final class MintTickIdentity {
     if (poolId.isEmpty || clientId.isEmpty) return; // Fail closed, not a demo identity.
 
     try {
-      final config = AmplifyOutputs(
-        auth: AuthOutputs(
-          awsRegion: region,
-          userPoolId: poolId,
-          userPoolClientId: clientId,
-        ),
-      );
+      // Public user-pool app client: no client secret or broker credentials.
+      // Use the stable Amplify v2 JSON schema rather than package-internal
+      // generated output classes (which differ between SDK releases).
+      final config = jsonEncode({
+        'version': '1',
+        'auth': {
+          'aws_region': region,
+          'user_pool_id': poolId,
+          'user_pool_client_id': clientId,
+          'standard_required_attributes': ['email'],
+          'user_verification_types': ['email'],
+        },
+      });
       await Amplify.addPlugin(AmplifyAuthCognito());
       await Amplify.configure(config);
       current = const CognitoCustomerIdentity();
