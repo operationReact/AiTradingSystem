@@ -219,7 +219,6 @@ class _MobileProductNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<TradingColors>()!;
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
       (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
@@ -261,16 +260,16 @@ class _MobileProductNavigation extends StatelessWidget {
                     margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      color: selected ? colors.neonCyan.withValues(alpha: 0.11) : Colors.transparent,
-                      border: selected ? Border.all(color: colors.neonCyan.withValues(alpha: 0.30)) : null,
-                      boxShadow: selected ? [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.10), blurRadius: 14)] : null,
+                      color: selected ? theme.colorScheme.primary.withValues(alpha: 0.10) : Colors.transparent,
+                      border: selected ? Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.24)) : null,
+                      
                     ),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(selected ? item.$2 : item.$1, size: 20, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant),
+                        Icon(selected ? item.$2 : item.$1, size: 22, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
                         const SizedBox(height: 2),
-                        Text(item.$3, maxLines: 1, style: TextStyle(fontSize: 10, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? colors.neonCyan : theme.colorScheme.onSurfaceVariant)),
+                        Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),

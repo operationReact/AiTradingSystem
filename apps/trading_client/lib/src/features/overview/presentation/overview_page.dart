@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../brand/minttick_brand.dart';
 import '../../../core/session/operator_session.dart';
 import '../../../core/widgets/data_state_panel.dart';
 import '../../../core/widgets/responsive_layout.dart';
@@ -96,29 +97,32 @@ class _ProductHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final mobile = MediaQuery.sizeOf(context).width < ResponsiveLayout.mobileBreakpoint;
-    final logoSize = mobile ? 40.0 : 46.0;
     return Row(
       children: [
-        Container(
-          width: logoSize,
-          height: logoSize,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(mobile ? 13 : 15), gradient: LinearGradient(colors: [theme.colorScheme.primary, theme.colorScheme.secondary])),
-          child: Icon(Icons.query_stats_rounded, color: Colors.white, size: mobile ? 22 : 24),
-        ),
-        SizedBox(width: mobile ? 10 : 12),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Semantics(
                 header: true,
-                child: Text('MintTick', style: (mobile ? theme.textTheme.titleMedium : theme.textTheme.titleLarge)?.copyWith(fontWeight: FontWeight.w900)),
+                child: MintTickLockup(
+                  markWidth: mobile ? 38 : 44,
+                  fontSize: mobile ? 20 : 23,
+                ),
               ),
-              Text('AI-powered PAPER trading', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              const SizedBox(height: 4),
+              Text('AI-powered PAPER trading', style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                fontSize: 12.5,
+              )),
             ],
           ),
         ),
-        IconButton(tooltip: 'Settings', onPressed: () => Navigator.of(context).pushNamed('/settings'), icon: const Icon(Icons.tune_rounded)),
+        IconButton(
+          tooltip: 'Settings',
+          onPressed: () => Navigator.of(context).pushNamed('/settings'),
+          icon: const Icon(Icons.tune_rounded),
+        ),
       ],
     );
   }
