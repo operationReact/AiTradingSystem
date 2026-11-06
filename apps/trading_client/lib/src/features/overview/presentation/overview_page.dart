@@ -142,7 +142,7 @@ class _AiPulseHero extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.symmetric(
         horizontal: mobile ? 16 : 24,
-        vertical: mobile ? 18 : 24,
+        vertical: mobile ? 11 : 24,
       ),
       decoration: BoxDecoration(
         color: scheme.surfaceContainerLow,
@@ -172,7 +172,7 @@ class _AiPulseHero extends StatelessWidget {
             'Explore Indian equities, evaluate research, and test strategies with virtual funds.',
             style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
