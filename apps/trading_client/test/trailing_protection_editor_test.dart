@@ -69,7 +69,7 @@ void main() {
 
     final repository = _FakePaperRepository();
     await tester.pumpWidget(MaterialApp(
-      theme: buildTheme(DesignStyle.neonFuturisticAi, Brightness.dark),
+      theme: buildTheme(Brightness.dark),
       home: PaperOrdersPage(
         repository: repository,
         trailingProtectionPreviewEnabled: true,
