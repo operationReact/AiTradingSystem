@@ -35,12 +35,6 @@ services:
       - no-new-privileges:true
     environment:
       TRADING_MODE: PAPER
-      # Optional: injected from host-local 0600 runtime.env, never from GitHub source.
-      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-ANGEL_ONE}
-      ANGELONE_API_KEY: ${ANGELONE_API_KEY:-}
-      ANGELONE_CLIENT_CODE: ${ANGELONE_CLIENT_CODE:-}
-      ANGELONE_PASSWORD: ${ANGELONE_PASSWORD:-}
-      ANGELONE_TOTP_SECRET: ${ANGELONE_TOTP_SECRET:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aitrading
       SPRING_DATASOURCE_USERNAME: aitrading
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?required}
