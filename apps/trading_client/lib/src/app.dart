@@ -280,20 +280,14 @@ class _DesktopProductRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<TradingColors>()!;
     return Container(
       width: 224,
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: theme.brightness == Brightness.dark
-              ? const [Color(0xFF0B0F1A), Color(0xFF10251F)]
-              : const [Color(0xFFF2FAF6), Color(0xFFE4F4EB)],
-        ),
-        border: Border.all(color: colors.neonCyan.withValues(alpha: 0.48)),
-        boxShadow: [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.14), blurRadius: 30), BoxShadow(color: colors.neonMagenta.withValues(alpha: 0.08), blurRadius: 42)],
+        color: theme.colorScheme.surfaceContainerLow,
+        border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,10 +368,7 @@ class _MoreProductSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ShaderMask(
-              shaderCallback: (bounds) => LinearGradient(colors: [colors.neonCyan, colors.neonViolet, colors.neonMagenta]).createShader(bounds),
-              child: const Text('More', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
-            ),
+            Text('More', style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
             const SizedBox(height: 3),
             Text('Trading tools and settings', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 10),
