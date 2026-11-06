@@ -1,4 +1,4 @@
-# Mintic — Angel One market-data setup (private development pilot)
+# MintTick — Angel One market-data setup (private development pilot)
 
 ## What this change implements
 
@@ -42,10 +42,10 @@ Application Management → Parameter Store → Create parameter):
 
 | Name | Purpose |
 |---|---|
-| `/mintic/dev/angelone/api-key` | SmartAPI application's API key |
-| `/mintic/dev/angelone/client-code` | Trading client code |
-| `/mintic/dev/angelone/login-pin` | Trading account login PIN |
-| `/mintic/dev/angelone/totp-secret` | Base32 TOTP enrollment secret |
+| `/minttick/dev/angelone/api-key` | SmartAPI application's API key |
+| `/minttick/dev/angelone/client-code` | Trading client code |
+| `/minttick/dev/angelone/login-pin` | Trading account login PIN |
+| `/minttick/dev/angelone/totp-secret` | Base32 TOTP enrollment secret |
 
 Set **Tier = Standard** (subject to account limits) and **Type = SecureString**.
 Prefer a scoped customer-managed KMS key if fine-grained access control is needed.

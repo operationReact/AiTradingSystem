@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 
+/// Canonical product identity for customer-facing surfaces.
+abstract final class MintTickBrand {
+  static const appName = 'MintTick';
+  static const productName = 'MintTick — AI Trading Platform';
+}
+
 /// Display-only identity. Trading authorization remains server-side.
 abstract final class MintTickPalette {
   static const mint = Color(0xFF00E676);
