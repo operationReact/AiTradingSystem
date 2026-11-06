@@ -29,9 +29,13 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Sid: InspectOnlyDedicatedStatePrefix
+              - Sid: InspectDedicatedStateBucketLocation
                 Effect: Allow
-                Action: [s3:ListBucket, s3:GetBucketLocation]
+                Action: s3:GetBucketLocation
+                Resource: arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1
+              - Sid: ListOnlyDedicatedStatePrefix
+                Effect: Allow
+                Action: s3:ListBucket
                 Resource: arn:aws:s3:::aitrading-paper-tfstate-098859530205-ap-south-1
                 Condition:
                   StringLike:
