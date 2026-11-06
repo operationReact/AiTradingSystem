@@ -3,12 +3,12 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-WRONG = ("mint" + "ic", "min" + "tick")
+WRONG = ("mint" + "ic", "min" + "tick", "signal" + "forge")
 
 
 class MintTickBrandConsistencyTest(unittest.TestCase):
     def test_active_product_text_has_no_wrong_spelling(self):
-        roots = (ROOT / "apps/trading_client", ROOT / "docs", ROOT / "README.md")
+        roots = (ROOT / "apps/trading_client", ROOT / "frontend", ROOT / "docs", ROOT / "README.md")
         for root in roots:
             paths = root.rglob("*") if root.is_dir() else (root,)
             for path in paths:
@@ -28,6 +28,8 @@ class MintTickBrandConsistencyTest(unittest.TestCase):
             "apps/trading_client/web/manifest.json": '"short_name": "MintTick"',
             "apps/trading_client/android/app/src/main/AndroidManifest.xml": 'android:label="MintTick"',
             "README.md": "# MintTick — AI Trading Platform",
+            "frontend/index.html": "<title>MintTick | AI Trading Platform</title>",
+            "frontend/public/manifest.webmanifest": '"short_name": "MintTick"',
         }
         for name, token in expected.items():
             with self.subTest(path=name):

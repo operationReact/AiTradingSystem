@@ -1,7 +1,7 @@
 {
-  "name": "SignalForge AI Trading Lab",
-  "short_name": "SignalForge",
-  "description": "Paper-trading and market research dashboard",
+  "name": "MintTick AI Trading Platform",
+  "short_name": "MintTick",
+  "description": "AI-powered market intelligence and trading platform",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -9,7 +9,7 @@
   "theme_color": "#0b1220",
   "icons": [
     {
-      "src": "/signalforge-icon.svg",
+      "src": "/minttick-mark.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
