@@ -139,10 +139,10 @@ void main() {
   testWidgets('password visibility toggles and never reveals plaintext by default', (tester) async {
     await pumpWelcome(tester);
     final field = find.byKey(const ValueKey('minttick-inline-password'));
-    expect(tester.widget<TextFormField>(field).obscureText, isTrue);
+    expect(tester.widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText))).obscureText, isTrue);
     await tester.tap(find.byKey(const ValueKey('minttick-password-visibility')));
     await tester.pump();
-    expect(tester.widget<TextFormField>(field).obscureText, isFalse);
+    expect(tester.widget<EditableText>(find.descendant(of: field, matching: find.byType(EditableText))).obscureText, isFalse);
   });
 
   testWidgets('reduced motion renders approved logo and both actions', (tester) async {
