@@ -50,7 +50,8 @@ class MintTickLockup extends StatelessWidget {
       children: [
         MintTickMark(width: markWidth),
         const SizedBox(width: 9),
-        Text.rich(
+        Flexible(
+          child: Text.rich(
           TextSpan(children: [
             TextSpan(text: 'Mint', style: TextStyle(color: scheme.onSurface)),
             TextSpan(text: 'Tick', style: TextStyle(color: mint)),
@@ -63,6 +64,7 @@ class MintTickLockup extends StatelessWidget {
             fontSize: fontSize,
             letterSpacing: -0.6,
             height: 1.05,
+          ),
           ),
         ),
       ],
