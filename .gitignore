@@ -50,3 +50,6 @@ crash.*.log
 # Never commit private trained research model build contexts
 intelligence/.research-release/
 intelligence/.research-staging-*/
+
+# Generated, non-secret read-only market-feed artifact
+infra/minttick-market-feed/minttick-feed.zip
