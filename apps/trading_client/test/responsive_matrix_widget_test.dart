@@ -36,7 +36,7 @@ void main() {
       for (final destination in ['home', 'markets', 'research', 'portfolio', 'more']) {
         expect(find.byKey(ValueKey('mobile-nav-$destination')), findsOneWidget);
       }
-      expect(find.text('See the market. Find the setup. Test it safely.'), findsOneWidget);
+      expect(find.text('Make informed trading decisions.'), findsOneWidget);
       expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
       expect(find.byKey(const ValueKey('global-theme-mode-control')), findsNothing);
       expect(tester.takeException(), isNull);
