@@ -48,7 +48,7 @@ void main() {
     final repository = _FakeResearchRepository();
     await tester.pumpWidget(MaterialApp(home: ResearchPage(repository: repository)));
 
-    expect(find.text('Run a scan to discover ranked trade ideas.'), findsOneWidget);
+    expect(find.text('No research results yet'), findsOneWidget);
     expect(find.text('Find opportunities'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('research-run-scan')));
     await tester.pumpAndSettle();
