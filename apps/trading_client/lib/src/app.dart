@@ -4,6 +4,7 @@ import 'brand/minttick_brand.dart';
 import 'data/authenticated_api_client.dart';
 import 'data/backtest_repository.dart';
 import 'data/health_repository.dart';
+import 'data/home_quote_repository.dart';
 import 'data/instrument_repository.dart';
 import 'data/market_data_repository.dart';
 import 'data/model_control_center_repository.dart';
@@ -190,6 +191,7 @@ class _TradingAppState extends State<TradingApp> {
   Widget _overviewPage() => OverviewPage(
         session: widget.session,
         dashboardRepository: HttpDashboardRepository(session: widget.session),
+        marketQuoteRepository: HttpHomeQuoteRepository(_api),
       );
 
   Widget _healthPage() => OperationsHealthPage(

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/session/operator_session.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../../../data/health_repository.dart';
+import '../../../data/home_quote_repository.dart';
 import '../../../theme/app_theme.dart';
 import '../../overview/presentation/overview_page.dart' as existing;
 import '../data/paper_runtime_repository.dart';
@@ -21,12 +22,14 @@ class OverviewPage extends StatelessWidget {
     required this.session,
     required this.dashboardRepository,
     this.runtimeRepository,
+    this.marketQuoteRepository,
     super.key,
   });
 
   final OperatorSession session;
   final DashboardRepository dashboardRepository;
   final PaperRuntimeRepository? runtimeRepository;
+  final HomeQuoteRepository? marketQuoteRepository;
 
   @override
   Widget build(BuildContext context) {
@@ -38,6 +41,7 @@ class OverviewPage extends StatelessWidget {
       return existing.OverviewPage(
         session: session,
         dashboardRepository: dashboardRepository,
+        marketQuoteRepository: marketQuoteRepository,
       );
     }
 
@@ -62,6 +66,8 @@ class OverviewPage extends StatelessWidget {
             child: existing.OverviewPage(
               session: session,
               dashboardRepository: dashboardRepository,
+              marketQuoteRepository: marketQuoteRepository,
+        marketQuoteRepository: marketQuoteRepository,
             ),
           ),
         ],

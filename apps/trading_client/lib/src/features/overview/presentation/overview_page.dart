@@ -5,16 +5,20 @@ import '../../../core/session/operator_session.dart';
 import '../../../core/widgets/data_state_panel.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../data/health_repository.dart';
+import '../../../data/home_quote_repository.dart';
+import 'home_market_quote_panel.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
     required this.session,
     required this.dashboardRepository,
+    this.marketQuoteRepository,
     super.key,
   });
 
   final OperatorSession session;
   final DashboardRepository dashboardRepository;
+  final HomeQuoteRepository? marketQuoteRepository;
 
   static const _modules = <_HomeModule>[
     _HomeModule(icon: Icons.candlestick_chart_rounded, title: 'Markets', description: 'Search stocks and explore recent price action.', route: '/market'),
@@ -47,6 +51,10 @@ class OverviewPage extends StatelessWidget {
                       const _ProductHeader(),
                       SizedBox(height: mobile ? 14 : 20),
                       _AiPulseHero(layout: layout),
+                      if (session.isAuthenticated && marketQuoteRepository != null) ...[
+                        SizedBox(height: sectionGap),
+                        HomeMarketQuotePanel(repository: marketQuoteRepository!),
+                      ],
                       SizedBox(height: sectionGap),
                       _AccountPanel(session: session, repository: dashboardRepository),
                       SizedBox(height: mobile ? 16 : 24),
