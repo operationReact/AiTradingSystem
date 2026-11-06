@@ -1,11 +1,9 @@
 package in.aitradingsystem.marketdata;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.provider.angelone.AngelOneException;
-import in.aitradingsystem.provider.angelone.AngelOneHistoricalService;
 import jakarta.annotation.PostConstruct;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -28,16 +26,15 @@ public class HistoricalCandleService {
     private static final LocalTime MARKET_CLOSE = LocalTime.of(15, 30);
     private static final DateTimeFormatter PROVIDER_DATE = DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm", Locale.ROOT);
     private static final Set<String> SUPPORTED_EXCHANGES = Set.of("NSE", "NFO", "BSE", "BFO", "MCX");
-    private static final String SOURCE = "ANGEL_ONE_SMARTAPI";
 
     private final InstrumentMasterService instruments;
-    private final AngelOneHistoricalService provider;
+    private final MarketDataProvider provider;
     private final HistoricalCandleParser parser;
     private final MarketDataRepository repository;
     private final int maxRangeDays;
     private final int maxChunksPerRun;
 
-    public HistoricalCandleService(InstrumentMasterService instruments, AngelOneHistoricalService provider,
+    public HistoricalCandleService(InstrumentMasterService instruments, MarketDataProvider provider,
                                    HistoricalCandleParser parser, MarketDataRepository repository,
                                    @Value("${app.market-data.max-range-days:366}") int maxRangeDays,
                                    @Value("${app.market-data.max-chunks-per-run:5}") int maxChunksPerRun) {
@@ -92,15 +89,15 @@ public class HistoricalCandleService {
             try {
                 String from = LocalDateTime.of(chunkFrom, MARKET_OPEN).format(PROVIDER_DATE);
                 String to = LocalDateTime.of(chunkTo, MARKET_CLOSE).format(PROVIDER_DATE);
-                JsonNode response = provider.fetch(run.exchange(), run.symbolToken(), run.interval(), from, to);
-                List<HistoricalCandleParser.CandleValues> values = parser.parse(response);
+                List<HistoricalCandleParser.CandleValues> values = provider.historicalCandles(
+                        run.exchange(), run.symbolToken(), run.interval(), from, to);
                 validateTimestamps(values, chunkFrom, chunkTo);
                 Instant fetchedAt = Instant.now();
                 CandleBackfillRun chunkRun = run;
                 List<MarketCandle> bars = values.stream().map(value -> new MarketCandle(
                         0, chunkRun.instrumentId(), chunkRun.exchange(), chunkRun.tradingSymbol(), chunkRun.symbolToken(),
                         chunkRun.catalogueVersion(), chunkRun.interval(), value.candleTime(), value.open(), value.high(),
-                        value.low(), value.close(), value.volume(), SOURCE, fetchedAt)).toList();
+                        value.low(), value.close(), value.volume(), provider.source(), fetchedAt)).toList();
                 repository.persistChunk(run.id(), chunkFrom, chunkTo, chunkTo.plusDays(1), bars);
             } catch (RuntimeException ex) {
                 repository.recordChunkFailure(run.id(), chunkFrom, chunkTo, errorCode(ex), errorMessage(ex));
