@@ -168,20 +168,28 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             validator: (value) => (value?.isEmpty ?? true) ? 'Enter your password' : null,
           ),
           const SizedBox(height: 8),
-          Row(
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 0,
             children: [
-              SizedBox(
-                width: 40,
-                height: 44,
-                child: Checkbox(
-                  key: const ValueKey('minttick-remember-me'),
-                  value: _rememberMe,
-                  activeColor: MintTickPalette.teal,
-                  onChanged: (value) => setState(() => _rememberMe = value ?? false),
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 44,
+                    child: Checkbox(
+                      key: const ValueKey('minttick-remember-me'),
+                      value: _rememberMe,
+                      activeColor: MintTickPalette.teal,
+                      onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                    ),
+                  ),
+                  const Text('Remember me', style: TextStyle(fontSize: 13)),
+                ],
               ),
-              const Text('Remember me', style: TextStyle(fontSize: 13)),
-              const Spacer(),
               TextButton(
                 key: const ValueKey('minttick-forgot-password'),
                 onPressed: _forgotPassword,
