@@ -33,6 +33,16 @@ class _FakeIdentity implements CustomerIdentity {
     resent = true;
   }
   @override
+  Future<void> requestPasswordReset(String usernameOrEmail) async {}
+
+  @override
+  Future<void> confirmPasswordReset({
+    required String usernameOrEmail,
+    required String code,
+    required String newPassword,
+  }) async {}
+
+  @override
   Future<LoginStep> signIn({required String username, required String password}) async =>
       LoginStep.complete;
   @override
