@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'operator_session.dart';
+import '../auth/customer_identity.dart';
 
 sealed class ApiFailure implements Exception {
   const ApiFailure(this.code, this.correlationId, {this.statusCode});
@@ -98,7 +99,17 @@ class AuthenticatedApiClient {
     required Duration timeout,
   }) async {
     final key = session.operatorKey;
-    if (key == null || key.isEmpty) throw const ApiAuthenticationRequired();
+    final customer = session.isCustomerAuthenticated;
+    String? token;
+    if (customer) {
+      // Public mobile sessions use a short-lived Cognito access JWT,
+      // never the legacy operator key and never plaintext HTTP.
+      if (baseUri.scheme != 'https') throw const ApiAuthenticationRequired();
+      token = await MintTickIdentity.current.accessToken();
+      if (token == null || token.isEmpty) throw const ApiAuthenticationRequired();
+    } else if (key == null || key.isEmpty) {
+      throw const ApiAuthenticationRequired();
+    }
 
     final base = baseUri.resolve(path);
     final queryParameters = <String, String>{
@@ -111,7 +122,8 @@ class AuthenticatedApiClient {
       ...extraHeaders,
       // Authentication and representation headers are owned by this client and
       // cannot be replaced by feature repositories.
-      'X-API-Key': key,
+      if (customer) 'Authorization': 'Bearer $token',
+      if (!customer) 'X-API-Key': key!,
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json',
     };

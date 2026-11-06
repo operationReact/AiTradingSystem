@@ -32,7 +32,7 @@ import 'presentation/research_experiment_jobs_page.dart';
 import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
-import 'presentation/sign_in_page.dart';
+import 'presentation/create_account_page.dart';
 import 'presentation/welcome_page.dart';
 import 'theme/app_theme.dart';
 
@@ -115,9 +115,9 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
-        '/sign-in': (_) => const SignInPage(),
-        '/sign-up': (_) => const SignInPage(isRegistration: true),
-        '/welcome': (_) => const MintTickWelcomePage(),
+        '/sign-in': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
+        '/sign-up': (_) => const CreateAccountPage(),
+        '/welcome': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/welcome-replay': (_) => const MintTickWelcomePage(replayFromSettings: true),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
         '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
@@ -159,6 +159,11 @@ class _TradingAppState extends State<TradingApp> {
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(builder: (_) => _overviewPage()),
     );
+  }
+
+  void _onCustomerAuthenticated() {
+    widget.session.markCustomerAuthenticated();
+    _navigate('/');
   }
 
   void _navigate(String route) {
