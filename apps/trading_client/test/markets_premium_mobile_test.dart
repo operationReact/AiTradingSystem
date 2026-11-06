@@ -109,7 +109,7 @@ Future<void> _showMarkets(
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = Size(width, 844);
   await tester.pumpWidget(MaterialApp(
-    theme: buildTheme(DesignStyle.neonFuturisticAi, brightness),
+    theme: buildTheme(brightness),
     home: MarketDataPage(repository: fake),
   ));
   await tester.pumpAndSettle();

@@ -31,7 +31,7 @@ void main() {
       });
 
       await tester.pumpWidget(MaterialApp(
-        theme: buildTheme(DesignStyle.neonFuturisticAi, brightness),
+        theme: buildTheme(brightness),
         home: OverviewPage(
           session: OperatorSession(),
           dashboardRepository: _NoDashboard(),

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../brand/minttick_brand.dart';
 import 'minttick_typography.dart';
 
-enum DesignStyle { neonFuturisticAi, cleanModern }
-
+/// One MintTick design system. Brightness changes appearance, not layout.
+///
+/// Dark and light are the only visual variations; never reintroduce
+/// separate product-wide design profiles.
 @immutable
 class TradingColors extends ThemeExtension<TradingColors> {
   const TradingColors({
@@ -23,13 +25,22 @@ class TradingColors extends ThemeExtension<TradingColors> {
   final Color unsafe;
   final Color panel;
 
+  // Transitional aliases retained for existing operational components.
+  // All resolve to MintTick brand tokens, not a second visual design.
   Color get neonCyan => MintTickPalette.mint;
   Color get neonViolet => MintTickPalette.teal;
-  Color get neonMagenta => const Color(0xFF28F4B4);
+  Color get neonMagenta => MintTickPalette.teal;
   Color get neonNavy => MintTickPalette.navy;
 
   @override
-  TradingColors copyWith({Color? healthy, Color? degraded, Color? unknown, Color? halted, Color? unsafe, Color? panel}) =>
+  TradingColors copyWith({
+    Color? healthy,
+    Color? degraded,
+    Color? unknown,
+    Color? halted,
+    Color? unsafe,
+    Color? panel,
+  }) =>
       TradingColors(
         healthy: healthy ?? this.healthy,
         degraded: degraded ?? this.degraded,
@@ -53,40 +64,36 @@ class TradingColors extends ThemeExtension<TradingColors> {
   }
 }
 
-ThemeData buildTheme(DesignStyle style, Brightness brightness) {
-  final isDark = brightness == Brightness.dark;
-  final neon = style == DesignStyle.neonFuturisticAi;
-  const cyan = MintTickPalette.mint;
-  const violet = MintTickPalette.teal;
+/// The single shared MintTick Material 3 component theme.
+ThemeData buildTheme(Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+  final scheme = ColorScheme.fromSeed(
+    seedColor: MintTickPalette.teal,
+    brightness: brightness,
+  ).copyWith(
+    primary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
+    onPrimary: dark ? MintTickPalette.navy : Colors.white,
+    primaryContainer: dark ? const Color(0xFF16342B) : const Color(0xFFDDF3E8),
+    onPrimaryContainer: dark ? const Color(0xFFDDF9EA) : const Color(0xFF19402B),
+    secondary: dark ? const Color(0xFF54D7C5) : const Color(0xFF087C72),
+    onSecondary: dark ? MintTickPalette.navy : Colors.white,
+    secondaryContainer: dark ? const Color(0xFF172B30) : const Color(0xFFE0F2EE),
+    onSecondaryContainer: dark ? const Color(0xFFD9F0EC) : const Color(0xFF18433F),
+    surface: dark ? MintTickPalette.navy : MintTickPalette.ice,
+    surfaceContainerLowest: dark ? const Color(0xFF090D15) : Colors.white,
+    surfaceContainerLow: dark ? const Color(0xFF0F1720) : const Color(0xFFF5F8F8),
+    surfaceContainer: dark ? const Color(0xFF141D26) : const Color(0xFFEDF3F2),
+    surfaceContainerHigh: dark ? const Color(0xFF19242D) : const Color(0xFFE6EEEE),
+    surfaceContainerHighest: dark ? const Color(0xFF22303A) : const Color(0xFFDDE8E5),
+    onSurface: dark ? MintTickPalette.ice : MintTickPalette.navy,
+    onSurfaceVariant: dark ? const Color(0xFFB9C8CC) : const Color(0xFF526266),
+    outline: dark ? const Color(0xFF60737C) : const Color(0xFF788E91),
+    outlineVariant: dark ? const Color(0xFF34444C) : const Color(0xFFCFDDDA),
+    error: dark ? const Color(0xFFFF8291) : const Color(0xFFAE263A),
+  );
 
-  final seed = MintTickPalette.teal;
-  final generated = ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-  final scheme = neon
-      ? generated.copyWith(
-          primary: isDark ? cyan : MintTickPalette.readableGreen,
-          secondary: isDark ? violet : const Color(0xFF007A70),
-          tertiary: violet,
-          surface: isDark ? MintTickPalette.navy : MintTickPalette.ice,
-          surfaceContainer: isDark ? const Color(0xFF102019) : const Color(0xFFF0F7F4),
-          surfaceContainerHigh: isDark ? const Color(0xFF182B22) : const Color(0xFFE6F1EC),
-          surfaceContainerHighest: isDark ? const Color(0xFF203629) : const Color(0xFFDDEBE4),
-          onSurface: isDark ? MintTickPalette.ice : MintTickPalette.navy,
-          onSurfaceVariant: isDark ? const Color(0xFFB0C9BF) : const Color(0xFF52645C),
-          outline: isDark ? cyan.withValues(alpha: 0.58) : const Color(0xFF7BA89A),
-          outlineVariant: isDark ? cyan.withValues(alpha: 0.22) : const Color(0xFFC0D6CB),
-        )
-      : generated.copyWith(
-          primary: isDark ? cyan : MintTickPalette.readableGreen,
-          secondary: isDark ? violet : const Color(0xFF007A70),
-          surface: isDark ? MintTickPalette.navy : MintTickPalette.ice,
-          onSurface: isDark ? MintTickPalette.ice : MintTickPalette.navy,
-        );
-
-  final panel = neon
-      ? (isDark ? const Color(0xFF102019) : const Color(0xFFF0F7F4))
-      : (isDark ? const Color(0xFF171A1F) : const Color(0xFFF4F6F8));
-
-  final statusColors = isDark
+  final panel = dark ? const Color(0xFF141D26) : const Color(0xFFF3F7F7);
+  final statuses = dark
       ? const (
           healthy: Color(0xFF53D69D),
           degraded: Color(0xFFFFB84D),
@@ -110,88 +117,109 @@ ThemeData buildTheme(DesignStyle style, Brightness brightness) {
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
     visualDensity: VisualDensity.standard,
-    focusColor: scheme.primary.withValues(alpha: 0.28),
-    hoverColor: scheme.primary.withValues(alpha: 0.08),
+    splashFactory: InkRipple.splashFactory,
+    focusColor: scheme.primary.withValues(alpha: 0.18),
+    hoverColor: scheme.primary.withValues(alpha: 0.07),
     extensions: <ThemeExtension<dynamic>>[
       TradingColors(
-        healthy: statusColors.healthy,
-        degraded: statusColors.degraded,
-        unknown: statusColors.unknown,
-        halted: statusColors.halted,
-        unsafe: statusColors.unsafe,
+        healthy: statuses.healthy,
+        degraded: statuses.degraded,
+        unknown: statuses.unknown,
+        halted: statuses.halted,
+        unsafe: statuses.unsafe,
         panel: panel,
       ),
     ],
     appBarTheme: AppBarTheme(
       elevation: 0,
       scrolledUnderElevation: 0,
-      toolbarHeight: 52,
-      backgroundColor: scheme.surface.withValues(alpha: 0.96),
+      toolbarHeight: 56,
+      backgroundColor: scheme.surface,
       foregroundColor: scheme.onSurface,
       centerTitle: false,
       titleTextStyle: TextStyle(
         color: scheme.onSurface,
         fontSize: 18,
-        fontWeight: FontWeight.w800,
-        letterSpacing: -0.2,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.25,
       ),
     ),
     cardTheme: CardThemeData(
-      elevation: 0,
       color: panel,
+      elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(neon ? 18 : 14),
-        side: BorderSide(
-          color: neon && isDark ? cyan.withValues(alpha: 0.28) : scheme.outlineVariant.withValues(alpha: 0.72),
-        ),
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.72)),
       ),
     ),
     listTileTheme: const ListTileThemeData(
-      dense: true,
-      minVerticalPadding: 6,
-      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      dense: false,
+      minVerticalPadding: 8,
+      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 3),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      height: 64,
+      height: 68,
       elevation: 0,
-      backgroundColor: neon && isDark ? const Color(0xF2071020) : scheme.surfaceContainer,
-      indicatorColor: neon ? cyan.withValues(alpha: isDark ? 0.16 : 0.12) : scheme.primaryContainer,
+      backgroundColor: scheme.surfaceContainerLow,
+      indicatorColor: scheme.primary.withValues(alpha: dark ? 0.14 : 0.11),
       iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
+            color: states.contains(WidgetState.selected)
+                ? scheme.primary
+                : scheme.onSurfaceVariant,
           )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-            color: states.contains(WidgetState.selected) ? scheme.primary : scheme.onSurfaceVariant,
+            color: states.contains(WidgetState.selected)
+                ? scheme.primary
+                : scheme.onSurfaceVariant,
             fontSize: 12,
-            fontWeight: states.contains(WidgetState.selected) ? FontWeight.w800 : FontWeight.w600,
+            fontWeight: states.contains(WidgetState.selected)
+                ? FontWeight.w700
+                : FontWeight.w500,
           )),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      fillColor: scheme.surfaceContainerHigh.withValues(alpha: 0.72),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(13), borderSide: BorderSide(color: scheme.outlineVariant)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(13), borderSide: BorderSide(color: scheme.outlineVariant)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(13), borderSide: BorderSide(color: scheme.primary, width: 1.5)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+      fillColor: scheme.surfaceContainerLow,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: scheme.outlineVariant),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: scheme.outlineVariant),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: scheme.primary, width: 1.6),
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(0, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
         minimumSize: const Size(0, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     ),
-    segmentedButtonTheme: SegmentedButtonThemeData(
-      style: ButtonStyle(shape: WidgetStatePropertyAll(RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)))),
+    textButtonTheme: TextButtonThemeData(
+      style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
     ),
-    dividerColor: scheme.outlineVariant.withValues(alpha: 0.55),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      ),
+    ),
+    dividerColor: scheme.outlineVariant.withValues(alpha: 0.72),
   );
 }

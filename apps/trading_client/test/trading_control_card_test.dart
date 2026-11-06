@@ -44,7 +44,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
-        theme: buildTheme(DesignStyle.neonFuturisticAi, Brightness.dark),
+        theme: buildTheme(Brightness.dark),
         home: Scaffold(
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(20),

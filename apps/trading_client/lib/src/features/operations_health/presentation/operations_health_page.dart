@@ -11,19 +11,11 @@ class OperationsHealthPage extends StatefulWidget {
   const OperationsHealthPage({
     required this.repository,
     required this.session,
-    required this.designStyle,
-    required this.themeMode,
-    required this.onDesignStyleChanged,
-    required this.onThemeModeChanged,
     super.key,
   });
 
   final HealthRepository repository;
   final OperatorSession session;
-  final DesignStyle designStyle;
-  final ThemeMode themeMode;
-  final ValueChanged<DesignStyle> onDesignStyleChanged;
-  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<OperationsHealthPage> createState() => _OperationsHealthPageState();

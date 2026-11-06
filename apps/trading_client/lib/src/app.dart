@@ -52,7 +52,6 @@ class TradingApp extends StatefulWidget {
 
 class _TradingAppState extends State<TradingApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  DesignStyle _style = DesignStyle.neonFuturisticAi;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
 
@@ -72,8 +71,8 @@ class _TradingAppState extends State<TradingApp> {
       title: 'MintTick',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
-      theme: buildTheme(_style, Brightness.light),
-      darkTheme: buildTheme(_style, Brightness.dark),
+      theme: buildTheme(Brightness.light),
+      darkTheme: buildTheme(Brightness.dark),
       initialRoute: widget.initialRoute,
       builder: (context, child) => LayoutBuilder(
         builder: (context, constraints) {
@@ -127,9 +126,7 @@ class _TradingAppState extends State<TradingApp> {
         '/notifications': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
         '/settings': (_) => SettingsPage(
-              designStyle: _style,
               themeMode: _themeMode,
-              onDesignStyleChanged: _setDesignStyle,
               onThemeModeChanged: _setThemeMode,
               tradingControlRepository: HttpTradingControlRepository(_api),
             ),
@@ -175,11 +172,6 @@ class _TradingAppState extends State<TradingApp> {
     }
   }
 
-  void _setDesignStyle(DesignStyle value) {
-    if (_style == value) return;
-    setState(() => _style = value);
-  }
-
   void _setThemeMode(ThemeMode value) {
     if (_themeMode == value) return;
     setState(() => _themeMode = value);
@@ -194,10 +186,6 @@ class _TradingAppState extends State<TradingApp> {
         key: const ValueKey('operations-health-page'),
         repository: widget.repositoryFactory(),
         session: widget.session,
-        designStyle: _style,
-        themeMode: _themeMode,
-        onDesignStyleChanged: _setDesignStyle,
-        onThemeModeChanged: _setThemeMode,
       );
 }
 

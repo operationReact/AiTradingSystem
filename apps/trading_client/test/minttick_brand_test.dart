@@ -4,20 +4,21 @@ import 'package:trading_client/src/brand/minttick_brand.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
 void main() {
-  test('brand primary colors persist in both display styles', () {
-    for (final style in DesignStyle.values) {
-      final dark = buildTheme(style, Brightness.dark);
-      final light = buildTheme(style, Brightness.light);
-      expect(dark.colorScheme.primary, MintTickPalette.mint);
-      expect(light.colorScheme.primary, MintTickPalette.readableGreen);
-      expect(dark.colorScheme.surface, isNot(light.colorScheme.surface));
-      expect(dark.extension<TradingColors>()!.unsafe, isNot(dark.colorScheme.primary));
-    }
+  test('One MintTick design system supports accessible dark and light modes', () {
+    final dark = buildTheme(Brightness.dark);
+    final light = buildTheme(Brightness.light);
+    expect(dark.colorScheme.primary, MintTickPalette.mint);
+    expect(light.colorScheme.primary, MintTickPalette.readableGreen);
+    expect(dark.colorScheme.surface, MintTickPalette.navy);
+    expect(light.colorScheme.surface, MintTickPalette.ice);
+    expect(dark.colorScheme.surface, isNot(light.colorScheme.surface));
+    expect(dark.extension<TradingColors>()!.unsafe, isNot(dark.colorScheme.primary));
+    expect(light.cardTheme.shape.runtimeType, dark.cardTheme.shape.runtimeType);
   });
 
   testWidgets('MintTick icon and wordmark render without network access', (tester) async {
     await tester.pumpWidget(MaterialApp(
-      theme: buildTheme(DesignStyle.neonFuturisticAi, Brightness.dark),
+      theme: buildTheme(Brightness.dark),
       home: const Scaffold(body: Center(child: MintTickLockup())),
     ));
     expect(find.byType(MintTickMark), findsOneWidget);
