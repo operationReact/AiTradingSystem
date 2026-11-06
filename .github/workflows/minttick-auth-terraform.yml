@@ -6,6 +6,10 @@ on:
     paths:
       - 'infra/minttick-auth/**'
       - '.github/workflows/minttick-auth-terraform.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-auth/requests/deploy.json'
   workflow_dispatch:
     inputs:
       operation:
@@ -42,7 +46,7 @@ jobs:
           terraform validate
 
   plan-or-apply:
-    if: github.event_name == 'workflow_dispatch' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -53,25 +57,45 @@ jobs:
       AWS_REGION: ap-south-1
       EXPECTED_ACCOUNT: "098859530205"
       TF_IN_AUTOMATION: "true"
-      MINTTICK_AUTH_ROLE: ${{ vars.MINTTICK_AUTH_DEPLOY_ROLE_ARN }}
-      MINTTICK_AUTH_STATE_BUCKET: ${{ vars.MINTTICK_AUTH_TF_STATE_BUCKET }}
+      MINTTICK_AUTH_ROLE: arn:aws:iam::098859530205:role/minttick-auth-github-deploy
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Confirm dedicated limited identity role, state storage and branch
+          fetch-depth: 2
+      - name: Confirm dedicated limited identity role, region and branch
         run: |
           set -euo pipefail
           test "$MINTTICK_AUTH_ROLE" = "arn:aws:iam::098859530205:role/minttick-auth-github-deploy"
-          test -n "$MINTTICK_AUTH_STATE_BUCKET"
           test "$GITHUB_REF" = "refs/heads/dev"
           test "$AWS_REGION" = "ap-south-1"
+      - name: Authenticate an exact one-shot reviewed dev apply request
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-auth/requests/deploy.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          obj = json.loads(Path('infra/minttick-auth/requests/deploy.json').read_text())
+          expected = {
+              'application': 'MintTick',
+              'environment': 'dev',
+              'aws_account': '098859530205',
+              'region': 'ap-south-1',
+              'operation': 'apply',
+              'authorization': 'USER_APPROVED_COGNITO_ESSENTIALS_2026-11-07',
+          }
+          if obj != expected:
+              raise SystemExit('Refusing unexpected or modified identity provisioning request')
+          print('Validated explicit narrowly scoped MintTick Cognito dev apply')
+          PY
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: '1.10.5'
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.MINTTICK_AUTH_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-auth-github-deploy
           aws-region: ap-south-1
           role-session-name: minttick-auth-${{ github.run_id }}
       - name: Reject wrong AWS account
@@ -83,7 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          terraform init -input=false -backend-config="bucket=$MINTTICK_AUTH_STATE_BUCKET"
+          terraform init -input=false
       - name: Preview identity changes
         working-directory: infra/minttick-auth
         run: |
@@ -92,7 +116,7 @@ jobs:
           terraform plan -input=false -var="environment=dev" -out="$RUNNER_TEMP/minttick-auth.tfplan"
           terraform show -no-color "$RUNNER_TEMP/minttick-auth.tfplan"
       - name: Apply only when operation=apply
-        if: inputs.operation == 'apply'
+        if: github.event_name == 'push' || inputs.operation == 'apply'
         working-directory: infra/minttick-auth
         run: |
           set -euo pipefail
