@@ -208,7 +208,11 @@ def test_tampered_frozen_regime_anomaly_and_fusion_contents_are_rejected():
         )
 
     corrupt_request = request.model_copy(
-        update={"regime": regime.model_copy(update={"evidence": {**regime.evidence, "zz-test": 1.0}})}
+        update={
+            "regime": regime.model_copy(
+                update={"evidence": {**regime.evidence, "zz-test": 1.0}}
+            )
+        }
     )
     with pytest.raises(ValueError, match="not the exact frozen heuristic"):
         build_regime_anomaly_advisory(
