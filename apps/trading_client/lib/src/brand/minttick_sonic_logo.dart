@@ -13,7 +13,7 @@ class BrandSonicLogo {
     await player.stop();
     await player.play(
       AssetSource('audio/minttick-signature.wav'),
-      volume: 0.28,
+      volume: 0.55,
     );
   }
 
