@@ -54,7 +54,7 @@ class ReadOnlyFeedTests(unittest.TestCase):
         with patch.object(feed, "_secrets", return_value=DUMMY), \
              patch.object(feed, "_read") as call:
             bad = feed.handler({"operation": "candles", "exchange": "NSE",
-                "symbolToken": "1", "interval": "ONE_DAY",
+                "symbolToken": "1", "interval": "ONE_MINUTE",
                 "fromDate": "2020-01-01 09:15", "toDate": "2020-12-30 15:30"}, None)
             self.assertEqual(bad["code"], "INVALID_CANDLE_REQUEST")
             call.assert_not_called()
