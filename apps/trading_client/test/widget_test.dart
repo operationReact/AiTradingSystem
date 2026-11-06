@@ -49,7 +49,7 @@ void main() {
     expect(find.byKey(const ValueKey('global-workspace-navigation')), findsNothing);
   });
 
-  testWidgets('Neon launches dark and settings keep profile separate from color mode', (tester) async {
+  testWidgets('Settings exposes one design with light and dark modes only', (tester) async {
     _phoneViewport(tester);
     await tester.pumpWidget(
       TradingApp(
@@ -61,23 +61,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Neon Futuristic AI'), findsOneWidget);
-    expect(find.text('Clean Modern'), findsOneWidget);
+    expect(find.text('Appearance'), findsOneWidget);
+    expect(find.text('Neon Futuristic AI'), findsNothing);
+    expect(find.text('Clean Modern'), findsNothing);
+    expect(find.text('Interface profile'), findsNothing);
+    expect(find.byKey(const ValueKey('global-design-style-control')), findsNothing);
     expect(find.text('Color mode'), findsOneWidget);
 
-    final initialThemeControl = tester.widget<SegmentedButton<ThemeMode>>(
+    final initial = tester.widget<SegmentedButton<ThemeMode>>(
       find.byKey(const ValueKey('settings-theme-mode-control')),
     );
-    expect(initialThemeControl.selected, {ThemeMode.dark});
+    expect(initial.segments.length, 2);
+    expect(initial.selected, {ThemeMode.dark});
 
-    await tester.tap(find.byKey(const ValueKey('profile-Clean Modern')));
+    await tester.tap(find.text('Light'));
     await tester.pumpAndSettle();
-
-    final themeControl = tester.widget<SegmentedButton<ThemeMode>>(
+    final light = tester.widget<SegmentedButton<ThemeMode>>(
       find.byKey(const ValueKey('settings-theme-mode-control')),
     );
-    expect(themeControl.selected, {ThemeMode.dark});
+    expect(light.selected, {ThemeMode.light});
     expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('system health never exposes development credentials or raw auth codes', (tester) async {
