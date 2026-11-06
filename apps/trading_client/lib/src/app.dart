@@ -307,7 +307,7 @@ class _DesktopProductRail extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const MintTickLockup(markWidth: 42, fontSize: 21),
+          const MintTickLockup(markWidth: 36, fontSize: 18),
           const SizedBox(height: 8),
           Text('AI TRADING PLATFORM · PAPER', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 10.5, letterSpacing: 0.7)),
           const SizedBox(height: 22),
