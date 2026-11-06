@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'auth/customer_identity.dart';
 
 import 'brand/minttick_brand.dart';
 import 'data/authenticated_api_client.dart';
@@ -145,6 +148,7 @@ class _TradingAppState extends State<TradingApp> {
         '/settings': (_) => SettingsPage(
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
+              onSignOut: _signOut,
               tradingControlRepository: HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
@@ -161,6 +165,23 @@ class _TradingAppState extends State<TradingApp> {
       },
       onUnknownRoute: (_) => MaterialPageRoute<void>(builder: (_) => _overviewPage()),
     );
+  }
+
+  Future<void> _signOut() async {
+    // Clear local access first even if the provider cannot be contacted.
+    widget.session.clear();
+    try {
+      await SharedPreferencesAsync().setBool('minttick.auth.remember_me.v1', false);
+    } catch (_) {
+      // Never depend on a stored preference to revoke local access.
+    }
+    try {
+      await MintTickIdentity.current.signOut();
+    } catch (_) {
+      // User must still return to login. Access JWTs expire on the server.
+    }
+    if (!mounted) return;
+    _navigate('/welcome');
   }
 
   void _onCustomerAuthenticated() {
