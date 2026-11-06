@@ -32,14 +32,14 @@ TextTheme buildMintTickTextTheme(ColorScheme scheme) => TextTheme(
       headlineLarge: TextStyle(
         color: scheme.onSurface,
         fontSize: 28,
-        fontWeight: FontWeight.w750,
+        fontWeight: FontWeight.w700,
         height: 1.18,
         letterSpacing: -0.6,
       ),
       headlineMedium: TextStyle(
         color: scheme.onSurface,
         fontSize: 24,
-        fontWeight: FontWeight.w750,
+        fontWeight: FontWeight.w700,
         height: 1.2,
         letterSpacing: -0.45,
       ),
@@ -67,7 +67,7 @@ TextTheme buildMintTickTextTheme(ColorScheme scheme) => TextTheme(
       titleSmall: TextStyle(
         color: scheme.onSurface,
         fontSize: 15,
-        fontWeight: FontWeight.w650,
+        fontWeight: FontWeight.w600,
         height: 1.3,
       ),
       bodyLarge: TextStyle(
