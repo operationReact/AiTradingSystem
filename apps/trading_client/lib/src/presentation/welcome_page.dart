@@ -8,8 +8,8 @@ import '../auth/customer_identity.dart';
 import '../brand/minttick_brand.dart';
 import '../theme/app_theme.dart';
 
-/// Brand-first, single-screen login. The identity-provider handshake is not
-/// implemented yet: no credentials are transmitted, stored or authenticated.
+/// Brand-first, single-screen customer login. Cognito validates credentials;
+/// MintTick backend must independently provision a verified permanent user ID.
 class MintTickWelcomePage extends StatefulWidget {
   const MintTickWelcomePage({
     super.key,
@@ -97,9 +97,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   }
 
   void _forgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Password recovery will be available when secure account access is connected.'),
-    ));
+    Navigator.of(context).pushNamed('/forgot-password');
   }
 
   Future<void> _createAccount() async {
@@ -176,8 +174,8 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
             controller: _username,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.username],
-            decoration: _fieldDecoration('Username', Icons.person_outline_rounded),
-            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your username' : null,
+            decoration: _fieldDecoration('Email or username', Icons.person_outline_rounded),
+            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your email or username' : null,
           ),
           const SizedBox(height: 14),
           TextFormField(
