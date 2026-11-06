@@ -9,11 +9,6 @@ on:
         type: choice
         default: plan
         options: [plan, apply]
-      enable_paper_invoke:
-        description: 'Allow PAPER EC2 role InvokeFunction (NO broker secret access)'
-        required: true
-        type: boolean
-        default: false
 
 permissions:
   id-token: write
@@ -32,7 +27,6 @@ jobs:
       AWS_REGION: ap-south-1
       EXPECTED_ACCOUNT: "098859530205"
       TF_IN_AUTOMATION: "true"
-      TF_VAR_enable_paper_invoke: ${{ inputs.enable_paper_invoke }}
       TF_VAR_ssm_customer_kms_key_arn: ${{ vars.MINTTICK_FEED_SSM_CUSTOM_KMS_KEY_ARN }}
     steps:
       - uses: actions/checkout@v4
