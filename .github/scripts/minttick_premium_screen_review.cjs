@@ -60,6 +60,13 @@ const path = require('path');
     await capture(name);
   };
   await nav(39,'08_home_light');
+  // Home's sole guest sign-in control is in the account card. Tap it to
+  // capture the same actual Sign-In widget under the user's light setting.
+  await page.mouse.click(192,310);
+  await page.waitForTimeout(1500);
+  await capture('08a_sign_in_light');
+  await page.mouse.click(28,30);
+  await page.waitForTimeout(800);
   await nav(117,'09_markets_light');
   await nav(194,'10_ai_research_light');
   await nav(271,'11_portfolio_light');
