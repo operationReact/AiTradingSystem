@@ -49,6 +49,18 @@ public class MarketQuoteController {
         return detail;
     }
 
+    @ExceptionHandler(MarketDataException.class)
+    ProblemDetail readOnlyProviderError(MarketDataException exception) {
+        HttpStatus status = switch (exception.code()) {
+            case "PROVIDER_RATE_LIMITED" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "PROVIDER_INVALID_REQUEST", "PROVIDER_INVALID_RESPONSE" -> HttpStatus.BAD_GATEWAY;
+            default -> HttpStatus.SERVICE_UNAVAILABLE;
+        };
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(status, exception.getMessage());
+        detail.setProperty("code", exception.code());
+        return detail;
+    }
+
     @ExceptionHandler(AngelOneException.class)
     ProblemDetail providerError(AngelOneException exception) {
         HttpStatus status = switch (exception.kind()) {
