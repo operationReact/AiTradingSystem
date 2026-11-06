@@ -73,7 +73,7 @@ class _TradingAppState extends State<TradingApp> {
     return MaterialApp(
       navigatorKey: _navigatorKey,
       navigatorObservers: [_routeObserver],
-      title: 'MintTick',
+      title: MintTickBrand.appName,
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: buildTheme(Brightness.light),

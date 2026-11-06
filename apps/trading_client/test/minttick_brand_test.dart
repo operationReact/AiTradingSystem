@@ -4,6 +4,11 @@ import 'package:trading_client/src/brand/minttick_brand.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
 void main() {
+  test('MintTick canonical product identity stays consistent', () {
+    expect(MintTickBrand.appName, 'MintTick');
+    expect(MintTickBrand.productName, 'MintTick — AI Trading Platform');
+  });
+
   test('One MintTick design system supports accessible dark and light modes', () {
     final dark = buildTheme(Brightness.dark);
     final light = buildTheme(Brightness.light);

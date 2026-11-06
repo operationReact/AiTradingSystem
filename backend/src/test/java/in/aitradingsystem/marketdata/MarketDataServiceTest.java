@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
-import in.aitradingsystem.provider.angelone.AngelOneHistoricalService;
 import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -16,7 +15,7 @@ class MarketDataServiceTest {
     @Test
     void rejectsUnsupportedExchangeBeforeCreatingBackfill() {
         InstrumentMasterService instruments = mock(InstrumentMasterService.class);
-        AngelOneHistoricalService provider = mock(AngelOneHistoricalService.class);
+        MarketDataProvider provider = mock(MarketDataProvider.class);
         MarketDataRepository repository = mock(MarketDataRepository.class);
         HistoricalCandleService service = new HistoricalCandleService(instruments, provider,
                 new HistoricalCandleParser(), repository, 366, 5);
@@ -33,7 +32,7 @@ class MarketDataServiceTest {
     @Test
     void rejectsDateRangeOutsideConfiguredLimit() {
         HistoricalCandleService service = new HistoricalCandleService(mock(InstrumentMasterService.class),
-                mock(AngelOneHistoricalService.class), new HistoricalCandleParser(), mock(MarketDataRepository.class), 30, 5);
+                mock(MarketDataProvider.class), new HistoricalCandleParser(), mock(MarketDataRepository.class), 30, 5);
         assertThatThrownBy(() -> service.query(1, HistoricalCandleInterval.ONE_DAY,
                 LocalDate.parse("2026-01-01"), LocalDate.parse("2026-02-01"), 0, 100))
             .isInstanceOf(MarketDataException.class).hasMessageContaining("limited to 30");

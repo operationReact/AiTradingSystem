@@ -1,6 +1,8 @@
-# AI Trading System
+# MintTick — AI Trading Platform
 
-News-driven research and **PAPER-only** trading platform for Indian cash equities. The backend remains the authority for risk, approvals, execution state, accounting and lifecycle. LIVE broker execution is not enabled.
+MintTick is an AI-powered Indian equities research and trading platform. Paper trading is one execution mode, not the product identity. The currently deployed backend is PAPER-only; LIVE broker execution is not enabled. The backend remains the authority for risk, approvals, execution state, accounting and lifecycle.
+
+**Naming contract:** The customer-facing product name is **MintTick** (capital M and T, one word). Existing backend package names, cloud resource names and Android/iOS identifiers remain unchanged until independently reviewed. New secret parameter paths use `/minttick/`.
 
 ## Production application architecture
 
