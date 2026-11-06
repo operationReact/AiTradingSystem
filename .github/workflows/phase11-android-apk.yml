@@ -126,7 +126,7 @@ jobs:
               root_close = manifest.find('>', manifest.find('<manifest'))
               if root_close == -1:
                   raise SystemExit('Generated Android manifest has no <manifest> root')
-              manifest = manifest[:root_close + 1] + '\\n    ' + permission + manifest[root_close + 1:]
+              manifest = manifest[:root_close + 1] + '\n    ' + permission + manifest[root_close + 1:]
               manifest_path.write_text(manifest)
           PY
           grep -q '^android.newDsl=false$' android/gradle.properties
@@ -146,10 +146,10 @@ jobs:
 
       - name: Build sideloadable release APK
         run: |
-          flutter build apk --release \\
-            --dart-define=API_BASE_URL="$API_BASE_URL" \\
-            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \\
-            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \\
+          flutter build apk --release \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
             --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID"
 
       - name: Record APK checksum
