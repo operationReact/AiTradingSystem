@@ -35,6 +35,9 @@ services:
       - no-new-privileges:true
     environment:
       TRADING_MODE: PAPER
+      # Read-only Lambda InvokeFunction mode. Never forward broker credentials to PAPER EC2.
+      MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-ANGEL_ONE}
+      MARKET_DATA_LAMBDA_FUNCTION_NAME: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:-}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aitrading
       SPRING_DATASOURCE_USERNAME: aitrading
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?required}
