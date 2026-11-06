@@ -4,7 +4,6 @@ import '../../../core/session/operator_session.dart';
 import '../../../core/widgets/data_state_panel.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../data/health_repository.dart';
-import '../../../presentation/sign_in_page.dart';
 
 class OverviewPage extends StatelessWidget {
   const OverviewPage({
@@ -337,7 +336,7 @@ class _AccountPanelState extends State<_AccountPanel> {
                       width: mobile ? double.infinity : null,
                       child: FilledButton.icon(
                         key: const ValueKey('dashboard-secure-sign-in'),
-                        onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SignInPage())),
+                        onPressed: () => Navigator.of(context).pushNamed('/sign-in'),
                         icon: const Icon(Icons.lock_open_rounded, size: 19),
                         label: const Text('Secure sign in'),
                       ),

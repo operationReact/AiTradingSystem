@@ -1,128 +1,133 @@
 import 'package:flutter/material.dart';
 
-class SignInPage extends StatelessWidget {
-  const SignInPage({super.key});
+import 'auth/auth_success_page.dart';
+import 'auth/biometric_auth_service.dart';
+import 'auth/enable_fingerprint_page.dart';
+import 'auth/fingerprint_sign_in_page.dart';
+import 'auth/otp_verification_page.dart';
+import 'auth/password_sign_in_page.dart';
+import 'auth/sign_up_page.dart';
 
-  static const _providerName = String.fromEnvironment('AUTH_PROVIDER_NAME');
-  static const _authConfigured = bool.fromEnvironment('AUTH_PROVIDER_CONFIGURED', defaultValue: false);
+enum _AuthStage {
+  signIn,
+  signUp,
+  verifyPhone,
+  verifyEmail,
+  enableFingerprint,
+  fingerprintSignIn,
+  success,
+}
+
+class SignInPage extends StatefulWidget {
+  const SignInPage({this.onAuthenticated, this.biometricService, super.key});
+
+  /// Production customer authentication can supply this callback once the
+  /// server session has been established. During UI review it may remain null.
+  final VoidCallback? onAuthenticated;
+  final BiometricAuthService? biometricService;
+
+  @override
+  State<SignInPage> createState() => _SignInPageState();
+}
+
+class _SignInPageState extends State<SignInPage> {
+  late final BiometricAuthService _biometricService = widget.biometricService ?? BiometricAuthService();
+
+  _AuthStage _stage = _AuthStage.signIn;
+  bool _fingerprintReady = false;
+  String _email = '';
+  String _phone = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFingerprintState();
+  }
+
+  Future<void> _loadFingerprintState() async {
+    final enabled = await _biometricService.isFingerprintEnabledForApp();
+    final available = await _biometricService.isFingerprintAvailable();
+    if (!mounted) return;
+    setState(() => _fingerprintReady = enabled && available);
+  }
+
+  void _go(_AuthStage stage) => setState(() => _stage = stage);
+
+  void _handlePasswordSignIn(String identifier, String password) {
+    if (identifier.trim().isEmpty || password.isEmpty) return;
+    _go(_AuthStage.success);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final providerLabel = _providerName.trim().isEmpty ? 'Secure identity provider' : _providerName.trim();
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Secure Sign In')),
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(28),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      scheme.primaryContainer,
-                      scheme.secondaryContainer.withValues(alpha: 0.72),
-                      scheme.surfaceContainerHighest,
-                    ],
-                  ),
-                  border: Border.all(color: scheme.primary.withValues(alpha: 0.35)),
-                  boxShadow: [
-                    BoxShadow(color: scheme.primary.withValues(alpha: 0.12), blurRadius: 36, spreadRadius: 2),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 58,
-                      height: 58,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: scheme.primary.withValues(alpha: 0.14),
-                      ),
-                      child: Icon(Icons.lock_person_rounded, color: scheme.primary, size: 30),
-                    ),
-                    const SizedBox(height: 20),
-                    Semantics(
-                      header: true,
-                      child: Text(
-                        'Welcome back',
-                        style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w900),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sign in to access your PAPER portfolio, AI research, risk controls, and connected broker account.',
-                      style: theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant, height: 1.5),
-                    ),
-                    const SizedBox(height: 24),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        color: scheme.surface.withValues(alpha: 0.55),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(_authConfigured ? Icons.verified_user_rounded : Icons.shield_outlined, color: scheme.primary),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(providerLabel, style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                                const SizedBox(height: 3),
-                                Text(
-                                  _authConfigured
-                                      ? 'Identity configuration is available for this build.'
-                                      : 'Production identity configuration has not been enabled for this build yet.',
-                                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        key: const ValueKey('secure-sign-in-continue'),
-                        onPressed: _authConfigured ? () => _showConfigurationBoundary(context) : null,
-                        icon: const Icon(Icons.arrow_forward_rounded),
-                        label: const Text('Continue securely'),
-                      ),
-                    ),
-                    if (!_authConfigured) ...[
-                      const SizedBox(height: 12),
-                      Text(
-                        'Sign-in stays disabled until the approved production identity provider is configured. No development key or broker password can be entered here.',
-                        style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.45),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
+    final page = switch (_stage) {
+      _AuthStage.signIn => PasswordSignInPage(
+          biometricEnrolled: _fingerprintReady,
+          onSignUp: () => _go(_AuthStage.signUp),
+          onFingerprintSignIn: () => _go(_AuthStage.fingerprintSignIn),
+          onPasswordSignIn: _handlePasswordSignIn,
         ),
-      ),
+      _AuthStage.signUp => SignUpPage(
+          onBack: () => _go(_AuthStage.signIn),
+          onCreateAccount: ({required fullName, required email, required phone}) {
+            if (fullName.trim().isEmpty) return;
+            _email = email;
+            _phone = phone;
+            _go(_AuthStage.verifyPhone);
+          },
+        ),
+      _AuthStage.verifyPhone => OtpVerificationPage(
+          type: OtpVerificationType.phone,
+          destination: _displayPhone(_phone),
+          onBack: () => _go(_AuthStage.signUp),
+          onVerified: () => _go(_AuthStage.verifyEmail),
+        ),
+      _AuthStage.verifyEmail => OtpVerificationPage(
+          type: OtpVerificationType.email,
+          destination: _email,
+          onBack: () => _go(_AuthStage.verifyPhone),
+          onVerified: () => _go(_AuthStage.enableFingerprint),
+        ),
+      _AuthStage.enableFingerprint => EnableFingerprintPage(
+          service: _biometricService,
+          onBack: () => _go(_AuthStage.verifyEmail),
+          onEnabled: () {
+            setState(() {
+              _fingerprintReady = true;
+              _stage = _AuthStage.success;
+            });
+          },
+          onSkip: () => _go(_AuthStage.success),
+        ),
+      _AuthStage.fingerprintSignIn => FingerprintSignInPage(
+          service: _biometricService,
+          onUsePassword: () => _go(_AuthStage.signIn),
+          onAuthenticated: () => _go(_AuthStage.success),
+        ),
+      _AuthStage.success => AuthSuccessPage(onContinue: _finishAuthenticationUi),
+    };
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      child: KeyedSubtree(key: ValueKey(_stage), child: page),
     );
   }
 
-  void _showConfigurationBoundary(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Secure identity handoff is the next authentication integration step.')),
-    );
+  void _finishAuthenticationUi() {
+    // Do not fabricate a trading session. The UI flow is complete, but the
+    // production backend must supply the authenticated customer session before
+    // Home is entered as a signed-in user.
+    widget.onAuthenticated?.call();
+  }
+
+  String _displayPhone(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return 'your phone number';
+    final digits = trimmed.replaceAll(RegExp(r'\D'), '');
+    if (digits.length <= 4) return trimmed;
+    final suffix = digits.substring(digits.length - 4);
+    return '••••••$suffix';
   }
 }
