@@ -51,17 +51,17 @@ resource "aws_iam_role_policy" "read_only_ssm" {
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "${aws_cloudwatch_log_group.feed.arn}:*"
       }
-    ], var.ssm_customer_kms_key_arn == "" ? [] : [{
-      Sid      = "DecryptOnlyViaMumbaiSSM"
-      Effect   = "Allow"
-      Action   = ["kms:Decrypt"]
-      Resource = var.ssm_customer_kms_key_arn
-      Condition = {
-        StringEquals = {
-          "kms:ViaService" = "ssm.ap-south-1.amazonaws.com"
+      ], var.ssm_customer_kms_key_arn == "" ? [] : [{
+        Sid      = "DecryptOnlyViaMumbaiSSM"
+        Effect   = "Allow"
+        Action   = ["kms:Decrypt"]
+        Resource = var.ssm_customer_kms_key_arn
+        Condition = {
+          StringEquals = {
+            "kms:ViaService" = "ssm.ap-south-1.amazonaws.com"
+          }
         }
-      }
-    }])
+      }])
   })
 }
 
