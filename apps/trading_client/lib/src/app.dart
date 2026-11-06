@@ -52,6 +52,10 @@ class TradingApp extends StatefulWidget {
 
 class _TradingAppState extends State<TradingApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  late final NavigatorObserver _routeObserver = _MintTickRouteObserver((name) {
+    if (!mounted || _selectedRoute == name) return;
+    setState(() => _selectedRoute = name);
+  });
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
 
@@ -68,6 +72,7 @@ class _TradingAppState extends State<TradingApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: _navigatorKey,
+      navigatorObservers: [_routeObserver],
       title: 'MintTick',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
@@ -76,6 +81,11 @@ class _TradingAppState extends State<TradingApp> {
       initialRoute: widget.initialRoute,
       builder: (context, child) => LayoutBuilder(
         builder: (context, constraints) {
+          // Sign-in is a focused account experience. Never overlay the product
+          // bottom bar or desktop trading rail on authentication pages.
+          if (_selectedRoute == '/sign-in') {
+            return child ?? const SizedBox.shrink();
+          }
           if (constraints.maxWidth >= 900) {
             return Row(
               children: [
@@ -105,13 +115,13 @@ class _TradingAppState extends State<TradingApp> {
         '/': (_) => _overviewPage(),
         '/sign-in': (_) => const SignInPage(),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
-        '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
-        '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api)),
+        '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
-        '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
-        '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api)),
+        '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
-        '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api)),
+        '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/orders': (_) => PaperOrdersPage(
               repository: HttpPaperTradingRepository(_api),
               trailingProtectionPreviewEnabled: true,
@@ -414,5 +424,35 @@ class _MoreProductSheet extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _MintTickRouteObserver extends NavigatorObserver {
+  _MintTickRouteObserver(this.onRouteChanged);
+
+  final ValueChanged<String> onRouteChanged;
+
+  void _track(Route<dynamic>? route) {
+    final name = route?.settings.name;
+    if (name == null || name.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => onRouteChanged(name));
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _track(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _track(previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _track(newRoute);
   }
 }
