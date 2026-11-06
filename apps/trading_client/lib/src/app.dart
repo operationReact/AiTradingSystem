@@ -300,7 +300,11 @@ class _DesktopProductRail extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(colors: [Color(0xFF0B0F1A), Color(0xFF10251F)]),
+        gradient: LinearGradient(
+          colors: theme.brightness == Brightness.dark
+              ? const [Color(0xFF0B0F1A), Color(0xFF10251F)]
+              : const [Color(0xFFF2FAF6), Color(0xFFE4F4EB)],
+        ),
         border: Border.all(color: colors.neonCyan.withValues(alpha: 0.48)),
         boxShadow: [BoxShadow(color: colors.neonCyan.withValues(alpha: 0.14), blurRadius: 30), BoxShadow(color: colors.neonMagenta.withValues(alpha: 0.08), blurRadius: 42)],
       ),
