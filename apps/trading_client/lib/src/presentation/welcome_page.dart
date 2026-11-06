@@ -69,6 +69,10 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
           // Cognito success does not grant MintTick access: the backend must
           // validate the JWT, verify email, and provision the persistent UUID.
           await MintTickCustomerAccountApi().provision();
+          // A user preference only, never store passwords or tokens here.
+          // The Cognito SDK persists credentials securely on supported devices.
+          await SharedPreferencesAsync().setBool(
+            'minttick.auth.remember_me.v1', _rememberMe);
           if (!mounted) return;
           _password.clear();
           if (widget.onAuthenticated != null) {
