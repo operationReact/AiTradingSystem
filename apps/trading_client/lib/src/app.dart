@@ -280,7 +280,6 @@ class _DesktopProductRail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colors = theme.extension<TradingColors>()!;
     return Container(
       width: 224,
       margin: const EdgeInsets.all(16),
