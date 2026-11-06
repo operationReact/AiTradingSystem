@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_core/amplify_core.dart' hide Amplify;
 import 'package:amplify_flutter/amplify_flutter.dart' show Amplify;
 import 'package:http/http.dart' as http;
 
