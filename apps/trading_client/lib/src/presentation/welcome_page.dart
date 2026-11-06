@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -6,21 +5,16 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../brand/minttick_brand.dart';
-import '../brand/minttick_sonic_logo.dart';
 import '../theme/app_theme.dart';
 
-/// First-launch brand screen using the exact approved MintTick vector lockup.
-/// All navigation remains usable while motion, audio, or storage are unavailable.
+/// Brand-first, single-screen login. The identity-provider handshake is not
+/// implemented yet: no credentials are transmitted, stored or authenticated.
 class MintTickWelcomePage extends StatefulWidget {
   const MintTickWelcomePage({
     super.key,
-    this.sound,
     this.replayFromSettings = false,
   });
-  final BrandSonicLogo? sound;
 
-  /// Explicit caller intent. Do not infer replay from Navigator.canPop():
-  /// Flutter initialRoute '/welcome' can itself have an underlying '/' route.
   final bool replayFromSettings;
 
   @override
@@ -30,225 +24,229 @@ class MintTickWelcomePage extends StatefulWidget {
 class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     with SingleTickerProviderStateMixin {
   static const seenKey = 'minttick.welcome.seen.v1';
-  static const soundKey = 'minttick.brand.sound_enabled.v1';
-
+  final _formKey = GlobalKey<FormState>();
+  final _username = TextEditingController();
+  final _password = TextEditingController();
   late final AnimationController _reveal = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 1450),
-  );
-  BrandSonicLogo? _ownedSound;
-  bool _soundEnabled = false;
-  bool _soundPreferenceTouched = false;
+  )..forward();
 
-  BrandSonicLogo get _sound => widget.sound ?? (_ownedSound ??= BrandSonicLogo());
-
-  @override
-  void initState() {
-    super.initState();
-    _reveal.forward();
-    unawaited(_restoreSoundPreference());
-  }
-
-  Future<void> _restoreSoundPreference() async {
-    try {
-      final enabled = await SharedPreferencesAsync().getBool(soundKey) ?? false;
-      if (mounted && !_soundPreferenceTouched) {
-        setState(() => _soundEnabled = enabled);
-      }
-    } catch (_) {
-      // The opening screen must render even without a local preferences plugin.
-    }
-  }
-
-  Future<void> _toggleSound() async {
-    _soundPreferenceTouched = true;
-    final enabled = !_soundEnabled;
-    setState(() => _soundEnabled = enabled);
-    unawaited(_saveSoundPreference(enabled));
-    if (enabled) {
-      await _playSound();
-    } else {
-      try {
-        await _sound.stop();
-      } catch (_) {
-        // Audio is never a prerequisite for interacting with the app.
-      }
-    }
-  }
-
-  Future<void> _saveSoundPreference(bool enabled) async {
-    try {
-      await SharedPreferencesAsync().setBool(soundKey, enabled);
-    } catch (_) {
-      // The local preference is best effort, not an authentication state.
-    }
-  }
-
-  Future<void> _playSound() async {
-    try {
-      await _sound.play();
-    } catch (_) {
-      // Devices without an audio engine still display the approved logo.
-    }
-  }
-
-  void _replay() {
-    _reveal.forward(from: 0);
-    if (_soundEnabled) unawaited(_playSound());
-  }
-
-  Future<void> _enter(String route) async {
-    try {
-      await SharedPreferencesAsync().setBool(seenKey, true);
-    } catch (_) {
-      // Never block sign-in/create-account navigation on local storage.
-    }
-    if (!mounted) return;
-    Navigator.of(context).pushNamedAndRemoveUntil(route, (_) => false);
-  }
+  bool _passwordVisible = false;
+  bool _rememberMe = false;
 
   @override
   void dispose() {
     _reveal.dispose();
-    unawaited(_ownedSound?.dispose() ?? Future<void>.value());
+    _username.dispose();
+    _password.dispose();
     super.dispose();
   }
 
-  Widget _logo({required double availableWidth, required bool reduceMotion}) {
-    // Scale the *entire* canonical lockup uniformly so its painter and
-    // wordmark retain their exact approved proportions on 320dp devices.
-    final width = math.min(availableWidth, 350.0);
+  Future<void> _markWelcomeSeen() async {
+    try {
+      await SharedPreferencesAsync().setBool(seenKey, true);
+    } catch (_) {
+      // Local preferences must never block access to the account flow.
+    }
+  }
+
+  void _signIn() {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    // Never send credentials to an unauthenticated or placeholder endpoint.
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Secure sign-in is not connected yet. Your credentials were not sent or saved.'),
+    ));
+  }
+
+  void _forgotPassword() {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Password recovery will be available when secure account access is connected.'),
+    ));
+  }
+
+  Future<void> _createAccount() async {
+    await _markWelcomeSeen();
+    if (!mounted) return;
+    Navigator.of(context).pushNamed('/sign-up');
+  }
+
+  Widget _brandLogo(double maxWidth, bool reduceMotion) {
+    final width = math.min(maxWidth, 330.0);
     return AnimatedBuilder(
       animation: _reveal,
-      builder: (context, child) {
-        final progress = reduceMotion
-            ? 1.0
-            : Curves.easeOutCubic.transform(_reveal.value);
-        return Opacity(
-          opacity: progress.clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, (1 - progress) * 14),
-            child: Transform(
-              alignment: Alignment.center,
-              transform: Matrix4.identity()
-                ..setEntry(3, 2, 0.0005)
-                ..rotateY((1 - progress) * 0.06),
-              child: Transform.scale(
-                scale: 0.975 + 0.025 * progress,
-                child: child,
-              ),
-            ),
-          ),
-        );
-      },
-      // The mark and lettering are the real MintTickMark/MintTickLockup
-      // widgets. Never synthesize or recolor the approved logo for mockups.
       child: SizedBox(
         width: width,
         child: FittedBox(
           fit: BoxFit.scaleDown,
-          alignment: Alignment.center,
           child: SizedBox(
             width: 390,
             child: Theme(
               data: buildTheme(Brightness.dark),
-              child: const MintTickLockup(markWidth: 104, fontSize: 39),
+              child: const MintTickLockup(markWidth: 82, fontSize: 32),
             ),
           ),
         ),
       ),
+      builder: (context, child) {
+        final p = reduceMotion ? 1.0 : Curves.easeOutCubic.transform(_reveal.value);
+        return Opacity(
+          opacity: p.clamp(0.0, 1.0),
+          child: Transform.translate(
+            offset: Offset(0, (1 - p) * 12),
+            child: Transform.scale(scale: 0.98 + 0.02 * p, child: child),
+          ),
+        );
+      },
     );
   }
 
-  Widget _actions(BuildContext context, {required bool replayFromSettings}) {
-    final primaryStyle = FilledButton.styleFrom(
-      minimumSize: const Size(double.infinity, 54),
-      foregroundColor: MintTickPalette.navy,
-      backgroundColor: MintTickPalette.mint,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+  InputDecoration _fieldDecoration(String hint, IconData icon, {Widget? suffix}) {
+    return InputDecoration(
+      hintText: hint,
+      prefixIcon: Icon(icon, size: 21, color: const Color(0xFFA9B9C2)),
+      suffixIcon: suffix,
+      filled: true,
+      fillColor: const Color(0xFF14232D),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFF34525D)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: MintTickPalette.teal, width: 1.4),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFFF8A80)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Color(0xFFFF8A80)),
+      ),
     );
-    final secondaryStyle = OutlinedButton.styleFrom(
-      minimumSize: const Size(double.infinity, 54),
-      foregroundColor: MintTickPalette.ice,
-      backgroundColor: const Color(0xFF19232D),
-      side: const BorderSide(color: Color(0xFF789A9C)),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-    );
+  }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (replayFromSettings)
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              key: const ValueKey('minttick-welcome-done'),
-              onPressed: () => Navigator.of(context).pop(),
-              style: primaryStyle,
-              child: const Text('Done'),
+  Widget _loginForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextFormField(
+            key: const ValueKey('minttick-inline-username'),
+            controller: _username,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.username],
+            decoration: _fieldDecoration('Username', Icons.person_outline_rounded),
+            validator: (value) => (value?.trim().isEmpty ?? true) ? 'Enter your username' : null,
+          ),
+          const SizedBox(height: 14),
+          TextFormField(
+            key: const ValueKey('minttick-inline-password'),
+            controller: _password,
+            obscureText: !_passwordVisible,
+            enableSuggestions: false,
+            autocorrect: false,
+            autofillHints: const [AutofillHints.password],
+            textInputAction: TextInputAction.done,
+            onFieldSubmitted: (_) => _signIn(),
+            decoration: _fieldDecoration(
+              'Password',
+              Icons.lock_outline_rounded,
+              suffix: IconButton(
+                key: const ValueKey('minttick-password-visibility'),
+                tooltip: _passwordVisible ? 'Hide password' : 'Show password',
+                onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+                icon: Icon(
+                  _passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                  color: const Color(0xFFAFBFC8),
+                ),
+              ),
             ),
-          )
-        else ...[
+            validator: (value) => (value?.isEmpty ?? true) ? 'Enter your password' : null,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 0,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 40,
+                    height: 44,
+                    child: Checkbox(
+                      key: const ValueKey('minttick-remember-me'),
+                      value: _rememberMe,
+                      activeColor: MintTickPalette.teal,
+                      onChanged: (value) => setState(() => _rememberMe = value ?? false),
+                    ),
+                  ),
+                  const Text('Remember me', style: TextStyle(fontSize: 13)),
+                ],
+              ),
+              TextButton(
+                key: const ValueKey('minttick-forgot-password'),
+                onPressed: _forgotPassword,
+                child: const Text('Forgot password?', style: TextStyle(fontSize: 13)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
           SizedBox(
-            width: double.infinity,
+            height: 54,
             child: FilledButton(
               key: const ValueKey('minttick-welcome-sign-in'),
-              onPressed: () => _enter('/sign-in'),
-              style: primaryStyle,
+              onPressed: _signIn,
+              style: FilledButton.styleFrom(
+                backgroundColor: MintTickPalette.teal,
+                foregroundColor: MintTickPalette.navy,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
               child: const Text('Sign in'),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Expanded(child: Divider(color: Color(0xFF34434C))),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('or', style: TextStyle(color: Colors.white.withValues(alpha: 0.58))),
+              ),
+              const Expanded(child: Divider(color: Color(0xFF34434C))),
+            ],
+          ),
+          const SizedBox(height: 20),
           SizedBox(
-            width: double.infinity,
+            height: 54,
             child: OutlinedButton(
               key: const ValueKey('minttick-welcome-create-account'),
-              onPressed: () => _enter('/sign-up'),
-              style: secondaryStyle,
+              onPressed: _createAccount,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: MintTickPalette.ice,
+                backgroundColor: const Color(0xFF14232D),
+                side: const BorderSide(color: Color(0xFF4E8989)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+              ),
               child: const Text('Create account'),
             ),
           ),
         ],
-        const SizedBox(height: 18),
-        Wrap(
-          alignment: WrapAlignment.center,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            TextButton(
-              key: const ValueKey('minttick-welcome-sound-toggle'),
-              onPressed: _toggleSound,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF94A5AD),
-                textStyle: const TextStyle(fontSize: 13),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                minimumSize: const Size(44, 44),
-              ),
-              child: Text(_soundEnabled ? 'Sound on' : 'Sound off'),
-            ),
-            const Text('·', style: TextStyle(color: Color(0xFF94A5AD))),
-            TextButton(
-              key: const ValueKey('minttick-welcome-replay'),
-              onPressed: _replay,
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF94A5AD),
-                textStyle: const TextStyle(fontSize: 13),
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                minimumSize: const Size(44, 44),
-              ),
-              child: const Text('Replay intro'),
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.of(context).disableAnimations;
-    final replayFromSettings = widget.replayFromSettings;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
       child: Scaffold(
@@ -257,70 +255,41 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, bounds) {
-              final horizontal = bounds.maxWidth < 380 ? 22.0 : 26.0;
+              final side = bounds.maxWidth < 350 ? 20.0 : 26.0;
+              final usableWidth = math.min(440.0, bounds.maxWidth - side * 2);
               return SingleChildScrollView(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: bounds.maxHeight),
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(horizontal, 12, horizontal, 26),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: math.max(0, bounds.maxHeight - 38),
-                      ),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 440,
+                      minHeight: bounds.maxHeight,
+                    ),
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(side, 24, side, 28),
                       child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // The whole approved mark + wordmark is centered as
+                          // one lockup, never separately aligned.
                           SizedBox(
-                            height: math.max(
-                              280,
-                              bounds.maxHeight < 630
-                                  ? 300
-                                  : bounds.maxHeight - (replayFromSettings ? 150 : 210),
-                            ),
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: RadialGradient(
-                                        center: const Alignment(0, 0.07),
-                                        radius: 0.75,
-                                        colors: [
-                                          MintTickPalette.teal.withValues(alpha: 0.095),
-                                          MintTickPalette.navy.withValues(alpha: 0),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Align(
-                                  alignment: const Alignment(0, 0.19),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      _logo(
-                                        availableWidth: bounds.maxWidth - horizontal * 2,
-                                        reduceMotion: reduceMotion,
-                                      ),
-                                      const SizedBox(height: 26),
-                                      Container(
-                                        width: math.min(190, bounds.maxWidth * 0.5),
-                                        height: 1,
-                                        color: MintTickPalette.teal.withValues(alpha: 0.11),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
+                            height: math.max(150, math.min(245, bounds.maxHeight * 0.32)),
+                            child: Center(child: _brandLogo(usableWidth, reduceMotion)),
                           ),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 440),
-                            child: _actions(
-                              context,
-                              replayFromSettings: replayFromSettings,
+                          if (widget.replayFromSettings) ...[
+                            const SizedBox(height: 64),
+                            SizedBox(
+                              height: 54,
+                              child: FilledButton(
+                                key: const ValueKey('minttick-welcome-done'),
+                                onPressed: () => Navigator.of(context).pop(),
+                                child: const Text('Done'),
+                              ),
                             ),
-                          ),
+                          ] else ...[
+                            const SizedBox(height: 12),
+                            _loginForm(),
+                          ],
                         ],
                       ),
                     ),
