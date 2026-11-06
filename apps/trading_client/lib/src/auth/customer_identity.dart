@@ -49,7 +49,7 @@ abstract final class MintTickIdentity {
       // Use the stable Amplify v2 JSON schema rather than package-internal
       // generated output classes (which differ between SDK releases).
       final config = jsonEncode({
-        'version': '1',
+        'version': '1.5',
         'auth': {
           'aws_region': region,
           'user_pool_id': poolId,
