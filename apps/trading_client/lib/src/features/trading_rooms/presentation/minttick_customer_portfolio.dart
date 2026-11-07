@@ -62,16 +62,18 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
 
   Future<void> _refresh() async {
     final generation = ++_generation;
-    if (mounted) setState(() {
-      _loading = true;
-      _error = null;
-      _broker = null;
-      _liveAvailableCash = null;
-      _holdingsCount = null;
-      _positionsCount = null;
-      _paperCashPaise = 0;
-      _fundedCount = 0;
-    });
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+        _broker = null;
+        _liveAvailableCash = null;
+        _holdingsCount = null;
+        _positionsCount = null;
+        _paperCashPaise = 0;
+        _fundedCount = 0;
+      });
+    }
     try {
       if (widget.mode.isPaper) {
         if (!widget.rooms.loaded) {
