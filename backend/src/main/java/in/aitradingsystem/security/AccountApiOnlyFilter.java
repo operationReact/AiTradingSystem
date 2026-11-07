@@ -28,6 +28,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final Set<String> CUSTOMER_ROOM_COLLECTION = Set.of("/api/customer/trading-rooms");
     private static final Set<String> BROKER_READS = Set.of(
         "/api/customer/brokers/angel-one/status",
+        "/api/customer/brokers/angel-one/configured-login",
         "/api/customer/brokers/angel-one/funds",
         "/api/customer/brokers/angel-one/holdings",
         "/api/customer/brokers/angel-one/positions",
@@ -45,6 +46,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final String UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback";
     private static final Set<String> BROKER_WRITES = Set.of(
         "/api/customer/brokers/angel-one/connect",
+        "/api/customer/brokers/angel-one/connect-configured",
         "/api/customer/brokers/angel-one/disconnect");
     private static final java.util.regex.Pattern CUSTOMER_ROOM_DETAIL =
         java.util.regex.Pattern.compile("^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$");
