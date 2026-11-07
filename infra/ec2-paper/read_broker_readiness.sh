@@ -44,6 +44,7 @@ allowed = {
     "CREDENTIALS_NOT_CONFIGURED", "SSM_UNAVAILABLE",
     "INVALID_TOTP_CONFIGURATION", "INTERNAL_FAILURE",
 }
+result = None
 try:
     code = Path(sys.argv[1]).read_text().strip()
     result = json.loads(Path(sys.argv[2]).read_text())
