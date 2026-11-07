@@ -20,6 +20,10 @@ import 'data/research_experiment_job_repository.dart';
 import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
 import 'features/trading_control/data/trading_control_repository.dart';
+import 'features/trading_rooms/domain/trading_room_draft.dart';
+import 'features/trading_rooms/presentation/minttick_customer_home.dart';
+import 'features/trading_rooms/presentation/minttick_customer_states.dart';
+import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
 import 'presentation/backtests_page.dart';
 import 'presentation/instruments_page.dart';
 import 'presentation/market_data_page.dart';
@@ -63,6 +67,7 @@ class _TradingAppState extends State<TradingApp> {
     if (!mounted || _selectedRoute == name) return;
     setState(() => _selectedRoute = name);
   });
+  final TradingRoomDraftStore _roomDrafts = TradingRoomDraftStore();
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
 
@@ -73,6 +78,12 @@ class _TradingAppState extends State<TradingApp> {
   void initState() {
     super.initState();
     _selectedRoute = widget.initialRoute;
+  }
+
+  @override
+  void dispose() {
+    _roomDrafts.dispose();
+    super.dispose();
   }
 
   @override
@@ -90,13 +101,13 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account') {
+          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account' || _selectedRoute.startsWith('/rooms/')) {
             return child ?? const SizedBox.shrink();
           }
           if (constraints.maxWidth >= 900) {
             return Row(
               children: [
-                _DesktopProductRail(selectedRoute: _selectedRoute, onNavigate: _navigate),
+                _DesktopProductRail(selectedRoute: _selectedRoute, onNavigate: _navigate, isCustomer: widget.session.isCustomerAuthenticated),
                 Expanded(child: child ?? const SizedBox.shrink()),
               ],
             );
@@ -112,6 +123,7 @@ class _TradingAppState extends State<TradingApp> {
                   selectedRoute: _selectedRoute,
                   onNavigate: _navigate,
                   onMore: _openMoreNavigation,
+                  isCustomer: widget.session.isCustomerAuthenticated,
                 ),
               ),
             ],
@@ -120,6 +132,16 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
+        '/rooms': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickTradingRoomsPage(
+                store: _roomDrafts,
+                onCreate: _openCreateRoom,
+                onOpen: _openRoom,
+              )
+            : _overviewPage(),
+        '/activity': (_) => widget.session.isCustomerAuthenticated
+            ? _customerState('Activity')
+            : _overviewPage(),
         '/account': (_) => CustomerAccountPage(
           loadAccount: () async {
             final data = await _api.getJson('/api/auth/cognito/me');
@@ -136,13 +158,13 @@ class _TradingAppState extends State<TradingApp> {
         '/welcome': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/welcome-replay': (_) => const MintTickWelcomePage(replayFromSettings: true),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
-        '/market': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
-        '/market-data': (_) => MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/market': (_) => widget.session.isCustomerAuthenticated ? _customerState('Markets') : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/market-data': (_) => widget.session.isCustomerAuthenticated ? _customerState('Markets') : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
-        '/portfolio': (_) => PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/portfolio': (_) => widget.session.isCustomerAuthenticated ? _customerState('Portfolio') : PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/orders': (_) => PaperOrdersPage(
               repository: HttpPaperTradingRepository(_api),
               trailingProtectionPreviewEnabled: true,
@@ -154,7 +176,7 @@ class _TradingAppState extends State<TradingApp> {
         '/risk': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/approvals': (_) => RiskApprovalsPage(repository: HttpRiskApprovalRepository(_api)),
         '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
-        '/notifications': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
+        '/notifications': (_) => widget.session.isCustomerAuthenticated ? _customerState('Notifications') : OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
         '/settings': (_) => SettingsPage(
               themeMode: _themeMode,
@@ -180,6 +202,7 @@ class _TradingAppState extends State<TradingApp> {
 
   Future<void> _signOut() async {
     // Clear local access first even if the provider cannot be contacted.
+    _roomDrafts.clear();
     widget.session.clear();
     try {
       await SharedPreferencesAsync().setBool('minttick.auth.remember_me.v1', false);
@@ -197,7 +220,7 @@ class _TradingAppState extends State<TradingApp> {
 
   void _onCustomerAuthenticated() {
     widget.session.markCustomerAuthenticated();
-    _navigate('/account');
+    _navigate('/');
   }
 
   void _navigate(String route) {
@@ -216,7 +239,7 @@ class _TradingAppState extends State<TradingApp> {
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
-      builder: (context) => const _MoreProductSheet(),
+      builder: (context) => _MoreProductSheet(isCustomer: widget.session.isCustomerAuthenticated),
     );
     if (!mounted) return;
     if (route != null) {
@@ -231,11 +254,63 @@ class _TradingAppState extends State<TradingApp> {
     setState(() => _themeMode = value);
   }
 
-  Widget _overviewPage() => OverviewPage(
-        session: widget.session,
-        dashboardRepository: HttpDashboardRepository(session: widget.session),
-        marketQuoteRepository: HttpHomeQuoteRepository(_api),
+  Future<Map<String, dynamic>> _loadCustomerProfile() async {
+    final result = await _api.getJson('/api/auth/cognito/me');
+    if (result is! Map<String, dynamic>) {
+      throw const FormatException('Invalid customer profile');
+    }
+    return result;
+  }
+
+  Widget _customerState(String section) => MintTickCustomerUnavailablePage(
+        section: section,
+        drafts: _roomDrafts,
+        onRooms: () => _navigate('/rooms'),
       );
+
+  Widget _overviewPage() => widget.session.isCustomerAuthenticated
+      ? MintTickCustomerHomePage(
+          loadProfile: _loadCustomerProfile,
+          drafts: _roomDrafts,
+          onCreateRoom: _openCreateRoom,
+          onRooms: () => _navigate('/rooms'),
+          onMarkets: () => _navigate('/market'),
+          onPortfolio: () => _navigate('/portfolio'),
+          onAccount: () => _navigate('/account'),
+          onNotifications: () => _navigate('/notifications'),
+        )
+      : OverviewPage(
+          session: widget.session,
+          dashboardRepository: HttpDashboardRepository(session: widget.session),
+          marketQuoteRepository: HttpHomeQuoteRepository(_api),
+        );
+
+  Future<void> _openCreateRoom() async {
+    if (!widget.session.isCustomerAuthenticated) return;
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return;
+    final room = await Navigator.of(navContext).push<TradingRoomDraft>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/rooms/create'),
+        builder: (_) => const MintTickRoomCreationPage(),
+      ),
+    );
+    if (!mounted || room == null) return;
+    _roomDrafts.add(room);
+    _navigate('/rooms');
+  }
+
+  void _openRoom(TradingRoomDraft room) {
+    if (!widget.session.isCustomerAuthenticated) return;
+    final navContext = _navigatorKey.currentContext;
+    if (navContext == null) return;
+    Navigator.of(navContext).push<void>(
+      MaterialPageRoute(
+        settings: const RouteSettings(name: '/rooms/detail'),
+        builder: (_) => MintTickRoomDetailPage(room: room),
+      ),
+    );
+  }
 
   Widget _healthPage() => OperationsHealthPage(
         key: const ValueKey('operations-health-page'),
@@ -245,15 +320,17 @@ class _TradingAppState extends State<TradingApp> {
 }
 
 class _MobileProductNavigation extends StatelessWidget {
-  const _MobileProductNavigation({required this.selectedRoute, required this.onNavigate, required this.onMore});
+  const _MobileProductNavigation({required this.selectedRoute, required this.onNavigate, required this.onMore, required this.isCustomer});
 
   final String selectedRoute;
   final ValueChanged<String> onNavigate;
   final VoidCallback onMore;
+  final bool isCustomer;
 
   int get _index {
     if (selectedRoute == '/') return 0;
     if (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments') return 1;
+    if (selectedRoute == '/rooms' || (isCustomer && selectedRoute.startsWith('/rooms/'))) return 2;
     if (selectedRoute == '/research' || selectedRoute == '/signals' || selectedRoute == '/backtests' || selectedRoute == '/scenarios') return 2;
     if (selectedRoute == '/portfolio' || selectedRoute == '/orders' || selectedRoute == '/paper-orders') return 3;
     return 4;
@@ -265,7 +342,7 @@ class _MobileProductNavigation extends StatelessWidget {
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
       (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
-      (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
+      isCustomer ? (Icons.layers_outlined, Icons.layers_rounded, 'Rooms') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
       (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Portfolio'),
       (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
     ];
@@ -292,7 +369,7 @@ class _MobileProductNavigation extends StatelessWidget {
                       onNavigate(switch (index) {
                         0 => '/',
                         1 => '/market',
-                        2 => '/research',
+                        2 => isCustomer ? '/rooms' : '/research',
                         3 => '/portfolio',
                         _ => '/',
                       });
@@ -327,10 +404,11 @@ class _MobileProductNavigation extends StatelessWidget {
 }
 
 class _DesktopProductRail extends StatelessWidget {
-  const _DesktopProductRail({required this.selectedRoute, required this.onNavigate});
+  const _DesktopProductRail({required this.selectedRoute, required this.onNavigate, required this.isCustomer});
 
   final String selectedRoute;
   final ValueChanged<String> onNavigate;
+  final bool isCustomer;
 
   @override
   Widget build(BuildContext context) {
@@ -349,15 +427,22 @@ class _DesktopProductRail extends StatelessWidget {
         children: [
           const MintTickLockup(markWidth: 36, fontSize: 18),
           const SizedBox(height: 8),
-          Text('AI TRADING PLATFORM · PAPER', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 10.5, letterSpacing: 0.7)),
+          Text(isCustomer ? 'TRADING WORKSPACE' : 'AI TRADING PLATFORM · PAPER', style: theme.textTheme.labelSmall?.copyWith(color: theme.colorScheme.onSurfaceVariant, fontSize: 10.5, letterSpacing: 0.7)),
           const SizedBox(height: 22),
           _RailAction(label: 'Home', icon: Icons.space_dashboard_rounded, active: selectedRoute == '/', onTap: () => onNavigate('/')),
+          if (isCustomer)
+            _RailAction(label: 'Trading Rooms', icon: Icons.layers_rounded, active: selectedRoute == '/rooms', onTap: () => onNavigate('/rooms')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),
-          _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
+          if (!isCustomer)
+            _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
           _RailAction(label: 'Portfolio', icon: Icons.account_balance_wallet_rounded, active: selectedRoute == '/portfolio', onTap: () => onNavigate('/portfolio')),
-          _RailAction(label: 'Model control', icon: Icons.hub_rounded, active: selectedRoute == '/admin/models', onTap: () => onNavigate('/admin/models')),
-          _RailAction(label: 'Experiments', icon: Icons.science_outlined, active: selectedRoute == '/admin/experiments', onTap: () => onNavigate('/admin/experiments')),
-          _RailAction(label: 'Emergency controls', icon: Icons.shield_rounded, active: selectedRoute == '/admin/model-emergency', onTap: () => onNavigate('/admin/model-emergency')),
+          if (isCustomer)
+            _RailAction(label: 'Mantic Mind activity', icon: Icons.history_rounded, active: selectedRoute == '/activity', onTap: () => onNavigate('/activity')),
+          if (isCustomer)
+            _RailAction(label: 'Account', icon: Icons.person_outline_rounded, active: selectedRoute == '/account', onTap: () => onNavigate('/account')),
+          if (!isCustomer) _RailAction(label: 'Model control', icon: Icons.hub_rounded, active: selectedRoute == '/admin/models', onTap: () => onNavigate('/admin/models')),
+          if (!isCustomer) _RailAction(label: 'Experiments', icon: Icons.science_outlined, active: selectedRoute == '/admin/experiments', onTap: () => onNavigate('/admin/experiments')),
+          if (!isCustomer) _RailAction(label: 'Emergency controls', icon: Icons.shield_rounded, active: selectedRoute == '/admin/model-emergency', onTap: () => onNavigate('/admin/model-emergency')),
           const Spacer(),
           _RailAction(label: 'Settings', icon: Icons.settings_rounded, active: selectedRoute == '/settings', onTap: () => onNavigate('/settings')),
         ],
@@ -397,7 +482,9 @@ class _RailAction extends StatelessWidget {
 }
 
 class _MoreProductSheet extends StatelessWidget {
-  const _MoreProductSheet();
+  const _MoreProductSheet({required this.isCustomer});
+
+  final bool isCustomer;
 
   static const _destinations = <(String, IconData, String, String)>[
     ('/orders', Icons.receipt_long_rounded, 'PAPER orders', 'Create and review simulated trades'),
@@ -408,6 +495,14 @@ class _MoreProductSheet extends StatelessWidget {
     ('/admin/model-emergency', Icons.shield_rounded, 'Emergency model controls', 'Reduce model influence with audited confirmation'),
     ('/notifications', Icons.notifications_rounded, 'Notifications', 'Important account and trading updates'),
     ('/settings', Icons.tune_rounded, 'Settings', 'Trading mode, execution mode and appearance'),
+  ];
+
+  static const _customerDestinations = <(String, IconData, String, String)>[
+    ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room drafts and plans'),
+    ('/activity', Icons.history_rounded, 'Mantic Mind activity', 'Decisions and audit history'),
+    ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
+    ('/account', Icons.person_outline_rounded, 'Account', 'Profile and sign out'),
+    ('/settings', Icons.tune_rounded, 'Settings', 'Appearance and preferences'),
   ];
 
   @override
@@ -427,7 +522,7 @@ class _MoreProductSheet extends StatelessWidget {
             const SizedBox(height: 3),
             Text('Trading tools and settings', style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 10),
-            ..._destinations.map(
+            ...(isCustomer ? _customerDestinations : _destinations).map(
               (destination) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Material(
