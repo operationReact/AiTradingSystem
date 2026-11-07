@@ -27,6 +27,13 @@ class AccountApiOnlyFilterTest {
         assertPasses("DELETE", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
         assertPasses("POST", "/api/customer/brokers/angel-one/connect");
         assertPasses("POST", "/api/customer/brokers/angel-one/disconnect");
+        assertPasses("POST", "/api/customer/brokers/upstox/start");
+        assertPasses("POST", "/api/customer/brokers/upstox/disconnect");
+        assertPasses("GET", "/api/customer/brokers/upstox/callback");
+        for (String route : List.of("status", "funds", "holdings", "positions",
+                "orders", "registered-ips")) {
+            assertPasses("GET", "/api/customer/brokers/upstox/" + route);
+        }
         String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
         assertPasses("POST", roomId + "activate");
         assertPasses("GET", roomId + "account");
@@ -56,6 +63,12 @@ class AccountApiOnlyFilterTest {
         assertBlocked("DELETE", "/api/auth/cognito/provision");
         assertBlocked("OPTIONS", "/api/paper/orders");
         assertBlocked("POST", "/api/customer/brokers/angel-one/orders");
+        assertBlocked("POST", "/api/customer/brokers/upstox/orders");
+        assertBlocked("POST", "/api/customer/brokers/upstox/registered-ips");
+        assertBlocked("GET", "/api/customer/brokers/upstox/start");
+        assertBlocked("POST", "/api/customer/brokers/upstox/callback");
+        assertBlocked("GET", "/api/customer/brokers/upstox/connect");
+        assertBlocked("GET", "/api/customer/brokers/upstox/execute");
         String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
         assertBlocked("POST", roomId + "orders");
         String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
