@@ -1,5 +1,6 @@
 locals {
-  # Fail closed without explicit cost approval AND a DNS ownership target.\n  enabled = var.approval == "PROVISION_MINTTICK_ACCOUNT_DEV" && var.hosted_zone_id != "" && var.account_domain != ""
+  # Fail closed without explicit cost approval AND a DNS ownership target.
+  enabled = var.approval == "PROVISION_MINTTICK_ACCOUNT_DEV" && var.hosted_zone_id != "" && var.account_domain != ""
   tags = {
     Name        = "minttick-dev-account-api"
     Application = "MintTick"
