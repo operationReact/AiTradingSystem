@@ -1,0 +1,76 @@
+name: MintTick - explicitly approved market feed Terraform request
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-market-feed-release-request.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-market-feed/requests/release.json'
+permissions:
+  contents: read
+concurrency:
+  group: minttick-market-feed-explicit-dispatch-dev
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify exact release request and no unsupported Terraform action
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          workflow=Path(".github/workflows/minttick-market-feed-deploy.yml").read_text()
+          assert "workflow_dispatch:" in workflow
+          assert "options: [plan, apply]" in workflow
+          assert "minttick-feed-github-deploy" in workflow
+          assert "terraform plan" in workflow and "terraform apply" in workflow
+          assert Path("infra/minttick-market-feed/main.tf").exists()
+          print("PASS: only the reviewed branch-restricted Terraform market-feed workflow may run")
+          PY
+  dispatch:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify one-file change and exact fixed-account authorization
+        id: request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-market-feed/requests/release.json'
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          doc=json.loads(Path("infra/minttick-market-feed/requests/release.json").read_text())
+          assert isinstance(doc,dict)
+          assert set(doc)=={"application","aws_account","region","environment","operation","authorization"}
+          assert doc["application"]=="MintTick"
+          assert doc["aws_account"]=="098859530205"
+          assert doc["region"]=="ap-south-1"
+          assert doc["environment"]=="dev"
+          assert doc["operation"] in {"plan","apply"}
+          assert doc["authorization"]=="USER_APPROVED_PRIVATE_ANGEL_ONE_FEED_2026-11-07"
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write(f'operation={doc["operation"]}\n')
+          PY
+      - name: Dispatch existing Terraform workflow (plan or apply only)
+        run: |
+          set -euo pipefail
+          gh workflow run minttick-market-feed-deploy.yml --repo operationReact/AiTradingSystem --ref dev -f operation="${{ steps.request.outputs.operation }}"
+          echo "Requested existing reviewed MintTick market-feed Terraform workflow"
