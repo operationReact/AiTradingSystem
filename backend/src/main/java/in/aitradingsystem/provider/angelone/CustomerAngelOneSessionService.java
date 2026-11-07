@@ -29,6 +29,7 @@ public class CustomerAngelOneSessionService {
     private final AngelOneRateLimiter limiter;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public CustomerAngelOneSessionService(AngelOneApiClient api, AngelOneRateLimiter limiter) {
         this(api, limiter, Clock.systemUTC());
     }
