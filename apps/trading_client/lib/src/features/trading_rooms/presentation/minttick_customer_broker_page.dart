@@ -54,7 +54,9 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         _error = 'Broker status could not be verified. Please retry.';
       });
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -84,7 +86,9 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       _pin.clear();
       _totp.clear();
       _apiKey.clear();
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -98,7 +102,9 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not confirm disconnection. Try again.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -319,8 +325,10 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       final items = data.entries.where((e) =>
           allowed.contains('${e.key}') &&
           (e.value is num || e.value is String)).take(6).toList();
-      if (items.isEmpty) return [const Text('The provider returned data, '
-          'but no verified summary fields are available in this view.')];
+      if (items.isEmpty) {
+        return [const Text('The provider returned data, '
+            'but no verified summary fields are available in this view.')];
+      }
       return items.map((entry) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 5),
         child: Row(children: [
