@@ -77,28 +77,34 @@ class _MintTickBrokerHubPageState extends State<MintTickBrokerHubPage> {
             ?.copyWith(color: scheme.onSurfaceVariant, height: 1.5)),
       const SizedBox(height: 18),
       _BrokerOption(
-        name: 'Upstox',
-        description: 'Secure Upstox sign-in · No PIN shared with MintTick',
-        connected: _upstox?.connected == true,
-        detail: _upstox?.available == false
-            ? 'Developer app configuration required'
-            : 'OAuth broker login',
-        onTap: widget.onUpstox,
-        key: const ValueKey('broker-hub-upstox'),
-      ),
-      const SizedBox(height: 11),
-      _BrokerOption(
         name: 'Angel One',
-        description: 'SmartAPI broker account',
+        description: 'View your Angel One funds and holdings',
         connected: _angelOne?.connected == true,
-        detail: 'Direct SmartAPI login · Read-only',
+        detail: 'Secure SmartAPI connection · Read-only',
         onTap: widget.onAngelOne,
         key: const ValueKey('broker-hub-angel-one'),
       ),
-      if (_busy) ...[
-        const SizedBox(height: 13),
-        const LinearProgressIndicator(),
-      ],
+      const SizedBox(height: 11),
+      _BrokerOption(
+        name: 'Upstox',
+        description: 'Sign in securely on the Upstox website',
+        connected: _upstox?.connected == true,
+        detail: _upstox?.available == false
+            ? 'Upstox setup required'
+            : 'Official Upstox authorization · Read-only',
+        onTap: widget.onUpstox,
+        key: const ValueKey('broker-hub-upstox'),
+      ),
+      AnimatedSwitcher(
+        duration: kMintTickMotion,
+        child: _busy
+            ? const Padding(
+                key: ValueKey('broker-refreshing'),
+                padding: EdgeInsets.only(top: 12),
+                child: LinearProgressIndicator(minHeight: 2),
+              )
+            : const SizedBox(key: ValueKey('broker-ready')),
+      ),
       const SizedBox(height: 19),
       const MintTickInfoText(
         'Your MintTick login is independent from your brokerage accounts. '
@@ -136,7 +142,7 @@ class _BrokerOption extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.surfaceContainerLow,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: onTap,
@@ -144,11 +150,27 @@ class _BrokerOption extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            border: Border.all(color: scheme.outlineVariant),
+            color: scheme.surfaceContainerLow.withValues(alpha: 0.88),
+            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.67)),
             borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: scheme.shadow.withValues(alpha: 0.035),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
           ),
           child: Row(children: [
-            const MintTickIconTile(Icons.account_balance_outlined),
+            Container(
+              width: 44, height: 44,
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHigh.withValues(alpha: 0.80),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(Icons.account_balance_outlined,
+                color: scheme.onSurfaceVariant, size: 21),
+            ),
             const SizedBox(width: 13),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
