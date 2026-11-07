@@ -1,0 +1,8 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "environment": "dev",
+  "operation": "apply-read-only-owner-market-feed",
+  "authorization": "USER_APPROVED_MINTTICK_PRIVATE_FEED_2026-11-07"
+}
