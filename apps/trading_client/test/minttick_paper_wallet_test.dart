@@ -78,7 +78,9 @@ void main() {
       home: MintTickRoomDetailPage(
         room: _room,
         repository: repo,
-        onRoomChanged: () async => reloads++,
+        onRoomChanged: () async {
+          reloads++;
+        },
       ),
     ));
     await tester.pumpAndSettle();
