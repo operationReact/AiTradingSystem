@@ -1,7 +1,7 @@
 {
-  "domain": "minttick.com",
-  "environment": "dev",
-  "aws_account": "098859530205",
-  "operation": "stage-acm-validation",
-  "authorization": "USER_APPROVED_ROUTE53_ONE_TIME_DNS_2026-11-07"
+    "domain": "minttick.com",
+    "environment": "dev",
+    "aws_account": "098859530205",
+    "operation": "stage-acm-validation",
+    "authorization": "USER_APPROVED_ROUTE53_ONE_TIME_DNS_2026-11-07"
 }
