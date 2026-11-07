@@ -363,6 +363,8 @@ class _TradingAppState extends State<TradingApp> {
         builder: (_) => MintTickRoomDetailPage(
           room: room,
           repository: HttpCustomerRoomRepository(_api),
+          executionRepository: HttpCustomerExecutionRepository(_api),
+          onBroker: () => _navigate('/broker/angel-one'),
           onRoomChanged: _roomDrafts.load,
         ),
       ),
