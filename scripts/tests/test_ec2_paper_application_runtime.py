@@ -29,6 +29,8 @@ class PaperAppRuntimeContract(unittest.TestCase):
             'APP_API_KEY: ${APP_API_KEY:?required}',
             '"127.0.0.1:8080:8080"',
             '"127.0.0.1:8088:8080"',
+            '"10.87.0.10:8081:8080"',
+            "https://www.minttick.com",
             'NEWS_INGESTION_ENABLED: "false"',
             'OFFICIAL_SOURCE_SCHEDULER_ENABLED: "false"',
             'AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"',
@@ -65,6 +67,9 @@ class PaperAppRuntimeContract(unittest.TestCase):
             "127.0.0.1:8080/api/health",
             "127.0.0.1:8088/health",
             "127.0.0.1:8088/api/health",
+            "10.87.0.10:8081/api/health",
+            'ports("backend")=={("127.0.0.1",8080,8080)}',
+            'ports("web")=={("127.0.0.1",8088,8080),("10.87.0.10",8081,8080)}',
             's["backend"]["environment"]["TRADING_MODE"]=="PAPER"',
         ):
             with self.subTest(required=required):
