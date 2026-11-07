@@ -17,7 +17,7 @@ EXPECTED_DOMAINS = frozenset({DOMAIN, "www.minttick.com", "api.minttick.com"})
 ACCOUNT = "098859530205"
 REGION = "us-east-1"
 CNAME_NAME = re.compile(r"^_[a-z0-9]+\.(?:(?:www|api)\.)?minttick\.com\.$")
-CNAME_VALUE = re.compile(r"^_[a-z0-9]+\.acm-validations\.aws\.$")
+CNAME_VALUE = re.compile(r"^_[a-z0-9_-]+\.acm-validations\.aws\.$")
 
 
 def aws(*args: str) -> dict:
@@ -109,7 +109,14 @@ def get_validation_records(arn: str) -> tuple[list[dict], str]:
             if name.split(".", 1)[1].rstrip(".") != domain:
                 raise RuntimeError("ACM validation rejected: record/domain mismatch")
             if not CNAME_VALUE.fullmatch(value):
-                raise RuntimeError("ACM validation rejected: unexpected CNAME target shape")
+                labels = value.rstrip(".").split(".")
+                first = labels[0] if labels else ""
+                raise RuntimeError(
+                    "ACM validation rejected: unexpected CNAME target shape"
+                    f" (labels={len(labels)}, leading_underscore={first.startswith('_')},"
+                    f" suffix_acm={value.endswith('.acm-validations.aws.')},"
+                    f" token_chars_valid={bool(re.fullmatch(r'_[a-z0-9_-]+', first))})"
+                )
             if name in records and records[name] != value:
                 raise RuntimeError("ACM supplied conflicting validation CNAMEs")
             records[name] = value
