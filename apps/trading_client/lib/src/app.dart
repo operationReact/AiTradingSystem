@@ -313,7 +313,7 @@ class _TradingAppState extends State<TradingApp> {
     } catch (_) {
       // Never add a phantom room when the server write failed.
       final current = _navigatorKey.currentContext;
-      if (mounted && current != null) {
+      if (mounted && current != null && current.mounted) {
         ScaffoldMessenger.of(current).showSnackBar(
           const SnackBar(content: Text(
             'Could not save your Trading Room. Verify the connection and try again.',
