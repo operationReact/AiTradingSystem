@@ -62,6 +62,16 @@ Resources:
                   StringEquals:
                     "aws:RequestTag/Application": MintTick
                     "aws:RequestTag/Environment": dev
+              # Cognito authorizes TagResource independently during CreateUserPool.
+              # The existing resource-tag guard cannot match a pool before it exists.
+              - Sid: AllowTaggedPoolCreationTagging
+                Effect: Allow
+                Action: cognito-idp:TagResource
+                Resource: arn:aws:cognito-idp:ap-south-1:098859530205:userpool/*
+                Condition:
+                  StringEquals:
+                    "aws:RequestTag/Application": MintTick
+                    "aws:RequestTag/Environment": dev
               - Sid: ReadPoolInventory
                 Effect: Allow
                 Action: cognito-idp:ListUserPools
