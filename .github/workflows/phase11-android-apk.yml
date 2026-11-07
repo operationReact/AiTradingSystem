@@ -1,6 +1,10 @@
 name: Phase 11 - Android APK delivery
 
 on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/android-cognito-test.json'
   pull_request:
     branches: [dev]
     paths:
@@ -36,11 +40,47 @@ jobs:
       run:
         working-directory: apps/trading_client
     env:
-      API_BASE_URL: ${{ github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://apk-ci.invalid' }}
-      MINTTICK_COGNITO_USER_POOL_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_user_pool_id || '' }}
-      MINTTICK_COGNITO_CLIENT_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.cognito_client_id || '' }}
+      API_BASE_URL: ${{ github.event_name == 'push' && 'https://api.minttick.com' || (github.event_name == 'workflow_dispatch' && inputs.api_base_url || 'https://apk-ci.invalid') }}
+      MINTTICK_COGNITO_USER_POOL_ID: ${{ github.event_name == 'push' && 'ap-south-1_jz2T8qbiY' || (github.event_name == 'workflow_dispatch' && inputs.cognito_user_pool_id || '') }}
+      MINTTICK_COGNITO_CLIENT_ID: ${{ github.event_name == 'push' && '6jm18v2mdpcfraip92hrjhqjnd' || (github.event_name == 'workflow_dispatch' && inputs.cognito_client_id || '') }}
+      MINTTICK_AUTH_ONLY_TEST: ${{ github.event_name == 'push' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require exact reviewed Cognito-only one-file build request
+        if: github.event_name == 'push'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/android-cognito-test.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          document=json.loads(Path('infra/minttick-domain/requests/android-cognito-test.json').read_text())
+          expected={
+              "application":"MintTick",
+              "environment":"dev",
+              "operation":"build-cognito-only-android-test",
+              "public_api_ready":False,
+              "cognito_pool":"ap-south-1_jz2T8qbiY",
+              "authorization":"USER_APPROVED_ANDROID_COGNITO_TEST_2026-11-07"
+          }
+          assert document == expected, "Unexpected Android identity-only build request"
+          source=Path('apps/trading_client/lib/src/presentation/welcome_page.dart').read_text()
+          assert "MINTTICK_AUTH_ONLY_TEST" in source
+          assert "pushNamedAndRemoveUntil('/auth-test'" in source
+          assert "await MintTickCustomerAccountApi().provision()" in source
+          status=Path('apps/trading_client/lib/src/presentation/cognito_test_page.dart').read_text()
+          assert "Trading rooms and brokerage actions are unavailable" in status
+          main=Path('apps/trading_client/lib/main.dart').read_text()
+          assert "cognitoTestSession" in main
+          PY
+          echo "PASS: authenticated-only Android test gate, no fake customer dashboard"
 
       - name: Validate physical-device API endpoint
         if: github.event_name == 'workflow_dispatch'
@@ -75,6 +115,10 @@ jobs:
       - name: Mark CI-only endpoint
         if: github.event_name == 'pull_request'
         run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
+
+      - name: Explicitly mark Cognito-only sideloadable test release
+        if: github.event_name == 'push'
+        run: echo 'Cognito is real. Customer backend activation is pending; this test never grants trading access.'
 
       - uses: subosito/flutter-action@v2
         with:
@@ -166,7 +210,8 @@ jobs:
             --dart-define=API_BASE_URL="$API_BASE_URL" \
             --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
             --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
-            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID"
+            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+            --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"
 
       - name: Record APK checksum
         run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
@@ -174,7 +219,7 @@ jobs:
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: ai-trading-android-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          name: ${{ github.event_name == 'push' && 'MintTick-Cognito-Android-Test' || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
           path: |
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
