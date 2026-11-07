@@ -85,12 +85,12 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('Live · Upstox'), findsOneWidget);
+    expect(find.text('LIVE · UPSTOX'), findsOneWidget);
     expect(find.textContaining('₹1250.5'), findsOneWidget);
     expect(find.textContaining('Holdings: 1'), findsOneWidget);
     await tester.tap(find.text('Angel One').first);
     await tester.pumpAndSettle();
-    expect(find.text('Live · Angel One'), findsOneWidget);
+    expect(find.text('LIVE · ANGEL ONE'), findsOneWidget);
     expect(find.textContaining('₹1250.5'), findsNothing);
     expect(tester.takeException(), isNull);
   });
