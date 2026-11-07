@@ -167,10 +167,17 @@ jobs:
               assert len(instances)==1, "BLOCKED: unexpected Lambda state instances"
               item=instances[0]
               attrs=item.get("attributes") or {}
-              assert attrs.get("function_name")=="minttick-dev-angelone-feed"
-              assert attrs.get("arn")=="arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed"
-              present=True
+              exact_name="minttick-dev-angelone-feed"
+              exact_arn="arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed"
+              assert attrs.get("function_name")==exact_name
+              assert attrs.get("id")==exact_name
               tainted=item.get("status")=="tainted"
+              # AWS can create the function successfully but Terraform marks
+              # an incomplete post-create update as tainted before the ARN
+              # attribute has been persisted. Accept only *that* state form.
+              if attrs.get("arn")!=exact_arn:
+                  assert tainted and not attrs.get("arn"), "BLOCKED: wrong Lambda ARN"
+              present=True
           with open(os.environ["GITHUB_OUTPUT"],"a") as output:
               output.write("tracked="+str(present).lower()+"\n")
               output.write("tainted="+str(tainted).lower()+"\n")
