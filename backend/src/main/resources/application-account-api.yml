@@ -1,0 +1,20 @@
+# Activate only in the dedicated public-facing customer account deployment:
+# SPRING_PROFILES_ACTIVE=account-api,prod
+# Configure MINTTICK_COGNITO_ENABLED=true and exact issuer/client ID separately.
+# No operator keys or dev-session bootstrap; no trading/admin API exposure.
+minttick:
+  account-api-only:
+    enabled: true
+app:
+  trading-mode: PAPER
+  research:
+    artifact-worker:
+      enabled: false
+    worker-readiness:
+      enabled: false
+  paper:
+    intraday-close:
+      enabled: false
+  news:
+    ingestion:
+      enabled: false
