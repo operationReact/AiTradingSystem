@@ -108,6 +108,11 @@ jobs:
                       k,v=map(str.strip,line.split(":",1))
                       if k in expected and v in expected[k]:
                           print(k+": "+v)
+                      if k=="MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS":
+                          fields=v.split(",")
+                          allowed={"api_key","client_code","pin","totp_secret"}
+                          if fields and len(fields)<=4 and len(set(fields))==len(fields) and set(fields).issubset(allowed):
+                              print(k+": "+",".join(fields))
               print("SUCCESS")
           else:
               print(status)
