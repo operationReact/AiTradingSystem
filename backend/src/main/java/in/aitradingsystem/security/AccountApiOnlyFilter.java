@@ -42,6 +42,10 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         java.util.regex.Pattern.compile(
             "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger)$");
 
+    private static final java.util.regex.Pattern CUSTOMER_EXECUTION_RESOURCE =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/(execution/readiness|orders/preflight)$");
+
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
         "/actuator/health/readiness",
@@ -70,7 +74,11 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (PAPER_WALLET_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/activate") && "POST".equals(method))
-                    || (!path.endsWith("/activate") && "GET".equals(method))));
+                    || (!path.endsWith("/activate") && "GET".equals(method))))
+            || (CUSTOMER_EXECUTION_RESOURCE.matcher(path).matches()
+                && ("OPTIONS".equals(method)
+                    || (path.endsWith("/execution/readiness") && "GET".equals(method))
+                    || (path.endsWith("/orders/preflight") && "POST".equals(method))));
         if (!allowed) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
