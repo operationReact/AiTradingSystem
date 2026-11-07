@@ -152,12 +152,16 @@ class _BrokerOption extends StatelessWidget {
             const SizedBox(width: 13),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Text(name, style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w800)),
-                  const Spacer(),
-                  if (connected) const MintTickStatusLabel('CONNECTED'),
-                ]),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(name, style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                    if (connected) const MintTickStatusLabel('CONNECTED'),
+                  ],
+                ),
                 const SizedBox(height: 5),
                 Text(description, style: Theme.of(context).textTheme.bodySmall),
                 const SizedBox(height: 5),
