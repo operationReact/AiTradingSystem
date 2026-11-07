@@ -62,3 +62,22 @@ open an inbound port, or imply Android customer sign-in is publicly reachable.**
 The Upstox developer-app client ID/secret and exact HTTPS callback must be
 configured separately per `docs/integrations/upstox-oauth.md` before it can
 connect to a real Upstox account.
+
+## Customer API gateway route contract
+
+The public Lambda edge in `infra/minttick-domain/account_proxy.py` now permits
+three additional **read-only-account connection management** routes:
+`GET configured-login`, `POST connect-configured`, and `POST disconnect`
+(all under `/api/customer/brokers/angel-one/`). These routes forward the
+Cognito access token to the existing Spring Boot account API. The backend
+independently checks `ROLE_CUSTOMER`, the active account UUID and, for
+`connect-configured`, the exact server-side Cognito owner subject. The
+configured broker login accepts an empty body; no PIN, TOTP seed, API key,
+or other broker credential is submitted from the Android device.
+
+**Not deployed by merging:** this code does not create the `minttick-account-api`
+stack, publish a public API, set the owner subject, install SSM secrets,
+or build a connected Android APK. The existing private PAPER EC2 intentionally
+has no broker secrets. The one-tap connection will report unavailable until
+server-side secrets and owner authorization are independently provisioned.
+Live order placement remains disabled.

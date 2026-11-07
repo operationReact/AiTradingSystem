@@ -42,11 +42,17 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("POST","/api/auth/cognito/provision"))
         self.assertTrue(proxy.allowed("GET","/api/auth/cognito/me"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/brokers/angel-one/configured-login"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect-configured"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
         for method, path in [
             ("GET","/api/admin/users"),
             ("GET","/api/risk/approvals"),
             ("POST","/api/customer/brokers/angel-one/connect"),
+            ("POST","/api/customer/brokers/angel-one/orders"),
+            ("GET","/api/customer/brokers/angel-one/connect-configured"),
+            ("GET","/api/customer/brokers/angel-one/connect"),
             ("POST","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/orders/intents"),
             ("DELETE","/api/customer/trading-rooms"),
             ("GET","/v3/api-docs"),
@@ -79,6 +85,29 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(request.full_url,"http://10.87.0.10:8081/api/auth/cognito/provision")
         self.assertEqual(request.headers.get("Authorization"),"Bearer public-test-token")
         self.assertEqual(proxy.handler(event("POST","/api/auth/cognito/provision",body='{"email":"x"}'),None)["statusCode"],400)
+
+    def test_owner_configured_broker_route_forwards_only_jwt_and_empty_post(self):
+        # The backend independently checks exact Cognito owner-sub + CUSTOMER
+        # and complete server-side SSM configuration. This edge does not carry
+        # broker credentials, customer PIN or TOTP in the request.
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
+            result=proxy.handler(event("POST","/api/customer/brokers/angel-one/connect-configured"),None)
+        self.assertEqual(result["statusCode"],200)
+        req=urlopen.call_args.args[0]
+        self.assertEqual(req.get_method(),"POST")
+        self.assertEqual(req.data,b"")
+        self.assertEqual(req.headers.get("Authorization"),"Bearer public-test-token")
+        self.assertEqual(proxy.handler(event("POST","/api/customer/brokers/angel-one/connect-configured",
+            body='{"pin":"1234"}'),None)["statusCode"],400)
+        self.assertEqual(proxy.handler(event("POST","/api/customer/brokers/angel-one/disconnect",
+            body='{"credential":"bad"}'),None)["statusCode"],400)
+
+    def test_invalid_base64_is_rejected_without_upstream_call(self):
+        data=event("POST","/api/customer/trading-rooms",body="%%%")
+        data["isBase64Encoded"]=True
+        with mock.patch.object(proxy.urllib.request,"urlopen") as urlopen:
+            self.assertEqual(proxy.handler(data,None)["statusCode"],400)
+        urlopen.assert_not_called()
 
     def test_readiness_is_through_existing_private_backend(self):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
