@@ -26,11 +26,13 @@ import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
+import 'features/trading_rooms/data/customer_market_repository.dart';
 import 'features/trading_rooms/data/customer_upstox_repository.dart';
 import 'features/trading_rooms/presentation/minttick_upstox_page.dart';
 import 'features/trading_rooms/presentation/minttick_broker_hub_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_broker_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_home.dart';
+import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
 import 'presentation/backtests_page.dart';
@@ -192,8 +194,12 @@ class _TradingAppState extends State<TradingApp> {
         '/welcome': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/welcome-replay': (_) => const MintTickWelcomePage(replayFromSettings: true),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
-        '/market': (_) => widget.session.isCustomerAuthenticated ? _customerState('Markets') : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
-        '/market-data': (_) => widget.session.isCustomerAuthenticated ? _customerState('Markets') : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/market': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickCustomerMarketPage(repository: HttpCustomerMarketRepository(_api))
+            : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/market-data': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickCustomerMarketPage(repository: HttpCustomerMarketRepository(_api))
+            : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
