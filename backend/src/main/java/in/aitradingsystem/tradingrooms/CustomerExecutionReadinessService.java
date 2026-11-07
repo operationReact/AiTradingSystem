@@ -1,0 +1,125 @@
+package in.aitradingsystem.tradingrooms;
+
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.http.HttpStatus;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
+
+/**
+ * Shared PAPER/LIVE order preflight boundary. Both modes use the same
+ * validated instrument/order vocabulary, but NEVER share funds, orders
+ * or execution authority. No provider order API is invoked from here.
+ */
+@Service
+public class CustomerExecutionReadinessService {
+    private final JdbcClient jdbc;
+    private final CustomerAngelOneSessionService broker;
+    private final InstrumentMasterService instruments;
+
+    public CustomerExecutionReadinessService(
+            JdbcClient jdbc, CustomerAngelOneSessionService broker,
+            InstrumentMasterService instruments) {
+        this.jdbc = jdbc;
+        this.broker = broker;
+        this.instruments = instruments;
+    }
+
+    public record Readiness(UUID roomId, String mode, String roomStatus,
+                            boolean brokerConnected, boolean virtualCashReady,
+                            boolean accountWideRiskReady, boolean brokerExecutionApproved,
+                            boolean marketDataVerified, boolean executionEnabled,
+                            List<String> blockers) {}
+
+    public record Preflight(UUID roomId, String mode, long instrumentId,
+                            String tradingSymbol, String exchange, String side,
+                            int quantity, String orderType, String duration,
+                            BigDecimal limitPrice, boolean executable,
+                            List<String> blockers) {}
+
+    private record Room(String mode, String status) {}
+
+    public Readiness readiness(UUID owner, UUID roomId) {
+        Room room = ownedRoom(owner, roomId);
+        boolean paperFunded = false;
+        if ("PAPER".equals(room.mode())) {
+            paperFunded = jdbc.sql("""
+                    SELECT EXISTS (
+                      SELECT 1 FROM customer_paper_account a
+                      WHERE a.room_id = :id AND a.user_id = :user
+                      AND a.halted = TRUE AND a.available_cash_paise >= 0
+                    )
+                    """)
+                .param("id", roomId).param("user", owner)
+                .query(Boolean.class).single();
+        }
+        boolean connected = "LIVE".equals(room.mode()) && broker.status(owner).connected();
+        List<String> blockers = new ArrayList<>();
+        if ("PAPER".equals(room.mode())) {
+            if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
+                blockers.add("PAPER_WALLET_NOT_FUNDED");
+            }
+            blockers.add("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
+        } else {
+            if (!connected) blockers.add("ANGEL_ONE_NOT_CONNECTED");
+            blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
+            blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
+            blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
+            blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
+        }
+        // The customer trading execution engine is unavailable in this stage.
+        // All mode-specific order submissions fail closed, regardless of
+        // application flags, UI state, or client-supplied claims.
+        blockers.add("EXECUTION_DISABLED");
+        return new Readiness(roomId, room.mode(), room.status(), connected, paperFunded,
+                false, false, false, false, List.copyOf(blockers));
+    }
+
+    public Preflight preflight(UUID owner, UUID roomId, long instrumentId,
+                              String side, int quantity, BigDecimal limitPrice) {
+        Readiness readiness = readiness(owner, roomId);
+        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
+        if (!("NSE".equals(instrument.exchange()) || "BSE".equals(instrument.exchange()))
+                || !("EQ".equalsIgnoreCase(instrument.instrumentType())
+                    || "EQUITY".equalsIgnoreCase(instrument.instrumentType())
+                    || "STOCK".equalsIgnoreCase(instrument.instrumentType()))) {
+            throw new ResponseStatusException(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Only active NSE/BSE cash equities are supported");
+        }
+        if (!"BUY".equals(side) && !"SELL".equals(side)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Only BUY or SELL order intents are supported");
+        }
+        if (quantity < 1 || quantity > 10000 || limitPrice == null
+                || limitPrice.signum() <= 0 || limitPrice.scale() > 2
+                || limitPrice.compareTo(new BigDecimal("10000000")) > 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Invalid quantity or proposed limit price");
+        }
+        List<String> blockers = new ArrayList<>(readiness.blockers());
+        blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED");
+        blockers.add("SERVER_SIDE_ORDER_RISK_NOT_EVALUATED");
+        return new Preflight(roomId, readiness.mode(), instrumentId,
+                instrument.tradingSymbol(), instrument.exchange(), side,
+                quantity, "LIMIT", "DAY", limitPrice, false, List.copyOf(blockers));
+    }
+
+    private Room ownedRoom(UUID owner, UUID roomId) {
+        return jdbc.sql("""
+                SELECT mode, status
+                FROM customer_trading_room
+                WHERE id = :id AND user_id = :user
+                """)
+            .param("id", roomId).param("user", owner)
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status")))
+            .optional()
+            .orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Trading Room not found"));
+    }
+}
