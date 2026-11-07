@@ -59,6 +59,49 @@ class ReadOnlyFeedTests(unittest.TestCase):
             self.assertEqual(bad["code"], "INVALID_CANDLE_REQUEST")
             call.assert_not_called()
 
+    def test_owner_connect_verifies_ssm_client_with_broker_profile(self):
+        with patch.object(feed, "_secrets", return_value=DUMMY), \
+             patch.object(feed, "_read_account", return_value={"clientcode": "TEST"}) as read:
+            result = feed.handler({"operation": "broker-connect"}, None)
+        self.assertEqual(result, {
+            "ok": True, "broker": "ANGEL_ONE",
+            "clientCodeMasked": "***EST", "orderExecutionEnabled": False,
+        })
+        read.assert_called_once_with(feed.PROFILE_PATH, DUMMY)
+        self.assertNotIn("not-real", str(result))
+        self.assertNotIn("JBSWY", str(result))
+
+    def test_owner_connect_rejects_broker_profile_mismatch(self):
+        with patch.object(feed, "_secrets", return_value=DUMMY), \
+             patch.object(feed, "_read_account", return_value={"clientcode": "OTHER"}):
+            result = feed.handler({"operation": "broker-connect"}, None)
+        self.assertEqual(result, {"ok": False, "code": "BROKER_ACCOUNT_MISMATCH"})
+
+    def test_account_reads_only_allow_exact_known_broker_paths(self):
+        with patch.object(feed, "_secrets", return_value=DUMMY), \
+             patch.object(feed, "_read_account", return_value={"availablecash": "5000"}) as read:
+            result = feed.handler({"operation": "broker-read", "resource": "funds"}, None)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["provider"], "ANGEL_ONE")
+        self.assertEqual(result["data"], {"availablecash": "5000"})
+        read.assert_called_once_with(feed.ACCOUNT_PATHS["funds"], DUMMY)
+        self.assertNotIn("not-real", str(result))
+        self.assertNotIn("1234", str(result))
+
+        for resource in ("placeOrder", "modifyOrder", "cancelOrder",
+                         "convertPosition", "getTokens", "logout"):
+            with patch.object(feed, "_read_account") as read:
+                result = feed.handler({"operation": "broker-read", "resource": resource}, None)
+            self.assertEqual(result, {"ok": False, "code": "DISALLOWED_OPERATION"})
+            read.assert_not_called()
+
+    def test_broker_get_never_follows_unreviewed_endpoint(self):
+        with patch.object(feed, "urlopen") as url:
+            with self.assertRaises(feed.FeedError):
+                feed._get("/rest/secure/angelbroking/order/v1/placeOrder",
+                          "not-real-broker-jwt", DUMMY)
+        url.assert_not_called()
+
     def test_no_order_mutation_paths(self):
         self.assertEqual({feed.LOGIN_PATH, feed.LTP_PATH, feed.CANDLE_PATH},
            {"/rest/auth/angelbroking/user/v1/loginByPassword",
