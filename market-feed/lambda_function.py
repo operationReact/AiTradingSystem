@@ -30,6 +30,15 @@ NAMES = {
 LOGIN_PATH = "/rest/auth/angelbroking/user/v1/loginByPassword"
 LTP_PATH = "/rest/secure/angelbroking/order/v1/getLtpData"
 CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData"
+PROFILE_PATH = "/rest/secure/angelbroking/user/v1/getProfile"
+ACCOUNT_PATHS = {
+    "funds": "/rest/secure/angelbroking/user/v1/getRMS",
+    "holdings": "/rest/secure/angelbroking/portfolio/v1/getHolding",
+    "positions": "/rest/secure/angelbroking/order/v1/getPosition",
+    "orders": "/rest/secure/angelbroking/order/v1/getOrderBook",
+}
+# No placeOrder/modifyOrder/cancelOrder/convertPosition endpoint is reachable.
+MAX_ACCOUNT_RESPONSE_BYTES = 110_000
 REAUTH_CODES = {"AG8001", "AG8003", "AB8050", "AB8051", "AB1010"}
 EXCHANGES = {"NSE", "BSE"}
 # Must match backend HistoricalCandleInterval maxDaysPerRequest.
@@ -135,6 +144,82 @@ def _post(path, payload, jwt, credentials):
     except (ValueError, TypeError, UnicodeError):
         raise FeedError("PROVIDER_INVALID_RESPONSE") from None
 
+def _get(path, jwt, credentials):
+    # Only broker-account reads or profile verification.
+    if path not in {*ACCOUNT_PATHS.values(), PROFILE_PATH} or not jwt:
+        raise FeedError("DISALLOWED_OPERATION")
+    _pace()
+    headers = {
+        "Accept": "application/json",
+        "X-PrivateKey": credentials["api_key"],
+        "X-UserType": "USER",
+        "X-SourceID": "WEB",
+        "Authorization": "Bearer " + jwt,
+    }
+    try:
+        with urlopen(Request(API_ROOT + path, headers=headers, method="GET"), timeout=7) as response:
+            payload = response.read(MAX_ACCOUNT_RESPONSE_BYTES + 1)
+        if len(payload) > MAX_ACCOUNT_RESPONSE_BYTES:
+            raise FeedError("PROVIDER_INVALID_RESPONSE")
+    except HTTPError as exc:
+        if exc.code == 401:
+            raise FeedError("SESSION_EXPIRED") from None
+        if exc.code in (403, 429):
+            raise FeedError("PROVIDER_RATE_LIMITED") from None
+        raise FeedError("PROVIDER_UNAVAILABLE") from None
+    except (URLError, TimeoutError, OSError):
+        raise FeedError("PROVIDER_UNAVAILABLE") from None
+    try:
+        result = json.loads(payload)
+        if not isinstance(result, dict) or result.get("status") is not True:
+            if isinstance(result, dict) and str(result.get("errorcode", "")) in REAUTH_CODES:
+                raise FeedError("SESSION_EXPIRED")
+            raise FeedError("PROVIDER_REJECTED")
+        return result.get("data")
+    except FeedError:
+        raise
+    except (ValueError, TypeError, UnicodeError):
+        raise FeedError("PROVIDER_INVALID_RESPONSE") from None
+
+def _read_account(path, credentials):
+    jwt = _login(credentials)
+    try:
+        return _get(path, jwt, credentials)
+    except FeedError as exc:
+        if exc.code != "SESSION_EXPIRED":
+            raise
+        _CACHE["jwt"] = None
+        _CACHE["jwt_expires"] = 0.0
+        return _get(path, _login(credentials), credentials)
+
+
+def _connect_broker(credentials):
+    # Independently compare the broker-verified identity with the one bound
+    # to the four SecureString parameters. Never expose profile PII or tokens.
+    data = _read_account(PROFILE_PATH, credentials)
+    if not isinstance(data, dict):
+        raise FeedError("PROVIDER_INVALID_RESPONSE")
+    expected = credentials["client_code"].strip().upper()
+    verified = str(data.get("clientcode", data.get("clientCode", ""))).strip().upper()
+    if not expected or verified != expected:
+        raise FeedError("BROKER_ACCOUNT_MISMATCH")
+    return {"ok": True, "broker": "ANGEL_ONE",
+            "clientCodeMasked": "***" + expected[-3:],
+            "orderExecutionEnabled": False}
+
+
+def _broker_read(event, credentials):
+    resource = event.get("resource")
+    if not isinstance(resource, str) or resource not in ACCOUNT_PATHS:
+        raise FeedError("DISALLOWED_OPERATION")
+    data = _read_account(ACCOUNT_PATHS[resource], credentials)
+    if not isinstance(data, (dict, list)):
+        raise FeedError("PROVIDER_INVALID_RESPONSE")
+    # No customer JWT, PIN, API key, TOTP or broker tokens are forwarded.
+    return {"ok": True, "provider": "ANGEL_ONE",
+            "fetchedAt": datetime.now(timezone.utc).isoformat(), "data": data}
+
+
 def _login(credentials):
     # Token reuse never survives beyond the next Indian midnight.
     if _CACHE["jwt"] and time.time() < _CACHE["jwt_expires"]:
@@ -217,14 +302,18 @@ def handler(event, context):
             if not isinstance(event, dict):
                 raise FeedError("INVALID_REQUEST")
             operation = event.get("operation")
-            if operation not in ("status", "quote", "candles"):
+            if operation not in ("status", "quote", "candles", "broker-connect", "broker-read"):
                 raise FeedError("DISALLOWED_OPERATION")
             credentials = _secrets()
             if operation == "status":
                 return {"ok": True, "source": "ANGEL_ONE_SMARTAPI", "configured": True}
             if operation == "quote":
                 return _quote(event, credentials)
-            return _candles(event, credentials)
+            if operation == "candles":
+                return _candles(event, credentials)
+            if operation == "broker-connect":
+                return _connect_broker(credentials)
+            return _broker_read(event, credentials)
         except FeedError as exc:
             return {"ok": False, "code": exc.code}
         except Exception:
