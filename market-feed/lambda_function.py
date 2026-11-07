@@ -1,7 +1,7 @@
 """MintTick read-only Angel One market-data Lambda.
 
 Direct IAM invocation only. No HTTP gateway, order endpoints, trading authority or secrets in responses.
-The Lambda execution role may read exactly four SSM SecureString parameters in ap-south-1.
+Dev-only owner pilot: the IAM-scoped Lambda accepts String or SecureString at exactly four SSM paths in ap-south-1. Migrate sensitive credentials to SecureString before broader use.
 """
 import base64
 import hashlib
@@ -68,7 +68,7 @@ def _secrets():
         result = boto3.client("ssm", region_name=REGION).get_parameters(
             Names=list(NAMES.values()), WithDecryption=True)
         found = {item["Name"]: item["Value"] for item in result.get("Parameters", [])
-                 if item.get("Type") == "SecureString" and
+                 if item.get("Type") in ("String", "SecureString") and
                  isinstance(item.get("Name"), str)}
         unavailable = tuple(
             field for field, name in NAMES.items()
