@@ -33,6 +33,13 @@ class ACMRecordsTest(TestCase):
             self.assertTrue(row["Name"].endswith("."))
             self.assertTrue(row["ResourceRecords"][0]["Value"].endswith("."))
 
+    def test_accepts_dns_safe_dash_underscore_acm_token(self):
+        data = result(entry("minttick.com", target="_a-b_c.acm-validations.aws"),
+                      entry("www.minttick.com"), entry("api.minttick.com"))
+        with mock.patch.object(module, "aws", return_value=data):
+            records, _ = module.get_validation_records("test-certificate")
+        self.assertEqual(len(records), 3)
+
     def test_rejects_unrelated_target(self):
         data = result(entry("minttick.com", target="_malicious.example.net"),
                       entry("www.minttick.com"), entry("api.minttick.com"))
