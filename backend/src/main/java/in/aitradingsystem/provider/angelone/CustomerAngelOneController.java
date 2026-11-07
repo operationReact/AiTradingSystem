@@ -1,6 +1,9 @@
 package in.aitradingsystem.provider.angelone;
 
 import in.aitradingsystem.user.CustomerIdentityStore;
+import in.aitradingsystem.config.AngelOneProperties;
+import java.time.Instant;
+import org.springframework.beans.factory.annotation.Value;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -30,10 +33,18 @@ import org.springframework.web.server.ResponseStatusException;
 public class CustomerAngelOneController {
     private final CustomerIdentityStore identities;
     private final CustomerAngelOneSessionService broker;
+    private final AngelOneProperties configuredCredentials;
+    private final String ownerCognitoSubject;
 
-    public CustomerAngelOneController(CustomerIdentityStore identities, CustomerAngelOneSessionService broker) {
+    public CustomerAngelOneController(CustomerIdentityStore identities,
+            CustomerAngelOneSessionService broker,
+            AngelOneProperties configuredCredentials,
+            @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerCognitoSubject) {
         this.identities = identities;
         this.broker = broker;
+        this.configuredCredentials = configuredCredentials;
+        // Fail closed unless a single exact Cognito subject is explicitly allowed.
+        this.ownerCognitoSubject = ownerCognitoSubject == null ? "" : ownerCognitoSubject.trim();
     }
 
     public record ConnectRequest(
@@ -56,6 +67,48 @@ public class CustomerAngelOneController {
             org.springframework.security.core.Authentication authentication) {
         UUID userId = customer(authentication);
         return noStore(broker.connect(userId, request.apiKey(), request.clientCode(), request.pin(), request.totp()));
+    }
+
+    /** Only the configured owner can use the existing server-side SSM credentials.
+     *  These credentials are never returned to the device or shared with other customers.
+     */
+    public record ConfiguredLoginAvailability(boolean available) {}
+
+    @GetMapping("/configured-login")
+    public ResponseEntity<ConfiguredLoginAvailability> configuredLogin(
+            org.springframework.security.core.Authentication authentication) {
+        customer(authentication);
+        return noStore(new ConfiguredLoginAvailability(
+            isAuthorizedOwner(authentication) && configuredCredentials.credentialsConfigured()));
+    }
+
+    @PostMapping("/connect-configured")
+    public ResponseEntity<CustomerAngelOneSessionService.ConnectionStatus> connectConfigured(
+            org.springframework.security.core.Authentication authentication) {
+        UUID userId = customer(authentication);
+        if (!isAuthorizedOwner(authentication)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Owner-only broker connection");
+        }
+        if (!configuredCredentials.credentialsConfigured()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "The server-side Angel One connection is not configured");
+        }
+        final String totp;
+        try {
+            totp = AngelOneTotp.generate(configuredCredentials.totpSecret(), Instant.now());
+        } catch (IllegalArgumentException ex) {
+            // Do not include secret details in errors or logs.
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "The server-side broker authentication is unavailable");
+        }
+        return noStore(broker.connect(userId, configuredCredentials.apiKey(),
+            configuredCredentials.clientCode(), configuredCredentials.password(), totp));
+    }
+
+    private boolean isAuthorizedOwner(org.springframework.security.core.Authentication authentication) {
+        return !ownerCognitoSubject.isBlank()
+            && authentication instanceof JwtAuthenticationToken token
+            && ownerCognitoSubject.equals(token.getToken().getSubject());
     }
 
     @PostMapping("/disconnect")
