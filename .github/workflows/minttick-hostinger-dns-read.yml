@@ -1,0 +1,43 @@
+name: MintTick - verify Hostinger DNS access (read only)
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/dns-read.json'
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/minttick_hostinger_dns_read.py'
+      - '.github/workflows/minttick-hostinger-dns-read.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify safe read-only script syntax
+        run: python3 -m py_compile scripts/minttick_hostinger_dns_read.py
+      - name: Require exact one-file request on dev
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = "operationReact/AiTradingSystem"
+          test "${GITHUB_REF}" = "refs/heads/dev"
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/dns-read.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path('infra/minttick-domain/requests/dns-read.json').read_text())
+          expected={"domain":"minttick.com","operation":"read-only-dns-preflight","environment":"dev"}
+          assert actual == expected, "Unapproved Hostinger DNS request"
+          PY
+      - name: Inspect DNS via Hostinger API without modifying records
+        if: github.event_name == 'push'
+        env:
+          HOSTINGER_API_TOKEN: ${{ secrets.HOSTINGER_API_TOKEN }}
+        run: python3 scripts/minttick_hostinger_dns_read.py
