@@ -5,6 +5,7 @@ import '../domain/trading_room_draft.dart';
 import '../domain/trading_workspace_mode.dart';
 import 'minttick_mode_switcher.dart';
 import '../data/customer_room_repository.dart';
+import '../data/customer_execution_repository.dart';
 import 'minttick_customer_widgets.dart';
 
 class MintTickTradingRoomsPage extends StatelessWidget {
@@ -591,12 +592,16 @@ class MintTickRoomDetailPage extends StatefulWidget {
   const MintTickRoomDetailPage({
     required this.room,
     this.repository,
+    this.executionRepository,
+    this.onBroker,
     this.onRoomChanged,
     super.key,
   });
 
   final TradingRoomDraft room;
   final HttpCustomerRoomRepository? repository;
+  final HttpCustomerExecutionRepository? executionRepository;
+  final VoidCallback? onBroker;
   final Future<void> Function()? onRoomChanged;
 
   @override
@@ -606,6 +611,7 @@ class MintTickRoomDetailPage extends StatefulWidget {
 class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
   String _tab = 'Overview';
   CustomerPaperWallet? _wallet;
+  CustomerExecutionReadiness? _readiness;
   List<CustomerPaperCashEvent> _events = const [];
   String? _error;
   bool _busy = false;
@@ -613,10 +619,21 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
   @override
   void initState() {
     super.initState();
+    _loadReadiness();
     if (widget.room.status == 'PAPER_FUNDED' &&
         widget.room.mode == 'PAPER' &&
         widget.repository != null) {
       _loadWallet();
+    }
+  }
+
+  Future<void> _loadReadiness() async {
+    if (widget.executionRepository == null) return;
+    try {
+      final data = await widget.executionRepository!.readiness(widget.room.id);
+      if (mounted) setState(() => _readiness = data);
+    } catch (_) {
+      if (mounted) setState(() => _readiness = null);
     }
   }
 
@@ -699,8 +716,23 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
     }
     if (_wallet != null && mounted) {
       await _loadWallet();
+      await _loadReadiness();
     }
   }
+
+  static String _explainBlocker(String code) => switch (code) {
+    'PAPER_WALLET_NOT_FUNDED' => 'Fund a virtual Paper wallet',
+    'CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED' => 'Paper order engine pending',
+    'ANGEL_ONE_NOT_CONNECTED' => 'Connect your Angel One broker',
+    'BROKER_APPROVED_HOSTING_NOT_VERIFIED' => 'Broker-approved hosting pending',
+    'REGISTERED_STATIC_IP_NOT_VERIFIED' => 'Registered IP approval pending',
+    'ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED' =>
+      'Account risk limits and reconciliation pending',
+    'EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED' =>
+      'Separate Live authorization required',
+    'EXECUTION_DISABLED' => 'Execution disabled for safety',
+    _ => 'Additional verification required',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -782,6 +814,60 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         )),
         const SizedBox(height: 17),
       ],
+      MintTickSurface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            const MintTickIconTile(Icons.verified_user_outlined),
+            const SizedBox(width: 11),
+            Expanded(child: Text('Trading readiness',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800))),
+            const MintTickStatusLabel('NOT ACTIVE'),
+          ]),
+          const SizedBox(height: 11),
+          Text(_readiness == null
+              ? 'Trading readiness has not been verified. '
+                'Order submission stays disabled.'
+              : 'Server-checked ${_readiness!.mode} readiness. '
+                'Orders remain disabled until every safety gate is satisfied.',
+            style: Theme.of(context).textTheme.bodySmall
+                ?.copyWith(color: scheme.onSurfaceVariant)),
+          if (_readiness != null) ...[
+            const SizedBox(height: 10),
+            for (final blocker in _readiness!.blockers.take(5))
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(children: [
+                  Icon(Icons.lock_outline_rounded, color: scheme.onSurfaceVariant, size: 15),
+                  const SizedBox(width: 7),
+                  Expanded(child: Text(
+                    _explainBlocker(blocker),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  )),
+                ]),
+              ),
+          ],
+          const SizedBox(height: 13),
+          Row(children: [
+            OutlinedButton.icon(
+              onPressed: widget.executionRepository == null
+                  ? null : _loadReadiness,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Check readiness'),
+            ),
+          ]),
+          if (room.mode == 'LIVE' && widget.onBroker != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(width: double.infinity, child: FilledButton.icon(
+              onPressed: widget.onBroker,
+              icon: const Icon(Icons.account_balance_outlined),
+              label: const Text('Connect or view Angel One'),
+            )),
+          ],
+        ],
+      )),
+      const SizedBox(height: 18),
       SegmentedButton<String>(
         key: const ValueKey('room-detail-tabs'),
         showSelectedIcon: false,
