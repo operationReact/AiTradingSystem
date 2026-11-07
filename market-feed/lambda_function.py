@@ -52,9 +52,11 @@ _CACHE = {"secrets": None, "secrets_loaded_at": 0.0, "jwt": None, "jwt_expires":
 _LAST_CALL = 0.0
 
 class FeedError(Exception):
-    def __init__(self, code):
+    def __init__(self, code, unavailable_fields=()):
         super().__init__(code)
         self.code = code
+        # Field identifiers only; never store or return the SSM secret values.
+        self.unavailable_fields = tuple(unavailable_fields)
 
 def _secrets():
     now = time.monotonic()
@@ -66,12 +68,15 @@ def _secrets():
         result = boto3.client("ssm", region_name=REGION).get_parameters(
             Names=list(NAMES.values()), WithDecryption=True)
         found = {item["Name"]: item["Value"] for item in result.get("Parameters", [])
-                 if item.get("Type") == "SecureString"}
-        if set(found) != set(NAMES.values()):
-            raise FeedError("CREDENTIALS_NOT_CONFIGURED")
+                 if item.get("Type") == "SecureString" and
+                 isinstance(item.get("Name"), str)}
+        unavailable = tuple(
+            field for field, name in NAMES.items()
+            if not isinstance(found.get(name), str) or not found[name].strip()
+        )
+        if unavailable:
+            raise FeedError("CREDENTIALS_NOT_CONFIGURED", unavailable)
         values = {key: found[name] for key, name in NAMES.items()}
-        if not all(isinstance(value, str) and value.strip() for value in values.values()):
-            raise FeedError("CREDENTIALS_NOT_CONFIGURED")
         _CACHE["secrets"] = values
         _CACHE["secrets_loaded_at"] = now
         return values
@@ -317,7 +322,13 @@ def handler(event, context):
                 return _connect_broker(credentials)
             return _broker_read(event, credentials)
         except FeedError as exc:
-            return {"ok": False, "code": exc.code}
+            response = {"ok": False, "code": exc.code}
+            # Status is IAM-invoked privately. Report only fixed symbolic field
+            # identifiers so the operator can repair exact SSM names/types.
+            if isinstance(event, dict) and event.get("operation") == "status" and (
+                    exc.code == "CREDENTIALS_NOT_CONFIGURED" and exc.unavailable_fields):
+                response["unavailableFields"] = list(exc.unavailable_fields)
+            return response
         except Exception:
             # Fail closed. Never serialize raw errors containing API payload or credentials.
             return {"ok": False, "code": "INTERNAL_FAILURE"}
