@@ -1,0 +1,85 @@
+name: MintTick domain - validate and stage ACM DNS records
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/**'
+      - '.github/workflows/minttick-domain-certificate.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/certificate.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-domain-certificate-dev
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate certificate staging script without AWS credentials
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/minttick-domain/ensure_certificate.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s = Path("infra/minttick-domain/ensure_certificate.py").read_text()
+          assert 'minttick.com' in s and 'us-east-1' in s
+          assert 'change-resource-record-sets' in s
+          assert 'delete-hosted-zone' not in s
+          PY
+      - name: Validate standalone CloudFormation template
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet cfn-lint
+          cfn-lint infra/minttick-domain/bootstrap-route53.yml
+
+  stage:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact reviewed one-file certificate request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/certificate.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual = json.loads(Path('infra/minttick-domain/requests/certificate.json').read_text())
+          expected = {
+              'domain': 'minttick.com',
+              'environment': 'dev',
+              'aws_account': '098859530205',
+              'operation': 'stage-acm-validation',
+              'authorization': 'USER_APPROVED_ROUTE53_ONE_TIME_DNS_2026-11-07',
+          }
+          assert actual == expected, 'Refusing unexpected domain operation'
+          PY
+      - name: Assume dedicated MintTick domain GitHub OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-domain-github-deploy
+          aws-region: us-east-1
+          role-session-name: minttick-domain-${{ github.run_id }}
+      - name: Stage only ACM certificate validation CNAMEs
+        run: |
+          set -euo pipefail
+          python3 infra/minttick-domain/ensure_certificate.py
