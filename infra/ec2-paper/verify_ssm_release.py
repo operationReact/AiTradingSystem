@@ -97,7 +97,7 @@ def verify_aws() -> None:
     tags = {x.get("Key"): x.get("Value") for x in inst.get("Tags", [])
             if isinstance(x, dict)}
     if (inst.get("InstanceId") != INSTANCE
-        or inst.get("InstanceType") != "t4g.medium"
+        or inst.get("InstanceType") not in {"t4g.medium", "m6g.medium", "m7g.medium"}
         or inst.get("VpcId") != VPC or inst.get("SubnetId") != SUBNET
         or inst.get("MetadataOptions", {}).get("HttpTokens") != "required"
         or inst.get("IamInstanceProfile", {}).get("Arn") != PROFILE
