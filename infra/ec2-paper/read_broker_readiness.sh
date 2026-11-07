@@ -57,6 +57,12 @@ except (OSError, ValueError, TypeError, AttributeError):
     reason = "INVALID_RESPONSE"
 print("MINTTICK_PRIVATE_FEED_LAMBDA:", "READY" if ready else "NOT_CONFIRMED")
 print("MINTTICK_PRIVATE_FEED_DIAGNOSTIC:", reason)
+if not ready and isinstance(result, dict):
+    fields = result.get("unavailableFields")
+    allowed_fields = {"api_key", "client_code", "pin", "totp_secret"}
+    if (isinstance(fields, list) and len(fields) <= 4 and fields
+            and all(isinstance(x, str) and x in allowed_fields for x in fields)):
+        print("MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS:", ",".join(sorted(set(fields))))
 PY
 else
   # Do not print raw AWS CLI stderr, HTTP error bodies, SSM values or tokens.
