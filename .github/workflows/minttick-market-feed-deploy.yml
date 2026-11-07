@@ -87,6 +87,64 @@ jobs:
       - name: Initialize isolated encrypted Terraform state
         working-directory: infra/minttick-market-feed
         run: terraform init -input=false -backend-config=backend.hcl
+      - name: Recover only the partially created exact feed IAM role state
+        working-directory: infra/minttick-market-feed
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform state pull > "$RUNNER_TEMP/minttick-feed-state.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads((Path(os.environ['RUNNER_TEMP'])/'minttick-feed-state.json').read_text())
+          matches=[r for r in data.get('resources',[])
+                   if r.get('mode')=='managed' and r.get('type')=='aws_iam_role' and r.get('name')=='feed']
+          assert len(matches)<=1, 'BLOCKED: unexpected duplicate managed feed roles'
+          tainted=False
+          if matches:
+              instances=matches[0].get('instances',[])
+              assert len(instances)==1, 'BLOCKED: unexpected feed role state instances'
+              instance=instances[0]
+              attrs=instance.get('attributes') or {}
+              assert attrs.get('name')=='minttick-dev-angelone-feed-lambda'
+              assert attrs.get('arn')=='arn:aws:iam::098859530205:role/minttick-dev-angelone-feed-lambda'
+              tainted=instance.get('status')=='tainted'
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('feed_role_tainted='+str(tainted).lower()+'\n')
+          print('PASS: examined exact isolated MintTick feed role state without exposing it')
+          PY
+          rm -f "$RUNNER_TEMP/minttick-feed-state.json"
+        id: taint-check
+      - name: Verify the exact Lambda-service trust before repairing state
+        if: steps.taint-check.outputs.feed_role_tainted == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          aws iam get-role --role-name minttick-dev-angelone-feed-lambda             --output json > "$RUNNER_TEMP/minttick-feed-role.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          role=json.loads((Path(os.environ['RUNNER_TEMP'])/'minttick-feed-role.json').read_text())['Role']
+          assert role['Arn']=='arn:aws:iam::098859530205:role/minttick-dev-angelone-feed-lambda'
+          document=role.get('AssumeRolePolicyDocument') or {}
+          statements=document.get('Statement',[])
+          if isinstance(statements,dict): statements=[statements]
+          assert len(statements)==1
+          policy=statements[0]
+          assert policy.get('Effect')=='Allow' and policy.get('Action')=='sts:AssumeRole'
+          assert policy.get('Principal',{}).get('Service')=='lambda.amazonaws.com'
+          print('PASS: dedicated existing feed role is exclusively trusted by AWS Lambda')
+          PY
+          rm -f "$RUNNER_TEMP/minttick-feed-role.json"
+      - name: Untaint verified partial feed role without deleting AWS resources
+        if: steps.taint-check.outputs.feed_role_tainted == 'true'
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          terraform untaint -lock-timeout=90s aws_iam_role.feed
+          echo 'PASS: only dedicated feed role state taint cleared; no AWS IAM mutation'
       - name: Validate and plan exact market-feed resources
         working-directory: infra/minttick-market-feed
         shell: bash
