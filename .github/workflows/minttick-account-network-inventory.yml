@@ -1,0 +1,87 @@
+name: MintTick - read-only account API private network inventory
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-account-network-inventory.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/account-network-inventory.json'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Confirm no AWS mutation actions in metadata-only workflow
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path(".github/workflows/minttick-account-network-inventory.yml").read_text()
+          assert "ec2 describe-instances" in s
+          for forbidden in ("authorize-security-group-ingress","run-instances","cloudformation deploy","ssm send-command"):
+              assert forbidden not in s, "Inventory may not mutate AWS"
+          PY
+  inventory:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file read-only network request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/account-network-inventory.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/minttick-domain/requests/account-network-inventory.json").read_text())
+          assert actual=={
+              "application":"MintTick",
+              "aws_account":"098859530205",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"read-only-network-inventory"
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-private-api-inventory-${{ github.run_id }}
+      - name: Inspect only approved existing PAPER EC2 network identifiers
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          aws ec2 describe-instances --instance-ids i-09c01b470fb39b85a \
+            --query 'Reservations[0].Instances[0].{InstanceId:InstanceId,VpcId:VpcId,SubnetId:SubnetId,PrivateIpAddress:PrivateIpAddress,SecurityGroups:SecurityGroups,State:State.Name,Tags:Tags}' --output json \
+            > "$RUNNER_TEMP/instance.json"
+          python3 - <<'PY'
+          import json,os,ipaddress
+          from pathlib import Path
+          raw=json.loads((Path(os.environ['RUNNER_TEMP'])/'instance.json').read_text())
+          tags={x['Key']:x['Value'] for x in raw['Tags']}
+          assert raw['InstanceId']=='i-09c01b470fb39b85a'
+          assert raw['VpcId']=='vpc-04712728d857bb782'
+          assert tags['Application']=='ai-trading-system' and tags['Environment']=='paper'
+          assert len(raw['SecurityGroups'])==1
+          assert ipaddress.ip_address(raw['PrivateIpAddress']).is_private
+          print("PASS: existing exact MintTick PAPER EC2 network inventory")
+          for k in ('VpcId','SubnetId','PrivateIpAddress'):
+              print(k+':',raw[k])
+          print('SecurityGroupId:',raw['SecurityGroups'][0]['GroupId'])
+          print('State:',raw['State'])
+          print('No EC2 configuration or security groups changed')
+          PY
