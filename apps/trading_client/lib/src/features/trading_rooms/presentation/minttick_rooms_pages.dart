@@ -674,8 +674,10 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         await widget.onRoomChanged!();
       }
     } catch (_) {
-      if (mounted) setState(() =>
-          _error = 'Could not activate your Paper wallet. Please retry.');
+      if (mounted) {
+        setState(() =>
+            _error = 'Could not activate your Paper wallet. Please retry.');
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
