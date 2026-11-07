@@ -2,18 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/trading_room_draft.dart';
+import '../domain/trading_workspace_mode.dart';
+import 'minttick_mode_switcher.dart';
 import '../data/customer_room_repository.dart';
 import 'minttick_customer_widgets.dart';
 
 class MintTickTradingRoomsPage extends StatelessWidget {
   const MintTickTradingRoomsPage({
     required this.store,
+    required this.mode,
     required this.onCreate,
     required this.onOpen,
     super.key,
   });
 
   final TradingRoomDraftStore store;
+  final TradingWorkspaceMode mode;
   final VoidCallback onCreate;
   final ValueChanged<TradingRoomDraft> onOpen;
 
@@ -21,7 +25,7 @@ class MintTickTradingRoomsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
-      animation: store,
+      animation: Listenable.merge([store, mode]),
       builder: (context, _) => MintTickCustomerScaffold(
         showHeader: false,
         children: [
@@ -31,19 +35,21 @@ class MintTickTradingRoomsPage extends StatelessWidget {
           Text('Trading Rooms', style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 7),
-          Text('Plan independently for Paper or Live trading. Saved rooms '
-              'remain in your MintTick account.',
+          Text('Switch between Paper and Live rooms without mixing '
+              'budgets, holdings or execution permissions.',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: scheme.onSurfaceVariant)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
+          MintTickModeSwitcher(mode: mode),
+          const SizedBox(height: 17),
           SizedBox(width: double.infinity, child: FilledButton.icon(
             key: const ValueKey('trading-rooms-create'),
             onPressed: onCreate,
             icon: const Icon(Icons.add_rounded),
-            label: const Text('Create a Trading Room'),
+            label: Text('Create ${mode.isPaper ? 'Paper' : 'Live'} Room'),
           )),
           const SizedBox(height: 22),
-          const MintTickSectionHeading('Your Trading Rooms'),
+          MintTickSectionHeading('${mode.isPaper ? 'Paper' : 'Live'} Trading Rooms'),
           const SizedBox(height: 10),
           if (store.isLoading)
             const Padding(
@@ -59,13 +65,14 @@ class MintTickTradingRoomsPage extends StatelessWidget {
               label: const Text('Retry loading rooms'),
             ),
           ]
-          else if (store.drafts.isEmpty)
-            const MintTickInfoText(
-              'No Trading Rooms yet. Choose Paper or Live when creating '
-              'a room. Both start as plans, not active trading.',
+          else if (!store.drafts.any((room) => room.mode == mode.selected))
+            MintTickInfoText(
+              'No ${mode.isPaper ? 'Paper' : 'Live'} rooms created yet. '
+              'Switch modes to view the other workspace.',
               icon: Icons.layers_outlined,
             ),
-          for (final room in store.drafts) ...[
+          for (final room in store.drafts.where(
+              (room) => room.mode == mode.selected)) ...[
             Material(
               color: scheme.surfaceContainerLow,
               borderRadius: BorderRadius.circular(16),
@@ -117,7 +124,8 @@ class MintTickTradingRoomsPage extends StatelessWidget {
 }
 
 class MintTickRoomCreationPage extends StatefulWidget {
-  const MintTickRoomCreationPage({super.key});
+  const MintTickRoomCreationPage({this.initialMode = 'PAPER', super.key});
+  final String initialMode;
 
   @override
   State<MintTickRoomCreationPage> createState() => _MintTickRoomCreationPageState();
@@ -130,7 +138,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   final _scroll = ScrollController();
   String _focus = 'Intraday';
   String _risk = 'Balanced';
-  String _mode = 'PAPER';
+  late String _mode;
   bool _review = false;
   bool _acknowledged = false;
 
@@ -140,6 +148,12 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
     ('Long-term', 'Longer horizon', Icons.layers_outlined),
     ('Help me choose', 'Explore approaches', Icons.psychology_outlined),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _mode = widget.initialMode == 'LIVE' ? 'LIVE' : 'PAPER';
+  }
 
   @override
   void dispose() {
