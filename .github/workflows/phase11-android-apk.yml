@@ -67,6 +67,11 @@ jobs:
           print('Validated public Cognito User Pool and client identifiers (no secrets)')
           PY
 
+      - name: Verify live HTTPS account API before packaging device APK
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: .
+        run: python3 scripts/verify_minttick_live_api.py
+
       - name: Mark CI-only endpoint
         if: github.event_name == 'pull_request'
         run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
