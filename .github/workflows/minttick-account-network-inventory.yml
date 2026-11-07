@@ -23,7 +23,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
-          s=Path(".github/workflows/minttick-account-network-inventory.yml").read_text()
+          s=Path(".github/workflows/minttick-account-network-inventory.yml").read_text().split("  inventory:",1)[1]
           assert "ec2 describe-instances" in s
           for forbidden in ("authorize-security-group-ingress","run-instances","cloudformation deploy","ssm send-command"):
               assert forbidden not in s, "Inventory may not mutate AWS"
