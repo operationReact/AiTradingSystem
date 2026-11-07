@@ -361,7 +361,7 @@ class _MobileProductNavigation extends StatelessWidget {
               final selected = _index == index;
               return Expanded(
                 child: InkWell(
-                  key: ValueKey('mobile-nav-${index == 2 ? 'research' : item.$3.toLowerCase()}'),
+                  key: ValueKey('mobile-nav-${index == 2 && !isCustomer ? 'research' : item.$3.toLowerCase()}'),
                   onTap: () {
                     if (index == 4) {
                       onMore();
