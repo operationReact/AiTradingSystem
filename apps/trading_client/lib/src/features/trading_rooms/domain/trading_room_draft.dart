@@ -10,6 +10,7 @@ class TradingRoomDraft {
     required this.paperBudget,
     required this.riskPreference,
     this.mode = 'PAPER',
+    this.status = 'DRAFT',
   });
 
   final String id;
@@ -20,6 +21,7 @@ class TradingRoomDraft {
   final int paperBudget;
   final String riskPreference;
   final String mode;
+  final String status;
 }
 
 /// Persisted customer plans, never broker orders or active trading rooms.

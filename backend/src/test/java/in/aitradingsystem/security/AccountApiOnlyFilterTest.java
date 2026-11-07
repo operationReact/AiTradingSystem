@@ -27,6 +27,11 @@ class AccountApiOnlyFilterTest {
         assertPasses("DELETE", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
         assertPasses("POST", "/api/customer/brokers/angel-one/connect");
         assertPasses("POST", "/api/customer/brokers/angel-one/disconnect");
+        String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
+        assertPasses("POST", roomId + "activate");
+        assertPasses("GET", roomId + "account");
+        assertPasses("GET", roomId + "ledger");
+        assertPasses("OPTIONS", roomId + "activate");
         for (String suffix : List.of("status", "funds", "holdings", "positions", "orders")) {
             assertPasses("GET", "/api/customer/brokers/angel-one/" + suffix);
         }
@@ -44,6 +49,12 @@ class AccountApiOnlyFilterTest {
         assertBlocked("DELETE", "/api/auth/cognito/provision");
         assertBlocked("OPTIONS", "/api/paper/orders");
         assertBlocked("POST", "/api/customer/brokers/angel-one/orders");
+        String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
+        assertBlocked("POST", roomId + "orders");
+        assertBlocked("GET", roomId + "activate");
+        assertBlocked("POST", roomId + "account");
+        assertBlocked("PUT", roomId + "ledger");
+        assertBlocked("GET", "/api/customer/trading-rooms/not-a-uuid/paper/account");
         assertBlocked("POST", "/api/customer/brokers/angel-one/funds");
         assertBlocked("GET", "/api/customer/brokers/angel-one/connect");
         assertBlocked("GET", "/api/customer/trading-rooms/anything/else");

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../domain/trading_room_draft.dart';
+import '../data/customer_room_repository.dart';
 import 'minttick_customer_widgets.dart';
 
 class MintTickTradingRoomsPage extends StatelessWidget {
@@ -42,7 +43,7 @@ class MintTickTradingRoomsPage extends StatelessWidget {
             label: const Text('Create a Trading Room'),
           )),
           const SizedBox(height: 22),
-          const MintTickSectionHeading('Your local drafts'),
+          const MintTickSectionHeading('Your Trading Rooms'),
           const SizedBox(height: 10),
           if (store.isLoading)
             const Padding(
@@ -93,7 +94,8 @@ class MintTickTradingRoomsPage extends StatelessWidget {
                       ],
                     )),
                     const SizedBox(width: 5),
-                    const MintTickStatusLabel('DRAFT'),
+                    MintTickStatusLabel(room.status == 'PAPER_FUNDED'
+                        ? 'PAPER FUNDED' : 'DRAFT'),
                     const Icon(Icons.chevron_right_rounded, size: 18),
                   ]),
                 ),
@@ -564,9 +566,24 @@ class _Pair extends StatelessWidget {
   }
 }
 
+
+String _formatPaise(int paise) {
+  final minus = paise < 0 ? '-' : '';
+  final abs = paise.abs();
+  return '$minus${formatPaperRupees(abs ~/ 100)}.${(abs % 100).toString().padLeft(2, '0')}';
+}
+
 class MintTickRoomDetailPage extends StatefulWidget {
-  const MintTickRoomDetailPage({required this.room, super.key});
+  const MintTickRoomDetailPage({
+    required this.room,
+    this.repository,
+    this.onRoomChanged,
+    super.key,
+  });
+
   final TradingRoomDraft room;
+  final HttpCustomerRoomRepository? repository;
+  final Future<void> Function()? onRoomChanged;
 
   @override
   State<MintTickRoomDetailPage> createState() => _MintTickRoomDetailPageState();
@@ -574,11 +591,109 @@ class MintTickRoomDetailPage extends StatefulWidget {
 
 class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
   String _tab = 'Overview';
+  CustomerPaperWallet? _wallet;
+  List<CustomerPaperCashEvent> _events = const [];
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.room.status == 'PAPER_FUNDED' &&
+        widget.room.mode == 'PAPER' &&
+        widget.repository != null) {
+      _loadWallet();
+    }
+  }
+
+  Future<void> _loadWallet() async {
+    if (widget.repository == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final wallet = await widget.repository!.paperAccount(widget.room.id);
+      final events = await widget.repository!.paperLedger(widget.room.id);
+      if (!mounted) return;
+      setState(() {
+        _wallet = wallet;
+        _events = events;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _wallet = null;
+          _error = 'Paper account could not be verified. Try again.';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+  }
+
+  Future<void> _activate() async {
+    if (_busy || widget.repository == null || widget.room.mode != 'PAPER' ||
+        widget.room.status != 'DRAFT') {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Fund your Paper room?'),
+        content: Text(
+          'MintTick will allocate ${formatPaperRupees(widget.room.paperBudget)} '
+          'in virtual cash to this room. This is not a deposit and cannot '
+          'place any trades yet.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-paper-activation'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Fund virtual wallet'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final wallet = await widget.repository!.activatePaper(widget.room.id);
+      if (!mounted) return;
+      setState(() => _wallet = wallet);
+      if (widget.onRoomChanged != null) {
+        await widget.onRoomChanged!();
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() =>
+            _error = 'Could not activate your Paper wallet. Please retry.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _busy = false);
+      }
+    }
+    if (_wallet != null && mounted) {
+      await _loadWallet();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final room = widget.room;
+    final funded = room.mode == 'PAPER' &&
+        (_wallet != null || room.status == 'PAPER_FUNDED');
     final limits = IllustrativeRoomLimits.forDraft(room);
     return MintTickCustomerScaffold(showHeader: false, children: [
       Align(alignment: Alignment.centerLeft, child: TextButton.icon(
@@ -591,13 +706,68 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         Expanded(child: Text(room.name,
           style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800))),
-        const MintTickStatusLabel('DRAFT'),
+        MintTickStatusLabel(funded ? 'PAPER FUNDED' : 'DRAFT'),
       ]),
       const SizedBox(height: 7),
       Text('${room.mode} · ${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 18),
+      const SizedBox(height: 17),
+      if (_busy)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 8),
+            child: LinearProgressIndicator()),
+      if (_error != null) ...[
+        MintTickInfoText(_error!, icon: Icons.error_outline_rounded),
+        const SizedBox(height: 8),
+        if (funded)
+          OutlinedButton.icon(
+            onPressed: _loadWallet,
+            icon: const Icon(Icons.refresh_rounded),
+            label: const Text('Retry Paper wallet'),
+          ),
+        const SizedBox(height: 13),
+      ],
+      if (room.mode == 'PAPER' && funded && _wallet != null) ...[
+        MintTickSurface(accent: true, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const MintTickEyebrow('Virtual PAPER cash · Not real money'),
+            const SizedBox(height: 8),
+            Text(_formatPaise(_wallet!.availableCashPaise),
+              key: const ValueKey('paper-wallet-cash'),
+              style: Theme.of(context).textTheme.headlineMedium
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 11),
+            _Pair('Initial allocation', _formatPaise(_wallet!.initialCashPaise)),
+            _Pair('Reserved for orders', _formatPaise(_wallet!.reservedCashPaise)),
+            const _Pair('Automated execution', 'Disabled'),
+          ],
+        )),
+        const SizedBox(height: 17),
+      ],
+      if (room.mode == 'PAPER' && !funded) ...[
+        MintTickSurface(accent: true, child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const MintTickEyebrow('Optional next step'),
+            const SizedBox(height: 10),
+            Text('Prepare a virtual Paper wallet',
+              style: Theme.of(context).textTheme.titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 7),
+            Text('Allocate your planned amount as simulated funds. '
+                'No broker account or real money is involved.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 13),
+            SizedBox(width: double.infinity, child: FilledButton.icon(
+              key: const ValueKey('activate-paper-wallet'),
+              onPressed: _busy || widget.repository == null ? null : _activate,
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              label: const Text('Fund virtual Paper wallet'),
+            )),
+          ],
+        )),
+        const SizedBox(height: 17),
+      ],
       SegmentedButton<String>(
         key: const ValueKey('room-detail-tabs'),
         showSelectedIcon: false,
@@ -611,7 +781,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       ),
       const SizedBox(height: 18),
       if (_tab == 'Overview') ...[
-        MintTickSurface(accent: true, child: Column(
+        MintTickSurface(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Row(children: [
@@ -622,25 +792,25 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
               MintTickStatusLabel('NOT RUNNING'),
             ]),
             const SizedBox(height: 12),
-            Text('This room is a saved ${room.mode} plan. Mantic Mind has not '
-                'been activated for automated execution.',
+            Text('The ${room.mode} room is saved. No automated strategy '
+                'or order execution is active.',
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           ],
         )),
-        const SizedBox(height: 19),
+        const SizedBox(height: 18),
         const MintTickSectionHeading('Room overview'),
         const SizedBox(height: 8),
         MintTickSurface(child: Column(children: [
           _Pair('Focus', room.focus),
           _Pair('Risk preference', room.riskPreference),
           _Pair('Execution', room.mode == 'LIVE'
-              ? 'Setup required · Not authorized'
-              : 'Not active · Plan only'),
-          const _Pair('Open positions', 'No connected trading engine'),
+              ? 'Live broker authorization required'
+              : 'Paused · No Paper order engine'),
+          const _Pair('Open positions', 'No customer execution service'),
         ])),
       ] else if (_tab == 'Plan') ...[
-        const MintTickSectionHeading('Example paper guardrails'),
+        const MintTickSectionHeading('Illustrative risk guardrails'),
         const SizedBox(height: 8),
         MintTickSurface(child: Column(children: [
           _Pair('Daily example loss cap', formatPaperRupees(limits.daily)),
@@ -649,22 +819,39 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         ])),
         const SizedBox(height: 12),
         const MintTickInfoText(
-          'Illustrative values only. They are not configured or enforced '
-          'on any backend. Live trading requires separate authorization.',
+          'Examples are not enforced risk limits. Mantic Mind must '
+          'obtain explicit approval before executable strategies begin.',
         ),
       ] else ...[
-        const MintTickSectionHeading('Decisions & activity'),
+        const MintTickSectionHeading('Account activity'),
         const SizedBox(height: 8),
-        const MintTickInfoText(
-          'No trading activity exists. This planned room has not been '
-          'activated or connected to an execution engine.',
-          icon: Icons.history_rounded,
-        ),
+        if (_wallet != null && _events.isEmpty)
+          const MintTickInfoText('No cash events returned from this room.')
+        else if (_events.isNotEmpty)
+          for (final event in _events) ...[
+            MintTickSurface(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Initial virtual allocation',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                _Pair('Amount', _formatPaise(event.cashDeltaPaise)),
+                _Pair('Balance after', _formatPaise(event.cashAfterPaise)),
+              ],
+            )),
+            const SizedBox(height: 8),
+          ]
+        else
+          const MintTickInfoText(
+            'No orders or fills. Your room does not execute trades yet.',
+            icon: Icons.history_rounded,
+          ),
       ],
       const SizedBox(height: 18),
       const MintTickInfoText(
-        'Automated trading controls will become available only when the '
-        'room backend, risk engine, and relevant permissions are verified.',
+        'Paper and Live remain separate. A funded Paper wallet is '
+        'simulated cash only; it does not enable real orders or '
+        'automated trading.',
         icon: Icons.shield_outlined,
       ),
     ]);
