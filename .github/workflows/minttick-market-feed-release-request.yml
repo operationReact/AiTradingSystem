@@ -34,22 +34,25 @@ jobs:
           assert Path("infra/minttick-market-feed/main.tf").exists()
           print("PASS: only the reviewed branch-restricted Terraform market-feed workflow may run")
           PY
-  dispatch:
+  terraform:
     needs: validate
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 30
     permissions:
-      actions: write
       contents: read
+      id-token: write
     env:
-      GH_TOKEN: ${{ github.token }}
+      AWS_REGION: ap-south-1
+      EXPECTED_ACCOUNT: "098859530205"
+      TF_IN_AUTOMATION: "true"
+      TF_VAR_ssm_customer_kms_key_arn: ${{ vars.MINTTICK_FEED_SSM_CUSTOM_KMS_KEY_ARN }}
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
           fetch-depth: 2
-      - name: Verify one-file change and exact fixed-account authorization
+      - name: Require exact one-file approved market feed Terraform request
         id: request
         run: |
           set -euo pipefail
@@ -60,17 +63,50 @@ jobs:
           doc=json.loads(Path("infra/minttick-market-feed/requests/release.json").read_text())
           assert isinstance(doc,dict)
           assert set(doc)=={"application","aws_account","region","environment","operation","authorization"}
-          assert doc["application"]=="MintTick"
-          assert doc["aws_account"]=="098859530205"
-          assert doc["region"]=="ap-south-1"
-          assert doc["environment"]=="dev"
-          assert doc["operation"] in {"plan","apply"}
+          assert doc["application"]=="MintTick" and doc["aws_account"]=="098859530205"
+          assert doc["region"]=="ap-south-1" and doc["environment"]=="dev"
+          assert doc["operation"] in ("plan","apply")
           assert doc["authorization"]=="USER_APPROVED_PRIVATE_ANGEL_ONE_FEED_2026-11-07"
           with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
-              fh.write(f'operation={doc["operation"]}\n')
+              fh.write("operation="+doc["operation"]+"\n")
           PY
-      - name: Dispatch existing Terraform workflow (plan or apply only)
+      - name: Validate dedicated Terraform OIDC deployment role
+        env:
+          ROLE: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
         run: |
           set -euo pipefail
-          gh workflow run minttick-market-feed-deploy.yml --repo operationReact/AiTradingSystem --ref dev -f operation="${{ steps.request.outputs.operation }}"
-          echo "Requested existing reviewed MintTick market-feed Terraform workflow"
+          test "$ROLE" = "arn:aws:iam::098859530205:role/minttick-feed-github-deploy"
+          test "$AWS_REGION" = "ap-south-1"
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - name: Authenticate only via dedicated GitHub OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+          role-session-name: minttick-feed-request-${{ github.run_id }}
+      - name: Verify account and read-only Lambda tests
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+          python3 -m unittest discover -s market-feed -p 'test_*.py' -v
+      - name: Initialize isolated versioned encrypted S3 state
+        working-directory: infra/minttick-market-feed
+        run: terraform init -input=false -backend-config=backend.hcl
+      - name: Validate and plan only fixed dedicated market-feed resources
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          terraform fmt -check -recursive
+          terraform validate
+          terraform plan -input=false -lock-timeout=90s -out="$RUNNER_TEMP/minttick-feed.tfplan"
+          terraform show -no-color "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Apply only on explicitly authorized apply request
+        if: steps.request.outputs.operation == 'apply'
+        working-directory: infra/minttick-market-feed
+        run: terraform apply -input=false "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Remove transient Terraform plan
+        if: always()
+        run: rm -f "$RUNNER_TEMP/minttick-feed.tfplan"
