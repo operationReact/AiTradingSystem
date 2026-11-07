@@ -3,6 +3,8 @@ package in.aitradingsystem.tradingrooms;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -72,7 +74,7 @@ class CustomerTradeIntentServiceIT extends AbstractPostgresIT {
 
     private CustomerTradeIntentService service(UUID room, String mode) {
         var readiness = mock(CustomerExecutionReadinessService.class);
-        when(readiness.preflight(any(), any(), any(Long.class), any(), any(Integer.class), any()))
+        when(readiness.preflight(any(), any(), anyLong(), any(), anyInt(), any()))
             .thenAnswer(call -> new CustomerExecutionReadinessService.Preflight(
                 room, mode, 42L, "SBIN-EQ", "NSE",
                 call.getArgument(3), call.getArgument(4),
