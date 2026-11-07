@@ -102,8 +102,11 @@ resource "aws_instance" "paper" {
   instance_initiated_shutdown_behavior = "stop"
   monitoring                           = false
   ebs_optimized                        = true
-  credit_specification {
-    cpu_credits = "standard"
+  dynamic "credit_specification" {
+    for_each = var.instance_type == "t4g.medium" ? [1] : []
+    content {
+      cpu_credits = "standard"
+    }
   }
   metadata_options {
     http_endpoint = "enabled"
