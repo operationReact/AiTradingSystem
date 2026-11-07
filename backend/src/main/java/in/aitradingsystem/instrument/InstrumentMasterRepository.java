@@ -221,7 +221,13 @@ public class InstrumentMasterRepository {
             where.append(" AND i.exchange = ? ");
             args.add(exchange);
         }
-        if (type != null && !type.isBlank()) {
+        if ("EQ".equalsIgnoreCase(type)) {
+            // Angel One cash equities (e.g. RELIANCE-EQ) often carry an
+            // empty instrumenttype, not the literal EQ value. Trust the
+            // cash segment AND equity trading-symbol suffix instead.
+            where.append(" AND i.exchange_segment IN ('NSE_CM','BSE_CM') ");
+            where.append(" AND i.trading_symbol LIKE '%-EQ' ");
+        } else if (type != null && !type.isBlank()) {
             where.append(" AND i.instrument_type = ? ");
             args.add(type);
         }
