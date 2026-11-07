@@ -109,6 +109,7 @@ jobs:
             'aws_iam_role.feed',
             'aws_iam_role_policy.read_only_ssm',
             'aws_cloudwatch_log_group.feed',
+            'data.archive_file.read_only_feed',
           }
           for change in plan.get("resource_changes",[]):
               address=change.get("address")
