@@ -724,6 +724,9 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
     'PAPER_WALLET_NOT_FUNDED' => 'Fund a virtual Paper wallet',
     'CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED' => 'Paper order engine pending',
     'ANGEL_ONE_NOT_CONNECTED' => 'Connect your Angel One broker',
+    'BROKER_NOT_CONNECTED' => 'Connect Angel One or Upstox',
+    'ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED' =>
+      'Choose a specific broker account for this room',
     'BROKER_APPROVED_HOSTING_NOT_VERIFIED' => 'Broker-approved hosting pending',
     'REGISTERED_STATIC_IP_NOT_VERIFIED' => 'Registered IP approval pending',
     'ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED' =>
@@ -862,7 +865,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
             SizedBox(width: double.infinity, child: FilledButton.icon(
               onPressed: widget.onBroker,
               icon: const Icon(Icons.account_balance_outlined),
-              label: const Text('Connect or view Angel One'),
+              label: const Text('Connect or view your broker'),
             )),
           ],
         ],

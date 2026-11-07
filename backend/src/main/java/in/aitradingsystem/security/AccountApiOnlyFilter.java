@@ -32,6 +32,17 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/brokers/angel-one/holdings",
         "/api/customer/brokers/angel-one/positions",
         "/api/customer/brokers/angel-one/orders");
+    private static final Set<String> UPSTOX_READS = Set.of(
+        "/api/customer/brokers/upstox/status",
+        "/api/customer/brokers/upstox/funds",
+        "/api/customer/brokers/upstox/holdings",
+        "/api/customer/brokers/upstox/positions",
+        "/api/customer/brokers/upstox/orders",
+        "/api/customer/brokers/upstox/registered-ips");
+    private static final Set<String> UPSTOX_WRITES = Set.of(
+        "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/disconnect");
+    private static final String UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback";
     private static final Set<String> BROKER_WRITES = Set.of(
         "/api/customer/brokers/angel-one/connect",
         "/api/customer/brokers/angel-one/disconnect");
@@ -75,6 +86,9 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                 && Set.of("GET", "OPTIONS").contains(method))
             || (BROKER_WRITES.contains(path)
                 && Set.of("POST", "OPTIONS").contains(method))
+            || (UPSTOX_READS.contains(path) && Set.of("GET", "OPTIONS").contains(method))
+            || (UPSTOX_WRITES.contains(path) && Set.of("POST", "OPTIONS").contains(method))
+            || (UPSTOX_CALLBACK.equals(path) && "GET".equals(method))
             || (PAPER_WALLET_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/activate") && "POST".equals(method))

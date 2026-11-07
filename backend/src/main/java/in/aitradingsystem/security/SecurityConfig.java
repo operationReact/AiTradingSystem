@@ -56,6 +56,9 @@ public class SecurityConfig {
                 // Admin routes must be evaluated before the generic authenticated GET rule below.
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
                     .hasAnyRole("ADMIN", "OPERATOR")
+                // Upstox browser callback carries only a one-time OAuth state,
+                // not a MintTick bearer JWT. All other broker APIs need CUSTOMER.
+                .requestMatchers(HttpMethod.GET, "/api/customer/brokers/upstox/callback").permitAll()
                 .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
                     .hasAnyRole("TRADER", "ADMIN", "OPERATOR")

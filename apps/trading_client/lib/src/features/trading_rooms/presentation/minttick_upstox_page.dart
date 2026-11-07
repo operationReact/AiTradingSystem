@@ -1,0 +1,307 @@
+import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../data/customer_upstox_repository.dart';
+import 'minttick_customer_widgets.dart';
+
+/// Broker-hosted OAuth login: Upstox handles credentials, not MintTick.
+class MintTickUpstoxPage extends StatefulWidget {
+  const MintTickUpstoxPage({
+    required this.repository,
+    this.launchAuthentication,
+    super.key,
+  });
+  final HttpCustomerUpstoxRepository repository;
+  final Future<bool> Function(Uri url)? launchAuthentication;
+
+  @override
+  State<MintTickUpstoxPage> createState() => _MintTickUpstoxPageState();
+}
+
+class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
+  CustomerUpstoxStatus? _status;
+  bool _loading = false;
+  bool _awaitingReturn = false;
+  String? _error;
+  String? _section;
+  Object? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    if (_loading) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final status = await widget.repository.status();
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _awaitingReturn = false;
+        _data = null;
+        _section = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error =
+            'Unable to verify Upstox connection. Check your network and retry.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _start() async {
+    if (_loading) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final loginUrl = await widget.repository.startAuthorization();
+      final opened = await (widget.launchAuthentication?.call(loginUrl) ??
+          launchUrl(loginUrl, mode: LaunchMode.externalApplication));
+      if (!opened) throw StateError('Browser unavailable');
+      if (mounted) {
+        setState(() => _awaitingReturn = true);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Could not open Upstox authorization. '
+            'Confirm the MintTick Upstox developer app is configured.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _disconnect() async {
+    if (_loading) return;
+    setState(() { _loading = true; _error = null; });
+    try {
+      final status = await widget.repository.disconnect();
+      if (mounted) {
+        setState(() {
+          _status = status;
+          _section = null;
+          _data = null;
+          _awaitingReturn = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _error = 'Could not verify disconnection.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _load(String section, Future<Object?> Function() fetch) async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _error = null;
+      _data = null;
+      _section = section;
+    });
+    try {
+      final result = await fetch();
+      if (mounted) setState(() => _data = result);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Upstox $section could not be loaded. '
+            'Re-authentication may be required.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final connected = _status?.connected == true;
+    return MintTickCustomerScaffold(showHeader: false, children: [
+      const SizedBox(height: 18),
+      const MintTickEyebrow('Connected brokers · Live'),
+      const SizedBox(height: 8),
+      Text('Upstox', style: text.headlineSmall
+          ?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 7),
+      Text('Secure login through Upstox. No brokerage PIN, password or OTP '
+          'is entered into MintTick.',
+        style: text.bodyMedium?.copyWith(
+          color: colors.onSurfaceVariant, height: 1.5)),
+      const SizedBox(height: 18),
+      MintTickSurface(accent: connected, child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            const MintTickIconTile(Icons.account_balance_outlined),
+            const SizedBox(width: 11),
+            Expanded(child: Text('Upstox Account',
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+            MintTickStatusLabel(connected ? 'CONNECTED' : 'NOT CONNECTED'),
+          ]),
+          const SizedBox(height: 11),
+          if (connected) ...[
+            Text('Verified broker account: ${_status?.accountMasked ?? 'connected'}'),
+            const SizedBox(height: 5),
+            Text('Read-only link · Real-money order execution disabled',
+              style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            if (_status?.expiresAt != null) ...[
+              const SizedBox(height: 6),
+              Text('Session expires ${_status!.expiresAt!.toLocal()}',
+                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            ],
+          ] else
+            Text(_status?.available == false
+                ? 'MintTick needs its Upstox developer app configured '
+                  'before you can connect.'
+                : 'Sign in on the official Upstox page to authorize '
+                  'access to this brokerage account.',
+              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+        ],
+      )),
+      if (_loading) ...[
+        const SizedBox(height: 15),
+        const LinearProgressIndicator(),
+      ],
+      if (_error != null) ...[
+        const SizedBox(height: 12),
+        MintTickInfoText(_error!, icon: Icons.error_outline_rounded),
+      ],
+      const SizedBox(height: 16),
+      if (!connected) ...[
+        SizedBox(width: double.infinity, child: FilledButton.icon(
+          key: const ValueKey('upstox-start-oauth'),
+          onPressed: _loading || _status?.available != true ? null : _start,
+          icon: const Icon(Icons.open_in_new_rounded),
+          label: const Text('Connect with Upstox'),
+        )),
+        if (_awaitingReturn) ...[
+          const SizedBox(height: 14),
+          const MintTickInfoText(
+            'Complete authentication on Upstox, return to MintTick, '
+            'then tap Refresh connection. Your credentials stay on Upstox.',
+            icon: Icons.verified_user_outlined,
+          ),
+        ],
+      ] else ...[
+        const MintTickSectionHeading('Live broker information'),
+        const SizedBox(height: 9),
+        Wrap(spacing: 8, runSpacing: 8, children: [
+          OutlinedButton(onPressed: _loading ? null
+              : () => _load('funds', widget.repository.funds),
+            child: const Text('Funds')),
+          OutlinedButton(onPressed: _loading ? null
+              : () => _load('holdings', widget.repository.holdings),
+            child: const Text('Holdings')),
+          OutlinedButton(onPressed: _loading ? null
+              : () => _load('positions', widget.repository.positions),
+            child: const Text('Positions')),
+          OutlinedButton(onPressed: _loading ? null
+              : () => _load('orders', widget.repository.orders),
+            child: const Text('Orders')),
+          OutlinedButton(onPressed: _loading ? null
+              : () => _load('IP status', widget.repository.registeredIps),
+            child: const Text('IP status')),
+        ]),
+        if (_section != null) ...[
+          const SizedBox(height: 12),
+          MintTickSurface(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${_section![0].toUpperCase()}${_section!.substring(1)}',
+                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 9),
+              ..._brokerSummary(text, colors),
+            ],
+          )),
+        ],
+        const SizedBox(height: 11),
+        OutlinedButton.icon(
+          key: const ValueKey('upstox-disconnect'),
+          onPressed: _loading ? null : _disconnect,
+          icon: const Icon(Icons.link_off_rounded),
+          label: const Text('Disconnect Upstox'),
+        ),
+      ],
+      const SizedBox(height: 13),
+      OutlinedButton.icon(
+        key: const ValueKey('upstox-refresh-status'),
+        onPressed: _loading ? null : _refresh,
+        icon: const Icon(Icons.refresh_rounded),
+        label: const Text('Refresh connection'),
+      ),
+      const SizedBox(height: 16),
+      const MintTickInfoText(
+        'Paper and Live portfolios are separate. Connecting a broker '
+        'enables account reads, not automatic orders. Live trading '
+        'requires additional consent, broker eligibility, registered '
+        'IP verification and server-enforced risk controls.',
+        icon: Icons.shield_outlined,
+      ),
+    ]);
+  }
+
+  List<Widget> _brokerSummary(TextTheme text, ColorScheme scheme) {
+    final value = _data;
+    if (value == null) {
+      return [const Text('No verified broker data loaded.')];
+    }
+    if (value is List) {
+      return [
+        Text('${value.length} records returned by Upstox',
+          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 7),
+        if (value.isEmpty) const Text('No records.'),
+        for (final row in value.take(15))
+          if (row is Map)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              title: Text(
+                '${row['trading_symbol'] ?? 'Broker record'}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text('Qty: ${row['quantity'] ?? '—'}  '
+                  'Status: ${row['status'] ?? '—'}'),
+            ),
+        if (value.length > 15)
+          const Text('Showing first 15 broker records'),
+      ];
+    }
+    if (value is Map) {
+      if (_section == 'IP status') {
+        final primary = value['primary_ip'];
+        return [Text(primary is String && primary.isNotEmpty
+            ? 'Primary static IP registered'
+            : 'No primary static IP reported by broker')];
+      }
+      final equity = value['equity'];
+      final data = equity is Map ? equity : value;
+      const fields = [
+        ('available_margin', 'Available margin'),
+        ('used_margin', 'Margin used'),
+        ('payin_amount', 'Pay-in'),
+        ('notional_cash', 'Notional cash'),
+      ];
+      final available = fields.where((field) => data[field.$1] is num).toList();
+      if (available.isEmpty) {
+        return [const Text('The broker returned no supported summary fields.')];
+      }
+      return [
+        for (final (field, name) in available)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Row(children: [
+              Expanded(child: Text(name, style: text.bodySmall)),
+              Text('₹${data[field]}',
+                style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ]),
+          ),
+      ];
+    }
+    return [const Text('No supported broker details to show.')];
+  }
+}

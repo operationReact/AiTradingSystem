@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../data/customer_angel_one_repository.dart';
+import '../data/customer_upstox_repository.dart';
 import '../data/customer_room_repository.dart';
 import '../domain/trading_room_draft.dart';
 import '../domain/trading_workspace_mode.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_mode_switcher.dart';
 
-/// Authoritative mode-specific portfolio overview. Paper funds are from the
-/// customer ledger. LIVE funds/holdings are from the user's own Angel One
-/// session. Planned room budgets never appear as actual cash or P&L.
+/// Paper balances come from each customer's virtual wallet.
+/// Live balances come from the *selected* connected broker, never a sum of
+/// different broker accounts or planned room allocations.
 class MintTickCustomerPortfolioPage extends StatefulWidget {
   const MintTickCustomerPortfolioPage({
     required this.mode,
     required this.rooms,
     required this.paperRepository,
     required this.brokerRepository,
+    required this.upstoxRepository,
     required this.onRooms,
     required this.onBroker,
     super.key,
@@ -25,6 +27,7 @@ class MintTickCustomerPortfolioPage extends StatefulWidget {
   final TradingRoomDraftStore rooms;
   final HttpCustomerRoomRepository paperRepository;
   final HttpCustomerAngelOneRepository brokerRepository;
+  final HttpCustomerUpstoxRepository upstoxRepository;
   final VoidCallback onRooms;
   final VoidCallback onBroker;
 
@@ -38,7 +41,10 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
   String? _error;
   int _paperCashPaise = 0;
   int _fundedCount = 0;
-  CustomerAngelOneConnection? _broker;
+  CustomerAngelOneConnection? _angelOne;
+  CustomerUpstoxStatus? _upstox;
+  String _selectedBroker = 'ANGEL_ONE';
+  bool _manualBrokerSelection = false;
   String? _liveAvailableCash;
   int? _holdingsCount;
   int? _positionsCount;
@@ -60,13 +66,20 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
 
   void _onModeChanged() => _refresh();
 
+  Future<CustomerAngelOneConnection?> _angelStatus() async {
+    try { return await widget.brokerRepository.status(); } catch (_) { return null; }
+  }
+
+  Future<CustomerUpstoxStatus?> _upstoxStatus() async {
+    try { return await widget.upstoxRepository.status(); } catch (_) { return null; }
+  }
+
   Future<void> _refresh() async {
     final generation = ++_generation;
     if (mounted) {
       setState(() {
         _loading = true;
         _error = null;
-        _broker = null;
         _liveAvailableCash = null;
         _holdingsCount = null;
         _positionsCount = null;
@@ -83,7 +96,6 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
         final funded = widget.rooms.drafts
             .where((r) => r.mode == 'PAPER' && r.status == 'PAPER_FUNDED')
             .toList();
-        // Only successful signed, tenant-scoped backend responses are summed.
         final wallets = await Future.wait(
           funded.map((room) => widget.paperRepository.paperAccount(room.id)),
         );
@@ -93,33 +105,59 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
           _fundedCount = funded.length;
         });
       } else {
-        final status = await widget.brokerRepository.status();
+        final results = await Future.wait<Object?>([
+          _angelStatus(),
+          _upstoxStatus(),
+        ]);
         if (!mounted || generation != _generation) return;
-        if (status.connected) {
+        final angel = results[0] is CustomerAngelOneConnection
+            ? results[0] as CustomerAngelOneConnection : null;
+        final upstox = results[1] is CustomerUpstoxStatus
+            ? results[1] as CustomerUpstoxStatus : null;
+        if (angel == null && upstox == null) {
+          throw StateError('Broker status unavailable');
+        }
+        final selected = !_manualBrokerSelection &&
+                angel?.connected != true && upstox?.connected == true
+            ? 'UPSTOX' : _selectedBroker;
+        setState(() {
+          _angelOne = angel;
+          _upstox = upstox;
+          _selectedBroker = selected;
+        });
+        final connected = selected == 'UPSTOX'
+            ? upstox?.connected == true : angel?.connected == true;
+        if (connected) {
           final payload = await Future.wait<Object?>([
-            widget.brokerRepository.funds(),
-            widget.brokerRepository.holdings(),
-            widget.brokerRepository.positions(),
+            selected == 'UPSTOX'
+                ? widget.upstoxRepository.funds()
+                : widget.brokerRepository.funds(),
+            selected == 'UPSTOX'
+                ? widget.upstoxRepository.holdings()
+                : widget.brokerRepository.holdings(),
+            selected == 'UPSTOX'
+                ? widget.upstoxRepository.positions()
+                : widget.brokerRepository.positions(),
           ]);
           if (!mounted || generation != _generation) return;
           final funds = payload[0];
-          final account = funds is Map ? funds : null;
-          final rawCash = account?['availablecash'] ?? account?['availableCash'];
-          final holdings = payload[1], positions = payload[2];
+          final map = funds is Map ? funds : null;
+          final equity = map?['equity'];
+          final cash = selected == 'UPSTOX'
+              ? (equity is Map ? equity['available_margin'] : null)
+              : (map?['availablecash'] ?? map?['availableCash']);
           setState(() {
-            _broker = status;
-            _liveAvailableCash = rawCash is num || rawCash is String
-                ? rawCash.toString() : null;
-            _holdingsCount = _countRows(holdings, 'holdings');
-            _positionsCount = _countRows(positions, 'positions');
+            _liveAvailableCash = (cash is num || cash is String)
+                ? cash.toString() : null;
+            _holdingsCount = _countRows(payload[1], 'holdings');
+            _positionsCount = _countRows(payload[2], 'positions');
           });
-        } else {
-          setState(() => _broker = status);
         }
       }
     } catch (_) {
       if (mounted && generation == _generation) {
-        setState(() => _error = 'Portfolio data could not be verified. Retry or reconnect your broker.');
+        setState(() => _error =
+            'Portfolio data could not be verified. Retry or reconnect your broker.');
       }
     } finally {
       if (mounted && generation == _generation) {
@@ -140,6 +178,12 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final mode = widget.mode.selected;
+    final brokerConnected = _selectedBroker == 'UPSTOX'
+        ? _upstox?.connected == true : _angelOne?.connected == true;
+    final label = _selectedBroker == 'UPSTOX' ? 'Upstox' : 'Angel One';
+    final account = _selectedBroker == 'UPSTOX'
+        ? _upstox?.accountMasked : _angelOne?.clientCodeMasked;
+
     return MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 18),
       const MintTickEyebrow('Your portfolio'),
@@ -149,6 +193,27 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
       const SizedBox(height: 14),
       MintTickModeSwitcher(mode: widget.mode),
       const SizedBox(height: 18),
+      if (mode == 'LIVE') ...[
+        const MintTickSectionHeading('Broker account'),
+        const SizedBox(height: 8),
+        SizedBox(width: double.infinity, child: SegmentedButton<String>(
+          key: const ValueKey('live-broker-selector'),
+          showSelectedIcon: true,
+          segments: const [
+            ButtonSegment(value: 'ANGEL_ONE', label: Text('Angel One')),
+            ButtonSegment(value: 'UPSTOX', label: Text('Upstox')),
+          ],
+          selected: {_selectedBroker},
+          onSelectionChanged: (value) {
+            setState(() {
+              _manualBrokerSelection = true;
+              _selectedBroker = value.first;
+            });
+            _refresh();
+          },
+        )),
+        const SizedBox(height: 13),
+      ],
       if (_loading) const Center(child: LinearProgressIndicator()),
       if (_error != null) ...[
         MintTickInfoText(_error!, icon: Icons.error_outline_rounded),
@@ -184,20 +249,20 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
       ] else if (!_loading && mode == 'LIVE') ...[
         MintTickSurface(accent: true, child: Column(
           crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const MintTickEyebrow('Live · Angel One'),
+            MintTickEyebrow('Live · $label'),
             const SizedBox(height: 11),
-            MintTickStatusLabel(_broker?.connected == true
+            MintTickStatusLabel(brokerConnected
                 ? 'BROKER CONNECTED' : 'NOT CONNECTED'),
             const SizedBox(height: 10),
-            Text(_broker?.connected == true
-                ? 'Verified account ${_broker?.clientCodeMasked ?? ''}'
-                : 'Connect your Angel One account to view actual broker funds.',
+            Text(brokerConnected
+                ? 'Verified account ${account ?? ''}'
+                : 'Connect your $label account to view actual broker funds.',
               style: Theme.of(context).textTheme.bodyMedium),
-            if (_broker?.connected == true) ...[
+            if (brokerConnected) ...[
               const SizedBox(height: 15),
               Text(_liveAvailableCash == null
                   ? 'Available cash not provided by broker'
-                  : 'Broker-reported available cash: ₹$_liveAvailableCash',
+                  : 'Broker-reported available funds: ₹$_liveAvailableCash',
                 key: const ValueKey('live-broker-cash'),
                 style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w700)),
@@ -220,8 +285,7 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
         FilledButton.icon(
           onPressed: widget.onBroker,
           icon: const Icon(Icons.account_balance_outlined),
-          label: Text(_broker?.connected == true
-              ? 'View Angel One account' : 'Connect Angel One'),
+          label: const Text('Manage connected brokers'),
         ),
       ],
       const SizedBox(height: 13),
