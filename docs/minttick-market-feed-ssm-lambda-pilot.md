@@ -111,3 +111,32 @@ currently loopback-only; this work does not make it publicly accessible.
 
 - Angel One SmartAPI: https://smartapi.angelone.in/docs
 - AWS SSM SecureString: https://docs.aws.amazon.com/systems-manager/latest/userguide/secure-string-parameter-kms-encryption.html
+
+
+## Customer Android Markets activation
+
+The connected Android client now uses
+`GET /api/customer/market-data/instruments/status`,
+`GET /api/customer/market-data/instruments` and
+`GET /api/customer/market-data/quotes?instrumentId=...`.
+Only a verified owner-bound Cognito CUSTOMER account may request an actual
+SmartAPI quote, and only when the private `ANGEL_ONE_LAMBDA` provider is
+enabled on the backend. The gateway does not expose operator quote endpoints,
+historical backfill writes, brokerage execution, or raw Lambda access.
+
+The catalogue must also have been imported and activated using the existing
+operator-only instrument master synchronization on the private backend.
+Otherwise the customer page intentionally reports no available instruments.
+Quotes are on-demand, not an exchange streaming feed; `fetchedAt` is the
+retrieval timestamp, not the exchange tick timestamp.
+
+The backend's owner-only Angel One account bridge invokes the same private
+Lambda with only `status`, `broker-connect` and enumerated `broker-read`
+operations. Broker access is never shared across customer users. Market-data
+rights remain personal-pilot only until broker/exchange redistribution terms
+allow wider display.
+
+**Not automatically deployed by merging:** dedicated feed Lambda and IAM,
+owner-subject binding, the backend's nonsecret mode switch, and catalogue
+import are separate operational steps. Do not describe a passing Flutter
+build as proof that real broker prices are being received.
