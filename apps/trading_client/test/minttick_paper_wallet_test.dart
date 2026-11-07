@@ -95,7 +95,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.activationCalls, 1);
     expect(reloads, 1);
-    expect(find.text('₹20,000.00'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-wallet-cash')), findsOneWidget);
+    expect(find.text('₹20,000.00'), findsAtLeastNWidgets(1));
     expect(find.text('Automated execution'), findsOneWidget);
     expect(find.text('Disabled'), findsOneWidget);
     expect(tester.takeException(), isNull);
