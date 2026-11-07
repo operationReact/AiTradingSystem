@@ -30,8 +30,8 @@ class MintTickTradingRoomsPage extends StatelessWidget {
           Text('Trading Rooms', style: Theme.of(context).textTheme.headlineSmall
               ?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 7),
-          Text('Build one room for each goal. Plans are saved in this app '
-              'session, not on the server.',
+          Text('Plan independently for Paper or Live trading. Saved rooms '
+              'remain in your MintTick account.',
             style: Theme.of(context).textTheme.bodyMedium
                 ?.copyWith(color: scheme.onSurfaceVariant)),
           const SizedBox(height: 20),
@@ -44,10 +44,24 @@ class MintTickTradingRoomsPage extends StatelessWidget {
           const SizedBox(height: 22),
           const MintTickSectionHeading('Your local drafts'),
           const SizedBox(height: 10),
-          if (store.drafts.isEmpty)
+          if (store.isLoading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (store.lastError != null) ...[
+            MintTickInfoText(store.lastError!, icon: Icons.error_outline_rounded),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: store.load,
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Retry loading rooms'),
+            ),
+          ]
+          else if (store.drafts.isEmpty)
             const MintTickInfoText(
-              'No rooms yet. Your first room begins as a local preview. '
-              'No paper engine or live broker orders are started.',
+              'No Trading Rooms yet. Choose Paper or Live when creating '
+              'a room. Both start as plans, not active trading.',
               icon: Icons.layers_outlined,
             ),
           for (final room in store.drafts) ...[
@@ -74,7 +88,7 @@ class MintTickTradingRoomsPage extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        Text('${room.focus} · ${formatPaperRupees(room.paperBudget)}',
+                        Text('${room.mode} · ${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
                           style: Theme.of(context).textTheme.bodySmall),
                       ],
                     )),
@@ -114,6 +128,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   final _scroll = ScrollController();
   String _focus = 'Intraday';
   String _risk = 'Balanced';
+  String _mode = 'PAPER';
   bool _review = false;
   bool _acknowledged = false;
 
@@ -138,6 +153,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
     focus: _focus,
     paperBudget: int.tryParse(_paperBudget.text.trim()) ?? 0,
     riskPreference: _risk,
+    mode: _mode,
   );
 
   void _top() {
@@ -157,7 +173,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
       setState(() => _review = true);
       _top();
     } else if (_acknowledged) {
-      // This is a local design draft. No backend entity or trade is created.
+      // App controller submits the plan to the authenticated customer API.
+      // Merely reviewing a plan never creates a trade or activates a strategy.
       Navigator.of(context).pop(_draft);
     }
   }
@@ -195,11 +212,11 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                     children: [
                       Text(_review ? 'Review Mantic Mind plan' : 'Create a Trading Room',
                         style: style.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                      Text('Step ${_review ? 2 : 1} of 2 · Paper preview',
+                      Text('Step ${_review ? 2 : 1} of 2 · ${_mode == 'LIVE' ? 'Live' : 'Paper'} plan',
                         style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                     ],
                   )),
-                  const MintTickStatusLabel('PAPER'),
+                  MintTickStatusLabel(_mode),
                 ]),
                 const SizedBox(height: 13),
                 Row(children: [
@@ -242,7 +259,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
             child: FilledButton(
               key: const ValueKey('room-creation-next'),
               onPressed: _review && !_acknowledged ? null : _continue,
-              child: Text(_review ? 'Save local preview draft' : 'Preview Mantic Mind plan'),
+              child: Text(_review ? 'Save Trading Room plan' : 'Preview Mantic Mind plan'),
             ),
           ),
         ),
@@ -262,6 +279,27 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
         Text("A few choices. We'll handle the technical planning.",
           style: style.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
         const SizedBox(height: 21),
+        const _FieldLabel('Trading mode'),
+        const SizedBox(height: 9),
+        SegmentedButton<String>(
+          key: const ValueKey('room-mode-toggle'),
+          showSelectedIcon: true,
+          segments: const [
+            ButtonSegment(value: 'PAPER', label: Text('Paper'),
+              icon: Icon(Icons.science_outlined)),
+            ButtonSegment(value: 'LIVE', label: Text('Live'),
+              icon: Icon(Icons.candlestick_chart_rounded)),
+          ],
+          selected: {_mode},
+          onSelectionChanged: (choices) => setState(() => _mode = choices.first),
+        ),
+        const SizedBox(height: 7),
+        Text(_mode == 'PAPER'
+            ? 'Virtual trading, without placing broker orders.'
+            : 'Real-money trading mode. Broker connection and separate '
+              'authorization are required before activation.',
+          style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 18),
         const _FieldLabel('Room name'),
         const SizedBox(height: 8),
         TextFormField(
@@ -292,7 +330,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           ]);
         }),
         const SizedBox(height: 19),
-        const _FieldLabel('Virtual paper budget (₹)'),
+        const _FieldLabel('Planned room budget (₹)'),
         const SizedBox(height: 8),
         TextFormField(
           key: const ValueKey('room-budget-input'),
@@ -310,7 +348,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           },
         ),
         const SizedBox(height: 5),
-        Text('Simulated budget only. No deposit or broker connection.',
+        Text('This is a planning amount, not a reserved broker balance.',
           style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
         const SizedBox(height: 19),
         const _FieldLabel('How do you approach risk?'),
@@ -345,7 +383,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
       Text('Your proposed plan.', style: style.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Understand the boundaries before keeping this draft.',
+      Text('Review your ${draft.mode == 'LIVE' ? 'Live' : 'Paper'} mode plan '
+          'before saving. No trading starts automatically.',
         style: style.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 18),
       MintTickSurface(child: Column(
@@ -363,7 +402,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 14),
           _Pair('Room', draft.name),
           _Pair('Approach', draft.focus),
-          _Pair('Paper budget', formatPaperRupees(draft.paperBudget)),
+          _Pair('Mode', draft.mode),
+          _Pair('Planned budget', formatPaperRupees(draft.paperBudget)),
           _Pair('Risk preference', draft.riskPreference),
         ],
       )),
@@ -374,7 +414,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
         Expanded(child: MintTickSurface(child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Daily paper loss cap',
+            Text('Example daily loss cap',
               style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
             const SizedBox(height: 8),
             Text(formatPaperRupees(limits.daily),
@@ -398,9 +438,9 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           formatPaperRupees(limits.position))),
       const SizedBox(height: 16),
       const MintTickInfoText(
-        'This is a UI-only sample plan. These figures are not enforced '
-        'by a risk engine, and no loss cap guarantees realized losses. '
-        'No server room or order is created.',
+        'These values are illustrative, not broker-verified, enforced, '
+        'or investment recommendations. Saving creates only a DRAFT '
+        'room in your account. No orders are placed.',
         icon: Icons.shield_outlined,
       ),
       const SizedBox(height: 12),
@@ -410,8 +450,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
         value: _acknowledged,
         controlAffinity: ListTileControlAffinity.leading,
         onChanged: (v) => setState(() => _acknowledged = v ?? false),
-        title: Text('I understand this saves a temporary local draft only. '
-            'It does not enable paper or live trading.',
+        title: Text('I understand this saves a Trading Room plan, not an '
+            'authorization to begin Paper or Live trading.',
           style: style.bodySmall),
       ),
     ]);
@@ -554,7 +594,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         const MintTickStatusLabel('DRAFT'),
       ]),
       const SizedBox(height: 7),
-      Text('${room.focus} · ${formatPaperRupees(room.paperBudget)} virtual allocation',
+      Text('${room.mode} · ${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
         style: Theme.of(context).textTheme.bodyMedium
             ?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 18),
@@ -582,8 +622,8 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
               MintTickStatusLabel('NOT RUNNING'),
             ]),
             const SizedBox(height: 12),
-            Text('This room is a local design draft. Mantic Mind is not '
-                'scanning markets, making trade decisions or executing orders.',
+            Text('This room is a saved ${room.mode} plan. Mantic Mind has not '
+                'been activated for automated execution.',
               style: Theme.of(context).textTheme.bodyMedium
                   ?.copyWith(color: scheme.onSurfaceVariant)),
           ],
@@ -594,7 +634,9 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         MintTickSurface(child: Column(children: [
           _Pair('Focus', room.focus),
           _Pair('Risk preference', room.riskPreference),
-          const _Pair('Execution', 'Unavailable · Design draft'),
+          _Pair('Execution', room.mode == 'LIVE'
+              ? 'Setup required · Not authorized'
+              : 'Not active · Plan only'),
           const _Pair('Open positions', 'No connected trading engine'),
         ])),
       ] else if (_tab == 'Plan') ...[
@@ -614,8 +656,8 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         const MintTickSectionHeading('Decisions & activity'),
         const SizedBox(height: 8),
         const MintTickInfoText(
-          'No trading activity exists. This draft has not been connected '
-          'to a strategy, market-data service, or execution engine.',
+          'No trading activity exists. This planned room has not been '
+          'activated or connected to an execution engine.',
           icon: Icons.history_rounded,
         ),
       ],
