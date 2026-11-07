@@ -210,7 +210,19 @@ class _TradingAppState extends State<TradingApp> {
   }
 
   Future<void> _signOut() async {
-    // Clear local access first even if the provider cannot be contacted.
+    // Best-effort server-side disconnect while the customer JWT is still
+    // available. A network failure must never block local sign-out; the
+    // server also expires all broker sessions automatically.
+    if (widget.session.isCustomerAuthenticated) {
+      try {
+        await _api.postJson(
+          '/api/customer/brokers/angel-one/disconnect',
+          timeout: const Duration(seconds: 3),
+        );
+      } catch (_) {
+        // Bounded session expiry still applies when offline.
+      }
+    }
     _roomDrafts.clear();
     widget.session.clear();
     try {
