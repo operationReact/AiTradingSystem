@@ -3,6 +3,7 @@ package in.aitradingsystem.provider.angelone;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import in.aitradingsystem.config.AngelOneProperties;
 import java.time.Instant;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -34,15 +35,27 @@ public class CustomerAngelOneController {
     private final CustomerIdentityStore identities;
     private final CustomerAngelOneSessionService broker;
     private final AngelOneProperties configuredCredentials;
+    private final OwnerAngelOneLambdaService lambdaBroker;
     private final String ownerCognitoSubject;
 
+    // Retain the direct-credential test seam; production uses the injected
+    // owner Lambda bridge instead of placing SecureStrings on the PAPER host.
+    public CustomerAngelOneController(CustomerIdentityStore identities,
+            CustomerAngelOneSessionService broker,
+            AngelOneProperties configuredCredentials, String ownerCognitoSubject) {
+        this(identities, broker, configuredCredentials, ownerCognitoSubject, null);
+    }
+
+    @Autowired
     public CustomerAngelOneController(CustomerIdentityStore identities,
             CustomerAngelOneSessionService broker,
             AngelOneProperties configuredCredentials,
-            @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerCognitoSubject) {
+            @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerCognitoSubject,
+            OwnerAngelOneLambdaService lambdaBroker) {
         this.identities = identities;
         this.broker = broker;
         this.configuredCredentials = configuredCredentials;
+        this.lambdaBroker = lambdaBroker;
         // Fail closed unless a single exact Cognito subject is explicitly allowed.
         this.ownerCognitoSubject = ownerCognitoSubject == null ? "" : ownerCognitoSubject.trim();
     }
@@ -58,7 +71,12 @@ public class CustomerAngelOneController {
     @GetMapping("/status")
     public ResponseEntity<CustomerAngelOneSessionService.ConnectionStatus> status(
             org.springframework.security.core.Authentication authentication) {
-        return noStore(broker.status(customer(authentication)));
+        UUID id = customer(authentication);
+        if (isAuthorizedOwner(authentication) && lambdaBroker != null
+                && lambdaBroker.status(id).connected()) {
+            return noStore(lambdaBroker.status(id));
+        }
+        return noStore(broker.status(id));
     }
 
     @PostMapping("/connect")
@@ -79,7 +97,8 @@ public class CustomerAngelOneController {
             org.springframework.security.core.Authentication authentication) {
         customer(authentication);
         return noStore(new ConfiguredLoginAvailability(
-            isAuthorizedOwner(authentication) && configuredCredentials.credentialsConfigured()));
+            isAuthorizedOwner(authentication) && (configuredCredentials.credentialsConfigured()
+                || (lambdaBroker != null && lambdaBroker.available()))));
     }
 
     @PostMapping("/connect-configured")
@@ -90,8 +109,11 @@ public class CustomerAngelOneController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Owner-only broker connection");
         }
         if (!configuredCredentials.credentialsConfigured()) {
+            if (lambdaBroker != null && lambdaBroker.available()) {
+                return noStore(lambdaBroker.connect(userId));
+            }
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "The server-side Angel One connection is not configured");
+                "The SSM-backed read-only Angel One connection is not configured");
         }
         final String totp;
         try {
@@ -115,6 +137,7 @@ public class CustomerAngelOneController {
     public ResponseEntity<CustomerAngelOneSessionService.ConnectionStatus> disconnect(
             org.springframework.security.core.Authentication authentication) {
         UUID userId = customer(authentication);
+        if (lambdaBroker != null) lambdaBroker.disconnect(userId);
         broker.disconnect(userId);
         return noStore(broker.status(userId));
     }
@@ -122,25 +145,45 @@ public class CustomerAngelOneController {
     @GetMapping("/funds")
     public ResponseEntity<CustomerAngelOneSessionService.BrokerRead> funds(
             org.springframework.security.core.Authentication authentication) {
-        return noStore(broker.funds(customer(authentication)));
+        UUID id = customer(authentication);
+        if (isAuthorizedOwner(authentication) && lambdaBroker != null
+                && lambdaBroker.status(id).connected()) {
+            return noStore(lambdaBroker.read(id, "funds"));
+        }
+        return noStore(broker.funds(id));
     }
 
     @GetMapping("/holdings")
     public ResponseEntity<CustomerAngelOneSessionService.BrokerRead> holdings(
             org.springframework.security.core.Authentication authentication) {
-        return noStore(broker.holdings(customer(authentication)));
+        UUID id = customer(authentication);
+        if (isAuthorizedOwner(authentication) && lambdaBroker != null
+                && lambdaBroker.status(id).connected()) {
+            return noStore(lambdaBroker.read(id, "holdings"));
+        }
+        return noStore(broker.holdings(id));
     }
 
     @GetMapping("/positions")
     public ResponseEntity<CustomerAngelOneSessionService.BrokerRead> positions(
             org.springframework.security.core.Authentication authentication) {
-        return noStore(broker.positions(customer(authentication)));
+        UUID id = customer(authentication);
+        if (isAuthorizedOwner(authentication) && lambdaBroker != null
+                && lambdaBroker.status(id).connected()) {
+            return noStore(lambdaBroker.read(id, "positions"));
+        }
+        return noStore(broker.positions(id));
     }
 
     @GetMapping("/orders")
     public ResponseEntity<CustomerAngelOneSessionService.BrokerRead> orders(
             org.springframework.security.core.Authentication authentication) {
-        return noStore(broker.orders(customer(authentication)));
+        UUID id = customer(authentication);
+        if (isAuthorizedOwner(authentication) && lambdaBroker != null
+                && lambdaBroker.status(id).connected()) {
+            return noStore(lambdaBroker.read(id, "orders"));
+        }
+        return noStore(broker.orders(id));
     }
 
     // No place/modify/cancel-order route is intentionally exposed. Before live
