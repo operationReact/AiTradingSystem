@@ -69,6 +69,9 @@ Resources:
                   - iam:GetRolePolicy
                   - iam:DeleteRolePolicy
                   - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListInstanceProfilesForRole
+                  - iam:ListRoleTags
                   - iam:DeleteRole
                 Resource: arn:aws:iam::098859530205:role/minttick-dev-angelone-feed-lambda
               - Sid: PassOnlyFeedRoleToLambda
@@ -88,7 +91,12 @@ Resources:
                   - logs:TagResource
                   - logs:UntagResource
                   - logs:ListTagsForResource
-                Resource: arn:aws:logs:ap-south-1:098859530205:log-group:/aws/lambda/minttick-dev-angelone-feed
+                # AWS logs tagging/creation can authorize against either the
+                # exact log-group ARN or its canonical :* representation.
+                # Scope both variants to this single MintTick feed log group.
+                Resource:
+                  - arn:aws:logs:ap-south-1:098859530205:log-group:/aws/lambda/minttick-dev-angelone-feed
+                  - arn:aws:logs:ap-south-1:098859530205:log-group:/aws/lambda/minttick-dev-angelone-feed:*
               - Sid: ReadLogGroupMetadata
                 Effect: Allow
                 Action: logs:DescribeLogGroups
