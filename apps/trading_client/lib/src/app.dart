@@ -342,7 +342,11 @@ class _TradingAppState extends State<TradingApp> {
     Navigator.of(navContext).push<void>(
       MaterialPageRoute(
         settings: const RouteSettings(name: '/rooms/detail'),
-        builder: (_) => MintTickRoomDetailPage(room: room),
+        builder: (_) => MintTickRoomDetailPage(
+          room: room,
+          repository: HttpCustomerRoomRepository(_api),
+          onRoomChanged: _roomDrafts.load,
+        ),
       ),
     );
   }
