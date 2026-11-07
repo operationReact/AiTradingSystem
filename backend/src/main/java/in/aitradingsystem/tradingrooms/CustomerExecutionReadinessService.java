@@ -3,6 +3,7 @@ package in.aitradingsystem.tradingrooms;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
+import in.aitradingsystem.provider.upstox.CustomerUpstoxOAuthService;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,13 +22,15 @@ import org.springframework.web.server.ResponseStatusException;
 public class CustomerExecutionReadinessService {
     private final JdbcClient jdbc;
     private final CustomerAngelOneSessionService broker;
+    private final CustomerUpstoxOAuthService upstox;
     private final InstrumentMasterService instruments;
 
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
-            InstrumentMasterService instruments) {
+            CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments) {
         this.jdbc = jdbc;
         this.broker = broker;
+        this.upstox = upstox;
         this.instruments = instruments;
     }
 
@@ -59,7 +62,8 @@ public class CustomerExecutionReadinessService {
                 .param("id", roomId).param("user", owner)
                 .query(Boolean.class).single();
         }
-        boolean connected = "LIVE".equals(room.mode()) && broker.status(owner).connected();
+        boolean connected = "LIVE".equals(room.mode())
+            && (broker.status(owner).connected() || upstox.status(owner).connected());
         List<String> blockers = new ArrayList<>();
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
@@ -67,7 +71,10 @@ public class CustomerExecutionReadinessService {
             }
             blockers.add("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
         } else {
-            if (!connected) blockers.add("ANGEL_ONE_NOT_CONNECTED");
+            if (!connected) blockers.add("BROKER_NOT_CONNECTED");
+            // A Live room must explicitly select ONE authenticated broker
+            // account; no implicit fallback to Angel One or Upstox.
+            blockers.add("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
             blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
             blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
             blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
