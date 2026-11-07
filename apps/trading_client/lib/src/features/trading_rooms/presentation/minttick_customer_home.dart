@@ -113,11 +113,14 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 accent: true,
                 padding: const EdgeInsets.all(19),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Row(children: [
-                    MintTickStatusLabel('YOUR NEXT STEP'),
-                    Spacer(),
-                    MintTickStatusLabel('PAPER FIRST'),
-                  ]),
+                  const Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      MintTickStatusLabel('YOUR NEXT STEP'),
+                      MintTickStatusLabel('PAPER FIRST'),
+                    ],
+                  ),
                   const SizedBox(height: 18),
                   const MintTickIconTile(Icons.layers_outlined),
                   const SizedBox(height: 14),
