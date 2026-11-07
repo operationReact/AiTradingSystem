@@ -22,6 +22,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
   CustomerAngelOneConnection? _connection;
   bool _busy = true;
   bool _showForm = false;
+  bool _configuredLoginAvailable = false;
   String? _error;
   Object? _data;
   String? _dataLabel;
@@ -46,12 +47,25 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     setState(() { _busy = true; _error = null; });
     try {
       final result = await widget.repository.status();
+      // Capability is derived from verified server-side identity, never cached.
+      bool configured = false;
+      try {
+        configured = await widget.repository.configuredLoginAvailable();
+      } catch (_) {
+        configured = false; // Manual customer connection remains available.
+      }
       if (!mounted) return;
-      setState(() { _connection = result; _data = null; _dataLabel = null; });
+      setState(() {
+        _connection = result;
+        _configuredLoginAvailable = configured;
+        _data = null;
+        _dataLabel = null;
+      });
     } catch (_) {
       if (mounted) {
         setState(() {
           _connection = null;
+          _configuredLoginAvailable = false;
           _error = 'Broker status could not be verified. Please retry.';
         });
       }
@@ -94,6 +108,27 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         _apiKey.clear();
         setState(() => _busy = false);
       }
+    }
+  }
+
+  Future<void> _connectConfigured() async {
+    if (_busy || !_configuredLoginAvailable) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final connection = await widget.repository.connectConfigured();
+      if (!mounted) return;
+      setState(() {
+        _connection = connection;
+        _showForm = false;
+        _data = null;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Angel One did not complete authentication. '
+            'Check the account configuration or try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -146,7 +181,6 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 17),
       MintTickSurface(
-        accent: connection?.connected == true,
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
             const MintTickIconTile(Icons.account_balance_outlined),
@@ -223,6 +257,20 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           onPressed: _busy ? null : _disconnect,
           icon: const Icon(Icons.link_off_rounded),
           label: const Text('Disconnect Angel One'),
+        ),
+      ] else if (_configuredLoginAvailable) ...[
+        SizedBox(width: double.infinity, child: FilledButton.icon(
+          key: const ValueKey('broker-connect-configured'),
+          onPressed: _busy ? null : _connectConfigured,
+          icon: const Icon(Icons.lock_outline_rounded),
+          label: const Text('Secure connect'),
+        )),
+        const SizedBox(height: 12),
+        const MintTickInfoText(
+          'Your verified MintTick account can connect with credentials '
+          'held by the server. Your PIN, API key and TOTP seed never '
+          'appear in this app.',
+          icon: Icons.verified_user_outlined,
         ),
       ] else ...[
         SizedBox(width: double.infinity, child: FilledButton.icon(
