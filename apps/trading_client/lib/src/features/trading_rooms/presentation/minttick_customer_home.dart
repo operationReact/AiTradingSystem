@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../domain/trading_room_draft.dart';
+import '../domain/trading_workspace_mode.dart';
+import 'minttick_mode_switcher.dart';
 import 'minttick_customer_widgets.dart';
 
 /// The real post-Cognito destination, not a simulated trading dashboard.
@@ -10,6 +12,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
   const MintTickCustomerHomePage({
     required this.loadProfile,
     required this.drafts,
+    required this.mode,
     required this.onCreateRoom,
     required this.onRooms,
     required this.onMarkets,
@@ -22,6 +25,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
 
   final Future<Map<String, dynamic>> Function() loadProfile;
   final TradingRoomDraftStore drafts;
+  final TradingWorkspaceMode mode;
   final VoidCallback onCreateRoom;
   final VoidCallback onRooms;
   final VoidCallback onMarkets;
@@ -57,6 +61,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
         throw const FormatException('Unverified customer');
       }
       if (mounted) setState(() => _profile = result);
+      await widget.mode.loadForCustomer(result['userId'] as String);
       await widget.drafts.load();
     } catch (_) {
       if (mounted) setState(() => _profile = null);
@@ -69,13 +74,19 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return AnimatedBuilder(
-      animation: widget.drafts,
+      animation: Listenable.merge([widget.drafts, widget.mode]),
       builder: (context, _) {
-        final rooms = widget.drafts.drafts;
+        final rooms = widget.drafts.drafts
+            .where((room) => room.mode == widget.mode.selected)
+            .toList(growable: false);
         return MintTickCustomerScaffold(
           onAccount: widget.onAccount,
           onNotifications: widget.onNotifications,
           children: [
+            if (!_loading && _profile != null) ...[
+              MintTickModeSwitcher(mode: widget.mode),
+              const SizedBox(height: 19),
+            ],
             if (_loading)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 65),
@@ -112,7 +123,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Retry loading your rooms'),
               ),
-            ] else if (rooms.isEmpty) ...[
+            ] else if (widget.drafts.drafts.isEmpty) ...[
               const MintTickEyebrow('Welcome to MintTick'),
               const SizedBox(height: 7),
               Text("Let's build your\ntrading space.",
@@ -198,20 +209,20 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 'Connect Angel One to view live account data.',
               ),
             ] else ...[
-              const MintTickEyebrow('Your workspace'),
+              MintTickEyebrow('${widget.mode.selected} · Your workspace'),
               const SizedBox(height: 6),
               Text('Welcome back.',
                 key: const ValueKey('customer-home-returning-title'),
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 5),
-              Text('Your Trading Rooms and next steps at a glance.',
+              Text('Your ${widget.mode.selected == 'PAPER' ? 'Paper' : 'Live'} Trading Rooms and next steps at a glance.',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 18),
               MintTickSurface(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const MintTickEyebrow('Planned budgets · Not funded'),
+                  const MintTickEyebrow('Planned room allocations · Not actual balances'),
                   const SizedBox(height: 8),
                   Text(formatPaperRupees(
                       rooms.fold<int>(0, (sum, room) => sum + room.paperBudget)),
@@ -219,8 +230,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                     style: Theme.of(context).textTheme.headlineMedium
                         ?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 6),
-                  Text('${rooms.length} draft ${rooms.length == 1 ? 'room' : 'rooms'}'
-                      '  ·  No automated trading enabled',
+                  Text('${rooms.length} ${widget.mode.selected} ${rooms.length == 1 ? 'room' : 'rooms'}'
+                      ' · Mode selection does not enable execution',
                     style: Theme.of(context).textTheme.bodySmall
                         ?.copyWith(color: scheme.onSurfaceVariant)),
                 ]),
@@ -229,6 +240,14 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               MintTickSectionHeading('Your Trading Rooms',
                   action: 'View all', onAction: widget.onRooms),
               const SizedBox(height: 9),
+              if (rooms.isEmpty) ...[
+                MintTickInfoText(
+                  'No ${widget.mode.selected == 'PAPER' ? 'Paper' : 'Live'} Trading Rooms yet. '
+                  'Your other-mode rooms remain untouched.',
+                  icon: Icons.layers_outlined,
+                ),
+                const SizedBox(height: 8),
+              ],
               for (final room in rooms.take(3)) ...[
                 _DraftHomeTile(room: room, onTap: widget.onRooms),
                 const SizedBox(height: 8),
@@ -237,7 +256,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               SizedBox(width: double.infinity, child: OutlinedButton.icon(
                 onPressed: widget.onCreateRoom,
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('Plan another room'),
+                label: Text('Create ${widget.mode.selected == 'PAPER' ? 'Paper' : 'Live'} room'),
               )),
               const SizedBox(height: 21),
               const MintTickSectionHeading('Mantic Mind · Status'),
@@ -246,9 +265,9 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 MintTickIconTile(Icons.psychology_outlined),
                 SizedBox(width: 12),
                 Expanded(child: Text(
-                  'Paper wallets can hold virtual cash, but no customer '
-                  'orders or Mantic Mind automation can run yet. '
-                  'Live execution is separately gated.',
+                  'Paper wallets use simulated money. Live uses your linked '
+                  'brokerage account. Mantic Mind and order execution '
+                  'remain disabled until their own safety gates pass.',
                 )),
               ])),
               const SizedBox(height: 18),
@@ -256,7 +275,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 onMarkets: widget.onMarkets,
                 onPortfolio: widget.onPortfolio,
               ),
-              if (widget.onBroker != null) ...[
+              if (widget.mode.selected == TradingWorkspaceMode.live &&
+                  widget.onBroker != null) ...[
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   key: const ValueKey('home-connect-broker'),
