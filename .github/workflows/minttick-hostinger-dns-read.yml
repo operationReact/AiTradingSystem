@@ -19,6 +19,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 2
       - name: Verify safe read-only script syntax
         run: python3 -m py_compile scripts/minttick_hostinger_dns_read.py
       - name: Require exact one-file request on dev
