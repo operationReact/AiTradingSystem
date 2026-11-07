@@ -1,0 +1,240 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  MintTick public Flutter Web hosting: private encrypted S3 origin,
+  CloudFront OAC, issued ACM viewer certificate, Route 53 aliases,
+  and restricted dev-only GitHub asset publishing role. No EC2 changes.
+
+Parameters:
+  ExistingPublicHostedZoneId:
+    Type: String
+    Default: Z007211128LFW2NUELIKC
+    AllowedPattern: '^Z[A-Z0-9]+$'
+  ExistingIssuedCertificateArn:
+    Type: String
+    Default: arn:aws:acm:us-east-1:098859530205:certificate/aa6654dd-3215-439d-8e83-b8f2e48531a1
+    AllowedPattern: '^arn:aws:acm:us-east-1:098859530205:certificate/[a-f0-9-]+$'
+
+Resources:
+  WebBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'minttick-web-${AWS::AccountId}-${AWS::Region}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldAssetVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+          - Id: AbortUnfinishedUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1
+      Tags:
+        - Key: Application
+          Value: MintTick
+        - Key: Environment
+          Value: dev
+        - Key: Purpose
+          Value: public-flutter-web
+
+  WebOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: minttick-web-origin-access
+        Description: Require CloudFront SigV4 origin requests for private MintTick assets
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ApexRedirectFunction:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: minttick-apex-to-www
+      AutoPublish: true
+      FunctionConfig:
+        Comment: Redirect minttick.com to the canonical HTTPS www domain
+        Runtime: cloudfront-js-1.0
+      FunctionCode: |
+        function handler(event) {
+          var request = event.request;
+          var host = request.headers.host && request.headers.host.value.toLowerCase();
+          if (host === 'minttick.com') {
+            return {
+              statusCode: 301,
+              statusDescription: 'Moved Permanently',
+              headers: {
+                location: { value: 'https://www.minttick.com' + request.uri },
+                'cache-control': { value: 'public, max-age=300' }
+              }
+            };
+          }
+          return request;
+        }
+
+  WebDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: MintTick public Flutter Web; HTTPS-only private S3 assets
+        Aliases: [minttick.com, www.minttick.com]
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_200
+        DefaultRootObject: index.html
+        Origins:
+          - Id: MintTickPrivateS3
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+            OriginAccessControlId: !GetAtt WebOriginAccessControl.Id
+        DefaultCacheBehavior:
+          TargetOriginId: MintTickPrivateS3
+          ViewerProtocolPolicy: redirect-to-https
+          AllowedMethods: [GET, HEAD]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          CachePolicyId: 4135ea2d-6df8-44a7-9df3-4b5a84be39ad
+          FunctionAssociations:
+            - EventType: viewer-request
+              FunctionARN: !GetAtt ApexRedirectFunction.FunctionARN
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+        ViewerCertificate:
+          AcmCertificateArn: !Ref ExistingIssuedCertificateArn
+          MinimumProtocolVersion: TLSv1.2_2021
+          SslSupportMethod: sni-only
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OnlyMintTickCloudFrontDistributionCanRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub 'arn:aws:s3:::${WebBucket}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+
+  ApexA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref ExistingPublicHostedZoneId
+      Name: minttick.com.
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt WebDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+  ApexAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref ExistingPublicHostedZoneId
+      Name: minttick.com.
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt WebDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+  WwwA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref ExistingPublicHostedZoneId
+      Name: www.minttick.com.
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt WebDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+  WwwAAAA:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref ExistingPublicHostedZoneId
+      Name: www.minttick.com.
+      Type: AAAA
+      AliasTarget:
+        DNSName: !GetAtt WebDistribution.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+        EvaluateTargetHealth: false
+
+  GithubWebPublishRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: minttick-web-github-publish
+      Description: Dev-only OIDC Flutter Web artifact publishing and this CloudFront invalidation
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Condition:
+              StringEquals:
+                'token.actions.githubusercontent.com:aud': sts.amazonaws.com
+                'token.actions.githubusercontent.com:sub': 'repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev'
+      Policies:
+        - PolicyName: minttick-web-publish-scoped
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: WebBucketMetadata
+                Effect: Allow
+                Action: [s3:GetBucketLocation, s3:ListBucket]
+                Resource: !GetAtt WebBucket.Arn
+              - Sid: PublishOnlyWebAssets
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:DeleteObject]
+                Resource: !Sub 'arn:aws:s3:::${WebBucket}/*'
+              - Sid: InvalidateOnlyMintTickDistribution
+                Effect: Allow
+                Action: [cloudfront:CreateInvalidation, cloudfront:GetInvalidation, cloudfront:GetDistribution]
+                Resource: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebDistribution}'
+              - Sid: InspectOnlyDedicatedWebStack
+                Effect: Allow
+                Action: cloudformation:DescribeStacks
+                Resource: !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stack/minttick-web-public/*'
+
+Outputs:
+  WebBucketName:
+    Value: !Ref WebBucket
+    Description: Private S3 bucket for immutable Flutter Web release artifacts
+  CloudFrontDistributionId:
+    Value: !Ref WebDistribution
+    Description: CloudFront distribution for www.minttick.com and apex
+  CloudFrontDomainName:
+    Value: !GetAtt WebDistribution.DomainName
+  GithubWebPublishRoleArn:
+    Value: !GetAtt GithubWebPublishRole.Arn
+  Website:
+    Value: https://www.minttick.com
