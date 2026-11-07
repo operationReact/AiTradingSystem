@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Restricted GitHub dev OIDC role to publish MintTick account image and deploy via SSM to tagged account host.
+Resources:
+  AccountReleaseGithubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: minttick-account-github-release
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+                "token.actions.githubusercontent.com:sub":
+                  - "repo:operationReact/AiTradingSystem:ref:refs/heads/dev"
+                  - "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+      Policies:
+        - PolicyName: account-ecr-immutable-release-only
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:PutImage
+                  - ecr:DescribeImages
+                Resource: arn:aws:ecr:ap-south-1:098859530205:repository/minttick-dev-account-api
+        - PolicyName: account-ssm-single-tagged-host
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadOnlyAccountInstanceDiscovery
+                Effect: Allow
+                Action: [ec2:DescribeInstances, ssm:DescribeInstanceInformation]
+                Resource: "*"
+              - Sid: SendReviewedCommandOnlyToAccountInstance
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource: arn:aws:ec2:ap-south-1:098859530205:instance/*
+                Condition:
+                  StringEquals:
+                    "ssm:resourceTag/Application": MintTick
+                    "ssm:resourceTag/Environment": dev
+                    "ssm:resourceTag/Component": AccountAPI
+              - Sid: RunOnlyAwsShellDocument
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource: arn:aws:ssm:ap-south-1::document/AWS-RunShellScript
+              - Sid: ReadOnlyCommandResultStatus
+                Effect: Allow
+                Action: [ssm:GetCommandInvocation]
+                Resource: "*"
+Outputs:
+  RoleArn:
+    Value: !GetAtt AccountReleaseGithubRole.Arn
