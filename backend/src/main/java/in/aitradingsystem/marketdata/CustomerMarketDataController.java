@@ -34,7 +34,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @Validated
 @RequestMapping("/api/customer/market-data")
-public final class CustomerMarketDataController {
+public class CustomerMarketDataController {
     private final CustomerIdentityStore identities;
     private final InstrumentMasterService instruments;
     private final MarketDataProvider market;
