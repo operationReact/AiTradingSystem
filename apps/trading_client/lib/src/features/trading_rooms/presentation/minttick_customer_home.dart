@@ -205,7 +205,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 style: Theme.of(context).textTheme.headlineSmall
                     ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 5),
-              Text('Your room drafts and next steps at a glance.',
+              Text('Your Trading Rooms and next steps at a glance.',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 18),
@@ -246,8 +246,9 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 MintTickIconTile(Icons.psychology_outlined),
                 SizedBox(width: 12),
                 Expanded(child: Text(
-                  'Plans saved for Paper or Live. Neither mode is activated, '
-                  'and no orders can be submitted yet.',
+                  'Paper wallets can hold virtual cash, but no customer '
+                  'orders or Mantic Mind automation can run yet. '
+                  'Live execution is separately gated.',
                 )),
               ])),
               const SizedBox(height: 18),
@@ -302,7 +303,8 @@ class _DraftHomeTile extends StatelessWidget {
                 style: Theme.of(context).textTheme.bodySmall),
             ],
           )),
-          const MintTickStatusLabel('DRAFT'),
+          MintTickStatusLabel(room.status == 'PAPER_FUNDED'
+              ? 'PAPER FUNDED' : 'DRAFT'),
         ]),
       ),
     ),
