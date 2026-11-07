@@ -86,11 +86,12 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         });
       }
     } finally {
-      // One-time authentication secrets must not remain in editable controls.
-      _pin.clear();
-      _totp.clear();
-      _apiKey.clear();
+      // Secrets never persist. Controllers are disposed if navigation
+      // ended while the connection request was in flight.
       if (mounted) {
+        _pin.clear();
+        _totp.clear();
+        _apiKey.clear();
         setState(() => _busy = false);
       }
     }
