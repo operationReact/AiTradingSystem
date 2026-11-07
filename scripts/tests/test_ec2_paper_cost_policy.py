@@ -43,7 +43,7 @@ class CheapPaperEC2Policy(unittest.TestCase):
             'prevent_destroy = true',
             'instance_initiated_shutdown_behavior = "stop"',
             'dynamic "credit_specification" {',
-            'for_each = var.instance_type == "t4g.medium" ? [1] : [],
+            'for_each = var.instance_type == "t4g.medium" ? [1] : []',
             'cpu_credits = "standard"',
             'AmazonSSMManagedInstanceCore',
             'No ingress rules',
