@@ -23,6 +23,19 @@ class HttpCustomerAngelOneRepository {
   Future<CustomerAngelOneConnection> status() async =>
       _status(await api.getJson('$_root/status'));
 
+  /// An owner-specific capability, not a shared login for MintTick users.
+  /// The API returns only an availability flag; SSM secrets never leave AWS.
+  Future<bool> configuredLoginAvailable() async {
+    final payload = await api.getJson('$_root/configured-login');
+    if (payload is! Map<String, dynamic> || payload['available'] is! bool) {
+      throw const FormatException('Invalid configured broker availability');
+    }
+    return payload['available'] as bool;
+  }
+
+  Future<CustomerAngelOneConnection> connectConfigured() async =>
+      _status(await api.postJson('$_root/connect-configured'));
+
   Future<CustomerAngelOneConnection> connect({
     required String apiKey,
     required String clientCode,
