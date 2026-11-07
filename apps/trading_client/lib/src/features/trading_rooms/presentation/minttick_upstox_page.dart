@@ -80,12 +80,14 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
     setState(() { _loading = true; _error = null; });
     try {
       final status = await widget.repository.disconnect();
-      if (mounted) setState(() {
-        _status = status;
-        _section = null;
-        _data = null;
-        _awaitingReturn = false;
-      });
+      if (mounted) {
+        setState(() {
+          _status = status;
+          _section = null;
+          _data = null;
+          _awaitingReturn = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not verify disconnection.');
     } finally {
