@@ -1,0 +1,6 @@
+{
+  "domain": "minttick.com",
+  "operation": "verify-public-delegation",
+  "aws_account": "098859530205",
+  "read_only": true
+}
