@@ -41,10 +41,34 @@ class ReadOnlyFeedTests(unittest.TestCase):
             result = feed.handler({"operation": "status"}, None)
         self.assertEqual(result, {
             "ok": False, "code": "CREDENTIALS_NOT_CONFIGURED",
-            "unavailableFields": ["client_code", "totp_secret"],
+            "unavailableFields": ["totp_secret"],
         })
         for private in ("private-key", "private-client", "4321"):
             self.assertNotIn(private, str(result))
+
+    def test_dev_pilot_accepts_all_four_string_parameters_without_echo(self):
+        values = {
+            "api_key": "example-private-key",
+            "client_code": "EXAMPLE",
+            "pin": "0987",
+            "totp_secret": "JBSWY3DPEHPK3PXP",
+        }
+        class StubSSM:
+            def get_parameters(self, **kwargs):
+                assert kwargs["WithDecryption"] is True
+                assert set(kwargs["Names"]) == set(feed.NAMES.values())
+                return {"Parameters": [
+                    {"Name": name, "Type": "String", "Value": values[field]}
+                    for field, name in feed.NAMES.items()
+                ]}
+        fake_boto3 = SimpleNamespace(client=lambda *args, **kwargs: StubSSM())
+        with patch.dict("sys.modules", {"boto3": fake_boto3}):
+            result = feed.handler({"operation": "status"}, None)
+        self.assertEqual(result, {
+            "ok": True, "source": "ANGEL_ONE_SMARTAPI", "configured": True
+        })
+        for value in values.values():
+            self.assertNotIn(value, str(result))
 
     def test_quote_normalizes_verified_broker_price(self):
         with patch.object(feed, "_secrets", return_value=DUMMY), \
