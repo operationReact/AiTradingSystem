@@ -62,7 +62,9 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
       final opened = await (widget.launchAuthentication?.call(loginUrl) ??
           launchUrl(loginUrl, mode: LaunchMode.externalApplication));
       if (!opened) throw StateError('Browser unavailable');
-      if (mounted) setState(() => _awaitingReturn = true);
+      if (mounted) {
+        setState(() => _awaitingReturn = true);
+      }
     } catch (_) {
       if (mounted) {
         setState(() => _error = 'Could not open Upstox authorization. '
