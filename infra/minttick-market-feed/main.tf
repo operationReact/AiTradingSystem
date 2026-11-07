@@ -70,6 +70,9 @@ resource "aws_cloudwatch_log_group" "feed" {
   retention_in_days = 3
 }
 
+# This AWS account must retain at least 10 unreserved executions. An explicit
+# Lambda reservation fails that quota; the function has IAM-only invocation,
+# no public URL or triggers, and owner-gated read-only broker operations.
 resource "aws_lambda_function" "feed" {
   function_name                  = local.function_name
   description                    = "MintTick read-only private Angel One quotes and candles"
@@ -80,7 +83,7 @@ resource "aws_lambda_function" "feed" {
   source_code_hash               = data.archive_file.read_only_feed.output_base64sha256
   memory_size                    = 256
   timeout                        = 25
-  reserved_concurrent_executions = 1
+  reserved_concurrent_executions = -1
   architectures                  = ["arm64"]
   depends_on                     = [aws_iam_role_policy.read_only_ssm, aws_cloudwatch_log_group.feed]
 }
