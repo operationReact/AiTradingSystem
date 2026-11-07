@@ -275,6 +275,7 @@ class _TradingAppState extends State<TradingApp> {
         section: section,
         drafts: _roomDrafts,
         onRooms: () => _navigate('/rooms'),
+        onBroker: () => _navigate('/broker/angel-one'),
       );
 
   Widget _overviewPage() => widget.session.isCustomerAuthenticated
