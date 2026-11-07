@@ -1,4 +1,5 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 import lambda_function as feed
 
@@ -25,6 +26,25 @@ class ReadOnlyFeedTests(unittest.TestCase):
         self.assertTrue(response["ok"])
         self.assertNotIn("not-real", str(response))
         self.assertNotIn("1234", str(response))
+
+    def test_status_reports_unavailable_ssm_field_names_only(self):
+        class StubSSM:
+            def get_parameters(self, **kwargs):
+                self.assert_not_used = False
+                return {"Parameters": [
+                    {"Name": feed.NAMES["api_key"], "Type": "SecureString", "Value": "private-key"},
+                    {"Name": feed.NAMES["client_code"], "Type": "String", "Value": "private-client"},
+                    {"Name": feed.NAMES["pin"], "Type": "SecureString", "Value": "4321"},
+                ], "InvalidParameters": [feed.NAMES["totp_secret"]]}
+        fake_boto3 = SimpleNamespace(client=lambda *args, **kwargs: StubSSM())
+        with patch.dict("sys.modules", {"boto3": fake_boto3}):
+            result = feed.handler({"operation": "status"}, None)
+        self.assertEqual(result, {
+            "ok": False, "code": "CREDENTIALS_NOT_CONFIGURED",
+            "unavailableFields": ["client_code", "totp_secret"],
+        })
+        for private in ("private-key", "private-client", "4321"):
+            self.assertNotIn(private, str(result))
 
     def test_quote_normalizes_verified_broker_price(self):
         with patch.object(feed, "_secrets", return_value=DUMMY), \
