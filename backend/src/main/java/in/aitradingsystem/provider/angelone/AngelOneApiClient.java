@@ -32,6 +32,7 @@ public class AngelOneApiClient {
     static final String ALL_HOLDINGS_PATH = "/rest/secure/angelbroking/portfolio/v1/getAllHolding";
     static final String POSITIONS_PATH = "/rest/secure/angelbroking/order/v1/getPosition";
     static final String ORDER_BOOK_PATH = "/rest/secure/angelbroking/order/v1/getOrderBook";
+    static final String PLACE_ORDER_PATH = "/rest/secure/angelbroking/order/v1/placeOrder";
 
     /** Provider error codes that the SDK treats as token or session expiry. */
     static final Set<String> SESSION_EXPIRED_CODES = Set.of("AG8001", "AG8003", "AB8050", "AB8051", "AB1010");
@@ -121,6 +122,24 @@ public class AngelOneApiClient {
 
     public JsonNode customerOrders(String apiKey, String jwtToken) {
         return get(ORDER_BOOK_PATH, jwtToken, apiKey);
+    }
+
+    /**
+     * Internal order transport only. NOT a public customer API.
+     * Must be called only after compliance authorization, server-owned
+     * capital reservation, user approval and idempotent intent persistence.
+     * Never blindly retry a place-order timeout: reconcile order book first.
+     */
+    JsonNode postInternalApprovedLimitOrder(String apiKey, String jwtToken,
+                                           ObjectNode verifiedLimitDayOrder) {
+        if (apiKey == null || apiKey.isBlank() || jwtToken == null || jwtToken.isBlank()
+                || verifiedLimitDayOrder == null
+                || !"LIMIT".equals(verifiedLimitDayOrder.path("ordertype").asText())
+                || !"DAY".equals(verifiedLimitDayOrder.path("duration").asText())
+                || !"NORMAL".equals(verifiedLimitDayOrder.path("variety").asText())) {
+            throw new IllegalArgumentException("Authorized LIMIT/DAY order context required");
+        }
+        return post(PLACE_ORDER_PATH, jwtToken, verifiedLimitDayOrder, apiKey);
     }
 
     /** Returns the last traded price for one instrument. The caller supplies the verified symbol token. */
