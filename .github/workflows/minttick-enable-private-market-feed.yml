@@ -1,0 +1,125 @@
+name: MintTick - enable owner-only private Angel One feed on EC2
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/enable_private_market_feed.sh'
+      - 'infra/ec2-paper/paper-compose.yml'
+      - '.github/workflows/minttick-enable-private-market-feed.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/enable-private-market-feed.json'
+permissions:
+  contents: read
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate fixed-instance, nonsecret private broker enablement
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/enable_private_market_feed.sh
+          grep -Fq 'MINTTICK_ANGEL_ONE_OWNER_SUB:' infra/ec2-paper/paper-compose.yml
+          grep -Fq 'TRADING_MODE: PAPER' infra/ec2-paper/paper-compose.yml
+          ! grep -Eq '^[[:space:]]+ANGELONE_(API_KEY|PASSWORD|TOTP_SECRET):' infra/ec2-paper/paper-compose.yml
+  enable:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+      # The Cognito subject is an identity binding, not a trading credential.
+      # Keep its value private in Actions secrets; never print it.
+      OWNER_SUB: ${{ secrets.MINTTICK_ANGEL_ONE_OWNER_SUB }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Enforce exact one-file owner/feed enablement request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/enable-private-market-feed.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/ec2-paper/requests/enable-private-market-feed.json").read_text())
+          assert actual=={
+            "application":"MintTick","environment":"paper",
+            "aws_account":"098859530205","region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "operation":"enable-private-owner-market-feed",
+            "authorization":"USER_APPROVED_PRIVATE_MARKET_FEED_2026-11-07",
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-private-owner-feed-${{ github.run_id }}
+      - name: Check exact instance, active SSM session and nightly shutdown
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,"infra/ec2-paper")
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Configure private feed through reviewed SSM command
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os,re
+          from pathlib import Path
+          sub=os.environ.get("OWNER_SUB","")
+          if not re.fullmatch(r"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", sub):
+              raise SystemExit("BLOCKED: configure exact Cognito owner subject as GitHub Actions secret")
+          script=Path("infra/ec2-paper/enable_private_market_feed.sh").read_bytes()
+          assert 100 < len(script) < 12000
+          command="printf '%s' '"+base64.b64encode(script).decode()+"' | base64 -d | bash -s -- "+sub
+          p=Path(os.environ["RUNNER_TEMP"])/"owner-feed-request.json"
+          p.write_text(json.dumps({"commands":[command]}))
+          p.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command             --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID"             --parameters "file://$RUNNER_TEMP/owner-feed-request.json"             --comment 'MintTick private Lambda market feed owner mode; no broker credentials'             --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-feed-request.json"
+          for attempt in $(seq 1 65); do
+            aws ssm get-command-invocation --command-id "$command_id"               --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/owner-feed-status.json" 2>/dev/null || true
+            status="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          try:
+              raw=json.loads((Path(os.environ["RUNNER_TEMP"])/"owner-feed-status.json").read_text())
+          except (OSError,ValueError):
+              print("Pending")
+              raise SystemExit
+          print(raw.get("Status","Pending"))
+          PY
+          )"
+            if [ "$status" = Success ]; then
+              echo 'PASS: private feed owner activation completed on exact EC2; no public ports opened'
+              exit 0
+            fi
+            case "$status" in Failed|TimedOut|Cancelled)
+              echo 'BLOCKED: private feed not activated; inspect readiness and SSM host status' >&2
+              exit 2;;
+            esac
+            sleep 8
+          done
+          echo 'BLOCKED: owner feed activation not confirmed' >&2
+          exit 2
