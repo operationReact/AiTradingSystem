@@ -9,6 +9,12 @@ on:
         type: choice
         default: plan
         options: [plan, apply]
+  # A single reviewed, typed JSON request is the only non-interactive apply
+  # entrypoint. The dev branch + dedicated broker-feed OIDC role still gate AWS.
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-market-feed/requests/deploy.json'
 
 permissions:
   id-token: write
@@ -32,6 +38,28 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Require exact one-file authorized private market-feed apply
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-market-feed/requests/deploy.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          value=json.loads(Path("infra/minttick-market-feed/requests/deploy.json").read_text())
+          expected={
+            "application":"MintTick",
+            "aws_account":"098859530205",
+            "region":"ap-south-1",
+            "environment":"dev",
+            "operation":"apply-read-only-owner-market-feed",
+            "authorization":"USER_APPROVED_MINTTICK_PRIVATE_FEED_2026-11-07",
+          }
+          assert value==expected, "No exact owner-only read-only feed authorization"
+          PY
       - name: Require separate read-only feed deployment role
         env:
           ROLE: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
@@ -67,10 +95,40 @@ jobs:
           terraform validate
           terraform plan -input=false -lock-timeout=90s -out="$RUNNER_TEMP/minttick-feed.tfplan"
           terraform show -no-color "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Reject surprise IAM and infrastructure plan changes
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          terraform show -json "$RUNNER_TEMP/minttick-feed.tfplan" > "$RUNNER_TEMP/feed-plan.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          plan=json.loads((Path(os.environ['RUNNER_TEMP'])/'feed-plan.json').read_text())
+          allowed={
+            'aws_lambda_function.feed',
+            'aws_iam_role.feed',
+            'aws_iam_role_policy.read_only_ssm',
+            'aws_cloudwatch_log_group.feed',
+          }
+          for change in plan.get("resource_changes",[]):
+              address=change.get("address")
+              actions=change.get("change",{}).get("actions",[])
+              if address not in allowed or actions not in (["no-op"],["create"],["update"],["read"]):
+                  raise SystemExit("BLOCKED: feed plan contains unreviewed infrastructure change")
+          print("PASS: plan contains only the four reviewed private read-only feed resources")
+          PY
+          rm -f "$RUNNER_TEMP/feed-plan.json"
       - name: Deploy only on explicit apply request
-        if: inputs.operation == 'apply'
+        if: inputs.operation == 'apply' || github.event_name == 'push'
         working-directory: infra/minttick-market-feed
         run: terraform apply -input=false "$RUNNER_TEMP/minttick-feed.tfplan"
+      - name: Confirm dedicated private Lambda is deployed
+        if: inputs.operation == 'apply' || github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          name="$(aws lambda get-function-configuration --function-name minttick-dev-angelone-feed --query FunctionName --output text)"
+          test "$name" = minttick-dev-angelone-feed
+          echo "PASS: dedicated read-only SSM-backed MintTick feed Lambda exists"
       - name: Delete transient plan
         if: always()
         run: rm -f "$RUNNER_TEMP/minttick-feed.tfplan"
