@@ -49,6 +49,7 @@ import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
 import 'presentation/create_account_page.dart';
+import 'presentation/cognito_test_page.dart';
 import 'presentation/customer_account_page.dart';
 import 'presentation/password_recovery_page.dart';
 import 'presentation/welcome_page.dart';
@@ -114,7 +115,7 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account' || _selectedRoute.startsWith('/rooms/')) {
+          if (_selectedRoute == '/auth-test' || _selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account' || _selectedRoute.startsWith('/rooms/')) {
             return child ?? const SizedBox.shrink();
           }
           if (constraints.maxWidth >= 900) {
@@ -184,6 +185,7 @@ class _TradingAppState extends State<TradingApp> {
           },
           onSignOut: _signOut,
         ),
+        '/auth-test': (_) => const MintTickCognitoTestPage(),
         '/sign-in': (_) => MintTickWelcomePage(onAuthenticated: _onCustomerAuthenticated),
         '/sign-up': (_) => const CreateAccountPage(),
         '/forgot-password': (_) => const PasswordRecoveryPage(),

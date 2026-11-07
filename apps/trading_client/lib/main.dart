@@ -29,19 +29,29 @@ Future<void> main() async {
   }
   // A device's cached Cognito session is not itself proof that MintTick's
   // backend recognizes and authorizes the customer. Validate it every launch.
+  var cognitoTestSession = false;
   if (rememberMe && await MintTickIdentity.current.hasSession()) {
-    try {
-      await MintTickCustomerAccountApi().provision();
-      session.markCustomerAuthenticated();
-    } catch (_) {
-      // Fail closed. Do not open a protected dashboard on a stale identity.
+    if (const bool.fromEnvironment('MINTTICK_AUTH_ONLY_TEST',
+        defaultValue: false)) {
+      // Cognito is real; MintTick backend customer provisioning is not.
+      // Do not grant CUSTOMER role or enter the trading dashboard.
+      cognitoTestSession = true;
+    } else {
+      try {
+        await MintTickCustomerAccountApi().provision();
+        session.markCustomerAuthenticated();
+      } catch (_) {
+        // Fail closed. Do not open a protected dashboard on a stale identity.
+      }
     }
   }
   runApp(TradingApp(
     repositoryFactory: () => HttpHealthRepository(session: session),
     session: session,
-    initialRoute: session.isCustomerAuthenticated
-        ? '/'
-        : (session.isAuthenticated ? '/' : '/welcome'),
+    initialRoute: cognitoTestSession
+        ? '/auth-test'
+        : (session.isCustomerAuthenticated
+            ? '/'
+            : (session.isAuthenticated ? '/' : '/welcome')),
   ));
 }

@@ -66,6 +66,19 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
       if (!mounted) return;
       switch (login) {
         case LoginStep.complete:
+          // This release-only test mode allows the user to verify a real AWS
+          // Cognito session while the public backend endpoint is unavailable.
+          // It NEVER marks a customer authenticated or opens trading routes.
+          if (const bool.fromEnvironment('MINTTICK_AUTH_ONLY_TEST',
+              defaultValue: false)) {
+            await SharedPreferencesAsync().setBool(
+              'minttick.auth.remember_me.v1', _rememberMe);
+            _password.clear();
+            if (!mounted) return;
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil('/auth-test', (_) => false);
+            return;
+          }
           // Cognito success does not grant MintTick access: the backend must
           // validate the JWT, verify email, and provision the persistent UUID.
           await MintTickCustomerAccountApi().provision();
