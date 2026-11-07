@@ -32,19 +32,45 @@ PY
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 chmod 0700 "$work"
-if timeout 20 aws lambda invoke --region ap-south-1   --function-name minttick-dev-angelone-feed   --cli-binary-format raw-in-base64-out   --payload '{"operation":"status"}' "$work/status.json"   --query 'StatusCode' --output text > "$work/code" 2>/dev/null; then
+if timeout 20 aws lambda invoke --region ap-south-1 \
+  --function-name minttick-dev-angelone-feed \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"operation":"status"}' "$work/status.json" \
+  --query 'StatusCode' --output text > "$work/code" 2> "$work/invoke.stderr"; then
   python3 - "$work/code" "$work/status.json" <<'PY'
-import json,sys
+import json, sys
 from pathlib import Path
+allowed = {
+    "CREDENTIALS_NOT_CONFIGURED", "SSM_UNAVAILABLE",
+    "INVALID_TOTP_CONFIGURATION", "INTERNAL_FAILURE",
+}
 try:
-    code=Path(sys.argv[1]).read_text().strip()
-    result=json.loads(Path(sys.argv[2]).read_text())
-    ready=code=="200" and result.get("ok") is True and result.get("configured") is True
-except (OSError,ValueError,TypeError,AttributeError):
-    ready=False
+    code = Path(sys.argv[1]).read_text().strip()
+    result = json.loads(Path(sys.argv[2]).read_text())
+    ready = (code == "200" and isinstance(result, dict)
+             and result.get("ok") is True and result.get("configured") is True)
+    reason = "READY" if ready else (
+        result.get("code") if isinstance(result, dict)
+        and result.get("code") in allowed else "UNEXPECTED_RESPONSE")
+except (OSError, ValueError, TypeError, AttributeError):
+    ready = False
+    reason = "INVALID_RESPONSE"
 print("MINTTICK_PRIVATE_FEED_LAMBDA:", "READY" if ready else "NOT_CONFIRMED")
+print("MINTTICK_PRIVATE_FEED_DIAGNOSTIC:", reason)
 PY
 else
+  # Do not print raw AWS CLI stderr, HTTP error bodies, SSM values or tokens.
+  reason=INVOCATION_FAILED
+  if grep -qiE 'AccessDenied|not authorized' "$work/invoke.stderr"; then
+    reason=INVOKE_ACCESS_DENIED
+  elif grep -qiE 'ResourceNotFound|Function not found' "$work/invoke.stderr"; then
+    reason=FUNCTION_NOT_FOUND
+  elif grep -qiE 'TooManyRequests|Throttl' "$work/invoke.stderr"; then
+    reason=THROTTLED
+  elif grep -qiE 'timed out|timeout' "$work/invoke.stderr"; then
+    reason=INVOCATION_TIMEOUT
+  fi
   echo "MINTTICK_PRIVATE_FEED_LAMBDA: NOT_CONFIRMED"
+  echo "MINTTICK_PRIVATE_FEED_DIAGNOSTIC: $reason"
 fi
 echo "MINTTICK_READ_ONLY_CHECK: completed; no broker secrets accessed by this script"
