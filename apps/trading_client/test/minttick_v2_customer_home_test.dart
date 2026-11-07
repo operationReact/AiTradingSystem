@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/trading_rooms/domain/trading_room_draft.dart';
+import 'package:trading_client/src/features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_customer_home.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_rooms_pages.dart';
@@ -21,11 +22,14 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final store = TradingRoomDraftStore();
       addTearDown(store.dispose);
+      final mode = TradingWorkspaceMode();
+      addTearDown(mode.dispose);
       await tester.pumpWidget(MaterialApp(
         theme: buildTheme(Brightness.dark),
         home: MintTickCustomerHomePage(
           loadProfile: () async => _customer,
           drafts: store,
+          mode: mode,
           onCreateRoom: () {},
           onRooms: () {},
           onMarkets: () {},
@@ -51,11 +55,14 @@ void main() {
         riskPreference: 'Balanced',
       ));
     addTearDown(store.dispose);
+    final mode = TradingWorkspaceMode();
+    addTearDown(mode.dispose);
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerHomePage(
         loadProfile: () async => _customer,
         drafts: store,
+        mode: mode,
         onCreateRoom: () {},
         onRooms: () {},
         onMarkets: () {},
@@ -68,18 +75,21 @@ void main() {
     expect(find.byKey(const ValueKey('customer-home-returning-title')), findsOneWidget);
     expect(find.text('Morning focus'), findsOneWidget);
     expect(find.text('₹20,000'), findsOneWidget);
-    expect(find.textContaining('No automated trading enabled'), findsOneWidget);
+    expect(find.textContaining('Mode selection does not enable execution'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('backend verification failure hides customer room content', (tester) async {
     final store = TradingRoomDraftStore();
     addTearDown(store.dispose);
+    final mode = TradingWorkspaceMode();
+    addTearDown(mode.dispose);
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerHomePage(
         loadProfile: () async => throw StateError('offline'),
         drafts: store,
+        mode: mode,
         onCreateRoom: () {},
         onRooms: () {},
         onMarkets: () {},
@@ -134,6 +144,8 @@ void main() {
   testWidgets('customer portfolio explicitly contains no fabricated holdings', (tester) async {
     final store = TradingRoomDraftStore();
     addTearDown(store.dispose);
+    final mode = TradingWorkspaceMode();
+    addTearDown(mode.dispose);
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerUnavailablePage(

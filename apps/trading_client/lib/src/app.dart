@@ -21,6 +21,9 @@ import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
 import 'features/trading_control/data/trading_control_repository.dart';
 import 'features/trading_rooms/domain/trading_room_draft.dart';
+import 'features/trading_rooms/domain/trading_workspace_mode.dart';
+import 'features/trading_rooms/data/customer_execution_repository.dart';
+import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_broker_page.dart';
@@ -71,6 +74,7 @@ class _TradingAppState extends State<TradingApp> {
     setState(() => _selectedRoute = name);
   });
   late final TradingRoomDraftStore _roomDrafts;
+  late final TradingWorkspaceMode _workspaceMode;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
 
@@ -81,12 +85,14 @@ class _TradingAppState extends State<TradingApp> {
   void initState() {
     super.initState();
     _roomDrafts = TradingRoomDraftStore(repository: HttpCustomerRoomRepository(_api));
+    _workspaceMode = TradingWorkspaceMode();
     _selectedRoute = widget.initialRoute;
   }
 
   @override
   void dispose() {
     _roomDrafts.dispose();
+    _workspaceMode.dispose();
     super.dispose();
   }
 
@@ -139,6 +145,7 @@ class _TradingAppState extends State<TradingApp> {
         '/rooms': (_) => widget.session.isCustomerAuthenticated
             ? MintTickTradingRoomsPage(
                 store: _roomDrafts,
+                mode: _workspaceMode,
                 onCreate: _openCreateRoom,
                 onOpen: _openRoom,
               )
@@ -173,7 +180,16 @@ class _TradingAppState extends State<TradingApp> {
         '/signals': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/research': (_) => ResearchPage(repository: HttpResearchRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/scenarios': (_) => ScenarioLookupPage(repository: HttpScenarioEvidenceRepository(_api)),
-        '/portfolio': (_) => widget.session.isCustomerAuthenticated ? _customerState('Portfolio') : PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
+        '/portfolio': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickCustomerPortfolioPage(
+                mode: _workspaceMode,
+                rooms: _roomDrafts,
+                paperRepository: HttpCustomerRoomRepository(_api),
+                brokerRepository: HttpCustomerAngelOneRepository(_api),
+                onRooms: () => _navigate('/rooms'),
+                onBroker: () => _navigate('/broker/angel-one'),
+              )
+            : PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/orders': (_) => PaperOrdersPage(
               repository: HttpPaperTradingRepository(_api),
               trailingProtectionPreviewEnabled: true,
@@ -224,6 +240,7 @@ class _TradingAppState extends State<TradingApp> {
       }
     }
     _roomDrafts.clear();
+    _workspaceMode.reset();
     widget.session.clear();
     try {
       await SharedPreferencesAsync().setBool('minttick.auth.remember_me.v1', false);
@@ -294,6 +311,7 @@ class _TradingAppState extends State<TradingApp> {
       ? MintTickCustomerHomePage(
           loadProfile: _loadCustomerProfile,
           drafts: _roomDrafts,
+          mode: _workspaceMode,
           onCreateRoom: _openCreateRoom,
           onRooms: () => _navigate('/rooms'),
           onMarkets: () => _navigate('/market'),
@@ -315,7 +333,7 @@ class _TradingAppState extends State<TradingApp> {
     final room = await Navigator.of(navContext).push<TradingRoomDraft>(
       MaterialPageRoute(
         settings: const RouteSettings(name: '/rooms/create'),
-        builder: (_) => const MintTickRoomCreationPage(),
+        builder: (_) => MintTickRoomCreationPage(initialMode: _workspaceMode.selected),
       ),
     );
     if (!mounted || room == null) return;
@@ -345,6 +363,8 @@ class _TradingAppState extends State<TradingApp> {
         builder: (_) => MintTickRoomDetailPage(
           room: room,
           repository: HttpCustomerRoomRepository(_api),
+          executionRepository: HttpCustomerExecutionRepository(_api),
+          onBroker: () => _navigate('/broker/angel-one'),
           onRoomChanged: _roomDrafts.load,
         ),
       ),
