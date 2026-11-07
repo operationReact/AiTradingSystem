@@ -25,6 +25,19 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/auth/cognito/provision",
         "/api/auth/cognito/me"
     );
+    private static final Set<String> CUSTOMER_ROOM_COLLECTION = Set.of("/api/customer/trading-rooms");
+    private static final Set<String> BROKER_READS = Set.of(
+        "/api/customer/brokers/angel-one/status",
+        "/api/customer/brokers/angel-one/funds",
+        "/api/customer/brokers/angel-one/holdings",
+        "/api/customer/brokers/angel-one/positions",
+        "/api/customer/brokers/angel-one/orders");
+    private static final Set<String> BROKER_WRITES = Set.of(
+        "/api/customer/brokers/angel-one/connect",
+        "/api/customer/brokers/angel-one/disconnect");
+    private static final java.util.regex.Pattern CUSTOMER_ROOM_DETAIL =
+        java.util.regex.Pattern.compile("^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$");
+
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
         "/actuator/health/readiness",
@@ -41,7 +54,15 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         boolean allowed = (AUTH_PATHS.contains(path)
                 && ("GET".equals(method) || "POST".equals(method) || "OPTIONS".equals(method))
                 && ("/api/auth/cognito/me".equals(path) ? !"POST".equals(method) : !"GET".equals(method)))
-            || (HEALTH_PATHS.contains(path) && "GET".equals(method));
+            || (HEALTH_PATHS.contains(path) && "GET".equals(method))
+            || (CUSTOMER_ROOM_COLLECTION.contains(path)
+                && Set.of("GET", "POST", "OPTIONS").contains(method))
+            || (CUSTOMER_ROOM_DETAIL.matcher(path).matches()
+                && Set.of("GET", "DELETE", "OPTIONS").contains(method))
+            || (BROKER_READS.contains(path)
+                && Set.of("GET", "OPTIONS").contains(method))
+            || (BROKER_WRITES.contains(path)
+                && Set.of("POST", "OPTIONS").contains(method));
         if (!allowed) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
