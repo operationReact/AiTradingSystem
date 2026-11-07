@@ -3,13 +3,7 @@ import '../domain/trading_room_draft.dart';
 
 /// Authenticated, customer-owned Trading Room plans.
 /// No order-placement, broker authorization, or account balances are implied.
-abstract class CustomerRoomRepository {
-  Future<List<TradingRoomDraft>> list();
-  Future<TradingRoomDraft> create(TradingRoomDraft draft);
-  Future<void> delete(String id);
-}
-
-class HttpCustomerRoomRepository implements CustomerRoomRepository {
+class HttpCustomerRoomRepository implements RoomDraftPersistence {
   HttpCustomerRoomRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -32,11 +26,6 @@ class HttpCustomerRoomRepository implements CustomerRoomRepository {
       'mode': draft.mode,
     });
     return _decode(data);
-  }
-
-  @override
-  Future<void> delete(String id) async {
-    throw UnsupportedError('Delete requires a dedicated authenticated DELETE API client method');
   }
 
   static String _focusToWire(String focus) => switch (focus) {
