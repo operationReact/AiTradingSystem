@@ -72,7 +72,7 @@ public class CustomerUpstoxController {
         return ResponseEntity.status(successful ? HttpStatus.OK : HttpStatus.BAD_REQUEST)
             .contentType(MediaType.TEXT_HTML)
             .cacheControl(CacheControl.noStore())
-            .header(HttpHeaders.REFERRER_POLICY, "no-referrer")
+            .header("Referrer-Policy", "no-referrer")
             .body(page);
     }
 
