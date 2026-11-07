@@ -156,7 +156,7 @@ public final class OwnerAngelOneLambdaService {
             return result;
         } catch (AngelOneException ex) {
             throw ex;
-        } catch (SdkException | java.io.IOException | RuntimeException ex) {
+        } catch (Exception ex) {
             // Never log the raw Lambda response, request, AWS exception or account secret.
             throw error(AngelOneException.Kind.UNAVAILABLE);
         }
