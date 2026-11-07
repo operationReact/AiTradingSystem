@@ -104,11 +104,17 @@ class SettingsPage extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 24),
-            Text('Trading controls',
+            Text(tradingControlRepository == null
+                    ? 'Trading readiness'
+                    : 'Trading controls',
                 style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 5),
             Text(
-              'Only PAPER trading is available. Risk limits remain enforced.',
+              tradingControlRepository == null
+                  ? 'Paper and Live are available as Trading Room plans. '
+                    'Order execution requires separate activation and authorization.'
+                  : 'Only PAPER trading is available in the operator workspace. '
+                    'Risk limits remain enforced.',
               style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurfaceVariant),
             ),
             const SizedBox(height: 14),
