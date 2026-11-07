@@ -38,7 +38,7 @@ void main() {
       expect(find.byKey(const ValueKey('customer-home-first-title')), findsOneWidget);
       expect(find.byKey(const ValueKey('customer-home-create-first')), findsOneWidget);
       expect(find.textContaining('P&L'), findsNothing);
-      expect(find.textContaining('LIVE'), findsNothing);
+      expect(find.text('PAPER + LIVE'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

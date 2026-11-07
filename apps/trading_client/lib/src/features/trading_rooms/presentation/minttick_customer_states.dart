@@ -11,12 +11,14 @@ class MintTickCustomerUnavailablePage extends StatelessWidget {
     required this.section,
     required this.drafts,
     required this.onRooms,
+    this.onBroker,
     super.key,
   });
 
   final String section;
   final TradingRoomDraftStore drafts;
   final VoidCallback onRooms;
+  final VoidCallback? onBroker;
 
   @override
   Widget build(BuildContext context) {
@@ -30,8 +32,9 @@ class MintTickCustomerUnavailablePage extends StatelessWidget {
       ),
       'Portfolio' => (
         'No broker portfolio connected',
-        'Your MintTick account is separate from your brokerage account. '
-        'No cash balance, holdings, or P&L can be shown yet.',
+        'Choose Paper or Live trading for each room. Your MintTick login '
+        'is independent from your Angel One account. '
+        'Connect Angel One to inspect real holdings, funds and positions.',
         Icons.account_balance_wallet_outlined,
       ),
       'Activity' => (
@@ -71,12 +74,31 @@ class MintTickCustomerUnavailablePage extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           if (section == 'Portfolio') ...[
+            const MintTickSectionHeading('Paper & Live'),
+            const SizedBox(height: 9),
+            const MintTickInfoText(
+              'Paper: a separate simulated portfolio will become available '
+              'after customer-specific paper accounting is connected. '
+              'Live: actual broker funds and holdings are available through '
+              'the authenticated Angel One read-only connection.',
+              icon: Icons.layers_outlined,
+            ),
+            if (onBroker != null) ...[
+              const SizedBox(height: 10),
+              FilledButton.icon(
+                key: const ValueKey('customer-portfolio-connect-broker'),
+                onPressed: onBroker,
+                icon: const Icon(Icons.account_balance_outlined),
+                label: const Text('Angel One · Live account'),
+              ),
+            ],
+            const SizedBox(height: 18),
             const MintTickSectionHeading('Your room planning'),
             const SizedBox(height: 8),
             MintTickSurface(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const MintTickEyebrow('Virtual plans only'),
+                const MintTickEyebrow('Planned allocations · not funded'),
                 const SizedBox(height: 7),
                 Text(formatPaperRupees(drafts.drafts.fold<int>(
                       0, (sum, room) => sum + room.paperBudget)),

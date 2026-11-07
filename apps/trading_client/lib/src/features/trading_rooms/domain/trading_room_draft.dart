@@ -9,29 +9,82 @@ class TradingRoomDraft {
     required this.focus,
     required this.paperBudget,
     required this.riskPreference,
+    this.mode = 'PAPER',
   });
 
   final String id;
   final String name;
   final String focus;
+  // Existing field name retained for compatibility with V2 design widgets.
+  // It represents a PLANNED amount in either mode, never funded capital.
   final int paperBudget;
   final String riskPreference;
+  final String mode;
 }
 
-/// Session-only, in-memory previews. Do not confuse these with persisted
-/// broker accounts, paper orders, or server-enforced risk controls.
+/// Persisted customer plans, never broker orders or active trading rooms.
+abstract class RoomDraftPersistence {
+  Future<List<TradingRoomDraft>> list();
+  Future<TradingRoomDraft> create(TradingRoomDraft draft);
+}
+
+/// Store backed by the customer API in production. The optional in-memory
+/// mode is reserved for pure widget tests and must never be used for a real
+/// customer account without an authenticated repository.
 class TradingRoomDraftStore extends ChangeNotifier {
+  TradingRoomDraftStore({this.repository});
+  final RoomDraftPersistence? repository;
   final List<TradingRoomDraft> _drafts = [];
+  bool _isLoading = false;
+  bool _loaded = false;
+  String? _lastError;
 
   List<TradingRoomDraft> get drafts => List.unmodifiable(_drafts);
+  bool get isLoading => _isLoading;
+  bool get loaded => _loaded || repository == null;
+  String? get lastError => _lastError;
 
+  Future<void> load() async {
+    if (repository == null) return;
+    _isLoading = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final rooms = await repository!.list();
+      _drafts
+        ..clear()
+        ..addAll(rooms);
+      _loaded = true;
+    } catch (_) {
+      _drafts.clear();
+      _loaded = false;
+      _lastError = 'Could not retrieve your Trading Rooms securely.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> create(TradingRoomDraft draft) async {
+    if (repository == null) throw StateError('No authenticated room API');
+    final stored = await repository!.create(draft);
+    _drafts.insert(0, stored);
+    _loaded = true;
+    _lastError = null;
+    notifyListeners();
+  }
+
+  /// Widget test utility only. Production MUST use create().
   void add(TradingRoomDraft draft) {
+    if (repository != null) throw StateError('Use create() for authenticated rooms');
     _drafts.add(draft);
     notifyListeners();
   }
 
   void clear() {
     _drafts.clear();
+    _loaded = false;
+    _lastError = null;
     notifyListeners();
   }
 }

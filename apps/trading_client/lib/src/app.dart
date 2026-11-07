@@ -21,6 +21,9 @@ import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
 import 'features/trading_control/data/trading_control_repository.dart';
 import 'features/trading_rooms/domain/trading_room_draft.dart';
+import 'features/trading_rooms/data/customer_room_repository.dart';
+import 'features/trading_rooms/data/customer_angel_one_repository.dart';
+import 'features/trading_rooms/presentation/minttick_customer_broker_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_home.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
@@ -67,7 +70,7 @@ class _TradingAppState extends State<TradingApp> {
     if (!mounted || _selectedRoute == name) return;
     setState(() => _selectedRoute = name);
   });
-  final TradingRoomDraftStore _roomDrafts = TradingRoomDraftStore();
+  late final TradingRoomDraftStore _roomDrafts;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
 
@@ -77,6 +80,7 @@ class _TradingAppState extends State<TradingApp> {
   @override
   void initState() {
     super.initState();
+    _roomDrafts = TradingRoomDraftStore(repository: HttpCustomerRoomRepository(_api));
     _selectedRoute = widget.initialRoute;
   }
 
@@ -137,6 +141,11 @@ class _TradingAppState extends State<TradingApp> {
                 store: _roomDrafts,
                 onCreate: _openCreateRoom,
                 onOpen: _openRoom,
+              )
+            : _overviewPage(),
+        '/broker/angel-one': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickCustomerBrokerPage(
+                repository: HttpCustomerAngelOneRepository(_api),
               )
             : _overviewPage(),
         '/activity': (_) => widget.session.isCustomerAuthenticated
@@ -201,7 +210,19 @@ class _TradingAppState extends State<TradingApp> {
   }
 
   Future<void> _signOut() async {
-    // Clear local access first even if the provider cannot be contacted.
+    // Best-effort server-side disconnect while the customer JWT is still
+    // available. A network failure must never block local sign-out; the
+    // server also expires all broker sessions automatically.
+    if (widget.session.isCustomerAuthenticated) {
+      try {
+        await _api.postJson(
+          '/api/customer/brokers/angel-one/disconnect',
+          timeout: const Duration(seconds: 3),
+        );
+      } catch (_) {
+        // Bounded session expiry still applies when offline.
+      }
+    }
     _roomDrafts.clear();
     widget.session.clear();
     try {
@@ -266,6 +287,7 @@ class _TradingAppState extends State<TradingApp> {
         section: section,
         drafts: _roomDrafts,
         onRooms: () => _navigate('/rooms'),
+        onBroker: () => _navigate('/broker/angel-one'),
       );
 
   Widget _overviewPage() => widget.session.isCustomerAuthenticated
@@ -278,6 +300,7 @@ class _TradingAppState extends State<TradingApp> {
           onPortfolio: () => _navigate('/portfolio'),
           onAccount: () => _navigate('/account'),
           onNotifications: () => _navigate('/notifications'),
+          onBroker: () => _navigate('/broker/angel-one'),
         )
       : OverviewPage(
           session: widget.session,
@@ -296,8 +319,20 @@ class _TradingAppState extends State<TradingApp> {
       ),
     );
     if (!mounted || room == null) return;
-    _roomDrafts.add(room);
-    _navigate('/rooms');
+    try {
+      await _roomDrafts.create(room);
+      if (mounted) _navigate('/rooms');
+    } catch (_) {
+      // Never add a phantom room when the server write failed.
+      final current = _navigatorKey.currentContext;
+      if (mounted && current != null && current.mounted) {
+        ScaffoldMessenger.of(current).showSnackBar(
+          const SnackBar(content: Text(
+            'Could not save your Trading Room. Verify the connection and try again.',
+          )),
+        );
+      }
+    }
   }
 
   void _openRoom(TradingRoomDraft room) {
@@ -499,7 +534,8 @@ class _MoreProductSheet extends StatelessWidget {
   ];
 
   static const _customerDestinations = <(String, IconData, String, String)>[
-    ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room drafts and plans'),
+    ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room plans'),
+    ('/broker/angel-one', Icons.account_balance_outlined, 'Connect Angel One', 'Your live brokerage data'),
     ('/activity', Icons.history_rounded, 'Mantic Mind activity', 'Decisions and audit history'),
     ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
     ('/account', Icons.person_outline_rounded, 'Account', 'Profile and sign out'),

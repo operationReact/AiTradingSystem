@@ -21,6 +21,15 @@ class AccountApiOnlyFilterTest {
         }
         assertPasses("OPTIONS", "/api/auth/cognito/me");
         assertPasses("OPTIONS", "/api/auth/cognito/provision");
+        assertPasses("GET", "/api/customer/trading-rooms");
+        assertPasses("POST", "/api/customer/trading-rooms");
+        assertPasses("GET", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+        assertPasses("DELETE", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
+        assertPasses("POST", "/api/customer/brokers/angel-one/connect");
+        assertPasses("POST", "/api/customer/brokers/angel-one/disconnect");
+        for (String suffix : List.of("status", "funds", "holdings", "positions", "orders")) {
+            assertPasses("GET", "/api/customer/brokers/angel-one/" + suffix);
+        }
     }
 
     @Test
@@ -34,6 +43,11 @@ class AccountApiOnlyFilterTest {
         assertBlocked("GET", "/api/auth/cognito/provision");
         assertBlocked("DELETE", "/api/auth/cognito/provision");
         assertBlocked("OPTIONS", "/api/paper/orders");
+        assertBlocked("POST", "/api/customer/brokers/angel-one/orders");
+        assertBlocked("POST", "/api/customer/brokers/angel-one/funds");
+        assertBlocked("GET", "/api/customer/brokers/angel-one/connect");
+        assertBlocked("GET", "/api/customer/trading-rooms/anything/else");
+        assertBlocked("PATCH", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
     }
 
     private void assertPasses(String method, String path) throws Exception {
