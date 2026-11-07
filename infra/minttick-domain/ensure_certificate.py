@@ -95,13 +95,21 @@ def get_validation_records(arn: str) -> tuple[list[dict], str]:
             if "ResourceRecord" not in entry:
                 continue
             record = entry["ResourceRecord"]
-            name = record["Name"].lower()
-            value = record["Value"].lower()
-            if (entry["DomainName"] not in EXPECTED_DOMAINS
-                    or record["Type"] != "CNAME"
-                    or not CNAME_NAME.fullmatch(name)
-                    or not CNAME_VALUE.fullmatch(value)):
-                raise RuntimeError("ACM returned an unexpected validation CNAME; refusing DNS write")
+            # ACM may omit the DNS root dot. Canonicalize before applying the
+            # strict allowlist rather than treating a valid DNS name as unsafe.
+            domain = entry["DomainName"].lower().rstrip(".")
+            name = record["Name"].strip().lower().rstrip(".") + "."
+            value = record["Value"].strip().lower().rstrip(".") + "."
+            if domain not in EXPECTED_DOMAINS:
+                raise RuntimeError("ACM validation rejected: unexpected domain")
+            if record["Type"] != "CNAME":
+                raise RuntimeError("ACM validation rejected: unexpected record type")
+            if not CNAME_NAME.fullmatch(name):
+                raise RuntimeError("ACM validation rejected: unexpected CNAME name shape")
+            if name.split(".", 1)[1].rstrip(".") != domain:
+                raise RuntimeError("ACM validation rejected: record/domain mismatch")
+            if not CNAME_VALUE.fullmatch(value):
+                raise RuntimeError("ACM validation rejected: unexpected CNAME target shape")
             if name in records and records[name] != value:
                 raise RuntimeError("ACM supplied conflicting validation CNAMEs")
             records[name] = value

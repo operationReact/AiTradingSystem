@@ -30,6 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile infra/minttick-domain/ensure_certificate.py
+          python3 -m unittest discover -s infra/minttick-domain -p 'test_*.py'
           python3 - <<'PY'
           from pathlib import Path
           s = Path("infra/minttick-domain/ensure_certificate.py").read_text()
