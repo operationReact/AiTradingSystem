@@ -57,7 +57,7 @@ class IllustrativeRoomLimits {
       _ => (0.01, 0.003, 0.15),
     };
     int sample(double portion) =>
-        (draft.paperBudget * portion).round().clamp(1, draft.paperBudget);
+        (draft.paperBudget * portion).round().clamp(1, draft.paperBudget).toInt();
     return IllustrativeRoomLimits(
       daily: sample(risk.$1),
       trade: sample(risk.$2),
