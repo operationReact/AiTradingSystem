@@ -43,13 +43,6 @@ management:
     tags:
       application: ai-trading-system
 app:
-  # Platform-owned OAuth app. Configure from AWS Secrets/SSM, never customer input.
-  # Upstox developer app must register exactly UPSTOX_REDIRECT_URI.
-  providers:
-    upstox:
-      client-id: ${UPSTOX_CLIENT_ID:}
-      client-secret: ${UPSTOX_CLIENT_SECRET:}
-      redirect-uri: ${UPSTOX_REDIRECT_URI:}
   trading-mode: ${TRADING_MODE:PAPER}
   research:
     artifact-worker:
@@ -159,6 +152,11 @@ app:
     max-attempts: 2
   providers:
     gemini-enabled: false
+    # Platform-owned OAuth app; exact HTTPS callback URL registered in Upstox.
+    upstox:
+      client-id: ${UPSTOX_CLIENT_ID:}
+      client-secret: ${UPSTOX_CLIENT_SECRET:}
+      redirect-uri: ${UPSTOX_REDIRECT_URI:}
     angel-one:
       api-key: ${ANGELONE_API_KEY:}
       client-code: ${ANGELONE_CLIENT_CODE:}
