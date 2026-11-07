@@ -317,10 +317,14 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     final data = _data;
     if (data == null) return [const Text('No broker data loaded yet.')];
     if (data is List) {
-      return [Text('${data.length} provider records received.',
-        style: theme.textTheme.bodyMedium)];
+      return _brokerRecords(data, theme);
     }
     if (data is Map) {
+      final nested = data['holdings'] ?? data['positions'] ??
+          data['orders'] ?? data['orderBook'] ?? data['data'];
+      if (nested is List) {
+        return _brokerRecords(nested, theme);
+      }
       // Only show a bounded list of approved, non-secret financial summary
       // labels. Do not dump the entire raw SmartAPI JSON response in the UI.
       const allowed = {
@@ -347,5 +351,45 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       )).toList();
     }
     return [const Text('Broker data is unavailable in this format.')];
+  }
+
+  List<Widget> _brokerRecords(List<dynamic> records, ThemeData theme) {
+    final ink = theme.colorScheme.onSurfaceVariant;
+    return [
+      Text('${records.length} records returned by Angel One',
+        style: theme.textTheme.bodySmall?.copyWith(color: ink)),
+      const SizedBox(height: 7),
+      if (records.isEmpty) const Text('No open records for this account.'),
+      for (final entry in records.take(20))
+        if (entry is Map)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(
+                '${entry['tradingsymbol'] ?? entry['tradingSymbol'] ?? entry['symbol'] ?? 'Broker record'}',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 4),
+              Wrap(spacing: 12, runSpacing: 5, children: [
+                for (final (field, label) in [
+                  ('quantity', 'Quantity'),
+                  ('netqty', 'Net quantity'),
+                  ('ltp', 'Last price'),
+                  ('pnl', 'P&L'),
+                  ('status', 'Status'),
+                ])
+                  if (entry[field] != null)
+                    Text('$label: ${entry[field]}',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: ink)),
+              ]),
+              const Divider(height: 13),
+            ]),
+          ),
+      if (records.length > 20)
+        Text('Showing first 20 records. More rows require pagination.',
+          style: theme.textTheme.bodySmall?.copyWith(color: ink)),
+    ];
   }
 }
