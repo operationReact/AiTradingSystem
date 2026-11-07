@@ -54,7 +54,7 @@ services:
       MINTTICK_COGNITO_REGION: ap-south-1
       MINTTICK_COGNITO_ISSUER: ${MINTTICK_COGNITO_ISSUER:-https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_jz2T8qbiY}
       MINTTICK_COGNITO_CLIENT_ID: ${MINTTICK_COGNITO_CLIENT_ID:-6jm18v2mdpcfraip92hrjhqjnd}
-      APP_CORS_ALLOWED_ORIGINS: http://localhost:8088
+      APP_CORS_ALLOWED_ORIGINS: http://localhost:8088,https://www.minttick.com,https://minttick.com
       APP_SECURITY_TRUST_FORWARDED_FOR: "false"
       AI_RESEARCH_WORKER_CLIENT_ENABLED: "false"
       AI_RESEARCH_WORKER_READINESS_ENABLED: "false"
@@ -78,6 +78,9 @@ services:
       - no-new-privileges:true
     ports:
       - "127.0.0.1:8088:8080"
+      # Private EC2 VPC IP only; SG accepts TCP 8081 solely from dedicated Lambda SG.
+      # Trading backend remains bound only to 127.0.0.1:8080.
+      - "10.87.0.10:8081:8080"
     networks:
       - paper_net
 

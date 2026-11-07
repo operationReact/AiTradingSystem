@@ -1,0 +1,108 @@
+name: MintTick - private account API template and authenticated edge
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/bootstrap-account-api.yml'
+      - 'infra/minttick-domain/account_proxy.py'
+      - 'infra/minttick-domain/test_account_proxy.py'
+      - 'infra/ec2-paper/paper-compose.yml'
+      - 'infra/ec2-paper/run_paper.sh'
+      - 'scripts/tests/test_ec2_paper_application_runtime.py'
+      - '.github/workflows/minttick-account-api-deploy.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/publish-account-api.json'
+permissions:
+  contents: read
+concurrency:
+  group: minttick-account-api-deploy-dev
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify Python edge, no admin/trading routes, and exact embedded Lambda code
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s infra/minttick-domain -p test_account_proxy.py -v
+          python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
+          bash -n infra/ec2-paper/run_paper.sh
+      - name: Validate Mumbai API Gateway, Lambda VPC, certificate and DNS stack
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet cfn-lint
+          cfn-lint infra/minttick-domain/bootstrap-account-api.yml
+  publish-code:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file reviewed private account API code request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/publish-account-api.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/minttick-domain/requests/publish-account-api.json").read_text())
+          expected={
+            "application":"MintTick",
+            "environment":"dev",
+            "aws_account":"098859530205",
+            "region":"ap-south-1",
+            "operation":"publish-private-account-api-lambda",
+            "authorization":"USER_APPROVED_MINTTICK_ACCOUNT_API_2026-11-07"
+          }
+          assert actual==expected, "Unexpected account API request"
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-account-github-code-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-account-${{ github.run_id }}
+      - name: Confirm expected stack, AWS account and Lambda identity
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          test "$(aws cloudformation describe-stacks --stack-name minttick-account-api --query 'Stacks[0].StackStatus' --output text)" = 'CREATE_COMPLETE'
+          test "$(aws lambda get-function-configuration --function-name minttick-dev-account-proxy --query 'VpcConfig.SubnetIds[0]' --output text)" = 'subnet-071ee24263e10fe7c'
+          echo 'Verified dedicated MintTick private account Lambda; no account networking changes'
+      - name: Publish reviewed Python allowlist code only
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile
+          from pathlib import Path
+          with zipfile.ZipFile('/tmp/minttick-private-account-code.zip','w',zipfile.ZIP_DEFLATED) as archive:
+              archive.write(Path('infra/minttick-domain/account_proxy.py'),arcname='index.py')
+          PY
+          aws lambda update-function-code --function-name minttick-dev-account-proxy \
+            --zip-file fileb:///tmp/minttick-private-account-code.zip \
+            --output json --query '{FunctionName:FunctionName,State:State}'
+          aws lambda wait function-updated --function-name minttick-dev-account-proxy
+          rm -f /tmp/minttick-private-account-code.zip
+          echo 'PASS: reviewed Python account proxy deployed; no CloudFormation, SG, EC2 or DNS mutation'
+      - name: Verify public TLS and deny unauthenticated customer access
+        run: |
+          set -euo pipefail
+          code="$(curl --silent --show-error --location --max-time 15 \
+            --output /dev/null --write-out '%{http_code}' https://api.minttick.com/api/auth/cognito/me)"
+          test "$code" = '401' || { echo "Expected 401 unauthorized, got $code" >&2; exit 2; }
+          code="$(curl --silent --show-error --location --max-time 15 \
+            --output /dev/null --write-out '%{http_code}' https://api.minttick.com/api/admin/users)"
+          test "$code" = '404' || { echo "Expected blocked admin 404, got $code" >&2; exit 2; }
+          echo 'PASS: HTTPS verified, customer account JWT gate and admin route isolation verified'

@@ -73,9 +73,12 @@ wait_health() {
 wait_health "Postgres-backed Java API" "http://127.0.0.1:8080/api/health"
 wait_health "Flutter Web static" "http://127.0.0.1:8088/health"
 wait_health "Flutter Web backend proxy" "http://127.0.0.1:8088/api/health"
+wait_health "Lambda-only private API bridge" "http://10.87.0.10:8081/api/health"
 
-# Fail if a listener escapes loopback via any compose port map.
+# Backend is localhost-only. The web reverse proxy has exactly one additional
+# VPC-private bind, protected at the EC2 security group by a Lambda-SG-only rule.
+# Fail closed on any drift to 0.0.0.0, public IP, extra port, or non-PAPER mode.
 docker compose --env-file .env -f paper-compose.yml config --format json |
-  python3 -c 'import json,sys; d=json.load(sys.stdin); s=d["services"]; assert all(p.get("host_ip")=="127.0.0.1" for n in ("backend","web") for p in s[n].get("ports",[])); assert not s["postgres"].get("ports"); assert s["backend"]["environment"]["TRADING_MODE"]=="PAPER"; print("PAPER deployment verified: only localhost listeners; no LIVE orders")'
+  python3 -c 'import json,sys; d=json.load(sys.stdin); s=d["services"]; ports=lambda n:{(p["host_ip"],int(p["published"]),int(p["target"])) for p in s[n].get("ports",[])}; assert ports("backend")=={("127.0.0.1",8080,8080)}; assert ports("web")=={("127.0.0.1",8088,8080),("10.87.0.10",8081,8080)}; assert not s["postgres"].get("ports"); assert s["backend"]["environment"]["TRADING_MODE"]=="PAPER"; print("PAPER deployment verified: backend loopback; VPC bridge Lambda SG only; no LIVE orders")'
 
 echo "PAPER PostgreSQL, Spring Boot and Flutter Web connected local acceptance passed"
