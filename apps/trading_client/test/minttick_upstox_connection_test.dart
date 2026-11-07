@@ -99,7 +99,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Available margin'), findsOneWidget);
     expect(find.text('₹1250.5'), findsOneWidget);
-    expect(find.textContaining('Live order execution disabled'), findsOneWidget);
+    expect(find.textContaining('Real-money order execution disabled'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
