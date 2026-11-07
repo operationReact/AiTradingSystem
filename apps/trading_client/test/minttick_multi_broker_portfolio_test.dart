@@ -9,6 +9,8 @@ import 'package:trading_client/src/features/trading_rooms/presentation/minttick_
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
+class _Rooms extends Fake implements HttpCustomerRoomRepository {}
+
 class _Angel extends Fake implements HttpCustomerAngelOneRepository {
   @override
   Future<CustomerAngelOneConnection> status() async =>
@@ -75,7 +77,7 @@ void main() {
       home: MintTickCustomerPortfolioPage(
         mode: mode,
         rooms: store,
-        paperRepository: Fake() as HttpCustomerRoomRepository,
+        paperRepository: _Rooms(),
         brokerRepository: _Angel(),
         upstoxRepository: _Upstox(),
         onRooms: () {},
