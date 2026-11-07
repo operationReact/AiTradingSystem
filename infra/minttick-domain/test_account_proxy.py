@@ -98,7 +98,7 @@ class AccountProxyTest(unittest.TestCase):
         anchor="        ZipFile: |\n"
         self.assertEqual(text.count(anchor),1)
         after=text.split(anchor,1)[1].split("\n  AccountHttpApi:",1)[0]
-        embedded="\n".join(row[8:] for row in after.rstrip("\n").split("\n")).rstrip()+"\n"
+        embedded="\n".join(row[10:] for row in after.rstrip("\n").split("\n")).rstrip()+"\n"
         self.assertEqual(embedded,SOURCE.read_text().rstrip()+"\n")
 
 if __name__ == "__main__":
