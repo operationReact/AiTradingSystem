@@ -1,6 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.user.CustomerIdentityStore;
+import in.aitradingsystem.instrument.InstrumentMasterException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -13,9 +14,11 @@ import java.math.BigDecimal;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -60,6 +63,15 @@ public class CustomerExecutionReadinessController {
             Authentication authentication) {
         return noStore(service.preflight(customer(authentication), roomId,
             input.instrumentId(), input.side(), input.quantity(), input.limitPrice()));
+    }
+
+    @ExceptionHandler(InstrumentMasterException.class)
+    ProblemDetail instrumentRejected(InstrumentMasterException ex) {
+        HttpStatus status = "INSTRUMENT_NOT_FOUND".equals(ex.code())
+            ? HttpStatus.NOT_FOUND : HttpStatus.UNPROCESSABLE_ENTITY;
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(status, ex.getMessage());
+        detail.setProperty("code", ex.code());
+        return detail;
     }
 
     private UUID customer(Authentication authentication) {
