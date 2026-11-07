@@ -26,6 +26,9 @@ import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
+import 'features/trading_rooms/data/customer_upstox_repository.dart';
+import 'features/trading_rooms/presentation/minttick_upstox_page.dart';
+import 'features/trading_rooms/presentation/minttick_broker_hub_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_broker_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_home.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
@@ -150,6 +153,19 @@ class _TradingAppState extends State<TradingApp> {
                 onOpen: _openRoom,
               )
             : _overviewPage(),
+        '/brokers': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickBrokerHubPage(
+                angelOne: HttpCustomerAngelOneRepository(_api),
+                upstox: HttpCustomerUpstoxRepository(_api),
+                onAngelOne: () => _navigate('/broker/angel-one'),
+                onUpstox: () => _navigate('/broker/upstox'),
+              )
+            : _overviewPage(),
+        '/broker/upstox': (_) => widget.session.isCustomerAuthenticated
+            ? MintTickUpstoxPage(
+                repository: HttpCustomerUpstoxRepository(_api),
+              )
+            : _overviewPage(),
         '/broker/angel-one': (_) => widget.session.isCustomerAuthenticated
             ? MintTickCustomerBrokerPage(
                 repository: HttpCustomerAngelOneRepository(_api),
@@ -187,7 +203,7 @@ class _TradingAppState extends State<TradingApp> {
                 paperRepository: HttpCustomerRoomRepository(_api),
                 brokerRepository: HttpCustomerAngelOneRepository(_api),
                 onRooms: () => _navigate('/rooms'),
-                onBroker: () => _navigate('/broker/angel-one'),
+                onBroker: () => _navigate('/brokers'),
               )
             : PaperPortfolioPage(repository: HttpPaperTradingRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/orders': (_) => PaperOrdersPage(
@@ -237,6 +253,16 @@ class _TradingAppState extends State<TradingApp> {
         );
       } catch (_) {
         // Bounded session expiry still applies when offline.
+      }
+    }
+    if (widget.session.isCustomerAuthenticated) {
+      try {
+        await _api.postJson(
+          '/api/customer/brokers/upstox/disconnect',
+          timeout: const Duration(seconds: 3),
+        );
+      } catch (_) {
+        // Server session still expires at Upstox's daily cutoff.
       }
     }
     _roomDrafts.clear();
@@ -304,7 +330,7 @@ class _TradingAppState extends State<TradingApp> {
         section: section,
         drafts: _roomDrafts,
         onRooms: () => _navigate('/rooms'),
-        onBroker: () => _navigate('/broker/angel-one'),
+        onBroker: () => _navigate('/brokers'),
       );
 
   Widget _overviewPage() => widget.session.isCustomerAuthenticated
@@ -318,7 +344,7 @@ class _TradingAppState extends State<TradingApp> {
           onPortfolio: () => _navigate('/portfolio'),
           onAccount: () => _navigate('/account'),
           onNotifications: () => _navigate('/notifications'),
-          onBroker: () => _navigate('/broker/angel-one'),
+          onBroker: () => _navigate('/brokers'),
         )
       : OverviewPage(
           session: widget.session,
@@ -364,7 +390,7 @@ class _TradingAppState extends State<TradingApp> {
           room: room,
           repository: HttpCustomerRoomRepository(_api),
           executionRepository: HttpCustomerExecutionRepository(_api),
-          onBroker: () => _navigate('/broker/angel-one'),
+          onBroker: () => _navigate('/brokers'),
           onRoomChanged: _roomDrafts.load,
         ),
       ),
@@ -559,7 +585,7 @@ class _MoreProductSheet extends StatelessWidget {
 
   static const _customerDestinations = <(String, IconData, String, String)>[
     ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room plans'),
-    ('/broker/angel-one', Icons.account_balance_outlined, 'Connect Angel One', 'Your live brokerage data'),
+    ('/brokers', Icons.account_balance_outlined, 'Connected brokers', 'Angel One and Upstox'),
     ('/activity', Icons.history_rounded, 'Mantic Mind activity', 'Decisions and audit history'),
     ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
     ('/account', Icons.person_outline_rounded, 'Account', 'Profile and sign out'),
