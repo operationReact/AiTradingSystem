@@ -91,9 +91,11 @@ public class UpstoxApiClient {
             return result.get("data");
         } catch (RestClientResponseException ex) {
             // Do not log provider responses. Token errors invalidate the session upstream.
-            if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) {
+            if (ex.getStatusCode().value() == 401) {
                 throw new UpstoxProviderException("UPSTOX_SESSION_EXPIRED");
             }
+            // 403 may also mean an endpoint is unavailable to this app
+            // (e.g. static-IP management), not an invalid OAuth session.
             throw new UpstoxProviderException("UPSTOX_READ_UNAVAILABLE");
         } catch (UpstoxProviderException ex) {
             throw ex;
