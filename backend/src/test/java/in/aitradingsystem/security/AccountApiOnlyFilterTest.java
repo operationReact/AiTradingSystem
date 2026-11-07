@@ -32,6 +32,10 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET", roomId + "account");
         assertPasses("GET", roomId + "ledger");
         assertPasses("OPTIONS", roomId + "activate");
+        String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
+        assertPasses("GET", resource + "execution/readiness");
+        assertPasses("POST", resource + "orders/preflight");
+        assertPasses("OPTIONS", resource + "orders/preflight");
         for (String suffix : List.of("status", "funds", "holdings", "positions", "orders")) {
             assertPasses("GET", "/api/customer/brokers/angel-one/" + suffix);
         }
@@ -51,6 +55,11 @@ class AccountApiOnlyFilterTest {
         assertBlocked("POST", "/api/customer/brokers/angel-one/orders");
         String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
         assertBlocked("POST", roomId + "orders");
+        String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
+        assertBlocked("POST", resource + "orders/place");
+        assertBlocked("POST", resource + "execution/readiness");
+        assertBlocked("GET", resource + "orders/preflight");
+        assertBlocked("DELETE", resource + "orders/preflight");
         assertBlocked("GET", roomId + "activate");
         assertBlocked("POST", roomId + "account");
         assertBlocked("PUT", roomId + "ledger");
