@@ -1,0 +1,134 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "MintTick IAM-only recovery for existing EC2 SSM application deploy. CREATE as an independent stack. No S3, EC2, instance settings, public networking, or existing stack updates.",
+  "Resources": {
+    "PaperGithubSsmDeployRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "RoleName": "aitrading-paper-ec2-ssm-deploy",
+        "Description": "Dev-only SSM command and temporary encrypted artifact upload to one existing Mumbai PAPER EC2; no EC2 lifecycle, Terraform or LIVE orders.",
+        "MaxSessionDuration": 3600,
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Federated": "arn:aws:iam::098859530205:oidc-provider/token.actions.githubusercontent.com"
+              },
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {
+                "StringEquals": {
+                  "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+                  "token.actions.githubusercontent.com:sub": "repo:operationReact@215111824/AiTradingSystem@1433875172:ref:refs/heads/dev"
+                }
+              }
+            }
+          ]
+        },
+        "Policies": [
+          {
+            "PolicyName": "aitrading-paper-ec2-ssm-deploy-locked",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Sid": "CheckExactPaperEC2AndSSMReadiness",
+                  "Effect": "Allow",
+                  "Action": [
+                    "ec2:DescribeInstances",
+                    "ssm:DescribeInstanceInformation",
+                    "ssm:GetCommandInvocation"
+                  ],
+                  "Resource": "*",
+                  "Condition": {
+                    "StringEquals": {
+                      "aws:RequestedRegion": "ap-south-1"
+                    }
+                  }
+                },
+                {
+                  "Sid": "CheckExactDailyStopScheduleBeforeAnyDeployment",
+                  "Effect": "Allow",
+                  "Action": "scheduler:GetSchedule",
+                  "Resource": "arn:aws:scheduler:ap-south-1:098859530205:schedule/default/aitrading-paper-nightly-stop"
+                },
+                {
+                  "Sid": "SendOnlyAWSLinuxShellSSMDocumentMumbai",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": "arn:aws:ssm:ap-south-1::document/AWS-RunShellScript"
+                },
+                {
+                  "Sid": "SendOnlyExactTaggedPaperInstance",
+                  "Effect": "Allow",
+                  "Action": "ssm:SendCommand",
+                  "Resource": "arn:aws:ec2:ap-south-1:098859530205:instance/i-09c01b470fb39b85a",
+                  "Condition": {
+                    "StringEquals": {
+                      "ssm:resourceTag/Application": "ai-trading-system",
+                      "ssm:resourceTag/Environment": "paper"
+                    }
+                  }
+                },
+                {
+                  "Sid": "UploadOnlyShortLivedPaperReleaseAssets",
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:PutObject",
+                    "s3:GetObject"
+                  ],
+                  "Resource": "arn:aws:s3:::aitrading-paper-releases-098859530205/releases/*"
+                },
+                {
+                  "Sid": "ExplicitlyDenyCloudProvisionAndTrades",
+                  "Effect": "Deny",
+                  "Action": [
+                    "ec2:StartInstances",
+                    "ec2:StopInstances",
+                    "ec2:RunInstances",
+                    "ec2:TerminateInstances",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "ssm:StartSession",
+                    "iam:PassRole",
+                    "iam:CreateRole",
+                    "rds:CreateDBInstance",
+                    "scheduler:UpdateSchedule",
+                    "s3:DeleteObject",
+                    "s3:DeleteBucket"
+                  ],
+                  "Resource": "*"
+                }
+              ]
+            }
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Application",
+            "Value": "ai-trading-system"
+          },
+          {
+            "Key": "Environment",
+            "Value": "paper"
+          },
+          {
+            "Key": "Capability",
+            "Value": "ssm-locked-deploy"
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "SsmDeployRoleArn": {
+      "Description": "Existing dev workflow must assume this role to inspect and deploy to exact one PAPER EC2 host.",
+      "Value": {
+        "Fn::GetAtt": [
+          "PaperGithubSsmDeployRole",
+          "Arn"
+        ]
+      }
+    }
+  }
+}
