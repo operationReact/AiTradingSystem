@@ -154,6 +154,10 @@ resource "aws_instance" "account" {
   }
   lifecycle {
     prevent_destroy = true
+    precondition {
+      condition     = var.hosted_zone_id != "" && var.account_domain != ""
+      error_message = "Paid provisioning requires owned account domain and Route53 hosted zone."
+    }
   }
   tags = local.tags
   depends_on = [aws_route_table_association.account, aws_iam_role_policy_attachment.ssm]
