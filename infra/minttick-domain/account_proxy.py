@@ -5,6 +5,7 @@ security group; the API Gateway JWT authorizer gates customer paths.
 No management, research, admin, LIVE trading, or broker credentials exposed.
 """
 import base64
+import binascii
 import json
 import re
 import urllib.error
@@ -19,6 +20,9 @@ EXACT = {
     ("GET", "/api/customer/trading-rooms"),
     ("POST", "/api/customer/trading-rooms"),
     ("GET", "/api/customer/brokers/angel-one/status"),
+    ("GET", "/api/customer/brokers/angel-one/configured-login"),
+    ("POST", "/api/customer/brokers/angel-one/connect-configured"),
+    ("POST", "/api/customer/brokers/angel-one/disconnect"),
     ("GET", "/api/customer/brokers/angel-one/funds"),
     ("GET", "/api/customer/brokers/angel-one/holdings"),
     ("GET", "/api/customer/brokers/angel-one/positions"),
@@ -74,13 +78,17 @@ def handler(event, context):
         if not isinstance(raw, str):
             raise ValueError("bad body")
         body = base64.b64decode(raw, validate=True) if event.get("isBase64Encoded") else raw.encode()
-    except (ValueError, UnicodeError):
+    except (ValueError, UnicodeError, binascii.Error):
         return reply(400, {"error": "INVALID_BODY"})
     if len(body) > MAX_BODY:
         return reply(413, {"error": "BODY_TOO_LARGE"})
     if method == "GET" and body:
         return reply(400, {"error": "INVALID_BODY"})
-    if method == "POST" and path == "/api/auth/cognito/provision" and body:
+    if method == "POST" and path in {
+        "/api/auth/cognito/provision",
+        "/api/customer/brokers/angel-one/connect-configured",
+        "/api/customer/brokers/angel-one/disconnect",
+    } and body:
         return reply(400, {"error": "INVALID_BODY"})
     internal_path = "/api/health" if is_health else path
     if query:
