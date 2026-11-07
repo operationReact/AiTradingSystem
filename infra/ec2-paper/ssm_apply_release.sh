@@ -26,8 +26,25 @@ trap cleanup EXIT
 chmod 0700 "$work"
 bundle="$work/release.tar"
 stage=artifact_download
-aws s3 cp "s3://$bucket/releases/$sha/$expected_hash/release.tar" "$bundle" \
-  --region ap-south-1 --no-progress --only-show-errors
+# Inspect S3 errors locally and reveal only a fixed, non-secret category.
+# Never forward raw AWS CLI output or temporary credentials to GitHub logs.
+if ! aws s3 cp "s3://$bucket/releases/$sha/$expected_hash/release.tar" "$bundle" \
+  --region ap-south-1 --no-progress --only-show-errors 2>"$work/s3-download.err"; then
+  reason=unknown
+  if grep -Eiq 'AccessDenied|Forbidden|403' "$work/s3-download.err"; then
+    reason=access_denied
+  elif grep -Eiq 'NoSuchKey|Not Found|404' "$work/s3-download.err"; then
+    reason=object_missing
+  elif grep -Eiq 'No space left|Errno 28' "$work/s3-download.err"; then
+    reason=disk_full
+  elif grep -Eiq 'Unable to locate credentials|NoCredentials|credential' "$work/s3-download.err"; then
+    reason=credentials_unavailable
+  elif grep -Eiq 'Could not connect|Name or service not known|timed out|EndpointConnectionError' "$work/s3-download.err"; then
+    reason=network_unavailable
+  fi
+  printf 'MINTTICK_S3_DOWNLOAD_FAILURE:%s\n' "$reason" >&2
+  exit 2
+fi
 stage=artifact_integrity
 printf '%s  %s\n' "$expected_hash" "$bundle" | sha256sum -c - >/dev/null || {
   echo "Release SHA256 mismatch; no Docker image will be loaded" >&2

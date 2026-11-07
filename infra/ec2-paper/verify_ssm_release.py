@@ -193,6 +193,15 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
                 }
                 combined = (str(result.get("StandardOutputContent") or "") +
                             "\n" + str(result.get("StandardErrorContent") or ""))
+                # Exact allowlist for the deliberately categorized S3 client
+                # error; raw AWS output is never included in run logs.
+                download_errors = {
+                    "access_denied", "object_missing", "disk_full",
+                    "credentials_unavailable", "network_unavailable", "unknown",
+                }
+                issue = re.search(r"MINTTICK_S3_DOWNLOAD_FAILURE:([a-z_]+)", combined)
+                if issue and issue.group(1) in download_errors:
+                    raise Rejected(f"SSM artifact download failed: {issue.group(1)}")
                 match = re.search(r"MINTTICK_DEPLOY_FAILED_STAGE:([a-z_]+)", combined)
                 if match and match.group(1) in stages:
                     raise Rejected(f"SSM deploy failed at safe stage: {match.group(1)}")
