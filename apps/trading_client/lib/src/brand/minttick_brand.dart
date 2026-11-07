@@ -81,19 +81,19 @@ class MintTickLockup extends StatelessWidget {
             child: Transform.translate(
               offset: Offset(wordmarkOffset, 0),
               child: Text.rich(
-          TextSpan(children: [
-            TextSpan(text: 'Mint', style: TextStyle(color: scheme.onSurface)),
-            TextSpan(text: 'Tick', style: TextStyle(color: mint)),
-          ]),
-          key: const ValueKey('minttick-wordmark'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: fontSize,
-            letterSpacing: -0.6,
-            height: 1.05,
-          ),
+                TextSpan(children: [
+                  TextSpan(text: 'Mint', style: TextStyle(color: scheme.onSurface)),
+                  TextSpan(text: 'Tick', style: TextStyle(color: mint)),
+                ]),
+                key: const ValueKey('minttick-wordmark'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: fontSize,
+                  letterSpacing: -0.6,
+                  height: 1.05,
+                ),
               ),
             ),
           ),
