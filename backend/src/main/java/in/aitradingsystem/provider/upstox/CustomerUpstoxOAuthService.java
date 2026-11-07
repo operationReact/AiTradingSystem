@@ -1,0 +1,201 @@
+package in.aitradingsystem.provider.upstox;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import in.aitradingsystem.provider.upstox.UpstoxApiClient.UpstoxProviderException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.Base64;
+import java.util.HexFormat;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+/**
+ * Customer-bound Upstox OAuth authorization-code flow (read-only).
+ * Only the platform has the OAuth client secret. Users authenticate on Upstox.
+ *
+ * <p>Pending state and access tokens are deliberately process-local for this
+ * first integration: no unencrypted tokens or refresh credentials are stored
+ * in PostgreSQL, frontend, logs, or the OAuth callback page. Multi-replica
+ * production deployment requires a shared encrypted session store and
+ * transactional one-time state consumption.
+ */
+@Service
+public class CustomerUpstoxOAuthService {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final LocalTime EXPIRES = LocalTime.of(3, 30);
+    private static final long STATE_TTL_SECONDS = 300;
+    private static final int MAX_PENDING = 10_000;
+    private final SecureRandom secureRandom = new SecureRandom();
+    private final ConcurrentHashMap<String, Pending> pending = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, String> mostRecent = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, BrokerSession> sessions = new ConcurrentHashMap<>();
+    private final UpstoxProperties props;
+    private final UpstoxApiClient api;
+    private final Clock clock;
+
+    @Autowired
+    public CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api) {
+        this(props, api, Clock.systemUTC());
+    }
+
+    CustomerUpstoxOAuthService(UpstoxProperties props, UpstoxApiClient api, Clock clock) {
+        this.props = props;
+        this.api = api;
+        this.clock = clock;
+    }
+
+    private record Pending(UUID customerId, Instant expiresAt) {}
+    private record BrokerSession(String accessToken, String brokerUserId, Instant expiresAt) {
+        @Override public String toString() { return "BrokerSession[redacted]"; }
+    }
+    public record StartResponse(String authorizationUrl) {}
+    public record Status(boolean available, boolean connected, String broker,
+                         String accountMasked, Instant expiresAt, boolean orderExecutionEnabled) {}
+    public record AccountData(String provider, Instant fetchedAt, JsonNode data) {}
+
+    public StartResponse start(UUID customerId) {
+        if (!props.configured()) {
+            throw new UpstoxProviderException("UPSTOX_APP_NOT_CONFIGURED");
+        }
+        Instant now = clock.instant();
+        pending.entrySet().removeIf(entry -> now.isAfter(entry.getValue().expiresAt()));
+        if (pending.size() >= MAX_PENDING) {
+            throw new UpstoxProviderException("UPSTOX_AUTH_CAPACITY_REACHED");
+        }
+        byte[] random = new byte[32];
+        secureRandom.nextBytes(random);
+        String state = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
+        String hashed = sha256(state);
+        String previous = mostRecent.put(customerId, hashed);
+        if (previous != null) pending.remove(previous);
+        pending.put(hashed, new Pending(customerId, now.plusSeconds(STATE_TTL_SECONDS)));
+        String url = "https://api.upstox.com/v2/login/authorization/dialog"
+            + "?response_type=code"
+            + "&client_id=" + encode(props.clientId())
+            + "&redirect_uri=" + encode(props.redirectUri())
+            + "&state=" + encode(state);
+        return new StartResponse(url);
+    }
+
+    /**
+     * Callback has no MintTick JWT; the unpredictable, one-time state binds
+     * the Upstox response to the initiating authenticated customer UUID.
+     */
+    public void complete(String state, String code) {
+        if (state == null || !state.matches("[A-Za-z0-9_-]{43}")) {
+            throw new UpstoxProviderException("UPSTOX_OAUTH_STATE_INVALID");
+        }
+        String hashed = sha256(state);
+        Pending flow = pending.remove(hashed);
+        if (flow == null || !mostRecent.remove(flow.customerId(), hashed)
+                || !clock.instant().isBefore(flow.expiresAt())) {
+            throw new UpstoxProviderException("UPSTOX_OAUTH_STATE_INVALID");
+        }
+        if (code == null || code.isBlank() || code.length() > 2048) {
+            throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
+        }
+        JsonNode response = api.exchangeCode(props, code);
+        String token = response.path("access_token").asText("");
+        if (token.isBlank() || token.length() > 16384) {
+            throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
+        }
+        // Always verify the account identity with the provider before binding.
+        JsonNode profile = api.profile(token);
+        String broker = profile.path("broker").asText("");
+        String brokerUser = profile.path("user_id").asText("");
+        if (!"UPSTOX".equalsIgnoreCase(broker) || brokerUser.isBlank()
+                || !profile.path("is_active").asBoolean(false)) {
+            throw new UpstoxProviderException("UPSTOX_PROFILE_REJECTED");
+        }
+        for (var existing : sessions.entrySet()) {
+            if (!existing.getKey().equals(flow.customerId())
+                    && !clock.instant().isAfter(existing.getValue().expiresAt())
+                    && existing.getValue().brokerUserId().equals(brokerUser)) {
+                throw new UpstoxProviderException("UPSTOX_ACCOUNT_ALREADY_CONNECTED");
+            }
+        }
+        Instant expires = nextTokenExpiry(clock.instant());
+        sessions.put(flow.customerId(), new BrokerSession(token, brokerUser, expires));
+    }
+
+    public Status status(UUID customerId) {
+        BrokerSession session = validSession(customerId);
+        return new Status(props.configured(), session != null, "UPSTOX",
+            session == null ? null : mask(session.brokerUserId()),
+            session == null ? null : session.expiresAt(), false);
+    }
+
+    public void disconnect(UUID customerId) {
+        sessions.remove(customerId);
+        String hashed = mostRecent.remove(customerId);
+        if (hashed != null) pending.remove(hashed);
+    }
+
+    public AccountData funds(UUID user) { return read(user, api::funds); }
+    public AccountData holdings(UUID user) { return read(user, api::holdings); }
+    public AccountData positions(UUID user) { return read(user, api::positions); }
+    public AccountData orders(UUID user) { return read(user, api::orders); }
+    public AccountData staticIps(UUID user) { return read(user, api::staticIps); }
+
+    private AccountData read(UUID customerId, BrokerRead operation) {
+        BrokerSession session = validSession(customerId);
+        if (session == null) throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
+        try {
+            JsonNode result = operation.fetch(session.accessToken());
+            return new AccountData("UPSTOX", clock.instant(), Objects.requireNonNull(result));
+        } catch (UpstoxProviderException ex) {
+            if ("UPSTOX_SESSION_EXPIRED".equals(ex.code())) {
+                sessions.remove(customerId, session);
+            }
+            throw ex;
+        }
+    }
+
+    private BrokerSession validSession(UUID user) {
+        BrokerSession existing = sessions.get(user);
+        if (existing != null && !clock.instant().isBefore(existing.expiresAt())) {
+            sessions.remove(user, existing);
+            return null;
+        }
+        return existing;
+    }
+
+    private static Instant nextTokenExpiry(Instant from) {
+        ZonedDateTime local = from.atZone(IST);
+        var date = local.toLocalTime().isBefore(EXPIRES)
+            ? local.toLocalDate() : local.toLocalDate().plusDays(1);
+        return date.atTime(EXPIRES).atZone(IST).toInstant();
+    }
+
+    private static String mask(String identifier) {
+        return "***" + identifier.substring(Math.max(0, identifier.length() - 3));
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    }
+
+    private static String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 unavailable", ex);
+        }
+    }
+
+    @FunctionalInterface private interface BrokerRead {
+        JsonNode fetch(String token);
+    }
+}
