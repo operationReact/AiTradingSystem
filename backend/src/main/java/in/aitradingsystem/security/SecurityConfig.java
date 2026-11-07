@@ -56,6 +56,7 @@ public class SecurityConfig {
                 // Admin routes must be evaluated before the generic authenticated GET rule below.
                 .requestMatchers("/api/risk/**", "/api/execution-policy/**", "/api/users/**", "/api/admin/**")
                     .hasAnyRole("ADMIN", "OPERATOR")
+                .requestMatchers("/api/customer/**").hasRole("CUSTOMER")
                 .requestMatchers("/api/paper/**", "/api/research/**", "/api/approvals/**", "/api/backtests/**")
                     .hasAnyRole("TRADER", "ADMIN", "OPERATOR")
                 // A valid, verified Cognito access JWT can provision an
