@@ -628,7 +628,9 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         });
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
   }
 
@@ -675,7 +677,9 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       if (mounted) setState(() =>
           _error = 'Could not activate your Paper wallet. Please retry.');
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() => _busy = false);
+      }
     }
     if (_wallet != null && mounted) {
       await _loadWallet();
