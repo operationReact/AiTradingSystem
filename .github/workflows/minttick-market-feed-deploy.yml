@@ -145,6 +145,86 @@ jobs:
           set -euo pipefail
           terraform untaint -lock-timeout=90s aws_iam_role.feed
           echo 'PASS: only dedicated feed role state taint cleared; no AWS IAM mutation'
+      - name: Inspect exact partial feed Lambda state without secrets
+        id: lambda-state
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          umask 077
+          terraform state pull > "$RUNNER_TEMP/feed-lambda-state.json"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          data=json.loads((Path(os.environ["RUNNER_TEMP"])/"feed-lambda-state.json").read_text())
+          resources=[r for r in data.get("resources",[])
+             if r.get("mode")=="managed" and r.get("type")=="aws_lambda_function"
+             and r.get("name")=="feed"]
+          assert len(resources)<=1, "BLOCKED: unexpected duplicate managed feed Lambdas"
+          present=False
+          tainted=False
+          if resources:
+              instances=resources[0].get("instances",[])
+              assert len(instances)==1, "BLOCKED: unexpected Lambda state instances"
+              item=instances[0]
+              attrs=item.get("attributes") or {}
+              assert attrs.get("function_name")=="minttick-dev-angelone-feed"
+              assert attrs.get("arn")=="arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed"
+              present=True
+              tainted=item.get("status")=="tainted"
+          with open(os.environ["GITHUB_OUTPUT"],"a") as output:
+              output.write("tracked="+str(present).lower()+"\n")
+              output.write("tainted="+str(tainted).lower()+"\n")
+          print("PASS: checked state for only dedicated MintTick private feed Lambda")
+          PY
+          rm -f "$RUNNER_TEMP/feed-lambda-state.json"
+      - name: Verify partial Lambda is the exact private read-only runtime
+        id: lambda-identity
+        run: |
+          set -euo pipefail
+          umask 077
+          if aws lambda get-function-configuration --function-name minttick-dev-angelone-feed \
+             --output json > "$RUNNER_TEMP/feed-lambda-identity.json" 2>/dev/null; then
+            python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          lam=json.loads((Path(os.environ["RUNNER_TEMP"])/"feed-lambda-identity.json").read_text())
+          assert lam["FunctionName"]=="minttick-dev-angelone-feed"
+          assert lam["FunctionArn"]=="arn:aws:lambda:ap-south-1:098859530205:function:minttick-dev-angelone-feed"
+          assert lam["Role"]=="arn:aws:iam::098859530205:role/minttick-dev-angelone-feed-lambda"
+          assert lam["Runtime"]=="python3.12"
+          assert lam["Handler"]=="lambda_function.handler"
+          assert lam["PackageType"]=="Zip"
+          assert lam["Architectures"]==["arm64"]
+          assert lam["MemorySize"]==256 and lam["Timeout"]==25
+          assert not (lam.get("VpcConfig") or {}).get("VpcId")
+          assert not lam.get("Layers")
+          assert not (lam.get("Environment") or {}).get("Variables")
+          print("PASS: exact IAM-only read-only Lambda runtime identity verified")
+          PY
+            echo 'existing=true' >> "$GITHUB_OUTPUT"
+          else
+            if [ "${{ steps.lambda-state.outputs.tracked }}" = 'true' ]; then
+              echo 'BLOCKED: previously managed Lambda is unexpectedly missing' >&2
+              exit 2
+            fi
+            echo 'existing=false' >> "$GITHUB_OUTPUT"
+            echo 'No prior Lambda exists; normal reviewed create plan will run'
+          fi
+          rm -f "$RUNNER_TEMP/feed-lambda-identity.json"
+      - name: Import only an exact previously created feed Lambda into isolated state
+        if: steps.lambda-state.outputs.tracked == 'false' && steps.lambda-identity.outputs.existing == 'true'
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          terraform import -lock-timeout=90s aws_lambda_function.feed minttick-dev-angelone-feed
+          echo 'PASS: recovered only pre-existing dedicated feed Lambda Terraform state'
+      - name: Untaint verified partial private feed Lambda without recreating it
+        if: steps.lambda-state.outputs.tainted == 'true' && steps.lambda-identity.outputs.existing == 'true'
+        working-directory: infra/minttick-market-feed
+        run: |
+          set -euo pipefail
+          terraform untaint -lock-timeout=90s aws_lambda_function.feed
+          echo 'PASS: cleared exact feed Lambda state taint; no AWS resource mutation'
       - name: Validate and plan exact market-feed resources
         working-directory: infra/minttick-market-feed
         shell: bash
