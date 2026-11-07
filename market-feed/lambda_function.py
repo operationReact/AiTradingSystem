@@ -304,6 +304,8 @@ def handler(event, context):
             operation = event.get("operation")
             if operation not in ("status", "quote", "candles", "broker-connect", "broker-read"):
                 raise FeedError("DISALLOWED_OPERATION")
+            if operation == "broker-read" and event.get("resource") not in ACCOUNT_PATHS:
+                raise FeedError("DISALLOWED_OPERATION")
             credentials = _secrets()
             if operation == "status":
                 return {"ok": True, "source": "ANGEL_ONE_SMARTAPI", "configured": True}
