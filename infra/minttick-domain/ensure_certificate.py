@@ -106,7 +106,7 @@ def get_validation_records(arn: str) -> tuple[list[dict], str]:
                 raise RuntimeError("ACM validation rejected: unexpected record type")
             if not CNAME_NAME.fullmatch(name):
                 raise RuntimeError("ACM validation rejected: unexpected CNAME name shape")
-            if not name.endswith("." + domain + "."):
+            if name.split(".", 1)[1].rstrip(".") != domain:
                 raise RuntimeError("ACM validation rejected: record/domain mismatch")
             if not CNAME_VALUE.fullmatch(value):
                 raise RuntimeError("ACM validation rejected: unexpected CNAME target shape")
