@@ -22,7 +22,7 @@ class CheapPaperEC2Policy(unittest.TestCase):
         self.assertIn('default     = "ap-south-1"', variables)
         self.assertIn('var.aws_region == "ap-south-1"', variables)
         self.assertIn('default     = "t4g.medium"', variables)
-        self.assertIn('var.instance_type == "t4g.medium"', variables)
+        self.assertIn('contains(["t4g.medium", "m6g.medium", "m7g.medium"], var.instance_type)', variables)
         self.assertIn('default     = ""', variables)
         self.assertIn('PROVISION_PAPER_EC2_4GB', variables)
         self.assertIn('enabled   = var.approve_paid_provision == "PROVISION_PAPER_EC2_4GB"', main)
@@ -42,7 +42,8 @@ class CheapPaperEC2Policy(unittest.TestCase):
             'disable_api_termination              = true',
             'prevent_destroy = true',
             'instance_initiated_shutdown_behavior = "stop"',
-            'credit_specification {',
+            'dynamic "credit_specification" {',
+            'for_each = var.instance_type == "t4g.medium" ? [1] : []',
             'cpu_credits = "standard"',
             'AmazonSSMManagedInstanceCore',
             'No ingress rules',
