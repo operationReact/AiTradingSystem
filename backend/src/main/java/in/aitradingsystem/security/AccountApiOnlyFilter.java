@@ -33,6 +33,10 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/brokers/angel-one/holdings",
         "/api/customer/brokers/angel-one/positions",
         "/api/customer/brokers/angel-one/orders");
+    private static final Set<String> CUSTOMER_MARKET_READS = Set.of(
+        "/api/customer/market-data/instruments",
+        "/api/customer/market-data/instruments/status",
+        "/api/customer/market-data/quotes");
     private static final Set<String> UPSTOX_READS = Set.of(
         "/api/customer/brokers/upstox/status",
         "/api/customer/brokers/upstox/funds",
@@ -85,6 +89,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (CUSTOMER_ROOM_DETAIL.matcher(path).matches()
                 && Set.of("GET", "DELETE", "OPTIONS").contains(method))
             || (BROKER_READS.contains(path)
+                && Set.of("GET", "OPTIONS").contains(method))
+            || (CUSTOMER_MARKET_READS.contains(path)
                 && Set.of("GET", "OPTIONS").contains(method))
             || (BROKER_WRITES.contains(path)
                 && Set.of("POST", "OPTIONS").contains(method))
