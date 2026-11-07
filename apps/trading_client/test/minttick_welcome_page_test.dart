@@ -46,6 +46,10 @@ void main() {
       await pumpWelcome(tester, width: width);
       expect(find.byType(MintTickLockup), findsOneWidget);
       expect(find.byType(MintTickMark), findsOneWidget);
+      // Regression: previously the outer 390px box was centered while
+      // the visible mark + wordmark remained left-aligned within it.
+      expect(tester.getCenter(find.byType(MintTickLockup)).dx,
+          closeTo(width / 2, 1.5));
       expect(find.text('Sign in'), findsOneWidget);
       expect(find.text('Create account'), findsOneWidget);
       expect(find.byKey(const ValueKey('minttick-inline-username')), findsOneWidget);
@@ -58,6 +62,41 @@ void main() {
     });
   }
 
+
+  testWidgets('logo has a visible finite entrance without shifting sign-in fields',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const MaterialApp(home: MintTickWelcomePage()));
+
+    MintTickLockup logo = tester.widget(find.byType(MintTickLockup));
+    final initialUsernameY = tester.getTopLeft(
+      find.byKey(const ValueKey('minttick-inline-username')),
+    ).dy;
+    expect(logo.markScale, lessThan(0.85));
+    expect(logo.wordmarkOpacity, 0);
+
+    await tester.pump(const Duration(milliseconds: 850));
+    logo = tester.widget(find.byType(MintTickLockup));
+    expect(logo.markScale, greaterThan(0.95));
+    expect(logo.wordmarkOpacity, greaterThan(0.0));
+    expect(logo.wordmarkOpacity, lessThan(1.0));
+
+    await tester.pumpAndSettle();
+    logo = tester.widget(find.byType(MintTickLockup));
+    expect(logo.markScale, closeTo(1.0, 0.001));
+    expect(logo.markOpacity, 1.0);
+    expect(logo.wordmarkOpacity, 1.0);
+    expect(logo.wordmarkOffset, 0);
+    expect(tester.getCenter(find.byType(MintTickLockup)).dx,
+        closeTo(195.0, 1.5));
+    expect(tester.getTopLeft(
+      find.byKey(const ValueKey('minttick-inline-username')),
+    ).dy, closeTo(initialUsernameY, 1.0));
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('real TradingApp first launch shows sign in and create account, not Done',
       (tester) async {
@@ -76,6 +115,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MintTickMark), findsOneWidget);
+    final staticLogo = tester.widget<MintTickLockup>(
+        find.byType(MintTickLockup));
+    expect(staticLogo.markScale, closeTo(1.0, 0.001));
+    expect(staticLogo.wordmarkOpacity, 1.0);
     expect(find.byKey(const ValueKey('minttick-welcome-sign-in')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-welcome-create-account')),
         findsOneWidget);
