@@ -182,6 +182,20 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
             print(f"SSM {action} completed successfully; no cloud changes outside exact host", flush=True)
             return
         if status in {"Cancelled", "Failed", "TimedOut", "Cancelling"}:
+            # Permit only explicitly enumerated stage identifiers from the
+            # reviewed deploy script, NEVER raw SSM stdout/stderr (may contain
+            # instance secrets, database details, or transient credentials).
+            if action == "deploy":
+                stages = {
+                    "host_precheck", "artifact_download",
+                    "artifact_integrity", "archive_validation",
+                    "image_load", "host_activation",
+                }
+                combined = (str(result.get("StandardOutputContent") or "") +
+                            "\n" + str(result.get("StandardErrorContent") or ""))
+                match = re.search(r"MINTTICK_DEPLOY_FAILED_STAGE:([a-z_]+)", combined)
+                if match and match.group(1) in stages:
+                    raise Rejected(f"SSM deploy failed at safe stage: {match.group(1)}")
             raise Rejected(f"SSM {action} did not pass host validation ({status})")
         if status not in {"Pending", "InProgress", "Delayed"}:
             raise Rejected("SSM returned an unexpected status")
