@@ -35,20 +35,29 @@ class _MintTickBrokerHubPageState extends State<MintTickBrokerHubPage> {
     _refresh();
   }
 
+  Future<Object?> _angelStatus() async {
+    try { return await widget.angelOne.status(); } catch (_) { return null; }
+  }
+
+  Future<Object?> _upstoxStatus() async {
+    try { return await widget.upstox.status(); } catch (_) { return null; }
+  }
+
   Future<void> _refresh() async {
     if (_busy) return;
     setState(() => _busy = true);
     final results = await Future.wait<Object?>([
-      widget.angelOne.status().catchError((Object _) => null),
-      widget.upstox.status().catchError((Object _) => null),
+      _angelStatus(), _upstoxStatus(),
     ]);
-    if (mounted) setState(() {
-      _angelOne = results[0] is CustomerAngelOneConnection
-          ? results[0] as CustomerAngelOneConnection : null;
-      _upstox = results[1] is CustomerUpstoxStatus
-          ? results[1] as CustomerUpstoxStatus : null;
-      _busy = false;
-    });
+    if (mounted) {
+      setState(() {
+        _angelOne = results[0] is CustomerAngelOneConnection
+            ? results[0] as CustomerAngelOneConnection : null;
+        _upstox = results[1] is CustomerUpstoxStatus
+            ? results[1] as CustomerUpstoxStatus : null;
+        _busy = false;
+      });
+    }
   }
 
   @override
