@@ -41,7 +41,7 @@ Future<void> main() async {
     repositoryFactory: () => HttpHealthRepository(session: session),
     session: session,
     initialRoute: session.isCustomerAuthenticated
-        ? '/account'
+        ? '/'
         : (session.isAuthenticated ? '/' : '/welcome'),
   ));
 }
