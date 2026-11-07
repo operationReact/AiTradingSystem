@@ -49,10 +49,12 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       if (!mounted) return;
       setState(() { _connection = result; _data = null; _dataLabel = null; });
     } catch (_) {
-      if (mounted) setState(() {
-        _connection = null;
-        _error = 'Broker status could not be verified. Please retry.';
-      });
+      if (mounted) {
+        setState(() {
+          _connection = null;
+          _error = 'Broker status could not be verified. Please retry.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() => _busy = false);
@@ -77,10 +79,12 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         _data = null;
       });
     } catch (_) {
-      if (mounted) setState(() {
-        _error = 'Angel One did not confirm the connection. Verify your '
-            'details, current TOTP and broker API access, then retry.';
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Angel One did not confirm the connection. Verify your '
+              'details, current TOTP and broker API access, then retry.';
+        });
+      }
     } finally {
       // One-time authentication secrets must not remain in editable controls.
       _pin.clear();
@@ -115,9 +119,11 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       final data = await request();
       if (mounted) setState(() => _data = data);
     } catch (_) {
-      if (mounted) setState(() => _error =
-          'Broker $label could not be loaded. The session may have expired '
-          'or the provider may be rate limiting requests.');
+      if (mounted) {
+        setState(() => _error =
+            'Broker $label could not be loaded. The session may have expired '
+            'or the provider may be rate limiting requests.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
