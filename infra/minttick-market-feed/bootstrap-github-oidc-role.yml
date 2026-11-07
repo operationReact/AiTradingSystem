@@ -48,6 +48,19 @@ Resources:
                   - lambda:CreateFunction
                   - lambda:GetFunction
                   - lambda:GetFunctionConfiguration
+                  # Terraform reads these metadata endpoints when refreshing
+                  # the exact dedicated Lambda, including partially created
+                  # functions. These are read-only and ARN-restricted below.
+                  - lambda:GetFunctionCodeSigningConfig
+                  - lambda:GetFunctionConcurrency
+                  - lambda:GetRuntimeManagementConfig
+                  - lambda:GetFunctionRecursionConfig
+                  - lambda:GetFunctionEventInvokeConfig
+                  - lambda:GetFunctionUrlConfig
+                  - lambda:GetPolicy
+                  - lambda:ListAliases
+                  - lambda:ListFunctionEventInvokeConfigs
+                  - lambda:ListFunctionUrlConfigs
                   - lambda:UpdateFunctionCode
                   - lambda:UpdateFunctionConfiguration
                   - lambda:DeleteFunction
