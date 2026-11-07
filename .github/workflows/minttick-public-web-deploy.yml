@@ -1,0 +1,128 @@
+name: MintTick - public Flutter Web hosting and verified release
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/bootstrap-public-web.yml'
+      - '.github/workflows/minttick-public-web-deploy.yml'
+      - 'infra/minttick-domain/requests/publish-web.json'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/publish-web.json'
+permissions:
+  contents: read
+concurrency:
+  group: minttick-web-public-deploy-dev
+  cancel-in-progress: false
+jobs:
+  validate-template:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate standalone CloudFormation web stack
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet cfn-lint
+          cfn-lint infra/minttick-domain/bootstrap-public-web.yml
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("infra/minttick-domain/bootstrap-public-web.yml").read_text()
+          for required in ("Z007211128LFW2NUELIKC", "minttick.com", "www.minttick.com", "AWS::CloudFront::Distribution", "OriginAccessControlId", "PublicAccessBlockConfiguration"):
+              assert required in s, "Missing required DNS/security contract"
+          assert "api.minttick.com." not in s, "Do not route the API until the private account edge is ready"
+          PY
+  publish:
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    needs: validate-template
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file MintTick web release request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/publish-web.json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path("infra/minttick-domain/requests/publish-web.json").read_text())
+          expected={
+            "application":"MintTick",
+            "environment":"dev",
+            "aws_account":"098859530205",
+            "site":"www.minttick.com",
+            "operation":"publish-cloudfront-web",
+            "authorization":"USER_APPROVED_MINTTICK_PUBLIC_WEB_2026-11-07"
+          }
+          assert actual==expected, "Unexpected public website deployment request"
+          PY
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - name: Resolve Flutter and build release for real HTTPS API
+        working-directory: apps/trading_client
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter analyze
+          flutter test
+          flutter build web --release \
+            --dart-define=API_BASE_URL=https://api.minttick.com \
+            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+            --dart-define=MINTTICK_COGNITO_USER_POOL_ID=ap-south-1_jz2T8qbiY \
+            --dart-define=MINTTICK_COGNITO_CLIENT_ID=6jm18v2mdpcfraip92hrjhqjnd
+          test -s build/web/index.html
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-web-github-publish
+          aws-region: us-east-1
+          role-session-name: minttick-web-${{ github.run_id }}
+      - name: Verify exact AWS account and existing web hosting stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].StackStatus" --output text | grep -qx 'CREATE_COMPLETE'
+          bucket="$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].Outputs[?OutputKey=='WebBucketName'].OutputValue|[0]" --output text)"
+          distribution="$(aws cloudformation describe-stacks --stack-name minttick-web-public \
+            --query "Stacks[0].Outputs[?OutputKey=='CloudFrontDistributionId'].OutputValue|[0]" --output text)"
+          test "$bucket" = "minttick-web-098859530205-us-east-1"
+          test "$distribution" != "None" && test -n "$distribution"
+          echo "MINTTICK_WEB_BUCKET=$bucket" >> "$GITHUB_ENV"
+          echo "MINTTICK_WEB_DISTRIBUTION=$distribution" >> "$GITHUB_ENV"
+      - name: Upload only the reviewed Flutter Web release to private S3 bucket
+        run: |
+          set -euo pipefail
+          aws s3 sync apps/trading_client/build/web/ "s3://$MINTTICK_WEB_BUCKET/" \
+            --delete --only-show-errors \
+            --cache-control "no-store, max-age=0, must-revalidate"
+      - name: Invalidate CloudFront and verify release
+        run: |
+          set -euo pipefail
+          invalidation="$(aws cloudfront create-invalidation --distribution-id "$MINTTICK_WEB_DISTRIBUTION" \
+            --paths '/*' --query Invalidation.Id --output text)"
+          aws cloudfront wait invalidation-completed --distribution-id "$MINTTICK_WEB_DISTRIBUTION" \
+            --id "$invalidation"
+          for attempt in $(seq 1 20); do
+            if curl -fsSL --max-time 20 https://www.minttick.com/ | grep -qi flutter; then
+              echo "PASS: https://www.minttick.com serves Flutter Web from AWS CloudFront"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "BLOCKED: public HTTPS Flutter Web smoke did not pass" >&2
+          exit 2
