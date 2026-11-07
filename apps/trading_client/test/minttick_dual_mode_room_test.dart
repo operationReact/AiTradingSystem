@@ -94,7 +94,10 @@ void main() {
     expect(find.text('Your proposed plan.'), findsOneWidget);
     expect(find.text('LIVE'), findsWidgets);
     final ack = find.byKey(const ValueKey('room-draft-acknowledge'));
-    await tester.ensureVisible(ack);
+    await tester.dragUntilVisible(
+      ack, find.byType(ListView).last, const Offset(0, -240),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(ack);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
