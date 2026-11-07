@@ -23,6 +23,7 @@ import org.springframework.web.client.RestClient;
 public class AngelOneApiClient {
 
     static final String LOGIN_PATH = "/rest/auth/angelbroking/user/v1/loginByPassword";
+    static final String PROFILE_PATH = "/rest/secure/angelbroking/user/v1/getProfile";
     static final String LTP_PATH = "/rest/secure/angelbroking/order/v1/getLtpData";
     static final String MARKET_QUOTE_PATH = "/rest/secure/angelbroking/market/v1/quote/";
     static final String CANDLE_PATH = "/rest/secure/angelbroking/historical/v1/getCandleData";
@@ -77,6 +78,49 @@ public class AngelOneApiClient {
                     "Login response did not contain session tokens");
         }
         return new LoginTokens(jwt, refresh);
+    }
+
+    /**
+     * Customer-scoped interactive login. Unlike the legacy operator session,
+     * this uses the user's own API key, PIN and current TOTP. Credentials are
+     * never retained by this adapter. Never log the request or provider JWT.
+     */
+    public LoginTokens customerLogin(String apiKey, String clientCode, String pin, String totp) {
+        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256) {
+            throw new IllegalArgumentException("Invalid broker API key");
+        }
+        ObjectNode body = mapper.createObjectNode()
+                .put("clientcode", clientCode)
+                .put("password", pin)
+                .put("totp", totp);
+        JsonNode data = post(LOGIN_PATH, null, body, apiKey);
+        String jwt = text(data, "jwtToken");
+        String refresh = text(data, "refreshToken");
+        if (jwt == null || refresh == null) {
+            throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MISSING_TOKENS",
+                    "Provider login returned no session tokens");
+        }
+        return new LoginTokens(jwt, refresh);
+    }
+
+    public JsonNode customerProfile(String apiKey, String jwtToken) {
+        return get(PROFILE_PATH, jwtToken, apiKey);
+    }
+
+    public JsonNode customerFunds(String apiKey, String jwtToken) {
+        return get(RMS_PATH, jwtToken, apiKey);
+    }
+
+    public JsonNode customerHoldings(String apiKey, String jwtToken) {
+        return get(ALL_HOLDINGS_PATH, jwtToken, apiKey);
+    }
+
+    public JsonNode customerPositions(String apiKey, String jwtToken) {
+        return get(POSITIONS_PATH, jwtToken, apiKey);
+    }
+
+    public JsonNode customerOrders(String apiKey, String jwtToken) {
+        return get(ORDER_BOOK_PATH, jwtToken, apiKey);
     }
 
     /** Returns the last traded price for one instrument. The caller supplies the verified symbol token. */
@@ -169,11 +213,15 @@ public class AngelOneApiClient {
     }
 
     private JsonNode post(String path, String jwtToken, JsonNode body) {
+        return post(path, jwtToken, body, properties.apiKey());
+    }
+
+    private JsonNode post(String path, String jwtToken, JsonNode body, String apiKey) {
         long startedAt = metrics == null ? 0L : metrics.start();
         try {
             JsonNode result = rest.post()
                     .uri(path)
-                    .headers(h -> applyHeaders(h, jwtToken))
+                    .headers(h -> applyHeaders(h, jwtToken, apiKey))
                     // Serialize the JSON tree explicitly. Passing JsonNode as Object lets the active HTTP converter
                     // introspect JsonNode's bean-style accessors on some Spring/Jackson combinations, producing a
                     // metadata object instead of the SmartAPI payload.
@@ -194,11 +242,15 @@ public class AngelOneApiClient {
     }
 
     private JsonNode get(String path, String jwtToken) {
+        return get(path, jwtToken, properties.apiKey());
+    }
+
+    private JsonNode get(String path, String jwtToken, String apiKey) {
         long startedAt = metrics == null ? 0L : metrics.start();
         try {
             JsonNode result = rest.get()
                     .uri(path)
-                    .headers(h -> applyHeaders(h, jwtToken))
+                    .headers(h -> applyHeaders(h, jwtToken, apiKey))
                     .exchange((request, response) -> parseHttpResponse(response.getStatusCode().value(), jwtToken,
                             new String(response.getBody().readAllBytes(), StandardCharsets.UTF_8)));
             if (metrics != null) metrics.recordSuccess(path, startedAt);
@@ -214,10 +266,10 @@ public class AngelOneApiClient {
         }
     }
 
-    private void applyHeaders(org.springframework.http.HttpHeaders headers, String jwtToken) {
+    private void applyHeaders(org.springframework.http.HttpHeaders headers, String jwtToken, String apiKey) {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-        headers.set("X-PrivateKey", properties.apiKey());
+        headers.set("X-PrivateKey", apiKey);
         headers.set("X-UserType", "USER");
         headers.set("X-SourceID", "WEB");
         if (jwtToken != null) headers.setBearerAuth(jwtToken);
