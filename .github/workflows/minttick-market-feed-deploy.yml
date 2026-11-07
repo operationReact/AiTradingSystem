@@ -63,7 +63,7 @@ jobs:
           PY
       - name: Require separate read-only feed deployment role
         env:
-          ROLE: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
+          ROLE: arn:aws:iam::098859530205:role/minttick-feed-github-deploy
         run: |
           set -euo pipefail
           test "$ROLE" = "arn:aws:iam::098859530205:role/minttick-feed-github-deploy"
@@ -76,7 +76,7 @@ jobs:
       - name: Authenticate through branch-restricted GitHub OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.MINTTICK_FEED_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-feed-github-deploy
           aws-region: ap-south-1
           role-session-name: minttick-feed-${{ github.run_id }}
       - name: Check target account and offline Lambda tests
