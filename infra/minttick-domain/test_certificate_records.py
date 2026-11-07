@@ -40,6 +40,20 @@ class ACMRecordsTest(TestCase):
             records, _ = module.get_validation_records("test-certificate")
         self.assertEqual(len(records), 3)
 
+    def test_accepts_acm_target_with_one_extra_aws_label(self):
+        data = result(entry("minttick.com", target="_a-b_c._edge.acm-validations.aws"),
+                      entry("www.minttick.com"), entry("api.minttick.com"))
+        with mock.patch.object(module, "aws", return_value=data):
+            records, _ = module.get_validation_records("test-certificate")
+        self.assertEqual(len(records), 3)
+
+    def test_rejects_target_with_multiple_extra_labels(self):
+        data = result(entry("minttick.com", target="_a-b_c.extra.more.acm-validations.aws"),
+                      entry("www.minttick.com"), entry("api.minttick.com"))
+        with mock.patch.object(module, "aws", return_value=data):
+            with self.assertRaisesRegex(RuntimeError, "target shape"):
+                module.get_validation_records("test-certificate")
+
     def test_rejects_unrelated_target(self):
         data = result(entry("minttick.com", target="_malicious.example.net"),
                       entry("www.minttick.com"), entry("api.minttick.com"))
