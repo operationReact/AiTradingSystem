@@ -22,8 +22,6 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final store = TradingRoomDraftStore();
       addTearDown(store.dispose);
-    final mode = TradingWorkspaceMode();
-    addTearDown(mode.dispose);
       final mode = TradingWorkspaceMode();
       addTearDown(mode.dispose);
       await tester.pumpWidget(MaterialApp(
