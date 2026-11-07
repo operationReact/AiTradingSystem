@@ -1,0 +1,148 @@
+name: MintTick account - immutable ARM64 ECR and SSM HTTPS release
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-account-api/requests/release.json'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: minttick-dev-account-release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 80
+    env:
+      AWS_REGION: ap-south-1
+      EXPECTED_ACCOUNT: '098859530205'
+      REQUEST_FILE: infra/minttick-account-api/requests/release.json
+      ROLE_ARN: arn:aws:iam::098859530205:role/minttick-account-github-release
+      IMAGE_REPO: 098859530205.dkr.ecr.ap-south-1.amazonaws.com/minttick-dev-account-api
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Enforce one-file reviewed dev release and requested host
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$REQUEST_FILE"
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          x = json.loads(Path(os.environ['REQUEST_FILE']).read_text())
+          assert set(x) == {'application', 'environment', 'region', 'aws_account',
+                            'operation', 'authorization', 'instance_id', 'domain'}
+          assert x['application'] == 'MintTick' and x['environment'] == 'dev'
+          assert x['region'] == 'ap-south-1' and x['aws_account'] == '098859530205'
+          assert x['operation'] == 'deploy'
+          assert x['authorization'] == 'USER_APPROVED_MINTTICK_ACCOUNT_RELEASE'
+          assert re.fullmatch(r'i-[a-f0-9]{17}', x['instance_id'])
+          assert re.fullmatch(r'[a-z0-9][a-z0-9.-]+[a-z0-9]', x['domain'])
+          with open(os.environ['GITHUB_ENV'], 'a') as out:
+              out.write('INSTANCE_ID=' + x['instance_id'] + '\n')
+              out.write('ACCOUNT_DOMAIN=' + x['domain'] + '\n')
+          PY
+          bash -n infra/minttick-account-api/deploy_account.sh
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - uses: docker/setup-buildx-action@v3
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-account-github-release
+          aws-region: ap-south-1
+          role-session-name: minttick-account-release-${{ github.run_id }}
+          allowed-account-ids: '098859530205'
+
+      - name: Verify AWS account and exact tagged account instance
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "$EXPECTED_ACCOUNT"
+          python3 - <<'PY'
+          import json, os, subprocess
+          iid = os.environ['INSTANCE_ID']
+          obj = json.loads(subprocess.check_output(
+              ['aws', 'ec2', 'describe-instances', '--region', 'ap-south-1',
+               '--instance-ids', iid, '--output', 'json']))
+          ins = [i for r in obj['Reservations'] for i in r['Instances']]
+          assert len(ins) == 1
+          i = ins[0]
+          tags = {t['Key']: t['Value'] for t in i.get('Tags', [])}
+          assert i['InstanceId'] == iid and i['InstanceType'] == 't4g.small'
+          assert i['State']['Name'] == 'running'
+          assert all(tags.get(k) == v for k, v in {
+              'Application': 'MintTick', 'Environment': 'dev',
+              'Component': 'AccountAPI', 'Name': 'minttick-dev-account-api'}.items())
+          print('Verified dedicated running account host, region, type and tags')
+          PY
+          aws ecr describe-repositories --repository-names minttick-dev-account-api \
+            --region ap-south-1 --query 'repositories[0].repositoryUri' --output text | \
+            grep -Fx "$IMAGE_REPO"
+
+      - name: Build immutable SHA ARM64 account backend and publish to dedicated ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws ecr get-login-password --region ap-south-1 | \
+            docker login --username AWS --password-stdin "098859530205.dkr.ecr.ap-south-1.amazonaws.com"
+          docker buildx build --platform linux/arm64 --file backend/Dockerfile.ec2-paper-arm64 \
+            --tag "$IMAGE_REPO:$GITHUB_SHA" --push backend
+
+      - name: SSM deploy reviewed script without disclosing host env or command output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os, pathlib
+          script = pathlib.Path('infra/minttick-account-api/deploy_account.sh').read_bytes()
+          assert len(script) < 16000
+          encoded = base64.b64encode(script).decode('ascii')
+          image = os.environ['IMAGE_REPO'] + ':' + os.environ['GITHUB_SHA']
+          domain = os.environ['ACCOUNT_DOMAIN']
+          command = "printf '%s' '" + encoded + "' | base64 -d | bash -s -- '" + image + "' '" + domain + "'"
+          target = pathlib.Path(os.environ['RUNNER_TEMP']) / 'account-ssm.json'
+          target.write_text(json.dumps({'commands': [command]}))
+          target.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --region ap-south-1 \
+            --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/account-ssm.json" \
+            --comment 'MintTick reviewed dev account release' \
+            --query 'Command.CommandId' --output text)"
+          rm -f "$RUNNER_TEMP/account-ssm.json"
+          test -n "$command_id"
+          for attempt in $(seq 1 120); do
+            status="$(aws ssm get-command-invocation --region ap-south-1 \
+              --command-id "$command_id" --instance-id "$INSTANCE_ID" \
+              --query Status --output text 2>/dev/null || true)"
+            if [ "$status" = Success ]; then echo 'SSM deployment accepted'; break; fi
+            case "$status" in Failed|TimedOut|Cancelled) echo 'SSM release failed' >&2; exit 1;; esac
+            sleep 10
+          done
+          test "$status" = Success
+
+      - name: Verify authenticated HTTPS readiness and account isolation
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --max-time 15 \
+            --proto '=https' --output /dev/null "https://$ACCOUNT_DOMAIN/actuator/health/readiness"
+          auth="$(curl --silent --show-error --max-time 15 --proto '=https' \
+            --output /dev/null --write-out '%{http_code}' "https://$ACCOUNT_DOMAIN/api/auth/cognito/me")"
+          test "$auth" = 401 || test "$auth" = 403
+          trade="$(curl --silent --show-error --max-time 15 --proto '=https' \
+            --output /dev/null --write-out '%{http_code}' "https://$ACCOUNT_DOMAIN/api/paper/orders")"
+          test "$trade" = 404
+          echo 'Account HTTPS backend reachable; unauthenticated customer request rejected; trading routes blocked'
