@@ -74,7 +74,9 @@ class _MintTickCustomerPortfolioPageState extends State<MintTickCustomerPortfoli
     });
     try {
       if (widget.mode.isPaper) {
-        if (!widget.rooms.loaded) await widget.rooms.load();
+        if (!widget.rooms.loaded) {
+          await widget.rooms.load();
+        }
         if (widget.rooms.lastError != null) throw StateError('Room list unavailable');
         final funded = widget.rooms.drafts
             .where((r) => r.mode == 'PAPER' && r.status == 'PAPER_FUNDED')
