@@ -29,6 +29,23 @@ upstox=(bool(settings.get("UPSTOX_CLIENT_ID")) and bool(settings.get("UPSTOX_CLI
         "https://api.minttick.com/api/customer/brokers/upstox/callback")
 print("MINTTICK_UPSTOX_SERVER_CONFIG:", "PRESENT" if upstox else "NOT_CONFIGURED")
 PY
+# Nonsecret, read-only inspection of prerequisites required by the guarded
+# owner-feed activation script. Never read or print environment file contents.
+if [[ ! -f "$root/.env" || -L "$root/.env" ]]; then
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: COMPOSE_ENV_MISSING"
+elif [[ "$(stat -c %a "$root/.env")" != 600 ]]; then
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: COMPOSE_ENV_PERMISSIONS"
+elif [[ ! -f "$root/paper-compose.yml" || -L "$root/paper-compose.yml" ]]; then
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: COMPOSE_FILE_MISSING"
+elif ! grep -Fq 'MINTTICK_ANGEL_ONE_OWNER_SUB:' "$root/paper-compose.yml" ||
+     ! grep -Fq 'MARKET_DATA_LAMBDA_FUNCTION_NAME:' "$root/paper-compose.yml" ||
+     ! grep -Fq 'TRADING_MODE: PAPER' "$root/paper-compose.yml"; then
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: INSTALLED_COMPOSE_OUTDATED"
+elif ! command -v docker >/dev/null 2>&1; then
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: DOCKER_MISSING"
+else
+  echo "MINTTICK_HOST_FEED_PREREQUISITES: READY"
+fi
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
 chmod 0700 "$work"
