@@ -16,6 +16,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
     required this.onPortfolio,
     required this.onAccount,
     required this.onNotifications,
+    this.onBroker,
     super.key,
   });
 
@@ -27,6 +28,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
   final VoidCallback onPortfolio;
   final VoidCallback onAccount;
   final VoidCallback onNotifications;
+  final VoidCallback? onBroker;
 
   @override
   State<MintTickCustomerHomePage> createState() =>
@@ -55,6 +57,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
         throw const FormatException('Unverified customer');
       }
       if (mounted) setState(() => _profile = result);
+      await widget.drafts.load();
     } catch (_) {
       if (mounted) setState(() => _profile = null);
     } finally {
@@ -96,6 +99,19 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 icon: const Icon(Icons.refresh_rounded),
                 label: const Text('Retry account verification'),
               ),
+            ] else if (widget.drafts.isLoading) ...[
+              const Center(child: CircularProgressIndicator()),
+            ] else if (widget.drafts.lastError != null) ...[
+              const MintTickEyebrow('Trading Rooms'),
+              const SizedBox(height: 9),
+              MintTickInfoText(widget.drafts.lastError!,
+                  icon: Icons.error_outline_rounded),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: widget.drafts.load,
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Retry loading your rooms'),
+              ),
             ] else if (rooms.isEmpty) ...[
               const MintTickEyebrow('Welcome to MintTick'),
               const SizedBox(height: 7),
@@ -118,7 +134,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                     runSpacing: 8,
                     children: [
                       MintTickStatusLabel('YOUR NEXT STEP'),
-                      MintTickStatusLabel('PAPER FIRST'),
+                      MintTickStatusLabel('PAPER + LIVE'),
                     ],
                   ),
                   const SizedBox(height: 18),
@@ -128,8 +144,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                     style: Theme.of(context).textTheme.titleLarge
                         ?.copyWith(fontWeight: FontWeight.w800, height: 1.2)),
                   const SizedBox(height: 8),
-                  Text('One room, one purpose. Start by reviewing a simulated '
-                      'plan—no real-money trading.',
+                  Text('One room, one purpose. Choose Paper or Live and review '
+                      'the plan before any trading is activated.',
                     style: Theme.of(context).textTheme.bodyMedium
                         ?.copyWith(color: scheme.onSurfaceVariant)),
                   const SizedBox(height: 17),
@@ -140,7 +156,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                     label: const Text('Create my first room'),
                   )),
                   const SizedBox(height: 13),
-                  Text('Choose a goal  →  Review a plan  →  Save a draft',
+                  Text('Choose a mode  →  Review risk  →  Save your plan',
                     style: Theme.of(context).textTheme.labelSmall
                         ?.copyWith(color: scheme.onSurfaceVariant)),
                 ]),
@@ -178,8 +194,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               ),
               const SizedBox(height: 16),
               const MintTickInfoText(
-                'Your MintTick account and a brokerage account are separate. '
-                'You can explore your workspace before connecting a broker.',
+                'Your MintTick login and broker account are separate. '
+                'Connect Angel One to view live account data.',
               ),
             ] else ...[
               const MintTickEyebrow('Your workspace'),
@@ -195,7 +211,7 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               const SizedBox(height: 18),
               MintTickSurface(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const MintTickEyebrow('Local paper plans · Not funded'),
+                  const MintTickEyebrow('Planned budgets · Not funded'),
                   const SizedBox(height: 8),
                   Text(formatPaperRupees(
                       rooms.fold<int>(0, (sum, room) => sum + room.paperBudget)),
@@ -230,8 +246,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 MintTickIconTile(Icons.psychology_outlined),
                 SizedBox(width: 12),
                 Expanded(child: Text(
-                  'Plans saved for preview. Market automation is not running; '
-                  'your drafts cannot submit orders.',
+                  'Plans saved for Paper or Live. Neither mode is activated, '
+                  'and no orders can be submitted yet.',
                 )),
               ])),
               const SizedBox(height: 18),
@@ -239,6 +255,15 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 onMarkets: widget.onMarkets,
                 onPortfolio: widget.onPortfolio,
               ),
+              if (widget.onBroker != null) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const ValueKey('home-connect-broker'),
+                  onPressed: widget.onBroker,
+                  icon: const Icon(Icons.account_balance_outlined),
+                  label: const Text('Connect Angel One'),
+                ),
+              ],
             ],
           ],
         );
@@ -273,7 +298,7 @@ class _DraftHomeTile extends StatelessWidget {
               Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w700)),
               const SizedBox(height: 3),
-              Text('${room.focus} · ${formatPaperRupees(room.paperBudget)}',
+              Text('${room.mode} · ${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
                 style: Theme.of(context).textTheme.bodySmall),
             ],
           )),
