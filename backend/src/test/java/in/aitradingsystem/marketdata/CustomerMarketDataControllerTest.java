@@ -62,7 +62,7 @@ class CustomerMarketDataControllerTest {
             "owner-sub","ANGEL_ONE_LAMBDA");
         var auth=principal("owner-sub");
         var instrument = new Instrument(
-            42L, "NSE", "NSE", "99999", "TEST-EQ",
+            42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
             "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
         when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
         when(provider.lastTradedPrice(instrument)).thenReturn(new BigDecimal("125.55"));
