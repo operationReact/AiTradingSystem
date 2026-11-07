@@ -50,7 +50,7 @@ services:
       # No client secret, password, broker key or token is ever stored here.
       # Deployed dev pool/public app client, no secrets. Use the existing
       # host and database; never expose the full PAPER application publicly.
-      MINTTICK_COGNITO_ENABLED: ${MINTTICK_COGNITO_ENABLED:-true}
+      MINTTICK_COGNITO_ENABLED: ${MINTTICK_COGNITO_ENABLED:-false}
       MINTTICK_COGNITO_REGION: ap-south-1
       MINTTICK_COGNITO_ISSUER: ${MINTTICK_COGNITO_ISSUER:-https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_jz2T8qbiY}
       MINTTICK_COGNITO_CLIENT_ID: ${MINTTICK_COGNITO_CLIENT_ID:-6jm18v2mdpcfraip92hrjhqjnd}
