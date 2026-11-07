@@ -37,7 +37,7 @@ ACCOUNT_PATHS = {
     "positions": "/rest/secure/angelbroking/order/v1/getPosition",
     "orders": "/rest/secure/angelbroking/order/v1/getOrderBook",
 }
-# No placeOrder/modifyOrder/cancelOrder/convertPosition endpoint is reachable.
+# No trade mutation or order execution endpoint is reachable.
 MAX_ACCOUNT_RESPONSE_BYTES = 110_000
 REAUTH_CODES = {"AG8001", "AG8003", "AB8050", "AB8051", "AB1010"}
 EXCHANGES = {"NSE", "BSE"}
