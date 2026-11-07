@@ -89,8 +89,9 @@ public class CustomerMarketDataController {
                 "Private read-only market feed has not been enabled");
         }
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
-        if (!java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
-                || !"EQ".equals(instrument.instrumentType())) {
+        if (!java.util.Set.of("NSE_CM", "BSE_CM").contains(instrument.exchangeSegment())
+                || !java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
+                || !instrument.tradingSymbol().endsWith("-EQ")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
         }
         BigDecimal price = market.lastTradedPrice(instrument);
