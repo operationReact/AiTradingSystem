@@ -78,6 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          echo "MintTick account stack status: $(aws cloudformation describe-stacks --stack-name minttick-account-api --query 'Stacks[0].StackStatus' --output text)"
           test "$(aws cloudformation describe-stacks --stack-name minttick-account-api --query 'Stacks[0].StackStatus' --output text)" = 'CREATE_COMPLETE'
           test "$(aws lambda get-function-configuration --function-name minttick-dev-account-proxy --query 'VpcConfig.SubnetIds[0]' --output text)" = 'subnet-071ee24263e10fe7c'
           echo 'Verified dedicated MintTick private account Lambda; no account networking changes'
