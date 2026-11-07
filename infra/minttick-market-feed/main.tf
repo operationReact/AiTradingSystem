@@ -80,7 +80,11 @@ resource "aws_lambda_function" "feed" {
   source_code_hash               = data.archive_file.read_only_feed.output_base64sha256
   memory_size                    = 256
   timeout                        = 25
-  reserved_concurrent_executions = 1
+  # This restricted AWS account must retain at least 10 unreserved executions;
+  # attempting to reserve even one fails the Lambda creation/update API.
+  # IAM-only invocation (no function URL, trigger, or public gateway) and the
+  # owner-gated backend remain responsible for controlling broker requests.
+  reserved_concurrent_executions = -1
   architectures                  = ["arm64"]
   depends_on                     = [aws_iam_role_policy.read_only_ssm, aws_cloudwatch_log_group.feed]
 }
