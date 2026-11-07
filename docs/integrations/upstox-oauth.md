@@ -78,3 +78,22 @@ announcements:
 **This PR is a read-only broker authorization integration.** It must not be
 mistaken for production Live order readiness; existing Paper/Live room safety
 gates remain unchanged.
+
+## Public HTTPS gateway support
+
+The account API Gateway's exact `GET /api/customer/brokers/upstox/callback`
+route is anonymous **only for the OAuth redirect**. The dedicated Lambda
+accepts one `state` plus one `code` or `error` parameter, rejects duplicate
+or unexpected query parameters and forwards the callback to Spring Boot.
+Spring Boot consumes the short-lived, one-time, customer-bound state and
+exchanges the code server-to-server. The Lambda returns fixed, no-store HTML
+with no broker code/state/error reflection and a no-referrer policy.
+The other Upstox endpoints (start, status, disconnect, funds, holdings,
+positions, orders, registered IPs) require a valid Cognito CUSTOMER JWT.
+No order-placement methods are opened by the edge.
+
+**Rollout:** This changes code and the CloudFormation template, not the AWS
+stack. Before using it, deploy or update `minttick-account-api` in Mumbai,
+register the exact HTTPS callback at Upstox, store developer app credentials
+only on the protected backend, and verify on a physical device. The private
+PAPER runtime deliberately remains unconfigured until this separate setup.

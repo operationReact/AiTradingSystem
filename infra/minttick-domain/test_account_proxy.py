@@ -45,6 +45,9 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/angel-one/configured-login"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect-configured"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
+        self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
         for method, path in [
             ("GET","/api/admin/users"),
@@ -53,6 +56,9 @@ class AccountProxyTest(unittest.TestCase):
             ("POST","/api/customer/brokers/angel-one/orders"),
             ("GET","/api/customer/brokers/angel-one/connect-configured"),
             ("GET","/api/customer/brokers/angel-one/connect"),
+            ("POST",proxy.UPSTOX_CALLBACK),
+            ("POST","/api/customer/brokers/upstox/orders"),
+            ("GET","/api/customer/brokers/upstox/start"),
             ("POST","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/orders/intents"),
             ("DELETE","/api/customer/trading-rooms"),
             ("GET","/v3/api-docs"),
@@ -108,6 +114,52 @@ class AccountProxyTest(unittest.TestCase):
         with mock.patch.object(proxy.urllib.request,"urlopen") as urlopen:
             self.assertEqual(proxy.handler(data,None)["statusCode"],400)
         urlopen.assert_not_called()
+
+    def test_upstox_callback_is_one_time_state_only_no_jwt_or_reflection(self):
+        state = "A" * 43
+        value = "state=" + state + "&code=short-test-code"
+        data = event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        data["rawQueryString"] = value
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
+            result=proxy.handler(data,None)
+        self.assertEqual(result["statusCode"],200)
+        self.assertIn("Upstox connected",result["body"])
+        self.assertNotIn(state,result["body"])
+        self.assertNotIn("short-test-code",result["body"])
+        req=urlopen.call_args.args[0]
+        self.assertEqual(req.get_method(),"GET")
+        self.assertEqual(req.full_url,proxy.BACKEND+proxy.UPSTOX_CALLBACK+"?"+value)
+        self.assertNotIn("Authorization",req.headers)
+        self.assertEqual(result["headers"]["referrer-policy"],"no-referrer")
+
+    def test_upstox_callback_rejects_injected_or_duplicate_query_without_socket(self):
+        for query in [
+            "", "code=a", "state=" + "a"*43,
+            "state=" + "a"*43 + "&code=x&code=y",
+            "state=" + "a"*43 + "&code=x&redirect_uri=https://evil.example",
+            "state=" + "a"*43 + "&code=x&error=y",
+            "state=" + "a"*43 + "&code=" + "X"*2049,
+            "state=" + "a"*43 + "&code=x&state=" + "b"*43,
+        ]:
+            data = event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+            data["rawQueryString"]=query
+            with mock.patch.object(proxy.urllib.request,"urlopen") as urlopen:
+                result=proxy.handler(data,None)
+            self.assertEqual(result["statusCode"],400,query[:40])
+            urlopen.assert_not_called()
+
+    def test_upstox_callback_returns_constant_failure_on_backend_rejection(self):
+        state = "A"*43
+        data=event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        data["rawQueryString"]="state="+state+"&error=access_denied"
+        class Declined(Reply):
+            status=400
+            def read(self,max_bytes):
+                return b"<html>Contains oauth code: secret</html>"
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Declined()):
+            result=proxy.handler(data,None)
+        self.assertEqual(result["statusCode"],400)
+        self.assertNotIn("secret",result["body"])
 
     def test_readiness_is_through_existing_private_backend(self):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
