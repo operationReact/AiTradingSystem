@@ -14,14 +14,8 @@ class MintTickCustomerBrokerPage extends StatefulWidget {
 }
 
 class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage> {
-  final _form = GlobalKey<FormState>();
-  final _clientCode = TextEditingController();
-  final _apiKey = TextEditingController();
-  final _pin = TextEditingController();
-  final _totp = TextEditingController();
   CustomerAngelOneConnection? _connection;
   bool _busy = true;
-  bool _showForm = false;
   bool _configuredLoginAvailable = false;
   String? _error;
   Object? _data;
@@ -31,15 +25,6 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
   void initState() {
     super.initState();
     _refresh();
-  }
-
-  @override
-  void dispose() {
-    _apiKey.dispose();
-    _clientCode.dispose();
-    _pin.dispose();
-    _totp.dispose();
-    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -76,41 +61,6 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     }
   }
 
-  Future<void> _connect() async {
-    if (_busy || !(_form.currentState?.validate() ?? false)) return;
-    setState(() { _busy = true; _error = null; });
-    try {
-      final connection = await widget.repository.connect(
-        apiKey: _apiKey.text.trim(),
-        clientCode: _clientCode.text.trim(),
-        pin: _pin.text,
-        totp: _totp.text.trim(),
-      );
-      if (!mounted) return;
-      setState(() {
-        _connection = connection;
-        _showForm = false;
-        _data = null;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _error = 'Angel One did not confirm the connection. Verify your '
-              'details, current TOTP and broker API access, then retry.';
-        });
-      }
-    } finally {
-      // Secrets never persist. Controllers are disposed if navigation
-      // ended while the connection request was in flight.
-      if (mounted) {
-        _pin.clear();
-        _totp.clear();
-        _apiKey.clear();
-        setState(() => _busy = false);
-      }
-    }
-  }
-
   Future<void> _connectConfigured() async {
     if (_busy || !_configuredLoginAvailable) return;
     setState(() { _busy = true; _error = null; });
@@ -119,7 +69,6 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       if (!mounted) return;
       setState(() {
         _connection = connection;
-        _showForm = false;
         _data = null;
       });
     } catch (_) {
@@ -137,7 +86,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     setState(() { _busy = true; _error = null; });
     try {
       await widget.repository.disconnect();
-      if (mounted) setState(() { _data = null; _connection = null; _showForm = false; });
+      if (mounted) setState(() { _data = null; _connection = null; });
       await _refresh();
     } catch (_) {
       if (mounted) setState(() => _error = 'Could not confirm disconnection. Try again.');
@@ -273,77 +222,21 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           icon: Icons.verified_user_outlined,
         ),
       ] else ...[
-        SizedBox(width: double.infinity, child: FilledButton.icon(
-          key: const ValueKey('broker-show-connect'),
-          onPressed: _busy ? null : () => setState(() => _showForm = !_showForm),
-          icon: const Icon(Icons.link_rounded),
-          label: const Text('Connect Angel One'),
+        const MintTickInfoText(
+          'Secure connection is not available for this account yet. '
+          'If your SmartAPI credentials are already stored in AWS Parameter Store, '
+          'they must be connected to the private broker Lambda and your verified '
+          'MintTick owner account. Never enter the long TOTP enrollment secret '
+          'into a one-time code field.',
+          icon: Icons.lock_outline_rounded,
+        ),
+        const SizedBox(height: 12),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          key: const ValueKey('broker-check-secure-connection'),
+          onPressed: _busy ? null : _refresh,
+          icon: const Icon(Icons.refresh_rounded),
+          label: const Text('Check secure connection'),
         )),
-        if (_showForm) ...[
-          const SizedBox(height: 15),
-          MintTickSurface(child: Form(
-            key: _form,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              Text('Secure connection',
-                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 7),
-              Text('Use your own Angel One SmartAPI key, client code, '
-                  'PIN and a current authenticator code. No TOTP seed is requested.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant, height: 1.4)),
-              const SizedBox(height: 14),
-              TextFormField(
-                key: const ValueKey('broker-client-code'),
-                controller: _clientCode,
-                decoration: const InputDecoration(labelText: 'Angel One client code'),
-                textCapitalization: TextCapitalization.characters,
-                validator: (v) => RegExp(r'^[A-Za-z0-9]{4,20}$')
-                        .hasMatch(v?.trim() ?? '') ? null : 'Enter a valid client code',
-              ),
-              const SizedBox(height: 11),
-              TextFormField(
-                key: const ValueKey('broker-api-key'),
-                controller: _apiKey,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: 'Your SmartAPI key'),
-                validator: (v) => (v?.trim().isNotEmpty ?? false)
-                    ? null : 'Your API key is required',
-              ),
-              const SizedBox(height: 11),
-              TextFormField(
-                key: const ValueKey('broker-pin'),
-                controller: _pin,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Angel One PIN'),
-                validator: (v) => RegExp(r'^\d{4,8}$')
-                        .hasMatch(v ?? '') ? null : 'Enter your broker PIN',
-              ),
-              const SizedBox(height: 11),
-              TextFormField(
-                key: const ValueKey('broker-totp'),
-                controller: _totp,
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: 'Current 6-digit TOTP'),
-                validator: (v) => RegExp(r'^\d{6}$')
-                        .hasMatch(v?.trim() ?? '') ? null : 'Enter the current code',
-              ),
-              const SizedBox(height: 13),
-              FilledButton(
-                key: const ValueKey('broker-connect-submit'),
-                onPressed: _busy ? null : _connect,
-                child: const Text('Verify & connect'),
-              ),
-            ]),
-          )),
-        ],
       ],
       const SizedBox(height: 18),
       const MintTickInfoText(

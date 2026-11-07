@@ -97,3 +97,37 @@ stack. Before using it, deploy or update `minttick-account-api` in Mumbai,
 register the exact HTTPS callback at Upstox, store developer app credentials
 only on the protected backend, and verify on a physical device. The private
 PAPER runtime deliberately remains unconfigured until this separate setup.
+
+
+## Required Upstox developer configuration for MintTick
+
+Unlike Angel One's SSM-owner flow, Upstox uses broker-hosted OAuth. Create
+or select a valid Upstox developer application and register this **exact**
+callback (not an arbitrary website URL):
+
+`https://api.minttick.com/api/customer/brokers/upstox/callback`
+
+The backend needs these configuration values:
+- `UPSTOX_CLIENT_ID` — app's public API key
+- `UPSTOX_CLIENT_SECRET` — server-only app secret
+- `UPSTOX_REDIRECT_URI` — exact HTTPS callback above
+
+Store the secret securely on the **appropriate protected customer API
+runtime**, not in the Android client, GitHub variables, plaintext repo
+files or chat. Unlike the four Angel One SecureStrings, these Upstox
+application settings are **not automatically installed** simply because
+Angel One parameters exist. The existing PAPER EC2 Compose environment
+must be explicitly configured (or the Upstox integration moved to a
+separate dedicated credential store/runtime) before `status.available`
+can become true.
+
+Once configured, the Android customer taps **Connect with Upstox**, logs
+in on the official Upstox authorization page, and consents. MintTick's
+server consumes the one-use state and exchanges the code privately.
+The callback route has no Cognito token only because it is the broker
+browser redirect; the initiating start and all account reads require
+the verified customer JWT. Do not claim the Upstox account is connected
+until the authenticated status endpoint confirms it.
+
+The protected gateway already admits the exact Upstox OAuth and account
+routes. No live order placement is enabled.

@@ -81,3 +81,51 @@ or build a connected Android APK. The existing private PAPER EC2 intentionally
 has no broker secrets. The one-tap connection will report unavailable until
 server-side secrets and owner authorization are independently provisioned.
 Live order placement remains disabled.
+
+
+## Updated owner-only connection architecture (November 2026)
+
+The current MintTick user is correct that the four Angel One credentials may already
+exist as **SecureString** values in SSM. That does **not** make them available to the
+PAPER EC2 application: the existing runtime deliberately excludes those values.
+
+The read-only private Lambda `minttick-dev-angelone-feed` is the authorized bridge:
+it fetches the four SecureStrings, generates each **six-digit current TOTP** from
+the long base32 **enrollment seed**, verifies the broker profile against the configured
+client code, and serves read-only account information. Its broker JWT stays in Lambda
+memory. The Spring backend holds only an owner-bound, masked, expiring connection
+status; it does not store the API key, PIN, TOTP seed or broker token.
+
+To activate the one-tap **Secure connect** button:
+1. Confirm the exact four SSM SecureString parameter names in Mumbai and verify
+   that the long TOTP value is the base32 enrollment seed, not a current OTP.
+2. Provision the dedicated feed IAM bootstrap and Terraform Lambda from
+   `docs/minttick-market-feed-ssm-lambda-pilot.md` using the existing reviewed
+   workflow. SSM parameters alone are not deployment.
+3. Enable the backend's two nonsecret settings
+   `MARKET_DATA_PROVIDER=ANGEL_ONE_LAMBDA` and
+   `MARKET_DATA_LAMBDA_FUNCTION_NAME=minttick-dev-angelone-feed` using the
+   existing protected EC2 SSM configuration mechanism. Only the private
+   Lambda is allowed to read the four SecureStrings.
+4. Bind `MINTTICK_ANGEL_ONE_OWNER_SUB` to the **exact Cognito access-token
+   subject** of the intended owner (not the MintTick internal user UUID).
+   Never assume the first registered user owns the private broker credentials.
+5. Verify `GET /api/customer/brokers/angel-one/configured-login` returns
+   `{"available":true}` for this one owner and false for another account.
+   Test read-only funds, holdings, positions and order book. Keep paper and
+   real order execution separately disabled.
+
+The public API Gateway explicitly denies manual `POST /connect` and every
+place/modify/cancel-order route. The Android owner flow does not ask the user
+to re-enter four secrets already held in Parameter Store. Do not send any
+secret or authenticator seed to ChatGPT, GitHub or a Flutter build.
+
+### Angel One-side setup checklist
+
+Confirm a valid SmartAPI application/API key and enabled TOTP on the intended
+Angel One client code at the official SmartAPI developer portal. Check whether
+the chosen API app has permitted market data and read-only account access.
+If the long enrollment key is lost, reset/enroll TOTP using Angel One's official
+account flow. A six-digit authenticator code cannot recover the long seed.
+Static-IP brokerage/execution rules are separate and no live order API is
+activated by this read-only rollout.

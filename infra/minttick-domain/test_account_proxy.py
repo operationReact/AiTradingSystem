@@ -48,6 +48,9 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
+        self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments/status"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/market-data/quotes"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
         for method, path in [
             ("GET","/api/admin/users"),
@@ -58,6 +61,9 @@ class AccountProxyTest(unittest.TestCase):
             ("GET","/api/customer/brokers/angel-one/connect"),
             ("POST",proxy.UPSTOX_CALLBACK),
             ("POST","/api/customer/brokers/upstox/orders"),
+            ("POST","/api/customer/market-data/quotes"),
+            ("POST","/api/customer/market-data/instruments/sync"),
+            ("GET","/api/market-data/quotes"),
             ("GET","/api/customer/brokers/upstox/start"),
             ("POST","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/orders/intents"),
             ("DELETE","/api/customer/trading-rooms"),

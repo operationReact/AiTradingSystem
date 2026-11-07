@@ -36,6 +36,9 @@ EXACT = {
     ("GET", "/api/customer/brokers/upstox/positions"),
     ("GET", "/api/customer/brokers/upstox/orders"),
     ("GET", "/api/customer/brokers/upstox/registered-ips"),
+    ("GET", "/api/customer/market-data/instruments/status"),
+    ("GET", "/api/customer/market-data/instruments"),
+    ("GET", "/api/customer/market-data/quotes"),
 }
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
