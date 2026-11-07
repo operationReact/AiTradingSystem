@@ -202,6 +202,7 @@ class _TradingAppState extends State<TradingApp> {
                 rooms: _roomDrafts,
                 paperRepository: HttpCustomerRoomRepository(_api),
                 brokerRepository: HttpCustomerAngelOneRepository(_api),
+                upstoxRepository: HttpCustomerUpstoxRepository(_api),
                 onRooms: () => _navigate('/rooms'),
                 onBroker: () => _navigate('/brokers'),
               )
