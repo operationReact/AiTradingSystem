@@ -1,0 +1,8 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "environment": "dev",
+  "operation": "plan",
+  "authorization": "USER_APPROVED_PRIVATE_ANGEL_ONE_FEED_2026-11-07"
+}
