@@ -41,9 +41,22 @@ class MintTickMark extends StatelessWidget {
 }
 
 class MintTickLockup extends StatelessWidget {
-  const MintTickLockup({this.markWidth = 44, this.fontSize = 21, super.key});
+  const MintTickLockup({
+    this.markWidth = 44,
+    this.fontSize = 21,
+    this.markScale = 1,
+    this.markOpacity = 1,
+    this.wordmarkOpacity = 1,
+    this.wordmarkOffset = 0,
+    super.key,
+  });
   final double markWidth;
   final double fontSize;
+  // Optional visual-only entrance controls. Other product lockups remain static.
+  final double markScale;
+  final double markOpacity;
+  final double wordmarkOpacity;
+  final double wordmarkOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -54,10 +67,20 @@ class MintTickLockup extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        MintTickMark(width: markWidth),
+        Opacity(
+          opacity: markOpacity,
+          child: Transform.scale(
+            scale: markScale,
+            child: MintTickMark(width: markWidth),
+          ),
+        ),
         const SizedBox(width: 9),
         Flexible(
-          child: Text.rich(
+          child: Opacity(
+            opacity: wordmarkOpacity,
+            child: Transform.translate(
+              offset: Offset(wordmarkOffset, 0),
+              child: Text.rich(
           TextSpan(children: [
             TextSpan(text: 'Mint', style: TextStyle(color: scheme.onSurface)),
             TextSpan(text: 'Tick', style: TextStyle(color: mint)),
@@ -71,6 +94,8 @@ class MintTickLockup extends StatelessWidget {
             letterSpacing: -0.6,
             height: 1.05,
           ),
+              ),
+            ),
           ),
         ),
       ],
