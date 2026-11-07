@@ -32,7 +32,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   final _password = TextEditingController();
   late final AnimationController _reveal = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1450),
+    duration: const Duration(milliseconds: 1950),
   )..forward();
 
   bool _passwordVisible = false;
@@ -124,29 +124,41 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   }
 
   Widget _brandLogo(double maxWidth, bool reduceMotion) {
+    // Center the *actual* mark and wordmark, not a padded 390px layout
+    // canvas. A fixed-width FittedBox previously made the visible lockup
+    // look left-aligned even though its outer box was centered.
     final width = math.min(maxWidth, 330.0);
     return AnimatedBuilder(
       animation: _reveal,
-      child: SizedBox(
-        width: width,
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: SizedBox(
-            width: 390,
+      builder: (context, _) {
+        final progress = reduceMotion ? 1.0 : _reveal.value;
+        // Distinct sequential movements are visible without a distracting,
+        // endlessly repeating animation on a screen used for passwords.
+        final mark = Curves.easeOutBack.transform(
+          const Interval(0.0, 0.52).transform(progress),
+        );
+        final markAlpha = const Interval(
+          0.0, 0.28, curve: Curves.easeOut,
+        ).transform(progress);
+        final words = const Interval(
+          0.22, 0.84, curve: Curves.easeOutCubic,
+        ).transform(progress);
+
+        return SizedBox(
+          width: width,
+          child: Center(
+            key: const ValueKey('minttick-centered-lockup'),
             child: Theme(
               data: buildTheme(Brightness.dark),
-              child: const MintTickLockup(markWidth: 82, fontSize: 32),
+              child: MintTickLockup(
+                markWidth: math.min(82.0, width * 0.26),
+                fontSize: math.min(32.0, width * 0.105),
+                markScale: 0.76 + 0.24 * mark,
+                markOpacity: markAlpha,
+                wordmarkOpacity: words,
+                wordmarkOffset: (1.0 - words) * 20,
+              ),
             ),
-          ),
-        ),
-      ),
-      builder: (context, child) {
-        final p = reduceMotion ? 1.0 : Curves.easeOutCubic.transform(_reveal.value);
-        return Opacity(
-          opacity: p.clamp(0.0, 1.0),
-          child: Transform.translate(
-            offset: Offset(0, (1 - p) * 12),
-            child: Transform.scale(scale: 0.98 + 0.02 * p, child: child),
           ),
         );
       },
