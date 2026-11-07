@@ -24,8 +24,8 @@ variable "instance_type" {
   type        = string
   default     = "t4g.medium"
   validation {
-    condition     = var.instance_type == "t4g.medium"
-    error_message = "Only budgeted ARM64 t4g.medium is permitted."
+    condition     = contains(["t4g.medium", "m6g.medium", "m7g.medium"], var.instance_type)
+    error_message = "Only a reviewed 4 GiB ARM64 type is permitted."
   }
 }
 
