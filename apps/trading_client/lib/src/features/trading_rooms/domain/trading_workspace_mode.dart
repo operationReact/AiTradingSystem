@@ -5,9 +5,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// order-submission permission. Each Trading Room stores its own fixed mode.
 class TradingWorkspaceMode extends ChangeNotifier {
   TradingWorkspaceMode({SharedPreferencesAsync? preferences})
-      : _preferences = preferences ?? SharedPreferencesAsync();
+      : _preferences = preferences;
 
-  final SharedPreferencesAsync _preferences;
+  // Resolve lazily after Flutter plugins are registered. This also keeps
+  // operator-only and golden-test app startup independent of native prefs.
+  SharedPreferencesAsync? _preferences;
   static const paper = 'PAPER';
   static const live = 'LIVE';
   static const _prefix = 'minttick.customer.trading_mode.v1.';
@@ -27,7 +29,8 @@ class TradingWorkspaceMode extends ChangeNotifier {
     _selected = paper;
     notifyListeners();
     try {
-      final saved = await _preferences.getString('$_prefix$customerId');
+      final storage = _preferences ??= SharedPreferencesAsync();
+      final saved = await storage.getString('$_prefix$customerId');
       if (generation != _generation || _customerId != customerId) return;
       _selected = saved == live ? live : paper;
       notifyListeners();
@@ -45,8 +48,12 @@ class TradingWorkspaceMode extends ChangeNotifier {
     notifyListeners();
     final user = _customerId;
     if (user != null) {
-      // Preference persistence is best effort, never a risk-control input.
-      _preferences.setString('$_prefix$user', mode).catchError((Object _) {});
+      // Never instantiate a native plugin in the synchronous selection path.
+      // If storage was unavailable, the current session still works.
+      final storage = _preferences;
+      if (storage != null) {
+        storage.setString('$_prefix$user', mode).catchError((Object _) {});
+      }
     }
   }
 
