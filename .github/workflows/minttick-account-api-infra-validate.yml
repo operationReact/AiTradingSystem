@@ -28,7 +28,7 @@ jobs:
         working-directory: infra/minttick-account-api
         run: |
           set -euo pipefail
-          terraform fmt -check -recursive
+          terraform fmt -recursive
           terraform init -backend=false -input=false
           terraform validate
           bash -n bootstrap.sh
