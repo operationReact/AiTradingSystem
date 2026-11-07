@@ -182,7 +182,7 @@ class _TradingAppState extends State<TradingApp> {
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
               onSignOut: _signOut,
-              tradingControlRepository: HttpTradingControlRepository(_api),
+              tradingControlRepository: widget.session.isCustomerAuthenticated ? null : HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
         '/operations/health': (_) => _healthPage(),
@@ -329,8 +329,9 @@ class _MobileProductNavigation extends StatelessWidget {
 
   int get _index {
     if (selectedRoute == '/') return 0;
+    if (isCustomer && (selectedRoute == '/rooms' || selectedRoute.startsWith('/rooms/'))) return 1;
+    if (isCustomer && (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments')) return 2;
     if (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments') return 1;
-    if (selectedRoute == '/rooms' || (isCustomer && selectedRoute.startsWith('/rooms/'))) return 2;
     if (selectedRoute == '/research' || selectedRoute == '/signals' || selectedRoute == '/backtests' || selectedRoute == '/scenarios') return 2;
     if (selectedRoute == '/portfolio' || selectedRoute == '/orders' || selectedRoute == '/paper-orders') return 3;
     return 4;
@@ -341,8 +342,8 @@ class _MobileProductNavigation extends StatelessWidget {
     final theme = Theme.of(context);
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
-      (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
-      isCustomer ? (Icons.layers_outlined, Icons.layers_rounded, 'Rooms') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
+      isCustomer ? (Icons.layers_outlined, Icons.layers_rounded, 'Rooms') : (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
+      isCustomer ? (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
       (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Portfolio'),
       (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
     ];
@@ -368,8 +369,8 @@ class _MobileProductNavigation extends StatelessWidget {
                     } else {
                       onNavigate(switch (index) {
                         0 => '/',
-                        1 => '/market',
-                        2 => isCustomer ? '/rooms' : '/research',
+                        1 => isCustomer ? '/rooms' : '/market',
+                        2 => isCustomer ? '/market' : '/research',
                         3 => '/portfolio',
                         _ => '/',
                       });
