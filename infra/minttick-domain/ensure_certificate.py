@@ -17,7 +17,9 @@ EXPECTED_DOMAINS = frozenset({DOMAIN, "www.minttick.com", "api.minttick.com"})
 ACCOUNT = "098859530205"
 REGION = "us-east-1"
 CNAME_NAME = re.compile(r"^_[a-z0-9]+\.(?:(?:www|api)\.)?minttick\.com\.$")
-CNAME_VALUE = re.compile(r"^_[a-z0-9_-]+\.acm-validations\.aws\.$")
+# ACM supplied a target with one additional DNS label in AWS account 098859530205.
+# Permit at most one extra service label; the AWS-owned suffix is still mandatory.
+CNAME_VALUE = re.compile(r"^_[a-z0-9_-]+(?:\.[a-z0-9_-]+)?\.acm-validations\.aws\.$")
 
 
 def aws(*args: str) -> dict:
