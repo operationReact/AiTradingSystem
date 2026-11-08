@@ -221,6 +221,44 @@ jobs:
           print('PASS: pinned Gradle 9.3.1 binary-only SHA-256 and bounded downloads')
           PY
 
+      - name: Stage checksum-verified Kotlin compiler from independent Maven cache
+        run: |
+          set -euo pipefail
+          # Kotlin 2.2.21's Maven Central JAR currently redirects to GitHub
+          # releases, repeatedly returning HTTP 504. A cached third-party
+          # mirror is permitted only after matching JetBrains' published SHA.
+          local_repo="$RUNNER_TEMP/minttick-verified-kotlin-maven"
+          module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.21"
+          mkdir -p "$local_repo/$module_path" "$HOME/.gradle/init.d"
+          artifact="kotlin-compiler-embeddable-2.2.21.jar"
+          mirror="https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"
+          curl --fail --show-error --location --retry 4 --retry-all-errors \
+            --retry-delay 5 --connect-timeout 12 --max-time 180 \
+            "$mirror" --output "$local_repo/$module_path/$artifact"
+          (cd "$local_repo/$module_path" && \
+            echo "9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295  $artifact" \
+              | sha256sum --check --status)
+          curl --fail --show-error --location --retry 3 --retry-all-errors \
+            --connect-timeout 12 --max-time 25 \
+            "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-2.2.21.pom" \
+            --output "$local_repo/$module_path/kotlin-compiler-embeddable-2.2.21.pom"
+          echo "MINTTICK_VERIFIED_KOTLIN_MAVEN=file://$local_repo" >> "$GITHUB_ENV"
+          cat > "$HOME/.gradle/init.d/minttick-verified-kotlin.gradle" <<'GRADLE'
+          gradle.beforeProject { project ->
+              def verified = System.getenv("MINTTICK_VERIFIED_KOTLIN_MAVEN")
+              if (verified == null || !verified.startsWith("file:///")) {
+                  throw new GradleException("Verified Kotlin local repository was not configured")
+              }
+              project.repositories.maven { repo ->
+                  repo.url = project.uri(verified)
+                  repo.content {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+          }
+          GRADLE
+          echo "PASS: Kotlin 2.2.21 compiler matches upstream JetBrains SHA-256"
+
       - name: Resolve dependencies
         run: flutter pub get
 
