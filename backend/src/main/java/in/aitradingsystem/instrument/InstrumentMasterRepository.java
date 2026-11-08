@@ -227,6 +227,9 @@ public class InstrumentMasterRepository {
             // cash segment AND equity trading-symbol suffix instead.
             where.append(" AND i.exchange_segment IN ('NSE_CM','BSE_CM') ");
             where.append(" AND i.trading_symbol LIKE '%-EQ' ");
+            // Official SmartAPI masters may contain connectivity/test instruments
+            // such as 011NSETEST-EQ. Never present these as listed equities.
+            where.append(" AND upper(i.trading_symbol) NOT LIKE '%NSETEST%' ");
         } else if (type != null && !type.isBlank()) {
             where.append(" AND i.instrument_type = ? ");
             args.add(type);
@@ -241,6 +244,7 @@ public class InstrumentMasterRepository {
                 args.toArray());
         List<Object> pageArgs = new ArrayList<>(args);
         pageArgs.add(q == null ? "" : q);
+        pageArgs.add(q == null ? "" : q);
         pageArgs.add(size);
         pageArgs.add((long) page * size);
         List<Instrument> content = jdbc.query("""
@@ -250,6 +254,19 @@ public class InstrumentMasterRepository {
                   FROM instrument_master i
                 """ + where + """
                  ORDER BY CASE WHEN lower(i.trading_symbol) = lower(?) THEN 0 ELSE 1 END,
+                          CASE WHEN ? = '' THEN
+                              CASE upper(i.trading_symbol)
+                                  WHEN 'RELIANCE-EQ' THEN 0
+                                  WHEN 'TCS-EQ' THEN 1
+                                  WHEN 'INFY-EQ' THEN 2
+                                  WHEN 'HDFCBANK-EQ' THEN 3
+                                  WHEN 'ICICIBANK-EQ' THEN 4
+                                  WHEN 'ITC-EQ' THEN 5
+                                  WHEN 'SBIN-EQ' THEN 6
+                                  WHEN 'BHARTIARTL-EQ' THEN 7
+                                  ELSE 8
+                              END ELSE 8 END,
+                          CASE WHEN i.exchange = 'NSE' THEN 0 ELSE 1 END,
                           i.trading_symbol ASC, i.instrument_type NULLS FIRST, i.expiry NULLS FIRST,
                           i.strike NULLS FIRST, i.symbol_token ASC
                  LIMIT ? OFFSET ?
