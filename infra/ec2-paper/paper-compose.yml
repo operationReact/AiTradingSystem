@@ -35,9 +35,13 @@ services:
       - no-new-privileges:true
     environment:
       TRADING_MODE: PAPER
-      # Read-only Lambda InvokeFunction mode. Never forward broker credentials to PAPER EC2.
+      # Preserve legacy owner Lambda reads, but authenticate live streams on
+      # the registered EC2 Elastic IP using the four pre-existing SSM SecureStrings.
+      # AWS role credentials come from the instance profile; no static AWS key
+      # or broker credential is present in Compose or host runtime.env.
       MARKET_DATA_PROVIDER: ${MARKET_DATA_PROVIDER:-ANGEL_ONE}
       MARKET_DATA_LAMBDA_FUNCTION_NAME: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:-}
+      MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED: "true"
       # Exact Cognito owner-subject binding; not an API key or broker credential.
       MINTTICK_ANGEL_ONE_OWNER_SUB: ${MINTTICK_ANGEL_ONE_OWNER_SUB:-}
       # Upstox app-owned OAuth credentials are injected only from protected host runtime.env.
