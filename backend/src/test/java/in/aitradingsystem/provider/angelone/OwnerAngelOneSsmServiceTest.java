@@ -8,7 +8,6 @@ import static org.mockito.Mockito.*;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -56,6 +55,8 @@ class OwnerAngelOneSsmServiceTest {
         assertThat(captor.getValue().names()).containsExactlyInAnyOrder(
                 ROOT + "api-key", ROOT + "client-code",
                 ROOT + "login-pin", ROOT + "totp-secret");
+        verify(broker).connect(eq(id), eq("private-api-key"), eq("AL1234"),
+                eq("1234"), matches("[0-9]{6}"));
         verifyNoMoreInteractions(ssm, broker);
     }
 
