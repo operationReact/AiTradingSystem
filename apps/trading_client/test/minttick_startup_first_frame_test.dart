@@ -8,10 +8,9 @@ import 'package:trading_client/src/core/session/operator_session.dart';
 import 'package:trading_client/src/presentation/welcome_page.dart';
 
 class _StartupCountingIdentity extends UnavailableCustomerIdentity {
-  const _StartupCountingIdentity(this.counter, {this.sessionExists = true});
+  const _StartupCountingIdentity(this.counter);
 
   final List<String> counter;
-  final bool sessionExists;
 
   @override
   bool get isConfigured => true;
@@ -19,7 +18,7 @@ class _StartupCountingIdentity extends UnavailableCustomerIdentity {
   @override
   Future<bool> hasSession() async {
     counter.add('hasSession');
-    return sessionExists;
+    return true;
   }
 
   @override
