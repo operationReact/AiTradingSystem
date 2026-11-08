@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../auth/customer_identity.dart';
+import '../auth/cognito_reachability.dart';
 import '../brand/minttick_brand.dart';
 import '../theme/app_theme.dart';
 
@@ -17,6 +18,7 @@ class MintTickWelcomePage extends StatefulWidget {
     this.replayFromSettings = false,
     this.onAuthenticated,
     this.provisionAccount,
+    this.cognitoConnectivityCheck,
   });
 
   final bool replayFromSettings;
@@ -25,6 +27,9 @@ class MintTickWelcomePage extends StatefulWidget {
   // Injectable only for deterministic UI tests; production always uses
   // Cognito JWT-backed MintTickCustomerAccountApi.
   final Future<String> Function()? provisionAccount;
+
+  // Optional test seam for the public-key endpoint probe, never credentials.
+  final Future<bool> Function()? cognitoConnectivityCheck;
 
   @override
   State<MintTickWelcomePage> createState() => _MintTickWelcomePageState();
@@ -118,12 +123,28 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
     } on CustomerAuthenticationUnavailable {
       if (mounted) _showMessage('Secure sign-in is not configured yet.');
     } on TimeoutException {
-      if (mounted) {
-        _showMessage(cognitoCompleted
-            ? 'Cognito sign-in completed, but MintTick account verification timed out. '
-                'Check https://api.minttick.com and retry.'
-            : 'Cognito sign-in timed out. Check the browser Network tab and '
-                'your connection to AWS Cognito, then retry.');
+      if (cognitoCompleted) {
+        if (mounted) {
+          _showMessage(
+              'Cognito sign-in completed, but MintTick account verification '
+              'timed out. Inspect the api.minttick.com request in Chrome Network.');
+        }
+      } else {
+        // A timed-out Amplify Future does not cancel an internal Cognito
+        // request. Avoid suggesting blind retries against a stuck SDK.
+        final reachable = await (widget.cognitoConnectivityCheck ??
+                MintTickCognitoReachability.check)()
+            .timeout(const Duration(seconds: 7),
+                onTimeout: () => false);
+        if (mounted) {
+          _showMessage(reachable
+              ? 'Cognito sign-in timed out, but its public endpoint is '
+                  'reachable. Restart the Flutter Chrome debug session before '
+                  'retrying; inspect cognito-idp requests in Chrome Network.'
+              : 'Cognito sign-in timed out and its public endpoint could not '
+                  'be verified from Chrome. Inspect blocked or pending '
+                  'cognito-idp requests in Chrome Network.');
+        }
       }
     } on CustomerAuthenticationFailed {
       if (mounted) {

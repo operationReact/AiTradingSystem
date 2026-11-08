@@ -39,13 +39,15 @@ void main() {
     double width = 390,
     double height = 844,
     bool disableAnimations = false,
+    Future<bool> Function()? cognitoConnectivityCheck,
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = Size(width, height);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(
-      home: const MintTickWelcomePage(),
+      home: MintTickWelcomePage(
+          cognitoConnectivityCheck: cognitoConnectivityCheck),
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(disableAnimations: disableAnimations),
         child: child!,
@@ -193,7 +195,8 @@ void main() {
     final pending = Completer<LoginStep>();
     final identity = _ControlledCognito(() => pending.future);
     MintTickIdentity.current = identity;
-    await pumpWelcome(tester);
+    await pumpWelcome(tester,
+        cognitoConnectivityCheck: () async => true);
     await tester.enterText(
       find.byKey(const ValueKey('minttick-inline-username')), 'example-user');
     await tester.enterText(
@@ -207,6 +210,7 @@ void main() {
     await tester.pump(const Duration(seconds: 26));
     await tester.pump();
     expect(find.textContaining('Cognito sign-in timed out'), findsOneWidget);
+    expect(find.textContaining('public endpoint is reachable'), findsOneWidget);
     expect(find.byType(CircularProgressIndicator), findsNothing);
     await tester.tap(button);
     await tester.pump();
