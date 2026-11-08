@@ -211,6 +211,11 @@ void main() {
     await tester.tap(button);
     await tester.pump();
     expect(identity.signInCalls, 2);
+    // Settle the second deliberately stalled request before ending the test;
+    // Flutter's widget test binding rejects pending 25-second timers.
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('backend verification timeout identifies stage and clears spinner',
