@@ -30,12 +30,32 @@ test "$(docker image inspect "$api" --format '{{.Config.User}}')" = "10001" || {
   echo "Backend must run as unprivileged container user" >&2; exit 2;
 }
 
+# Fail closed if this backend would authenticate outside the registered
+# broker static IP. Keep the local AWS network identity derived, not invented.
+observed_egress="$(curl --silent --fail --connect-timeout 3 --max-time 8 https://checkip.amazonaws.com 2>/dev/null || true)"
+test "$observed_egress" = "3.108.130.17" || {
+  echo "Angel One registered static egress IP mismatch; release refused" >&2
+  exit 2
+}
+client_iface="$(ip -o -4 addr show | awk '$4 ~ /^10[.]87[.]0[.]10[/]/ {print $2}')"
+client_iface="${client_iface%%@*}"
+[[ "$client_iface" =~ ^[a-zA-Z0-9_.-]{2,32}$ ]] || {
+  echo "Exact EC2 client network interface unavailable" >&2; exit 2
+}
+test -f "/sys/class/net/$client_iface/address" || exit 2
+client_mac="$(tr '[:upper:]' '[:lower:]' < "/sys/class/net/$client_iface/address" | tr -d '[:space:]')"
+[[ "$client_mac" =~ ^([0-9a-f]{2}:){5}[0-9a-f]{2}$ ]] && test "$client_mac" != "00:00:00:00:00:00" || {
+  echo "Exact EC2 client network MAC unavailable" >&2; exit 2
+}
+
 # Merge host-local credentials (never exported to Actions or console logs)
-# with an immutable release digest, atomically and with 0600 permissions.
+# with an immutable release digest and nonsecret network headers, atomically
+# and with 0600 permissions.
 temp="$(mktemp "$root/.env.XXXXXXXX")"
 trap 'rm -f -- "$temp"' EXIT
 cat runtime.env > "$temp"
 printf 'RELEASE_SHA=%s\n' "$sha" >> "$temp"
+printf 'ANGELONE_CLIENT_MAC_ADDRESS=%s\n' "$client_mac" >> "$temp"
 chmod 0600 "$temp"
 docker compose --env-file "$temp" -f paper-compose.yml config --quiet
 
