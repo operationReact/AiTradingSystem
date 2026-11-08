@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.math.BigDecimal;
@@ -54,6 +55,32 @@ class CustomerMarketDataControllerTest {
             .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
                 assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
         verifyNoInteractions(provider,catalogue);
+    }
+
+    @Test
+    void connectedCustomerCanReadOwnVerifiedCashQuoteWithoutAccessingOwnerFeed() {
+        var broker = mock(CustomerAngelOneSessionService.class);
+        var auth = principal("other-sub");
+        UUID accountId = UUID.randomUUID();
+        when(identities.find("cognito", ISSUER, "other-sub"))
+            .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
+                accountId, "ACTIVE", "CUSTOMER", "Trader", "customer@example.invalid")));
+        when(broker.status(accountId)).thenReturn(
+            new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***123", Instant.now().plusSeconds(3600), false));
+        var instrument = new Instrument(
+            42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
+            "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(broker.quote(accountId, instrument)).thenReturn(new BigDecimal("125.55"));
+        var controller = new CustomerMarketDataController(
+            identities, catalogue, provider, "owner-sub", "ANGEL_ONE_LAMBDA", broker);
+        var result = controller.quote(auth, 42L).getBody();
+        assertThat(result).isNotNull();
+        assertThat(result.ltp()).isEqualByComparingTo("125.55");
+        assertThat(result.source()).isEqualTo("ANGEL_ONE_SMARTAPI_CUSTOMER");
+        verify(broker).quote(accountId, instrument);
+        verifyNoInteractions(provider);
     }
 
     @Test

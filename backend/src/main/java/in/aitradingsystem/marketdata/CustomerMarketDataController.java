@@ -1,6 +1,7 @@
 package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
 import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.instrument.InstrumentMasterRepository;
@@ -12,6 +13,7 @@ import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -40,16 +42,27 @@ public class CustomerMarketDataController {
     private final MarketDataProvider market;
     private final String ownerSubject;
     private final String providerMode;
+    private final CustomerAngelOneSessionService customerBroker;
 
+    /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
+    CustomerMarketDataController(CustomerIdentityStore identities,
+            InstrumentMasterService instruments, MarketDataProvider market,
+            String ownerSubject, String providerMode) {
+        this(identities, instruments, market, ownerSubject, providerMode, null);
+    }
+
+    @Autowired
     public CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerSubject,
-            @Value("${app.market-data.provider:ANGEL_ONE}") String providerMode) {
+            @Value("${app.market-data.provider:ANGEL_ONE}") String providerMode,
+            CustomerAngelOneSessionService customerBroker) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
         this.ownerSubject = ownerSubject == null ? "" : ownerSubject.trim();
         this.providerMode = providerMode;
+        this.customerBroker = customerBroker;
     }
 
     @GetMapping("/instruments/status")
@@ -80,13 +93,21 @@ public class CustomerMarketDataController {
     public ResponseEntity<Quote> quote(Authentication authentication,
             @RequestParam @Min(1) long instrumentId) {
         JwtAuthenticationToken token = requireCustomer(authentication);
-        if (ownerSubject.isEmpty() || !ownerSubject.equals(token.getToken().getSubject())) {
+        boolean ownerFeed = ownerSubject.equals(token.getToken().getSubject())
+            && !ownerSubject.isEmpty() && "ANGEL_ONE_LAMBDA".equals(providerMode);
+        var account = identities.find("cognito", token.getToken().getIssuer().toString(),
+            token.getToken().getSubject()).orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        boolean accountFeed = customerBroker != null
+            && customerBroker.status(account.id()).connected();
+        if (!ownerFeed && !accountFeed) {
+            if (ownerSubject.equals(token.getToken().getSubject())
+                    && !"ANGEL_ONE_LAMBDA".equals(providerMode)) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Private read-only market feed has not been enabled");
+            }
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Broker market data is limited to its authorized account owner");
-        }
-        if (!"ANGEL_ONE_LAMBDA".equals(providerMode)) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Private read-only market feed has not been enabled");
+                "Connect your own brokerage account to request market quotes");
         }
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         if (!java.util.Set.of("NSE_CM", "BSE_CM").contains(instrument.exchangeSegment())
@@ -94,9 +115,11 @@ public class CustomerMarketDataController {
                 || !instrument.tradingSymbol().endsWith("-EQ")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
         }
-        BigDecimal price = market.lastTradedPrice(instrument);
+        BigDecimal price = ownerFeed ? market.lastTradedPrice(instrument)
+            : customerBroker.quote(account.id(), instrument);
+        String source = ownerFeed ? market.source() : "ANGEL_ONE_SMARTAPI_CUSTOMER";
         return noStore(new Quote(instrument.id(), instrument.exchange(), instrument.tradingSymbol(),
-            price, Instant.now(), market.source()));
+            price, Instant.now(), source));
     }
 
     private JwtAuthenticationToken requireCustomer(Authentication authentication) {

@@ -104,6 +104,7 @@ Resources:
               ("GET", "/api/customer/brokers/angel-one/status"),
               ("GET", "/api/customer/brokers/angel-one/configured-login"),
               ("POST", "/api/customer/brokers/angel-one/connect-configured"),
+              ("POST", "/api/customer/brokers/angel-one/connect"),
               ("POST", "/api/customer/brokers/angel-one/disconnect"),
               ("GET", "/api/customer/brokers/angel-one/funds"),
               ("GET", "/api/customer/brokers/angel-one/holdings"),
@@ -233,6 +234,22 @@ Resources:
                   "/api/customer/brokers/upstox/disconnect",
               } and body:
                   return reply(400, {"error": "INVALID_BODY"})
+              # Manual SmartAPI login is customer-scoped and authorized. Accept only the
+              # four required short-lived input fields; never log, cache or echo them.
+              if method == "POST" and path == "/api/customer/brokers/angel-one/connect":
+                  try:
+                      credentials = json.loads(body)
+                      valid = (isinstance(credentials, dict)
+                          and set(credentials) == {"apiKey", "clientCode", "pin", "totp"}
+                          and all(isinstance(v, str) for v in credentials.values())
+                          and 1 <= len(credentials["apiKey"]) <= 256
+                          and re.fullmatch(r"(?i)[a-z0-9]{4,20}", credentials["clientCode"])
+                          and re.fullmatch(r"[0-9]{4,8}", credentials["pin"])
+                          and re.fullmatch(r"[0-9]{6}", credentials["totp"]))
+                  except (ValueError, TypeError):
+                      valid = False
+                  if not valid:
+                      return reply(400, {"error": "INVALID_BROKER_LOGIN_INPUT"})
               internal_path = "/api/health" if is_health else path
               if query:
                   internal_path += "?" + query

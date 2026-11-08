@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/customer_angel_one_repository.dart';
+import 'minttick_angel_one_manual_login.dart';
 import 'minttick_customer_widgets.dart';
 
 /// Customer-owned, interactive, READ-ONLY broker connection. Never renders
@@ -75,6 +76,30 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       if (mounted) {
         setState(() => _error = 'Angel One did not complete authentication. '
             'Check the account configuration or try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _connectManual() async {
+    if (_busy) return;
+    final input = await showMintTickAngelOneLogin(context);
+    if (!mounted || input == null) return;
+    setState(() { _busy = true; _error = null; });
+    try {
+      final connection = await widget.repository.connect(
+        apiKey: input.apiKey,
+        clientCode: input.clientCode,
+        pin: input.pin,
+        totp: input.totp,
+      );
+      if (mounted) setState(() { _connection = connection; _data = null; });
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error =
+          'Angel One could not verify this login. Check SmartAPI access, '
+          'the current six-digit authenticator code, and your broker account.');
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -237,6 +262,24 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           icon: const Icon(Icons.refresh_rounded),
           label: const Text('Check secure connection'),
         )),
+      ],
+      if (connection?.connected != true) ...[
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            key: const ValueKey('broker-connect-manual'),
+            onPressed: _busy ? null : _connectManual,
+            icon: const Icon(Icons.account_circle_outlined),
+            label: const Text('Connect using my own SmartAPI credentials'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        const MintTickInfoText(
+          'Your own API key, client code, PIN and current 6-digit TOTP '
+          'are used only for this sign-in. Never enter a long TOTP seed.',
+          icon: Icons.privacy_tip_outlined,
+        ),
       ],
       const SizedBox(height: 18),
       const MintTickInfoText(

@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.instrument.Instrument;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -42,6 +44,26 @@ class CustomerAngelOneSessionServiceTest {
         verify(api).customerFunds("key-alice", "jwt-alice-secret");
         service.disconnect(alice);
         assertThat(service.status(alice).connected()).isFalse();
+    }
+
+    @Test
+    void ownBrokerMarketQuoteNeverUsesAnotherCustomersSession() throws Exception {
+        var service = service(Clock.fixed(Instant.parse("2026-11-07T06:00:00Z"), ZoneOffset.UTC));
+        UUID alice = UUID.randomUUID(), bob = UUID.randomUUID();
+        when(api.customerLogin("key-alice", "AL1234", "1234", "123456"))
+            .thenReturn(new AngelOneApiClient.LoginTokens("alice-jwt", "refresh"));
+        when(api.customerProfile("key-alice", "alice-jwt"))
+            .thenReturn(mapper.readTree("{\"clientcode\":\"AL1234\"}"));
+        service.connect(alice, "key-alice", "AL1234", "1234", "123456");
+        var instrument = new Instrument(
+            42L, "NSE_CM", "NSE", "99999", "TEST-EQ",
+            "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(api.customerLtp("key-alice", "alice-jwt", "NSE", "TEST-EQ", "99999"))
+            .thenReturn(new BigDecimal("125.55"));
+        assertThat(service.quote(alice, instrument)).isEqualByComparingTo("125.55");
+        assertThatThrownBy(() -> service.quote(bob, instrument))
+            .isInstanceOf(CustomerAngelOneSessionService.BrokerConnectionRequiredException.class);
+        verify(api, times(1)).customerLtp("key-alice", "alice-jwt", "NSE", "TEST-EQ", "99999");
     }
 
     @Test

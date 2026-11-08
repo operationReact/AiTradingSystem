@@ -144,11 +144,26 @@ public class AngelOneApiClient {
 
     /** Returns the last traded price for one instrument. The caller supplies the verified symbol token. */
     public BigDecimal ltp(String jwtToken, String exchange, String tradingSymbol, String symbolToken) {
+        return checkedLtp(properties.apiKey(), jwtToken, exchange, tradingSymbol, symbolToken);
+    }
+
+    /** Broker-customer-scoped quote; do not substitute the platform API key. */
+    public BigDecimal customerLtp(String apiKey, String jwtToken,
+            String exchange, String tradingSymbol, String symbolToken) {
+        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
+                || jwtToken == null || jwtToken.isBlank()) {
+            throw new IllegalArgumentException("Valid customer broker session required");
+        }
+        return checkedLtp(apiKey, jwtToken, exchange, tradingSymbol, symbolToken);
+    }
+
+    private BigDecimal checkedLtp(String apiKey, String jwtToken,
+            String exchange, String tradingSymbol, String symbolToken) {
         ObjectNode body = mapper.createObjectNode()
                 .put("exchange", exchange)
                 .put("tradingsymbol", tradingSymbol)
                 .put("symboltoken", symbolToken);
-        JsonNode data = post(LTP_PATH, jwtToken, body);
+        JsonNode data = post(LTP_PATH, jwtToken, body, apiKey);
         JsonNode ltp = data.get("ltp");
         if (ltp == null || !ltp.isNumber()) {
             throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MISSING_LTP",
