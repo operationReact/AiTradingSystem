@@ -165,7 +165,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   String _focus = 'Intraday';
   String _risk = 'Balanced';
   late String _mode;
-  bool _review = false;
+  int _step = 0;
   bool _acknowledged = false;
 
   static const _focuses = <(String, String, IconData)>[
@@ -210,20 +210,19 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   }
 
   void _continue() {
-    if (!_review) {
-      if (!(_formKey.currentState?.validate() ?? false)) return;
-      setState(() => _review = true);
+    if (_step == 0 && !(_formKey.currentState?.validate() ?? false)) return;
+    if (_step < 3) {
+      setState(() => _step++);
       _top();
     } else if (_acknowledged) {
-      // App controller submits the plan to the authenticated customer API.
-      // Merely reviewing a plan never creates a trade or activates a strategy.
+      // Only a draft is persisted by the authenticated customer API.
       Navigator.of(context).pop(_draft);
     }
   }
 
   void _back() {
-    if (_review) {
-      setState(() => _review = false);
+    if (_step > 0) {
+      setState(() => _step--);
       _top();
     } else {
       Navigator.of(context).pop();
@@ -252,9 +251,9 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                   Expanded(child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(_review ? 'Review MintTick Mind plan' : 'Create a Trading Room',
+                      Text(_step == 3 ? 'Review Trading Room' : 'New Trading Room',
                         style: style.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
-                      Text('Step ${_review ? 2 : 1} of 2 · ${_mode == 'LIVE' ? 'Live' : 'Paper'} plan',
+                      Text('Step ${_step + 1} of 4 · ${_mode == 'LIVE' ? 'Live' : 'Paper'}',
                         style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
                     ],
                   )),
@@ -262,9 +261,10 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 ]),
                 const SizedBox(height: 13),
                 Row(children: [
-                  Expanded(child: _ProgressSegment(active: true)),
-                  const SizedBox(width: 8),
-                  Expanded(child: _ProgressSegment(active: _review)),
+                  for (var index = 0; index < 4; index++) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    Expanded(child: _ProgressSegment(active: index <= _step)),
+                  ],
                 ]),
               ]),
             ),
@@ -275,7 +275,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 AnimatedSwitcher(
                   duration: MediaQuery.of(context).disableAnimations
                       ? Duration.zero : kMintTickMotion,
-                  child: _review
+                  child: _step == 3
                       ? KeyedSubtree(
                           key: const ValueKey('room-plan'),
                           child: _buildPlan(context))
@@ -300,8 +300,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
             height: 50,
             child: FilledButton(
               key: const ValueKey('room-creation-next'),
-              onPressed: _review && !_acknowledged ? null : _continue,
-              child: Text(_review ? 'Save Trading Room plan' : 'Preview MintTick Mind plan'),
+              onPressed: _step == 3 && !_acknowledged ? null : _continue,
+              child: Text(_step == 3 ? 'Save Trading Room plan' : const ['Continue to Strategy', 'Continue to Risk', 'Review Plan'][_step]),
             ),
           ),
         ),
@@ -312,106 +312,117 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   Widget _buildDetails(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final style = Theme.of(context).textTheme;
+    final headings = ['Room details', 'Choose a strategy focus', 'Set a risk preference'];
     return Form(
       key: _formKey,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Start with your goal.', style: style.headlineSmall
+        Text(headings[_step], style: style.headlineSmall
             ?.copyWith(fontWeight: FontWeight.w800)),
         const SizedBox(height: 6),
-        Text("A few choices. We'll handle the technical planning.",
+        Text(_step == 0
+            ? 'Create a plan for your selected workspace.'
+            : _step == 1
+                ? 'Select the intended trading horizon. This does not activate a strategy.'
+                : 'Choose a planning preference; actual risk limits require server validation.',
           style: style.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 21),
-        const _FieldLabel('Trading mode'),
-        const SizedBox(height: 9),
-        SegmentedButton<String>(
-          key: const ValueKey('room-mode-toggle'),
-          showSelectedIcon: true,
-          segments: const [
-            ButtonSegment(value: 'PAPER', label: Text('Paper'),
-              icon: Icon(Icons.science_outlined)),
-            ButtonSegment(value: 'LIVE', label: Text('Live'),
-              icon: Icon(Icons.candlestick_chart_rounded)),
-          ],
-          selected: {_mode},
-          onSelectionChanged: (choices) => setState(() => _mode = choices.first),
-        ),
-        const SizedBox(height: 7),
-        Text(_mode == 'PAPER'
-            ? 'Virtual trading, without placing broker orders.'
-            : 'Real-money trading mode. Broker connection and separate '
-              'authorization are required before activation.',
-          style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 18),
-        const _FieldLabel('Room name'),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: const ValueKey('room-name-input'),
-          controller: _name,
-          maxLength: 38,
-          textInputAction: TextInputAction.next,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Morning opportunities', counterText: ''),
-          validator: (value) => (value?.trim().isEmpty ?? true)
-              ? 'Give your room a name' : null,
-        ),
-        const SizedBox(height: 18),
-        const _FieldLabel("What's your focus?"),
-        const SizedBox(height: 10),
-        LayoutBuilder(builder: (context, constraints) {
-          final half = (constraints.maxWidth - 10) / 2;
-          return Wrap(spacing: 10, runSpacing: 10, children: [
-            for (final (label, subtitle, icon) in _focuses)
-              SizedBox(
-                width: half,
-                child: _FocusChoice(
+        const SizedBox(height: 20),
+        if (_step == 0) ...[
+          const _FieldLabel('Trading mode'),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            key: const ValueKey('room-mode-toggle'),
+            segments: const [
+              ButtonSegment(value: 'PAPER', label: Text('Paper'),
+                icon: Icon(Icons.science_outlined)),
+              ButtonSegment(value: 'LIVE', label: Text('Live'),
+                icon: Icon(Icons.candlestick_chart_rounded)),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (choices) => setState(() => _mode = choices.first),
+          ),
+          const SizedBox(height: 8),
+          Text(_mode == 'PAPER'
+              ? 'Uses simulated funds. No broker order is placed.'
+              : 'A Live plan does not grant broker order authorization.',
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 18),
+          const _FieldLabel('Room name'),
+          const SizedBox(height: 8),
+          TextFormField(
+            key: const ValueKey('room-name-input'),
+            controller: _name,
+            maxLength: 38,
+            textInputAction: TextInputAction.next,
+            decoration: const InputDecoration(
+              hintText: 'Paper Trading 1', counterText: ''),
+            validator: (value) => (value?.trim().isEmpty ?? true)
+                ? 'Give your room a name' : null,
+          ),
+          const SizedBox(height: 18),
+          const _FieldLabel('Asset class'),
+          const SizedBox(height: 8),
+          MintTickSurface(child: Row(children: [
+            const Icon(Icons.stacked_line_chart_rounded),
+            const SizedBox(width: 10),
+            const Expanded(child: Text('Equity · Cash market')),
+            Text('Current scope',
+              style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ])),
+          const SizedBox(height: 18),
+          const _FieldLabel('Planned capital allocation (₹)'),
+          const SizedBox(height: 8),
+          TextFormField(
+            key: const ValueKey('room-budget-input'),
+            controller: _paperBudget,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: const InputDecoration(prefixText: '₹  ', hintText: '20000'),
+            validator: (value) {
+              final n = int.tryParse(value?.trim() ?? '');
+              return n == null || n < 1000 || n > 10000000
+                  ? 'Enter ₹1,000 to ₹1 crore' : null;
+            },
+          ),
+          const SizedBox(height: 6),
+          Text('A planned amount, not funded cash or a broker balance.',
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        if (_step == 1) ...[
+          const _FieldLabel('Strategy / holding horizon'),
+          const SizedBox(height: 12),
+          LayoutBuilder(builder: (context, constraints) {
+            final half = (constraints.maxWidth - 10) / 2;
+            return Wrap(spacing: 10, runSpacing: 10, children: [
+              for (final (label, subtitle, icon) in _focuses)
+                SizedBox(width: half, child: _FocusChoice(
                   label: label, subtitle: subtitle, icon: icon,
                   selected: label == _focus,
                   onTap: () => setState(() => _focus = label),
-                ),
+                )),
+            ]);
+          }),
+          const SizedBox(height: 14),
+          const MintTickInfoText(
+            'Intraday and delivery describe trade holding styles. Equity is '
+            'the supported asset class. Strategy configuration is a separate step.'),
+        ],
+        if (_step == 2) ...[
+          const _FieldLabel('How do you approach risk?'),
+          const SizedBox(height: 12),
+          Wrap(spacing: 9, runSpacing: 9, children: [
+            for (final label in ['Cautious', 'Balanced', 'Aggressive'])
+              ChoiceChip(
+                key: ValueKey('room-risk-${label.toLowerCase()}'),
+                label: Text(label),
+                selected: label == _risk,
+                onSelected: (_) => setState(() => _risk = label),
               ),
-          ]);
-        }),
-        const SizedBox(height: 19),
-        const _FieldLabel('Planned room budget (₹)'),
-        const SizedBox(height: 8),
-        TextFormField(
-          key: const ValueKey('room-budget-input'),
-          controller: _paperBudget,
-          keyboardType: TextInputType.number,
-          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(
-            prefixText: '₹  ', hintText: '20000'),
-          validator: (value) {
-            final n = int.tryParse(value?.trim() ?? '');
-            if (n == null || n < 1000 || n > 10000000) {
-              return 'Use a virtual budget between ₹1,000 and ₹1 crore';
-            }
-            return null;
-          },
-        ),
-        const SizedBox(height: 5),
-        Text('This is a planning amount, not a reserved broker balance.',
-          style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 19),
-        const _FieldLabel('How do you approach risk?'),
-        const SizedBox(height: 9),
-        Wrap(spacing: 7, runSpacing: 7, children: [
-          for (final label in ['Cautious', 'Balanced', 'Aggressive'])
-            ChoiceChip(
-              key: ValueKey('room-risk-${label.toLowerCase()}'),
-              label: Text(label),
-              selected: label == _risk,
-              onSelected: (_) => setState(() => _risk = label),
-            ),
-        ]),
-        const SizedBox(height: 8),
-        Text('This is a preference, not a suitability assessment.',
-          style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 18),
-        const MintTickInfoText(
-          'MintTick Mind may recommend fewer trades or none. '
-          'Automation never overrides approved risk limits.',
-        ),
+          ]),
+          const SizedBox(height: 15),
+          const MintTickInfoText(
+            'This is a preference, not a suitability assessment or an '
+            'enforced risk policy. Live order risk is always checked on the server.'),
+        ],
       ]),
     );
   }
