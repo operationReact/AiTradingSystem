@@ -82,4 +82,45 @@ class CustomerAngelOneConfiguredLoginTest {
         verify(service).connect(any(UUID.class), eq("private-api-key"), eq("AL1234"),
             eq("1234"), matches("[0-9]{6}"));
     }
+
+    @Test
+    void ownerConfiguredLoginUsesSsmOnEc2InsteadOfLambdaSession() {
+        var ownerSsm = mock(OwnerAngelOneSsmService.class);
+        var lambda = mock(OwnerAngelOneLambdaService.class);
+        var live = mock(CustomerAngelOneLiveQuoteService.class);
+        when(ownerSsm.available()).thenReturn(true);
+        var noHostSecrets = new AngelOneProperties("", "", "", "",
+            "https://apiconnect.angelone.in", 5000, 5000, 3600, 0, 0);
+        var controller = new CustomerAngelOneController(identities, service, noHostSecrets,
+            "owner-sub", lambda, ownerSsm, live);
+        var auth = principal("owner-sub");
+        assertThat(controller.configuredLogin(auth).getBody().available()).isTrue();
+        when(ownerSsm.connect(any(UUID.class))).thenReturn(
+            new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***234", Instant.now().plusSeconds(3000), false));
+
+        var status = controller.connectConfigured(auth).getBody();
+        assertThat(status.connected()).isTrue();
+        assertThat(status.orderExecutionEnabled()).isFalse();
+        verify(ownerSsm).connect(any(UUID.class));
+        verify(lambda, never()).connect(any(UUID.class));
+        verify(service, never()).connect(any(UUID.class), anyString(), anyString(),
+                anyString(), anyString());
+    }
+
+    @Test
+    void nonOwnerCannotUseConfiguredSsmLogin() {
+        var ownerSsm = mock(OwnerAngelOneSsmService.class);
+        when(ownerSsm.available()).thenReturn(true);
+        var noHostSecrets = new AngelOneProperties("", "", "", "",
+            "https://apiconnect.angelone.in", 5000, 5000, 3600, 0, 0);
+        var controller = new CustomerAngelOneController(identities, service, noHostSecrets,
+            "owner-sub", null, ownerSsm, null);
+        assertThat(controller.configuredLogin(principal("other-sub")).getBody().available())
+            .isFalse();
+        assertThatThrownBy(() -> controller.connectConfigured(principal("other-sub")))
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verify(ownerSsm, never()).connect(any(UUID.class));
+    }
 }
