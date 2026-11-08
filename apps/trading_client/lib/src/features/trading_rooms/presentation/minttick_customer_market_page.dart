@@ -184,9 +184,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       if (!mounted || _selected?.id != stock.id) return;
       setState(() {
         _quoteError = switch (error.statusCode) {
-          403 => 'Angel One quotes are restricted to the verified account owner.',
+          403 => 'Your MintTick account cannot access the market feed.',
           429 => 'The broker has limited quote requests. Try again later.',
-          503 => 'The private Angel One market feed is not connected yet.',
+          503 => 'MintTick’s server-side market feed is temporarily unavailable.',
           _ => 'No verified broker quote is available for this stock.',
         };
       });
@@ -263,7 +263,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       Text('Markets', style: theme.textTheme.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Explore genuine NSE and BSE cash equities. Live quotes require an authenticated broker session.',
+      Text('Explore real NSE and BSE equities using MintTick’s app-managed market feed. No personal broker login required.',
         style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant, height: 1.4)),
       const SizedBox(height: 18),
