@@ -1,0 +1,91 @@
+name: MintTick - read-only registered outbound IP inspection
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-public-egress-inspect.yml'
+      - 'infra/ec2-paper/read_public_egress.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/read-public-egress.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Static checks for exact-host read-only probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/read_public_egress.py
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path("infra/ec2-paper/read_public_egress.py").read_text()
+          assert 'i-09c01b470fb39b85a' in script
+          assert 'https://checkip.amazonaws.com' in script
+          assert '"ssm", "send-command"' in script
+          assert '"ec2", "describe-instances"' in script
+          for prohibited in ('ssm:GetParameter', 'start-instances', 'stop-instances',
+                             'authorize-security-group', 'run-instances',
+                             'update-function-code', 'placeOrder'):
+              assert prohibited not in script
+          print("PASS: read-only egress probe restricted to exact EC2")
+          PY
+
+  observe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Exact one-file request authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/read-public-egress.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          got=json.loads(Path("infra/ec2-paper/requests/read-public-egress.json").read_text())
+          expected={
+              "application":"MintTick",
+              "environment":"paper",
+              "aws_account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"read-only-public-egress-ip"
+          }
+          assert got == expected, "Incorrect egress inspection request"
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-egress-inspect
+      - name: Inspect actual EC2 HTTPS egress IP and Elastic IP association
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/read_public_egress.py
