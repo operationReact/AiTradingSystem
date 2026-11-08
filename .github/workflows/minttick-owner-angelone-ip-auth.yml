@@ -130,6 +130,10 @@ jobs:
               k,v=line.split(": ",1)
               if k in allowed and v in allowed[k]:
                   outputs.append(k+": "+v)
+              elif k=="ANGEL_ONE_AUTH":
+                  import re
+                  if re.fullmatch(r"HTTP_[45][0-9]{2}|PROVIDER_CODE_(?:AB|AG)[0-9]{4}", v):
+                      outputs.append(k+": "+v)
           for item in outputs: print(item)
           if data.get("Status") == "Success" and all(v in outputs for v in (
               "EC2_EGRESS: MATCH_REGISTERED_EIP",
