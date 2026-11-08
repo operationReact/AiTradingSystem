@@ -62,15 +62,42 @@ def main():
         raise RuntimeError("EXACT_EC2_IS_NOT_RUNNING")
 
     ec2_public = public_ipv4(node.get("PublicIpAddress"))
-    nic_associations = [
-        nic.get("Association", {}) for nic in node.get("NetworkInterfaces", [])
-        if isinstance(nic, dict)
-    ]
-    elastic = any(assoc.get("AllocationId") and public_ipv4(assoc.get("PublicIp"))
-                  for assoc in nic_associations)
+    # DescribeInstances NetworkInterfaces[].Association is NOT guaranteed to
+    # include Elastic IP AllocationId. Inspect the canonical EIP API instead.
+    # Missing DescribeAddresses permission must never be misreported as ABSENT.
+    elastic_state = "UNVERIFIED"
+    if ec2_public:
+        try:
+            allocations = aws("ec2", "describe-addresses", "--public-ips", ec2_public)
+        except RuntimeError:
+            elastic_state = "UNVERIFIED_DESCRIBE_ADDRESSES_FAILED"
+        else:
+            matches = [
+                a for a in allocations.get("Addresses", [])
+                if a.get("PublicIp") == ec2_public
+            ]
+            elastic_state = "ABSENT"
+            if len(matches) == 1:
+                a = matches[0]
+                linked_enis = {
+                    nic.get("NetworkInterfaceId")
+                    for nic in node.get("NetworkInterfaces", [])
+                    if isinstance(nic, dict)
+                }
+                if (
+                    a.get("AllocationId", "").startswith("eipalloc-")
+                    and a.get("AssociationId", "").startswith("eipassoc-")
+                    and (
+                        a.get("InstanceId") == INSTANCE
+                        or a.get("NetworkInterfaceId") in linked_enis
+                    )
+                ):
+                    elastic_state = "PRESENT"
+                else:
+                    elastic_state = "UNVERIFIED_ASSOCIATION_MISMATCH"
     print("INSTANCE:", INSTANCE)
     print("EC2_PUBLIC_INTERFACE_IP:", ec2_public or "NONE")
-    print("EC2_ELASTIC_IP_ASSOCIATION:", "PRESENT" if elastic else "ABSENT")
+    print("EC2_ELASTIC_IP_ASSOCIATION:", elastic_state)
 
     # Execute a fixed read-only HTTPS request on the existing EC2 host via SSM.
     # No IAM role/parameter values, host environment, logs, or tokens are read.
@@ -100,10 +127,12 @@ def main():
     if not observed:
         raise RuntimeError("PUBLIC_EGRESS_UNCONFIRMED")
     print("OBSERVED_EC2_OUTBOUND_IPV4:", observed)
-    if ec2_public == observed and elastic:
+    if ec2_public == observed and elastic_state == "PRESENT":
         label = "EC2_ELASTIC_IP_CONFIRMED"
-    elif ec2_public == observed:
+    elif ec2_public == observed and elastic_state == "ABSENT":
         label = "EC2_PUBLIC_IP_NOT_ELASTIC_CAN_CHANGE_ON_RESTART"
+    elif ec2_public == observed:
+        label = "EC2_OUTBOUND_CONFIRMED_ELASTIC_ASSOCIATION_UNVERIFIED"
     else:
         label = "NAT_OR_OTHER_EGRESS_STABILITY_NOT_CONFIRMED"
     print("EGRESS_IP_STABILITY:", label)
