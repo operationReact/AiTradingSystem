@@ -188,9 +188,8 @@ jobs:
                   raise SystemExit('Generated Android manifest has no <manifest> root')
               manifest = manifest[:root_close + 1] + '\n    ' + permission + manifest[root_close + 1:]
               manifest_path.write_text(manifest)
-          # The generated wrapper's default Gradle CDN redirects to GitHub Releases,
-          # which has returned HTTP 504. Use Gradle's direct official CDN with
-          # a checksum independently published at gradle.org/release-checksums/.
+          # Avoid transient GitHub Releases HTTP 504 from Gradle's redirect.
+          # Use the official Gradle binary CDN and SHA256 release checksum.
           wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
           wrapper_text = wrapper.read_text()
           expected = 'distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip'
@@ -209,42 +208,6 @@ jobs:
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
           grep -Fq 'downloads.gradle.org/distributions/gradle-9.3.1-bin.zip' android/gradle/wrapper/gradle-wrapper.properties
           grep -Fq 'distributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06' android/gradle/wrapper/gradle-wrapper.properties
-
-      - name: Resolve dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Test
-        run: flutter test
-
-      - name: Build sideloadable release APK
-        run: |
-          flutter build apk --release \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
-            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
-            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
-            --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"
-
-      - name: Record APK checksum
-        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
-
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ github.event_name == 'push' && 'MintTick-Cognito-Android-Test' || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
-          path: |
-            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
-            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
-          if-no-files-found: error
-          retention-days: 14
- android/gradle.properties
-          grep -q 'compilerOptions' android/app/build.gradle.kts
-          ! grep -q 'kotlinOptions' android/app/build.gradle.kts
-          grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
-          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
       - name: Resolve dependencies
         run: flutter pub get
