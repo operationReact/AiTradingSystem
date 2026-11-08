@@ -298,6 +298,8 @@ Resources:
         AllowOrigins:
           - https://www.minttick.com
           - https://minttick.com
+          # Fixed IntelliJ Flutter web origin for local dev against existing AWS API.
+          - http://localhost:5173
         AllowHeaders:
           - Authorization
           - Content-Type
