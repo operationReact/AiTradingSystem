@@ -5,6 +5,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/minttick-domain/requests/android-cognito-test.json'
+      - 'infra/minttick-domain/requests/android-connected-test.json'
   pull_request:
     branches: [dev]
     paths:
@@ -50,40 +51,68 @@ jobs:
           persist-credentials: false
           fetch-depth: 2
 
-      - name: Require exact reviewed Cognito-only one-file build request
+      - name: Require exact reviewed one-file Android build request
         if: github.event_name == 'push'
+        id: request_mode
         working-directory: .
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
           test "$GITHUB_REF" = 'refs/heads/dev'
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/android-cognito-test.json'
           python3 - <<'PY'
           import json
+          import os
+          import subprocess
           from pathlib import Path
-          document=json.loads(Path('infra/minttick-domain/requests/android-cognito-test.json').read_text())
-          expected={
+
+          changed=subprocess.check_output(
+              ['git','diff-tree','--no-commit-id','--name-only','-r','HEAD'],
+              text=True).strip()
+          prefix='infra/minttick-domain/requests/'
+          identity_path=prefix+'android-cognito-test.json'
+          connected_path=prefix+'android-connected-test.json'
+          if changed not in (identity_path, connected_path):
+              raise SystemExit('Only one reviewed Android request file is permitted')
+          document=json.loads(Path(changed).read_text())
+          common={
               "application":"MintTick",
               "environment":"dev",
-              "operation":"build-cognito-only-android-test",
-              "public_api_ready":False,
-              "cognito_pool":"ap-south-1_jz2T8qbiY",
-              "authorization":"USER_APPROVED_ANDROID_COGNITO_TEST_2026-11-07"
+              "cognito_pool":"ap-south-1_jz2T8qbiY"
           }
-          assert document == expected, "Unexpected Android identity-only build request"
-          source=Path('apps/trading_client/lib/src/presentation/welcome_page.dart').read_text()
-          assert "MINTTICK_AUTH_ONLY_TEST" in source
-          assert "pushNamedAndRemoveUntil('/auth-test'" in source
-          assert "await MintTickCustomerAccountApi().provision()" in source
-          status=Path('apps/trading_client/lib/src/presentation/cognito_test_page.dart').read_text()
-          assert "Trading rooms and brokerage actions are unavailable" in status
-          main=Path('apps/trading_client/lib/main.dart').read_text()
-          assert "cognitoTestSession" in main
+          if changed==identity_path:
+              expected={
+                  **common,
+                  "operation":"build-cognito-only-android-test",
+                  "public_api_ready":False,
+                  "authorization":"USER_APPROVED_ANDROID_COGNITO_TEST_2026-11-07"
+              }
+              source=Path('apps/trading_client/lib/src/presentation/welcome_page.dart').read_text()
+              assert "MINTTICK_AUTH_ONLY_TEST" in source
+              assert "pushNamedAndRemoveUntil('/auth-test'" in source
+              assert "await MintTickCustomerAccountApi().provision()" in source
+              status=Path('apps/trading_client/lib/src/presentation/cognito_test_page.dart').read_text()
+              assert "Trading rooms and brokerage actions are unavailable" in status
+              main=Path('apps/trading_client/lib/main.dart').read_text()
+              assert "cognitoTestSession" in main
+          else:
+              expected={
+                  **common,
+                  "operation":"build-backend-connected-android-test",
+                  "public_api_ready":True,
+                  "api_origin":"https://api.minttick.com",
+                  "authorization":"USER_REQUESTED_CONNECTED_ANDROID_2026-11-08"
+              }
+              with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+                  stream.write('connected=true\n')
+              with open(os.environ['GITHUB_ENV'],'a') as stream:
+                  stream.write('MINTTICK_AUTH_ONLY_TEST=false\n')
+          if document != expected:
+              raise SystemExit('Unexpected Android request contents')
+          print('PASS: exact user-requested build mode validated; no broker credentials')
           PY
-          echo "PASS: authenticated-only Android test gate, no fake customer dashboard"
 
       - name: Validate physical-device API endpoint
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || steps.request_mode.outputs.connected == 'true'
         run: |
           python3 - <<'PY'
           import os
@@ -108,7 +137,7 @@ jobs:
           PY
 
       - name: Verify live HTTPS account API before packaging device APK
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || steps.request_mode.outputs.connected == 'true'
         working-directory: .
         run: python3 scripts/verify_minttick_live_api.py
 
@@ -117,7 +146,7 @@ jobs:
         run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
 
       - name: Explicitly mark Cognito-only sideloadable test release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.request_mode.outputs.connected != 'true'
         run: echo 'Cognito is real. Customer backend activation is pending; this test never grants trading access.'
 
       - uses: subosito/flutter-action@v2
@@ -363,7 +392,7 @@ jobs:
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ github.event_name == 'push' && 'MintTick-Cognito-Android-Test' || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          name: ${{ github.event_name == 'push' && (steps.request_mode.outputs.connected == 'true' && 'MintTick-Connected-Android-Test' || 'MintTick-Cognito-Android-Test') || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
           path: |
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
