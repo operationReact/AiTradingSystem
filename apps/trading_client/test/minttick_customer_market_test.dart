@@ -56,6 +56,27 @@ class _CustomerMarketFake implements CustomerMarketRepository {
   }
 }
 
+
+class _LiveMarketFake extends _CustomerMarketFake implements CustomerLiveMarketRepository {
+  String nextStatus = 'MARKET_CLOSED';
+  int liveRequests = 0;
+
+  @override
+  Future<CustomerLiveQuote> liveQuote(int instrumentId) async {
+    liveRequests++;
+    final live = nextStatus == 'LIVE';
+    return CustomerLiveQuote(
+      instrumentId: instrumentId,
+      exchange: 'NSE',
+      tradingSymbol: 'TEST-EQ',
+      status: nextStatus,
+      ltp: live ? 125.55 : null,
+      exchangeAt: live ? DateTime.now().toUtc() : null,
+      source: live ? 'ANGEL_ONE_SMARTAPI_WS_V2' : null,
+    );
+  }
+}
+
 void main() {
   test('rejects a broker quote without a valid price and fetched timestamp', () {
     expect(() => CustomerMarketQuote.fromJson({
@@ -123,5 +144,38 @@ void main() {
     expect(find.byKey(const ValueKey('customer-market-verified-price')), findsNothing);
     expect(find.textContaining('Unable to retrieve an authenticated quote'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('market reopening and app resume refresh verified ticks without manual reselect', (tester) async {
+    final fake = _LiveMarketFake();
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('customer-market-stock-101')));
+    await tester.pump();
+    await tester.pump();
+    expect(fake.liveRequests, greaterThanOrEqualTo(1));
+    expect(find.byKey(const ValueKey('customer-market-live-price')), findsNothing);
+
+    fake.nextStatus = 'LIVE';
+    for (var i = 0; i < 16; i++) {
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+    }
+    expect(fake.liveRequests, greaterThanOrEqualTo(2));
+    expect(find.byKey(const ValueKey('customer-market-live-price')), findsOneWidget);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('customer-market-live-price')), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('customer-market-live-price')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
