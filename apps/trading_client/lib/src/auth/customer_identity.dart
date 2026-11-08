@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_flutter/amplify_flutter.dart' show Amplify;
+import 'package:amplify_flutter/amplify_flutter.dart' show Amplify, AuthenticationFlowType;
 import 'package:http/http.dart' as http;
 
 /// Authentication is deliberately independent of MintTick app-user IDs.
