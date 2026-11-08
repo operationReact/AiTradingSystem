@@ -14,7 +14,7 @@ void main() {
     final light = buildTheme(Brightness.light);
     expect(dark.colorScheme.primary, const Color(0xFF78B6AF));
     expect(light.colorScheme.primary, MintTickPalette.readableGreen);
-    expect(dark.colorScheme.surface, const Color(0xFF0E1620));
+    expect(dark.colorScheme.surface, MintTickPalette.nearBlack);
     expect(dark.colorScheme.surfaceContainerLow, const Color(0xFF1B2732));
     expect(dark.colorScheme.surfaceContainerHigh, const Color(0xFF283845));
     expect(dark.colorScheme.onSurface, const Color(0xFFEDF2F4));
