@@ -5,6 +5,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 RUN = ROOT / ".run" / "MintTick Local Web (AWS Backend).run.xml"
+DEBUG_RUN = ROOT / ".run" / "MintTick Local Web (CORS Debug).run.xml"
 TEMPLATE = ROOT / "infra" / "minttick-domain" / "bootstrap-account-api.yml"
 WORKFLOW = ROOT / ".github" / "workflows" / "minttick-intellij-local-cors.yml"
 
@@ -30,6 +31,23 @@ class LocalWebContractTests(unittest.TestCase):
                        "TOTP", "ANGELONE_", "SSM_", "PIN="):
             self.assertNotIn(unsafe, args)
 
+    def test_separate_explicit_debug_chrome_configuration_only_bypasses_cors_locally(self):
+        standard = ET.parse(RUN).getroot().find("configuration")
+        debug = ET.parse(DEBUG_RUN).getroot().find("configuration")
+        self.assertEqual(debug.attrib["type"], "FlutterRunConfigurationType")
+        def options(node):
+            return {x.attrib["name"]: x.attrib["value"] for x in node.findall("option")}
+        normal, bypass = options(standard), options(debug)
+        self.assertEqual(normal["filePath"], bypass["filePath"])
+        self.assertNotIn("--disable-web-security", normal["additionalArgs"])
+        self.assertIn("--web-browser-flag=--disable-web-security", bypass["additionalArgs"])
+        self.assertEqual(
+            bypass["additionalArgs"].replace("--web-browser-flag=--disable-web-security ", ""),
+            normal["additionalArgs"],
+        )
+        self.assertNotIn("CONNECTED_API_KEY", bypass["additionalArgs"])
+        self.assertNotIn("SSM_", bypass["additionalArgs"])
+
     def test_api_gateway_cors_preserves_production_origins_and_auth_headers(self):
         config = TEMPLATE.read_text()
         cors = config.split("      CorsConfiguration:", 1)[1].split("\n\n", 1)[0]
@@ -40,6 +58,8 @@ class LocalWebContractTests(unittest.TestCase):
         for header in ("Authorization", "Content-Type", "Idempotency-Key", "X-Correlation-Id"):
             self.assertIn("- " + header, cors)
         self.assertNotIn("AllowCredentials: true", cors)
+        self.assertIn("arn:aws:apigateway:", config)
+        self.assertIn("apigateway:PATCH", config)
         self.assertNotIn("- '*'", cors)
 
     def test_workflow_limits_deployment_to_exact_one_file_request(self):

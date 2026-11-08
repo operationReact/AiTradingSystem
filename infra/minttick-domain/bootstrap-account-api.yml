@@ -455,6 +455,14 @@ Resources:
               - Effect: Allow
                 Action: cloudformation:DescribeStacks
                 Resource: !Sub 'arn:aws:cloudformation:ap-south-1:${AWS::AccountId}:stack/minttick-account-api/*'
+              # Restrict code deployer's CORS changes to this single dev HTTP API.
+              # Separate GitHub workflow validates the exact one-file request
+              # and confirms Cognito unauthorized requests are still denied.
+              - Effect: Allow
+                Action:
+                  - apigateway:GET
+                  - apigateway:PATCH
+                Resource: !Sub 'arn:aws:apigateway:${AWS::Region}::/apis/${AccountHttpApi}'
 
 Outputs:
   AccountApi:
