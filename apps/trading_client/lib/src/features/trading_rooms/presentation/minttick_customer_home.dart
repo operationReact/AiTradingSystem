@@ -168,7 +168,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               if (widget.marketRepository != null) ...[
                 MintTickMarketPreview(
                   repository: widget.marketRepository!,
-                  onMarkets: widget.onMarkets),
+                  onMarkets: widget.onMarkets,
+                  onConnectBroker: widget.onBroker),
                 const SizedBox(height: 15),
               ],
               if (widget.mode.isPaper) ...[
@@ -250,7 +251,8 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               if (widget.marketRepository != null) ...[
                 MintTickMarketPreview(
                   repository: widget.marketRepository!,
-                  onMarkets: widget.onMarkets),
+                  onMarkets: widget.onMarkets,
+                  onConnectBroker: widget.onBroker),
                 const SizedBox(height: 10),
               ],
               MintTickSurface(
