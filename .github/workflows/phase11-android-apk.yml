@@ -282,18 +282,26 @@ jobs:
               if (verified == null || !verified.startsWith("file:///")) {
                   throw new GradleException("Verified Kotlin local repository was not configured")
               }
+              // Adding a local repository to initially empty pluginManagement
+              // disables Gradle's implicit Plugin Portal fallback. Preserve
+              // the normal upstream repositories explicitly.
               settings.pluginManagement.repositories.maven { repo ->
                   repo.url = settings.uri(verified)
                   repo.content {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
               }
+              settings.pluginManagement.repositories.gradlePluginPortal()
+              settings.pluginManagement.repositories.google()
+              settings.pluginManagement.repositories.mavenCentral()
               settings.dependencyResolutionManagement.repositories.maven { repo ->
                   repo.url = settings.uri(verified)
                   repo.content {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
               }
+              settings.dependencyResolutionManagement.repositories.mavenCentral()
+              settings.dependencyResolutionManagement.repositories.google()
           }
           GRADLE
           echo "PASS: Kotlin 2.2.21 compiler matches upstream JetBrains SHA-256"
