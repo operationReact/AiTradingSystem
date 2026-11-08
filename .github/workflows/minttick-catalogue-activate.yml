@@ -140,6 +140,12 @@ jobs:
                   print("VERIFIED")
               else:
                   print("INVALID")
+          elif status in ("Failed","TimedOut","Cancelled"):
+              # Report only an allowlisted stage marker, never raw SSM output.
+              err=result.get("StandardErrorContent","")
+              if not isinstance(err,str): err=""
+              marker=re.search(r"(?m)^MINTTICK_CATALOGUE_BLOCKER: (HOST_PREFLIGHT|PREIMPORT_DB|OPERATOR_KEY|BACKEND_HTTP|BACKEND_RESPONSE|POSTIMPORT_DB)$",err)
+              print("Failed_"+marker.group(1) if marker else status)
           else:
               print(status)
           PY
@@ -148,8 +154,8 @@ jobs:
               echo 'PASS: official cash equity instrument catalogue is activated and non-empty'
               exit 0
             fi
-            case "$state" in Failed|TimedOut|Cancelled|INVALID)
-              echo 'BLOCKED: market catalogue activation was not verified on exact host' >&2
+            case "$state" in Failed*|TimedOut|Cancelled|INVALID)
+              echo "BLOCKED: market catalogue activation not verified; safe diagnostic: $state" >&2
               exit 2;;
             esac
             sleep 6
