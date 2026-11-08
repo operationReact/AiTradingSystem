@@ -103,9 +103,9 @@ jobs:
                   "authorization":"USER_REQUESTED_CONNECTED_ANDROID_2026-11-08"
               }
               with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
-                  stream.write('connected=true\\n')
+                  stream.write('connected=true\n')
               with open(os.environ['GITHUB_ENV'],'a') as stream:
-                  stream.write('MINTTICK_AUTH_ONLY_TEST=false\\n')
+                  stream.write('MINTTICK_AUTH_ONLY_TEST=false\n')
           if document != expected:
               raise SystemExit('Unexpected Android request contents')
           print('PASS: exact user-requested build mode validated; no broker credentials')
@@ -146,7 +146,7 @@ jobs:
         run: echo 'PR validation builds the APK with a non-routable placeholder URL; it proves packaging only.'
 
       - name: Explicitly mark Cognito-only sideloadable test release
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && steps.request_mode.outputs.connected != 'true'
         run: echo 'Cognito is real. Customer backend activation is pending; this test never grants trading access.'
 
       - uses: subosito/flutter-action@v2
