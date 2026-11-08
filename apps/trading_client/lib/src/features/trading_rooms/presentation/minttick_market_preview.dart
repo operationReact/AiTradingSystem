@@ -7,12 +7,12 @@ import '../data/customer_market_repository.dart';
 class MintTickMarketPreview extends StatefulWidget {
   const MintTickMarketPreview({
     required this.repository,
-    required this.onMarkets,
+    this.onMarkets,
     super.key,
   });
 
   final CustomerMarketRepository repository;
-  final VoidCallback onMarkets;
+  final VoidCallback? onMarkets;
 
   @override
   State<MintTickMarketPreview> createState() => _MintTickMarketPreviewState();
@@ -162,13 +162,14 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
           ]);
         },
       ),
-      Align(
-        alignment: Alignment.centerRight,
-        child: TextButton(
-          onPressed: widget.onMarkets,
-          child: const Text('View instruments and quotes'),
+      if (widget.onMarkets != null)
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: widget.onMarkets,
+            child: const Text('View instruments and quotes'),
+          ),
         ),
-      ),
     ]);
   }
 }
