@@ -4,6 +4,17 @@
 # Never prints secrets, raw responses, market prices or broker account data.
 set -Eeuo pipefail
 umask 077
+# Redacted stage-only failure marker. The workflow never displays raw host stderr.
+stage=HOST_PREFLIGHT
+work=''
+report_exit() {
+  local result=$?
+  if [[ -n "$work" && -d "$work" ]]; then rm -rf -- "$work"; fi
+  if (( result != 0 )); then
+    printf 'MINTTICK_CATALOGUE_BLOCKER: %s\n' "$stage" >&2
+  fi
+}
+trap report_exit EXIT
 test "$(id -u)" -eq 0
 test "$(uname -m)" = aarch64
 root=/opt/aitradingsystem-paper
@@ -19,8 +30,6 @@ command -v curl >/dev/null 2>&1
 
 work="$(mktemp -d "$root/.instrument-import.XXXXXXXX")"
 chmod 0700 "$work"
-trap 'rm -rf -- "$work"' EXIT
-
 cash_count() {
   timeout 12 docker compose --env-file "$root/.env" -f "$root/paper-compose.yml" \
     exec -T postgres psql -X -v ON_ERROR_STOP=1 -U aitrading -d aitrading -Atq \
@@ -28,6 +37,7 @@ cash_count() {
     2>/dev/null
 }
 
+stage=PREIMPORT_DB
 before="$(cash_count)" || { echo 'BLOCKED: cannot read existing instrument catalogue' >&2; exit 2; }
 [[ "$before" =~ ^[0-9]{1,6}$ ]] || { echo 'BLOCKED: invalid catalogue count' >&2; exit 2; }
 if (( 10#$before > 0 )); then
@@ -36,6 +46,7 @@ if (( 10#$before > 0 )); then
   exit 0
 fi
 
+stage=OPERATOR_KEY
 # Generate an ephemeral 0600 request-header file from the protected host env.
 # No secret is passed via SSM, command-line arguments, GitHub, or output.
 python3 - "$root/runtime.env" "$work/header" <<'PY'
@@ -54,6 +65,7 @@ PY
 
 # Only the local operator endpoint can import the signed-off public instrument file.
 # Keep response in a protected temp file and never display it.
+stage=BACKEND_HTTP
 code="$(timeout 210 curl --silent --connect-timeout 5 --max-time 190 \
   --output "$work/result.json" --write-out '%{http_code}' \
   --header "@$work/header" --request POST \
@@ -62,6 +74,7 @@ code="$(timeout 210 curl --silent --connect-timeout 5 --max-time 190 \
   exit 2
 }
 [[ "$code" == 200 ]] || { echo 'BLOCKED: local catalogue import did not return HTTP 200' >&2; exit 2; }
+stage=BACKEND_RESPONSE
 python3 - "$work/result.json" <<'PY'
 import json,sys
 from pathlib import Path
@@ -74,6 +87,7 @@ except (ValueError,TypeError,AssertionError,OSError):
     raise SystemExit("BLOCKED: official instrument catalogue import was not accepted")
 PY
 
+stage=POSTIMPORT_DB
 after="$(cash_count)" || { echo 'BLOCKED: cannot verify activated cash equities' >&2; exit 2; }
 [[ "$after" =~ ^[0-9]{1,6}$ ]] || { echo 'BLOCKED: invalid activated count' >&2; exit 2; }
 (( 10#$after > 0 )) || { echo 'BLOCKED: import yielded zero active cash equities' >&2; exit 2; }
