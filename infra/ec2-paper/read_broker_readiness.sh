@@ -120,4 +120,61 @@ if [[ -f "$root/.env" && ! -L "$root/.env" &&
   fi
 fi
 echo "MINTTICK_MARKET_CATALOGUE: $catalogue_state"
+# Import diagnostics are read-only and print categorical, bounded results.
+operator_state="$(python3 - "$root/runtime.env" <<'PY'
+import re,sys
+from pathlib import Path
+try:
+    found=[s.split("=",1)[1] for s in Path(sys.argv[1]).read_text().splitlines()
+           if s.startswith("APP_API_KEY=")]
+    good=len(found)==1 and re.fullmatch(r"[!-~]{16,256}",found[0])
+    print("PRESENT" if good else "MISSING_OR_INVALID")
+except (OSError,ValueError):
+    print("MISSING_OR_INVALID")
+PY
+)" || operator_state=MISSING_OR_INVALID
+echo "MINTTICK_OPERATOR_KEY: $operator_state"
+http="$(timeout 8 curl --silent --connect-timeout 2 --max-time 5 \
+  --output /dev/null --write-out '%{http_code}' \
+  http://127.0.0.1:8080/api/instruments/status 2>/dev/null)" || http=000
+if [[ "$http" =~ ^[234][0-9][0-9]$ ]]; then
+  echo 'MINTTICK_LOCAL_IMPORT_API: REACHABLE'
+else
+  echo 'MINTTICK_LOCAL_IMPORT_API: UNREACHABLE'
+fi
+last_run=''
+if [[ -f "$root/.env" && ! -L "$root/.env" &&
+      -f "$root/paper-compose.yml" && ! -L "$root/paper-compose.yml" ]] &&
+    command -v docker >/dev/null 2>&1; then
+  last_run="$(timeout 15 docker compose --env-file "$root/.env" \
+    -f "$root/paper-compose.yml" exec -T postgres \
+    psql -X -v ON_ERROR_STOP=1 -U aitrading -d aitrading -Atq \
+    -c "SELECT status || '|' || COALESCE(error_code,'') FROM instrument_import_run ORDER BY started_at DESC LIMIT 1;" \
+    2>/dev/null)" || last_run='__ERROR__'
+fi
+python3 - "$last_run" <<'PY'
+import re,sys
+raw=sys.argv[1].strip()
+if raw=="__ERROR__" or "\n" in raw:
+    status,error="UNKNOWN","OTHER"
+elif not raw:
+    status,error="NONE","NONE"
+else:
+    pieces=raw.split("|")
+    if len(pieces)!=2:
+        status,error="UNKNOWN","OTHER"
+    else:
+        status,error=pieces
+        if status not in {"RUNNING","FAILED","SUCCEEDED"}:
+            status,error="UNKNOWN","OTHER"
+allowed={"SOURCE_UNAVAILABLE","SOURCE_TIMEOUT","SOURCE_EMPTY","SOURCE_TOO_LARGE",
+         "SOURCE_INTERRUPTED","NO_VALID_INSTRUMENTS","TOO_MANY_REJECTED_ROWS",
+         "INCOMPLETE_CATALOGUE","CONFLICTING_DUPLICATE","IMPORT_FAILED"}
+if status!="FAILED":
+    error="NONE"
+elif error not in allowed and not re.fullmatch(r"SOURCE_HTTP_[1-5][0-9]{2}",error):
+    error="OTHER"
+print("MINTTICK_LAST_IMPORT_STATUS:",status)
+print("MINTTICK_LAST_IMPORT_ERROR:",error)
+PY
 echo "MINTTICK_READ_ONLY_CHECK: completed; no broker secrets accessed by this script"
