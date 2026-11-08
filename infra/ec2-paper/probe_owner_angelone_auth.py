@@ -56,7 +56,11 @@ def ssm_params():
     for param in params:
         key = NAMES.get(param.get("Name"))
         value = param.get("Value")
-        if not key or key in result or param.get("Type") != "SecureString" or (
+        typ = param.get("Type")
+        if key in {"api_key", "client_code", "pin", "totp_secret"}:
+            safe_type = {"SecureString":"SECURE_STRING", "String":"STRING"}.get(typ, "OTHER")
+            print("OWNER_SSM_TYPE_" + key.upper() + ": " + safe_type, flush=True)
+        if not key or key in result or typ != "SecureString" or (
             not isinstance(value, str) or not value.strip()):
             raise ProbeFailure("OWNER_SSM_ACCESS: INVALID_PARAMETERS")
         result[key] = value
