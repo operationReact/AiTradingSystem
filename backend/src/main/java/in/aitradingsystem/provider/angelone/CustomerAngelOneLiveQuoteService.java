@@ -91,6 +91,9 @@ public class CustomerAngelOneLiveQuoteService {
         }
         Feed feed = feeds.get(user);
         if (feed != null && (feed.instrument.id() != instrument.id()
+                || !feed.instrument.symbolToken().equals(instrument.symbolToken())
+                || !feed.instrument.exchangeSegment().equals(instrument.exchangeSegment())
+                || !feed.instrument.tradingSymbol().equals(instrument.tradingSymbol())
                 || !feed.credentials.jwt().equals(credentials.jwt()))) {
             disconnect(user);
             feed = null;
