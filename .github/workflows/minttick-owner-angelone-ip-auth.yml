@@ -1,0 +1,156 @@
+name: MintTick - read-only owner Angel One IP authentication probe
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-owner-angelone-ip-auth.yml'
+      - 'infra/ec2-paper/probe_owner_angelone_auth.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/owner-angelone-ip-auth.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded read-only broker auth probe
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/probe_owner_angelone_auth.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("infra/ec2-paper/probe_owner_angelone_auth.py").read_text()
+          assert 100 < len(s) < 16000
+          assert "https://checkip.amazonaws.com" in s
+          assert 'OUTBOUND_IP = "3.108.130.17"' in s
+          assert '"/rest/auth/angelbroking/user/v1/loginByPassword"' in s
+          assert '"/rest/secure/angelbroking/user/v1/getProfile"' in s
+          assert "NO_ORDER_OR_QUOTE_OR_WEBSOCKET_ATTEMPTED" in s
+          for forbidden in ('placeOrder"', 'place-order"', 'modifyOrder"', 'cancelOrder"',
+                            'v1/placeOrder', 'getLtpData', 'sendOrder'):
+              assert forbidden not in s
+          print("PASS: fixed-IP SSM + login + profile only; no trading operations")
+          PY
+
+  probe:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard exact one-file diagnostic authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/owner-angelone-ip-auth.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("infra/ec2-paper/requests/owner-angelone-ip-auth.json").read_text())
+          assert d=={
+            "application":"MintTick",
+            "aws_account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "registered_static_ip":"3.108.130.17",
+            "operation":"read-only-owner-angelone-login-and-feed-token-probe"
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-ip-probe
+      - name: Run exact-host broker login and profile probe without exposing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = "098859530205"
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          script=Path("infra/ec2-paper/probe_owner_angelone_auth.py").read_bytes()
+          command="printf '%s' '"+base64.b64encode(script).decode()+"' | base64 -d | python3 -"
+          p=Path(os.environ["RUNNER_TEMP"])/"owner-angelone-ip-probe.json"
+          p.write_text(json.dumps({"commands":[command]}))
+          p.chmod(0o600)
+          PY
+          cid="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/owner-angelone-ip-probe.json" \
+            --comment 'MintTick read-only SSM-backed Angel One login and profile over registered EIP' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-angelone-ip-probe.json"
+          for attempt in $(seq 1 32); do
+            aws ssm get-command-invocation --command-id "$cid" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/owner-angelone-ip-status.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          try:
+              data=json.loads((Path(os.environ["RUNNER_TEMP"])/"owner-angelone-ip-status.json").read_text())
+          except (OSError,ValueError):
+              print("PENDING");raise SystemExit
+          allowed={
+            "EC2_EGRESS":{"MATCH_REGISTERED_EIP","MISMATCH","UNAVAILABLE"},
+            "OWNER_SSM_ACCESS":{"READY","UNAVAILABLE","INVALID_RESPONSE","INCOMPLETE","INVALID_PARAMETERS","TOTP_INVALID"},
+            "ANGEL_ONE_AUTH":{"TOKEN_AND_FEED_RECEIVED","VERIFIED_OWNER_PROFILE","REJECTED_OR_IP_RESTRICTED",
+                               "RATE_LIMITED","UNAVAILABLE","NETWORK_UNAVAILABLE","INVALID_RESPONSE",
+                               "TOKEN_OR_FEED_MISSING","PROFILE_MISMATCH","INTERNAL_FAILURE"}
+          }
+          outputs=[]
+          for line in data.get("StandardOutputContent","").splitlines():
+              if ": " not in line: continue
+              k,v=line.split(": ",1)
+              if k in allowed and v in allowed[k]:
+                  outputs.append(k+": "+v)
+          for item in outputs: print(item)
+          if data.get("Status") == "Success" and all(v in outputs for v in (
+              "EC2_EGRESS: MATCH_REGISTERED_EIP",
+              "OWNER_SSM_ACCESS: READY",
+              "ANGEL_ONE_AUTH: TOKEN_AND_FEED_RECEIVED",
+              "ANGEL_ONE_AUTH: VERIFIED_OWNER_PROFILE"
+          )):
+              print("PASS")
+          elif data.get("Status") in ("Failed","TimedOut","Cancelled","Success"):
+              print("FAILED")
+          else:
+              print("PENDING")
+          PY
+            )"
+            if [[ "$result" == *$'\nPASS' ]]; then
+              printf '%s\n' "$result"
+              echo "Owner Angel One profile and feed token verified from registered EC2 IP; no orders"
+              exit 0
+            fi
+            if [[ "$result" == *$'\nFAILED' ]]; then
+              printf '%s\n' "$result"
+              exit 2
+            fi
+            sleep 4
+          done
+          echo "Angel One read-only probe did not complete"
+          exit 2

@@ -1,0 +1,8 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "registered_static_ip": "3.108.130.17",
+  "operation": "read-only-owner-angelone-login-and-feed-token-probe"
+}
