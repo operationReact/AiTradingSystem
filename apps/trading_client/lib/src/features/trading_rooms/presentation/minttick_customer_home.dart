@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../data/customer_market_repository.dart';
 import '../domain/trading_room_draft.dart';
 import '../domain/trading_workspace_mode.dart';
 import 'minttick_mode_switcher.dart';
+import 'minttick_market_preview.dart';
 import 'minttick_customer_widgets.dart';
 
 /// The real post-Cognito destination, not a simulated trading dashboard.
@@ -13,6 +15,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
     required this.loadProfile,
     required this.drafts,
     required this.mode,
+    this.marketRepository,
     required this.onCreateRoom,
     required this.onRooms,
     required this.onMarkets,
@@ -26,6 +29,7 @@ class MintTickCustomerHomePage extends StatefulWidget {
   final Future<Map<String, dynamic>> Function() loadProfile;
   final TradingRoomDraftStore drafts;
   final TradingWorkspaceMode mode;
+  final CustomerMarketRepository? marketRepository;
   final VoidCallback onCreateRoom;
   final VoidCallback onRooms;
   final VoidCallback onMarkets;
@@ -124,90 +128,113 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 label: const Text('Retry loading your rooms'),
               ),
             ] else if (widget.drafts.drafts.isEmpty) ...[
-              const MintTickEyebrow('Welcome to MintTick'),
+              MintTickEyebrow(widget.mode.isPaper
+                  ? 'Paper · Your workspace' : 'Live · Your workspace'),
               const SizedBox(height: 7),
-              Text("Let's build your\ntrading space.",
+              Text(widget.mode.isPaper ? 'Welcome to MintTick'
+                  : 'Live workspace',
                 key: const ValueKey('customer-home-first-title'),
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w800, height: 1.13)),
-              const SizedBox(height: 9),
-              Text('Tell us what you want to achieve. Mantic Mind will '
-                'help you explore a plan without technical complexity.',
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 6),
+              Text(widget.mode.isPaper
+                  ? 'Start with your first Paper Room and test a strategy with simulated funds.'
+                  : 'Manage broker connectivity and prepare separate Live Trading Rooms.',
                 style: Theme.of(context).textTheme.bodyMedium
-                    ?.copyWith(color: scheme.onSurfaceVariant, height: 1.45)),
-              const SizedBox(height: 22),
-              MintTickSurface(
-                accent: true,
-                padding: const EdgeInsets.all(19),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      MintTickStatusLabel('YOUR NEXT STEP'),
-                      MintTickStatusLabel('PAPER + LIVE'),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  const MintTickIconTile(Icons.layers_outlined),
-                  const SizedBox(height: 14),
-                  Text('Create your first Trading Room',
-                    style: Theme.of(context).textTheme.titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w800, height: 1.2)),
-                  const SizedBox(height: 8),
-                  Text('One room, one purpose. Choose Paper or Live and review '
-                      'the plan before any trading is activated.',
-                    style: Theme.of(context).textTheme.bodyMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-                  const SizedBox(height: 17),
-                  SizedBox(width: double.infinity, child: FilledButton.icon(
-                    key: const ValueKey('customer-home-create-first'),
-                    onPressed: widget.onCreateRoom,
-                    icon: const Icon(Icons.add_rounded),
-                    label: const Text('Create my first room'),
-                  )),
-                  const SizedBox(height: 13),
-                  Text('Choose a mode  →  Review risk  →  Save your plan',
-                    style: Theme.of(context).textTheme.labelSmall
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
-                ]),
-              ),
-              const SizedBox(height: 23),
-              const MintTickSectionHeading('What Mantic Mind does'),
+                    ?.copyWith(color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 19),
+              if (widget.mode.selected == TradingWorkspaceMode.live &&
+                  widget.onBroker != null) ...[
+                MintTickSurface(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Broker account',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 5),
+                    const Text('Check your Angel One or Upstox account status before trading. '
+                      'Connection alone does not authorize live orders.'),
+                    const SizedBox(height: 12),
+                    SizedBox(width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('home-connect-broker'),
+                        onPressed: widget.onBroker,
+                        icon: const Icon(Icons.link_rounded),
+                        label: const Text('Manage broker connection'))),
+                  ],
+                )),
+                const SizedBox(height: 20),
+              ],
+              if (widget.marketRepository != null) ...[
+                MintTickMarketPreview(
+                  repository: widget.marketRepository!,
+                  onMarkets: widget.onMarkets),
+                const SizedBox(height: 15),
+              ],
+              if (widget.mode.isPaper) ...[
+                MintTickSurface(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('PAPER · PLANNED ALLOCATION',
+                      style: Theme.of(context).textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                    const SizedBox(height: 8),
+                    Text('₹0', style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text('0 rooms · Simulated only',
+                      style: Theme.of(context).textTheme.bodySmall),
+                  ],
+                )),
+                const SizedBox(height: 18),
+              ],
+              MintTickSectionHeading('Your Trading Rooms',
+                action: 'View all', onAction: widget.onRooms),
+              const SizedBox(height: 8),
+              MintTickSurface(child: Row(children: [
+                const MintTickIconTile(Icons.layers_outlined),
+                const SizedBox(width: 12),
+                Expanded(child: Text(widget.mode.isPaper
+                    ? 'No Paper Rooms yet. Your first room starts as a draft.'
+                    : 'No Live Rooms yet. Broker verification and risk checks apply.',
+                  style: Theme.of(context).textTheme.bodySmall)),
+              ])),
               const SizedBox(height: 10),
-              MintTickSurface(child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const MintTickIconTile(Icons.psychology_outlined),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Intelligence without the complexity',
-                        style: Theme.of(context).textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 5),
-                      Text('The planned system evaluates rules, explains '
-                          'decisions, and respects authorized risk boundaries. '
-                          'It is not operating in this UI release.',
-                        style: Theme.of(context).textTheme.bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant, height: 1.4)),
-                    ],
-                  )),
-                ],
-              )),
-              const SizedBox(height: 22),
-              const MintTickSectionHeading('Explore MintTick'),
+              if (widget.mode.isPaper)
+                SizedBox(width: double.infinity, child: FilledButton.icon(
+                  key: const ValueKey('customer-home-create-first'),
+                  onPressed: widget.onCreateRoom,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Create your first Paper Room'),
+                ))
+              else
+                SizedBox(width: double.infinity, child: OutlinedButton.icon(
+                  key: const ValueKey('customer-home-create-first'),
+                  onPressed: widget.onCreateRoom,
+                  icon: const Icon(Icons.add_rounded),
+                  label: const Text('Plan a Live Room'),
+                )),
+              const SizedBox(height: 17),
+              MintTickSurface(child: Row(children: [
+                const MintTickIconTile(Icons.psychology_outlined),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('MintTick Mind',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text('Not configured · Strategies and risk controls are independent.',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                )),
+              ])),
+              const SizedBox(height: 18),
+              const MintTickSectionHeading('Explore'),
               const SizedBox(height: 8),
               _HomeQuickLinks(
-                onMarkets: widget.onMarkets,
-                onPortfolio: widget.onPortfolio,
-              ),
-              const SizedBox(height: 16),
-              const MintTickInfoText(
-                'Your MintTick login and broker account are separate. '
-                'Connect Angel One to view live account data.',
-              ),
+                onMarkets: widget.onMarkets, onPortfolio: widget.onPortfolio),
             ] else ...[
               MintTickEyebrow('${widget.mode.selected} · Your workspace'),
               const SizedBox(height: 6),
@@ -219,7 +246,13 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
               Text('Your ${widget.mode.selected == 'PAPER' ? 'Paper' : 'Live'} Trading Rooms and next steps at a glance.',
                 style: Theme.of(context).textTheme.bodyMedium
                     ?.copyWith(color: scheme.onSurfaceVariant)),
-              const SizedBox(height: 18),
+              const SizedBox(height: 15),
+              if (widget.marketRepository != null) ...[
+                MintTickMarketPreview(
+                  repository: widget.marketRepository!,
+                  onMarkets: widget.onMarkets),
+                const SizedBox(height: 10),
+              ],
               MintTickSurface(
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   const MintTickEyebrow('Planned room allocations · Not actual balances'),
@@ -259,14 +292,14 @@ class _MintTickCustomerHomePageState extends State<MintTickCustomerHomePage> {
                 label: Text('Create ${widget.mode.selected == 'PAPER' ? 'Paper' : 'Live'} room'),
               )),
               const SizedBox(height: 21),
-              const MintTickSectionHeading('Mantic Mind · Status'),
+              const MintTickSectionHeading('MintTick Mind · Status'),
               const SizedBox(height: 9),
               const MintTickSurface(child: Row(children: [
                 MintTickIconTile(Icons.psychology_outlined),
                 SizedBox(width: 12),
                 Expanded(child: Text(
                   'Paper wallets use simulated money. Live uses your linked '
-                  'brokerage account. Mantic Mind and order execution '
+                  'brokerage account. MintTick Mind and order execution '
                   'remain disabled until their own safety gates pass.',
                 )),
               ])),
