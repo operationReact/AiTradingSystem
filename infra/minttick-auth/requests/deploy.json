@@ -1,8 +1,1 @@
-{
-  "application": "MintTick",
-  "environment": "dev",
-  "aws_account": "098859530205",
-  "region": "ap-south-1",
-  "operation": "apply",
-  "authorization": "USER_APPROVED_COGNITO_ESSENTIALS_2026-11-07"
-}
+{"application":"MintTick","environment":"dev","aws_account":"098859530205","region":"ap-south-1","operation":"apply","authorization":"USER_APPROVED_COGNITO_ESSENTIALS_2026-11-07"}
