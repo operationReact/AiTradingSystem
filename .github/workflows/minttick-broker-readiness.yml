@@ -28,7 +28,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           source = Path(".github/workflows/minttick-broker-readiness.yml").read_text()
-          start = source.index("          import json,os,re")
+          start = source.rfind("          import json,os,re")
           end = source.index("\\n          PY", start)
           code = "\\n".join(line[10:] for line in source[start:end].splitlines())
           compile(code, "minttick-readiness-output-parser", "exec")
