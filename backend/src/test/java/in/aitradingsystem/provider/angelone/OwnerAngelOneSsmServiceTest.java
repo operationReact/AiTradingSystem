@@ -61,6 +61,61 @@ class OwnerAngelOneSsmServiceTest {
     }
 
     @Test
+    void acceptsExactAllowlistedParametersWhenStoredAsPlainStrings() {
+        var id = UUID.randomUUID();
+        when(ssm.getParameters(any(GetParametersRequest.class))).thenReturn(
+            GetParametersResponse.builder().parameters(
+                Parameter.builder().name(ROOT + "api-key").value("private-api-key")
+                    .type(ParameterType.STRING).build(),
+                Parameter.builder().name(ROOT + "client-code").value("AL1234")
+                    .type(ParameterType.STRING).build(),
+                Parameter.builder().name(ROOT + "login-pin").value("1234")
+                    .type(ParameterType.STRING).build(),
+                Parameter.builder().name(ROOT + "totp-secret").value("JBSWY3DPEHPK3PXP")
+                    .type(ParameterType.STRING).build())
+                .build());
+        when(broker.connect(eq(id), eq("private-api-key"), eq("AL1234"),
+                eq("1234"), matches("[0-9]{6}")))
+            .thenReturn(new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***234", clock.instant().plusSeconds(3600), false));
+        var service = new OwnerAngelOneSsmService(broker, true, ssm, clock);
+        assertThat(service.connect(id).connected()).isTrue();
+        verify(broker).connect(eq(id), eq("private-api-key"), eq("AL1234"),
+                eq("1234"), matches("[0-9]{6}"));
+    }
+
+    @Test
+    void mixedStringAndSecureStringParametersAreAccepted() {
+        var id = UUID.randomUUID();
+        when(ssm.getParameters(any(GetParametersRequest.class))).thenReturn(
+            GetParametersResponse.builder().parameters(
+                Parameter.builder().name(ROOT + "api-key").value("private-api-key")
+                    .type(ParameterType.STRING).build(),
+                secret("client-code", "AL1234"),
+                secret("login-pin", "1234"),
+                secret("totp-secret", "JBSWY3DPEHPK3PXP"))
+                .build());
+        var service = new OwnerAngelOneSsmService(broker, true, ssm, clock);
+        service.connect(id);
+        verify(broker).connect(eq(id), eq("private-api-key"), eq("AL1234"),
+                eq("1234"), matches("[0-9]{6}"));
+    }
+
+    @Test
+    void arbitraryNonStringParameterTypeIsRejected() {
+        when(ssm.getParameters(any(GetParametersRequest.class))).thenReturn(
+            GetParametersResponse.builder().parameters(
+                Parameter.builder().name(ROOT + "api-key").value("private-api-key")
+                    .type(ParameterType.UNKNOWN_TO_SDK_VERSION).build(),
+                secret("client-code", "AL1234"), secret("login-pin", "1234"),
+                secret("totp-secret", "JBSWY3DPEHPK3PXP")).build());
+        var service = new OwnerAngelOneSsmService(broker, true, ssm, clock);
+        assertThatThrownBy(() -> service.connect(UUID.randomUUID()))
+            .isInstanceOf(AngelOneException.class);
+        verifyNoInteractions(broker);
+    }
+
+    @Test
     void disabledFeatureNeverReadsSecureStringsOrLogsIn() {
         var service = new OwnerAngelOneSsmService(broker, false, ssm, clock);
         assertThat(service.available()).isFalse();
