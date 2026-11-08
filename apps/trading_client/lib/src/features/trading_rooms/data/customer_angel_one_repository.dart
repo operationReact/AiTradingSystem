@@ -33,6 +33,21 @@ class HttpCustomerAngelOneRepository {
     return payload['available'] as bool;
   }
 
+  /// The caller's own Cognito subject, used only for explicit AWS owner setup.
+  /// This is not a broker secret or MintTick's permanent app-user ID.
+  Future<String> ownerLinkReference() async {
+    final data = await api.getJson('$_root/owner-link-reference');
+    if (data is! Map<String, dynamic> ||
+        data['cognitoSubject'] is! String) {
+      throw const FormatException('Invalid customer identity reference');
+    }
+    final subject = (data['cognitoSubject'] as String).trim();
+    if (!RegExp(r'^[A-Za-z0-9_-]{10,128}$').hasMatch(subject)) {
+      throw const FormatException('Invalid customer identity reference');
+    }
+    return subject;
+  }
+
   Future<CustomerAngelOneConnection> connectConfigured() async =>
       _status(await api.postJson('$_root/connect-configured'));
 
@@ -84,3 +99,4 @@ class HttpCustomerAngelOneRepository {
     return response['data'];
   }
 }
+

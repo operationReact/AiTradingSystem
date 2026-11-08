@@ -128,6 +128,20 @@ public class CustomerAngelOneController {
                 || (lambdaBroker != null && lambdaBroker.available()))));
     }
 
+    /** Self-only link reference. This is a Cognito subject, not an API key,
+     * login PIN, broker owner grant, or the app_user UUID. A server operator
+     * must separately authorize the subject in protected host settings.
+     */
+    public record OwnerLinkReference(String cognitoSubject) {}
+
+    @GetMapping("/owner-link-reference")
+    public ResponseEntity<OwnerLinkReference> ownerLinkReference(
+            org.springframework.security.core.Authentication authentication) {
+        customer(authentication);
+        JwtAuthenticationToken token = (JwtAuthenticationToken) authentication;
+        return noStore(new OwnerLinkReference(token.getToken().getSubject()));
+    }
+
     @PostMapping("/connect-configured")
     public ResponseEntity<CustomerAngelOneSessionService.ConnectionStatus> connectConfigured(
             org.springframework.security.core.Authentication authentication) {
