@@ -202,7 +202,7 @@ jobs:
           checksum = 'distributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
           wrapper.write_text(wrapper_text.replace(expected, direct, 1).rstrip() + '\n' + checksum + '\n')
           PY
-          grep -q '^android.newDsl=false android/gradle.properties
+          grep -q '^android.newDsl=false$' android/gradle.properties
           grep -q 'compilerOptions' android/app/build.gradle.kts
           ! grep -q 'kotlinOptions' android/app/build.gradle.kts
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
