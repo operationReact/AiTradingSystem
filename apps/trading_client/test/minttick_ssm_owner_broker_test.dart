@@ -7,10 +7,14 @@ import 'package:trading_client/src/theme/app_theme.dart';
 class _ServerConfiguredAngel extends Fake implements HttpCustomerAngelOneRepository {
   bool linked = false;
   bool available = true;
+  bool checkFails = false;
   int connects = 0;
 
   @override
-  Future<bool> configuredLoginAvailable() async => available;
+  Future<bool> configuredLoginAvailable() async {
+    if (checkFails) throw StateError('API check unavailable');
+    return available;
+  }
 
   @override
   Future<String> ownerLinkReference() async => 'owner-cognito-sub-12345';
@@ -50,12 +54,37 @@ void main() {
         findsOneWidget);
     expect(find.text('owner-cognito-sub-12345'), findsOneWidget);
     expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
+    // Owner SSM mismatch is not a reason to ask for four secrets again.
+    // This optional setting is below the first 844dp viewport.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('broker-alternate-account-expander')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.byKey(const ValueKey('broker-alternate-account-expander')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
+    expect(repo.connects, 0);
+  });
+
+  testWidgets('capability errors never prompt for broker secrets',
+      (tester) async {
+    final repo = _ServerConfiguredAngel()..checkFails = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerBrokerPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('status could not be verified'), findsOneWidget);
+    expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
+    expect(find.byKey(const ValueKey('broker-alternate-account-expander')), findsNothing);
+    expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
     expect(repo.connects, 0);
   });
 
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final width in [320.0, 390.0]) {
-      testWidgets('preconfigured owner uses no input fields at ${width.toInt()}dp $brightness',
+      testWidgets('preconfigured owner auto-connects without fields at ${width.toInt()}dp $brightness',
           (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = Size(width, 844);
@@ -67,15 +96,14 @@ void main() {
           home: MintTickCustomerBrokerPage(repository: repository),
         ));
         await tester.pumpAndSettle();
-        final connect = find.byKey(const ValueKey('broker-connect-configured'));
-        expect(connect, findsOneWidget);
+        // A verified owner uses stored server credentials automatically.
+        // The form cannot be required or offered to the SSM owner.
+        expect(repository.connects, 1);
+        expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
+        expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
         expect(find.byKey(const ValueKey('broker-api-key')), findsNothing);
         expect(find.byKey(const ValueKey('broker-pin')), findsNothing);
         expect(find.byKey(const ValueKey('broker-totp')), findsNothing);
-        await tester.ensureVisible(connect);
-        await tester.tap(connect);
-        await tester.pumpAndSettle();
-        expect(repository.connects, 1);
         expect(find.text('CONNECTED'), findsOneWidget);
         expect(find.textContaining('***234'), findsOneWidget);
         expect(tester.takeException(), isNull);

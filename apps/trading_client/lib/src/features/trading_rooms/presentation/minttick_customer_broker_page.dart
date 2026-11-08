@@ -19,6 +19,11 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
   CustomerAngelOneConnection? _connection;
   bool _busy = true;
   bool _configuredLoginAvailable = false;
+  bool _statusVerified = false;
+  bool _availabilityCheckFailed = false;
+  // One transparent read-only login attempt per broker page visit.
+  // Manual four-field entry is never required for a configured owner.
+  bool _autoConfiguredAttempted = false;
   String? _ownerReference;
   String? _error;
   Object? _data;
@@ -34,16 +39,30 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     if (!mounted) return;
     setState(() { _busy = true; _error = null; });
     try {
-      final result = await widget.repository.status();
+      var result = await widget.repository.status();
       // Capability is derived from verified server-side identity, never cached.
+      // A network error is NOT a negative owner authorization response.
       bool configured = false;
+      bool lookupFailed = false;
       try {
         configured = await widget.repository.configuredLoginAvailable();
       } catch (_) {
-        configured = false; // Manual customer connection remains available.
+        lookupFailed = true;
+      }
+      String? autoConnectError;
+      if (configured && !result.connected && !_autoConfiguredAttempted) {
+        // The backend alone verifies the exact Cognito owner and reads SSM.
+        // No credential or TOTP ever crosses the Flutter boundary.
+        _autoConfiguredAttempted = true;
+        try {
+          result = await widget.repository.connectConfigured();
+        } catch (_) {
+          autoConnectError = 'Saved Angel One login could not be completed. '
+              'Check the protected owner binding and tap Secure connect to retry.';
+        }
       }
       String? linkReference;
-      if (!configured) {
+      if (!configured && !lookupFailed) {
         try {
           linkReference = await widget.repository.ownerLinkReference();
         } catch (_) {
@@ -54,7 +73,13 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       setState(() {
         _connection = result;
         _configuredLoginAvailable = configured;
+        _statusVerified = true;
+        _availabilityCheckFailed = lookupFailed;
         _ownerReference = linkReference;
+        _error = lookupFailed
+            ? 'Saved Angel One connection status could not be verified. '
+                'Retry without re-entering any broker credentials.'
+            : autoConnectError;
         _data = null;
         _dataLabel = null;
       });
@@ -63,6 +88,8 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         setState(() {
           _connection = null;
           _configuredLoginAvailable = false;
+          _statusVerified = false;
+          _availabilityCheckFailed = true;
           _ownerReference = null;
           _error = 'Broker status could not be verified. Please retry.';
         });
@@ -122,6 +149,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     if (_busy) return;
     setState(() { _busy = true; _error = null; });
     try {
+      _autoConfiguredAttempted = true; // Explicit disconnect must not auto-reconnect.
       await widget.repository.disconnect();
       if (mounted) setState(() { _data = null; _connection = null; });
       await _refresh();
@@ -258,12 +286,12 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           'appear in this app.',
           icon: Icons.verified_user_outlined,
         ),
-      ] else ...[
+      ] else if (_statusVerified && !_availabilityCheckFailed) ...[
         const MintTickInfoText(
-          'Saved Angel One credentials are available only to the designated '
-          'MintTick owner. If your account should be the owner, its Cognito '
-          'identity must be explicitly linked in the protected AWS backend '
-          'settings. This link cannot be inferred from your email or app ID.',
+          'If your Angel One credentials are already saved in AWS SSM, '
+          'do not enter them again. Secure connect requires the exact '
+          'signed-in Cognito owner to be linked in protected AWS settings. '
+          'This account is not authorized for saved login yet.',
           icon: Icons.lock_outline_rounded,
         ),
         if (_ownerReference case final subject?) ...[
@@ -298,22 +326,35 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           label: const Text('Check secure connection'),
         )),
       ],
-      if (connection?.connected != true) ...[
+      // A failed availability check must never silently fall back to a
+      // manual credential form, because the server might already hold SSM.
+      if (connection?.connected != true && _statusVerified &&
+          !_availabilityCheckFailed && !_configuredLoginAvailable) ...[
         const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            key: const ValueKey('broker-connect-manual'),
-            onPressed: _busy ? null : _connectManual,
-            icon: const Icon(Icons.account_circle_outlined),
-            label: const Text('Connect using my own SmartAPI credentials'),
-          ),
-        ),
-        const SizedBox(height: 8),
-        const MintTickInfoText(
-          'Your own API key, client code, PIN and current 6-digit TOTP '
-          'are used only for this sign-in. Never enter a long TOTP seed.',
-          icon: Icons.privacy_tip_outlined,
+        ExpansionTile(
+          key: const ValueKey('broker-alternate-account-expander'),
+          initiallyExpanded: false,
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Connect a different Angel One account'),
+          subtitle: const Text(
+            'Only for a separate SmartAPI account not saved in AWS SSM.'),
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                key: const ValueKey('broker-connect-manual'),
+                onPressed: _busy ? null : _connectManual,
+                icon: const Icon(Icons.account_circle_outlined),
+                label: const Text('Enter separate account credentials'),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const MintTickInfoText(
+              'Manual login requires a separate account API key, client code, '
+              'PIN and current six-digit TOTP. Never enter the enrollment seed.',
+              icon: Icons.privacy_tip_outlined,
+            ),
+          ],
         ),
       ],
       const SizedBox(height: 18),

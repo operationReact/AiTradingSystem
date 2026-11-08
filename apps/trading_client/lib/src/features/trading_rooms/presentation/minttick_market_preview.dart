@@ -5,7 +5,7 @@ import 'minttick_equity_avatar.dart';
 import '../data/customer_market_repository.dart';
 
 /// Verified cash-equity quote preview. No simulated prices or charts.
-/// The owner feed or each customer's verified broker connection controls quote access.
+/// The app-managed SSM-backed feed controls quotes, not personal broker connections.
 class MintTickMarketPreview extends StatefulWidget {
   const MintTickMarketPreview({
     required this.repository,
@@ -144,7 +144,7 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
                 color: colors.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: const Text('Checking authenticated market feed…'),
+              child: const Text('Checking MintTick market feed…'),
             );
           }
           final hasPrices = quotes.any((item) => item.quote != null);
@@ -194,7 +194,7 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
             const SizedBox(height: 7),
             Text(hasPrices
                 ? 'Authenticated on-demand quotes · updated while the market is open. Not a tick-by-tick stream.'
-                : 'Prices need a connected broker session. No simulated values are shown.',
+                : 'MintTick market data is unavailable. No simulated values are shown.',
               style: styles.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant)),
             if (hasPrices) ...[

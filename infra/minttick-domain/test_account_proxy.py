@@ -43,6 +43,7 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/auth/cognito/me"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/angel-one/configured-login"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/brokers/angel-one/owner-link-reference"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect-configured"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
@@ -97,6 +98,18 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(request.full_url,"http://10.87.0.10:8081/api/auth/cognito/provision")
         self.assertEqual(request.headers.get("Authorization"),"Bearer public-test-token")
         self.assertEqual(proxy.handler(event("POST","/api/auth/cognito/provision",body='{"email":"x"}'),None)["statusCode"],400)
+
+    def test_owner_link_reference_requires_cognito_and_no_store(self):
+        path = "/api/customer/brokers/angel-one/owner-link-reference"
+        unauthenticated = event("GET", path, bearer="")
+        self.assertEqual(proxy.handler(unauthenticated, None)["statusCode"], 401)
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as urlopen:
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        forwarded = urlopen.call_args.args[0]
+        self.assertEqual(forwarded.full_url, proxy.BACKEND + path)
+        self.assertEqual(forwarded.headers.get("Authorization"), "Bearer public-test-token")
 
     def test_owner_configured_broker_route_forwards_only_jwt_and_empty_post(self):
         # The backend independently checks exact Cognito owner-sub + CUSTOMER
