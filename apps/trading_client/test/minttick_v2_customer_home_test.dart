@@ -42,7 +42,7 @@ void main() {
       expect(find.byKey(const ValueKey('customer-home-first-title')), findsOneWidget);
       expect(find.byKey(const ValueKey('customer-home-create-first')), findsOneWidget);
       expect(find.textContaining('P&L'), findsNothing);
-      expect(find.text('PAPER + LIVE'), findsOneWidget);
+      expect(find.byKey(const ValueKey('paper-live-toggle')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -125,6 +125,11 @@ void main() {
       find.byKey(const ValueKey('room-name-input')), 'Morning focus');
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
     await tester.pumpAndSettle();
+    // The approved wizard has four steps: Details → Strategy → Risk → Review.
+    for (var next = 0; next < 2; next++) {
+      await tester.tap(find.byKey(const ValueKey('room-creation-next')));
+      await tester.pumpAndSettle();
+    }
     expect(find.text('Your proposed plan.'), findsOneWidget);
     expect(find.text('Morning focus'), findsOneWidget);
     expect(find.text('₹200'), findsOneWidget);
