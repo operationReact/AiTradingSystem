@@ -74,7 +74,10 @@ public class CustomerAngelOneLiveQuoteService {
 
     public LiveQuote quote(UUID user, Instrument instrument) {
         Instant now = clock.instant();
-        if (!calendar.isInsideCashSession(now)) return empty(instrument, "MARKET_CLOSED");
+        if (!calendar.isInsideCashSession(now)) {
+            disconnect(user);
+            return empty(instrument, "MARKET_CLOSED");
+        }
         if (!"NSE_CM".equals(instrument.exchangeSegment())
                 && !"BSE_CM".equals(instrument.exchangeSegment())) {
             return empty(instrument, "UNAVAILABLE");
@@ -97,6 +100,8 @@ public class CustomerAngelOneLiveQuoteService {
             Feed candidate = new Feed(instrument, credentials, now);
             Feed existing = feeds.putIfAbsent(user, candidate);
             feed = existing == null ? candidate : existing;
+            if (existing != null && existing.instrument.id() != instrument.id())
+                return empty(instrument, "RECONNECTING");
             if (existing == null) start(user, candidate);
         }
         if (feed.state == State.CLOSED) {
@@ -125,7 +130,7 @@ public class CustomerAngelOneLiveQuoteService {
 
     private enum State { CONNECTING, OPEN, CLOSED }
 
-    private record Tick(BigDecimal price, Instant exchangeAt, Instant receivedAt, long sequence) {}
+    record Tick(BigDecimal price, Instant exchangeAt, Instant receivedAt, long sequence) {}
 
     private static final class Feed {
         final Instrument instrument;
@@ -240,27 +245,37 @@ public class CustomerAngelOneLiveQuoteService {
     }
 
     private void accept(Feed feed, byte[] data) {
-        if (data.length != 51 || data[0] != 1) return;
-        int venue = "NSE_CM".equals(feed.instrument.exchangeSegment()) ? 1 : 3;
-        if (Byte.toUnsignedInt(data[1]) != venue) return;
+        Tick verified = parseTick(feed.instrument, data, clock.instant(), feed.latest);
+        if (verified != null) feed.latest = verified;
+    }
+
+    /** Pure on-host binary validator, separately unit tested with no socket. */
+    static Tick parseTick(Instrument instrument, byte[] data, Instant received, Tick old) {
+        if (data == null || data.length != 51 || data[0] != 1) return null;
+        int venue = "NSE_CM".equals(instrument.exchangeSegment()) ? 1
+                : "BSE_CM".equals(instrument.exchangeSegment()) ? 3 : -1;
+        if (Byte.toUnsignedInt(data[1]) != venue) return null;
         int end = 2;
         while (end < 27 && data[end] != 0) end++;
         String token = new String(data, 2, end - 2, StandardCharsets.US_ASCII);
-        if (!feed.instrument.symbolToken().equals(token)) return;
+        if (!token.matches("[0-9]{1,25}") || !instrument.symbolToken().equals(token))
+            return null;
+        // Require a zero-filled token suffix; do not accept forged prefix matches.
+        for (int at = end; at < 27; at++) if (data[at] != 0) return null;
         ByteBuffer fields = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
         long sequence = fields.getLong(27);
         long epochMillis = fields.getLong(35);
         long cents = fields.getLong(43);
-        if (sequence < 0 || epochMillis <= 0 || cents <= 0) return;
-        Instant received = clock.instant();
+        if (sequence < 0 || epochMillis <= 0 || cents <= 0) return null;
         Instant exchangeTime;
         try { exchangeTime = Instant.ofEpochMilli(epochMillis); }
-        catch (RuntimeException e) { return; }
+        catch (RuntimeException ex) { return null; }
         if (exchangeTime.isAfter(received.plus(FUTURE_SKEW))
-                || Duration.between(exchangeTime, received).compareTo(MAX_TICK_AGE) > 0) return;
-        Tick old = feed.latest;
-        if (old != null && (sequence <= old.sequence || exchangeTime.isBefore(old.exchangeAt))) return;
-        feed.latest = new Tick(BigDecimal.valueOf(cents, 2), exchangeTime, received, sequence);
+                || Duration.between(exchangeTime, received).compareTo(MAX_TICK_AGE) > 0)
+            return null;
+        if (old != null && (sequence <= old.sequence
+                || exchangeTime.isBefore(old.exchangeAt))) return null;
+        return new Tick(BigDecimal.valueOf(cents, 2), exchangeTime, received, sequence);
     }
 
     private void heartbeat() {
