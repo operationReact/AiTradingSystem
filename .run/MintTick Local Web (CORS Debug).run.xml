@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="MintTick Local Web (CORS Debug)" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <!-- Temporary development-only Chrome process. Flutter launches a separate
+         temporary Chrome profile; never reuse this browser for other sites. -->
+    <option name="additionalArgs" value="--web-port=5173 --web-browser-flag=--disable-web-security --dart-define=API_BASE_URL=https://api.minttick.com --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 --dart-define=MINTTICK_COGNITO_USER_POOL_ID=ap-south-1_jz2T8qbiY --dart-define=MINTTICK_COGNITO_CLIENT_ID=6jm18v2mdpcfraip92hrjhqjnd --dart-define=MINTTICK_AUTH_ONLY_TEST=false" />
+    <option name="filePath" value="$PROJECT_DIR$/apps/trading_client/lib/main.dart" />
+    <method v="2" />
+  </configuration>
+</component>
