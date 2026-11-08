@@ -78,6 +78,18 @@ def db(sql):
         return result.stdout.strip() if result.returncode==0 else None
     except (OSError,subprocess.TimeoutExpired):
         return None
+# Server-side identity association check. Cognito subject never appears
+# in logs, repo or SSM output; comparison is a read-only database boolean.
+linked="UNKNOWN"
+if len(owner)==1 and re.fullmatch(r"[A-Za-z0-9_-]{10,128}",owner[0]):
+    count=db("SELECT CASE WHEN EXISTS (SELECT 1 FROM app_auth_identity ai "
+             "JOIN app_user u ON u.id=ai.user_id "
+             "WHERE ai.provider='cognito' AND ai.subject='"
+             + owner[0] +
+             "' AND u.role='CUSTOMER' AND u.status='ACTIVE') "
+             "THEN 'YES' ELSE 'NO' END;")
+    linked=count if count in {"YES","NO"} else "UNKNOWN"
+print("MINTTICK_OWNER_ACCOUNT_LINKED:",linked)
 value=db("SELECT status || '|' || COALESCE(error_code,'') FROM instrument_import_run ORDER BY started_at DESC LIMIT 1;")
 if value is None or "\n" in value:
     status,err="UNKNOWN","OTHER"
