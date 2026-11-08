@@ -13,6 +13,7 @@ import pathlib,re,subprocess,sys,hmac
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError
 root=pathlib.Path(sys.argv[1])
+lines=[]
 try:
     lines=(root/"runtime.env").read_text().splitlines()
     vals=[line[12:] for line in lines if line.startswith("APP_API_KEY=")]
