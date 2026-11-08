@@ -1,0 +1,144 @@
+name: MintTick - IntelliJ localhost web CORS (dev only)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.run/MintTick Local Web (AWS Backend).run.xml'
+      - 'infra/minttick-domain/bootstrap-account-api.yml'
+      - 'scripts/tests/test_minttick_intellij_local_web.py'
+      - '.github/workflows/minttick-intellij-local-cors.yml'
+      - 'docs/minttick-intellij-local-web.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/enable-intellij-localhost-cors.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-account-api-local-cors-dev
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate IntelliJ Flutter project run config, permitted localhost CORS and no secrets
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p test_minttick_intellij_local_web.py -v
+
+  apply-dev-cors:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Authorize exact one-file temporary localhost CORS request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/enable-intellij-localhost-cors.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual=json.loads(Path('infra/minttick-domain/requests/enable-intellij-localhost-cors.json').read_text())
+          assert actual == {
+            "application": "MintTick",
+            "environment": "dev",
+            "aws_account": "098859530205",
+            "region": "ap-south-1",
+            "operation": "allow-fixed-intellij-localhost-5173-origin",
+            "api_origin": "https://api.minttick.com",
+            "authorization": "USER_REQUESTED_LOCAL_INTELLIJ_CORS_2026-11-08"
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/minttick-account-github-code-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-intellij-cors-${{ github.run_id }}
+      - name: Resolve exact existing MintTick HTTP API from its production stack
+        id: target
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          status="$(aws cloudformation describe-stacks --stack-name minttick-account-api --query 'Stacks[0].StackStatus' --output text)"
+          case "$status" in CREATE_COMPLETE|UPDATE_COMPLETE) ;; *) echo 'Unexpected existing stack state' >&2; exit 2;; esac
+          api_id="$(aws cloudformation describe-stack-resource --stack-name minttick-account-api --logical-resource-id AccountHttpApi --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          [[ "$api_id" =~ ^[a-z0-9]{10}$ ]] || { echo 'Expected existing HTTP API id missing' >&2; exit 2; }
+          current="$(aws apigatewayv2 get-api --api-id "$api_id" --output json)"
+          python3 - "$current" <<'PY'
+          import json,sys
+          api=json.loads(sys.argv[1])
+          assert api['ProtocolType'] == 'HTTP', 'Not a HTTP API'
+          assert api['Name'] == 'minttick-dev-customer-api', 'Unexpected API'
+          cors=api.get('CorsConfiguration',{})
+          assert {'https://www.minttick.com','https://minttick.com'} <= set(cors.get('AllowOrigins',[])), 'Production origins not found'
+          assert {'GET','POST','OPTIONS'} <= set(cors.get('AllowMethods',[])), 'Unexpected existing methods'
+          assert {'Authorization','Content-Type'} <= set(cors.get('AllowHeaders',[])), 'Existing auth headers missing'
+          PY
+          echo "api_id=$api_id" >> "$GITHUB_OUTPUT"
+          echo "Verified existing dedicated dev account HTTP API"
+      - name: Apply fixed localhost CORS only, leaving JWT authorizer and API routes intact
+        env:
+          API_ID: ${{ steps.target.outputs.api_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          policy={
+              "AllowOrigins": ["https://www.minttick.com","https://minttick.com","http://localhost:5173"],
+              "AllowHeaders": ["Authorization","Content-Type","Idempotency-Key","X-Correlation-Id"],
+              "AllowMethods": ["GET","POST","OPTIONS"],
+              "MaxAge": 600,
+          }
+          p=Path(os.environ['RUNNER_TEMP'])/'minttick-local-cors.json'
+          p.write_text(json.dumps(policy))
+          PY
+          aws apigatewayv2 update-api --api-id "$API_ID" \
+            --cors-configuration "file://$RUNNER_TEMP/minttick-local-cors.json" \
+            --output json --query '{ApiId:ApiId,Name:Name,ProtocolType:ProtocolType}'
+          rm -f "$RUNNER_TEMP/minttick-local-cors.json"
+          echo 'Dev HTTP API CORS patched for IntelliJ origin; existing Cognito authorizer untouched'
+      - name: Verify actual Chrome OPTIONS preflight and unauthenticated access denial
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3 4 5; do
+            headers="$(mktemp)"
+            status="$(curl -sS --max-time 15 -D "$headers" -o /dev/null -w '%{http_code}' \
+              -X OPTIONS 'https://api.minttick.com/api/auth/cognito/provision' \
+              -H 'Origin: http://localhost:5173' \
+              -H 'Access-Control-Request-Method: POST' \
+              -H 'Access-Control-Request-Headers: authorization,content-type' || true)"
+            if [[ "$status" =~ ^20[04]$ ]] &&
+               grep -iq '^access-control-allow-origin: http://localhost:5173' "$headers" &&
+               grep -iq '^access-control-allow-methods:.*POST' "$headers" &&
+               grep -iq '^access-control-allow-headers:.*authorization' "$headers"; then
+              rm -f "$headers"
+              code="$(curl -sS --max-time 15 -o /dev/null -w '%{http_code}' \
+                -H 'Origin: http://localhost:5173' 'https://api.minttick.com/api/auth/cognito/me')"
+              test "$code" = 401 || { echo 'JWT authorization unexpectedly bypassed' >&2; exit 2; }
+              echo 'PASS: IntelliJ localhost OPTIONS CORS and unchanged Cognito 401'
+              exit 0
+            fi
+            rm -f "$headers"
+            sleep 3
+          done
+          echo 'FAIL: live HTTPS API does not permit IntelliJ localhost preflight' >&2
+          exit 2
