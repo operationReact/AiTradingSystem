@@ -117,6 +117,7 @@ jobs:
           if status=="Success":
               expected={
                 "MINTTICK_OWNER_BINDING": {"PRESENT","MISSING"},
+                "MINTTICK_OWNER_ACCOUNT_LINKED": {"YES","NO","UNKNOWN"},
                 "MINTTICK_PRIVATE_FEED_MODE": {"ENABLED","NOT_ENABLED"},
                 "MINTTICK_UPSTOX_SERVER_CONFIG": {"PRESENT","NOT_CONFIGURED"},
                 "MINTTICK_PRIVATE_FEED_LAMBDA": {"READY","NOT_CONFIRMED"},
