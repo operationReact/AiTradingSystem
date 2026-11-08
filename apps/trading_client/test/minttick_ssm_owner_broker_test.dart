@@ -55,6 +55,12 @@ void main() {
     expect(find.text('owner-cognito-sub-12345'), findsOneWidget);
     expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
     // Owner SSM mismatch is not a reason to ask for four secrets again.
+    // This optional setting is below the first 844dp viewport.
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('broker-alternate-account-expander')),
+      260,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.byKey(const ValueKey('broker-alternate-account-expander')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
