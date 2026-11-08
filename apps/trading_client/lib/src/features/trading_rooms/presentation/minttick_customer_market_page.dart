@@ -150,6 +150,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         _liveQuote = stale ? null : reply;
         _liveStatus = stale ? 'STALE' : reply.status;
       });
+      if (reply.status == 'MARKET_CLOSED' ||
+          reply.status == 'BROKER_CONNECTION_REQUIRED') {
+        _liveTimer?.cancel();
+      }
     } catch (_) {
       if (mounted && _selected?.id == stock.id) {
         setState(() {
@@ -173,7 +177,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       Text('Markets', style: theme.textTheme.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Explore stocks and request verified, on-demand market quotes.',
+      Text('Explore verified equities. LIVE requires your connected Angel One session.',
         style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant, height: 1.4)),
       const SizedBox(height: 18),
