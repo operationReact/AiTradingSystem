@@ -40,6 +40,9 @@ services:
       MARKET_DATA_LAMBDA_FUNCTION_NAME: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:-}
       # Exact Cognito owner-subject binding; not an API key or broker credential.
       MINTTICK_ANGEL_ONE_OWNER_SUB: ${MINTTICK_ANGEL_ONE_OWNER_SUB:-}
+      UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
+      UPSTOX_CLIENT_SECRET: ${UPSTOX_CLIENT_SECRET:-}
+      UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-}
       # Upstox app-owned OAuth credentials are injected only from protected host runtime.env.
       # These are never compiled into the Flutter client or CI release artifacts.
       UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
