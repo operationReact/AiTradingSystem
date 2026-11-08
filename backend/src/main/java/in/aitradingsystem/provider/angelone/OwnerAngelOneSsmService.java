@@ -17,7 +17,7 @@ import software.amazon.awssdk.services.ssm.model.ParameterType;
 
 /**
  * Owner-only Angel One connection authenticated by the PAPER EC2 instance
- * from the four existing SSM SecureStrings. The login, profile verification,
+ * from the four allowlisted SSM String or SecureString parameters. Login, profile verification,
  * and WebSocket V2 all originate from the registered EC2 Elastic IP.
  *
  * This service never returns, logs, persists or distributes broker secrets.
@@ -88,7 +88,8 @@ public final class OwnerAngelOneSsmService {
         Map<String, String> values = new HashMap<>();
         for (var parameter : response.parameters()) {
             if (parameter == null || !NAMES.contains(parameter.name())
-                    || parameter.type() != ParameterType.SECURE_STRING
+                    || (parameter.type() != ParameterType.SECURE_STRING
+                        && parameter.type() != ParameterType.STRING)
                     || parameter.value() == null || parameter.value().isBlank()
                     || values.putIfAbsent(parameter.name(), parameter.value()) != null) {
                 throw unavailable("OWNER_SSM_PARAMETERS_INVALID");
