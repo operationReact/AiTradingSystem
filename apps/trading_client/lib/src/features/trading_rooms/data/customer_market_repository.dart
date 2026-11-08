@@ -54,7 +54,7 @@ class CustomerLiveQuote {
     final status = value['status'];
     final exchange = value['exchange'];
     final tradingSymbol = value['tradingSymbol'];
-    if (id is! num || id.toInt() < 1 ||
+    if (id is! int || id < 1 ||
         (exchange != 'NSE' && exchange != 'BSE') ||
         tradingSymbol is! String || tradingSymbol.isEmpty ||
         status is! String ||
@@ -67,7 +67,7 @@ class CustomerLiveQuote {
       if (value['ltp'] != null || value['exchangeAt'] != null) {
         throw const FormatException('Non-live price was supplied');
       }
-      return CustomerLiveQuote(instrumentId: id.toInt(),
+      return CustomerLiveQuote(instrumentId: id,
           exchange: exchange as String, tradingSymbol: tradingSymbol,
           status: status);
     }
@@ -79,7 +79,7 @@ class CustomerLiveQuote {
         tickAt == null || source != 'ANGEL_ONE_SMARTAPI_WS_V2') {
       throw const FormatException('Unverified live quote');
     }
-    return CustomerLiveQuote(instrumentId: id.toInt(),
+    return CustomerLiveQuote(instrumentId: id,
         exchange: exchange as String, tradingSymbol: tradingSymbol,
         status: status, ltp: price, exchangeAt: tickAt,
         source: source as String);
