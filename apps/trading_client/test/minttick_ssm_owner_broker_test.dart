@@ -50,12 +50,16 @@ void main() {
         findsOneWidget);
     expect(find.text('owner-cognito-sub-12345'), findsOneWidget);
     expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
+    // Owner SSM mismatch is not a reason to ask for four secrets again.
+    expect(find.byKey(const ValueKey('broker-alternate-account-expander')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
     expect(repo.connects, 0);
   });
 
   for (final brightness in [Brightness.dark, Brightness.light]) {
     for (final width in [320.0, 390.0]) {
-      testWidgets('preconfigured owner uses no input fields at ${width.toInt()}dp $brightness',
+      testWidgets('preconfigured owner auto-connects without fields at ${width.toInt()}dp $brightness',
           (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = Size(width, 844);
@@ -67,15 +71,14 @@ void main() {
           home: MintTickCustomerBrokerPage(repository: repository),
         ));
         await tester.pumpAndSettle();
-        final connect = find.byKey(const ValueKey('broker-connect-configured'));
-        expect(connect, findsOneWidget);
+        // A verified owner uses stored server credentials automatically.
+        // The form cannot be required or offered to the SSM owner.
+        expect(repository.connects, 1);
+        expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
+        expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
         expect(find.byKey(const ValueKey('broker-api-key')), findsNothing);
         expect(find.byKey(const ValueKey('broker-pin')), findsNothing);
         expect(find.byKey(const ValueKey('broker-totp')), findsNothing);
-        await tester.ensureVisible(connect);
-        await tester.tap(connect);
-        await tester.pumpAndSettle();
-        expect(repository.connects, 1);
         expect(find.text('CONNECTED'), findsOneWidget);
         expect(find.textContaining('***234'), findsOneWidget);
         expect(tester.takeException(), isNull);
