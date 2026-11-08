@@ -65,6 +65,26 @@ class InstrumentMasterApiIT extends AbstractPostgresIT {
     }
 
     @Test
+    void ignoresUntradedOfficialCommodityVenuesAndPublishesSupportedEquities() {
+        String mixedMaster = """
+                [
+                  {"token":"2885","symbol":"RELIANCE-EQ","name":"RELIANCE","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"3045","symbol":"SBIN-EQ","name":"SBIN","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"92001","symbol":"NCO-DERIVATIVE","expiry":"","strike":"-1","lotsize":"1","exch_seg":"NCO","tick_size":"5"},
+                  {"token":"92002","symbol":"NCDEX-DERIVATIVE","expiry":"","strike":"-1","lotsize":"1","exch_seg":"NCDEX","tick_size":"5"}
+                ]
+                """;
+        var summary = service.importSource(mixedMaster.getBytes(StandardCharsets.UTF_8));
+
+        assertThat(summary.status()).isEqualTo("SUCCEEDED");
+        assertThat(summary.parsedCount()).isEqualTo(4);
+        assertThat(summary.acceptedCount()).isEqualTo(2);
+        assertThat(summary.rejectedCount()).isZero();
+        assertThat(summary.activeCount()).isEqualTo(2);
+        assertThat(service.catalogueSummary().activeCount()).isEqualTo(2);
+    }
+
+    @Test
     void failedIncompleteImportLeavesPreviousCatalogueActive() throws Exception {
         var first = service.importSource(FIRST_MASTER.getBytes(StandardCharsets.UTF_8));
         assertThat(first.status()).isEqualTo("SUCCEEDED");

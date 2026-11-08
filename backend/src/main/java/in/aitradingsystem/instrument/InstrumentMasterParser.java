@@ -10,6 +10,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Strict parser for the Angel One OpenAPIScripMaster JSON array. */
@@ -19,6 +20,9 @@ public class InstrumentMasterParser {
             .parseCaseInsensitive()
             .appendPattern("ddMMMyyyy")
             .toFormatter(Locale.ENGLISH);
+    // Official daily master also includes commodity venues MintTick deliberately does not ingest.
+    // These recognized, out-of-scope records are skipped, not treated as malformed target instruments.
+    private static final Set<String> OUT_OF_SCOPE_SEGMENTS = Set.of("NCO", "NCDEX");
     private final ObjectMapper mapper;
 
     public InstrumentMasterParser(ObjectMapper mapper) {
@@ -34,19 +38,31 @@ public class InstrumentMasterParser {
             }
             List<InstrumentDraft> accepted = new ArrayList<>(root.size());
             int rejected = 0;
+            int skipped = 0;
             for (JsonNode node : root) {
+                if (isOutOfScopeSegment(node)) {
+                    skipped++;
+                    continue;
+                }
                 try {
                     accepted.add(parseOne(node));
                 } catch (RuntimeException e) {
                     rejected++;
                 }
             }
-            return new ParseResult(root.size(), List.copyOf(accepted), rejected);
+            return new ParseResult(root.size(), List.copyOf(accepted), rejected, skipped);
         } catch (InstrumentMasterException e) {
             throw e;
         } catch (Exception e) {
             throw new InstrumentMasterException("INVALID_JSON", "Instrument master is not valid JSON");
         }
+    }
+
+    private static boolean isOutOfScopeSegment(JsonNode node) {
+        if (node == null || !node.isObject()) return false;
+        JsonNode raw = node.get("exch_seg");
+        return raw != null && raw.isTextual()
+                && OUT_OF_SCOPE_SEGMENTS.contains(raw.asText().trim().toUpperCase(Locale.ROOT));
     }
 
     private InstrumentDraft parseOne(JsonNode node) {
@@ -157,5 +173,6 @@ public class InstrumentMasterParser {
     public record InstrumentDraft(String exchangeSegment, String exchange, String symbolToken, String tradingSymbol,
                                   String name, String instrumentType, LocalDate expiry, BigDecimal strike,
                                   int lotSize, BigDecimal tickSize) {}
-    public record ParseResult(int parsedCount, List<InstrumentDraft> accepted, int rejectedCount) {}
+    public record ParseResult(int parsedCount, List<InstrumentDraft> accepted,
+                              int rejectedCount, int skippedCount) {}
 }

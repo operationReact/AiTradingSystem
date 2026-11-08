@@ -83,6 +83,24 @@ class InstrumentMasterParserTest {
     }
 
     @Test
+    void skipsKnownOutOfScopeCommodityVenuesButRejectsUnexpectedSegments() {
+        var result = parser.parse(bytes("""
+                [
+                  {"token":"1","symbol":"SBIN-EQ","lotsize":"1","tick_size":"5","exch_seg":"NSE","strike":"-1"},
+                  {"token":"2","symbol":"FUT-OUT-OF-SCOPE","lotsize":"1","tick_size":"5","exch_seg":"NCO","strike":"-1"},
+                  {"token":"3","symbol":"AGRI-OUT-OF-SCOPE","lotsize":"1","tick_size":"5","exch_seg":"ncdex","strike":"-1"},
+                  {"token":"4","symbol":"BAD","lotsize":"1","tick_size":"5","exch_seg":"UNKNOWN","strike":"-1"}
+                ]
+                """), 10);
+
+        assertThat(result.parsedCount()).isEqualTo(4);
+        assertThat(result.accepted()).hasSize(1);
+        assertThat(result.rejectedCount()).isEqualTo(1);
+        assertThat(result.skippedCount()).isEqualTo(2);
+        assertThat(result.accepted().get(0).tradingSymbol()).isEqualTo("SBIN-EQ");
+    }
+
+    @Test
     void rejectsInvalidJsonEmptyAndOversizedMaster() {
         assertThatThrownBy(() -> parser.parse(bytes("not-json"), 10))
                 .isInstanceOf(InstrumentMasterException.class);
