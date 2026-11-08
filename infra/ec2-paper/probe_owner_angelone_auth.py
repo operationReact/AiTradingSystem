@@ -82,6 +82,9 @@ def request_json(url, method, headers, data=None):
             raise ProbeFailure("ANGEL_ONE_AUTH: REJECTED_OR_IP_RESTRICTED") from None
         if error.code == 429:
             raise ProbeFailure("ANGEL_ONE_AUTH: RATE_LIMITED") from None
+        # Public HTTP status only. Never print response text, headers or URI.
+        if 400 <= error.code <= 599:
+            raise ProbeFailure(f"ANGEL_ONE_AUTH: HTTP_{error.code}") from None
         raise ProbeFailure("ANGEL_ONE_AUTH: UNAVAILABLE") from None
     except (urllib.error.URLError, OSError, TimeoutError):
         raise ProbeFailure("ANGEL_ONE_AUTH: NETWORK_UNAVAILABLE") from None
@@ -90,6 +93,10 @@ def request_json(url, method, headers, data=None):
     except (ValueError, TypeError):
         raise ProbeFailure("ANGEL_ONE_AUTH: INVALID_RESPONSE") from None
     if not isinstance(result, dict) or result.get("status") is not True:
+        # Provider's bounded machine-readable code only; never its message.
+        code = result.get("errorcode") if isinstance(result, dict) else None
+        if isinstance(code, str) and re.fullmatch(r"(?:AB|AG)[0-9]{4}", code):
+            raise ProbeFailure("ANGEL_ONE_AUTH: PROVIDER_CODE_" + code) from None
         raise ProbeFailure("ANGEL_ONE_AUTH: REJECTED_OR_IP_RESTRICTED")
     if not isinstance(result.get("data"), dict):
         raise ProbeFailure("ANGEL_ONE_AUTH: INVALID_RESPONSE")
