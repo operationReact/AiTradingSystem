@@ -45,6 +45,16 @@ class InstrumentMasterDownloaderTest {
         assertThat(result.isCompletedExceptionally()).isTrue();
     }
     
+    @Test
+    void instrumentMasterGetsLongerDownloadWindowWithoutExtendingQuoteTimeout() {
+        assertThat(InstrumentMasterDownloader.masterDownloadTimeout(10_000))
+                .isEqualTo(java.time.Duration.ofSeconds(90));
+        assertThat(InstrumentMasterDownloader.masterDownloadTimeout(60_000))
+                .isEqualTo(java.time.Duration.ofSeconds(90));
+        assertThat(InstrumentMasterDownloader.masterDownloadTimeout(110_000))
+                .isEqualTo(java.time.Duration.ofSeconds(110));
+    }
+
     private static Flow.Subscription noOpSubscription() {
         return new Flow.Subscription() {
             @Override public void request(long n) {}
