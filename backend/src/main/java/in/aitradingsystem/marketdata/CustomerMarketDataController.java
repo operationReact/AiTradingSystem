@@ -121,8 +121,11 @@ public class CustomerMarketDataController {
         var account = identities.find("cognito", token.getToken().getIssuer().toString(),
             token.getToken().getSubject()).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        boolean accountFeed = customerBroker != null
-            && customerBroker.status(account.id()).connected();
+        // A missing, revoked or expired broker session is an unavailable feed,
+        // never a null-pointer 500 or a reason to fall back to a different user.
+        var connection = customerBroker == null ? null : customerBroker.status(account.id());
+        boolean accountFeed = connection != null && connection.connected()
+            && connection.expiresAt() != null && connection.expiresAt().isAfter(Instant.now());
         if (!ownerFeed && !accountFeed) {
             if (ownerSubject.equals(token.getToken().getSubject())
                     && !"ANGEL_ONE_LAMBDA".equals(providerMode)) {
