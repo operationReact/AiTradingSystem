@@ -97,4 +97,27 @@ else
   echo "MINTTICK_PRIVATE_FEED_LAMBDA: NOT_CONFIRMED"
   echo "MINTTICK_PRIVATE_FEED_DIAGNOSTIC: $reason"
 fi
+# The broker Lambda being ready does NOT establish that instruments exist.
+# Inspect only a bounded count of active NSE/BSE cash equities using the
+# existing private PostgreSQL container, without credentials or market prices.
+# Never print SQL errors, database metadata, host env or row contents.
+catalogue_state=UNAVAILABLE
+if [[ -f "$root/.env" && ! -L "$root/.env" &&
+      -f "$root/paper-compose.yml" && ! -L "$root/paper-compose.yml" ]] &&
+   command -v docker >/dev/null 2>&1; then
+  count="$(timeout 15 docker compose --env-file "$root/.env" \
+    -f "$root/paper-compose.yml" exec -T postgres \
+    psql -X -v ON_ERROR_STOP=1 -U aitrading -d aitrading -Atq \
+    -c "SELECT count(*) FROM instrument_master i JOIN instrument_catalogue_state c ON c.active_version = i.catalogue_version WHERE c.singleton_id = 1 AND i.active = TRUE AND i.exchange_segment IN ('NSE_CM','BSE_CM') AND i.trading_symbol LIKE '%-EQ';" \
+    2>/dev/null)" || count=""
+  if [[ "$count" =~ ^[0-9]{1,6}$ ]]; then
+    if (( 10#$count > 0 )); then
+      catalogue_state=READY
+    else
+      catalogue_state=EMPTY
+    fi
+    echo "MINTTICK_CASH_EQUITY_INSTRUMENTS: $count"
+  fi
+fi
+echo "MINTTICK_MARKET_CATALOGUE: $catalogue_state"
 echo "MINTTICK_READ_ONLY_CHECK: completed; no broker secrets accessed by this script"
