@@ -273,13 +273,23 @@ jobs:
             --output "$local_repo/$module_path/kotlin-compiler-embeddable-2.2.21.pom"
           echo "MINTTICK_VERIFIED_KOTLIN_MAVEN=file://$local_repo" >> "$GITHUB_ENV"
           cat > "$HOME/.gradle/init.d/minttick-verified-kotlin.gradle" <<'GRADLE'
-          gradle.beforeProject { project ->
+          // Flutter Gradle's included build uses settings-level dependency
+          // repositories and explicitly forbids project-level repositories.
+          // Register our already-verified *local* cache before settings are
+          // evaluated, including the isolated Flutter Gradle included build.
+          gradle.beforeSettings { settings ->
               def verified = System.getenv("MINTTICK_VERIFIED_KOTLIN_MAVEN")
               if (verified == null || !verified.startsWith("file:///")) {
                   throw new GradleException("Verified Kotlin local repository was not configured")
               }
-              project.repositories.maven { repo ->
-                  repo.url = project.uri(verified)
+              settings.pluginManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+                  repo.content {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+              settings.dependencyResolutionManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
                   repo.content {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
