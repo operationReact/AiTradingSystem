@@ -13,6 +13,7 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ssm.SsmClient;
 import software.amazon.awssdk.services.ssm.model.GetParametersRequest;
 import software.amazon.awssdk.services.ssm.model.GetParametersResponse;
+import software.amazon.awssdk.services.ssm.model.ParameterType;
 
 /**
  * Owner-only Angel One connection authenticated by the PAPER EC2 instance
@@ -87,6 +88,7 @@ public final class OwnerAngelOneSsmService {
         Map<String, String> values = new HashMap<>();
         for (var parameter : response.parameters()) {
             if (parameter == null || !NAMES.contains(parameter.name())
+                    || parameter.type() != ParameterType.SECURE_STRING
                     || parameter.value() == null || parameter.value().isBlank()
                     || values.putIfAbsent(parameter.name(), parameter.value()) != null) {
                 throw unavailable("OWNER_SSM_PARAMETERS_INVALID");
