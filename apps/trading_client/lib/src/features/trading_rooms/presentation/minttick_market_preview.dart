@@ -112,7 +112,9 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
   }
 
   void _refresh() {
-    setState(() => _result = _fetch());
+    setState(() {
+      _result = _fetch();
+    });
   }
 
   @override
