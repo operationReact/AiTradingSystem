@@ -218,6 +218,39 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Use SHA256-verified Kotlin compiler mirror during GitHub Releases outage
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact='org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.21/kotlin-compiler-embeddable-2.2.21.jar'
+          checksum='9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295'
+          mirror=''
+          for base in \
+            'https://repository.liferay.com/nexus/content/repositories/gradle-plugins' \
+            'https://maven.aliyun.com/repository/public'; do
+            rm -f "$RUNNER_TEMP/kotlin-compiler-embeddable.jar"
+            if timeout 90 curl --fail --silent --show-error --location \
+                 --retry 2 --connect-timeout 10 --max-time 80 \
+                 "$base/$artifact" -o "$RUNNER_TEMP/kotlin-compiler-embeddable.jar" \
+              && test "$(sha256sum "$RUNNER_TEMP/kotlin-compiler-embeddable.jar" | cut -d ' ' -f1)" = "$checksum"; then
+              mirror="$base"
+              break
+            fi
+          done
+          test -n "$mirror" || { echo 'No checksum-verified Kotlin compiler source available'; exit 3; }
+          rm -f "$RUNNER_TEMP/kotlin-compiler-embeddable.jar"
+          mkdir -p "${GRADLE_USER_HOME:-$HOME/.gradle}/init.d"
+          # This applies to included Gradle builds and only the Kotlin group.
+          cat > "${GRADLE_USER_HOME:-$HOME/.gradle}/init.d/minttick-kotlin-mirror.gradle" <<EOF
+          gradle.beforeProject { project ->
+            project.repositories.maven {
+              url = uri("${mirror}")
+              content { includeGroup("org.jetbrains.kotlin") }
+            }
+          }
+          EOF
+          echo 'Exact Kotlin compiler SHA256 independently verified before build.'
+
       - name: Build sideloadable release APK
         run: |
           flutter build apk --release \
