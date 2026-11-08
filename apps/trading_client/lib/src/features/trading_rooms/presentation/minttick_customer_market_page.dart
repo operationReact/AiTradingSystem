@@ -5,6 +5,7 @@ import '../../../data/authenticated_api_client.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_market_preview.dart';
 
 /// Verified customer equity catalogue and owner-only, on-demand broker quotes.
 /// Nothing on this page is simulated or advertised as a streaming exchange tick.
@@ -114,11 +115,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       const SizedBox(height: 18),
       const MintTickEyebrow('MintTick / Markets'),
       const SizedBox(height: 6),
-      Text('Indian equities', style: theme.textTheme.headlineSmall
+      Text('Markets', style: theme.textTheme.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Search the exchange instrument catalogue. '
-          'Request a verified Angel One price for your own account.',
+      Text('Explore stocks and request verified, on-demand market quotes.',
         style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant, height: 1.4)),
       const SizedBox(height: 18),
@@ -155,21 +155,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       const SizedBox(height: 12),
-      MintTickSurface(
-        child: Row(children: [
-          const MintTickIconTile(Icons.show_chart_rounded),
-          const SizedBox(width: 12),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Read-only · On-demand', style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            Text('Quotes are fetched from Angel One when requested. '
-                'They are not a live streaming feed or an execution signal.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant, height: 1.4)),
-          ])),
-        ]),
-      ),
+      MintTickMarketPreview(repository: widget.repository),
+      const SizedBox(height: 12),
       if (_catalogue?.activeCount == 0) ...[
         const SizedBox(height: 12),
         const MintTickInfoText('The exchange instrument catalogue has not yet '
