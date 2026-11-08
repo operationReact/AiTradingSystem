@@ -1,7 +1,9 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_flutter/amplify_flutter.dart' show Amplify;
+import 'package:amplify_flutter/amplify_flutter.dart' show Amplify, AuthenticationFlowType;
 import 'package:http/http.dart' as http;
 
 /// Authentication is deliberately independent of MintTick app-user IDs.
@@ -30,6 +32,23 @@ abstract class CustomerIdentity {
 
 enum RegistrationStep { emailCodeRequired, complete }
 enum LoginStep { complete, emailConfirmationRequired, additionalChallenge }
+
+/// Available only for an explicitly opted-in Flutter WEB DEBUG session.
+/// The normal Android/release sign-in remains USER_SRP_AUTH.
+abstract final class MintTickLocalAuthFlow {
+  static const requested = bool.fromEnvironment(
+    'MINTTICK_LOCAL_COGNITO_PASSWORD_AUTH', defaultValue: false);
+
+  static bool usePasswordAuth({
+    required bool debugMode,
+    required bool web,
+    required bool optIn,
+  }) => debugMode && web && optIn;
+
+  static bool get enabled => usePasswordAuth(
+    debugMode: kDebugMode, web: kIsWeb, optIn: requested);
+}
+
 
 /// Allows screens and unit tests to swap authentication implementations.
 abstract final class MintTickIdentity {
@@ -211,9 +230,20 @@ class CognitoCustomerIdentity implements CustomerIdentity {
   @override
   Future<LoginStep> signIn({required String username, required String password}) async {
     try {
+      // SRP is the default. The opt-in USER_PASSWORD_AUTH path helps isolate
+      // a browser-side SRP stall without bypassing Cognito verification.
+      // USER_PASSWORD_AUTH sends the password to Cognito over HTTPS; never
+      // log, persist, or route it through MintTick's backend.
       final result = await Amplify.Auth.signIn(
         username: username,
         password: password,
+        options: SignInOptions(
+          pluginOptions: CognitoSignInPluginOptions(
+            authFlowType: MintTickLocalAuthFlow.enabled
+                ? AuthenticationFlowType.userPasswordAuth
+                : AuthenticationFlowType.userSrpAuth,
+          ),
+        ),
       );
       return switch (result.nextStep.signInStep) {
         AuthSignInStep.done => LoginStep.complete,

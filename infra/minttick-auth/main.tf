@@ -86,6 +86,11 @@ resource "aws_cognito_user_pool_client" "flutter" {
 
   explicit_auth_flows = [
     "ALLOW_USER_SRP_AUTH",
+    # Private dev Flutter Chrome can explicitly opt into USER_PASSWORD_AUTH
+    # to diagnose an SRP request that stalls before reaching Cognito.
+    # Cognito continues to validate passwords; SDK uses TLS. This app client
+    # already has generate_secret=false; never export any broker credentials.
+    "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_REFRESH_TOKEN_AUTH",
   ]
 

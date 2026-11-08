@@ -138,6 +138,45 @@ timeout and differentiates **endpoint reachable, SDK operation stalled**
 from **endpoint not verifiably reachable**. This is a diagnostic only;
 it does not bypass Cognito password validation or mint an app session.
 
+## Optional Cognito password flow (local debug only)
+
+If Cognito's public JWKS endpoint returns HTTP 200, but Amplify's default
+SRP login hangs in Chrome **without an InitiateAuth POST**, the app offers
+an explicit test of AWS Cognito's standard `USER_PASSWORD_AUTH` flow.
+
+This is **not a bypass**: Cognito still validates the actual password and
+issues the same identity tokens, directly over TLS. Unlike SRP, the password
+is transmitted to Cognito inside the encrypted request. It is never sent
+to MintTick's backend, browser telemetry, or a repository.
+
+1. Ensure Terraform has successfully updated the existing **dev** public
+   Cognito user-pool app client to allow `ALLOW_USER_PASSWORD_AUTH` **in
+   addition** to `ALLOW_USER_SRP_AUTH`. A source-code merge does not
+   activate this AWS client setting.
+2. Stop the current Flutter process with `q` and close its Chrome debug
+   instance, since the old SRP call cannot be cancelled by `Future.timeout`.
+3. From `apps/trading_client` inside IntelliJ's Terminal, launch:
+
+```powershell
+flutter run -d chrome --web-port=5173 --dart-define=API_BASE_URL=https://api.minttick.com --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 --dart-define=MINTTICK_COGNITO_USER_POOL_ID=ap-south-1_jz2T8qbiY --dart-define=MINTTICK_COGNITO_CLIENT_ID=6jm18v2mdpcfraip92hrjhqjnd --dart-define=MINTTICK_AUTH_ONLY_TEST=false --dart-define=MINTTICK_LOCAL_COGNITO_PASSWORD_AUTH=true
+```
+
+The alternative shared IntelliJ configuration is **MintTick Local Web
+(Cognito Password Debug)**. This flag is compiled out of release builds
+and never enabled on Android. Do not enable it on public devices.
+
+Open Chrome DevTools → Network → All. On a sign-in attempt, the
+`cognito-idp` **InitiateAuth** request should now appear if the previous
+delay was inside SRP processing. A 400 `USER_PASSWORD_AUTH flow not
+enabled` means the Cognito Terraform update has not yet been applied.
+A successful Cognito login followed by a failed `api.minttick.com`
+provision call is a **separate localhost API Gateway CORS issue**.
+
+Never copy or share the Auth request payload or tokens. If Cognito still
+hangs before a POST in both modes, inspect sanitized Chrome Console
+errors and browser extensions/proxy restrictions rather than retrying
+the password repeatedly.
+
 ## Developer workflow
 
 Run `flutter analyze` and `flutter test` in
