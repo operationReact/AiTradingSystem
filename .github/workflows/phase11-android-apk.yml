@@ -195,6 +195,139 @@ jobs:
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
+      - name: Stage checksum-verified Gradle 9.3.1 from public archive mirrors
+        run: |
+          set -euo pipefail
+          # Gradle's official CDN currently redirects to github.com/releases
+          # which persistently returns HTTP 504 on the GitHub runner.
+          # Mirrors are used only to transfer bytes: the SHA-256 independently
+          # published by Gradle must match before any artifact is executed.
+          artifact="$RUNNER_TEMP/minttick-gradle-9.3.1-bin.zip"
+          checksum="b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06"
+          found=false
+          for source in \
+            "https://mirrors.huaweicloud.com/gradle/gradle-9.3.1-bin.zip" \
+            "https://mirror.nju.edu.cn/gradle/gradle-9.3.1-bin.zip"; do
+            rm -f -- "$artifact"
+            if curl --fail --show-error --location --retry 3 --retry-all-errors \
+                --retry-delay 3 --connect-timeout 12 --max-time 180 \
+                "$source" --output "$artifact"; then
+              if (cd "$RUNNER_TEMP" && \
+                printf '%s  %s\n' "$checksum" "minttick-gradle-9.3.1-bin.zip" \
+                  | sha256sum --check --status); then
+                found=true
+                break
+              fi
+              echo "Rejected Gradle mirror data: checksum mismatch" >&2
+            fi
+          done
+          test "$found" = "true" || {
+            echo "No independently verified Gradle 9.3.1 distribution available" >&2
+            exit 2
+          }
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          p=Path('android/gradle/wrapper/gradle-wrapper.properties')
+          content=p.read_text()
+          if 'gradle-9.3.1-all.zip' not in content and 'gradle-9.3.1-bin.zip' not in content:
+              raise SystemExit('Unexpected generated Gradle version; manual upgrade required')
+          artifact=Path(os.environ['RUNNER_TEMP'])/'minttick-gradle-9.3.1-bin.zip'
+          if not artifact.is_file() or artifact.stat().st_size < 100_000_000:
+              raise SystemExit('Pinned Gradle distribution is absent or incomplete')
+          local_url=artifact.as_uri().replace(':','\\:',1)
+          settings={
+            'distributionUrl':local_url,
+            'distributionSha256Sum':'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06',
+            'networkTimeout':'60000',
+            'retries':'2',
+            'retryBackOffMs':'3000',
+          }
+          lines=[line for line in content.splitlines()
+                 if line.split('=',1)[0] not in settings]
+          lines.extend(f'{key}={value}' for key,value in settings.items())
+          p.write_text('\n'.join(lines)+'\n')
+          print('PASS: local Gradle 9.3.1 archive pinned to official SHA-256')
+          PY
+
+      - name: Stage checksum-verified Kotlin compiler from independent Maven cache
+        run: |
+          set -euo pipefail
+          # Kotlin 2.2.21 and 2.4.0 compiler archives are redirected to
+          # GitHub releases by Maven Central, which returns 504 on CI.
+          # Both binaries must match independently published JetBrains SHA-256
+          # from kotlin/gradle/verification-metadata.xml before use.
+          local_repo="$RUNNER_TEMP/minttick-verified-kotlin-maven"
+          mkdir -p "$HOME/.gradle/init.d"
+          while read -r version expected_sha; do
+            module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/$version"
+            mkdir -p "$local_repo/$module_path"
+            artifact="kotlin-compiler-embeddable-$version.jar"
+            mirror="https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"
+            curl --fail --show-error --location --retry 4 --retry-all-errors \
+              --retry-delay 5 --connect-timeout 12 --max-time 180 \
+              "$mirror" --output "$local_repo/$module_path/$artifact"
+            (cd "$local_repo/$module_path" && \
+              printf '%s  %s\n' "$expected_sha" "$artifact" \
+              | sha256sum --check --status)
+            curl --fail --show-error --location --retry 3 --retry-all-errors \
+              --connect-timeout 12 --max-time 25 \
+              "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-$version.pom" \
+              --output "$local_repo/$module_path/kotlin-compiler-embeddable-$version.pom"
+          done <<'KOTLIN_VERSIONS'
+          2.2.21 9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295
+          2.4.0 c2b25e8c1c93ec416ba4327f5e31eaec0f0c8847241b9353e294b8db9dce564f
+          KOTLIN_VERSIONS
+          echo "MINTTICK_VERIFIED_KOTLIN_MAVEN=file://$local_repo" >> "$GITHUB_ENV"
+          cat > "$HOME/.gradle/init.d/minttick-verified-kotlin.gradle" <<'GRADLE'
+          // Flutter Gradle's included build uses settings-level dependency
+          // repositories and explicitly forbids project-level repositories.
+          // Register our already-verified *local* cache before settings are
+          // evaluated, including the isolated Flutter Gradle included build.
+          gradle.beforeSettings { settings ->
+              def verified = System.getenv("MINTTICK_VERIFIED_KOTLIN_MAVEN")
+              if (verified == null || !verified.startsWith("file:///")) {
+                  throw new GradleException("Verified Kotlin local repository was not configured")
+              }
+              // Adding a local repository to initially empty pluginManagement
+              // disables Gradle's implicit Plugin Portal fallback. Preserve
+              // the normal upstream repositories explicitly.
+              settings.pluginManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+                  repo.content {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+              settings.pluginManagement.repositories.gradlePluginPortal()
+              settings.pluginManagement.repositories.google()
+              settings.pluginManagement.repositories.mavenCentral()
+              // Kotlin compiler JARs are staged and hash-verified locally.
+              // Maven Central would otherwise win repository selection and
+              // redirect large artifacts to github.com, returning HTTP 504.
+              // Exclusive content prevents resolution of this exact module
+              // through any other dependency repository, including plugins.
+              def verifiedRepo = settings.dependencyResolutionManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+              }
+              settings.dependencyResolutionManagement.repositories.exclusiveContent {
+                  forRepositories(verifiedRepo)
+                  filter {
+                      includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
+                  }
+              }
+              settings.dependencyResolutionManagement.repositories.mavenCentral()
+              settings.dependencyResolutionManagement.repositories.google()
+          }
+          GRADLE
+          echo "PASS: Kotlin 2.2.21 and 2.4.0 compilers match upstream JetBrains SHA-256"
+
+      - name: Validate Gradle settings and verified offline Kotlin repository
+        run: |
+          set -euo pipefail
+          # A quick Gradle configuration check catches init-script DSL errors
+          # before the longer Flutter test suite and release compilation.
+          (cd android && ./gradlew --no-daemon help)
+
       - name: Resolve dependencies
         run: flutter pub get
 
@@ -206,12 +339,23 @@ jobs:
 
       - name: Build sideloadable release APK
         run: |
-          flutter build apk --release \
-            --dart-define=API_BASE_URL="$API_BASE_URL" \
-            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
-            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
-            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
-            --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"
+          set -euo pipefail
+          # Retry transient upstream Gradle/Kotlin HTTP 504, not source tests.
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --dart-define=API_BASE_URL="$API_BASE_URL" \
+              --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+              --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+              --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+              --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Release APK failed after bounded retries" >&2
+              exit 1
+            fi
+            sleep "$((attempt * 12))"
+          done
 
       - name: Record APK checksum
         run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
