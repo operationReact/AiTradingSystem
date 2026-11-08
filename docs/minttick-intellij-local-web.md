@@ -138,6 +138,42 @@ timeout and differentiates **endpoint reachable, SDK operation stalled**
 from **endpoint not verifiably reachable**. This is a diagnostic only;
 it does not bypass Cognito password validation or mint an app session.
 
+## Amplify's cached-session queue can block sign-in
+
+This repo had an additional local Chrome bug: startup ran
+`MintTickIdentity.current.hasSession()` even when Remember Me was disabled.
+Amplify Auth serializes operations through a single SDK queue; a hung startup
+`fetchAuthSession()` can prevent a later `signIn()` from ever sending its
+`InitiateAuth` POST. A Flutter `Future.timeout` does NOT cancel the
+underlying stalled SDK work. This behavior is documented in
+[Amplify Flutter issue #7418](https://github.com/aws-amplify/amplify-flutter/issues/7418).
+
+When `MINTTICK_LOCAL_COGNITO_PASSWORD_AUTH=true` is set for Chrome **debug**,
+MintTick now bypasses **all startup session-restoration checks** after Amplify
+initializes. It opens `/welcome` unauthenticated, so the first
+`Amplify.Auth.signIn()` is not queued behind MintTick's own startup
+`hasSession` or `signOut` operations.
+
+This debug mode does **not** reuse a cached session, grant access to the
+dashboard, bypass passwords, or affect Android/release builds.
+Backend JWT validation is still required after login.
+
+After pulling the fix:
+
+1. Stop Flutter with `q`, close the old Flutter-launched Chrome window,
+   and start a **fresh** `flutter run` using the command in the next section.
+   A hot reload is insufficient if an earlier Amplify operation is stuck.
+2. If a previous browser session still interferes, use Chrome DevTools →
+   **Application → Storage → Clear site data** for **localhost:5173 only**.
+   This deletes local browser sign-in state; it does not change AWS accounts.
+3. Test sign-in **once** and inspect Chrome DevTools → **Network → All**.
+   The actual `InitiateAuth` request is a POST to `cognito-idp`, not
+   the public `jwks.json` GET. Do not share its request body, headers,
+   password or tokens.
+4. If no POST appears even with cached-session checks skipped, do not assume
+   the Cognito credentials are wrong: inspect sanitized Console errors and
+   investigate Amplify's client-side startup/worker behavior.
+
 ## Optional Cognito password flow (local debug only)
 
 If Cognito's public JWKS endpoint returns HTTP 200, but Amplify's default
