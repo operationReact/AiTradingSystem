@@ -195,6 +195,114 @@ jobs:
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
+      - name: Pin smaller official Gradle binary and checksum, bypass GitHub release 504s
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('android/gradle/wrapper/gradle-wrapper.properties')
+          content=p.read_text()
+          # The Flutter 3.47-generated Gradle 9.3.1 -all archive is 224 MB
+          # and redirected to github.com releases, which twice returned 504.
+          # Gradle's official -bin zip is only 130 MB. Its published SHA-256
+          # is pinned independently from https://gradle.org/release-checksums/.
+          expected='b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
+          actual=re.search(r'^distributionUrl=.*gradle-(9[.]3[.]1)-(?:all|bin)[.]zip
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build sideloadable release APK
+        run: |
+          set -euo pipefail
+          # Flutter already retries once, but Gradle/Kotlin's upstream GitHub
+          # release network intermittently returns HTTP 504. Retry bounded
+          # times without changing SDK, toolchain, secrets or packaging inputs.
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --dart-define=API_BASE_URL="$API_BASE_URL" \
+              --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+              --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+              --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+              --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "Release APK could not be built after bounded retries" >&2
+              exit 1
+            fi
+            sleep "$((attempt * 12))"
+          done
+
+      - name: Record APK checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event_name == 'push' && 'MintTick-Cognito-Android-Test' || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+, content, re.M)
+          if not actual:
+              raise SystemExit('Unexpected generated Gradle version; do not silently downgrade')
+          updates={
+              'distributionUrl':r'https\://downloads.gradle.org/distributions/gradle-9.3.1-bin.zip',
+              'distributionSha256Sum':expected,
+              'networkTimeout':'60000',
+              'retries':'4',
+              'retryBackOffMs':'3000',
+          }
+          for key,value in updates.items():
+              pattern=rf'(?m)^{re.escape(key)}=.*
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build sideloadable release APK
+        run: |
+          flutter build apk --release \
+            --dart-define=API_BASE_URL="$API_BASE_URL" \
+            --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+            --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+            --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+            --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"
+
+      - name: Record APK checksum
+        run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event_name == 'push' && 'MintTick-Cognito-Android-Test' || 'ai-trading-android' }}-${{ github.sha }}${{ github.event_name == 'pull_request' && '-ci-validation-only' || '' }}
+          path: |
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+              line=f'{key}={value}'
+              if re.search(pattern,content):
+                  content=re.sub(pattern,lambda _:line,content,count=1)
+              else:
+                  content=content.rstrip()+'\n'+line+'\n'
+          p.write_text(content)
+          assert content.count('distributionSha256Sum=') == 1
+          assert 'downloads.gradle.org/distributions/gradle-9.3.1-bin.zip' in content
+          print('PASS: official Gradle 9.3.1 bin-only distribution with pinned SHA-256')
+          PY
+
       - name: Resolve dependencies
         run: flutter pub get
 
