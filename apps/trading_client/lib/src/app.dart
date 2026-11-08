@@ -347,6 +347,7 @@ class _TradingAppState extends State<TradingApp> {
           loadProfile: _loadCustomerProfile,
           drafts: _roomDrafts,
           mode: _workspaceMode,
+          marketRepository: HttpCustomerMarketRepository(_api),
           onCreateRoom: _openCreateRoom,
           onRooms: () => _navigate('/rooms'),
           onMarkets: () => _navigate('/market'),
