@@ -148,6 +148,25 @@ public class CustomerMarketDataController {
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                     "Live socket requires a manually connected Angel One session");
             var tick = liveQuotes.quote(account.id(), instrument);
+            // Recheck instrument/source identity at the customer API boundary,
+            // not only inside the broker decoder. Never re-label a mismatched
+            // or fabricated sample as a valid customer's LIVE quote.
+            boolean matches = tick != null && tick.instrumentId() == instrument.id()
+                && instrument.exchange().equals(tick.exchange())
+                && instrument.tradingSymbol().equals(tick.tradingSymbol());
+            boolean verifiedLive = tick != null && "LIVE".equals(tick.status())
+                && "ANGEL_ONE_SMARTAPI_WS_V2".equals(tick.source())
+                && tick.ltp() != null && tick.ltp().signum() > 0
+                && tick.exchangeAt() != null && tick.receivedAt() != null;
+            boolean emptyState = tick != null && java.util.Set.of(
+                "CONNECTING", "RECONNECTING", "STALE", "UNAVAILABLE",
+                "MARKET_CLOSED", "BROKER_CONNECTION_REQUIRED").contains(tick.status())
+                && tick.ltp() == null && tick.exchangeAt() == null
+                && tick.source() == null;
+            if (!matches || !(verifiedLive || emptyState)) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Live provider identity or freshness evidence is unavailable");
+            }
             return noStore(new Quote(instrument.id(), instrument.exchange(),
                     instrument.tradingSymbol(), tick.ltp(), Instant.now(),
                     tick.source(), tick.exchangeAt(), tick.status()));
