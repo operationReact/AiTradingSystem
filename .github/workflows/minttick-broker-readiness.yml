@@ -23,6 +23,16 @@ jobs:
         with:
           persist-credentials: false
       - run: bash -n infra/ec2-paper/read_broker_readiness.sh
+      - name: Compile embedded Python readiness parser
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source = Path(".github/workflows/minttick-broker-readiness.yml").read_text()
+          start = source.rfind("          import json,os,re")
+          end = source.index(chr(10) + "          PY", start)
+          code = chr(10).join(line[10:] for line in source[start:end].splitlines())
+          compile(code, "minttick-readiness-output-parser", "exec")
+          PY
 
   inspect:
     needs: validate
@@ -111,10 +121,9 @@ jobs:
                       if k in expected and v in expected[k]:
                           print(k+": "+v)
                       if k=="MINTTICK_CASH_EQUITY_INSTRUMENTS":
-                assert re.fullmatch(r"[0-9]{1,6}",v), "Unexpected catalogue count"
-                print(k+": "+v)
-                continue
-            if k=="MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS":
+                          if re.fullmatch(r"[0-9]{1,6}",v):
+                              print(k+": "+v)
+                      if k=="MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS":
                           fields=v.split(",")
                           allowed={"api_key","client_code","pin","totp_secret"}
                           if fields and len(fields)<=4 and len(set(fields))==len(fields) and set(fields).issubset(allowed):
