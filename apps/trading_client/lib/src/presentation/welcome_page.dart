@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -15,10 +16,15 @@ class MintTickWelcomePage extends StatefulWidget {
     super.key,
     this.replayFromSettings = false,
     this.onAuthenticated,
+    this.provisionAccount,
   });
 
   final bool replayFromSettings;
   final VoidCallback? onAuthenticated;
+
+  // Injectable only for deterministic UI tests; production always uses
+  // Cognito JWT-backed MintTickCustomerAccountApi.
+  final Future<String> Function()? provisionAccount;
 
   @override
   State<MintTickWelcomePage> createState() => _MintTickWelcomePageState();
@@ -58,21 +64,24 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   Future<void> _signIn() async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _busy = true);
+    var cognitoCompleted = false;
     try {
+      // Without this bound, a stalled Amplify/Cognito web request can keep
+      // the sign-in button disabled and spinning for the entire page session.
       final login = await MintTickIdentity.current.signIn(
         username: _username.text.trim(),
         password: _password.text,
-      );
+      ).timeout(const Duration(seconds: 25));
       if (!mounted) return;
       switch (login) {
         case LoginStep.complete:
+          cognitoCompleted = true;
           // This release-only test mode allows the user to verify a real AWS
           // Cognito session while the public backend endpoint is unavailable.
           // It NEVER marks a customer authenticated or opens trading routes.
           if (const bool.fromEnvironment('MINTTICK_AUTH_ONLY_TEST',
               defaultValue: false)) {
-            await SharedPreferencesAsync().setBool(
-              'minttick.auth.remember_me.v1', _rememberMe);
+            await _saveRememberMe();
             _password.clear();
             if (!mounted) return;
             Navigator.of(context)
@@ -81,11 +90,12 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
           }
           // Cognito success does not grant MintTick access: the backend must
           // validate the JWT, verify email, and provision the persistent UUID.
-          await MintTickCustomerAccountApi().provision();
-          // A user preference only, never store passwords or tokens here.
-          // The Cognito SDK persists credentials securely on supported devices.
-          await SharedPreferencesAsync().setBool(
-            'minttick.auth.remember_me.v1', _rememberMe);
+          await (widget.provisionAccount ??
+                  () => MintTickCustomerAccountApi().provision())()
+              .timeout(const Duration(seconds: 20));
+          // Remember-me is optional and must not freeze login once the
+          // backend has authenticated the user's actual Cognito identity.
+          await _saveRememberMe();
           if (!mounted) return;
           _password.clear();
           if (widget.onAuthenticated != null) {
@@ -100,17 +110,50 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
       }
     } on CustomerAuthenticationUnavailable {
       if (mounted) _showMessage('Secure sign-in is not configured yet.');
+    } on TimeoutException {
+      if (mounted) {
+        _showMessage(cognitoCompleted
+            ? 'Cognito sign-in completed, but MintTick account verification timed out. '
+                'Check https://api.minttick.com and retry.'
+            : 'Cognito sign-in timed out. Check the browser Network tab and '
+                'your connection to AWS Cognito, then retry.');
+      }
+    } on CustomerAuthenticationFailed {
+      if (mounted) {
+        _showMessage(cognitoCompleted
+            ? 'Cognito sign-in succeeded, but MintTick backend account verification '
+                'failed. Check the API URL and browser Network tab.'
+            : 'Unable to sign in. Check your credentials and email verification.');
+      }
     } catch (_) {
-      if (mounted) _showMessage('Unable to sign in. Check your details or account verification.');
+      if (mounted) {
+        _showMessage(cognitoCompleted
+            ? 'MintTick backend account verification failed. Check browser Network.'
+            : 'Unable to sign in. Check your connection and account status.');
+      }
     } finally {
+      // A failed or timed-out request must always re-enable both actions.
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveRememberMe() async {
+    try {
+      await SharedPreferencesAsync()
+          .setBool('minttick.auth.remember_me.v1', _rememberMe)
+          .timeout(const Duration(seconds: 4));
+    } catch (_) {
+      // Optional storage must not prevent a successful authenticated login.
     }
   }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 8),
+      ));
   }
 
   void _forgotPassword() {
