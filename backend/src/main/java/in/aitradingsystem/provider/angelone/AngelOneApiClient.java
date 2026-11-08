@@ -37,7 +37,11 @@ public class AngelOneApiClient {
     /** Provider error codes that the SDK treats as token or session expiry. */
     static final Set<String> SESSION_EXPIRED_CODES = Set.of("AG8001", "AG8003", "AB8050", "AB8051", "AB1010");
 
-    public record LoginTokens(String jwtToken, String refreshToken) {
+    public record LoginTokens(String jwtToken, String refreshToken, String feedToken) {
+        /** Legacy operator login fixture constructor; no streaming entitlement inferred. */
+        public LoginTokens(String jwtToken, String refreshToken) {
+            this(jwtToken, refreshToken, null);
+        }
         @Override
         public String toString() {
             return "LoginTokens[redacted]";
@@ -101,7 +105,10 @@ public class AngelOneApiClient {
             throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MISSING_TOKENS",
                     "Provider login returned no session tokens");
         }
-        return new LoginTokens(jwt, refresh);
+        String feedToken = text(data, "feedToken");
+        // Existing manual broker reads continue without feedToken, but a WS
+        // connection is impossible unless the broker actually supplies one.
+        return new LoginTokens(jwt, refresh, feedToken);
     }
 
     public JsonNode customerProfile(String apiKey, String jwtToken) {
