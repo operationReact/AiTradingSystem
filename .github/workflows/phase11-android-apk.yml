@@ -310,7 +310,7 @@ jobs:
                   repo.url = settings.uri(verified)
               }
               settings.dependencyResolutionManagement.repositories.exclusiveContent {
-                  forRepository(verifiedRepo)
+                  forRepositories(verifiedRepo)
                   filter {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
@@ -320,6 +320,13 @@ jobs:
           }
           GRADLE
           echo "PASS: Kotlin 2.2.21 and 2.4.0 compilers match upstream JetBrains SHA-256"
+
+      - name: Validate Gradle settings and verified offline Kotlin repository
+        run: |
+          set -euo pipefail
+          # A quick Gradle configuration check catches init-script DSL errors
+          # before the longer Flutter test suite and release compilation.
+          (cd android && ./gradlew --no-daemon help)
 
       - name: Resolve dependencies
         run: flutter pub get
