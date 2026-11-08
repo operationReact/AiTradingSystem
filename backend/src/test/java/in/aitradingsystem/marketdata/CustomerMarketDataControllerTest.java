@@ -151,4 +151,63 @@ class CustomerMarketDataControllerTest {
         verifyNoInteractions(streaming, provider);
     }
 
+    @Test
+    void expiredManualBrokerSessionIsUnavailableWithoutCallingLiveOrRestProviders() {
+        var auth = principal("customer-expired");
+        var broker = mock(CustomerAngelOneSessionService.class);
+        var streaming = mock(CustomerAngelOneLiveQuoteService.class);
+        UUID accountId = UUID.randomUUID();
+        when(identities.find("cognito", ISSUER, "customer-expired"))
+            .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
+                accountId, "ACTIVE", "CUSTOMER", "Test", "customer@example.invalid")));
+        when(broker.status(accountId)).thenReturn(
+            new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***123", Instant.now().minusSeconds(60), false));
+        var controller = new CustomerMarketDataController(identities, catalogue,
+            provider, "owner-sub", "ANGEL_ONE_LAMBDA", broker, streaming);
+        assertThatThrownBy(() -> controller.quote(auth, 42L, true))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN));
+        verifyNoInteractions(streaming, provider, catalogue);
+    }
+
+    @Test
+    void customerLiveQuoteRejectsMismatchedInstrumentIdentityAndInventedLiveSource() {
+        var auth = principal("customer-identity");
+        var broker = mock(CustomerAngelOneSessionService.class);
+        var streaming = mock(CustomerAngelOneLiveQuoteService.class);
+        UUID accountId = UUID.randomUUID();
+        when(identities.find("cognito", ISSUER, "customer-identity"))
+            .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
+                accountId, "ACTIVE", "CUSTOMER", "Test", "customer@example.invalid")));
+        when(broker.status(accountId)).thenReturn(
+            new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***123", Instant.now().plusSeconds(3600), false));
+        var instrument = new Instrument(42L, "NSE_CM", "NSE", "private-token",
+            "TEST-EQ", "Test", "EQ", null, null, 1,
+            new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        var controller = new CustomerMarketDataController(identities, catalogue,
+            provider, "owner-sub", "ANGEL_ONE_LAMBDA", broker, streaming);
+
+        when(streaming.quote(accountId, instrument)).thenReturn(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(43L, "BSE", "OTHER-EQ",
+                new BigDecimal("125.55"), Instant.parse("2026-11-08T09:00:00Z"),
+                Instant.parse("2026-11-08T09:00:01Z"), "LIVE",
+                "ANGEL_ONE_SMARTAPI_WS_V2"));
+        assertThatThrownBy(() -> controller.quote(auth, 42L, true))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+
+        when(streaming.quote(accountId, instrument)).thenReturn(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                new BigDecimal("125.55"), Instant.parse("2026-11-08T09:00:00Z"),
+                Instant.parse("2026-11-08T09:00:01Z"), "LIVE", "SIMULATED"));
+        assertThatThrownBy(() -> controller.quote(auth, 42L, true))
+            .isInstanceOfSatisfying(ResponseStatusException.class, ex ->
+                assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE));
+        verifyNoInteractions(provider);
+        verify(broker, never()).quote(accountId, instrument);
+    }
+
 }
