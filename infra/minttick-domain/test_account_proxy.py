@@ -44,6 +44,7 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/angel-one/configured-login"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect-configured"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
@@ -55,7 +56,6 @@ class AccountProxyTest(unittest.TestCase):
         for method, path in [
             ("GET","/api/admin/users"),
             ("GET","/api/risk/approvals"),
-            ("POST","/api/customer/brokers/angel-one/connect"),
             ("POST","/api/customer/brokers/angel-one/orders"),
             ("GET","/api/customer/brokers/angel-one/connect-configured"),
             ("GET","/api/customer/brokers/angel-one/connect"),
