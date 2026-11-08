@@ -106,7 +106,7 @@ public class CustomerAngelOneLiveQuoteService {
         }
         if (feed.state == State.CLOSED) {
             if (Duration.between(feed.startedAt, now).compareTo(RECONNECT_BACKOFF) >= 0) {
-                feeds.remove(user, feed);
+                disconnect(user);
             }
             return empty(instrument, "RECONNECTING");
         }
@@ -284,13 +284,18 @@ public class CustomerAngelOneLiveQuoteService {
             for (Map.Entry<UUID, Feed> entry : feeds.entrySet()) {
                 Feed feed = entry.getValue();
                 if (feed.state != State.OPEN || feed.socket == null) continue;
-                if (sessions.credentialsForStream(entry.getKey()) == null
+                var latestCredentials = sessions.credentialsForStream(entry.getKey());
+                if (latestCredentials == null
+                        || !latestCredentials.jwt().equals(feed.credentials.jwt())
                         || !feed.credentials.expiresAt().isAfter(now)) {
                     disconnect(entry.getKey());
                     continue;
                 }
-                // Provider SDK expects "ping" text. Heartbeats never refresh LTP.
-                feed.socket.sendText("ping", true).exceptionally(error -> {
+                // Official Python SDK uses websocket ping *control frames*
+                // with payload "ping", not an application text message.
+                // Heartbeats never refresh exchange tick age.
+                feed.socket.sendPing(ByteBuffer.wrap("ping".getBytes(StandardCharsets.US_ASCII)))
+                        .exceptionally(error -> {
                     feed.state = State.CLOSED;
                     feed.latest = null;
                     return null;
