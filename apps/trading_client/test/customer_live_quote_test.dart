@@ -41,6 +41,10 @@ void main() {
       {...valid, 'source': 'SIMULATED'},
       {...valid, 'exchangeAt': 'not-a-time'},
       {...valid, 'instrumentId': -1},
+      {...valid, 'instrumentId': 42.5},
+      {...valid, 'instrumentId': '42'},
+      {...valid, 'exchange': 'NFO'},
+      {...valid, 'tradingSymbol': ''},
     ]) {
       expect(() => CustomerLiveQuote.fromJson(wrong), throwsFormatException);
     }
