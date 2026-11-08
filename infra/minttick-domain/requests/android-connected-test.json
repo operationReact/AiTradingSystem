@@ -1,0 +1,9 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "operation": "build-backend-connected-android-test",
+  "public_api_ready": true,
+  "api_origin": "https://api.minttick.com",
+  "cognito_pool": "ap-south-1_jz2T8qbiY",
+  "authorization": "USER_REQUESTED_CONNECTED_ANDROID_2026-11-08"
+}
