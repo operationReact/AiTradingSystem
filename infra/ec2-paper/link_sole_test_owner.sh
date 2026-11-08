@@ -47,7 +47,10 @@ sql=("SELECT ai.subject FROM app_auth_identity ai "
      "WHERE ai.provider='cognito' AND ai.issuer='"+issuer+"' "
      "AND u.role='CUSTOMER' AND u.status='ACTIVE' "
      "ORDER BY ai.subject;")
-query=subprocess.run(psql+[sql],capture_output=True,text=True,timeout=22,check=True)
+try:
+    query=subprocess.run(psql+[sql],capture_output=True,text=True,timeout=22,check=True)
+except Exception:
+    raise SystemExit('BLOCKED: sole-customer identity lookup unavailable')
 subjects=query.stdout.splitlines()
 if len(subjects)!=1 or not subject_ok.fullmatch(subjects[0]):
     raise SystemExit('BLOCKED: exactly one active Cognito CUSTOMER is required')
@@ -61,8 +64,11 @@ check_sql=("SELECT count(*) FROM app_auth_identity ai JOIN app_user u ON "
            "u.id=ai.user_id WHERE ai.provider='cognito' "
            "AND ai.issuer='"+issuer+"' AND ai.subject='"+previous+"' "
            "AND u.role='CUSTOMER' AND u.status='ACTIVE';")
-linked=subprocess.run(psql+[check_sql],capture_output=True,text=True,
-                      timeout=22,check=True)
+try:
+    linked=subprocess.run(psql+[check_sql],capture_output=True,text=True,
+                          timeout=22,check=True)
+except Exception:
+    raise SystemExit('BLOCKED: existing owner status unavailable')
 if linked.stdout.strip()!='0':
     raise SystemExit('BLOCKED: existing owner is already linked; refuse reassignment')
 
@@ -89,9 +95,9 @@ def atomic_write(path,content):
 
 updated=False
 try:
+    updated=True
     for path in paths:
         atomic_write(path,replace_owner(old_files[path]))
-    updated=True
     subprocess.run(['docker','compose','--env-file',str(root/'.env'),
         '-f',str(compose),'config','--quiet'],check=True,
         capture_output=True,timeout=22)
