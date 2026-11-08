@@ -167,11 +167,14 @@ void main() {
     expect(fake.liveRequests, greaterThanOrEqualTo(2));
     expect(find.byKey(const ValueKey('customer-market-live-price')), findsOneWidget);
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    // Invoke the page's lifecycle observer directly: TestWidgets binding may
+    // intentionally suppress platform lifecycle dispatch in widget tests.
+    final state = tester.state(find.byType(MintTickCustomerMarketPage));
+    (state as WidgetsBindingObserver).didChangeAppLifecycleState(AppLifecycleState.paused);
     await tester.pump();
     expect(find.byKey(const ValueKey('customer-market-live-price')), findsNothing);
 
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    (state as WidgetsBindingObserver).didChangeAppLifecycleState(AppLifecycleState.resumed);
     await tester.pump();
     await tester.pump();
     expect(find.byKey(const ValueKey('customer-market-live-price')), findsOneWidget);
