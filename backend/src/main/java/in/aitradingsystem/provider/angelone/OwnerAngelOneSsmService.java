@@ -9,7 +9,6 @@ import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.ssm.SsmClient;
 import software.amazon.awssdk.services.ssm.model.GetParametersRequest;
@@ -76,7 +75,7 @@ public final class OwnerAngelOneSsmService {
                     response = read(client);
                 }
             }
-        } catch (SdkException | RuntimeException ex) {
+        } catch (RuntimeException ex) {
             // Never expose AWS errors, parameter contents or credential material.
             throw unavailable("OWNER_SSM_ACCESS_UNAVAILABLE");
         }
