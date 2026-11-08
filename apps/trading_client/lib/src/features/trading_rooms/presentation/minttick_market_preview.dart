@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'minttick_equity_avatar.dart';
 
 import '../data/customer_market_repository.dart';
 
@@ -8,11 +10,13 @@ class MintTickMarketPreview extends StatefulWidget {
   const MintTickMarketPreview({
     required this.repository,
     this.onMarkets,
+    this.onConnectBroker,
     super.key,
   });
 
   final CustomerMarketRepository repository;
   final VoidCallback? onMarkets;
+  final VoidCallback? onConnectBroker;
 
   @override
   State<MintTickMarketPreview> createState() => _MintTickMarketPreviewState();
@@ -24,13 +28,45 @@ class _PreviewQuote {
   final CustomerMarketQuote? quote;
 }
 
-class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
+class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
+    with WidgetsBindingObserver {
   late Future<List<_PreviewQuote>> _result;
+  Timer? _refreshTimer;
+  bool _foreground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _result = _fetch();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted && _foreground && _duringIndianCashSession()) _refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _foreground = state == AppLifecycleState.resumed;
+    if (_foreground && mounted) _refresh();
+  }
+
+  // UI polling guard only; authoritative exchange status comes from backend.
+  bool _duringIndianCashSession() {
+    final ist = DateTime.now().toUtc().add(
+        const Duration(hours: 5, minutes: 30));
+    final mins = ist.hour * 60 + ist.minute;
+    if (ist.year == 2026 && ist.month == 11 && ist.day == 8) {
+      return mins >= 14 * 60 + 20 && mins < 15 * 60 + 15;
+    }
+    return ist.weekday <= DateTime.friday &&
+        mins >= 9 * 60 + 15 && mins < 15 * 60 + 30;
   }
 
   @override
@@ -66,9 +102,9 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
         // Never synthesize a price when the feed, authorization or catalogue fails.
       }
       output.add(_PreviewQuote(symbol, quote));
-      // Broker feed has a one-second pacing rule. Avoid burst refreshes.
-      if (quote != null && symbol != symbols.last) {
-        await Future<void>.delayed(const Duration(milliseconds: 1150));
+      // Pace requests even when a quote fails.
+      if (symbol != symbols.last) {
+        await Future<void>.delayed(const Duration(milliseconds: 1250));
       }
     }
     return output;
@@ -124,6 +160,11 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      MintTickEquityAvatar(
+                        tradingSymbol: '${quotes[index].symbol}-EQ',
+                        size: 28,
+                      ),
+                      const SizedBox(height: 7),
                       Text(quotes[index].symbol,
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: styles.labelSmall?.copyWith(
@@ -138,7 +179,7 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
                       const SizedBox(height: 4),
                       Text(quotes[index].quote == null
                           ? 'Unavailable'
-                          : 'Verified quote',
+                          : 'ON-DEMAND',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: styles.labelSmall?.copyWith(
                           color: colors.onSurfaceVariant)),
@@ -149,8 +190,8 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
             ]),
             const SizedBox(height: 7),
             Text(hasPrices
-                ? 'On-demand broker quotes · Retrieved at the displayed source time, not streaming prices.'
-                : 'Quotes unavailable. Check the instrument catalogue and authorized broker feed.',
+                ? 'Authenticated on-demand quotes · updated while the market is open. Not a tick-by-tick stream.'
+                : 'Prices need a connected broker session. No simulated values are shown.',
               style: styles.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant)),
             if (hasPrices) ...[
@@ -162,6 +203,16 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
           ]);
         },
       ),
+      if (widget.onConnectBroker != null)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            key: const ValueKey('customer-market-preview-connect-broker'),
+            onPressed: widget.onConnectBroker,
+            icon: const Icon(Icons.link_rounded, size: 18),
+            label: const Text('Manage Angel One connection'),
+          ),
+        ),
       if (widget.onMarkets != null)
         Align(
           alignment: Alignment.centerRight,
