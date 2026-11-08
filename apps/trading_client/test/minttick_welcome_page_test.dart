@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:trading_client/src/app.dart';
+import 'package:trading_client/src/auth/customer_identity.dart';
 import 'package:trading_client/src/brand/minttick_brand.dart';
 import 'package:trading_client/src/data/health_repository.dart';
 import 'package:trading_client/src/data/operator_session.dart';
@@ -14,8 +17,22 @@ class _NoHealth implements HealthRepository {
       throw StateError('Guest opening screen must not call backend.');
 }
 
+class _ControlledCognito extends UnavailableCustomerIdentity {
+  _ControlledCognito(this.onSignIn);
+
+  final Future<LoginStep> Function() onSignIn;
+  int signInCalls = 0;
+
+  @override
+  Future<LoginStep> signIn({required String username, required String password}) {
+    signInCalls++;
+    return onSignIn();
+  }
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
+  tearDown(() => MintTickIdentity.current = const UnavailableCustomerIdentity());
 
   Future<void> pumpWelcome(
     WidgetTester tester, {
@@ -169,6 +186,63 @@ void main() {
     expect(find.textContaining('not configured yet'), findsOneWidget);
     expect(find.text('Sign in destination'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('stalled Cognito sign-in times out and enables retry',
+      (tester) async {
+    final pending = Completer<LoginStep>();
+    final identity = _ControlledCognito(() => pending.future);
+    MintTickIdentity.current = identity;
+    await pumpWelcome(tester);
+    await tester.enterText(
+      find.byKey(const ValueKey('minttick-inline-username')), 'example-user');
+    await tester.enterText(
+      find.byKey(const ValueKey('minttick-inline-password')), 'example-password');
+    final button = find.byKey(const ValueKey('minttick-welcome-sign-in'));
+    await tester.tap(button);
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(identity.signInCalls, 1);
+
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump();
+    expect(find.textContaining('Cognito sign-in timed out'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    await tester.tap(button);
+    await tester.pump();
+    expect(identity.signInCalls, 2);
+    // Settle the second deliberately stalled request before ending the test;
+    // Flutter's widget test binding rejects pending 25-second timers.
+    await tester.pump(const Duration(seconds: 26));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('backend verification timeout identifies stage and clears spinner',
+      (tester) async {
+    MintTickIdentity.current = _ControlledCognito(
+        () async => LoginStep.complete);
+    final provision = Completer<String>();
+    await tester.pumpWidget(MaterialApp(
+      home: MintTickWelcomePage(
+        provisionAccount: () => provision.future,
+        onAuthenticated: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('minttick-inline-username')), 'example-user');
+    await tester.enterText(
+      find.byKey(const ValueKey('minttick-inline-password')), 'example-password');
+    await tester.tap(find.byKey(const ValueKey('minttick-welcome-sign-in')));
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 21));
+    await tester.pump();
+    expect(find.textContaining('MintTick account verification timed out'),
+        findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
   });
 
   testWidgets('create account navigates to distinct registration route', (tester) async {
