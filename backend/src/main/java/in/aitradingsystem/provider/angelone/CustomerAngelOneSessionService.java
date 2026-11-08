@@ -1,6 +1,8 @@
 package in.aitradingsystem.provider.angelone;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import in.aitradingsystem.instrument.Instrument;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -105,6 +107,22 @@ public class CustomerAngelOneSessionService {
 
     public BrokerRead orders(UUID userId) {
         return read(userId, AngelOneRateLimiter.Category.ACCOUNT_PORTFOLIO, api::customerOrders);
+    }
+
+    /** On-demand LTP using only this user's own verified and unexpired broker session. */
+    public BigDecimal quote(UUID userId, Instrument instrument) {
+        BrokerSession session = current(userId);
+        if (session == null) throw new BrokerConnectionRequiredException();
+        limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
+        try {
+            return api.customerLtp(session.apiKey(), session.jwt(), instrument.exchange(),
+                instrument.tradingSymbol(), instrument.symbolToken());
+        } catch (AngelOneException ex) {
+            if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
+                sessions.remove(userId, session);
+            }
+            throw ex;
+        }
     }
 
     private BrokerRead read(UUID userId, AngelOneRateLimiter.Category category, AccountCall call) {
