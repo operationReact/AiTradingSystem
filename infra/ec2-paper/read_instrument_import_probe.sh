@@ -13,6 +13,7 @@ import pathlib,re,subprocess,sys,hmac
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError
 root=pathlib.Path(sys.argv[1])
+lines=[]
 try:
     lines=(root/"runtime.env").read_text().splitlines()
     vals=[line[12:] for line in lines if line.startswith("APP_API_KEY=")]
@@ -30,6 +31,19 @@ except (OSError,ValueError):
     compose_key=""
 key_state=("MATCH" if runtime_key and compose_key and hmac.compare_digest(runtime_key,compose_key)
            else "MISMATCH" if runtime_key and compose_key else "MISSING")
+# Owner allowlist is required for the verified Cognito account to see
+# "Secure connect". Never reveal the subject, email or credential values.
+owner=[line.split("=",1)[1].strip() for line in lines
+       if line.startswith("MINTTICK_ANGEL_ONE_OWNER_SUB=")]
+print("MINTTICK_OWNER_BINDING:",
+      "PRESENT" if len(owner)==1 and re.fullmatch(r"[A-Za-z0-9_-]{10,128}",owner[0])
+      else "MISSING")
+try:
+    compose=(root/"paper-compose.yml").read_text()
+    enabled='MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED: "true"' in compose
+except OSError:
+    enabled=False
+print("MINTTICK_PRIVATE_FEED_MODE:", "ENABLED" if enabled else "NOT_ENABLED")
 print("MINTTICK_OPERATOR_ENV_KEYS:",key_state)
 print("MINTTICK_OPERATOR_KEY:", "PRESENT" if key_ok else "MISSING_OR_INVALID")
 try:
