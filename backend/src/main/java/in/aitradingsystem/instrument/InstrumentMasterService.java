@@ -45,8 +45,11 @@ public class InstrumentMasterService {
             List<InstrumentMasterParser.InstrumentDraft> unique = deduplicate(parsed.accepted());
             duplicateCount = parsed.accepted().size() - unique.size();
 
-            double rejectedPercent = parsed.parsedCount() == 0 ? 100.0
-                    : parsed.rejectedCount() * 100.0d / parsed.parsedCount();
+            // The official master contains NCO/NCDEX, but MintTick does not ingest those venues.
+            // Keep strict rejection limits for all supported rows; ignored venues are not invalid data.
+            int eligibleCount = parsed.parsedCount() - parsed.skippedCount();
+            double rejectedPercent = eligibleCount == 0 ? 100.0
+                    : parsed.rejectedCount() * 100.0d / eligibleCount;
             if (rejectedPercent > properties.instrumentMasterMaxRejectedPercent()) {
                 throw new InstrumentMasterException("TOO_MANY_REJECTED_ROWS",
                         "Instrument master exceeded the configured invalid-row percentage");
