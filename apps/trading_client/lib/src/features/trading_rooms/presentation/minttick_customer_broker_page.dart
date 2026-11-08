@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../data/customer_angel_one_repository.dart';
 import 'minttick_angel_one_manual_login.dart';
@@ -18,6 +19,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
   CustomerAngelOneConnection? _connection;
   bool _busy = true;
   bool _configuredLoginAvailable = false;
+  String? _ownerReference;
   String? _error;
   Object? _data;
   String? _dataLabel;
@@ -40,10 +42,19 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       } catch (_) {
         configured = false; // Manual customer connection remains available.
       }
+      String? linkReference;
+      if (!configured) {
+        try {
+          linkReference = await widget.repository.ownerLinkReference();
+        } catch (_) {
+          // Fallback manual login still works for every other customer.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _connection = result;
         _configuredLoginAvailable = configured;
+        _ownerReference = linkReference;
         _data = null;
         _dataLabel = null;
       });
@@ -52,6 +63,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         setState(() {
           _connection = null;
           _configuredLoginAvailable = false;
+          _ownerReference = null;
           _error = 'Broker status could not be verified. Please retry.';
         });
       }
@@ -248,13 +260,36 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         ),
       ] else ...[
         const MintTickInfoText(
-          'Secure connection is not available for this account yet. '
-          'If your SmartAPI credentials are already stored in AWS Parameter Store, '
-          'they must be connected to the private broker Lambda and your verified '
-          'MintTick owner account. Never enter the long TOTP enrollment secret '
-          'into a one-time code field.',
+          'Saved Angel One credentials are available only to the designated '
+          'MintTick owner. If your account should be the owner, its Cognito '
+          'identity must be explicitly linked in the protected AWS backend '
+          'settings. This link cannot be inferred from your email or app ID.',
           icon: Icons.lock_outline_rounded,
         ),
+        if (_ownerReference case final subject?) ...[
+          const SizedBox(height: 12),
+          MintTickSurface(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Your secure owner-link reference',
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(fontWeight: FontWeight.w700)),
+              const SizedBox(height: 7),
+              SelectableText(subject, style: theme.textTheme.bodySmall),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                key: const ValueKey('broker-copy-owner-reference'),
+                onPressed: () => Clipboard.setData(ClipboardData(text: subject)),
+                icon: const Icon(Icons.copy_rounded, size: 17),
+                label: const Text('Copy reference for AWS setup'),
+              ),
+              const SizedBox(height: 6),
+              Text('This is not an API key, PIN, TOTP seed or broker token.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant)),
+            ],
+          )),
+        ],
         const SizedBox(height: 12),
         SizedBox(width: double.infinity, child: OutlinedButton.icon(
           key: const ValueKey('broker-check-secure-connection'),
