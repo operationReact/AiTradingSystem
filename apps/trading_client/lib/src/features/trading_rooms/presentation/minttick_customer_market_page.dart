@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,6 +23,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   InstrumentCatalogueStatus? _catalogue;
   List<InstrumentRecord> _stocks = const [];
   CustomerMarketQuote? _quote;
+  CustomerLiveQuote? _liveQuote;
+  String _liveStatus = 'UNAVAILABLE';
+  Timer? _liveTimer;
+  bool _liveLoading = false;
   InstrumentRecord? _selected;
   String? _exchange;
   String? _error;
@@ -39,11 +44,15 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   @override
   void dispose() {
     _version++;
+    _liveTimer?.cancel();
     _query.dispose();
     super.dispose();
   }
 
   Future<void> _load() async {
+    _liveTimer?.cancel();
+    _liveQuote = null;
+    _liveStatus = 'UNAVAILABLE';
     final version = ++_version;
     setState(() {
       _loading = true;
@@ -78,6 +87,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
 
   Future<void> _select(InstrumentRecord stock) async {
     if (_loadingQuote) return;
+    _liveTimer?.cancel();
+    _liveQuote = null;
+    _liveStatus = 'CONNECTING';
     setState(() {
       _selected = stock;
       _quote = null;
@@ -87,6 +99,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     try {
       final quote = await widget.repository.quote(stock.id);
       if (!mounted || _selected?.id != stock.id) return;
+      if (quote.instrumentId != stock.id ||
+          quote.exchange != stock.exchange ||
+          quote.tradingSymbol != stock.tradingSymbol) {
+        throw const FormatException('On-demand quote instrument identity mismatch');
+      }
       setState(() => _quote = quote);
     } on ApiHttpFailure catch (error) {
       if (!mounted || _selected?.id != stock.id) return;
@@ -103,7 +120,56 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         setState(() => _quoteError = 'Unable to retrieve an authenticated quote.');
       }
     } finally {
-      if (mounted && _selected?.id == stock.id) setState(() => _loadingQuote = false);
+      if (mounted && _selected?.id == stock.id) {
+        setState(() => _loadingQuote = false);
+        _startLivePolling(stock);
+      }
+    }
+  }
+
+  void _startLivePolling(InstrumentRecord stock) {
+    if (widget.repository is! CustomerLiveMarketRepository) {
+      if (mounted) setState(() => _liveStatus = 'UNAVAILABLE');
+      return;
+    }
+    unawaited(_pollLive(stock));
+    _liveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_pollLive(stock));
+    });
+  }
+
+  Future<void> _pollLive(InstrumentRecord stock) async {
+    if (_liveLoading || !mounted || _selected?.id != stock.id) return;
+    _liveLoading = true;
+    try {
+      final reply = await (widget.repository as CustomerLiveMarketRepository).liveQuote(stock.id);
+      if (!mounted || _selected?.id != stock.id) return;
+      if (reply.instrumentId != stock.id ||
+          reply.exchange != stock.exchange ||
+          reply.tradingSymbol != stock.tradingSymbol) {
+        throw const FormatException('Quote identity mismatch');
+      }
+      final age = reply.exchangeAt == null
+          ? null : DateTime.now().toUtc().difference(reply.exchangeAt!.toUtc());
+      final stale = reply.status == 'LIVE' &&
+          (age == null || age.isNegative || age > const Duration(seconds: 12));
+      setState(() {
+        _liveQuote = stale ? null : reply;
+        _liveStatus = stale ? 'STALE' : reply.status;
+      });
+      if (reply.status == 'MARKET_CLOSED' ||
+          reply.status == 'BROKER_CONNECTION_REQUIRED') {
+        _liveTimer?.cancel();
+      }
+    } catch (_) {
+      if (mounted && _selected?.id == stock.id) {
+        setState(() {
+          _liveQuote = null;
+          _liveStatus = 'UNAVAILABLE';
+        });
+      }
+    } finally {
+      _liveLoading = false;
     }
   }
 
@@ -118,7 +184,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       Text('Markets', style: theme.textTheme.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Explore stocks and request verified, on-demand market quotes.',
+      Text('Explore verified equities. LIVE requires your connected Angel One session.',
         style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant, height: 1.4)),
       const SizedBox(height: 18),
@@ -180,7 +246,18 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             const SizedBox(height: 8),
             if (_loadingQuote)
               const LinearProgressIndicator(minHeight: 2)
-            else if (_quote != null) ...[
+            else if (_liveStatus == 'LIVE' && _liveQuote?.ltp != null) ...[
+              Text('LIVE · ANGEL ONE', key: const ValueKey('customer-market-live-status'),
+                  style: theme.textTheme.labelMedium?.copyWith(color: scheme.primary,
+                      fontWeight: FontWeight.w800)),
+              Text('₹${_liveQuote!.ltp!.toStringAsFixed(2)}',
+                  key: const ValueKey('customer-market-live-price'),
+                  style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+              Text('Exchange tick: ${_liveQuote!.exchangeAt!.toLocal()}',
+                  style: theme.textTheme.bodySmall),
+            ] else if (_quote != null) ...[
+              Text('NOT LIVE · $_liveStatus', key: const ValueKey('customer-market-live-status'),
+                  style: theme.textTheme.labelMedium?.copyWith(color: scheme.error)),
               Text('₹${_quote!.ltp.toStringAsFixed(2)}',
                 key: const ValueKey('customer-market-verified-price'),
                 style: theme.textTheme.headlineMedium?.copyWith(
@@ -190,7 +267,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 5),
-              const Text('Retrieved time is not the exchange tick time.',
+              const Text('Retrieved time is not the exchange tick time. NOT LIVE unless verified.',
                 style: TextStyle(fontSize: 11)),
             ] else
               Text(_quoteError ?? 'No quote available.',

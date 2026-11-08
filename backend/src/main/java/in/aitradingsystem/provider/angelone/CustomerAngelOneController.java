@@ -36,6 +36,7 @@ public class CustomerAngelOneController {
     private final CustomerAngelOneSessionService broker;
     private final AngelOneProperties configuredCredentials;
     private final OwnerAngelOneLambdaService lambdaBroker;
+    private final CustomerAngelOneLiveQuoteService liveQuotes;
     private final String ownerCognitoSubject;
 
     // Retain the direct-credential test seam; production uses the injected
@@ -43,7 +44,15 @@ public class CustomerAngelOneController {
     public CustomerAngelOneController(CustomerIdentityStore identities,
             CustomerAngelOneSessionService broker,
             AngelOneProperties configuredCredentials, String ownerCognitoSubject) {
-        this(identities, broker, configuredCredentials, ownerCognitoSubject, null);
+        this(identities, broker, configuredCredentials, ownerCognitoSubject, null, null);
+    }
+
+    /** Backwards-compatible direct test seam; deployment injects the live service. */
+    CustomerAngelOneController(CustomerIdentityStore identities,
+            CustomerAngelOneSessionService broker,
+            AngelOneProperties configuredCredentials, String ownerCognitoSubject,
+            OwnerAngelOneLambdaService lambdaBroker) {
+        this(identities, broker, configuredCredentials, ownerCognitoSubject, lambdaBroker, null);
     }
 
     @Autowired
@@ -51,11 +60,13 @@ public class CustomerAngelOneController {
             CustomerAngelOneSessionService broker,
             AngelOneProperties configuredCredentials,
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerCognitoSubject,
-            OwnerAngelOneLambdaService lambdaBroker) {
+            OwnerAngelOneLambdaService lambdaBroker,
+            CustomerAngelOneLiveQuoteService liveQuotes) {
         this.identities = identities;
         this.broker = broker;
         this.configuredCredentials = configuredCredentials;
         this.lambdaBroker = lambdaBroker;
+        this.liveQuotes = liveQuotes;
         // Fail closed unless a single exact Cognito subject is explicitly allowed.
         this.ownerCognitoSubject = ownerCognitoSubject == null ? "" : ownerCognitoSubject.trim();
     }
@@ -137,6 +148,8 @@ public class CustomerAngelOneController {
     public ResponseEntity<CustomerAngelOneSessionService.ConnectionStatus> disconnect(
             org.springframework.security.core.Authentication authentication) {
         UUID userId = customer(authentication);
+        // Explicit customer revoke tears down the private stream immediately.
+        if (liveQuotes != null) liveQuotes.disconnect(userId);
         if (lambdaBroker != null) lambdaBroker.disconnect(userId);
         broker.disconnect(userId);
         return noStore(broker.status(userId));

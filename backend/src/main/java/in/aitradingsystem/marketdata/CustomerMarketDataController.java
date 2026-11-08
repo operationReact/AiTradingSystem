@@ -2,6 +2,7 @@ package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
+import in.aitradingsystem.provider.angelone.CustomerAngelOneLiveQuoteService;
 import in.aitradingsystem.instrument.InstrumentMasterException;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.instrument.InstrumentMasterRepository;
@@ -43,12 +44,20 @@ public class CustomerMarketDataController {
     private final String ownerSubject;
     private final String providerMode;
     private final CustomerAngelOneSessionService customerBroker;
+    private final CustomerAngelOneLiveQuoteService liveQuotes;
 
     /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode) {
-        this(identities, instruments, market, ownerSubject, providerMode, null);
+        this(identities, instruments, market, ownerSubject, providerMode, null, null);
+    }
+
+    CustomerMarketDataController(CustomerIdentityStore identities,
+            InstrumentMasterService instruments, MarketDataProvider market,
+            String ownerSubject, String providerMode,
+            CustomerAngelOneSessionService customerBroker) {
+        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null);
     }
 
     @Autowired
@@ -56,13 +65,15 @@ public class CustomerMarketDataController {
             InstrumentMasterService instruments, MarketDataProvider market,
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerSubject,
             @Value("${app.market-data.provider:ANGEL_ONE}") String providerMode,
-            CustomerAngelOneSessionService customerBroker) {
+            CustomerAngelOneSessionService customerBroker,
+            CustomerAngelOneLiveQuoteService liveQuotes) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
         this.ownerSubject = ownerSubject == null ? "" : ownerSubject.trim();
         this.providerMode = providerMode;
         this.customerBroker = customerBroker;
+        this.liveQuotes = liveQuotes;
     }
 
     @GetMapping("/instruments/status")
@@ -87,19 +98,34 @@ public class CustomerMarketDataController {
     }
 
     public record Quote(long instrumentId, String exchange, String tradingSymbol,
-                        BigDecimal ltp, Instant fetchedAt, String source) {}
+                        BigDecimal ltp, Instant fetchedAt, String source,
+                        Instant exchangeAt, String status) {
+        public Quote(long instrumentId, String exchange, String tradingSymbol,
+                BigDecimal ltp, Instant fetchedAt, String source) {
+            this(instrumentId, exchange, tradingSymbol, ltp, fetchedAt, source, null, "ON_DEMAND");
+        }
+    }
+
+    /** Existing code-level fixture; HTTP clients use the routed overload below. */
+    ResponseEntity<Quote> quote(Authentication authentication, long instrumentId) {
+        return quote(authentication, instrumentId, false);
+    }
 
     @GetMapping("/quotes")
     public ResponseEntity<Quote> quote(Authentication authentication,
-            @RequestParam @Min(1) long instrumentId) {
+            @RequestParam @Min(1) long instrumentId,
+            @RequestParam(defaultValue = "false") boolean live) {
         JwtAuthenticationToken token = requireCustomer(authentication);
         boolean ownerFeed = ownerSubject.equals(token.getToken().getSubject())
             && !ownerSubject.isEmpty() && "ANGEL_ONE_LAMBDA".equals(providerMode);
         var account = identities.find("cognito", token.getToken().getIssuer().toString(),
             token.getToken().getSubject()).orElseThrow(
                 () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
-        boolean accountFeed = customerBroker != null
-            && customerBroker.status(account.id()).connected();
+        // A missing, revoked or expired broker session is an unavailable feed,
+        // never a null-pointer 500 or a reason to fall back to a different user.
+        var connection = customerBroker == null ? null : customerBroker.status(account.id());
+        boolean accountFeed = connection != null && connection.connected()
+            && connection.expiresAt() != null && connection.expiresAt().isAfter(Instant.now());
         if (!ownerFeed && !accountFeed) {
             if (ownerSubject.equals(token.getToken().getSubject())
                     && !"ANGEL_ONE_LAMBDA".equals(providerMode)) {
@@ -114,6 +140,36 @@ public class CustomerMarketDataController {
                 || !java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
                 || !instrument.tradingSymbol().endsWith("-EQ")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
+        }
+        // Only manually connected customer sessions can stream: the SSM Lambda
+        // path deliberately does not release provider JWT or feedToken to EC2.
+        if (live) {
+            if (liveQuotes == null || !accountFeed)
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Live socket requires a manually connected Angel One session");
+            var tick = liveQuotes.quote(account.id(), instrument);
+            // Recheck instrument/source identity at the customer API boundary,
+            // not only inside the broker decoder. Never re-label a mismatched
+            // or fabricated sample as a valid customer's LIVE quote.
+            boolean matches = tick != null && tick.instrumentId() == instrument.id()
+                && instrument.exchange().equals(tick.exchange())
+                && instrument.tradingSymbol().equals(tick.tradingSymbol());
+            boolean verifiedLive = tick != null && "LIVE".equals(tick.status())
+                && "ANGEL_ONE_SMARTAPI_WS_V2".equals(tick.source())
+                && tick.ltp() != null && tick.ltp().signum() > 0
+                && tick.exchangeAt() != null && tick.receivedAt() != null;
+            boolean emptyState = tick != null && java.util.Set.of(
+                "CONNECTING", "RECONNECTING", "STALE", "UNAVAILABLE",
+                "MARKET_CLOSED", "BROKER_CONNECTION_REQUIRED").contains(tick.status())
+                && tick.ltp() == null && tick.exchangeAt() == null
+                && tick.source() == null;
+            if (!matches || !(verifiedLive || emptyState)) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                    "Live provider identity or freshness evidence is unavailable");
+            }
+            return noStore(new Quote(instrument.id(), instrument.exchange(),
+                    instrument.tradingSymbol(), tick.ltp(), Instant.now(),
+                    tick.source(), tick.exchangeAt(), tick.status()));
         }
         BigDecimal price = ownerFeed ? market.lastTradedPrice(instrument)
             : customerBroker.quote(account.id(), instrument);

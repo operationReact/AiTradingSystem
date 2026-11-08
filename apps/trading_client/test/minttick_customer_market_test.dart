@@ -8,6 +8,7 @@ import 'package:trading_client/src/theme/app_theme.dart';
 class _CustomerMarketFake implements CustomerMarketRepository {
   int quoteRequests = 0;
   bool denyQuote = false;
+  bool mismatchQuote = false;
   @override
   Future<InstrumentCatalogueStatus> catalogueStatus() async =>
       InstrumentCatalogueStatus(version: 'catalogue-v1', activatedAt: DateTime.utc(2026, 11, 7), activeCount: 1);
@@ -45,7 +46,7 @@ class _CustomerMarketFake implements CustomerMarketRepository {
     quoteRequests++;
     if (denyQuote) throw StateError('provider unavailable');
     return CustomerMarketQuote(
-      instrumentId: instrumentId,
+      instrumentId: mismatchQuote ? instrumentId + 1 : instrumentId,
       exchange: 'NSE',
       tradingSymbol: 'TEST-EQ',
       ltp: 125.55,
@@ -107,5 +108,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Unable to retrieve an authenticated quote'), findsOneWidget);
     expect(find.byKey(const ValueKey('customer-market-verified-price')), findsNothing);
+  });
+
+  testWidgets('mismatched stock identity never displays on-demand broker price', (tester) async {
+    final fake = _CustomerMarketFake()..mismatchQuote = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('customer-market-stock-101')));
+    await tester.pumpAndSettle();
+    expect(fake.quoteRequests, 1);
+    expect(find.byKey(const ValueKey('customer-market-verified-price')), findsNothing);
+    expect(find.textContaining('Unable to retrieve an authenticated quote'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
