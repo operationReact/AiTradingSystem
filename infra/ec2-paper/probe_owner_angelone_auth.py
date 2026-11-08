@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One-time exact-host Angel One authentication probe; no order, quote or WS calls.
 
-Reads only four encrypted SSM owner parameters inside the existing EC2 instance,
+Reads only four allowlisted SSM String or SecureString owner parameters on EC2,
 validates the registered EIP, performs one SmartAPI login+profile identity check,
 and emits fixed categorical outcomes. No tokens, PIN, code, API key or seed are
 written to disk, printed, returned to GitHub or transmitted to MintTick clients.
@@ -60,7 +60,7 @@ def ssm_params():
         if key in {"api_key", "client_code", "pin", "totp_secret"}:
             safe_type = {"SecureString":"SECURE_STRING", "String":"STRING"}.get(typ, "OTHER")
             print("OWNER_SSM_TYPE_" + key.upper() + ": " + safe_type, flush=True)
-        if not key or key in result or typ != "SecureString" or (
+        if not key or key in result or typ not in ("String", "SecureString") or (
             not isinstance(value, str) or not value.strip()):
             raise ProbeFailure("OWNER_SSM_ACCESS: INVALID_PARAMETERS")
         result[key] = value
