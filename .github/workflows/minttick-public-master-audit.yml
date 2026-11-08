@@ -1,0 +1,21 @@
+name: MintTick - public instrument master format audit (no AWS)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/audit_public_angelone_master.py'
+      - '.github/workflows/minttick-public-master-audit.yml'
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate public data audit syntax
+        run: python3 -m py_compile infra/ec2-paper/audit_public_angelone_master.py
+      - name: Count public-source format mismatches without printing source records
+        run: python3 infra/ec2-paper/audit_public_angelone_master.py
