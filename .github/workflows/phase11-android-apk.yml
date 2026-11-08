@@ -306,12 +306,11 @@ jobs:
               // redirect large artifacts to github.com, returning HTTP 504.
               // Exclusive content prevents resolution of this exact module
               // through any other dependency repository, including plugins.
+              def verifiedRepo = settings.dependencyResolutionManagement.repositories.maven { repo ->
+                  repo.url = settings.uri(verified)
+              }
               settings.dependencyResolutionManagement.repositories.exclusiveContent {
-                  forRepository {
-                      maven { repo ->
-                          repo.url = settings.uri(verified)
-                      }
-                  }
+                  forRepository(verifiedRepo)
                   filter {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
