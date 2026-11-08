@@ -102,8 +102,9 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
         // Never synthesize a price when the feed, authorization or catalogue fails.
       }
       output.add(_PreviewQuote(symbol, quote));
-      // Pace requests even when a quote fails.
-      if (symbol != symbols.last) {
+      // Pace successful REST requests; do not create pending delay timers
+      // when a brokerage account is disconnected or a widget is disposed.
+      if (quote != null && symbol != symbols.last) {
         await Future<void>.delayed(const Duration(milliseconds: 1250));
       }
     }
