@@ -13,6 +13,13 @@ public class IndianCashMarketCalendar implements MarketSessionCalendar {
     public static final ZoneId ZONE = ZoneId.of("Asia/Kolkata");
     private static final LocalTime OPEN = LocalTime.of(9, 15);
     private static final LocalTime CLOSE = LocalTime.of(15, 30);
+    // NSE/CMTR/76941: special Diwali Muhurat cash trading on Sunday 2026-11-08.
+    // Without per-security CAS classification, terminate the common continuous
+    // session at 15:15 IST (the earliest cash close), not 15:30 for non-CAS.
+    // Never treat the exception as a general weekend-trading permission.
+    private static final LocalDate MUHURAT_2026 = LocalDate.of(2026, 11, 8);
+    private static final LocalTime MUHURAT_OPEN = LocalTime.of(14, 20);
+    private static final LocalTime MUHURAT_CONSERVATIVE_CLOSE = LocalTime.of(15, 15);
     private final JdbcTemplate jdbc;
 
     public IndianCashMarketCalendar(JdbcTemplate jdbc) {
@@ -22,6 +29,7 @@ public class IndianCashMarketCalendar implements MarketSessionCalendar {
     @Override
     public boolean isTradingDay(LocalDate date) {
         if (date == null) throw new IllegalArgumentException("date is required");
+        if (MUHURAT_2026.equals(date)) return true;
         if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) return false;
         return jdbc.queryForObject("SELECT NOT EXISTS (SELECT 1 FROM market_holiday WHERE trade_date = ? AND market = 'NSE_CASH')",
                 Boolean.class, date);
@@ -30,7 +38,12 @@ public class IndianCashMarketCalendar implements MarketSessionCalendar {
     @Override
     public MarketSession session(LocalDate date) {
         boolean trading = isTradingDay(date);
-        return new MarketSession(date, ZonedDateTime.of(date, OPEN, ZONE), ZonedDateTime.of(date, CLOSE, ZONE), trading);
+        if (MUHURAT_2026.equals(date)) {
+            return new MarketSession(date, ZonedDateTime.of(date, MUHURAT_OPEN, ZONE),
+                    ZonedDateTime.of(date, MUHURAT_CONSERVATIVE_CLOSE, ZONE), trading);
+        }
+        return new MarketSession(date, ZonedDateTime.of(date, OPEN, ZONE),
+                ZonedDateTime.of(date, CLOSE, ZONE), trading);
     }
 
     @Override
