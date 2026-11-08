@@ -135,7 +135,11 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository, Customer
     if (data is! Map<String, dynamic>) {
       throw const FormatException('Invalid live quote response');
     }
-    return CustomerLiveQuote.fromJson(data);
+    final quote = CustomerLiveQuote.fromJson(data);
+    if (quote.instrumentId != instrumentId) {
+      throw const FormatException('Live quote instrument identity mismatch');
+    }
+    return quote;
   }
 
   @override
@@ -147,6 +151,10 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository, Customer
     if (data is! Map<String, dynamic>) {
       throw const FormatException('Invalid broker quote');
     }
-    return CustomerMarketQuote.fromJson(data);
+    final quote = CustomerMarketQuote.fromJson(data);
+    if (quote.instrumentId != instrumentId) {
+      throw const FormatException('On-demand quote instrument identity mismatch');
+    }
+    return quote;
   }
 }
