@@ -79,7 +79,8 @@ jobs:
           test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
           status="$(aws cloudformation describe-stacks --stack-name minttick-account-api --query 'Stacks[0].StackStatus' --output text)"
           case "$status" in CREATE_COMPLETE|UPDATE_COMPLETE) ;; *) echo 'Unexpected existing stack state' >&2; exit 2;; esac
-          api_id="$(aws cloudformation describe-stack-resource --stack-name minttick-account-api --logical-resource-id AccountHttpApi --query 'StackResourceDetail.PhysicalResourceId' --output text)"
+          # Existing OIDC role already has DescribeStacks, not DescribeStackResource.
+          api_id="$(aws cloudformation describe-stacks --stack-name minttick-account-api --query "Stacks[0].Outputs[?OutputKey=='HttpApiId'].OutputValue | [0]" --output text)"
           [[ "$api_id" =~ ^[a-z0-9]{10}$ ]] || { echo 'Expected existing HTTP API id missing' >&2; exit 2; }
           current="$(aws apigatewayv2 get-api --api-id "$api_id" --output json)"
           python3 - "$current" <<'PY'
@@ -90,7 +91,7 @@ jobs:
           cors=api.get('CorsConfiguration',{})
           assert {'https://www.minttick.com','https://minttick.com'} <= set(cors.get('AllowOrigins',[])), 'Production origins not found'
           assert {'GET','POST','OPTIONS'} <= set(cors.get('AllowMethods',[])), 'Unexpected existing methods'
-          assert {'Authorization','Content-Type'} <= set(cors.get('AllowHeaders',[])), 'Existing auth headers missing'
+          assert {'authorization','content-type'} <= {h.lower() for h in cors.get('AllowHeaders',[])}, 'Existing auth headers missing'
           PY
           echo "api_id=$api_id" >> "$GITHUB_OUTPUT"
           echo "Verified existing dedicated dev account HTTP API"
