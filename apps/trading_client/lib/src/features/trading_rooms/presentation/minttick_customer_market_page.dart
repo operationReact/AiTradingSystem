@@ -8,8 +8,8 @@ import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_market_preview.dart';
 
-/// Verified customer equity catalogue and owner-only, on-demand broker quotes.
-/// Nothing on this page is simulated or advertised as a streaming exchange tick.
+/// Verified customer cash-equity catalogue and broker quotes.
+/// LIVE is shown only for a fresh, exchange-timestamped backend stream sample.
 class MintTickCustomerMarketPage extends StatefulWidget {
   const MintTickCustomerMarketPage({required this.repository, super.key});
   final CustomerMarketRepository repository;
@@ -18,7 +18,8 @@ class MintTickCustomerMarketPage extends StatefulWidget {
   State<MintTickCustomerMarketPage> createState() => _MintTickCustomerMarketPageState();
 }
 
-class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage> {
+class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
+    with WidgetsBindingObserver {
   final TextEditingController _query = TextEditingController();
   InstrumentCatalogueStatus? _catalogue;
   List<InstrumentRecord> _stocks = const [];
@@ -27,6 +28,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   String _liveStatus = 'UNAVAILABLE';
   Timer? _liveTimer;
   bool _liveLoading = false;
+  bool _appActive = true;
+  int _idlePollTicks = 0;
   InstrumentRecord? _selected;
   String? _exchange;
   String? _error;
@@ -38,18 +41,42 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
   }
 
   @override
   void dispose() {
     _version++;
+    WidgetsBinding.instance.removeObserver(this);
     _liveTimer?.cancel();
     _query.dispose();
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final resumed = state == AppLifecycleState.resumed;
+    if (_appActive == resumed) return;
+    _appActive = resumed;
+    if (!resumed) {
+      // Cached ticks must never retain a LIVE label when the app is hidden.
+      if (_liveQuote != null || _liveStatus == 'LIVE') {
+        setState(() {
+          _liveQuote = null;
+          _liveStatus = 'UNAVAILABLE';
+        });
+      }
+    } else if (_selected case final stock?) {
+      _idlePollTicks = 0;
+      if (widget.repository is CustomerLiveMarketRepository) {
+        unawaited(_pollLive(stock));
+      }
+    }
+  }
+
   Future<void> _load() async {
+    _idlePollTicks = 0;
     _liveTimer?.cancel();
     _liveQuote = null;
     _liveStatus = 'UNAVAILABLE';
@@ -88,6 +115,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   Future<void> _select(InstrumentRecord stock) async {
     if (_loadingQuote) return;
     _liveTimer?.cancel();
+    _idlePollTicks = 0;
     _liveQuote = null;
     _liveStatus = 'CONNECTING';
     setState(() {
@@ -134,16 +162,24 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     unawaited(_pollLive(stock));
     _liveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!_appActive) return;
+      // Closed/unavailable feeds must retry automatically without hammering
+      // the API every two seconds while the exchange or broker is offline.
+      if (const {'MARKET_CLOSED', 'BROKER_CONNECTION_REQUIRED', 'UNAVAILABLE'}
+          .contains(_liveStatus)) {
+        if (++_idlePollTicks < 15) return;
+      }
+      _idlePollTicks = 0;
       unawaited(_pollLive(stock));
     });
   }
 
   Future<void> _pollLive(InstrumentRecord stock) async {
-    if (_liveLoading || !mounted || _selected?.id != stock.id) return;
+    if (_liveLoading || !mounted || !_appActive || _selected?.id != stock.id) return;
     _liveLoading = true;
     try {
       final reply = await (widget.repository as CustomerLiveMarketRepository).liveQuote(stock.id);
-      if (!mounted || _selected?.id != stock.id) return;
+      if (!mounted || !_appActive || _selected?.id != stock.id) return;
       if (reply.instrumentId != stock.id ||
           reply.exchange != stock.exchange ||
           reply.tradingSymbol != stock.tradingSymbol) {
@@ -157,12 +193,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         _liveQuote = stale ? null : reply;
         _liveStatus = stale ? 'STALE' : reply.status;
       });
-      if (reply.status == 'MARKET_CLOSED' ||
-          reply.status == 'BROKER_CONNECTION_REQUIRED') {
-        _liveTimer?.cancel();
-      }
     } catch (_) {
-      if (mounted && _selected?.id == stock.id) {
+      if (mounted && _appActive && _selected?.id == stock.id) {
         setState(() {
           _liveQuote = null;
           _liveStatus = 'UNAVAILABLE';
