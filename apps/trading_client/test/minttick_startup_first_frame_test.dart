@@ -3,9 +3,98 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/bootstrap.dart';
+import 'package:trading_client/src/auth/customer_identity.dart';
+import 'package:trading_client/src/core/session/operator_session.dart';
 import 'package:trading_client/src/presentation/welcome_page.dart';
 
+class _StartupCountingIdentity extends UnavailableCustomerIdentity {
+  const _StartupCountingIdentity(this.counter, {this.sessionExists = true});
+
+  final List<String> counter;
+  final bool sessionExists;
+
+  @override
+  bool get isConfigured => true;
+
+  @override
+  Future<bool> hasSession() async {
+    counter.add('hasSession');
+    return sessionExists;
+  }
+
+  @override
+  Future<void> signOut() async {
+    counter.add('signOut');
+  }
+}
+
 void main() {
+  test('local web debug avoids the Amplify cached-session admission queue',
+      () async {
+    final calls = <String>[];
+    final session = OperatorSession();
+    final route = await restoreMintTickSessionAfterInit(
+      session,
+      identity: _StartupCountingIdentity(calls),
+      skipCachedSession: true,
+      readRememberMe: () async {
+        calls.add('preferences');
+        return true;
+      },
+      provision: () async => calls.add('provision'),
+    );
+    expect(route, '/welcome');
+    expect(calls, isEmpty, reason: 'No Amplify Auth call before signIn');
+    expect(session.isCustomerAuthenticated, isFalse);
+  });
+
+  test('normal startup still signs out when remember-me is false',
+      () async {
+    final calls = <String>[];
+    final session = OperatorSession();
+    final route = await restoreMintTickSessionAfterInit(
+      session,
+      identity: _StartupCountingIdentity(calls),
+      skipCachedSession: false,
+      readRememberMe: () async => false,
+      provision: () async => calls.add('provision'),
+    );
+    expect(route, '/welcome');
+    expect(calls, ['hasSession', 'signOut']);
+    expect(session.isCustomerAuthenticated, isFalse);
+  });
+
+  test('normal restoration requires real backend provisioning',
+      () async {
+    final calls = <String>[];
+    final session = OperatorSession();
+    final route = await restoreMintTickSessionAfterInit(
+      session,
+      identity: _StartupCountingIdentity(calls),
+      skipCachedSession: false,
+      readRememberMe: () async => true,
+      provision: () async => calls.add('provision'),
+    );
+    expect(route, '/');
+    expect(calls, ['hasSession', 'provision']);
+    expect(session.isCustomerAuthenticated, isTrue);
+  });
+
+  test('failed backend provisioning never grants customer access',
+      () async {
+    final calls = <String>[];
+    final session = OperatorSession();
+    final route = await restoreMintTickSessionAfterInit(
+      session,
+      identity: _StartupCountingIdentity(calls),
+      skipCachedSession: false,
+      readRememberMe: () async => true,
+      provision: () async => throw StateError('network blocked'),
+    );
+    expect(route, '/welcome');
+    expect(session.isCustomerAuthenticated, isFalse);
+  });
+
   testWidgets('welcome renders at first frame without waiting for Cognito',
       (tester) async {
     final pending = Completer<String>();
