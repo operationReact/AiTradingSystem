@@ -141,12 +141,13 @@ public class CustomerMarketDataController {
                 || !instrument.tradingSymbol().endsWith("-EQ")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
         }
-        // Only manually connected customer sessions can stream: the SSM Lambda
-        // path deliberately does not release provider JWT or feedToken to EC2.
+        // Live streaming requires a verified on-EC2 broker session. The
+        // owner-only SSM path can now establish one without revealing tokens
+        // to the Flutter client or relying on the separate Lambda's egress.
         if (live) {
             if (liveQuotes == null || !accountFeed)
                 throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                    "Live socket requires a manually connected Angel One session");
+                    "Live socket requires an authenticated Angel One session on this backend");
             var tick = liveQuotes.quote(account.id(), instrument);
             // Recheck instrument/source identity at the customer API boundary,
             // not only inside the broker decoder. Never re-label a mismatched
@@ -171,9 +172,12 @@ public class CustomerMarketDataController {
                     instrument.tradingSymbol(), tick.ltp(), Instant.now(),
                     tick.source(), tick.exchangeAt(), tick.status()));
         }
-        BigDecimal price = ownerFeed ? market.lastTradedPrice(instrument)
-            : customerBroker.quote(account.id(), instrument);
-        String source = ownerFeed ? market.source() : "ANGEL_ONE_SMARTAPI_CUSTOMER";
+        // When the owner has connected through EC2 SSM, use the same
+        // registered static-IP session for on-demand quotes as for WebSocket.
+        // Retain the Lambda fallback only when no on-EC2 session exists.
+        BigDecimal price = accountFeed ? customerBroker.quote(account.id(), instrument)
+            : market.lastTradedPrice(instrument);
+        String source = accountFeed ? "ANGEL_ONE_SMARTAPI_CUSTOMER" : market.source();
         return noStore(new Quote(instrument.id(), instrument.exchange(), instrument.tradingSymbol(),
             price, Instant.now(), source));
     }
