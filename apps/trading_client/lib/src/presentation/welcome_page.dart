@@ -44,6 +44,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   bool _passwordVisible = false;
   bool _rememberMe = false;
   bool _busy = false;
+  String _busyStage = 'Signing in…';
 
   @override
   void dispose() {
@@ -63,7 +64,10 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
 
   Future<void> _signIn() async {
     if (_busy || !(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _busyStage = 'Connecting to Cognito…';
+    });
     var cognitoCompleted = false;
     try {
       // Without this bound, a stalled Amplify/Cognito web request can keep
@@ -76,6 +80,9 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
       switch (login) {
         case LoginStep.complete:
           cognitoCompleted = true;
+          if (mounted) {
+            setState(() => _busyStage = 'Verifying MintTick account…');
+          }
           // This release-only test mode allows the user to verify a real AWS
           // Cognito session while the public backend endpoint is unavailable.
           // It NEVER marks a customer authenticated or opens trading routes.
@@ -317,7 +324,16 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
                 textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
               child: _busy
-                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 12),
+                        Text(_busyStage),
+                      ],
+                    )
                   : const Text('Sign in'),
             ),
           ),
