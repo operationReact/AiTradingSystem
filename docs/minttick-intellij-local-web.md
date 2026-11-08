@@ -98,6 +98,46 @@ Angel One PINs or TOTP seeds to the frontend. The customer client uses
 a Cognito access token; Angel One credentials stay in AWS SSM. The
 local Flutter process does not place live orders.
 
+## Cognito login stalls on localhost
+
+When the sign-in button says **Connecting to Cognito…** and later times out,
+the browser is blocked **before** MintTick's account-provisioning API.
+A successful homepage or DevTools connection does not establish that Cognito
+user-pool requests are working.
+
+Use **IntelliJ's Terminal** (no passwords or tokens required) to verify
+basic connectivity to this exact Cognito User Pool's public signing keys:
+
+```powershell
+$uri = 'https://cognito-idp.ap-south-1.amazonaws.com/ap-south-1_jz2T8qbiY/.well-known/jwks.json'
+$keys = Invoke-RestMethod -Uri $uri -TimeoutSec 10
+"Public Cognito endpoint reachable: $($keys.keys.Count -gt 0)"
+```
+
+- If the command fails, investigate local DNS, VPN, firewall, proxy and
+  HTTPS connectivity before attempting another password login.
+- If it succeeds, this confirms **only** public Cognito HTTPS connectivity
+  from PowerShell. It does **not** guarantee the browser SDK or SRP auth
+  operation works. Chrome DevTools → Network → filter
+  `cognito-idp.ap-south-1.amazonaws.com`, then sign in **once**.
+  Check the request's **status** and **timing**. Pending, blocked, CORS,
+  400/403 and 5xx outcomes imply different fixes.
+- Do **not** share the Network Headers or Payload tabs, cookies, tokens,
+  credentials, or browser screenshots with passwords visible.
+- A `Future.timeout` on Flutter's wrapper does not cancel an underlying
+  Amplify authentication call. If it times out, close that debug Chrome
+  window and restart the Flutter run before retrying.
+- For isolating a Chrome debugging flag, try the normal **MintTick Local
+  Web (AWS Backend)** configuration, which does *not* disable browser
+  security. Cognito login may then succeed even when the separate
+  MintTick API provisioning step hits the still-pending localhost CORS
+  permission issue.
+
+MintTick now probes the public JWKS document after an authentication
+timeout and differentiates **endpoint reachable, SDK operation stalled**
+from **endpoint not verifiably reachable**. This is a diagnostic only;
+it does not bypass Cognito password validation or mint an app session.
+
 ## Developer workflow
 
 Run `flutter analyze` and `flutter test` in
