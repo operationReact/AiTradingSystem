@@ -47,6 +47,20 @@ class CustomerAngelOneConfiguredLoginTest {
     }
 
     @Test
+    void selfServiceOwnerReferenceIsOnlyTheAuthenticatedCognitoSubject() {
+        var controller = new CustomerAngelOneController(
+            identities, service, configured, "owner-sub");
+        var owner = controller.ownerLinkReference(principal("owner-sub")).getBody();
+        assertThat(owner).isNotNull();
+        assertThat(owner.cognitoSubject()).isEqualTo("owner-sub");
+
+        var other = controller.ownerLinkReference(principal("another-customer")).getBody();
+        assertThat(other).isNotNull();
+        assertThat(other.cognitoSubject()).isEqualTo("another-customer");
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void onlyTheConfiguredOwnerGetsTheSecureConnectAction() {
         var controller = new CustomerAngelOneController(identities, service, configured, "owner-sub");
         assertThat(controller.configuredLogin(principal("someone-else"))
