@@ -19,6 +19,8 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
   CustomerAngelOneConnection? _connection;
   bool _busy = true;
   bool _configuredLoginAvailable = false;
+  bool _statusVerified = false;
+  bool _availabilityCheckFailed = false;
   // One transparent read-only login attempt per broker page visit.
   // Manual four-field entry is never required for a configured owner.
   bool _autoConfiguredAttempted = false;
@@ -39,11 +41,13 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     try {
       var result = await widget.repository.status();
       // Capability is derived from verified server-side identity, never cached.
+      // A network error is NOT a negative owner authorization response.
       bool configured = false;
+      bool lookupFailed = false;
       try {
         configured = await widget.repository.configuredLoginAvailable();
       } catch (_) {
-        configured = false; // Manual customer connection remains available.
+        lookupFailed = true;
       }
       String? autoConnectError;
       if (configured && !result.connected && !_autoConfiguredAttempted) {
@@ -58,7 +62,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         }
       }
       String? linkReference;
-      if (!configured) {
+      if (!configured && !lookupFailed) {
         try {
           linkReference = await widget.repository.ownerLinkReference();
         } catch (_) {
@@ -69,8 +73,13 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       setState(() {
         _connection = result;
         _configuredLoginAvailable = configured;
+        _statusVerified = true;
+        _availabilityCheckFailed = lookupFailed;
         _ownerReference = linkReference;
-        _error = autoConnectError;
+        _error = lookupFailed
+            ? 'Saved Angel One connection status could not be verified. '
+                'Retry without re-entering any broker credentials.'
+            : autoConnectError;
         _data = null;
         _dataLabel = null;
       });
@@ -79,6 +88,8 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         setState(() {
           _connection = null;
           _configuredLoginAvailable = false;
+          _statusVerified = false;
+          _availabilityCheckFailed = true;
           _ownerReference = null;
           _error = 'Broker status could not be verified. Please retry.';
         });
@@ -275,7 +286,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           'appear in this app.',
           icon: Icons.verified_user_outlined,
         ),
-      ] else ...[
+      ] else if (_statusVerified && !_availabilityCheckFailed) ...[
         const MintTickInfoText(
           'If your Angel One credentials are already saved in AWS SSM, '
           'do not enter them again. Secure connect requires the exact '
@@ -315,9 +326,10 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
           label: const Text('Check secure connection'),
         )),
       ],
-      // An alternative account can still be connected explicitly, but never
-      // present its four-field form as the primary path for an SSM owner.
-      if (connection?.connected != true && !_configuredLoginAvailable) ...[
+      // A failed availability check must never silently fall back to a
+      // manual credential form, because the server might already hold SSM.
+      if (connection?.connected != true && _statusVerified &&
+          !_availabilityCheckFailed && !_configuredLoginAvailable) ...[
         const SizedBox(height: 12),
         ExpansionTile(
           key: const ValueKey('broker-alternate-account-expander'),
