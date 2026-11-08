@@ -38,9 +38,12 @@ class CustomerMarketQuote {
 
 /// Only a verified exchange-timestamped quote may be displayed as LIVE.
 class CustomerLiveQuote {
-  const CustomerLiveQuote({required this.instrumentId, required this.status,
+  const CustomerLiveQuote({required this.instrumentId, required this.exchange,
+    required this.tradingSymbol, required this.status,
     this.ltp, this.exchangeAt, this.source});
   final int instrumentId;
+  final String exchange;
+  final String tradingSymbol;
   final String status;
   final num? ltp;
   final DateTime? exchangeAt;
@@ -49,7 +52,12 @@ class CustomerLiveQuote {
   factory CustomerLiveQuote.fromJson(Map<String, dynamic> value) {
     final id = value['instrumentId'];
     final status = value['status'];
-    if (id is! num || id.toInt() < 1 || status is! String ||
+    final exchange = value['exchange'];
+    final tradingSymbol = value['tradingSymbol'];
+    if (id is! num || id.toInt() < 1 ||
+        (exchange != 'NSE' && exchange != 'BSE') ||
+        tradingSymbol is! String || tradingSymbol.isEmpty ||
+        status is! String ||
         !const {'LIVE','CONNECTING','RECONNECTING','STALE','UNAVAILABLE',
           'MARKET_CLOSED','BROKER_CONNECTION_REQUIRED'}.contains(status)) {
       throw const FormatException('Invalid live quote state');
@@ -59,7 +67,9 @@ class CustomerLiveQuote {
       if (value['ltp'] != null || value['exchangeAt'] != null) {
         throw const FormatException('Non-live price was supplied');
       }
-      return CustomerLiveQuote(instrumentId: id.toInt(), status: status);
+      return CustomerLiveQuote(instrumentId: id.toInt(),
+          exchange: exchange as String, tradingSymbol: tradingSymbol,
+          status: status);
     }
     final price = value['ltp'] is num ? value['ltp'] as num :
         num.tryParse('${value['ltp'] ?? ''}');
@@ -69,8 +79,10 @@ class CustomerLiveQuote {
         tickAt == null || source != 'ANGEL_ONE_SMARTAPI_WS_V2') {
       throw const FormatException('Unverified live quote');
     }
-    return CustomerLiveQuote(instrumentId: id.toInt(), status: status,
-        ltp: price, exchangeAt: tickAt, source: source as String);
+    return CustomerLiveQuote(instrumentId: id.toInt(),
+        exchange: exchange as String, tradingSymbol: tradingSymbol,
+        status: status, ltp: price, exchangeAt: tickAt,
+        source: source as String);
   }
 }
 
