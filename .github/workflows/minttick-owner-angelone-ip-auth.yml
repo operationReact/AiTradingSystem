@@ -116,6 +116,7 @@ jobs:
               print("PENDING");raise SystemExit
           allowed={
             "EC2_EGRESS":{"MATCH_REGISTERED_EIP","MISMATCH","UNAVAILABLE"},
+            "INSTANCE_NETWORK_HEADERS":{"VERIFIED","UNAVAILABLE"},
             "OWNER_SSM_ACCESS":{"READY","UNAVAILABLE","INVALID_RESPONSE","INCOMPLETE","INVALID_PARAMETERS","TOTP_INVALID"},
             **{name: {"SECURE_STRING","STRING","OTHER"} for name in (
                "OWNER_SSM_TYPE_API_KEY", "OWNER_SSM_TYPE_CLIENT_CODE",
@@ -137,6 +138,7 @@ jobs:
           for item in outputs: print(item)
           if data.get("Status") == "Success" and all(v in outputs for v in (
               "EC2_EGRESS: MATCH_REGISTERED_EIP",
+              "INSTANCE_NETWORK_HEADERS: VERIFIED",
               "OWNER_SSM_ACCESS: READY",
               "ANGEL_ONE_AUTH: TOKEN_AND_FEED_RECEIVED",
               "ANGEL_ONE_AUTH: VERIFIED_OWNER_PROFILE"
