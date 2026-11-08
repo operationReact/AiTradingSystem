@@ -195,30 +195,59 @@ jobs:
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
 
-      - name: Pin checksum-verified official Gradle binary distribution with retries
+      - name: Stage checksum-verified Gradle 9.3.1 from public archive mirrors
         run: |
           set -euo pipefail
+          # Gradle's official CDN currently redirects to github.com/releases
+          # which persistently returns HTTP 504 on the GitHub runner.
+          # Mirrors are used only to transfer bytes: the SHA-256 independently
+          # published by Gradle must match before any artifact is executed.
+          artifact="$RUNNER_TEMP/minttick-gradle-9.3.1-bin.zip"
+          checksum="b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06"
+          found=false
+          for source in \
+            "https://mirrors.huaweicloud.com/gradle/gradle-9.3.1-bin.zip" \
+            "https://mirror.nju.edu.cn/gradle/gradle-9.3.1-bin.zip"; do
+            rm -f -- "$artifact"
+            if curl --fail --show-error --location --retry 3 --retry-all-errors \
+                --retry-delay 3 --connect-timeout 12 --max-time 180 \
+                "$source" --output "$artifact"; then
+              if (cd "$RUNNER_TEMP" && \
+                printf '%s  %s\n' "$checksum" "minttick-gradle-9.3.1-bin.zip" \
+                  | sha256sum --check --status); then
+                found=true
+                break
+              fi
+              echo "Rejected Gradle mirror data: checksum mismatch" >&2
+            fi
+          done
+          test "$found" = "true" || {
+            echo "No independently verified Gradle 9.3.1 distribution available" >&2
+            exit 2
+          }
           python3 - <<'PY'
           from pathlib import Path
+          import os
           p=Path('android/gradle/wrapper/gradle-wrapper.properties')
           content=p.read_text()
-          # Fail closed if the Flutter-generated toolchain changes version.
           if 'gradle-9.3.1-all.zip' not in content and 'gradle-9.3.1-bin.zip' not in content:
-              raise SystemExit('Unexpected Gradle version; manual upgrade required')
-          official='https\://downloads.gradle.org/distributions/gradle-9.3.1-bin.zip'
-          published_sha='b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06'
+              raise SystemExit('Unexpected generated Gradle version; manual upgrade required')
+          artifact=Path(os.environ['RUNNER_TEMP'])/'minttick-gradle-9.3.1-bin.zip'
+          if not artifact.is_file() or artifact.stat().st_size < 100_000_000:
+              raise SystemExit('Pinned Gradle distribution is absent or incomplete')
+          local_url=artifact.as_uri().replace(':','\\:',1)
           settings={
-            'distributionUrl':official,
-            'distributionSha256Sum':published_sha,
+            'distributionUrl':local_url,
+            'distributionSha256Sum':'b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06',
             'networkTimeout':'60000',
-            'retries':'4',
+            'retries':'2',
             'retryBackOffMs':'3000',
           }
           lines=[line for line in content.splitlines()
                  if line.split('=',1)[0] not in settings]
           lines.extend(f'{key}={value}' for key,value in settings.items())
           p.write_text('\n'.join(lines)+'\n')
-          print('PASS: pinned Gradle 9.3.1 binary-only SHA-256 and bounded downloads')
+          print('PASS: local Gradle 9.3.1 archive pinned to official SHA-256')
           PY
 
       - name: Stage checksum-verified Kotlin compiler from independent Maven cache
