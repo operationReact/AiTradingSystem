@@ -45,6 +45,16 @@ jobs:
               assert forbidden not in text, f"Unsafe operation in import script: {forbidden}"
           assert len(text.encode()) < 12000, "SSM script exceeds reviewed size"
           PY
+      - name: Compile embedded SSM response parser
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          source=Path(".github/workflows/minttick-catalogue-activate.yml").read_text()
+          start=source.rfind("          import json,os,re")
+          end=source.index(chr(10)+"          PY",start)
+          code=chr(10).join(line[10:] for line in source[start:end].splitlines())
+          compile(code,"minttick-catalogue-ssm-response","exec")
+          PY
   activate:
     needs: validate
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
