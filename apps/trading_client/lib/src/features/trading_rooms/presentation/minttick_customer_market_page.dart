@@ -403,28 +403,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(stock.name.trim().isEmpty
-                            ? stock.tradingSymbol.replaceFirst(RegExp(r'-EQ
-                ),
-              ),
-            ),
-          ),
-        ],
-      if (_hasNext && widget.repository is CustomerPaginatedMarketRepository) ...[
-        const SizedBox(height: 10),
-        SizedBox(width: double.infinity, child: OutlinedButton.icon(
-          key: const ValueKey('customer-market-load-more'),
-          onPressed: _loadingMore ? null : _loadMore,
-          icon: _loadingMore
-              ? const SizedBox(width: 16, height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.expand_more_rounded),
-          label: Text(_loadingMore ? 'Loading equities…' : 'Load more equities'),
-        )),
-      ],
-    ]);
-  }
-}
-), '')
+                            ? stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')
                             : stock.name,
                           maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall
@@ -444,6 +423,18 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             ),
           ),
         ],
+      if (_hasNext && widget.repository is CustomerPaginatedMarketRepository) ...[
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          key: const ValueKey('customer-market-load-more'),
+          onPressed: _loadingMore ? null : _loadMore,
+          icon: _loadingMore
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(_loadingMore ? 'Loading equities…' : 'Load more equities'),
+        )),
+      ],
     ]);
   }
 }
