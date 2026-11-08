@@ -26,12 +26,11 @@ jobs:
       - name: Compile embedded Python readiness parser
         run: |
           python3 - <<'PY'
-          import re
           from pathlib import Path
           source = Path(".github/workflows/minttick-broker-readiness.yml").read_text()
-          matches = re.findall(r"result=\"\\$\\(python3 - <<'PY'\\n(.*?)\\n          PY", source, re.S)
-          assert len(matches) == 1, "Expected one bounded SSM output parser"
-          code = "\\n".join(row[10:] for row in matches[0].splitlines())
+          start = source.index("          import json,os,re")
+          end = source.index("\\n          PY", start)
+          code = "\\n".join(line[10:] for line in source[start:end].splitlines())
           compile(code, "minttick-readiness-output-parser", "exec")
           PY
 
