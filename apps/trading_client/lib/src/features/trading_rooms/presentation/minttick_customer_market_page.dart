@@ -256,7 +256,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 5),
-              const Text('On-demand reference only. Retrieval time is not an exchange tick.',
+              const Text('Retrieved time is not the exchange tick time. NOT LIVE unless verified.',
                 style: TextStyle(fontSize: 11)),
             ] else
               Text(_quoteError ?? 'No quote available.',
