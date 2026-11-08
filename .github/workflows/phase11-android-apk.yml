@@ -188,12 +188,12 @@ jobs:
                   raise SystemExit('Generated Android manifest has no <manifest> root')
               manifest = manifest[:root_close + 1] + '\n    ' + permission + manifest[root_close + 1:]
               manifest_path.write_text(manifest)
-          # Avoid transient GitHub Releases HTTP 504 from Gradle's redirect.
-          # Use the official Gradle binary CDN and SHA256 release checksum.
+          # Both official Gradle URLs redirect to GitHub Releases (HTTP 504).
+          # Use a checksum-pinned university mirror; Gradle validates the official SHA256.
           wrapper = Path('android/gradle/wrapper/gradle-wrapper.properties')
           wrapper_text = wrapper.read_text()
           expected = 'distributionUrl=https\\://services.gradle.org/distributions/gradle-9.3.1-all.zip'
-          direct = 'distributionUrl=https\\://downloads.gradle.org/distributions/gradle-9.3.1-bin.zip'
+          direct = 'distributionUrl=https\\://mirror.nju.edu.cn/gradle/gradle-9.3.1-bin.zip'
           if expected not in wrapper_text:
               raise SystemExit('Unexpected generated Gradle version')
           if 'distributionSha256Sum=' in wrapper_text:
@@ -206,7 +206,7 @@ jobs:
           ! grep -q 'kotlinOptions' android/app/build.gradle.kts
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
-          grep -Fq 'downloads.gradle.org/distributions/gradle-9.3.1-bin.zip' android/gradle/wrapper/gradle-wrapper.properties
+          grep -Fq 'mirror.nju.edu.cn/gradle/gradle-9.3.1-bin.zip' android/gradle/wrapper/gradle-wrapper.properties
           grep -Fq 'distributionSha256Sum=b266d5ff6b90eada6dc3b20cb090e3731302e553a27c5d3e4df1f0d76beaff06' android/gradle/wrapper/gradle-wrapper.properties
 
       - name: Resolve dependencies
