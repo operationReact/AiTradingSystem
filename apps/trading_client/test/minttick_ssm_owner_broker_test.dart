@@ -7,10 +7,14 @@ import 'package:trading_client/src/theme/app_theme.dart';
 class _ServerConfiguredAngel extends Fake implements HttpCustomerAngelOneRepository {
   bool linked = false;
   bool available = true;
+  bool checkFails = false;
   int connects = 0;
 
   @override
-  Future<bool> configuredLoginAvailable() async => available;
+  Future<bool> configuredLoginAvailable() async {
+    if (checkFails) throw StateError('API check unavailable');
+    return available;
+  }
 
   @override
   Future<String> ownerLinkReference() async => 'owner-cognito-sub-12345';
@@ -54,6 +58,21 @@ void main() {
     expect(find.byKey(const ValueKey('broker-alternate-account-expander')),
         findsOneWidget);
     expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
+    expect(repo.connects, 0);
+  });
+
+  testWidgets('capability errors never prompt for broker secrets',
+      (tester) async {
+    final repo = _ServerConfiguredAngel()..checkFails = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerBrokerPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('status could not be verified'), findsOneWidget);
+    expect(find.byKey(const ValueKey('broker-connect-manual')), findsNothing);
+    expect(find.byKey(const ValueKey('broker-alternate-account-expander')), findsNothing);
+    expect(find.byKey(const ValueKey('broker-connect-configured')), findsNothing);
     expect(repo.connects, 0);
   });
 
