@@ -33,6 +33,72 @@ class HttpCustomerAngelOneRepository {
     return payload['available'] as bool;
   }
 
+  /// The caller's own Cognito subject, used only for explicit AWS owner setup.
+  /// This is not a broker secret or MintTick's permanent app-user ID.
+  Future<String> ownerLinkReference() async {
+    final data = await api.getJson('$_root/owner-link-reference');
+    if (data is! Map<String, dynamic> ||
+        data['cognitoSubject'] is! String) {
+      throw const FormatException('Invalid customer identity reference');
+    }
+    final subject = (data['cognitoSubject'] as String).trim();
+    if (!RegExp(r'^[A-Za-z0-9_-]{10,128}
+      _status(await api.postJson('$_root/connect-configured'));
+
+  Future<CustomerAngelOneConnection> connect({
+    required String apiKey,
+    required String clientCode,
+    required String pin,
+    required String totp,
+  }) async {
+    // Do not create any local preferences or storage records for secrets.
+    return _status(await api.postJson('$_root/connect', body: {
+      'apiKey': apiKey,
+      'clientCode': clientCode,
+      'pin': pin,
+      'totp': totp,
+    }));
+  }
+
+  Future<CustomerAngelOneConnection> disconnect() async =>
+      _status(await api.postJson('$_root/disconnect'));
+
+  Future<Object?> funds() async => _unwrap(await api.getJson('$_root/funds'));
+  Future<Object?> holdings() async => _unwrap(await api.getJson('$_root/holdings'));
+  Future<Object?> positions() async => _unwrap(await api.getJson('$_root/positions'));
+  Future<Object?> orders() async => _unwrap(await api.getJson('$_root/orders'));
+
+  static CustomerAngelOneConnection _status(Object? data) {
+    if (data is! Map<String, dynamic> ||
+        data['connected'] is! bool ||
+        data['orderExecutionEnabled'] is! bool ||
+        data['broker'] != 'ANGEL_ONE') {
+      throw const FormatException('Invalid broker connection status');
+    }
+    final expiry = data['expiresAt'];
+    return CustomerAngelOneConnection(
+      connected: data['connected'] as bool,
+      clientCodeMasked: data['clientCodeMasked'] as String?,
+      expiresAt: expiry is String ? DateTime.tryParse(expiry) : null,
+      orderExecutionEnabled: data['orderExecutionEnabled'] as bool,
+    );
+  }
+
+  static Object? _unwrap(Object? response) {
+    if (response is! Map<String, dynamic> ||
+        response['provider'] != 'ANGEL_ONE' ||
+        !response.containsKey('data')) {
+      throw const FormatException('Invalid broker account response');
+    }
+    return response['data'];
+  }
+}
+).hasMatch(subject)) {
+      throw const FormatException('Invalid customer identity reference');
+    }
+    return subject;
+  }
+
   Future<CustomerAngelOneConnection> connectConfigured() async =>
       _status(await api.postJson('$_root/connect-configured'));
 
