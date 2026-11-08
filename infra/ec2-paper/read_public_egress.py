@@ -95,6 +95,10 @@ def main():
                     elastic_state = "PRESENT"
                 else:
                     elastic_state = "UNVERIFIED_ASSOCIATION_MISMATCH"
+    metadata = node.get("MetadataOptions") or {}
+    hop = metadata.get("HttpPutResponseHopLimit")
+    print("IMDSV2_REQUIRED:", metadata.get("HttpTokens") == "required")
+    print("IMDSV2_RESPONSE_HOP_LIMIT:", hop if hop in (1,2,3,4,5,6) else "UNKNOWN")
     print("INSTANCE:", INSTANCE)
     print("EC2_PUBLIC_INTERFACE_IP:", ec2_public or "NONE")
     print("EC2_ELASTIC_IP_ASSOCIATION:", elastic_state)
