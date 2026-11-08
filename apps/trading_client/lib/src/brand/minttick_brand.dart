@@ -11,6 +11,8 @@ abstract final class MintTickPalette {
   static const mint = Color(0xFF00E676);
   static const teal = Color(0xFF00BFA5);
   static const navy = Color(0xFF0B0F1A);
+  // Neutral near-black page canvas, intentionally not pure black or navy.
+  static const nearBlack = Color(0xFF0B0D10);
   static const ice = Color(0xFFF8FAFC);
   static const readableGreen = Color(0xFF007A52);
 }
