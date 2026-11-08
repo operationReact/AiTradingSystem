@@ -79,8 +79,8 @@ ThemeData buildTheme(Brightness brightness) {
     onSecondary: dark ? const Color(0xFF0E1620) : Colors.white,
     secondaryContainer: dark ? const Color(0xFF283845) : const Color(0xFFE0F2EE),
     onSecondaryContainer: dark ? const Color(0xFFD9F0EC) : const Color(0xFF18433F),
-    surface: dark ? const Color(0xFF0E1620) : MintTickPalette.ice,
-    surfaceContainerLowest: dark ? const Color(0xFF0E1620) : Colors.white,
+    surface: dark ? MintTickPalette.nearBlack : MintTickPalette.ice,
+    surfaceContainerLowest: dark ? MintTickPalette.nearBlack : Colors.white,
     surfaceContainerLow: dark ? const Color(0xFF1B2732) : const Color(0xFFF5F8F8),
     surfaceContainer: dark ? const Color(0xFF1B2732) : const Color(0xFFEDF3F2),
     surfaceContainerHigh: dark ? const Color(0xFF283845) : const Color(0xFFE6EEEE),
@@ -116,6 +116,10 @@ ThemeData buildTheme(Brightness brightness) {
     materialTapTargetSize: MaterialTapTargetSize.padded,
     scaffoldBackgroundColor: scheme.surface,
     canvasColor: scheme.surface,
+    // Sheets are page-level surfaces too; cards and accent colors stay unchanged.
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: dark ? MintTickPalette.nearBlack : scheme.surface,
+    ),
     visualDensity: VisualDensity.standard,
     splashFactory: InkRipple.splashFactory,
     focusColor: scheme.primary.withValues(alpha: 0.18),
