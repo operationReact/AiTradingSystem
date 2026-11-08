@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/customer_market_repository.dart';
 
 /// Verified cash-equity quote preview. No simulated prices or charts.
-/// The owner-only broker feed controls availability and data licensing.
+/// The owner feed or each customer's verified broker connection controls quote access.
 class MintTickMarketPreview extends StatefulWidget {
   const MintTickMarketPreview({
     required this.repository,
@@ -67,7 +67,7 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
       }
       output.add(_PreviewQuote(symbol, quote));
       // Broker feed has a one-second pacing rule. Avoid burst refreshes.
-      if (symbol != symbols.last) {
+      if (quote != null && symbol != symbols.last) {
         await Future<void>.delayed(const Duration(milliseconds: 1150));
       }
     }
@@ -150,12 +150,12 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview> {
             const SizedBox(height: 7),
             Text(hasPrices
                 ? 'On-demand broker quotes · Retrieved at the displayed source time, not streaming prices.'
-                : 'Quotes unavailable for this account. Verify the owner-authorized feed and instrument catalogue.',
+                : 'Quotes unavailable. Check the instrument catalogue and authorized broker feed.',
               style: styles.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant)),
             if (hasPrices) ...[
               const SizedBox(height: 3),
-              Text('Source: Angel One private feed · Times shown on instrument details.',
+              Text('Source and fetch time are shown on each instrument detail.',
                 style: styles.labelSmall?.copyWith(
                   color: colors.onSurfaceVariant)),
             ],
