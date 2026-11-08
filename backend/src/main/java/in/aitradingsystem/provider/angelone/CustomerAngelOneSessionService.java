@@ -47,7 +47,8 @@ public class CustomerAngelOneSessionService {
 
     public record BrokerRead(String provider, Instant fetchedAt, JsonNode data) {}
 
-    private record BrokerSession(String apiKey, String clientCode, String jwt, Instant expiresAt) {
+    private record BrokerSession(String apiKey, String clientCode, String jwt,
+                                 String feedToken, Instant expiresAt) {
         @Override public String toString() { return "BrokerSession[redacted]"; }
     }
 
@@ -75,7 +76,7 @@ public class CustomerAngelOneSessionService {
         // Never assume the broker session is valid for the full trading day.
         Instant boundedExpiry = now.plusSeconds(3 * 60 * 60);
         Instant expires = midnight.isBefore(boundedExpiry) ? midnight : boundedExpiry;
-        sessions.put(userId, new BrokerSession(apiKey, code, tokens.jwtToken(), expires));
+        sessions.put(userId, new BrokerSession(apiKey, code, tokens.jwtToken(), tokens.feedToken(), expires));
         return status(userId);
     }
 
@@ -87,6 +88,24 @@ public class CustomerAngelOneSessionService {
         String code = session.clientCode();
         String suffix = code.substring(Math.max(0, code.length() - 3));
         return new ConnectionStatus(true, "ANGEL_ONE", "***" + suffix, session.expiresAt(), false);
+    }
+
+    /**
+     * Only the server-side read-only streaming service can receive these values.
+     * No token is serialized in customer APIs, logs, or diagnostics.
+     */
+    record StreamCredentials(String apiKey, String clientCode, String jwt,
+                             String feedToken, Instant expiresAt) {
+        @Override public String toString() { return "StreamCredentials[redacted]"; }
+    }
+
+    StreamCredentials credentialsForStream(UUID userId) {
+        BrokerSession s = current(userId);
+        if (s == null || s.feedToken() == null || s.feedToken().isBlank()) {
+            return null;
+        }
+        return new StreamCredentials(s.apiKey(), s.clientCode(), s.jwt(),
+                s.feedToken(), s.expiresAt());
     }
 
     public void disconnect(UUID userId) {
