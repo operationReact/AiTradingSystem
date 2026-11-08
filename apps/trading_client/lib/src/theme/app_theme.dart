@@ -71,28 +71,28 @@ ThemeData buildTheme(Brightness brightness) {
     seedColor: MintTickPalette.teal,
     brightness: brightness,
   ).copyWith(
-    primary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
-    onPrimary: dark ? MintTickPalette.navy : Colors.white,
-    primaryContainer: dark ? const Color(0xFF16342B) : const Color(0xFFDDF3E8),
-    onPrimaryContainer: dark ? const Color(0xFFDDF9EA) : const Color(0xFF19402B),
-    secondary: dark ? const Color(0xFF54D7C5) : const Color(0xFF087C72),
-    onSecondary: dark ? MintTickPalette.navy : Colors.white,
-    secondaryContainer: dark ? const Color(0xFF172B30) : const Color(0xFFE0F2EE),
+    primary: dark ? const Color(0xFF78B6AF) : MintTickPalette.readableGreen,
+    onPrimary: dark ? const Color(0xFF0E1620) : Colors.white,
+    primaryContainer: dark ? const Color(0xFF283845) : const Color(0xFFDDF3E8),
+    onPrimaryContainer: dark ? const Color(0xFFEDF2F4) : const Color(0xFF19402B),
+    secondary: dark ? const Color(0xFF78B6AF) : const Color(0xFF087C72),
+    onSecondary: dark ? const Color(0xFF0E1620) : Colors.white,
+    secondaryContainer: dark ? const Color(0xFF283845) : const Color(0xFFE0F2EE),
     onSecondaryContainer: dark ? const Color(0xFFD9F0EC) : const Color(0xFF18433F),
-    surface: dark ? MintTickPalette.navy : MintTickPalette.ice,
-    surfaceContainerLowest: dark ? const Color(0xFF090D15) : Colors.white,
-    surfaceContainerLow: dark ? const Color(0xFF0F1720) : const Color(0xFFF5F8F8),
-    surfaceContainer: dark ? const Color(0xFF141D26) : const Color(0xFFEDF3F2),
-    surfaceContainerHigh: dark ? const Color(0xFF19242D) : const Color(0xFFE6EEEE),
-    surfaceContainerHighest: dark ? const Color(0xFF22303A) : const Color(0xFFDDE8E5),
-    onSurface: dark ? MintTickPalette.ice : MintTickPalette.navy,
+    surface: dark ? const Color(0xFF0E1620) : MintTickPalette.ice,
+    surfaceContainerLowest: dark ? const Color(0xFF0E1620) : Colors.white,
+    surfaceContainerLow: dark ? const Color(0xFF1B2732) : const Color(0xFFF5F8F8),
+    surfaceContainer: dark ? const Color(0xFF1B2732) : const Color(0xFFEDF3F2),
+    surfaceContainerHigh: dark ? const Color(0xFF283845) : const Color(0xFFE6EEEE),
+    surfaceContainerHighest: dark ? const Color(0xFF283845) : const Color(0xFFDDE8E5),
+    onSurface: dark ? const Color(0xFFEDF2F4) : MintTickPalette.navy,
     onSurfaceVariant: dark ? const Color(0xFFB9C8CC) : const Color(0xFF526266),
     outline: dark ? const Color(0xFF60737C) : const Color(0xFF788E91),
     outlineVariant: dark ? const Color(0xFF34444C) : const Color(0xFFCFDDDA),
     error: dark ? const Color(0xFFFF8291) : const Color(0xFFAE263A),
   );
 
-  final panel = dark ? const Color(0xFF141D26) : const Color(0xFFF3F7F7);
+  final panel = dark ? const Color(0xFF1B2732) : const Color(0xFFF3F7F7);
   final statuses = dark
       ? const (
           healthy: Color(0xFF53D69D),
