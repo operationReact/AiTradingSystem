@@ -152,7 +152,7 @@ def main():
             # One read-only LTP subscription for a public NSE cash equity.
             message = json.dumps({"correlationID": "minttickEipTick",
                 "action": 1, "params": {"mode": 1, "tokenList": [
-                    {"exchangeType": 1, "tokens": [NSE_TOKEN]}]}}).encode()
+                    {"exchangeType": 1, "tokens": [NSE_TOKEN]}]}}, separators=(",", ":")).encode()
             send_frame(sock, 0x1, message)
             print("BROKER_WS_SUBSCRIPTION: SENT", flush=True)
 
