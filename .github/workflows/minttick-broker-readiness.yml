@@ -101,6 +101,7 @@ jobs:
                 "MINTTICK_PRIVATE_FEED_MODE": {"ENABLED","NOT_ENABLED"},
                 "MINTTICK_UPSTOX_SERVER_CONFIG": {"PRESENT","NOT_CONFIGURED"},
                 "MINTTICK_PRIVATE_FEED_LAMBDA": {"READY","NOT_CONFIRMED"},
+                "MINTTICK_MARKET_CATALOGUE": {"READY","EMPTY","UNAVAILABLE"},
                 "MINTTICK_HOST_FEED_PREREQUISITES": {"READY","COMPOSE_ENV_MISSING","COMPOSE_ENV_PERMISSIONS","COMPOSE_FILE_MISSING","INSTALLED_COMPOSE_OUTDATED","DOCKER_MISSING"},
                 "MINTTICK_PRIVATE_FEED_DIAGNOSTIC": {"READY","CREDENTIALS_NOT_CONFIGURED","SSM_UNAVAILABLE","INVALID_TOTP_CONFIGURATION","INTERNAL_FAILURE","UNEXPECTED_RESPONSE","INVALID_RESPONSE","INVOKE_ACCESS_DENIED","FUNCTION_NOT_FOUND","THROTTLED","INVOCATION_TIMEOUT","INVOCATION_FAILED"},
               }
@@ -109,7 +110,11 @@ jobs:
                       k,v=map(str.strip,line.split(":",1))
                       if k in expected and v in expected[k]:
                           print(k+": "+v)
-                      if k=="MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS":
+                      if k=="MINTTICK_CASH_EQUITY_INSTRUMENTS":
+                assert re.fullmatch(r"[0-9]{1,6}",v), "Unexpected catalogue count"
+                print(k+": "+v)
+                continue
+            if k=="MINTTICK_PRIVATE_FEED_UNAVAILABLE_FIELDS":
                           fields=v.split(",")
                           allowed={"api_key","client_code","pin","totp_secret"}
                           if fields and len(fields)<=4 and len(set(fields))==len(fields) and set(fields).issubset(allowed):
