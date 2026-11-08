@@ -4,7 +4,7 @@
 - On-host catalogue activation and independent read-only inventory succeeded after PRs #619–#622.
 - 2,778 active NSE/BSE cash-equity instruments; last import SUCCEEDED.
 - The current Flutter home quote panel polls the read-only HTTP quote API every 60 seconds. Its fetchedAt is the backend retrieval time, **not** the exchange timestamp. It is NOT a live WebSocket feed.
-- Market is closed on Sunday, November 8. Passing build and infrastructure checks cannot establish open-market streaming acceptance.
+- **Special-session exception:** Sunday, November 8, 2026 has Diwali Muhurat trading. NSE cash continuous session opens 14:20 IST; non-CAS securities close 15:30 IST and CAS securities transition to closing auction from 15:15 IST. The correct test window is exchange-calendar-driven, not a blanket Sunday closure. See NSE capital-market circular NSE/CMTR/76941 (Oct 19, 2026). Passing build and infrastructure checks cannot establish actual open-market streaming acceptance.
 
 ## Target architecture (not yet deployed)
 1. Keep user/session credentials and Angel One JWT/feedToken server-side in approved secure storage and a dedicated, long-lived read-only streaming process. Do **not** put provider credentials or broker tokens into Flutter, browser URLs, logs, GitHub Actions or an untrusted client.
@@ -29,4 +29,5 @@ This PR adds the deterministic **read-only WebSocket V2 LTP validation boundary*
 
 Sources:
 - https://smartapi.angelone.in/docs (SmartAPI WebSocket Streaming 2.0).
+- https://nsearchives.nseindia.com/content/circulars/CMTR76941.pdf (NSE Diwali 2026 special cash session).
 - https://github.com/angel-one/smartapi-python/blob/main/SmartApi/smartWebSocketV2.py (reference V2 binary layout).
