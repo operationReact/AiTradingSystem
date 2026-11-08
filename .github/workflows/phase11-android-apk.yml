@@ -301,9 +301,18 @@ jobs:
               settings.pluginManagement.repositories.gradlePluginPortal()
               settings.pluginManagement.repositories.google()
               settings.pluginManagement.repositories.mavenCentral()
-              settings.dependencyResolutionManagement.repositories.maven { repo ->
-                  repo.url = settings.uri(verified)
-                  repo.content {
+              // Kotlin compiler JARs are staged and hash-verified locally.
+              // Maven Central would otherwise win repository selection and
+              // redirect large artifacts to github.com, returning HTTP 504.
+              // Exclusive content prevents resolution of this exact module
+              // through any other dependency repository, including plugins.
+              settings.dependencyResolutionManagement.repositories.exclusiveContent {
+                  forRepository {
+                      maven { repo ->
+                          repo.url = settings.uri(verified)
+                      }
+                  }
+                  filter {
                       includeModule("org.jetbrains.kotlin", "kotlin-compiler-embeddable")
                   }
               }
