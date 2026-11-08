@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import ipaddress
 import json
+from pathlib import Path
 import re
 import struct
 import subprocess
@@ -78,6 +79,15 @@ def request_json(url, method, headers, data=None):
             if len(raw) > 32768:
                 raise ProbeFailure("ANGEL_ONE_AUTH: INVALID_RESPONSE")
     except urllib.error.HTTPError as error:
+        # Read only bounded provider errorcode for categorical diagnostics,
+        # never its message, response body, request headers or tokens.
+        try:
+            error_body = json.loads(error.read(16384))
+        except (ValueError, TypeError, UnicodeError, OSError):
+            error_body = None
+        code = error_body.get("errorcode") if isinstance(error_body, dict) else None
+        if isinstance(code, str) and re.fullmatch(r"(?:AB|AG)[0-9]{4}", code):
+            raise ProbeFailure("ANGEL_ONE_AUTH: PROVIDER_CODE_" + code) from None
         if error.code in (401, 403):
             raise ProbeFailure("ANGEL_ONE_AUTH: REJECTED_OR_IP_RESTRICTED") from None
         if error.code == 429:
@@ -126,10 +136,40 @@ def egress():
     print("EC2_EGRESS: MATCH_REGISTERED_EIP", flush=True)
 
 
+def verified_client_network_headers():
+    # Official SmartAPI requires physical client local/public IP and MAC.
+    # Determine the MAC of the exact EC2 interface, never invent or log it.
+    try:
+        output = subprocess.run(
+            ["ip", "-o", "-4", "addr", "show"], capture_output=True,
+            check=False, text=True, timeout=3)
+        if output.returncode != 0:
+            raise ValueError("no interface")
+        for line in output.stdout.splitlines():
+            fields = line.split()
+            if len(fields) < 4 or fields[2] != "inet" or not fields[3].startswith("10.87.0.10/"):
+                continue
+            interface = fields[1].split("@")[0]
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{2,32}", interface):
+                continue
+            mac = (Path("/sys/class/net") / interface / "address").read_text().strip().lower()
+            if re.fullmatch(r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}", mac) and mac != "00:00:00:00:00:00":
+                return {
+                    "X-ClientPublicIP": OUTBOUND_IP,
+                    "X-ClientLocalIP": "10.87.0.10",
+                    "X-MACAddress": mac,
+                }
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+    raise ProbeFailure("INSTANCE_NETWORK_HEADERS: UNAVAILABLE")
+
+
 def run():
     if not sys.platform.startswith("linux"):
         raise ProbeFailure("INSTANCE_PLATFORM: UNEXPECTED")
     egress()
+    network_headers = verified_client_network_headers()
+    print("INSTANCE_NETWORK_HEADERS: VERIFIED", flush=True)
     p = ssm_params()
     if (not re.fullmatch(r"[A-Za-z0-9._-]{4,20}", p["client_code"])
             or not re.fullmatch(r"[0-9]{4,8}", p["pin"])):
@@ -141,6 +181,7 @@ def run():
         "X-PrivateKey": p["api_key"],
         "X-UserType": "USER",
         "X-SourceID": "WEB",
+        **network_headers,
     }
     body = json.dumps({
         "clientcode": p["client_code"], "password": p["pin"], "totp": otp
