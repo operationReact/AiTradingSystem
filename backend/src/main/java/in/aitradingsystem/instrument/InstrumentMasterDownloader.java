@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 /** Downloads only from the configured, allow-listed Angel One instrument-master HTTPS URL. */
 @Component
 public class InstrumentMasterDownloader {
+    // Angel One publishes a large, daily instrument master. Quote/login timeouts stay short.
+    private static final long MIN_MASTER_READ_TIMEOUT_MS = 90_000L;
     private final AngelOneProperties properties;
     private final HttpClient client;
 
@@ -32,7 +34,7 @@ public class InstrumentMasterDownloader {
     public byte[] download() {
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(java.net.URI.create(properties.instrumentMasterUrl()))
-                .timeout(Duration.ofMillis(properties.readTimeoutMs()))
+                .timeout(masterDownloadTimeout(properties.readTimeoutMs()))
                 .header("Accept", "application/json")
                 .GET()
                 .build();
@@ -71,6 +73,10 @@ public class InstrumentMasterDownloader {
             throw new InstrumentMasterException("SOURCE_UNAVAILABLE",
                     "Angel One instrument-master source could not be read");
         }
+    }
+
+    static Duration masterDownloadTimeout(int configuredReadTimeoutMs) {
+        return Duration.ofMillis(Math.max(MIN_MASTER_READ_TIMEOUT_MS, configuredReadTimeoutMs));
     }
 
     static HttpResponse.BodySubscriber<byte[]> boundedBody(int maxBytes) {
