@@ -128,7 +128,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
 
   Future<void> _loadMore() async {
     if (_loadingMore || _loading || !_hasNext ||
-        widget.repository is! CustomerPaginatedMarketRepository) return;
+        widget.repository is! CustomerPaginatedMarketRepository) {
+      return;
+    }
     final version = _version;
     setState(() => _loadingMore = true);
     try {
