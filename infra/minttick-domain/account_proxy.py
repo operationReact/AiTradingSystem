@@ -22,6 +22,8 @@ EXACT = {
     ("POST", "/api/customer/trading-rooms"),
     ("GET", "/api/customer/brokers/angel-one/status"),
     ("GET", "/api/customer/brokers/angel-one/configured-login"),
+    # Authenticated self-only Cognito reference; never a SmartAPI secret.
+    ("GET", "/api/customer/brokers/angel-one/owner-link-reference"),
     ("POST", "/api/customer/brokers/angel-one/connect-configured"),
     ("POST", "/api/customer/brokers/angel-one/connect"),
     ("POST", "/api/customer/brokers/angel-one/disconnect"),
