@@ -18,7 +18,9 @@ import org.springframework.stereotype.Component;
 /** Downloads only from the configured, allow-listed Angel One instrument-master HTTPS URL. */
 @Component
 public class InstrumentMasterDownloader {
-    // Angel One publishes a large, daily instrument master. Quote/login timeouts stay short.\n    private static final long MIN_MASTER_READ_TIMEOUT_MS = 90_000L;\n    private final AngelOneProperties properties;
+    // Angel One publishes a large, daily instrument master. Quote/login timeouts stay short.
+    private static final long MIN_MASTER_READ_TIMEOUT_MS = 90_000L;
+    private final AngelOneProperties properties;
     private final HttpClient client;
 
     public InstrumentMasterDownloader(AngelOneProperties properties) {
@@ -73,7 +75,11 @@ public class InstrumentMasterDownloader {
         }
     }
 
-    static Duration masterDownloadTimeout(int configuredReadTimeoutMs) {\n        return Duration.ofMillis(Math.max(MIN_MASTER_READ_TIMEOUT_MS, configuredReadTimeoutMs));\n    }\n\n    static HttpResponse.BodySubscriber<byte[]> boundedBody(int maxBytes) {
+    static Duration masterDownloadTimeout(int configuredReadTimeoutMs) {
+        return Duration.ofMillis(Math.max(MIN_MASTER_READ_TIMEOUT_MS, configuredReadTimeoutMs));
+    }
+
+    static HttpResponse.BodySubscriber<byte[]> boundedBody(int maxBytes) {
         return new HttpResponse.BodySubscriber<>() {
             private final ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(maxBytes, 1_048_576));
             private final CompletableFuture<byte[]> body = new CompletableFuture<>();
