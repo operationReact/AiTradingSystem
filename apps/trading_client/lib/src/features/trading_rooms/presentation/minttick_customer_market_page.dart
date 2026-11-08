@@ -139,7 +139,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     try {
       final reply = await (widget.repository as CustomerLiveMarketRepository).liveQuote(stock.id);
       if (!mounted || _selected?.id != stock.id) return;
-      if (reply.instrumentId != stock.id) {
+      if (reply.instrumentId != stock.id ||
+          reply.exchange != stock.exchange ||
+          reply.tradingSymbol != stock.tradingSymbol) {
         throw const FormatException('Quote identity mismatch');
       }
       final age = reply.exchangeAt == null
