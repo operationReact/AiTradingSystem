@@ -148,6 +148,19 @@ Future<String> restoreMintTickSession(OperatorSession session) async {
     throw StateError('Cognito is not configured');
   }
 
+  // Amplify Auth has a serialized state-machine admission queue. On Flutter
+  // Chrome, a stale fetchAuthSession() during automatic restoration can hang
+  // indefinitely inside the SDK. Future.timeout does NOT cancel that queued
+  // operation; a subsequent signIn() can then time out without ever emitting
+  // an InitiateAuth POST (see aws-amplify/amplify-flutter#7418).
+  //
+  // The explicitly opted-in local browser diagnostic needs a *fresh* sign-in
+  // attempt, so do not call fetchAuthSession or signOut on startup. A token
+  // in local browser storage is NEVER treated as proof of customer access:
+  // the app remains on /welcome until real Cognito sign-in and backend JWT
+  // provisioning both complete.
+  if (MintTickLocalAuthFlow.enabled) return '/welcome';
+
   var rememberMe = false;
   try {
     rememberMe = await SharedPreferencesAsync()
