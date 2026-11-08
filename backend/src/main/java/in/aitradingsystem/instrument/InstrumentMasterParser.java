@@ -10,14 +10,11 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 
 /** Strict parser for the Angel One OpenAPIScripMaster JSON array. */
 @Component
 public class InstrumentMasterParser {
-    private static final Set<String> ALLOWED_SEGMENTS =
-            Set.of("NSE_CM", "BSE_CM", "NSE_FO", "BSE_FO", "MCX_FO", "CDS", "BCD");
     private static final DateTimeFormatter EXPIRY = new DateTimeFormatterBuilder()
             .parseCaseInsensitive()
             .appendPattern("ddMMMyyyy")
@@ -57,8 +54,7 @@ public class InstrumentMasterParser {
         String token = requiredText(node, "token", 32);
         String symbol = requiredText(node, "symbol", 100);
         String name = optionalText(node, "name", 200);
-        String segment = requiredText(node, "exch_seg", 20).toUpperCase(Locale.ROOT);
-        if (!ALLOWED_SEGMENTS.contains(segment)) throw new IllegalArgumentException("unsupported segment");
+        String segment = normalizeSegment(requiredText(node, "exch_seg", 20));
         if (!token.matches("[0-9]{1,32}") || !symbol.matches("[A-Za-z0-9&._/-]{1,100}")) {
             throw new IllegalArgumentException("invalid token/symbol");
         }
@@ -79,6 +75,20 @@ public class InstrumentMasterParser {
             default -> throw new IllegalArgumentException("unsupported segment");
         };
         return new InstrumentDraft(segment, exchange, token, symbol, name, type, expiry, strike, lotSize, tickSize);
+    }
+
+    /** Angel One uses both SmartAPI segment codes and exchange short names in official masters. */
+    private static String normalizeSegment(String raw) {
+        return switch (raw.toUpperCase(Locale.ROOT)) {
+            case "NSE", "NSE_CM" -> "NSE_CM";
+            case "BSE", "BSE_CM" -> "BSE_CM";
+            case "NFO", "NSE_FO" -> "NSE_FO";
+            case "BFO", "BSE_FO" -> "BSE_FO";
+            case "MCX", "MCX_FO" -> "MCX_FO";
+            case "CDS" -> "CDS";
+            case "BCD" -> "BCD";
+            default -> throw new IllegalArgumentException("unsupported segment");
+        };
     }
 
     private static String requiredText(JsonNode node, String field, int max) {
@@ -135,8 +145,12 @@ public class InstrumentMasterParser {
         if (text == null) return null;
         try {
             return LocalDate.parse(text.toUpperCase(Locale.ENGLISH), EXPIRY);
-        } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("invalid expiry");
+        } catch (DateTimeParseException legacyFormat) {
+            try {
+                return LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE);
+            } catch (DateTimeParseException isoFormat) {
+                throw new IllegalArgumentException("invalid expiry");
+            }
         }
     }
 
