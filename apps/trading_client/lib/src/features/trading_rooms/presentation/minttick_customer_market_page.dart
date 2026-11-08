@@ -99,6 +99,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     try {
       final quote = await widget.repository.quote(stock.id);
       if (!mounted || _selected?.id != stock.id) return;
+      if (quote.instrumentId != stock.id ||
+          quote.exchange != stock.exchange ||
+          quote.tradingSymbol != stock.tradingSymbol) {
+        throw const FormatException('On-demand quote instrument identity mismatch');
+      }
       setState(() => _quote = quote);
     } on ApiHttpFailure catch (error) {
       if (!mounted || _selected?.id != stock.id) return;
