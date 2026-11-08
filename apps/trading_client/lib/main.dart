@@ -1,57 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import 'src/app.dart';
-import 'src/auth/customer_identity.dart';
-import 'src/core/session/operator_session.dart';
-import 'src/features/operations_health/data/health_repository.dart';
+import 'src/bootstrap.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  await MintTickIdentity.initialize();
-  final session = OperatorSession();
-  // The Remember me preference contains no credentials. When it is not set
-  // we deliberately terminate a cached Cognito session rather than silently
-  // signing into somebody else's account on a shared device.
-  var rememberMe = false;
-  try {
-    rememberMe = await SharedPreferencesAsync()
-        .getBool('minttick.auth.remember_me.v1') ?? false;
-  } catch (_) {
-    // A missing preference must fail closed.
-  }
-  if (!rememberMe && await MintTickIdentity.current.hasSession()) {
-    try {
-      await MintTickIdentity.current.signOut();
-    } catch (_) {
-      // Still fail closed; do not expose the protected dashboard.
-    }
-  }
-  // A device's cached Cognito session is not itself proof that MintTick's
-  // backend recognizes and authorizes the customer. Validate it every launch.
-  var cognitoTestSession = false;
-  if (rememberMe && await MintTickIdentity.current.hasSession()) {
-    if (const bool.fromEnvironment('MINTTICK_AUTH_ONLY_TEST',
-        defaultValue: false)) {
-      // Cognito is real; MintTick backend customer provisioning is not.
-      // Do not grant CUSTOMER role or enter the trading dashboard.
-      cognitoTestSession = true;
-    } else {
-      try {
-        await MintTickCustomerAccountApi().provision();
-        session.markCustomerAuthenticated();
-      } catch (_) {
-        // Fail closed. Do not open a protected dashboard on a stale identity.
-      }
-    }
-  }
-  runApp(TradingApp(
-    repositoryFactory: () => HttpHealthRepository(session: session),
-    session: session,
-    initialRoute: cognitoTestSession
-        ? '/auth-test'
-        : (session.isCustomerAuthenticated
-            ? '/'
-            : (session.isAuthenticated ? '/' : '/welcome')),
-  ));
+  // First paint must not wait for Cognito, cached sessions, shared preferences,
+  // or AWS account verification. Startup runs asynchronously behind the
+  // visible, temporarily disabled sign-in form.
+  runApp(const MintTickStartupApp());
 }
