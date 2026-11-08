@@ -331,7 +331,13 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
                             width: 18, height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2)),
                         const SizedBox(width: 12),
-                        Text(_busyStage),
+                        Flexible(
+                          child: Text(
+                            _busyStage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     )
                   : const Text('Sign in'),
