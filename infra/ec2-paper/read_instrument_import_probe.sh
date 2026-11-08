@@ -9,7 +9,7 @@ test -f "$root/runtime.env" && test ! -L "$root/runtime.env"
 test -f "$root/.env" && test ! -L "$root/.env"
 test -f "$root/paper-compose.yml" && test ! -L "$root/paper-compose.yml"
 python3 - "$root" <<'PY'
-import pathlib,re,subprocess,sys
+import pathlib,re,subprocess,sys,hmac
 from urllib.request import Request,urlopen
 from urllib.error import HTTPError
 root=pathlib.Path(sys.argv[1])
@@ -18,8 +18,19 @@ try:
     vals=[line[12:] for line in lines if line.startswith("APP_API_KEY=")]
     key_ok=(len(vals)==1 and re.fullmatch(r"[!-~]{16,256}",vals[0]) is not None
             and (root/"runtime.env").stat().st_mode & 0o077 == 0)
+    runtime_key=vals[0] if key_ok else ""
 except (OSError,ValueError):
     key_ok=False
+    runtime_key=""
+try:
+    env=[line[12:] for line in (root/".env").read_text().splitlines()
+         if line.startswith("APP_API_KEY=")]
+    compose_key=env[0] if len(env)==1 and env[0] else ""
+except (OSError,ValueError):
+    compose_key=""
+key_state=("MATCH" if runtime_key and compose_key and hmac.compare_digest(runtime_key,compose_key)
+           else "MISMATCH" if runtime_key and compose_key else "MISSING")
+print("MINTTICK_OPERATOR_ENV_KEYS:",key_state)
 print("MINTTICK_OPERATOR_KEY:", "PRESENT" if key_ok else "MISSING_OR_INVALID")
 try:
     with urlopen(Request("http://127.0.0.1:8080/api/instruments/status"),
@@ -30,6 +41,20 @@ except HTTPError as exc:
 except Exception:
     http=0
 print("MINTTICK_LOCAL_IMPORT_API:", "REACHABLE" if 200<=http<500 else "UNREACHABLE")
+try:
+    if not runtime_key:
+        auth="UNAVAILABLE"
+    else:
+        request=Request("http://127.0.0.1:8080/api/instruments/status",
+                        headers={"X-API-Key":runtime_key})
+        try:
+            with urlopen(request,timeout=5) as response:
+                auth="ACCEPTED" if response.status==200 else "REJECTED"
+        except HTTPError as e:
+            auth="REJECTED" if e.code in (401,403,404) else "UNAVAILABLE"
+except Exception:
+    auth="UNAVAILABLE"
+print("MINTTICK_OPERATOR_AUTH:",auth)
 base=["docker","compose","--env-file",str(root/".env"),"-f",str(root/"paper-compose.yml"),
       "exec","-T","postgres","psql","-X","-v","ON_ERROR_STOP=1","-U","aitrading",
       "-d","aitrading","-Atq","-c"]
