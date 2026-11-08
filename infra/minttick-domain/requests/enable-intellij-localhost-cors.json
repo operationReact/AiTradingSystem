@@ -1,0 +1,9 @@
+{
+  "application": "MintTick",
+  "environment": "dev",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "operation": "allow-fixed-intellij-localhost-5173-origin",
+  "api_origin": "https://api.minttick.com",
+  "authorization": "USER_REQUESTED_LOCAL_INTELLIJ_CORS_2026-11-08"
+}
