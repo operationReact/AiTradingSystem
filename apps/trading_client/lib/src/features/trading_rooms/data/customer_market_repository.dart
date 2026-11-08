@@ -96,7 +96,14 @@ abstract interface class CustomerMarketRepository {
   Future<CustomerMarketQuote> quote(int instrumentId);
 }
 
-class HttpCustomerMarketRepository implements CustomerMarketRepository, CustomerLiveMarketRepository {
+abstract interface class CustomerPaginatedMarketRepository {
+  Future<InstrumentSearchPage> searchPage({
+    String? query, String? exchange, required int page,
+  });
+}
+
+class HttpCustomerMarketRepository implements CustomerMarketRepository,
+    CustomerLiveMarketRepository, CustomerPaginatedMarketRepository {
   HttpCustomerMarketRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -112,11 +119,18 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository, Customer
   }
 
   @override
-  Future<InstrumentSearchPage> search({String? query, String? exchange}) async {
+  Future<InstrumentSearchPage> search({String? query, String? exchange}) =>
+      searchPage(query: query, exchange: exchange, page: 0);
+
+  @override
+  Future<InstrumentSearchPage> searchPage({
+    String? query, String? exchange, required int page,
+  }) async {
+    if (page < 0 || page > 10000) throw ArgumentError.value(page);
     final data = await api.getJson('$_root/instruments', query: {
       'query': query,
       'exchange': exchange,
-      'page': '0',
+      'page': '$page',
       'size': '20',
     });
     if (data is! Map<String, dynamic>) {
