@@ -6,13 +6,17 @@ import '../../../data/authenticated_api_client.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_equity_avatar.dart';
 import 'minttick_market_preview.dart';
 
 /// Verified customer cash-equity catalogue and broker quotes.
 /// LIVE is shown only for a fresh, exchange-timestamped backend stream sample.
 class MintTickCustomerMarketPage extends StatefulWidget {
-  const MintTickCustomerMarketPage({required this.repository, super.key});
+  const MintTickCustomerMarketPage({
+    required this.repository, this.onConnectBroker, super.key,
+  });
   final CustomerMarketRepository repository;
+  final VoidCallback? onConnectBroker;
 
   @override
   State<MintTickCustomerMarketPage> createState() => _MintTickCustomerMarketPageState();
@@ -23,6 +27,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   final TextEditingController _query = TextEditingController();
   InstrumentCatalogueStatus? _catalogue;
   List<InstrumentRecord> _stocks = const [];
+  bool _hasNext = false;
+  int _totalStocks = 0;
+  int _nextPage = 1;
+  bool _loadingMore = false;
   CustomerMarketQuote? _quote;
   CustomerLiveQuote? _liveQuote;
   String _liveStatus = 'UNAVAILABLE';
@@ -97,18 +105,57 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       if (!mounted || version != _version) return;
       setState(() {
         if (result.length == 2) _catalogue = result.first as InstrumentCatalogueStatus;
-        _stocks = (result.last as InstrumentSearchPage).content;
+        final page = result.last as InstrumentSearchPage;
+        _stocks = page.content;
+        _hasNext = page.hasNext;
+        _totalStocks = page.totalElements;
+        _nextPage = page.page + 1;
       });
     } catch (_) {
       if (mounted && version == _version) {
         setState(() {
           _stocks = const [];
+          _hasNext = false;
+          _totalStocks = 0;
           _error = 'Unable to load the customer market catalogue. '
               'Check the MintTick API and try again.';
         });
       }
     } finally {
       if (mounted && version == _version) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _loading || !_hasNext ||
+        widget.repository is! CustomerPaginatedMarketRepository) {
+      return;
+    }
+    final version = _version;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await (widget.repository as CustomerPaginatedMarketRepository)
+          .searchPage(
+            query: _query.text.trim().isEmpty ? null : _query.text.trim(),
+            exchange: _exchange, page: _nextPage);
+      if (!mounted || version != _version) return;
+      setState(() {
+        final existing = _stocks.map((e) => e.id).toSet();
+        _stocks = [
+          ..._stocks,
+          ...page.content.where((stock) => existing.add(stock.id)),
+        ];
+        _hasNext = page.hasNext;
+        _totalStocks = page.totalElements;
+        _nextPage = page.page + 1;
+      });
+    } catch (_) {
+      if (mounted && version == _version) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load more equities. Retry.')));
+      }
+    } finally {
+      if (mounted && version == _version) setState(() => _loadingMore = false);
     }
   }
 
@@ -216,7 +263,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       Text('Markets', style: theme.textTheme.headlineSmall
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 6),
-      Text('Explore verified equities. LIVE requires your connected Angel One session.',
+      Text('Explore genuine NSE and BSE cash equities. Live quotes require an authenticated broker session.',
         style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant, height: 1.4)),
       const SizedBox(height: 18),
@@ -253,7 +300,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       const SizedBox(height: 12),
-      MintTickMarketPreview(repository: widget.repository),
+      MintTickMarketPreview(
+        repository: widget.repository,
+        onConnectBroker: widget.onConnectBroker,
+      ),
       const SizedBox(height: 12),
       if (_catalogue?.activeCount == 0) ...[
         const SizedBox(height: 12),
@@ -318,7 +368,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       Row(children: [
         Expanded(child: Text('Cash equities', style: theme.textTheme.titleMedium
             ?.copyWith(fontWeight: FontWeight.w800))),
-        Text('${_stocks.length} results',
+        Text(_totalStocks == 0 ? 'No results'
+            : '${_stocks.length} of $_totalStocks',
           style: theme.textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant)),
       ]),
@@ -344,14 +395,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                     border: Border.all(color: scheme.outlineVariant),
                   ),
                   child: Row(children: [
+                    MintTickEquityAvatar(
+                      tradingSymbol: stock.tradingSymbol,
+                      companyName: stock.name,
+                      size: 45,
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(stock.tradingSymbol, maxLines: 1,
+                        Text(stock.name.trim().isEmpty
+                            ? stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')
+                            : stock.name,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.titleSmall
                               ?.copyWith(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 4),
-                        Text('${stock.name} · ${stock.exchange}',
+                        Text('${stock.tradingSymbol} · ${stock.exchange}',
                           maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
                               color: scheme.onSurfaceVariant)),
@@ -365,6 +425,18 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             ),
           ),
         ],
+      if (_hasNext && widget.repository is CustomerPaginatedMarketRepository) ...[
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: OutlinedButton.icon(
+          key: const ValueKey('customer-market-load-more'),
+          onPressed: _loadingMore ? null : _loadMore,
+          icon: _loadingMore
+              ? const SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.expand_more_rounded),
+          label: Text(_loadingMore ? 'Loading equities…' : 'Load more equities'),
+        )),
+      ],
     ]);
   }
 }

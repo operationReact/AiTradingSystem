@@ -195,7 +195,10 @@ class _TradingAppState extends State<TradingApp> {
         '/welcome-replay': (_) => const MintTickWelcomePage(replayFromSettings: true),
         '/instruments': (_) => InstrumentsPage(repository: HttpInstrumentRepository(_api)),
         '/market': (_) => widget.session.isCustomerAuthenticated
-            ? MintTickCustomerMarketPage(repository: HttpCustomerMarketRepository(_api))
+            ? MintTickCustomerMarketPage(
+                repository: HttpCustomerMarketRepository(_api),
+                onConnectBroker: () => _navigate('/broker/angel-one'),
+              )
             : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/market-data': (_) => widget.session.isCustomerAuthenticated
             ? MintTickCustomerMarketPage(repository: HttpCustomerMarketRepository(_api))
