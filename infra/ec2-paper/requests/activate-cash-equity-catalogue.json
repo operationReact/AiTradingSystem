@@ -1,9 +1,9 @@
 {
-    "application": "MintTick",
-    "environment": "paper",
-    "aws_account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "operation": "activate-empty-cash-equity-catalogue",
-    "authorization": "USER_APPROVED_MINTTICK_MARKET_DATA_REPAIR_2026-11-08"
+  "application": "MintTick",
+  "environment": "paper",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "activate-empty-cash-equity-catalogue",
+  "authorization": "USER_APPROVED_MINTTICK_MARKET_DATA_REPAIR_2026-11-08"
 }
