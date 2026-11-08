@@ -140,46 +140,66 @@ class _MintTickStartupAppState extends State<MintTickStartupApp> {
 }
 
 /// Restores a cached Cognito session only after verified JWT-backed MintTick
-/// provisioning. All network operations are bounded and fail closed.
-/// No remembered preference grants access to a protected screen by itself.
+/// provisioning. No remembered preference can authorize product access.
 Future<String> restoreMintTickSession(OperatorSession session) async {
   await MintTickIdentity.initialize().timeout(const Duration(seconds: 12));
-  if (!MintTickIdentity.current.isConfigured) {
+  return restoreMintTickSessionAfterInit(
+    session,
+    identity: MintTickIdentity.current,
+    skipCachedSession: MintTickLocalAuthFlow.enabled,
+    readRememberMe: () async =>
+        await SharedPreferencesAsync()
+            .getBool('minttick.auth.remember_me.v1')
+            .timeout(const Duration(seconds: 3)) ??
+        false,
+    provision: () async {
+      await MintTickCustomerAccountApi()
+          .provision()
+          .timeout(const Duration(seconds: 16));
+    },
+  );
+}
+
+/// Restores an authenticated dashboard only after backend validation.
+/// A pure injectable seam also verifies that local browser debug never
+/// starts hasSession()/signOut() before the user clicks Sign In.
+///
+/// Related Amplify SDK limitation:
+/// https://github.com/aws-amplify/amplify-flutter/issues/7418
+/// One stalled fetchAuthSession can block signIn behind a serialized queue.
+/// The Flutter wrapper's Future.timeout does not cancel that SDK operation.
+Future<String> restoreMintTickSessionAfterInit(
+  OperatorSession session, {
+  required CustomerIdentity identity,
+  required bool skipCachedSession,
+  required Future<bool> Function() readRememberMe,
+  required Future<void> Function() provision,
+}) async {
+  if (!identity.isConfigured) {
     throw StateError('Cognito is not configured');
   }
 
-  // Amplify Auth has a serialized state-machine admission queue. On Flutter
-  // Chrome, a stale fetchAuthSession() during automatic restoration can hang
-  // indefinitely inside the SDK. Future.timeout does NOT cancel that queued
-  // operation; a subsequent signIn() can then time out without ever emitting
-  // an InitiateAuth POST (see aws-amplify/amplify-flutter#7418).
-  //
-  // The explicitly opted-in local browser diagnostic needs a *fresh* sign-in
-  // attempt, so do not call fetchAuthSession or signOut on startup. A token
-  // in local browser storage is NEVER treated as proof of customer access:
-  // the app remains on /welcome until real Cognito sign-in and backend JWT
-  // provisioning both complete.
-  if (MintTickLocalAuthFlow.enabled) return '/welcome';
+  if (skipCachedSession) {
+    // Opt-in, local Chrome debug: NO session check, sign-out, preferences
+    // or backend call before the user initiates an actual Cognito sign-in.
+    // This never marks the account customer-authenticated.
+    return '/welcome';
+  }
 
   var rememberMe = false;
   try {
-    rememberMe = await SharedPreferencesAsync()
-            .getBool('minttick.auth.remember_me.v1')
-            .timeout(const Duration(seconds: 3)) ??
-        false;
+    rememberMe = await readRememberMe();
   } catch (_) {
     // An unreadable preference is not permission to restore a session.
   }
 
-  final hasSession = await MintTickIdentity.current
+  final hasSession = await identity
       .hasSession()
       .timeout(const Duration(seconds: 7));
   if (!rememberMe) {
     if (hasSession) {
       // Never retain a cached session when Remember Me is off.
-      await MintTickIdentity.current
-          .signOut()
-          .timeout(const Duration(seconds: 7));
+      await identity.signOut().timeout(const Duration(seconds: 7));
     }
     return '/welcome';
   }
@@ -191,13 +211,11 @@ Future<String> restoreMintTickSession(OperatorSession session) async {
   }
 
   try {
-    await MintTickCustomerAccountApi()
-        .provision()
-        .timeout(const Duration(seconds: 16));
+    await provision();
     session.markCustomerAuthenticated();
     return '/';
   } catch (_) {
-    // A cached Cognito session alone is not sufficient for product access.
+    // A cached Cognito session alone does not authorize product access.
     return '/welcome';
   }
 }
