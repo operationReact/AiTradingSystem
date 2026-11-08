@@ -42,7 +42,13 @@ class HttpCustomerAngelOneRepository {
       throw const FormatException('Invalid customer identity reference');
     }
     final subject = (data['cognitoSubject'] as String).trim();
-    if (!RegExp(r'^[A-Za-z0-9_-]{10,128}
+    if (!RegExp(r'^[A-Za-z0-9_-]{10,128}$').hasMatch(subject)) {
+      throw const FormatException('Invalid customer identity reference');
+    }
+    return subject;
+  }
+
+  Future<CustomerAngelOneConnection> connectConfigured() async =>
       _status(await api.postJson('$_root/connect-configured'));
 
   Future<CustomerAngelOneConnection> connect({
