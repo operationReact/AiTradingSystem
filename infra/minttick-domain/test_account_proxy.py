@@ -114,6 +114,33 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(proxy.handler(event("POST","/api/customer/brokers/angel-one/disconnect",
             body='{"credential":"bad"}'),None)["statusCode"],400)
 
+    def test_manual_smartapi_connection_requires_account_jwt_and_six_digit_code(self):
+        endpoint = "/api/customer/brokers/angel-one/connect"
+        data = {"apiKey": "sample-test-value", "clientCode": "TEST1234",
+                "pin": "1234", "totp": "123456"}
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as socket:
+            result = proxy.handler(event("POST", endpoint, body=json.dumps(data)), None)
+        self.assertEqual(result["statusCode"], 200)
+        outgoing = socket.call_args.args[0]
+        self.assertEqual(outgoing.full_url, proxy.BACKEND + endpoint)
+        self.assertEqual(json.loads(outgoing.data), data)
+        self.assertEqual(outgoing.headers.get("Authorization"), "Bearer public-test-token")
+        for invalid in [
+            {},
+            {**data, "totp": "12345"},
+            {**data, "totp": "1234567890"},
+            {**data, "unknown": "not-allowed"},
+        ]:
+            with mock.patch.object(proxy.urllib.request, "urlopen") as denied:
+                answer = proxy.handler(event("POST", endpoint, body=json.dumps(invalid)), None)
+            self.assertEqual(answer["statusCode"], 400)
+            denied.assert_not_called()
+        with mock.patch.object(proxy.urllib.request, "urlopen") as denied:
+            invalid_jwt = event("POST", endpoint, jwt={"claims":{}}, body=json.dumps(data))
+            answer = proxy.handler(invalid_jwt, None)
+        self.assertEqual(answer["statusCode"], 401)
+        denied.assert_not_called()
+
     def test_invalid_base64_is_rejected_without_upstream_call(self):
         data=event("POST","/api/customer/trading-rooms",body="%%%")
         data["isBase64Encoded"]=True
