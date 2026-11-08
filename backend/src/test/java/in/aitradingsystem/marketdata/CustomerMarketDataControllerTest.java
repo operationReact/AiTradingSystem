@@ -210,4 +210,29 @@ class CustomerMarketDataControllerTest {
         verify(broker, never()).quote(accountId, instrument);
     }
 
+
+    @Test
+    void ownerOnDemandQuoteUsesEipSessionInsteadOfLegacyLambda() {
+        var broker = mock(CustomerAngelOneSessionService.class);
+        var auth = principal("owner-sub");
+        UUID accountId = UUID.randomUUID();
+        when(identities.find("cognito", ISSUER, "owner-sub"))
+            .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
+                accountId, "ACTIVE", "CUSTOMER", "Test", "owner@example.invalid")));
+        when(broker.status(accountId)).thenReturn(
+            new CustomerAngelOneSessionService.ConnectionStatus(
+                true, "ANGEL_ONE", "***234", Instant.now().plusSeconds(3600), false));
+        var instrument = new Instrument(42L, "NSE_CM", "NSE", "99999",
+            "TEST-EQ", "Test", "EQ", null, null, 1,
+            new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(broker.quote(accountId, instrument)).thenReturn(new BigDecimal("150.40"));
+        var controller = new CustomerMarketDataController(identities, catalogue,
+            provider, "owner-sub", "ANGEL_ONE_LAMBDA", broker);
+        var result = controller.quote(auth, 42L).getBody();
+        assertThat(result.source()).isEqualTo("ANGEL_ONE_SMARTAPI_CUSTOMER");
+        assertThat(result.ltp()).isEqualByComparingTo("150.40");
+        verify(broker).quote(accountId, instrument);
+        verifyNoInteractions(provider);
+    }
 }
