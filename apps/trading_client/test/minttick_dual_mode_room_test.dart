@@ -91,6 +91,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
     await tester.pumpAndSettle();
 
+    // The approved wizard has four steps: Details → Strategy → Risk → Review.
+    for (var next = 0; next < 2; next++) {
+      await tester.tap(find.byKey(const ValueKey('room-creation-next')));
+      await tester.pumpAndSettle();
+    }
     expect(find.text('Your proposed plan.'), findsOneWidget);
     expect(find.text('LIVE'), findsWidgets);
     final ack = find.byKey(const ValueKey('room-draft-acknowledge'));
