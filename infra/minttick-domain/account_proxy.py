@@ -24,6 +24,7 @@ EXACT = {
     ("GET", "/api/customer/brokers/angel-one/configured-login"),
     ("POST", "/api/customer/brokers/angel-one/connect-configured"),
     ("POST", "/api/customer/brokers/angel-one/connect"),
+    ("POST", "/api/customer/brokers/angel-one/connect"),
     ("POST", "/api/customer/brokers/angel-one/disconnect"),
     ("GET", "/api/customer/brokers/angel-one/funds"),
     ("GET", "/api/customer/brokers/angel-one/holdings"),
