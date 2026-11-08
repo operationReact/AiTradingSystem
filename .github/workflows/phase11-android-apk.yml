@@ -253,24 +253,31 @@ jobs:
       - name: Stage checksum-verified Kotlin compiler from independent Maven cache
         run: |
           set -euo pipefail
-          # Kotlin 2.2.21's Maven Central JAR currently redirects to GitHub
-          # releases, repeatedly returning HTTP 504. A cached third-party
-          # mirror is permitted only after matching JetBrains' published SHA.
+          # Kotlin 2.2.21 and 2.4.0 compiler archives are redirected to
+          # GitHub releases by Maven Central, which returns 504 on CI.
+          # Both binaries must match independently published JetBrains SHA-256
+          # from kotlin/gradle/verification-metadata.xml before use.
           local_repo="$RUNNER_TEMP/minttick-verified-kotlin-maven"
-          module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/2.2.21"
-          mkdir -p "$local_repo/$module_path" "$HOME/.gradle/init.d"
-          artifact="kotlin-compiler-embeddable-2.2.21.jar"
-          mirror="https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"
-          curl --fail --show-error --location --retry 4 --retry-all-errors \
-            --retry-delay 5 --connect-timeout 12 --max-time 180 \
-            "$mirror" --output "$local_repo/$module_path/$artifact"
-          (cd "$local_repo/$module_path" && \
-            echo "9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295  $artifact" \
+          mkdir -p "$HOME/.gradle/init.d"
+          while read -r version expected_sha; do
+            module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/$version"
+            mkdir -p "$local_repo/$module_path"
+            artifact="kotlin-compiler-embeddable-$version.jar"
+            mirror="https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"
+            curl --fail --show-error --location --retry 4 --retry-all-errors \
+              --retry-delay 5 --connect-timeout 12 --max-time 180 \
+              "$mirror" --output "$local_repo/$module_path/$artifact"
+            (cd "$local_repo/$module_path" && \
+              printf '%s  %s\n' "$expected_sha" "$artifact" \
               | sha256sum --check --status)
-          curl --fail --show-error --location --retry 3 --retry-all-errors \
-            --connect-timeout 12 --max-time 25 \
-            "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-2.2.21.pom" \
-            --output "$local_repo/$module_path/kotlin-compiler-embeddable-2.2.21.pom"
+            curl --fail --show-error --location --retry 3 --retry-all-errors \
+              --connect-timeout 12 --max-time 25 \
+              "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-$version.pom" \
+              --output "$local_repo/$module_path/kotlin-compiler-embeddable-$version.pom"
+          done <<'KOTLIN_VERSIONS'
+          2.2.21 9588fa696ac5507af764fd5660df6894185e12704ec1bc3f5cb772af4987f295
+          2.4.0 c2b25e8c1c93ec416ba4327f5e31eaec0f0c8847241b9353e294b8db9dce564f
+          KOTLIN_VERSIONS
           echo "MINTTICK_VERIFIED_KOTLIN_MAVEN=file://$local_repo" >> "$GITHUB_ENV"
           cat > "$HOME/.gradle/init.d/minttick-verified-kotlin.gradle" <<'GRADLE'
           // Flutter Gradle's included build uses settings-level dependency
@@ -304,7 +311,7 @@ jobs:
               settings.dependencyResolutionManagement.repositories.google()
           }
           GRADLE
-          echo "PASS: Kotlin 2.2.21 compiler matches upstream JetBrains SHA-256"
+          echo "PASS: Kotlin 2.2.21 and 2.4.0 compilers match upstream JetBrains SHA-256"
 
       - name: Resolve dependencies
         run: flutter pub get
