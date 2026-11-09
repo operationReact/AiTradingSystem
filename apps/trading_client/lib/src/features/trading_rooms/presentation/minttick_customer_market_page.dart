@@ -489,6 +489,15 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         ),
         const SizedBox(height: 12),
       ],
+      if (overview.source != 'STORED_LAST_OVERVIEW' &&
+          !overview.indices.any((index) => index.freshness == 'LIVE')) ...[
+        const MintTickInfoText(
+          'No verified live index quote. Market breadth, movers and sectors '
+          'reflect last recorded provider data, not an active trading signal.',
+          icon: Icons.schedule_rounded,
+        ),
+        const SizedBox(height: 12),
+      ],
       Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
