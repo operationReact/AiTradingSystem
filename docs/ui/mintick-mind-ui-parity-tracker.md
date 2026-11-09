@@ -8,7 +8,7 @@
 
 ## Implemented mock UI scope
 
-All **42 named routes** from the enhanced prototype (32 original + 10 agent additions) have Flutter screen definitions with a navigable shell. This is **functionally mapped and source-committed**, not yet pixel-certified. The screens use shared near-black/mint cards, text, diagrams, compact charts, metric grids, menus, navigation, dialogs, tabs, filters, buttons and hypothetical data.
+All **42 named routes** from the enhanced prototype (32 original + 10 agent additions), plus **one new research-engine planning screen** (43 total), have Flutter screen definitions with a navigable shell. This is **functionally mapped and source-committed**, not yet pixel-certified. The screens use shared near-black/mint cards, text, diagrams, compact charts, metric grids, menus, navigation, dialogs, tabs, filters, buttons and hypothetical data.
 
 | Route | Current Flutter screen coverage | UI parity gate |
 | --- | --- | --- |
@@ -25,7 +25,8 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 | decision-detail | Reasoning, evidence, risk, counterfactuals, outcomes | Golden pending |
 | decision-lab | Adjustable agreement/freshness/risk simulation | Golden pending |
 | dependencies | Graph/matrix, conflicts, correlated evidence, portfolio links | Golden pending |
-| research | Backtest, paper, shadow, walk-forward tabs and experiments | Golden pending |
+| research | Backtest, paper, shadow, walk-forward tabs and experiments; planned-engine entry point | Golden pending |
+| research-engines | 5 external research candidates with NOT CONNECTED badges, readiness checklist, source-file references, proposed PRs, and navigation; no installed backtester or broker execution | New 43rd screen; golden pending |
 | experiment-detail | Hypothetical performance and methodology | Golden pending |
 | performance | Attribution, drawdowns, drift and learning links | Golden pending |
 | journal | Filterable decision audit timeline and mock export control | Golden pending |
@@ -42,7 +43,7 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 | assistant | Scripted read-only research question/answer interface | Golden pending |
 | design-gallery | Nine clickable **Flutter recreation thumbnails** | Original bitmaps not embedded |
 | design-preview | Native responsive phone preview mapped to a target screen | Bitmap/pixel parity pending |
-| coverage | Cross-linked 42-screen, 232-strategy, 18-model coverage inventory | Golden pending |
+| coverage | Cross-linked 43-route (42 prototype + 1 planning), 232-strategy, 18-model coverage inventory | Golden pending |
 | settings | Mind-only display and mock preference controls | Golden pending |
 | intelligence-hub | Source-to-decision pipeline, horizon policy, capital veto | Golden pending |
 | agent-council | Bull/Bear/Fundamental/Flow/Critic debate with symbol and vote filter | Golden pending |
@@ -70,7 +71,7 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 \`lib/src/features/mintick_mind/data/mind_fixtures.dart\`: mock registry, names and statuses.  
 \`lib/src/features/mintick_mind/presentation/mind_widgets.dart\`: scoped visual tokens and widgets.  
 \`lib/src/features/mintick_mind/presentation/mintick_mind_page.dart\`: original first-pass Overview and sub-tabs.  
-`lib/src/features/mintick_mind/presentation/mind_workspace_page.dart`: responsive navigation and 42-route dispatch.
+`lib/src/features/mintick_mind/presentation/mind_workspace_page.dart`: responsive navigation and 43-route dispatch (42 approved prototype routes + Research Engines Lab).
 \`lib/src/features/mintick_mind/presentation/mind_analytics_screens.dart\`: strategy, model, chart, decision and dependency surfaces.  
 \`lib/src/features/mintick_mind/presentation/mind_investment_screens.dart\`: discovery, thesis, portfolio, risk, regimes, events.  
 \`lib/src/features/mintick_mind/presentation/mind_research_screens.dart\`: experiments, journal, performance, F&O.  
@@ -104,4 +105,15 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 - Run route-by-route interaction verification and certify explicit mock-only enforcement.
 - Verify the diff includes only Flutter/client mock UI, the explicit profile-gated Java mock controller/tests, and documentation. Check the branch against current `dev` and merge only when CI confirms no conflicts.
 
-**Current evidence:** GitHub source commits, static 42-route inventory, backend DTO fixtures and tests added. **Flutter runtime evidence: UNVERIFIED** until CI/platform builds; no device visual parity is certified.
+**Current evidence:** GitHub source commits, 43-route static inventory (42 prototype + 1 planning), backend DTO fixtures and tests added. **Flutter runtime evidence: UNVERIFIED** until CI/platform builds; no device visual parity is certified.
+
+
+## Five external research repository placeholder change (2026-11-09)
+
+- New `research-engines` screen: single integration planning cockpit; no five separate apps/screens. All statuses explicitly **PLANNED / NOT CONNECTED** and **NO BROKER / ORDER AUTHORITY**.
+- `mind_research_engine_fixtures.dart`: five static records for VectorBT (pilot), Backtesting.py (validator), NautilusTrader (advanced simulation), QuantConnect LEAN (architecture benchmark), Freqtrade (research patterns); each includes licence, tasks/PR plan, blockers, upstream files, proposed MintTick touchpoints, affected screen IDs. `connected` and `orderAuthority` always false.
+- `mind_research_engine_screens.dart`: interactive filtering, candidate details, uncompleted prerequisite list and clickable in-app navigation, with zero network/broker/model dependencies.
+- Entry links placed on Research & Backtesting, Model Laboratory, Strategy Detail, Experiment Results and Coverage. Mock-only status is visible; no fabricated performance or success claims added.
+- `mintick_mind_research_engines_ui_test.dart`: validates five records, disabled authority, route/links and candidate selection; existing 42-route assertions updated to 43. Future CI/device verification evidence needed before marking release-ready.
+- Linked Notion implementation annex: https://app.notion.com/p/41336a828cb6815dab4eca25bc04f27a?pvs=204, planning IDs OSS-01 through OSS-14.
+- The existing 42 screens' original identities and user flows are preserved. This enhancement is a planning placeholder only; implementation work is still governed by external library licensing, source data, parity, resource budget and Java execution safety gates.
