@@ -6,7 +6,7 @@ import 'package:trading_client/src/features/mintick_mind/presentation/mind_works
 void main() {
   test('all 42 prototype screens plus research engines lab have native route descriptors', () {
     expect(MintickMindScreens.all.length, 43);
-    expect(MintickMindScreens.all.map((r)=>r.id).toSet().length, 42);
+    expect(MintickMindScreens.all.map((r)=>r.id).toSet().length, 43);
     expect(MintickMindScreens.all.any((r)=>r.id=='options-chain'), isTrue);
     expect(MintickMindScreens.all.any((r)=>r.id=='culprit-catcher'), isTrue);
     expect(MintickMindScreens.all.any((r)=>r.id=='agent-council'), isTrue);
