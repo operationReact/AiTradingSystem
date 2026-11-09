@@ -9,6 +9,7 @@ import in.aitradingsystem.mind.MindReadinessService;
 import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
 import in.aitradingsystem.mind.MindMaWalkForwardService;
+import in.aitradingsystem.mind.MindProspectiveCohortService;
 import java.util.List;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -23,7 +24,7 @@ class CustomerMindControllerTest {
             evidence, evidence, "ABSTAIN", false, false);
         when(service.inspect()).thenReturn(expected);
 
-        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class)).overview();
+        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).overview();
         assertEquals(200, response.getStatusCode().value());
         assertEquals(expected, response.getBody());
         assertFalse(response.getBody().executionEnabled());
@@ -41,7 +42,7 @@ class CustomerMindControllerTest {
             "ABSTAIN", false, false);
         when(evidence.inspect(10)).thenReturn(expected);
 
-        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class)).evidence(10);
+        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).evidence(10);
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -61,7 +62,7 @@ class CustomerMindControllerTest {
         var response = new CustomerMindController(
             mock(MindReadinessService.class),
             mock(MindEvidenceLedgerService.class), service,
-            mock(MindMaWalkForwardService.class)).strategyReplay();
+            mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).strategyReplay();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -83,13 +84,38 @@ class CustomerMindControllerTest {
         when(walkForward.inspect()).thenReturn(expected);
         var response = new CustomerMindController(
             mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
-            mock(MindStrategyReplayService.class), walkForward).maWalkForward();
+            mock(MindStrategyReplayService.class), walkForward,
+            mock(MindProspectiveCohortService.class)).maWalkForward();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
         assertFalse(response.getBody().validatedTradingEdge());
         assertFalse(response.getBody().paperOrderSubmitted());
         assertFalse(response.getBody().executionEnabled());
+    }
+
+    @Test
+    void prospectiveReadCannotClaimValidatedSignalOrTradePermission() {
+        var prospective = mock(MindProspectiveCohortService.class);
+        var expected = new MindProspectiveCohortService.Status(
+            "mind.prospective-cohort.v1", Instant.parse("2026-11-09T16:00:00Z"),
+            "UNREGISTERED", null, "MA_RECLAIM_V1",
+            "DETERMINISTIC_CATALOGUE_HASH_NO_SIGNAL_RANKING", null,
+            null, null, null, 10, 0, 0, 0, List.of(),
+            List.of("COHORT_NOT_REGISTERED"), "ABSTAIN",
+            false, false, false);
+        when(prospective.inspect()).thenReturn(expected);
+        var response = new CustomerMindController(
+            mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
+            mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class),
+            prospective).prospectiveCohort();
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        assertEquals(expected, response.getBody());
+        assertFalse(response.getBody().outcomeValidated());
+        assertFalse(response.getBody().paperOrderSubmitted());
+        assertFalse(response.getBody().executionEnabled());
+        org.mockito.Mockito.verify(prospective).inspect();
     }
 
 }
