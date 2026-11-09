@@ -332,12 +332,36 @@ public class CustomerMarketDataController {
         if (applicationFeed == null || !applicationFeed.available()) {
             return noStore(new Snapshot(Instant.now(), storedSnapshotRows(stocks)));
         }
-        var replies = applicationFeed.snapshot(stocks);
+        // Configuration alone does not establish a working provider session.
+        // When the broker cannot authenticate (including after market close), serve
+        // previously verified quotes with explicit LAST_CLOSE provenance instead.
+        List<CustomerAngelOneLiveQuoteService.LiveQuote> replies;
+        try {
+            replies = applicationFeed.snapshot(stocks);
+        } catch (RuntimeException ex) {
+            return noStore(new Snapshot(Instant.now(), storedSnapshotRows(stocks)));
+        }
+        if (replies == null || replies.size() != stocks.size()) {
+            return noStore(new Snapshot(Instant.now(), storedSnapshotRows(stocks)));
+        }
+
         Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
             ? Map.of() : lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
         List<SnapshotRow> rows = new ArrayList<>();
+        List<CustomerAngelOneLiveQuoteService.LiveQuote> verifiedTicks = new ArrayList<>();
         for (int i = 0; i < stocks.size(); i++) {
-            rows.add(snapshotRow(stocks.get(i), replies.get(i), lastTicks.get(stocks.get(i).id())));
+            SnapshotRow row = snapshotRow(stocks.get(i), replies.get(i), lastTicks.get(stocks.get(i).id()));
+            rows.add(row);
+            // Persist ONLY source- and instrument-verified LIVE rows; missing, closed,
+            // stale and spoofed ticks must never seed the historical price cache.
+            if ("LIVE".equals(row.status())) verifiedTicks.add(replies.get(i));
+        }
+        if (lastTickStore != null && !verifiedTicks.isEmpty()) {
+            try {
+                lastTickStore.recordLive(verifiedTicks);
+            } catch (DataAccessException ex) {
+                // A cache write failure must not suppress a verified live quote.
+            }
         }
         return noStore(new Snapshot(Instant.now(), rows));
     }
@@ -348,7 +372,7 @@ public class CustomerMarketDataController {
      */
     private static SnapshotRow snapshotRow(Instrument instrument,
             CustomerAngelOneLiveQuoteService.LiveQuote reply, MarketLastTickStore.LastTick lastTick) {
-        boolean matches = reply.instrumentId() == instrument.id()
+        boolean matches = reply != null && reply.instrumentId() == instrument.id()
             && instrument.exchange().equals(reply.exchange())
             && instrument.tradingSymbol().equals(reply.tradingSymbol());
         if (!matches) {

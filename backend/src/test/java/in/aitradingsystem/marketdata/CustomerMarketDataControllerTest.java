@@ -80,7 +80,10 @@ class CustomerMarketDataControllerTest {
             new CustomerAngelOneLiveQuoteService.LiveQuote(999L, "NSE", "WRONG-EQ",
                 new BigDecimal("10.00"), null, null, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2")));
 
-        var snapshot = controller().snapshot(customer, List.of(42L, 43L)).getBody();
+        var store = mock(MarketLastTickStore.class);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+        var snapshot = controller.snapshot(customer, List.of(42L, 43L)).getBody();
 
         assertThat(snapshot).isNotNull();
         assertThat(snapshot.rows()).hasSize(2);
@@ -88,6 +91,9 @@ class CustomerMarketDataControllerTest {
         assertThat(snapshot.rows().get(0).ltp()).isEqualByComparingTo("155.30");
         assertThat(snapshot.rows().get(1).status()).isEqualTo("UNAVAILABLE");
         assertThat(snapshot.rows().get(1).ltp()).isNull();
+        verify(store).recordLive(argThat(quotes -> quotes.size() == 1
+            && quotes.iterator().next().instrumentId() == 42L
+            && "ANGEL_ONE_SMARTAPI_WS_V2".equals(quotes.iterator().next().source())));
         verifyNoInteractions(customerBroker, personalSockets, provider);
     }
 
@@ -240,6 +246,53 @@ class CustomerMarketDataControllerTest {
         assertThat(firstSession.status()).isEqualTo("LAST_CLOSE");
         assertThat(firstSession.changePercent()).isNull();
         verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void failedApplicationSessionReturnsVerifiedStoredRowsRatherThanFailingThePage() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var store = mock(MarketLastTickStore.class);
+        var tickAt = Instant.parse("2026-11-09T09:50:00Z");
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument)))
+            .thenThrow(new IllegalStateException("provider session expired"));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("126.20"),
+                new BigDecimal("125.00"), tickAt)));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.exchangeAt()).isEqualTo(tickAt);
+        assertThat(row.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        verify(store, never()).recordLive(any());
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void failedApplicationSessionWithoutSavedDataRemainsUnavailableNotFakeLive() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var store = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument)))
+            .thenThrow(new IllegalStateException("provider session expired"));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of());
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+        assertThat(row.exchangeAt()).isNull();
+        verify(store, never()).recordLive(any());
     }
 
     @Test

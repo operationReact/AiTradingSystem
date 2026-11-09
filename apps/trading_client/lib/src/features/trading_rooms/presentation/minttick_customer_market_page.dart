@@ -728,11 +728,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       return (text: 'Live feed connected. Each price carries its exchange tick time.',
         icon: Icons.sensors_rounded);
     }
-    if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) {
-      return (text: statuses.contains('LAST_CLOSE')
-          ? 'Market closed. Last traded prices are labelled and are not live.'
-          : 'Market closed. Prices appear when the NSE and BSE cash session opens.',
+    if (statuses.every((s) => s == 'MARKET_CLOSED')) {
+      return (text: 'Market closed. No saved price is available for these stocks yet.',
         icon: Icons.bedtime_outlined);
+    }
+    if (statuses.every((s) => s == 'LAST_CLOSE')) {
+      // The provider may also be down DURING an open session: saved ticks
+      // alone cannot establish the exchange's open/closed state.
+      return (text: 'Showing last verified saved prices · not live.',
+        icon: Icons.history_rounded);
+    }
+    if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) {
+      return (text: 'Market closed. Showing last saved prices where available.',
+        icon: Icons.bedtime_outlined);
+    }
+    if (statuses.contains('LAST_CLOSE')) {
+      return (text: 'Some saved prices are available; others have no verified quote.',
+        icon: Icons.history_rounded);
     }
     if (feedFailed) {
       return (text: 'Market feed request failed. Retrying automatically; no prices are shown.',
