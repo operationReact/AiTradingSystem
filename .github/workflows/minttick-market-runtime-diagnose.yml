@@ -1,0 +1,161 @@
+name: MintTick - read-only runtime market-data diagnosis
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-market-runtime-diagnose.yml'
+      - 'infra/ec2-paper/probe_market_runtime.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/diagnose-market-runtime.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate bounded nonsecret read-only probe
+        run: |
+          python3 -m py_compile infra/ec2-paper/probe_market_runtime.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/probe_market_runtime.py').read_text()
+          assert len(s) < 10000
+          assert 'market_overview_snapshot' in s
+          assert 'market_last_tick' in s
+          assert 'MARKET_CONTAINER_IMDS:' in s
+          assert 'MARKET_NETWORK_HEADERS:' in s
+          for prohibited in ['--with-decryption','placeOrder','get-parameters','jwtToken','feedToken','print(settings)', 'print(values)']:
+              assert prohibited not in s
+          PY
+
+  diagnose:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      INSTANCE_ID: i-09c01b470fb39b85a
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file read-only diagnostic request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/diagnose-market-runtime.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('infra/ec2-paper/requests/diagnose-market-runtime.json').read_text())
+          assert d == {
+            'application':'MintTick',
+            'environment':'paper',
+            'aws_account':'098859530205',
+            'region':'ap-south-1',
+            'instance_id':'i-09c01b470fb39b85a',
+            'operation':'read-only-market-runtime-diagnostics'
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-market-diagnostics
+      - name: Inspect instance metadata configuration without secrets
+        run: |
+          set -euo pipefail
+          test "$(aws sts get-caller-identity --query Account --output text)" = '098859530205'
+          hop="$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" --query 'Reservations[0].Instances[0].MetadataOptions.HttpPutResponseHopLimit' --output text)"
+          case "$hop" in
+            1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43|44|45|46|47|48|49|50|51|52|53|54|55|56|57|58|59|60|61|62|63|64)
+              echo "MARKET_IMDS_HOP_LIMIT: $hop";;
+            *) echo "MARKET_IMDS_HOP_LIMIT: UNAVAILABLE";;
+          esac
+      - name: Probe Docker metadata reachability and cached market-data coverage via SSM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, json, os
+          from pathlib import Path
+          raw=Path('infra/ec2-paper/probe_market_runtime.py').read_bytes()
+          cmd="printf '%s' '"+base64.b64encode(raw).decode()+"' | base64 -d | python3 -"
+          p=Path(os.environ['RUNNER_TEMP'])/'market-diagnostic.json'
+          p.write_text(json.dumps({'commands':[cmd]}))
+          p.chmod(0o600)
+          PY
+          cid="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds 240 \
+            --parameters "file://$RUNNER_TEMP/market-diagnostic.json" \
+            --comment 'MintTick read-only market schema and IMDS categories' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/market-diagnostic.json"
+          for attempt in $(seq 1 45); do
+            aws ssm get-command-invocation --command-id "$cid" \
+              --instance-id "$INSTANCE_ID" --output json \
+              > "$RUNNER_TEMP/market-diagnostic-out.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          try:
+              data=json.loads((Path(os.environ['RUNNER_TEMP'])/'market-diagnostic-out.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING')
+              raise SystemExit
+          allow={
+            'MARKET_BACKEND':{'RUNNING','UNAVAILABLE'},
+            'MARKET_POSTGRES':{'RUNNING','UNAVAILABLE'},
+            'MARKET_HOST_IMDS':{'AVAILABLE','UNAVAILABLE'},
+            'MARKET_CONTAINER_IMDS':{'AVAILABLE','UNAVAILABLE'},
+            'MARKET_APP_STREAM':{'ENABLED','DISABLED','UNKNOWN'},
+            'MARKET_OWNER_WARMER':{'ENABLED','DISABLED','UNKNOWN'},
+            'MARKET_NETWORK_HEADERS':{'CONFIGURED','MISSING','UNKNOWN'},
+            'MARKET_PROVIDER_MODE':{'ANGEL_ONE','ANGEL_ONE_LAMBDA','OTHER','UNKNOWN'},
+            'MARKET_LAST_TICKS':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
+            'MARKET_OVERVIEW_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
+            'MARKET_DETAIL_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
+          }
+          hits={}
+          for line in data.get('StandardOutputContent','').splitlines():
+              if ': ' not in line: continue
+              key,value=line.split(': ',1)
+              if key in allow and value in allow[key]: hits[key]=value
+          for key in sorted(hits): print(key+': '+hits[key])
+          status=data.get('Status')
+          if status=='Success' and len(hits)==len(allow):
+              print('PASS')
+          elif status in ('Success','Failed','TimedOut','Cancelled'):
+              print('FAILED')
+          else:
+              print('PENDING')
+          PY
+            )"
+            if [[ "$result" == *$'\nPASS' ]]; then
+              printf '%s\n' "$result"
+              exit 0
+            fi
+            if [[ "$result" == *$'\nFAILED' ]]; then
+              printf '%s\n' "$result"
+              exit 2
+            fi
+            sleep 4
+          done
+          echo 'Read-only market probe timed out without exposing runtime details' >&2
+          exit 2
