@@ -142,7 +142,7 @@ class MindMetric extends StatelessWidget {
     child: SizedBox(
       height: 104,
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(label, style: const TextStyle(color: MindPalette.text, fontSize: 12)),
+        Text(label,maxLines:1,overflow:TextOverflow.ellipsis,style:const TextStyle(color:MindPalette.text,fontSize:12)),
         const SizedBox(height: 8),
         Text(value, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 22)),
         const Spacer(),
