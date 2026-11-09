@@ -2,6 +2,7 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.mind.MindReadinessService;
 import in.aitradingsystem.mind.MindEvidenceLedgerService;
+import in.aitradingsystem.mind.MindStrategyReplayService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -23,10 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 public class CustomerMindController {
     private final MindReadinessService service;
     private final MindEvidenceLedgerService evidence;
+    private final MindStrategyReplayService replay;
 
-    public CustomerMindController(MindReadinessService service, MindEvidenceLedgerService evidence) {
+    public CustomerMindController(MindReadinessService service,
+                                  MindEvidenceLedgerService evidence,
+                                  MindStrategyReplayService replay) {
         this.service = service;
         this.evidence = evidence;
+        this.replay = replay;
     }
 
     @GetMapping("/evidence")
@@ -34,6 +39,13 @@ public class CustomerMindController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(30) int limit) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(evidence.inspect(limit));
+    }
+
+    /** Historical research-only reconstruction; never submits a PAPER or LIVE order. */
+    @GetMapping("/strategy-replay")
+    public ResponseEntity<MindStrategyReplayService.Replay> strategyReplay() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(replay.inspect());
     }
 
     @GetMapping("/overview")
