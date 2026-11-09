@@ -1,10 +1,10 @@
 # Mintick Mind — Flutter UI implementation and parity tracker
 
 **Branch:** \`feature/minttick-mind-ui-mockups-20261109\`  
-**Parent:** \`dev\` commit \`af9417aba64ede259397a527b4b2c0d5b9b6e063\`  
-**Source of product UX:** user-uploaded \`MintTick_Mind_Interactive_Prototype(1).html\` and nine Mintick Mind mockup screenshots.  
+**Base:** forked from `dev` at `af9417aba64ede259397a527b4b2c0d5b9b6e063`; PR #657 targets current `dev`.
+**UX source:** original `MintTick_Mind_Interactive_Prototype(1).html`, enhanced `MintTick_Mind_Agent_Enhanced_Clickable_Prototype.html`, and nine visual reference mockups.
 **Technology:** Flutter under \`apps/trading_client\`; never modify the historical React product reference.  
-**Merge / deployment permission:** **NOT GRANTED**. Do not merge into \`dev\`, alter backend resources, deploy AWS, or submit orders.
+**Merge:** user authorized merge into `dev` after CI on 2026-11-09. **Deployment:** not requested. **Execution:** demo UI and mock backend have no trading authority.
 
 ## Implemented mock UI scope
 
@@ -42,7 +42,7 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 | assistant | Scripted read-only research question/answer interface | Golden pending |
 | design-gallery | Nine clickable **Flutter recreation thumbnails** | Original bitmaps not embedded |
 | design-preview | Native responsive phone preview mapped to a target screen | Bitmap/pixel parity pending |
-| coverage | Cross-linked 32-screen, 232-strategy, 18-model coverage inventory | Golden pending |
+| coverage | Cross-linked 42-screen, 232-strategy, 18-model coverage inventory | Golden pending |
 | settings | Mind-only display and mock preference controls | Golden pending |
 | intelligence-hub | Source-to-decision pipeline, horizon policy, capital veto | Golden pending |
 | agent-council | Bull/Bear/Fundamental/Flow/Critic debate with symbol and vote filter | Golden pending |
@@ -70,12 +70,20 @@ All **42 named routes** from the enhanced prototype (32 original + 10 agent addi
 \`lib/src/features/mintick_mind/data/mind_fixtures.dart\`: mock registry, names and statuses.  
 \`lib/src/features/mintick_mind/presentation/mind_widgets.dart\`: scoped visual tokens and widgets.  
 \`lib/src/features/mintick_mind/presentation/mintick_mind_page.dart\`: original first-pass Overview and sub-tabs.  
-\`lib/src/features/mintick_mind/presentation/mind_workspace_page.dart\`: responsive navigation and 32-route dispatch.  
+`lib/src/features/mintick_mind/presentation/mind_workspace_page.dart`: responsive navigation and 42-route dispatch.
 \`lib/src/features/mintick_mind/presentation/mind_analytics_screens.dart\`: strategy, model, chart, decision and dependency surfaces.  
 \`lib/src/features/mintick_mind/presentation/mind_investment_screens.dart\`: discovery, thesis, portfolio, risk, regimes, events.  
 \`lib/src/features/mintick_mind/presentation/mind_research_screens.dart\`: experiments, journal, performance, F&O.  
 \`lib/src/features/mintick_mind/presentation/mind_system_screens.dart\`: rooms, controls, assistant, gallery, preferences, coverage.  
 \`test/mintick_mind_mock_ui_test.dart\` and \`test/mintick_mind_workspace_coverage_test.dart\`: UI/data tests, **not executed here**.
+
+### Enhanced agent UI and mock backend
+
+- `lib/src/features/mintick_mind/data/mind_agent_fixtures.dart`: deterministic votes, evidence, incidents, regimes, calibration and institutional flow samples.
+- `lib/src/features/mintick_mind/presentation/mind_agent_screens.dart`: ten Flutter screen implementations.
+- `backend/src/main/java/in/aitradingsystem/api/MindDemoController.java`: read-only authenticated `/api/mind/demo/v1/*` contract; inactive unless Spring profile `mind-demo` is enabled.
+- `backend/src/test/java/in/aitradingsystem/api/MindDemoControllerTest.java`: demo, verification and no-execution assertions.
+- Flutter UI continues to use local fixtures. The demo REST contract is not called automatically; future service integration will be a separately validated change.
 
 ## Strict guardrails
 
