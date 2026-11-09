@@ -1,3 +1,9 @@
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
 // A stable release key is mandatory for distribution builds. PR-only APKs
 // retain Flutter's transient debug signer and are never an installable update.
 val minttickStableSigning = System.getenv("MINTTICK_REQUIRE_STABLE_SIGNING") == "true"
@@ -5,11 +11,6 @@ fun requiredMinttickSigningValue(name: String): String =
     System.getenv(name)?.takeIf { it.isNotBlank() }
         ?: error("MintTick Android release signing is missing: $name")
 
-plugins {
-    id("com.android.application")
-    id("kotlin-android")
-    id("dev.flutter.flutter-gradle-plugin")
-}
 
 android {
     namespace = "in.aitradingsystem.trading_client"
