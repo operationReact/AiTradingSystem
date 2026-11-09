@@ -92,6 +92,14 @@ public class InstrumentMasterService {
         return repository.findActiveInstrumentById(instrumentId);
     }
 
+    public java.util.Map<Long, Instrument> activeInstrumentsByIds(java.util.Collection<Long> instrumentIds) {
+        return repository.findActiveInstrumentsByIds(instrumentIds);
+    }
+
+    public java.util.Optional<Instrument> activeInstrumentBySymbol(String exchange, String tradingSymbol) {
+        return repository.findActiveInstrumentBySymbol(exchange, tradingSymbol);
+    }
+
     public InstrumentMasterRepository.CatalogueSummary catalogueSummary() {
         return repository.catalogueSummary();
     }

@@ -1,6 +1,8 @@
 package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.provider.angelone.AngelOneException;
+import in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneLiveQuoteService;
 import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
@@ -14,6 +16,8 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Pattern;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
@@ -39,6 +43,8 @@ import org.springframework.web.server.ResponseStatusException;
 @Validated
 @RequestMapping("/api/customer/market-data")
 public class CustomerMarketDataController {
+    /** Matches the catalogue page size cap so one visible page is one snapshot request. */
+    static final int MAX_SNAPSHOT_ROWS = 30;
     private final CustomerIdentityStore identities;
     private final InstrumentMasterService instruments;
     private final MarketDataProvider market;
@@ -47,19 +53,20 @@ public class CustomerMarketDataController {
     private final CustomerAngelOneSessionService customerBroker;
     private final CustomerAngelOneLiveQuoteService liveQuotes;
     private final AppAngelOneMarketFeedService applicationFeed;
+    private final MarketOverviewService marketOverview;
 
     /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode) {
-        this(identities, instruments, market, ownerSubject, providerMode, null, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode,
             CustomerAngelOneSessionService customerBroker) {
-        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -68,7 +75,17 @@ public class CustomerMarketDataController {
             CustomerAngelOneSessionService customerBroker,
             CustomerAngelOneLiveQuoteService liveQuotes) {
         this(identities, instruments, market, ownerSubject, providerMode,
-            customerBroker, liveQuotes, null);
+            customerBroker, liveQuotes, null, null);
+    }
+
+    CustomerMarketDataController(CustomerIdentityStore identities,
+            InstrumentMasterService instruments, MarketDataProvider market,
+            String ownerSubject, String providerMode,
+            CustomerAngelOneSessionService customerBroker,
+            CustomerAngelOneLiveQuoteService liveQuotes,
+            AppAngelOneMarketFeedService applicationFeed) {
+        this(identities, instruments, market, ownerSubject, providerMode,
+            customerBroker, liveQuotes, applicationFeed, null);
     }
 
     @Autowired
@@ -78,7 +95,8 @@ public class CustomerMarketDataController {
             @Value("${app.market-data.provider:ANGEL_ONE}") String providerMode,
             CustomerAngelOneSessionService customerBroker,
             CustomerAngelOneLiveQuoteService liveQuotes,
-            AppAngelOneMarketFeedService applicationFeed) {
+            AppAngelOneMarketFeedService applicationFeed,
+            MarketOverviewService marketOverview) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
@@ -87,7 +105,9 @@ public class CustomerMarketDataController {
         this.customerBroker = customerBroker;
         this.liveQuotes = liveQuotes;
         this.applicationFeed = applicationFeed;
+        this.marketOverview = marketOverview;
     }
+
 
     @GetMapping("/instruments/status")
     public ResponseEntity<InstrumentMasterRepository.CatalogueSummary> instrumentStatus(
@@ -131,12 +151,7 @@ public class CustomerMarketDataController {
         // A customer must authenticate to MintTick, NOT to Angel One, to
         // browse our private app-managed market feed.
         requireCustomer(authentication);
-        Instrument instrument = instruments.requireActiveInstrument(instrumentId);
-        if (!java.util.Set.of("NSE_CM", "BSE_CM").contains(instrument.exchangeSegment())
-                || !java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
-                || !instrument.tradingSymbol().endsWith("-EQ")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
-        }
+        Instrument instrument = requireCashEquity(instruments.requireActiveInstrument(instrumentId));
 
         if (live) {
             // Live ticks originate from ONE server-side SSM-backed app feed,
@@ -189,6 +204,117 @@ public class CustomerMarketDataController {
             instrument.tradingSymbol(), price, Instant.now(), source));
     }
 
+    public record SnapshotRow(long instrumentId, String exchange, String tradingSymbol,
+                              BigDecimal ltp, Instant exchangeAt, String status, String source) {}
+
+    /**
+     * Day OHLC, previous close and traded volume from one verified FULL quote. {@code previousClose}
+     * is the provider's previous-session close. {@code exchangeAt} is the exchange feed time, and
+     * {@code fetchedAt} is when MintTick received the reply. The source tag names the provider path.
+     */
+    public record DetailQuote(long instrumentId, String exchange, String tradingSymbol,
+                              BigDecimal ltp, BigDecimal open, BigDecimal high, BigDecimal low,
+                              BigDecimal previousClose, long volume, Instant exchangeAt,
+                              Instant fetchedAt, String source, String status,
+                              BigDecimal averagePrice, BigDecimal week52High, BigDecimal week52Low,
+                              long totalBuyQuantity, long totalSellQuantity,
+                              List<AngelOneQuoteDetailParser.DepthLevel> bids,
+                              List<AngelOneQuoteDetailParser.DepthLevel> asks) {}
+
+    /** Application-feed OHLC and volume for one cash equity; no customer broker credentials used. */
+    @GetMapping("/quotes/detail")
+    public ResponseEntity<DetailQuote> quoteDetail(Authentication authentication,
+            @RequestParam @Min(1) long instrumentId) {
+        requireCustomer(authentication);
+        Instrument instrument = requireCashEquity(instruments.requireActiveInstrument(instrumentId));
+        if (applicationFeed == null || !applicationFeed.available()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Application market feed has not been configured");
+        }
+        var detail = applicationFeed.detail(instrument);
+        return noStore(new DetailQuote(instrument.id(), instrument.exchange(),
+            instrument.tradingSymbol(), detail.ltp(), detail.open(), detail.high(), detail.low(),
+            detail.previousClose(), detail.volume(), detail.exchangeAt(), Instant.now(),
+            "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND", detail.averagePrice(), detail.week52High(),
+            detail.week52Low(), detail.totalBuyQuantity(), detail.totalSellQuantity(),
+            detail.bids(), detail.asks()));
+    }
+
+    public record Snapshot(Instant generatedAt, List<SnapshotRow> rows) {}
+
+    /** Nifty 50 breadth, movers, gap, sectors and index values from one verified bulk provider read per batch. */
+    @GetMapping("/overview")
+    public ResponseEntity<MarketOverviewService.Overview> overview(Authentication authentication) {
+        requireCustomer(authentication);
+        if (marketOverview == null || applicationFeed == null || !applicationFeed.available()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Application market feed has not been configured");
+        }
+        return noStore(marketOverview.overview());
+    }
+
+
+    /**
+     * Live state for a visible page of cash equities, sharing one application stream.
+     * Each row carries its own status; a price appears only when that row is verified LIVE.
+     */
+    @GetMapping("/snapshot")
+    public ResponseEntity<Snapshot> snapshot(Authentication authentication,
+            @RequestParam List<Long> instrumentIds) {
+        requireCustomer(authentication);
+        if (instrumentIds.isEmpty() || instrumentIds.size() > MAX_SNAPSHOT_ROWS
+                || instrumentIds.stream().anyMatch(id -> id == null || id < 1)
+                || instrumentIds.stream().distinct().count() != instrumentIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid market snapshot request");
+        }
+        List<Instrument> stocks = new ArrayList<>();
+        for (long id : instrumentIds) {
+            stocks.add(requireCashEquity(instruments.requireActiveInstrument(id)));
+        }
+        if (applicationFeed == null || !applicationFeed.available()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Application live market feed is unavailable");
+        }
+        var replies = applicationFeed.snapshot(stocks);
+        List<SnapshotRow> rows = new ArrayList<>();
+        for (int i = 0; i < stocks.size(); i++) {
+            rows.add(snapshotRow(stocks.get(i), replies.get(i)));
+        }
+        return noStore(new Snapshot(Instant.now(), rows));
+    }
+
+    private static SnapshotRow snapshotRow(Instrument instrument,
+            CustomerAngelOneLiveQuoteService.LiveQuote reply) {
+        boolean matches = reply.instrumentId() == instrument.id()
+            && instrument.exchange().equals(reply.exchange())
+            && instrument.tradingSymbol().equals(reply.tradingSymbol());
+        if (!matches) {
+            return new SnapshotRow(instrument.id(), instrument.exchange(),
+                instrument.tradingSymbol(), null, null, "UNAVAILABLE", null);
+        }
+        boolean verifiedLive = "LIVE".equals(reply.status())
+            && "ANGEL_ONE_SMARTAPI_WS_V2".equals(reply.source())
+            && reply.ltp() != null && reply.ltp().signum() > 0
+            && reply.exchangeAt() != null && reply.receivedAt() != null;
+        if (verifiedLive) {
+            return new SnapshotRow(instrument.id(), instrument.exchange(),
+                instrument.tradingSymbol(), reply.ltp(), reply.exchangeAt(), "LIVE", reply.source());
+        }
+        String status = java.util.Set.of("CONNECTING", "RECONNECTING", "STALE", "UNAVAILABLE",
+                "MARKET_CLOSED").contains(reply.status()) ? reply.status() : "UNAVAILABLE";
+        return new SnapshotRow(instrument.id(), instrument.exchange(),
+            instrument.tradingSymbol(), null, null, status, null);
+    }
+
+    private static Instrument requireCashEquity(Instrument instrument) {
+        if (!java.util.Set.of("NSE_CM", "BSE_CM").contains(instrument.exchangeSegment())
+                || !java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
+                || !instrument.tradingSymbol().endsWith("-EQ")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
+        }
+        return instrument;
+    }
+
     private JwtAuthenticationToken requireCustomer(Authentication authentication) {
         if (!(authentication instanceof JwtAuthenticationToken token) ||
                 token.getAuthorities().stream().noneMatch(a -> "ROLE_CUSTOMER".equals(a.getAuthority()))) {
@@ -221,6 +347,28 @@ public class CustomerMarketDataController {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status,
             "Read-only market data is unavailable");
         problem.setProperty("code", ex.code());
+        return problem;
+    }
+
+    /** Provider failures from the on-demand quote path; fixed messages avoid leaking provider detail. */
+    @ExceptionHandler(AngelOneException.class)
+    ProblemDetail providerFailure(AngelOneException ex) {
+        HttpStatus status = switch (ex.kind()) {
+            case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
+            case NOT_CONFIGURED, UNAVAILABLE, SESSION_EXPIRED, REJECTED, INVALID_RESPONSE ->
+                HttpStatus.SERVICE_UNAVAILABLE;
+        };
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status,
+            "Read-only market data is unavailable");
+        problem.setProperty("code", "PROVIDER_" + ex.kind().name());
+        return problem;
+    }
+
+    @ExceptionHandler(CustomerAngelOneSessionService.BrokerConnectionRequiredException.class)
+    ProblemDetail brokerConnectionRequired() {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+            "Read-only market data is unavailable");
+        problem.setProperty("code", "BROKER_CONNECTION_REQUIRED");
         return problem;
     }
 }
