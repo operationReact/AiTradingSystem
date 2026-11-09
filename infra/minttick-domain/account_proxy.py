@@ -42,7 +42,14 @@ EXACT = {
     ("GET", "/api/customer/market-data/instruments/status"),
     ("GET", "/api/customer/market-data/instruments"),
     ("GET", "/api/customer/market-data/quotes"),
+    ("GET", "/api/customer/market-data/quotes/detail"),
+    ("GET", "/api/customer/market-data/overview"),
+    ("GET", "/api/customer/market-data/snapshot"),
+    ("GET", "/api/customer/market-data/candles"),
+    ("GET", "/api/customer/watchlist"),
+    ("POST", "/api/customer/watchlist"),
 }
+WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(account|ledger)$")
@@ -58,6 +65,7 @@ def reply(status, obj):
 
 def allowed(method, path):
     return ((method, path) in EXACT
+            or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
             or (method == "GET" and path == UPSTOX_CALLBACK)
             or (method == "GET" and (ROOM.fullmatch(path) or PAPER.fullmatch(path))))
 
