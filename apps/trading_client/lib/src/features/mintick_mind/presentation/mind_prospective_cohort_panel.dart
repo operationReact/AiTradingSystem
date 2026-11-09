@@ -93,9 +93,13 @@ class _MindProspectiveCohortPanelState extends State<MindProspectiveCohortPanel>
           fontWeight: FontWeight.w800)),
       ]),
       const SizedBox(height: 6),
-      if (cohort.sourceStatus == 'UNREGISTERED')
-        const Text('Research cohort not yet registered. '
-            'Only a permitted administrator can freeze a future-only cohort.',
+      if (cohort.sourceStatus == 'UNREGISTERED' ||
+          cohort.sourceStatus == 'UNAVAILABLE')
+        Text(cohort.sourceStatus == 'UNAVAILABLE'
+            ? 'Prospective source evidence is unavailable. '
+              'No observations or trading decisions are verified.'
+            : 'Research cohort not yet registered. '
+              'Only a permitted administrator can freeze a future-only cohort.',
           key: ValueKey('mind-prospective-unregistered'),
           style: TextStyle(color: MindPalette.muted, fontSize: 11))
       else ...[
@@ -151,6 +155,7 @@ class _MindProspectiveCohortPanelState extends State<MindProspectiveCohortPanel>
       '${instant.toUtc().toIso8601String()} UTC';
 
   static String _state(String status) => switch (status) {
+    'UNAVAILABLE' => 'Prospective source evidence unavailable',
     'AWAITING_FUTURE_SESSION' => 'Awaiting future market session',
     'COLLECTING' => 'Collecting future market observations',
     'INSUFFICIENT_COVERAGE' => 'Source coverage incomplete',
