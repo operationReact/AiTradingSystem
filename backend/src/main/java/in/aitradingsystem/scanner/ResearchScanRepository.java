@@ -82,6 +82,22 @@ public class ResearchScanRepository {
                 """, runId, instrumentId, bounded(strategy, 80), bounded(severity, 12), bounded(code, 80), bounded(message, 300));
     }
 
+    /** Bounded diagnostic read for the read-only Mind evidence ledger. */
+    public List<ResearchScanDiagnostic> recentDiagnostics(UUID runId, int limit) {
+        if (limit < 1 || limit > 30) throw new IllegalArgumentException("limit must be 1..30");
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, strategy, severity, code, message, created_at
+                  FROM research_scan_diagnostic
+                 WHERE scan_run_id = ?
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?
+                """, (rs, row) -> new ResearchScanDiagnostic(
+                    rs.getLong("id"), rs.getObject("scan_run_id", UUID.class),
+                    (Long) rs.getObject("instrument_id"), rs.getString("strategy"),
+                    rs.getString("severity"), rs.getString("code"), rs.getString("message"),
+                    instant(rs.getObject("created_at", OffsetDateTime.class))), runId, limit);
+    }
+
     public List<ResearchScanDiagnostic> diagnostics(UUID runId) {
         requireRun(runId);
         return jdbc.query("""
