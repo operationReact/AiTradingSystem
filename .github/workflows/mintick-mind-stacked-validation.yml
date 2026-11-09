@@ -75,8 +75,12 @@ jobs:
           from pathlib import Path
           p = Path("pubspec.yaml")
           config = p.read_text()
-          assert "\\nhooks:" not in config
-          p.write_text(config + "\\nhooks:\\n  user_defines:\\n    sqlite3:\\n      source: system\\n")
+          nl = chr(10)
+          assert nl + "hooks:" not in config
+          p.write_text(config + nl.join((
+              "", "hooks:", "  user_defines:",
+              "    sqlite3:", "      source: system", ""
+          )))
           PY
           flutter pub get
       - name: Test native Flutter widgets and repositories
