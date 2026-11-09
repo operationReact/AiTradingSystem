@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 part of 'mind_workspace_page.dart';
 
 extension _MindResearchScreens on _MindWorkspaceState {
@@ -18,7 +20,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
     return _surface('Research & Backtesting',
       'Experiments, validation, paper and shadow performance',[
       _chips(['All','Backtests','Paper','Shadow','Walk-forward'],
-        _researchMode,(v)=>setState(()=>_researchMode=v)),
+        _researchMode,(v)=>_updateMind(()=>_researchMode=v)),
       const SizedBox(height:10),
       _metricGrid([
         ('Running','8','Illustrative experiments'),
@@ -181,7 +183,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
     return _surface('Decision Journal','Immutable-looking audit timeline of mock signals and outcomes',[
       _chips(['All','Intraday','Swing','Long-Term','ABSTAIN','WAIT',
         'Futures','Options'],_decisionFilter,
-        (v)=>setState(()=>_decisionFilter=v)),
+        (v)=>_updateMind(()=>_decisionFilter=v)),
       const SizedBox(height:10),
       _section('Decision Records',Icons.history_outlined,[
         for(var i=0;i<items.length;i++)
@@ -234,7 +236,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
             ' research templates · no execution authority',
           Icons.analytics_outlined,
           trailing:'Review',color:MindPalette.purple,
-          tap:()=>setState((){
+          tap:()=>_updateMind((){
             _family=family;
             _strategyMode='All';
             _route='strategies';
@@ -263,7 +265,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
   Widget optionChainScreen()=>_surface('Option Chain',
     'Illustrative NIFTY and BANKNIFTY contract research',[
     _chips(['NIFTY','BANKNIFTY'],_optionUnderlying,
-      (v)=>setState((){
+      (v)=>_updateMind((){
         _optionUnderlying=v;
         _strike=v=='NIFTY'?25500:56000;
       })),
@@ -296,7 +298,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
           rows:[
             for(var i=-5;i<=5;i++)
               DataRow(selected:_strike==(_optionUnderlying=='NIFTY'?25500:56000)+i*100,
-                onSelectChanged:(_)=>setState(()=>_strike=
+                onSelectChanged:(_)=>_updateMind(()=>_strike=
                   (_optionUnderlying=='NIFTY'?25500:56000)+i*100.0),
                 cells:[
                   DataCell(Text((210-i*21).toStringAsFixed(1))),
@@ -340,10 +342,10 @@ extension _MindResearchScreens on _MindWorkspaceState {
       'Evaluate illustrative defined-risk options scenarios',[
       _chips(['Bull Call Spread','Bear Put Spread','Long Straddle',
         'Iron Condor','Covered Call','Protective Put'],
-        _optionStructure,(v)=>setState(()=>_optionStructure=v)),
+        _optionStructure,(v)=>_updateMind(()=>_optionStructure=v)),
       const SizedBox(height:10),
       _chips(['NIFTY','BANKNIFTY'],_optionUnderlying,
-        (v)=>setState((){
+        (v)=>_updateMind((){
           _optionUnderlying=v;
           _strike=v=='NIFTY'?25500:56000;
         })),
@@ -355,7 +357,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
           min:_optionUnderlying=='NIFTY'?24500:54000,
           max:_optionUnderlying=='NIFTY'?26500:58000,
           divisions:20,activeColor:MindPalette.mint,
-          onChanged:(v)=>setState(()=>_strike=v)),
+          onChanged:(v)=>_updateMind(()=>_strike=v)),
         _value('Reference spot',spot.toStringAsFixed(0)),
         _value('Premium assumption','Illustrative · 100 points'),
         _value('Value at unchanged spot',samplePayoff.toStringAsFixed(0)+' points'),
@@ -437,7 +439,7 @@ class _MindPayoffPainter extends CustomPainter {
       final y=(size.height*.5-values[i]/bound*size.height*.43)
         .clamp(5.0,size.height-5.0).toDouble();
       final x=size.width*i/64;
-      if(i==0)path.moveTo(x,y);else path.lineTo(x,y);
+      if(i==0){path.moveTo(x,y);}else{path.lineTo(x,y);}
     }
     canvas.drawPath(path,Paint()..color=MindPalette.mint
       ..style=PaintingStyle.stroke..strokeWidth=2.2);
