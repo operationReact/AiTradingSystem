@@ -170,6 +170,7 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
     snapshotRequests++;
     if (failSnapshot) throw StateError('provider unavailable');
     final live = status == 'LIVE';
+    final stored = status == 'LAST_CLOSE';
     return CustomerMarketSnapshot(
       generatedAt: DateTime.now().toUtc(),
       rows: [
@@ -179,9 +180,12 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
             exchange: 'NSE',
             tradingSymbol: mismatchSymbol ? 'OTHER-EQ' : 'TEST-EQ',
             status: status,
-            ltp: live ? 125.55 : null,
-            exchangeAt: live ? DateTime.now().toUtc() : null,
-            source: live ? 'ANGEL_ONE_SMARTAPI_WS_V2' : null,
+            ltp: live ? 125.55 : stored ? 124.70 : null,
+            exchangeAt: live ? DateTime.now().toUtc()
+                : stored ? DateTime.utc(2026, 11, 9, 10) : null,
+            source: live ? 'ANGEL_ONE_SMARTAPI_WS_V2'
+                : stored ? 'STORED_LAST_LIVE_TICK' : null,
+            changePercent: stored ? 1.35 : null,
           ),
       ],
     );
@@ -470,6 +474,24 @@ void main() {
     expect(find.text('₹125.55'), findsOneWidget);
     expect(find.textContaining('LIVE ·'), findsOneWidget);
     expect(find.textContaining('Live feed connected'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('saved quotes display after feed loss without falsely declaring market closed',
+      (tester) async {
+    final fake = _CustomerMarketFake()..status = 'LAST_CLOSE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await _openExplore(tester);
+    expect(find.text('₹124.70'), findsOneWidget);
+    expect(find.textContaining('LAST TRADED'), findsOneWidget);
+    expect(find.textContaining('Showing last verified saved prices'), findsOneWidget);
+    expect(find.textContaining('Market closed.'), findsNothing);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
