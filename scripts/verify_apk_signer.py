@@ -11,12 +11,16 @@ import subprocess
 import sys
 from pathlib import Path
 
-_LABEL = re.compile(
-    # Only APK signers; "Source Stamp Signer" certificates are independent.
-    r"^\s*signer\s*#\s*(\d+)\s+certificate\s+sha[\s-]?256\s+"
-    r"(?:digest|fingerprint)\s*:\s*",
+# Android Build Tools 37 prints "V2 Signer:" / "V3.0 Signer:", while older
+# apksigner builds print "Signer #1".  Never match Source Stamp entries.
+_CERT_LABEL = re.compile(
+    r"^\s*(?:(?:V\d+(?:\.\d+)?\s+Signer(?P<scheme_number>\s*#\s*\d+)?)"
+    r"|(?:Signer\s*#\s*(?P<legacy_number>\d+)))"
+    r"\s*:?\s*certificate\s+sha[\s-]?256\s+(?:digest|fingerprint)\s*:\s*",
     re.IGNORECASE,
 )
+_CERT_SHA_LABEL = re.compile(r"certificate\s+sha[\s-]?256\s+(?:digest|fingerprint)\s*:", re.IGNORECASE)
+_NUMBER_OF_SIGNERS = re.compile(r"^\s*Number of signers\s*:\s*(\d+)\s*$", re.IGNORECASE)
 _DIGEST = re.compile(r"((?:[0-9a-f]{2}:){31}[0-9a-f]{2}|[0-9a-f]{64})(?![0-9a-f])", re.IGNORECASE)
 
 
@@ -28,28 +32,44 @@ def normalize_digest(value: str) -> str:
 
 
 def parse_apksigner_certificate(report: str) -> str:
-    """Parse only *Signer #1 certificate* SHA-256, not contents/other hashes."""
-    found: list[str] = []
-    signers: set[int] = set()
+    """Allow one verified APK signing identity across V2/V3/V3.1 schemes."""
+    fingerprints: list[str] = []
+    signer_numbers: set[int] = set()
+    declared_counts: list[int] = []
     for line in report.splitlines():
-        match = _LABEL.search(line)
-        if match is None:
+        count = _NUMBER_OF_SIGNERS.fullmatch(line.strip())
+        if count is not None:
+            declared_counts.append(int(count.group(1)))
             continue
-        signer_number = int(match.group(1))
-        signers.add(signer_number)
+        # The source stamp is a distinct signer and never attests app identity.
+        if "source stamp" in line.lower():
+            continue
+        if not _CERT_SHA_LABEL.search(line):
+            continue
+        match = _CERT_LABEL.search(line)
+        if match is None:
+            # An unrecognized APK signer certificate is a hard error, not an
+            # invitation to select one of several certificates silently.
+            raise ValueError("Unrecognized APK signing certificate label")
+        if match.group("legacy_number") is not None:
+            signer_numbers.add(int(match.group("legacy_number")))
+        elif match.group("scheme_number") is not None:
+            signer_numbers.add(int(match.group("scheme_number").replace("#", "").strip()))
         digest_match = _DIGEST.search(line, match.end())
         if digest_match is None:
             raise ValueError("Signer certificate SHA-256 fingerprint not parseable")
-        found.append(normalize_digest(digest_match.group(1)))
-    if signers != {1} or not found or len(set(found)) != 1:
-        # Only categorical public metadata; never reveal raw verifier output.
+        fingerprints.append(normalize_digest(digest_match.group(1)))
+    if ((signer_numbers and signer_numbers != {1})
+            or (declared_counts and set(declared_counts) != {1})
+            or not fingerprints or len(set(fingerprints)) != 1):
         raise ValueError(
             "Missing, conflicting or multiple APK signing certificates"
-            f" (parsed_signer_count={len(signers)},"
-            f" certificate_lines={len(found)},"
-            f" unique_certificates={len(set(found))})"
+            f" (parsed_signer_count={len(signer_numbers)},"
+            f" certificate_lines={len(fingerprints)},"
+            f" unique_certificates={len(set(fingerprints))},"
+            f" declared_signer_counts={len(declared_counts)})"
         )
-    return found[0]
+    return fingerprints[0]
 
 
 def verify_apk(apksigner: Path, apk: Path, expected: str, output: Path) -> str:
@@ -58,7 +78,7 @@ def verify_apk(apksigner: Path, apk: Path, expected: str, output: Path) -> str:
         raise ValueError("APK or Android SDK verifier is missing")
     try:
         result = subprocess.run(
-            [str(apksigner), "verify", "--print-certs", str(apk)],
+            [str(apksigner), "verify", "--verbose", "--print-certs", str(apk)],
             capture_output=True, text=True, timeout=120, check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
