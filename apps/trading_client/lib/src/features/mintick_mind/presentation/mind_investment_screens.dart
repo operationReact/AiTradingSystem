@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 part of 'mind_workspace_page.dart';
 
 extension _MindInvestmentScreens on _MindWorkspaceState {
@@ -61,7 +63,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
       ])),
       const SizedBox(height:13),
       _chips(['All','Screening','Deep Review','Thesis Active'],_mbStage,
-        (v)=>setState(()=>_mbStage=v)),
+        (v)=>_updateMind(()=>_mbStage=v)),
       const SizedBox(height:9),
       _section('Investment Candidates',Icons.track_changes_outlined,[
         for(final company in visible)
@@ -136,7 +138,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
           ])),
           IconButton(
             tooltip:_watchlist.contains(company.$1)?'Remove watch':'Add to watch',
-            onPressed:()=>setState((){
+            onPressed:()=>_updateMind((){
               if(!_watchlist.add(company.$1)) _watchlist.remove(company.$1);
             }),
             icon:Icon(_watchlist.contains(company.$1)?Icons.star:Icons.star_border,
@@ -253,7 +255,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
         MindPanel(highlight:true,child:Column(children:[
           _value('Scenario shock',_scenarioShock.toStringAsFixed(0)+'%'),
           Slider(value:_scenarioShock,min:-40,max:20,divisions:60,
-            activeColor:MindPalette.mint,onChanged:(v)=>setState(()=>_scenarioShock=v)),
+            activeColor:MindPalette.mint,onChanged:(v)=>_updateMind(()=>_scenarioShock=v)),
           _value('Current fictional portfolio','₹28,46,730'),
           _value('Stressed value','₹'+stressed.round().toString(),
             color:_scenarioShock<0?MindPalette.red:MindPalette.mint),
@@ -279,10 +281,10 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
       const MindSectionTitle(title:'Risk Limit Simulation',icon:Icons.shield_outlined),
       _value('Max daily loss',_riskDaily.toStringAsFixed(1)+'%'),
       Slider(value:_riskDaily,min:.5,max:5,divisions:18,
-        activeColor:MindPalette.mint,onChanged:(v)=>setState(()=>_riskDaily=v)),
+        activeColor:MindPalette.mint,onChanged:(v)=>_updateMind(()=>_riskDaily=v)),
       _value('Capital per strategy',_riskPerStrategy.toStringAsFixed(0)+'%'),
       Slider(value:_riskPerStrategy,min:1,max:50,divisions:49,
-        activeColor:MindPalette.mint,onChanged:(v)=>setState(()=>_riskPerStrategy=v)),
+        activeColor:MindPalette.mint,onChanged:(v)=>_updateMind(()=>_riskPerStrategy=v)),
       _value('Emergency stop',_emergencyStop?'SIMULATED ACTIVE':'Not activated',
         color:_emergencyStop?MindPalette.red:MindPalette.mint),
       SwitchListTile.adaptive(title:const Text('Demo emergency stop',
@@ -290,7 +292,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
         subtitle:const Text('Local visual state only — production controls unchanged',
           style:TextStyle(color:MindPalette.muted,fontSize:11)),
         activeTrackColor:MindPalette.red,value:_emergencyStop,
-        onChanged:(v)=>setState(()=>_emergencyStop=v)),
+        onChanged:(v)=>_updateMind(()=>_emergencyStop=v)),
     ])),
     const SizedBox(height:12),
     _split(
