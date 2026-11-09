@@ -85,7 +85,7 @@ class MindProspectiveCohortServiceTest {
             for (var slot : slots(date)) {
                 for (int member = 1; member <= 20; member++) {
                     observations.add(new MindProspectiveCohortRepository.Observation(
-                        member, slot.timestamp(), slot.timestamp().plusSeconds(60),
+                        member, slot.timestamp(), slot.timestamp().plusSeconds(360),
                         syntheticForFirst && member == 1 ? "TEST_FIXTURE" :
                             "ANGEL_ONE_SMARTAPI",
                         new BigDecimal("100"), new BigDecimal("101"),
