@@ -17,6 +17,9 @@ void main() {
     expect(dark.outlineVariant, MintTickPalette.darkBorder);
     expect(dark.onSurfaceVariant, MintTickPalette.mutedSilver);
     expect(MintTickPalette.mint, const Color(0xFF00A83B));
+    expect(buildTheme(Brightness.dark).navigationBarTheme.indicatorColor,
+        Colors.transparent);
+    expect(buildTheme(Brightness.dark).cardTheme.elevation, 0);
   });
 
   test('Mintick Mind reuses the canonical matte surfaces and green', () {
