@@ -38,6 +38,18 @@ jobs:
       - run: flutter pub get
       - name: Static analysis
         run: flutter analyze
+      - name: Use system SQLite for Linux CI tests only
+        run: |
+          set -euo pipefail
+          test -f /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 || { echo "System SQLite missing"; exit 2; }
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("pubspec.yaml")
+          config = p.read_text()
+          assert "\\nhooks:" not in config, "Unexpected existing hooks configuration"
+          p.write_text(config + "\\nhooks:\\n  user_defines:\\n    sqlite3:\\n      source: system\\n")
+          PY
+          flutter pub get
       - name: Functional and responsive tests
         run: |
           set -euo pipefail
