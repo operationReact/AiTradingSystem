@@ -366,12 +366,51 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Verify and stage the permanent Android signing key
+        if: github.event_name != 'pull_request'
+        env:
+          MINTTICK_ANDROID_KEYSTORE_BASE64: ${{ secrets.MINTTICK_ANDROID_KEYSTORE_BASE64 }}
+          MINTTICK_ANDROID_KEY_ALIAS: ${{ secrets.MINTTICK_ANDROID_KEY_ALIAS }}
+          MINTTICK_ANDROID_STORE_PASSWORD: ${{ secrets.MINTTICK_ANDROID_STORE_PASSWORD }}
+          MINTTICK_ANDROID_KEY_PASSWORD: ${{ secrets.MINTTICK_ANDROID_KEY_PASSWORD }}
+          MINTTICK_ANDROID_CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          for name in MINTTICK_ANDROID_KEYSTORE_BASE64 MINTTICK_ANDROID_KEY_ALIAS MINTTICK_ANDROID_STORE_PASSWORD MINTTICK_ANDROID_KEY_PASSWORD MINTTICK_ANDROID_CERT_SHA256; do
+            if test -z "${!name:-}"; then
+              echo "::error::Missing permanent Android signing configuration: $name"
+              exit 2
+            fi
+          done
+          umask 077
+          keystore="$RUNNER_TEMP/minttick-release-keystore.p12"
+          printf '%s' "$MINTTICK_ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          test -s "$keystore" || { echo "::error::Empty release keystore"; exit 2; }
+          cert_details="$(keytool -list -v -keystore "$keystore" -alias "$MINTTICK_ANDROID_KEY_ALIAS" -storepass:env MINTTICK_ANDROID_STORE_PASSWORD)" || {
+            echo "::error::Signing keystore, alias or password could not be verified"
+            exit 2
+          }
+          actual="$(printf '%s\\n' "$cert_details" | sed -n -E 's/^[[:space:]]*SHA256:[[:space:]]*([[:xdigit:]:]+).*$/\\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "${#actual}" -eq 64 && test "$actual" = "$expected" || {
+            echo "::error::Signing certificate differs from the pinned MintTick certificate"
+            exit 2
+          }
+          echo "PASS: permanent release keystore matches pinned certificate; credentials remain private"
+
       - name: Build sideloadable release APK
+        env:
+          MINTTICK_REQUIRE_STABLE_SIGNING: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
+          MINTTICK_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/minttick-release-keystore.p12
+          MINTTICK_ANDROID_KEY_ALIAS: ${{ secrets.MINTTICK_ANDROID_KEY_ALIAS }}
+          MINTTICK_ANDROID_STORE_PASSWORD: ${{ secrets.MINTTICK_ANDROID_STORE_PASSWORD }}
+          MINTTICK_ANDROID_KEY_PASSWORD: ${{ secrets.MINTTICK_ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           # Retry transient upstream Gradle/Kotlin HTTP 504, not source tests.
           for attempt in 1 2 3; do
             if flutter build apk --release \
+              --build-number="$((100000 + GITHUB_RUN_NUMBER))" \
               --dart-define=API_BASE_URL="$API_BASE_URL" \
               --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
               --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
@@ -386,6 +425,30 @@ jobs:
             sleep "$((attempt * 12))"
           done
 
+      - name: Confirm APK is signed by the pinned permanent certificate
+        if: github.event_name != 'pull_request'
+        env:
+          MINTTICK_ANDROID_CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          sdk_dir="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$sdk_dir" || { echo "::error::Android SDK location not available"; exit 2; }
+          verifier="$(find "$sdk_dir/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)"
+          test -n "$verifier" && test -x "$verifier" || {
+            echo "::error::apksigner missing; cannot verify release signer"
+            exit 2
+          }
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          report="$("$verifier" verify --print-certs "$apk")"
+          signer="$(printf '%s\\n' "$report" | sed -n -E 's/^Signer #1 certificate SHA-256 digest: ([[:xdigit:]]+).*$/\\1/p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
+          expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          test "${#signer}" -eq 64 && test "$signer" = "$expected" || {
+            echo "::error::APK signer does not match the permanent MintTick certificate"
+            exit 2
+          }
+          printf '%s\\n' "$signer" > "$apk.signer.sha256"
+          echo "PASS: signed release APK matches the pinned Android identity"
+
       - name: Record APK checksum
         run: sha256sum build/app/outputs/flutter-apk/app-release.apk | tee build/app/outputs/flutter-apk/app-release.apk.sha256
 
@@ -396,5 +459,10 @@ jobs:
           path: |
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk
             apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.sha256
+            apps/trading_client/build/app/outputs/flutter-apk/app-release.apk.signer.sha256
           if-no-files-found: error
           retention-days: 14
+
+      - name: Remove signing keystore from ephemeral runner
+        if: always()
+        run: rm -f -- "$RUNNER_TEMP/minttick-release-keystore.p12"
