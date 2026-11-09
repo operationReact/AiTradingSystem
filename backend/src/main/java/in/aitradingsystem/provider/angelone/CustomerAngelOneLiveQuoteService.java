@@ -1,6 +1,7 @@
 package in.aitradingsystem.provider.angelone;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.marketdata.IndianCashMarketCalendar;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import jakarta.annotation.PreDestroy;
 import java.io.ByteArrayOutputStream;
@@ -14,7 +15,12 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -23,12 +29,15 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Private single-instrument WebSocket V2 live quote pilot for manually connected
- * customer broker accounts. Only the server sees JWT/feedToken. No order paths,
- * URL token query parameters, bearer propagation or public WebSocket endpoint.
+ * Private multi-instrument WebSocket V2 LTP stream for the server-side application
+ * feed. One socket per feed subscribes every watched canonical token (up to the
+ * provider's per-subscription limit), and each token keeps its own verified tick.
+ * Only the server sees JWT/feedToken. No order paths, URL token query parameters,
+ * bearer propagation or public WebSocket endpoint.
  *
  * Existing JSON API edge samples this verified cache; a direct phone WebSocket
  * is NOT provided by the current API Gateway Lambda proxy.
@@ -36,11 +45,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class CustomerAngelOneLiveQuoteService {
     private static final URI BROKER = URI.create("wss://smartapisocket.angelone.in/smart-stream");
-    private static final Duration MAX_TICK_AGE = Duration.ofSeconds(10);
     private static final Duration FUTURE_SKEW = Duration.ofSeconds(2);
     private static final Duration RECONNECT_BACKOFF = Duration.ofSeconds(5);
     private static final Duration MAX_CONNECTION_IDLE = Duration.ofSeconds(45);
     private static final int MAX_CUSTOMER_CONNECTIONS = 3;
+    /** SmartAPI accepts at most 50 tokens per subscription request. */
+    static final int MAX_WATCHED_PER_FEED = 50;
+    private static final int FRAME_LENGTH = 51;
 
     private final CustomerAngelOneSessionService sessions;
     private final MarketSessionCalendar calendar;
@@ -53,18 +64,33 @@ public class CustomerAngelOneLiveQuoteService {
         return thread;
     });
 
+    private final int watchCap;
+    /** Shared market-data account whose feed serves every customer's reads; null when unset. */
+    private final UUID ownerUser;
+
     @Autowired
     public CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
-            MarketSessionCalendar calendar) {
-        this(sessions, calendar, HttpClient.newHttpClient(), Clock.systemUTC());
+            MarketSessionCalendar calendar,
+            @Value("${minttick.owner-feed.ws-token-cap:" + MAX_WATCHED_PER_FEED + "}") int watchCap,
+            @Value("${minttick.owner-feed.user-id:}") String ownerUserId) {
+        this(sessions, calendar, HttpClient.newHttpClient(), Clock.systemUTC(), watchCap,
+                ownerUserId == null || ownerUserId.isBlank() ? null : UUID.fromString(ownerUserId.trim()));
     }
 
     CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
             MarketSessionCalendar calendar, HttpClient client, Clock clock) {
+        this(sessions, calendar, client, clock, MAX_WATCHED_PER_FEED, null);
+    }
+
+    CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
+            MarketSessionCalendar calendar, HttpClient client, Clock clock, int watchCap, UUID ownerUser) {
+        if (watchCap < 1) throw new IllegalArgumentException("watchCap must be positive");
         this.sessions = sessions;
         this.calendar = calendar;
         this.client = client;
         this.clock = clock;
+        this.watchCap = watchCap;
+        this.ownerUser = ownerUser;
         heartbeats.scheduleAtFixedRate(this::heartbeat, 10, 10, TimeUnit.SECONDS);
     }
 
@@ -73,51 +99,70 @@ public class CustomerAngelOneLiveQuoteService {
             BigDecimal ltp, Instant exchangeAt, Instant receivedAt, String status, String source) {}
 
     public LiveQuote quote(UUID user, Instrument instrument) {
+        return snapshot(user, List.of(instrument)).get(0);
+    }
+
+    /** One result per requested instrument, in request order. Only LIVE carries a price. */
+    public List<LiveQuote> snapshot(UUID user, List<Instrument> instruments) {
         Instant now = clock.instant();
         if (!calendar.isInsideCashSession(now)) {
             disconnect(user);
-            return empty(instrument, "MARKET_CLOSED");
+            return instruments.stream().map(i -> empty(i, "MARKET_CLOSED")).toList();
         }
-        if (!"NSE_CM".equals(instrument.exchangeSegment())
-                && !"BSE_CM".equals(instrument.exchangeSegment())) {
-            return empty(instrument, "UNAVAILABLE");
+        Map<Long, LiveQuote> results = new HashMap<>();
+        List<Instrument> eligible = new ArrayList<>();
+        for (Instrument instrument : instruments) {
+            if (eligible(instrument)) eligible.add(instrument);
+            else results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
         }
-        if (!instrument.symbolToken().matches("[0-9]{1,25}"))
-            return empty(instrument, "UNAVAILABLE");
+        if (eligible.isEmpty()) return ordered(instruments, results);
+        Feed ownerFeed = ownerUser == null || ownerUser.equals(user) ? null : feeds.get(ownerUser);
+        if (ownerFeed != null && ownerFeed.state == State.OPEN) {
+            for (Instrument instrument : eligible) {
+                boolean watched = watch(ownerFeed, instrument);
+                results.put(instrument.id(), watched ? read(ownerFeed, instrument, now)
+                    : empty(instrument, "UNAVAILABLE"));
+            }
+            return ordered(instruments, results);
+        }
         var credentials = sessions.credentialsForStream(user);
         if (credentials == null || !credentials.expiresAt().isAfter(now)) {
             disconnect(user);
-            return empty(instrument, "BROKER_CONNECTION_REQUIRED");
-        }
-        Feed feed = feeds.get(user);
-        if (feed != null && (feed.instrument.id() != instrument.id()
-                || !feed.instrument.symbolToken().equals(instrument.symbolToken())
-                || !feed.instrument.exchangeSegment().equals(instrument.exchangeSegment())
-                || !feed.instrument.tradingSymbol().equals(instrument.tradingSymbol())
-                || !feed.credentials.jwt().equals(credentials.jwt()))) {
-            disconnect(user);
-            feed = null;
-        }
-        if (feed == null) {
-            if (feeds.size() >= MAX_CUSTOMER_CONNECTIONS) return empty(instrument, "UNAVAILABLE");
-            Feed candidate = new Feed(instrument, credentials, now);
-            Feed existing = feeds.putIfAbsent(user, candidate);
-            feed = existing == null ? candidate : existing;
-            if (existing != null && existing.instrument.id() != instrument.id())
-                return empty(instrument, "RECONNECTING");
-            if (existing == null) start(user, candidate);
-        }
-        if (feed.state == State.CLOSED) {
-            if (Duration.between(feed.startedAt, now).compareTo(RECONNECT_BACKOFF) >= 0) {
-                disconnect(user);
+            for (Instrument instrument : eligible) {
+                results.put(instrument.id(), empty(instrument, "BROKER_CONNECTION_REQUIRED"));
             }
-            return empty(instrument, "RECONNECTING");
+            return ordered(instruments, results);
         }
-        Tick tick = feed.latest;
-        if (feed.state != State.OPEN || tick == null)
-            return empty(instrument, "CONNECTING");
+        Feed feed = feedFor(user, credentials, now);
+        for (Instrument instrument : eligible) {
+            boolean watched = feed != null && watch(feed, instrument);
+            results.put(instrument.id(), watched ? read(feed, instrument, now)
+                : empty(instrument, "UNAVAILABLE"));
+        }
+        return ordered(instruments, results);
+    }
+
+    private static List<LiveQuote> ordered(List<Instrument> instruments, Map<Long, LiveQuote> results) {
+        return instruments.stream()
+            .map(i -> results.getOrDefault(i.id(), empty(i, "UNAVAILABLE"))).toList();
+    }
+
+    private static LiveQuote empty(Instrument instrument, String status) {
+        return new LiveQuote(instrument.id(), instrument.exchange(),
+                instrument.tradingSymbol(), null, null, null, status, null);
+    }
+
+    private LiveQuote read(Feed feed, Instrument instrument, Instant now) {
+        if (feed.state == State.CLOSED) return empty(instrument, "RECONNECTING");
+        Watch watch = feed.watches.get(key(venue(instrument), instrument.symbolToken()));
+        Tick tick = watch == null ? null : watch.latest;
+        if (feed.state != State.OPEN || tick == null) return empty(instrument, "CONNECTING");
+        // SmartAPI LTP frames arrive only on trades, so a quiet stock legitimately has an
+        // older last trade. Such a price stays valid for the rest of the session; a tick
+        // from a previous session is not.
+        Instant sessionOpen = sessionOpen(now);
         if (tick.exchangeAt.isAfter(now.plus(FUTURE_SKEW))
-                || Duration.between(tick.exchangeAt, now).compareTo(MAX_TICK_AGE) > 0
+                || tick.exchangeAt.isBefore(sessionOpen)
                 || Duration.between(feed.lastHeartbeat, now).compareTo(MAX_CONNECTION_IDLE) > 0) {
             return empty(instrument, "STALE");
         }
@@ -126,29 +171,41 @@ public class CustomerAngelOneLiveQuoteService {
                 tick.receivedAt, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2");
     }
 
-    private static LiveQuote empty(Instrument instrument, String status) {
-        return new LiveQuote(instrument.id(), instrument.exchange(),
-                instrument.tradingSymbol(), null, null, null, status, null);
+    private Feed feedFor(UUID user, CustomerAngelOneSessionService.StreamCredentials credentials,
+            Instant now) {
+        Feed feed = feeds.get(user);
+        if (feed != null && !feed.credentials.jwt().equals(credentials.jwt())) {
+            disconnect(user);
+            feed = null;
+        }
+        if (feed != null && feed.state == State.CLOSED
+                && Duration.between(feed.startedAt, now).compareTo(RECONNECT_BACKOFF) >= 0) {
+            disconnect(user);
+            feed = null;
+        }
+        if (feed != null) return feed;
+        if (feeds.size() >= MAX_CUSTOMER_CONNECTIONS) return null;
+        Feed candidate = new Feed(credentials, now);
+        Feed existing = feeds.putIfAbsent(user, candidate);
+        if (existing != null) return existing;
+        start(user, candidate);
+        return candidate;
     }
 
-    private enum State { CONNECTING, OPEN, CLOSED }
-
-    record Tick(BigDecimal price, Instant exchangeAt, Instant receivedAt, long sequence) {}
-
-    private static final class Feed {
-        final Instrument instrument;
-        final CustomerAngelOneSessionService.StreamCredentials credentials;
-        final Instant startedAt;
-        volatile State state = State.CONNECTING;
-        volatile Instant lastHeartbeat;
-        volatile Tick latest;
-        volatile WebSocket socket;
-        final ByteArrayOutputStream parts = new ByteArrayOutputStream(51);
-        Feed(Instrument instrument, CustomerAngelOneSessionService.StreamCredentials credentials, Instant at) {
-            this.instrument = instrument;
-            this.credentials = credentials;
-            this.startedAt = at;
-            this.lastHeartbeat = at;
+    /** Adds the token to the feed's watch set, subscribing live when the socket is open. */
+    private boolean watch(Feed feed, Instrument instrument) {
+        int venue = venue(instrument);
+        String key = key(venue, instrument.symbolToken());
+        synchronized (feed.sendLock) {
+            Watch existing = feed.watches.get(key);
+            if (existing != null) return existing.instrument.id() == instrument.id();
+            if (feed.watches.size() >= watchCap) return false;
+            Watch added = new Watch(instrument, venue);
+            feed.watches.put(key, added);
+            if (feed.state == State.OPEN && feed.socket != null) {
+                sendControl(feed, feed.socket, subscription(1, List.of(added)));
+            }
+            return true;
         }
     }
 
@@ -164,16 +221,14 @@ public class CustomerAngelOneLiveQuoteService {
                     .buildAsync(BROKER, new Listener(user, feed))
                     .whenComplete((ws, error) -> {
                         if (error != null || feeds.get(user) != feed) {
-                            feed.state = State.CLOSED;
-                            feed.latest = null;
+                            closeFeed(feed);
                             if (ws != null) ws.abort();
                         } else {
                             feed.socket = ws;
                         }
                     });
         } catch (RuntimeException e) {
-            feed.state = State.CLOSED;
-            feed.latest = null;
+            closeFeed(feed);
         }
     }
 
@@ -189,15 +244,20 @@ public class CustomerAngelOneLiveQuoteService {
                 ws.abort();
                 return;
             }
-            feed.socket = ws;
-            feed.state = State.OPEN;
-            feed.lastHeartbeat = clock.instant();
-            int venue = "NSE_CM".equals(feed.instrument.exchangeSegment()) ? 1 : 3;
-            // Canonical catalogue token is server-owned, one LTP subscription.
-            String subscribe = "{\"correlationID\":\"minttick1\",\"action\":1,"
-                + "\"params\":{\"mode\":1,\"tokenList\":[{\"exchangeType\":" + venue
-                + ",\"tokens\":[\"" + feed.instrument.symbolToken() + "\"]}]}}";
-            ws.sendText(subscribe, true);
+            synchronized (feed.sendLock) {
+                feed.socket = ws;
+                feed.lastHeartbeat = clock.instant();
+                try {
+                    if (!feed.watches.isEmpty()) {
+                        ws.sendText(subscription(1, feed.watches.values()), true);
+                    }
+                    feed.state = State.OPEN;
+                } catch (RuntimeException error) {
+                    closeFeed(feed);
+                    ws.abort();
+                    return;
+                }
+            }
             ws.request(1);
         }
         @Override public CompletionStage<?> onBinary(WebSocket ws, ByteBuffer packet, boolean last) {
@@ -206,10 +266,10 @@ public class CustomerAngelOneLiveQuoteService {
                 return CompletableFuture.completedFuture(null);
             }
             synchronized (feed.parts) {
-                if (feed.parts.size() + packet.remaining() > 51) {
+                if (feed.parts.size() + packet.remaining() > FRAME_LENGTH) {
                     feed.parts.reset();
                     // Invalid provider data must never refresh a price.
-                    feed.latest = null;
+                    feed.watches.values().forEach(w -> w.latest = null);
                 } else {
                     byte[] buf = new byte[packet.remaining()];
                     packet.get(buf);
@@ -236,49 +296,113 @@ public class CustomerAngelOneLiveQuoteService {
             return CompletableFuture.completedFuture(null);
         }
         @Override public CompletionStage<?> onClose(WebSocket ws, int statusCode, String reason) {
-            feed.state = State.CLOSED;
-            feed.latest = null;
+            closeFeed(feed);
             return CompletableFuture.completedFuture(null);
         }
         @Override public void onError(WebSocket ws, Throwable error) {
-            feed.state = State.CLOSED;
-            feed.latest = null;
+            closeFeed(feed);
             // No provider payload, JWT or exception detail is logged.
         }
     }
 
     private void accept(Feed feed, byte[] data) {
-        Tick verified = parseTick(feed.instrument, data, clock.instant(), feed.latest);
-        if (verified != null) feed.latest = verified;
+        Frame frame = parseFrame(data);
+        if (frame == null) return;
+        Watch watch = feed.watches.get(key(frame.venue(), frame.token()));
+        if (watch == null) return;
+        Instant received = clock.instant();
+        Tick verified = verify(watch.instrument, frame, received, watch.latest, sessionOpen(received));
+        if (verified != null) watch.latest = verified;
+    }
+
+    private Instant sessionOpen(Instant now) {
+        return calendar.session(now.atZone(IndianCashMarketCalendar.ZONE).toLocalDate())
+                .open().toInstant();
     }
 
     /** Pure on-host binary validator, separately unit tested with no socket. */
-    static Tick parseTick(Instrument instrument, byte[] data, Instant received, Tick old) {
-        if (data == null || data.length != 51 || data[0] != 1) return null;
-        int venue = "NSE_CM".equals(instrument.exchangeSegment()) ? 1
-                : "BSE_CM".equals(instrument.exchangeSegment()) ? 3 : -1;
-        if (Byte.toUnsignedInt(data[1]) != venue) return null;
+    static Tick parseTick(Instrument instrument, byte[] data, Instant received, Tick old,
+            Instant sessionOpen) {
+        Frame frame = parseFrame(data);
+        return frame == null ? null : verify(instrument, frame, received, old, sessionOpen);
+    }
+
+    record Frame(int venue, String token, long sequence, long epochMillis, long cents) {}
+
+    /** Structural parse of one LTP frame; identity and freshness are checked by {@link #verify}. */
+    static Frame parseFrame(byte[] data) {
+        if (data == null || data.length != FRAME_LENGTH || data[0] != 1) return null;
+        int venue = Byte.toUnsignedInt(data[1]);
         int end = 2;
         while (end < 27 && data[end] != 0) end++;
         String token = new String(data, 2, end - 2, StandardCharsets.US_ASCII);
-        if (!token.matches("[0-9]{1,25}") || !instrument.symbolToken().equals(token))
-            return null;
+        if (!token.matches("[0-9]{1,25}")) return null;
         // Require a zero-filled token suffix; do not accept forged prefix matches.
         for (int at = end; at < 27; at++) if (data[at] != 0) return null;
         ByteBuffer fields = ByteBuffer.wrap(data).order(ByteOrder.LITTLE_ENDIAN);
-        long sequence = fields.getLong(27);
-        long epochMillis = fields.getLong(35);
-        long cents = fields.getLong(43);
+        return new Frame(venue, token, fields.getLong(27), fields.getLong(35), fields.getLong(43));
+    }
+
+    static Tick verify(Instrument instrument, Frame frame, Instant received, Tick old,
+            Instant sessionOpen) {
+        if (venue(instrument) < 0 || frame.venue() != venue(instrument)) return null;
+        if (!instrument.symbolToken().equals(frame.token())) return null;
+        long sequence = frame.sequence();
+        long epochMillis = frame.epochMillis();
+        long cents = frame.cents();
         if (sequence < 0 || epochMillis <= 0 || cents <= 0) return null;
         Instant exchangeTime;
         try { exchangeTime = Instant.ofEpochMilli(epochMillis); }
         catch (RuntimeException ex) { return null; }
-        if (exchangeTime.isAfter(received.plus(FUTURE_SKEW))
-                || Duration.between(exchangeTime, received).compareTo(MAX_TICK_AGE) > 0)
+        // LTP frames arrive only on trades, so a quiet stock's last trade may be minutes old.
+        // It is valid for the current session only; earlier-session or future ticks are rejected.
+        if (exchangeTime.isAfter(received.plus(FUTURE_SKEW)) || exchangeTime.isBefore(sessionOpen))
             return null;
         if (old != null && (sequence <= old.sequence
                 || exchangeTime.isBefore(old.exchangeAt))) return null;
         return new Tick(BigDecimal.valueOf(cents, 2), exchangeTime, received, sequence);
+    }
+
+    private static int venue(Instrument instrument) {
+        return "NSE_CM".equals(instrument.exchangeSegment()) ? 1
+            : "BSE_CM".equals(instrument.exchangeSegment()) ? 3 : -1;
+    }
+
+    private static boolean eligible(Instrument instrument) {
+        return venue(instrument) > 0 && instrument.symbolToken() != null
+            && instrument.symbolToken().matches("[0-9]{1,25}");
+    }
+
+    private static String key(int venue, String token) {
+        return venue + ":" + token;
+    }
+
+    /** SmartAPI subscription/unsubscription message, grouped by exchange type. */
+    static String subscription(int action, Collection<Watch> watches) {
+        Map<Integer, List<String>> byVenue = new TreeMap<>();
+        for (Watch watch : watches) {
+            byVenue.computeIfAbsent(watch.venue, v -> new ArrayList<>())
+                .add("\"" + watch.instrument.symbolToken() + "\"");
+        }
+        StringBuilder groups = new StringBuilder();
+        for (Map.Entry<Integer, List<String>> entry : byVenue.entrySet()) {
+            if (groups.length() > 0) groups.append(',');
+            groups.append("{\"exchangeType\":").append(entry.getKey())
+                .append(",\"tokens\":[").append(String.join(",", entry.getValue())).append("]}");
+        }
+        return "{\"correlationID\":\"minttick1\",\"action\":" + action
+            + ",\"params\":{\"mode\":1,\"tokenList\":[" + groups + "]}}";
+    }
+
+    private void sendControl(Feed feed, WebSocket ws, String message) {
+        try {
+            ws.sendText(message, true).exceptionally(error -> {
+                closeFeed(feed);
+                return null;
+            });
+        } catch (RuntimeException error) {
+            closeFeed(feed);
+        }
     }
 
     private void heartbeat() {
@@ -299,8 +423,7 @@ public class CustomerAngelOneLiveQuoteService {
                 // Heartbeats never refresh exchange tick age.
                 feed.socket.sendPing(ByteBuffer.wrap("ping".getBytes(StandardCharsets.US_ASCII)))
                         .exceptionally(error -> {
-                    feed.state = State.CLOSED;
-                    feed.latest = null;
+                    closeFeed(feed);
                     return null;
                 });
             }
@@ -309,11 +432,15 @@ public class CustomerAngelOneLiveQuoteService {
         }
     }
 
+    private static void closeFeed(Feed feed) {
+        feed.state = State.CLOSED;
+        feed.watches.values().forEach(w -> w.latest = null);
+    }
+
     public void disconnect(UUID user) {
         Feed old = feeds.remove(user);
         if (old != null) {
-            old.latest = null;
-            old.state = State.CLOSED;
+            closeFeed(old);
             if (old.socket != null) old.socket.abort();
         }
     }
@@ -322,5 +449,35 @@ public class CustomerAngelOneLiveQuoteService {
         heartbeats.shutdownNow();
         feeds.keySet().forEach(this::disconnect);
         client.close();
+    }
+
+    private enum State { CONNECTING, OPEN, CLOSED }
+
+    record Tick(BigDecimal price, Instant exchangeAt, Instant receivedAt, long sequence) {}
+
+    static final class Watch {
+        final Instrument instrument;
+        final int venue;
+        volatile Tick latest;
+        Watch(Instrument instrument, int venue) {
+            this.instrument = instrument;
+            this.venue = venue;
+        }
+    }
+
+    private static final class Feed {
+        final CustomerAngelOneSessionService.StreamCredentials credentials;
+        final Instant startedAt;
+        final Map<String, Watch> watches = new ConcurrentHashMap<>();
+        final Object sendLock = new Object();
+        final ByteArrayOutputStream parts = new ByteArrayOutputStream(FRAME_LENGTH);
+        volatile State state = State.CONNECTING;
+        volatile Instant lastHeartbeat;
+        volatile WebSocket socket;
+        Feed(CustomerAngelOneSessionService.StreamCredentials credentials, Instant at) {
+            this.credentials = credentials;
+            this.startedAt = at;
+            this.lastHeartbeat = at;
+        }
     }
 }

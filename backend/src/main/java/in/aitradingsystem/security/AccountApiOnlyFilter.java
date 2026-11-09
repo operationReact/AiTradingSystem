@@ -36,7 +36,14 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final Set<String> CUSTOMER_MARKET_READS = Set.of(
         "/api/customer/market-data/instruments",
         "/api/customer/market-data/instruments/status",
-        "/api/customer/market-data/quotes");
+        "/api/customer/market-data/quotes",
+        "/api/customer/market-data/snapshot",
+        "/api/customer/market-data/candles",
+        "/api/customer/market-data/quotes/detail",
+        "/api/customer/market-data/overview");
+    private static final String CUSTOMER_WATCHLIST = "/api/customer/watchlist";
+    private static final java.util.regex.Pattern CUSTOMER_WATCHLIST_ITEM =
+        java.util.regex.Pattern.compile("^/api/customer/watchlist/items/[0-9]{1,18}$");
     private static final Set<String> UPSTOX_READS = Set.of(
         "/api/customer/brokers/upstox/status",
         "/api/customer/brokers/upstox/funds",
@@ -86,6 +93,10 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (HEALTH_PATHS.contains(path) && "GET".equals(method))
             || (CUSTOMER_ROOM_COLLECTION.contains(path)
                 && Set.of("GET", "POST", "OPTIONS").contains(method))
+            || (CUSTOMER_WATCHLIST.equals(path)
+                && Set.of("GET", "POST", "OPTIONS").contains(method))
+            || (CUSTOMER_WATCHLIST_ITEM.matcher(path).matches()
+                && Set.of("DELETE", "OPTIONS").contains(method))
             || (CUSTOMER_ROOM_DETAIL.matcher(path).matches()
                 && Set.of("GET", "DELETE", "OPTIONS").contains(method))
             || (BROKER_READS.contains(path)

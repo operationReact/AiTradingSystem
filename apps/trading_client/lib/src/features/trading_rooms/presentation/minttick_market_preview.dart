@@ -4,8 +4,9 @@ import 'minttick_equity_avatar.dart';
 
 import '../data/customer_market_repository.dart';
 
-/// Verified cash-equity quote preview. No simulated prices or charts.
-/// The app-managed SSM-backed feed controls quotes, not personal broker connections.
+/// Overview of a few liquid cash equities, read from the same batched snapshot
+/// as the Markets page. A price is shown only for a backend-verified LIVE row.
+/// No simulated prices, no hardcoded exchange calendar.
 class MintTickMarketPreview extends StatefulWidget {
   const MintTickMarketPreview({
     required this.repository,
@@ -22,15 +23,20 @@ class MintTickMarketPreview extends StatefulWidget {
   State<MintTickMarketPreview> createState() => _MintTickMarketPreviewState();
 }
 
-class _PreviewQuote {
-  const _PreviewQuote(this.symbol, this.quote);
+const _previewSymbols = ['RELIANCE', 'TCS', 'INFY'];
+const _pollInterval = Duration(seconds: 30);
+const _maxTickAge = Duration(seconds: 12);
+
+class _PreviewTile {
+  const _PreviewTile(this.symbol, this.row);
   final String symbol;
-  final CustomerMarketQuote? quote;
+  final CustomerLiveQuote? row;
 }
 
 class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
     with WidgetsBindingObserver {
-  late Future<List<_PreviewQuote>> _result;
+  late Future<List<_PreviewTile>> _result;
+  final Map<String, int> _instrumentIds = {};
   Timer? _refreshTimer;
   bool _foreground = true;
 
@@ -39,8 +45,8 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _result = _fetch();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && _foreground && _duringIndianCashSession()) _refresh();
+    _refreshTimer = Timer.periodic(_pollInterval, (_) {
+      if (mounted && _foreground) _refresh();
     });
   }
 
@@ -57,64 +63,84 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
     if (_foreground && mounted) _refresh();
   }
 
-  // UI polling guard only; authoritative exchange status comes from backend.
-  bool _duringIndianCashSession() {
-    final ist = DateTime.now().toUtc().add(
-        const Duration(hours: 5, minutes: 30));
-    final mins = ist.hour * 60 + ist.minute;
-    if (ist.year == 2026 && ist.month == 11 && ist.day == 8) {
-      return mins >= 14 * 60 + 20 && mins < 15 * 60 + 15;
-    }
-    return ist.weekday <= DateTime.friday &&
-        mins >= 9 * 60 + 15 && mins < 15 * 60 + 30;
-  }
-
   @override
   void didUpdateWidget(covariant MintTickMarketPreview oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.repository != oldWidget.repository) _result = _fetch();
+    if (widget.repository != oldWidget.repository) {
+      _instrumentIds.clear();
+      _result = _fetch();
+    }
   }
 
-  Future<List<_PreviewQuote>> _fetch() async {
-    const symbols = ['RELIANCE', 'TCS', 'INFY'];
-    final output = <_PreviewQuote>[];
-    try {
-      final catalogue = await widget.repository.catalogueStatus();
-      if (catalogue.activeCount <= 0) {
-        return [for (final s in symbols) _PreviewQuote(s, null)];
-      }
-    } catch (_) {
-      return [for (final s in symbols) _PreviewQuote(s, null)];
-    }
-    for (final symbol in symbols) {
-      CustomerMarketQuote? quote;
-      try {
-        final page = await widget.repository.search(
-          query: symbol, exchange: 'NSE');
-        for (final instrument in page.content) {
-          if (instrument.exchange == 'NSE' &&
-              instrument.tradingSymbol.toUpperCase() == '$symbol-EQ') {
-            quote = await widget.repository.quote(instrument.id);
-            break;
-          }
+  Future<void> _resolveIds(CustomerMarketRepository repo) async {
+    for (final symbol in _previewSymbols) {
+      if (_instrumentIds.containsKey(symbol)) continue;
+      final page = await repo.search(query: symbol, exchange: 'NSE');
+      for (final instrument in page.content) {
+        if (instrument.exchange == 'NSE' &&
+            instrument.tradingSymbol.toUpperCase() == '$symbol-EQ') {
+          _instrumentIds[symbol] = instrument.id;
+          break;
         }
-      } catch (_) {
-        // Never synthesize a price when the feed, authorization or catalogue fails.
-      }
-      output.add(_PreviewQuote(symbol, quote));
-      // Pace successful REST requests; do not create pending delay timers
-      // when a brokerage account is disconnected or a widget is disposed.
-      if (quote != null && symbol != symbols.last) {
-        await Future<void>.delayed(const Duration(milliseconds: 1250));
       }
     }
-    return output;
+  }
+
+  Future<List<_PreviewTile>> _fetch() async {
+    final empty = [for (final s in _previewSymbols) _PreviewTile(s, null)];
+    final CustomerSnapshotMarketRepository? snapshotRepo =
+        widget.repository is CustomerSnapshotMarketRepository
+            ? widget.repository as CustomerSnapshotMarketRepository
+            : null;
+    if (snapshotRepo == null) return empty;
+    final repo = widget.repository;
+    try {
+      final catalogue = await repo.catalogueStatus();
+      if (catalogue.activeCount <= 0) return empty;
+      await _resolveIds(repo);
+      final resolved = [
+        for (final s in _previewSymbols)
+          if (_instrumentIds[s] != null) _instrumentIds[s]!,
+      ];
+      if (resolved.isEmpty) return empty;
+      final snapshot = await snapshotRepo.snapshot(resolved);
+      final byId = {for (final row in snapshot.rows) row.instrumentId: row};
+      return [
+        for (final s in _previewSymbols)
+          _PreviewTile(s, _instrumentIds[s] == null
+              ? null
+              : byId[_instrumentIds[s]]),
+      ];
+    } catch (_) {
+      // Never synthesize a price when the feed, authorization or catalogue fails.
+      return empty;
+    }
   }
 
   void _refresh() {
     setState(() {
       _result = _fetch();
     });
+  }
+
+  /// Verified LIVE price, or false when the row cannot be shown as live.
+  bool _isLive(CustomerLiveQuote? row) {
+    if (row == null || row.status != 'LIVE' || row.ltp == null) return false;
+    final at = row.exchangeAt;
+    if (at == null) return false;
+    final age = DateTime.now().toUtc().difference(at.toUtc());
+    return age <= _maxTickAge && age >= const Duration(seconds: -2);
+  }
+
+  String _label(CustomerLiveQuote? row) {
+    if (row == null) return 'NO FEED';
+    if (_isLive(row)) return 'LIVE';
+    return switch (row.status) {
+      'MARKET_CLOSED' => 'CLOSED',
+      'CONNECTING' || 'RECONNECTING' => 'CONNECTING',
+      'STALE' || 'LIVE' => 'STALE',
+      _ => 'NO FEED',
+    };
   }
 
   @override
@@ -132,11 +158,11 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
           icon: const Icon(Icons.refresh_rounded, size: 20),
         ),
       ]),
-      FutureBuilder<List<_PreviewQuote>>(
+      FutureBuilder<List<_PreviewTile>>(
         future: _result,
         builder: (context, snapshot) {
-          final quotes = snapshot.data;
-          if (quotes == null) {
+          final tiles = snapshot.data;
+          if (tiles == null) {
             return Container(
               key: const ValueKey('customer-market-preview-loading'),
               padding: const EdgeInsets.all(14),
@@ -147,62 +173,20 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
               child: const Text('Checking MintTick market feed…'),
             );
           }
-          final hasPrices = quotes.any((item) => item.quote != null);
+          final hasPrices = tiles.any((tile) => _isLive(tile.row));
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              for (var index = 0; index < quotes.length; index++) ...[
+              for (var index = 0; index < tiles.length; index++) ...[
                 if (index != 0) const SizedBox(width: 8),
-                Expanded(child: Container(
-                  key: ValueKey('customer-market-preview-${quotes[index].symbol}'),
-                  padding: const EdgeInsets.fromLTRB(10, 12, 8, 12),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerLow,
-                    border: Border.all(color: colors.outlineVariant),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      MintTickEquityAvatar(
-                        tradingSymbol: '${quotes[index].symbol}-EQ',
-                        size: 28,
-                      ),
-                      const SizedBox(height: 7),
-                      Text(quotes[index].symbol,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: styles.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant)),
-                      const SizedBox(height: 9),
-                      Text(quotes[index].quote == null
-                          ? '—'
-                          : '₹${quotes[index].quote!.ltp.toStringAsFixed(2)}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: styles.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 4),
-                      Text(quotes[index].quote == null
-                          ? 'Unavailable'
-                          : 'ON-DEMAND',
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: styles.labelSmall?.copyWith(
-                          color: colors.onSurfaceVariant)),
-                    ],
-                  ),
-                )),
+                Expanded(child: _tile(tiles[index], colors, styles)),
               ],
             ]),
             const SizedBox(height: 7),
             Text(hasPrices
-                ? 'Authenticated on-demand quotes · updated while the market is open. Not a tick-by-tick stream.'
-                : 'MintTick market data is unavailable. No simulated values are shown.',
+                ? 'Verified exchange ticks while the market is open. Prices show only when LIVE.'
+                : 'No verified live prices right now. MintTick shows no simulated values.',
               style: styles.bodySmall?.copyWith(
                 color: colors.onSurfaceVariant)),
-            if (hasPrices) ...[
-              const SizedBox(height: 3),
-              Text('Source and fetch time are shown on each instrument detail.',
-                style: styles.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant)),
-            ],
           ]);
         },
       ),
@@ -225,5 +209,46 @@ class _MintTickMarketPreviewState extends State<MintTickMarketPreview>
           ),
         ),
     ]);
+  }
+
+  Widget _tile(_PreviewTile tile, ColorScheme colors, TextTheme styles) {
+    final live = _isLive(tile.row);
+    final label = _label(tile.row);
+    final price = live ? '₹${tile.row!.ltp!.toStringAsFixed(2)}' : '—';
+    return Semantics(
+      label: '${tile.symbol}, ${live ? price : 'no live price'}, $label',
+      child: Container(
+        key: ValueKey('customer-market-preview-${tile.symbol}'),
+        padding: const EdgeInsets.fromLTRB(10, 12, 8, 12),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: ExcludeSemantics(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              MintTickEquityAvatar(tradingSymbol: '${tile.symbol}-EQ', size: 28),
+              const SizedBox(height: 7),
+              Text(tile.symbol,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: styles.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+              const SizedBox(height: 9),
+              Text(price,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: styles.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()])),
+              const SizedBox(height: 4),
+              Text(label,
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: styles.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

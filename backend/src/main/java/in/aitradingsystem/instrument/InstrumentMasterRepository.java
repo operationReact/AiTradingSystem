@@ -295,6 +295,43 @@ public class InstrumentMasterRepository {
         return rows.get(0);
     }
 
+    /** Resolves IDs against the active catalogue version. IDs not in that version are absent from the map. */
+    public java.util.Map<Long, Instrument> findActiveInstrumentsByIds(java.util.Collection<Long> instrumentIds) {
+        java.util.Map<Long, Instrument> found = new java.util.HashMap<>();
+        if (instrumentIds.isEmpty()) {
+            return found;
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(instrumentIds.size(), "?"));
+        jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.instrument_id IN (%s) AND i.active = TRUE
+                """.formatted(placeholders), instrumentIds.toArray(), rs -> {
+            Instrument instrument = instrumentMapper.mapRow(rs, 0);
+            found.put(instrument.id(), instrument);
+        });
+        return found;
+    }
+
+    /** Resolves an exchange and symbol to a single active catalogue row. Ambiguous matches resolve to empty. */
+    public java.util.Optional<Instrument> findActiveInstrumentBySymbol(String exchange, String tradingSymbol) {
+        List<Instrument> rows = jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.exchange = ? AND i.trading_symbol = ? AND i.active = TRUE
+                 LIMIT 2
+                """, instrumentMapper, exchange, tradingSymbol);
+        return rows.size() == 1 ? java.util.Optional.of(rows.get(0)) : java.util.Optional.empty();
+    }
+
     public CatalogueSummary catalogueSummary() {
         return jdbc.query("""
                 SELECT s.active_version, s.activated_at,

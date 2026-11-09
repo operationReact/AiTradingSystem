@@ -175,6 +175,13 @@ app:
       instrument-search-max-page-size: 100
       instrument-master-max-rejected-percent: 5
       instrument-master-min-retained-percent: 80
+minttick:
+  owner-feed:
+    enabled: ${OWNER_FEED_ENABLED:false}
+    user-id: ${OWNER_FEED_USER_ID:f3122ced-5304-4f06-9a4d-3edeccbe07c1}
+    ws-token-cap: ${OWNER_FEED_WS_TOKEN_CAP:1000}
+    universe-limit: ${OWNER_FEED_UNIVERSE_LIMIT:1000}
+    poll-ms: ${OWNER_FEED_POLL_MS:2000}
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

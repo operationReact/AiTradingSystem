@@ -190,6 +190,28 @@ public class AngelOneApiClient {
      * higher-level depth service before becoming research evidence.
      */
     public JsonNode fullMarketQuote(String jwtToken, List<String> symbolTokens) {
+        return fullMarketQuote(null, jwtToken, symbolTokens);
+    }
+
+    /** Broker-customer-scoped FULL quote for one NSE token; do not substitute the platform API key. */
+    public JsonNode customerFullQuote(String apiKey, String jwtToken, String symbolToken) {
+        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
+                || jwtToken == null || jwtToken.isBlank()) {
+            throw new IllegalArgumentException("Valid customer broker session required");
+        }
+        return fullMarketQuote(apiKey, jwtToken, List.of(symbolToken));
+    }
+
+    /** Broker-customer-scoped FULL quote for a bounded NSE token batch (at most 50 per request). */
+    public JsonNode customerFullQuotes(String apiKey, String jwtToken, List<String> symbolTokens) {
+        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
+                || jwtToken == null || jwtToken.isBlank()) {
+            throw new IllegalArgumentException("Valid customer broker session required");
+        }
+        return fullMarketQuote(apiKey, jwtToken, symbolTokens);
+    }
+
+    private JsonNode fullMarketQuote(String apiKey, String jwtToken, List<String> symbolTokens) {
         if (symbolTokens == null || symbolTokens.isEmpty() || symbolTokens.size() > 50) {
             throw new IllegalArgumentException("FULL market quote requires between 1 and 50 symbol tokens");
         }
@@ -205,7 +227,8 @@ public class AngelOneApiClient {
         ObjectNode body = mapper.createObjectNode()
                 .put("mode", "FULL")
                 .set("exchangeTokens", exchangeTokens);
-        JsonNode data = post(MARKET_QUOTE_PATH, jwtToken, body);
+        JsonNode data = apiKey == null ? post(MARKET_QUOTE_PATH, jwtToken, body)
+                : post(MARKET_QUOTE_PATH, jwtToken, body, apiKey);
         if (!data.isObject()) {
             throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "MARKET_QUOTE_NOT_OBJECT",
                     "FULL market quote response data was not an object");

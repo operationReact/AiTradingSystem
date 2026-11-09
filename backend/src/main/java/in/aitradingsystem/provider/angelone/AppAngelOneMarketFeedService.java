@@ -5,6 +5,8 @@ import in.aitradingsystem.marketdata.MarketDataException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 
@@ -47,17 +49,38 @@ public final class AppAngelOneMarketFeedService {
         return sessions.quote(APPLICATION_FEED_ID, instrument);
     }
 
+    /** Application-session FULL quote; the parser verifies identity, feed time and OHLC ordering. */
+    public AngelOneQuoteDetailParser.Detail detail(Instrument instrument) {
+        ensureSession();
+        return sessions.quoteDetail(APPLICATION_FEED_ID, instrument);
+    }
+
+    /** Application-session FULL bulk quote for at most 50 NSE tokens in one provider request. */
+    public Map<String, AngelOneQuoteDetailParser.Detail> details(List<AngelOneQuoteDetailParser.Expected> expected) {
+        ensureSession();
+        return sessions.quoteDetailsBatch(APPLICATION_FEED_ID, expected);
+    }
+
     public CustomerAngelOneLiveQuoteService.LiveQuote live(Instrument instrument) {
         ensureSession();
-        var result = liveQuotes.quote(APPLICATION_FEED_ID, instrument);
-        // An expired backend feed is a provider outage, not a customer's
-        // responsibility to enter their personal broker credentials.
-        if ("BROKER_CONNECTION_REQUIRED".equals(result.status())) {
-            return new CustomerAngelOneLiveQuoteService.LiveQuote(
-                result.instrumentId(), result.exchange(), result.tradingSymbol(),
-                null, null, null, "UNAVAILABLE", null);
-        }
-        return result;
+        return withoutPersonalBrokerPrompt(liveQuotes.quote(APPLICATION_FEED_ID, instrument));
+    }
+
+    /** One live result per instrument, sharing the single application-owned stream. */
+    public List<CustomerAngelOneLiveQuoteService.LiveQuote> snapshot(List<Instrument> instruments) {
+        ensureSession();
+        return liveQuotes.snapshot(APPLICATION_FEED_ID, instruments).stream()
+            .map(AppAngelOneMarketFeedService::withoutPersonalBrokerPrompt).toList();
+    }
+
+    // An expired backend feed is a provider outage, not a customer's
+    // responsibility to enter their personal broker credentials.
+    private static CustomerAngelOneLiveQuoteService.LiveQuote withoutPersonalBrokerPrompt(
+            CustomerAngelOneLiveQuoteService.LiveQuote result) {
+        if (!"BROKER_CONNECTION_REQUIRED".equals(result.status())) return result;
+        return new CustomerAngelOneLiveQuoteService.LiveQuote(
+            result.instrumentId(), result.exchange(), result.tradingSymbol(),
+            null, null, null, "UNAVAILABLE", null);
     }
 
     private synchronized void ensureSession() {

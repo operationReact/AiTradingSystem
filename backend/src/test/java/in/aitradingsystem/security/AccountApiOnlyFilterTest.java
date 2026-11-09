@@ -21,6 +21,27 @@ class AccountApiOnlyFilterTest {
         }
         assertPasses("OPTIONS", "/api/auth/cognito/me");
         assertPasses("OPTIONS", "/api/auth/cognito/provision");
+        assertPasses("GET", "/api/customer/market-data/instruments");
+        assertPasses("GET", "/api/customer/market-data/instruments/status");
+        assertPasses("GET", "/api/customer/market-data/quotes");
+        assertPasses("GET", "/api/customer/market-data/snapshot");
+        assertBlocked("POST", "/api/customer/market-data/snapshot");
+        assertPasses("GET", "/api/customer/market-data/candles");
+        assertBlocked("POST", "/api/customer/market-data/candles");
+        assertPasses("GET", "/api/customer/market-data/quotes/detail");
+        assertBlocked("POST", "/api/customer/market-data/quotes/detail");
+        assertPasses("GET", "/api/customer/market-data/overview");
+        assertBlocked("POST", "/api/customer/market-data/overview");
+        assertPasses("GET", "/api/customer/watchlist");
+        assertPasses("POST", "/api/customer/watchlist");
+        assertPasses("OPTIONS", "/api/customer/watchlist");
+        assertPasses("DELETE", "/api/customer/watchlist/items/42");
+        assertPasses("OPTIONS", "/api/customer/watchlist/items/42");
+        assertBlocked("PUT", "/api/customer/watchlist");
+        assertBlocked("DELETE", "/api/customer/watchlist");
+        assertBlocked("GET", "/api/customer/watchlist/items/42");
+        assertBlocked("DELETE", "/api/customer/watchlist/items/abc");
+        assertBlocked("DELETE", "/api/customer/watchlist/items/1234567890123456789");
         assertPasses("GET", "/api/customer/trading-rooms");
         assertPasses("POST", "/api/customer/trading-rooms");
         assertPasses("GET", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");

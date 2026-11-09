@@ -8,6 +8,8 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Locale;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
@@ -136,6 +138,40 @@ public class CustomerAngelOneSessionService {
         try {
             return api.customerLtp(session.apiKey(), session.jwt(), instrument.exchange(),
                 instrument.tradingSymbol(), instrument.symbolToken());
+        } catch (AngelOneException ex) {
+            if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
+                sessions.remove(userId, session);
+            }
+            throw ex;
+        }
+    }
+
+    /** On-demand FULL quote (OHLC, previous close, volume) for this user's verified session. */
+    public AngelOneQuoteDetailParser.Detail quoteDetail(UUID userId, Instrument instrument) {
+        BrokerSession session = current(userId);
+        if (session == null) throw new BrokerConnectionRequiredException();
+        limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
+        try {
+            JsonNode data = api.customerFullQuote(session.apiKey(), session.jwt(), instrument.symbolToken());
+            return AngelOneQuoteDetailParser.parse(data, instrument, clock.instant());
+        } catch (AngelOneException ex) {
+            if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
+                sessions.remove(userId, session);
+            }
+            throw ex;
+        }
+    }
+
+    /** One FULL bulk quote (at most 50 NSE tokens) for this user's verified session; invalid rows are omitted. */
+    public Map<String, AngelOneQuoteDetailParser.Detail> quoteDetailsBatch(UUID userId,
+            List<AngelOneQuoteDetailParser.Expected> expected) {
+        BrokerSession session = current(userId);
+        if (session == null) throw new BrokerConnectionRequiredException();
+        limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
+        try {
+            List<String> tokens = expected.stream().map(AngelOneQuoteDetailParser.Expected::symbolToken).toList();
+            JsonNode data = api.customerFullQuotes(session.apiKey(), session.jwt(), tokens);
+            return AngelOneQuoteDetailParser.parseBatch(data, expected, clock.instant());
         } catch (AngelOneException ex) {
             if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
                 sessions.remove(userId, session);

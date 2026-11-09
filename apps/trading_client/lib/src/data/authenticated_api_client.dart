@@ -90,6 +90,19 @@ class AuthenticatedApiClient {
         timeout: timeout,
       );
 
+  Future<Object?> deleteJson(
+    String path, {
+    Map<String, String?> query = const {},
+    Duration timeout = const Duration(seconds: 15),
+  }) =>
+      _send(
+        method: 'DELETE',
+        path: path,
+        query: query,
+        extraHeaders: const {},
+        timeout: timeout,
+      );
+
   Future<Object?> _send({
     required String method,
     required String path,
@@ -145,6 +158,7 @@ class AuthenticatedApiClient {
               body: body == null ? null : jsonEncode(body),
             )
             .timeout(timeout),
+        'DELETE' => await client.delete(uri, headers: requestHeaders).timeout(timeout),
         _ => throw ArgumentError.value(method, 'method', 'Unsupported HTTP method'),
       };
       final correlation = response.headers['x-correlation-id'];
