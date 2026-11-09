@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 part of 'mind_workspace_page.dart';
 
 /// Ten additional screens from the enhanced user-approved clickable prototype.
@@ -121,7 +123,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
           style:const TextStyle(color:MindPalette.text,fontSize:17),
           items:[for(final symbol in MindAgentFixtures.councilSymbols)
             DropdownMenuItem(value:symbol,child:Text(symbol))],
-          onChanged:(v){if(v!=null)setState(()=>_agentCouncilSymbol=v);},
+          onChanged:(v){if(v!=null)_updateMind(()=>_agentCouncilSymbol=v);},
         ),
         const Text('Selecting a symbol changes the research context only; no model is called.',
           style:TextStyle(color:MindPalette.muted,fontSize:11)),
@@ -135,7 +137,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
       ]),
       const SizedBox(height:13),
       _chips(['All','BUY CANDIDATE','WAIT','RESEARCH','ABSTAIN CHECK'],
-        _agentCouncilView,(v)=>setState(()=>_agentCouncilView=v)),
+        _agentCouncilView,(v)=>_updateMind(()=>_agentCouncilView=v)),
       const SizedBox(height:8),
       for(final vote in filtered) Padding(padding:const EdgeInsets.only(bottom:9),
         child:MindPanel(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -172,7 +174,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     return _agentPage('Evidence & Provenance Ledger',
       'Every argument must have a timestamp, provenance and usability state',[
       _chips(categories,_agentEvidenceScope,
-        (v)=>setState(()=>_agentEvidenceScope=v)),
+        (v)=>_updateMind(()=>_agentEvidenceScope=v)),
       const SizedBox(height:8),
       for(final e in filtered)Padding(padding:const EdgeInsets.only(bottom:9),
         child:MindPanel(child:Column(children:[
@@ -209,7 +211,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     return _agentPage('Regime Weight Studio',
       'Hypothetical research weighting for different market structures',[
       _chips(MindAgentFixtures.regimeWeights.keys.toList(),
-        _agentRegime,(v)=>setState(()=>_agentRegime=v)),
+        _agentRegime,(v)=>_updateMind(()=>_agentRegime=v)),
       const SizedBox(height:10),
       MindPanel(highlight:true,child:Column(children:[
         const MindSectionTitle(title:'Illustrative weighting',
@@ -233,7 +235,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
         ])Padding(padding:const EdgeInsets.only(bottom:7),
           child:_tile(pair.$1,pair.$2,Icons.track_changes_outlined,
             color:pair.$1==_agentRegime?MindPalette.mint:MindPalette.muted,
-            tap:()=>setState(()=>_agentRegime=pair.$1))),
+            tap:()=>_updateMind(()=>_agentRegime=pair.$1))),
       ]),
       _agentCaution('No strategy automatically activates',
         'Live deployment requires walk-forward evidence, borrow eligibility, '
@@ -249,7 +251,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     return _agentPage('Signal Performance Scorecard',
       'Research scores by horizon, after-cost assumptions and sample uncertainty',[
       _chips(MindAgentFixtures.horizons,_agentSignalHorizon,
-        (v)=>setState(()=>_agentSignalHorizon=v)),
+        (v)=>_updateMind(()=>_agentSignalHorizon=v)),
       const SizedBox(height:11),
       _metricGrid([
         ('Cohort','SYNTHETIC','No verified tests'),
@@ -287,7 +289,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     return _agentPage('Confidence Calibration',
       'Separate raw model scores from actual probabilities and decision eligibility',[
       _chips(MindAgentFixtures.horizons,_agentCalMode,
-        (v)=>setState(()=>_agentCalMode=v)),
+        (v)=>_updateMind(()=>_agentCalMode=v)),
       const SizedBox(height:10),
       _metricGrid([
         ('Calibration','UNVERIFIED','Mock buckets'),
@@ -319,10 +321,10 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
   Widget shadowArenaScreen()=>_agentPage('Shadow Trading Arena',
     'Hypothetical model comparisons with aligned decision timestamps',[
       _chips(['Strategies','Regimes','Agent votes','Counterfactuals'],
-        _agentShadowTab,(v)=>setState(()=>_agentShadowTab=v)),
+        _agentShadowTab,(v)=>_updateMind(()=>_agentShadowTab=v)),
       const SizedBox(height:8),
       _chips(['Baseline','Adaptive','Strict Risk'],
-        _agentShadowCompare,(v)=>setState(()=>_agentShadowCompare=v)),
+        _agentShadowCompare,(v)=>_updateMind(()=>_agentShadowCompare=v)),
       const SizedBox(height:12),
       _metricGrid([
         ('Evaluation','SHADOW','No broker fills'),
@@ -357,7 +359,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
   Widget institutionalFlowScreen()=>_agentPage('FII / DII Flow Monitor',
     'Synthetic institutional participation research for Indian markets',[
       _chips(['2026-11-06','2026-11-09'],_agentFlowDate,
-        (v)=>setState(()=>_agentFlowDate=v)),
+        (v)=>_updateMind(()=>_agentFlowDate=v)),
       const SizedBox(height:10),
       _agentCaution('NOT VERIFIED · official flow source unavailable',
         'Dates and amounts are placeholders, not authentic FII/DII statistics. '
@@ -386,7 +388,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
   Widget dailyVerdictScreen()=>_agentPage('Daily Market Verdict',
     'Research briefing combining uncertainty, horizon rules and action blockers',[
       _chips(['2026-11-09','2026-11-06'],_agentVerdictDate,
-        (v)=>setState(()=>_agentVerdictDate=v)),
+        (v)=>_updateMind(()=>_agentVerdictDate=v)),
       const SizedBox(height:11),
       MindPanel(highlight:true,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         const MindTag('SELECTIVE · NO ORDERS',color:MindPalette.yellow),
@@ -425,7 +427,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     return _agentPage('Culprit Catcher · Root Cause',
       'Root-cause review of failed signals, eligibility blocks and regime mistakes',[
       _chips([for(final e in MindAgentFixtures.incidents)e.id],
-        _agentIncident,(v)=>setState(()=>_agentIncident=v)),
+        _agentIncident,(v)=>_updateMind(()=>_agentIncident=v)),
       const SizedBox(height:10),
       MindPanel(highlight:true,child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Row(children:[
