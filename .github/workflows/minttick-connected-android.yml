@@ -59,56 +59,12 @@ jobs:
               assert marker in apk, f"Missing Android signing gate: {marker}"
           PY
 
-  dispatch:
+  release-apk:
     needs: validate
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      actions: write
-    env:
-      API_BASE_URL: https://api.minttick.com
-      COGNITO_POOL: ap-south-1_jz2T8qbiY
-      COGNITO_CLIENT: 6jm18v2mdpcfraip92hrjhqjnd
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - name: Require only the explicitly approved connected APK release request
-        run: |
-          set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/android-connected.json"
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          actual=json.loads(Path("infra/minttick-domain/requests/android-connected.json").read_text())
-          expected={
-            "application":"MintTick",
-            "environment":"dev",
-            "operation":"build-connected-android",
-            "api_base_url":"https://api.minttick.com",
-            "public_api_ready":True,
-            "cognito_pool":"ap-south-1_jz2T8qbiY",
-            "authorization":"USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07"
-          }
-          assert actual == expected, "Refusing unreviewed connected Android release request"
-          PY
-      - name: Test real TLS account API and reject unauthenticated app access
-        run: |
-          set -euo pipefail
-          python3 scripts/verify_minttick_live_api.py
-          code="$(curl --silent --show-error --location --max-time 15 \
-            --output /dev/null --write-out '%{http_code}' "$API_BASE_URL/api/admin/users")"
-          test "$code" = "404" || { echo "Blocked: admin API not isolated" >&2; exit 2; }
-      - name: Dispatch existing signed-in, backend-connected Android APK workflow
-        run: |
-          set -euo pipefail
-          gh workflow run phase11-android-apk.yml --repo operationReact/AiTradingSystem \
-            --ref dev \
-            -f api_base_url="$API_BASE_URL" \
-            -f cognito_user_pool_id="$COGNITO_POOL" \
-            -f cognito_client_id="$COGNITO_CLIENT"
-          echo "Backend-connected APK build dispatched; workflow will independently reverify API and run Flutter analyze, test, release build and checksum."
+    # Invoke the workflow from this exact dev commit, not an unregistered
+    # workflow_dispatch endpoint on the unrelated default branch.
+    # The called workflow revalidates the exact one-file approval, live HTTPS
+    # Cognito gate, Flutter tests and pinned permanent Android certificate.
+    uses: ./.github/workflows/phase11-android-apk.yml
+    secrets: inherit
