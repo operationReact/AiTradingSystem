@@ -202,12 +202,12 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       const Row(children: [
         Icon(Icons.stacked_line_chart, color: MindPalette.mint, size: 27),
         SizedBox(width: 9),
-        Text('MintTick', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: MindPalette.text)),
+        Expanded(child:Text('MintTick',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:MindPalette.text))),
       ]),
       const SizedBox(height: 7),
       const Text('MINTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
       const SizedBox(height: 18),
-      Expanded(child: ListView(children: [
+      Expanded(child: SingleChildScrollView(child: Column(children: [
         for (final group in ['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM']) ...[
           Padding(padding: const EdgeInsets.fromLTRB(11, 14, 11, 6),
             child: Text(group, style: const TextStyle(color: MindPalette.muted, fontSize: 10, letterSpacing: 1.3))),
