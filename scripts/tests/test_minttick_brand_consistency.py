@@ -1,9 +1,14 @@
 """Detect incorrect customer-facing brand spelling in tracked application text."""
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-WRONG = ("mint" + "ic", "min" + "tick")
+# The separate in-app engine is explicitly named "Mintick Mind".
+# Reject incorrect standalone product brand tokens, not that compound name.
+def has_incorrect_brand(value: str) -> bool:
+    without_engine = re.sub(r"mintick[\\s_-]*mind", "", value.lower())
+    return re.search(r"(?<![a-z0-9_])mintic(?:k)?(?![a-z0-9_])", without_engine) is not None
 
 
 class MintTickBrandConsistencyTest(unittest.TestCase):
@@ -18,8 +23,15 @@ class MintTickBrandConsistencyTest(unittest.TestCase):
                     continue
                 with self.subTest(path=str(path.relative_to(ROOT))):
                     content = path.read_text(encoding="utf-8").lower()
-                    for word in WRONG:
-                        self.assertNotIn(word, content)
+                    self.assertFalse(has_incorrect_brand(content))
+
+    def test_mind_name_is_distinct_from_minttick_brand(self):
+        self.assertFalse(has_incorrect_brand("Mintick Mind"))
+        self.assertFalse(has_incorrect_brand("MintickMindWorkspacePage"))
+        self.assertFalse(has_incorrect_brand("features/mintick_mind/widget.dart"))
+        self.assertFalse(has_incorrect_brand("MintTick"))
+        self.assertTrue(has_incorrect_brand("Mintic"))
+        self.assertTrue(has_incorrect_brand("Mintick"))
 
     def test_mobile_and_web_application_identity(self):
         expected = {
