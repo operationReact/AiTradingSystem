@@ -89,9 +89,15 @@ public class CustomerAngelOneLiveQuoteService {
         this.calendar = calendar;
         this.client = client;
         this.clock = clock;
-        this.watchCap = watchCap;
+        // A misconfigured env var must not exceed the one-request V2 watch budget.
+        this.watchCap = boundedWatchCap(watchCap);
         this.ownerUser = ownerUser;
         heartbeats.scheduleAtFixedRate(this::heartbeat, 10, 10, TimeUnit.SECONDS);
+    }
+
+    static int boundedWatchCap(int requested) {
+        if (requested < 1) throw new IllegalArgumentException("watchCap must be positive");
+        return Math.min(requested, MAX_WATCHED_PER_FEED);
     }
 
     /** Live is the ONLY state in which a price is returned. */
