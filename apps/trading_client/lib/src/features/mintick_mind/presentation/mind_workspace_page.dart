@@ -8,6 +8,7 @@ import '../data/mind_evidence_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
+import '../data/mind_prospective_signals_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -88,6 +89,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.strategyReplayRepository,
     this.walkForwardRepository,
     this.prospectiveRepository,
+    this.prospectiveSignalsRepository,
     super.key,
   });
 
@@ -102,6 +104,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindMaWalkForwardRepository? walkForwardRepository;
   final MindProspectiveCohortRepository? prospectiveRepository;
+  final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -223,6 +226,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
                     strategyReplayRepository: widget.strategyReplayRepository,
                     walkForwardRepository: widget.walkForwardRepository,
                     prospectiveRepository: widget.prospectiveRepository,
+                    prospectiveSignalsRepository: widget.prospectiveSignalsRepository,
                   )
                 : _screen()),
             if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
