@@ -21,6 +21,7 @@ import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
 import 'features/trading_control/data/trading_control_repository.dart';
 import 'features/trading_rooms/domain/trading_room_draft.dart';
+import 'features/mintick_mind/presentation/mintick_mind_page.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -148,6 +149,9 @@ class _TradingAppState extends State<TradingApp> {
       ),
       routes: {
         '/': (_) => _overviewPage(),
+        '/mind': (_) => widget.session.isCustomerAuthenticated
+            ? const MintickMindPage()
+            : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
             ? MintTickTradingRoomsPage(
                 store: _roomDrafts,
@@ -427,8 +431,9 @@ class _MobileProductNavigation extends StatelessWidget {
 
   int get _index {
     if (selectedRoute == '/') return 0;
-    if (isCustomer && (selectedRoute == '/rooms' || selectedRoute.startsWith('/rooms/'))) return 1;
-    if (isCustomer && (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments')) return 2;
+    if (isCustomer && selectedRoute == '/mind') return 2;
+    if (isCustomer && (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments')) return 1;
+    if (isCustomer && (selectedRoute == '/account' || selectedRoute == '/settings')) return 4;
     if (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments') return 1;
     if (selectedRoute == '/research' || selectedRoute == '/signals' || selectedRoute == '/backtests' || selectedRoute == '/scenarios') return 2;
     if (selectedRoute == '/portfolio' || selectedRoute == '/orders' || selectedRoute == '/paper-orders') return 3;
@@ -440,10 +445,10 @@ class _MobileProductNavigation extends StatelessWidget {
     final theme = Theme.of(context);
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
-      isCustomer ? (Icons.layers_outlined, Icons.layers_rounded, 'Rooms') : (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
-      isCustomer ? (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
+      (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
+      isCustomer ? (Icons.psychology_outlined, Icons.psychology_rounded, 'Mind') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
       (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Portfolio'),
-      (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
+      isCustomer ? (Icons.person_outline_rounded, Icons.person_rounded, 'Profile') : (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
     ];
 
     return Material(
@@ -462,14 +467,15 @@ class _MobileProductNavigation extends StatelessWidget {
                 child: InkWell(
                   key: ValueKey('mobile-nav-${index == 2 && !isCustomer ? 'research' : item.$3.toLowerCase()}'),
                   onTap: () {
-                    if (index == 4) {
+                    if (index == 4 && !isCustomer) {
                       onMore();
                     } else {
                       onNavigate(switch (index) {
                         0 => '/',
-                        1 => isCustomer ? '/rooms' : '/market',
-                        2 => isCustomer ? '/market' : '/research',
+                        1 => '/market',
+                        2 => isCustomer ? '/mind' : '/research',
                         3 => '/portfolio',
+                        4 => '/account',
                         _ => '/',
                       });
                     }
@@ -532,11 +538,12 @@ class _DesktopProductRail extends StatelessWidget {
           if (isCustomer)
             _RailAction(label: 'Trading Rooms', icon: Icons.layers_rounded, active: selectedRoute == '/rooms', onTap: () => onNavigate('/rooms')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),
+          if (isCustomer) _RailAction(label: 'Mintick Mind', icon: Icons.psychology_outlined, active: selectedRoute == '/mind', onTap: () => onNavigate('/mind')),
           if (!isCustomer)
             _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
           _RailAction(label: 'Portfolio', icon: Icons.account_balance_wallet_rounded, active: selectedRoute == '/portfolio', onTap: () => onNavigate('/portfolio')),
           if (isCustomer)
-            _RailAction(label: 'Mantic Mind activity', icon: Icons.history_rounded, active: selectedRoute == '/activity', onTap: () => onNavigate('/activity')),
+            _RailAction(label: 'Mind activity', icon: Icons.history_rounded, active: selectedRoute == '/activity', onTap: () => onNavigate('/activity')),
           if (isCustomer)
             _RailAction(label: 'Account', icon: Icons.person_outline_rounded, active: selectedRoute == '/account', onTap: () => onNavigate('/account')),
           if (!isCustomer) _RailAction(label: 'Model control', icon: Icons.hub_rounded, active: selectedRoute == '/admin/models', onTap: () => onNavigate('/admin/models')),
@@ -599,7 +606,8 @@ class _MoreProductSheet extends StatelessWidget {
   static const _customerDestinations = <(String, IconData, String, String)>[
     ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room plans'),
     ('/brokers', Icons.account_balance_outlined, 'Connected brokers', 'Angel One and Upstox'),
-    ('/activity', Icons.history_rounded, 'Mantic Mind activity', 'Decisions and audit history'),
+    ('/mind', Icons.psychology_outlined, 'Mintick Mind', 'Prototype UI with mock-only strategy data'),
+    ('/activity', Icons.history_rounded, 'Mind activity', 'Decisions and audit history'),
     ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
     ('/account', Icons.person_outline_rounded, 'Account', 'Profile and sign out'),
     ('/settings', Icons.tune_rounded, 'Settings', 'Appearance and preferences'),
