@@ -1,4 +1,4 @@
-name: Mintick Mind stacked branch validation
+name: MintTick Mind stacked branch validation
 
 # Validates an unmerged feature stack when the dev-only PR workflows cannot
 # run due to concurrent dev changes. No deployment, release credentials or APK.
