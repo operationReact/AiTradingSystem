@@ -10,7 +10,7 @@ abstract final class MintTickBrand {
 abstract final class MintTickPalette {
   // Matte, solid-colour premium identity, approved for all app surfaces.
   // Never use a gradient/glow as an alternative to these tokens.
-  static const mint = Color(0xFF00A83B);
+  static const mint = Color(0xFF3D9567); // Muted emerald; readable on near-black.
   static const teal = mint; // Legacy alias; single brand accent.
   static const navy = Color(0xFF090B0A);
   static const nearBlack = Color(0xFF090B0A);
@@ -19,7 +19,7 @@ abstract final class MintTickPalette {
   static const darkBorder = Color(0xFF292F2A);
   static const mutedSilver = Color(0xFFA5ABA6);
   static const ice = Color(0xFFF8FAF8);
-  static const readableGreen = Color(0xFF006D42);
+  static const readableGreen = Color(0xFF276F4B); // Darker green for light surfaces.
 }
 
 /// Resolution-independent mark, based on the approved rising-M identity.

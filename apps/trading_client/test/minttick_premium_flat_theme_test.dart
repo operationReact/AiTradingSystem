@@ -16,7 +16,8 @@ void main() {
     expect(dark.surfaceContainer, MintTickPalette.darkCard);
     expect(dark.outlineVariant, MintTickPalette.darkBorder);
     expect(dark.onSurfaceVariant, MintTickPalette.mutedSilver);
-    expect(MintTickPalette.mint, const Color(0xFF00A83B));
+    expect(MintTickPalette.mint, const Color(0xFF3D9567));
+    expect(MintTickPalette.readableGreen, const Color(0xFF276F4B));
     expect(buildTheme(Brightness.dark).navigationBarTheme.indicatorColor,
         Colors.transparent);
     expect(buildTheme(Brightness.dark).cardTheme.elevation, 0);
