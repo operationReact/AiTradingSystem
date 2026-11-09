@@ -14,6 +14,7 @@ abstract final class MindPalette {
   static const yellow = Color(0xFFF3CB73);
   static const red = Color(0xFFF1818B);
   static const purple = Color(0xFFBFA5F6);
+  static const blue = Color(0xFF7AC9EE);
 }
 
 class MindPanel extends StatelessWidget {
