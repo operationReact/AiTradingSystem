@@ -103,7 +103,7 @@ public final class MindMaWalkForwardService {
                 .stream()
                 .filter(c -> c != null && STRATEGY.equals(c.strategy()) &&
                     "FIVE_MINUTE".equals(c.interval()) &&
-                    Set.of("NSE", "BSE").contains(c.exchange()) &&
+                    c.exchange() != null && Set.of("NSE", "BSE").contains(c.exchange()) &&
                     c.tradingSymbol() != null && c.tradingSymbol().endsWith("-EQ") &&
                     c.candidateFingerprint() != null &&
                     c.candidateFingerprint().matches("[a-f0-9]{64}") &&
