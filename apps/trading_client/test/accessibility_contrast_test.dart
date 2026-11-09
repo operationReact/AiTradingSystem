@@ -19,6 +19,10 @@ void main() {
         expect(_contrast(status, colors.panel), greaterThanOrEqualTo(4.5),
           reason: 'Risk state must remain readable on the component background');
       }
+      expect(_contrast(scheme.primary, scheme.surface), greaterThanOrEqualTo(4.5),
+          reason: 'MintTick green text/icons must remain readable on the page');
+      expect(_contrast(scheme.onPrimary, scheme.primary), greaterThanOrEqualTo(4.5),
+          reason: 'Primary action labels must remain readable');
       expect(_contrast(scheme.onSurface, scheme.surface), greaterThanOrEqualTo(4.5));
       expect(_contrast(scheme.onSurfaceVariant, scheme.surface), greaterThanOrEqualTo(4.5));
     });
