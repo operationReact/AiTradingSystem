@@ -4,6 +4,7 @@ import in.aitradingsystem.mind.MindReadinessService;
 import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
 import in.aitradingsystem.mind.MindMaWalkForwardService;
+import in.aitradingsystem.mind.MindProspectiveCohortService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -27,15 +28,18 @@ public class CustomerMindController {
     private final MindEvidenceLedgerService evidence;
     private final MindStrategyReplayService replay;
     private final MindMaWalkForwardService walkForward;
+    private final MindProspectiveCohortService prospective;
 
     public CustomerMindController(MindReadinessService service,
                                   MindEvidenceLedgerService evidence,
                                   MindStrategyReplayService replay,
-                                  MindMaWalkForwardService walkForward) {
+                                  MindMaWalkForwardService walkForward,
+                                  MindProspectiveCohortService prospective) {
         this.service = service;
         this.evidence = evidence;
         this.replay = replay;
         this.walkForward = walkForward;
+        this.prospective = prospective;
     }
 
     @GetMapping("/evidence")
@@ -57,6 +61,13 @@ public class CustomerMindController {
     public ResponseEntity<MindMaWalkForwardService.Report> maWalkForward() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(walkForward.inspect());
+    }
+
+    /** Forward-only pre-registered multi-stock research, with no trade action. */
+    @GetMapping("/prospective-cohort")
+    public ResponseEntity<MindProspectiveCohortService.Status> prospectiveCohort() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(prospective.inspect());
     }
 
     @GetMapping("/overview")
