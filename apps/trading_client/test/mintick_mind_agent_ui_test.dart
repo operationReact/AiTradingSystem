@@ -25,7 +25,7 @@ void main() {
       'institutional-flow','daily-verdict','culprit-catcher',
     ];
     final all = MintickMindScreens.all.map((s) => s.id).toSet();
-    expect(MintickMindScreens.all.length, 42);
+    expect(MintickMindScreens.all.length, 43);
     for (final id in ids) {
       expect(all.contains(id), isTrue, reason: 'Missing agent route: $id');
     }
