@@ -140,6 +140,12 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     super.dispose();
   }
 
+  // Extensions are in the same Dart library but State.setState is protected.
+  // Route all prototype-only state updates through this owner-state helper.
+  void _updateMind(VoidCallback update) {
+    if (mounted) setState(update);
+  }
+
   void _go(String route) {
     if (!MintickMindScreens.all.any((e) => e.id == route)) return;
     setState(() => _route = route);
