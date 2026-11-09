@@ -214,7 +214,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           for (final screen in MintickMindScreens.all.where((s) => s.group == group))
             _menuItem(screen),
         ],
-      ])),
+      ]))),
       const Text('Research only · No real orders', style: TextStyle(color: MindPalette.muted, fontSize: 11)),
     ]),
   );
