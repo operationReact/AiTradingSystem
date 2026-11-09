@@ -37,6 +37,18 @@ class VerifyApkSignerTest(unittest.TestCase):
         )
         self.assertEqual(parse_apksigner_certificate(report), SHA)
 
+    def test_scheme_numbered_signer_label(self):
+        self.assertEqual(
+            parse_apksigner_certificate(
+                f"V2 Signer #1 certificate SHA-256 digest: {SHA}\n"
+            ),
+            SHA,
+        )
+        with self.assertRaises(ValueError):
+            parse_apksigner_certificate(
+                f"V2 Signer #2 certificate SHA-256 digest: {SHA}\n"
+            )
+
     def test_different_scheme_certificates_fail_closed(self):
         with self.assertRaises(ValueError):
             parse_apksigner_certificate(
