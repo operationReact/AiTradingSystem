@@ -10,6 +10,7 @@ import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
 import in.aitradingsystem.mind.MindMaWalkForwardService;
 import in.aitradingsystem.mind.MindProspectiveCohortService;
+import in.aitradingsystem.mind.MindProspectiveSignalService;
 import java.util.List;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class CustomerMindControllerTest {
             evidence, evidence, "ABSTAIN", false, false);
         when(service.inspect()).thenReturn(expected);
 
-        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).overview();
+        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class), mock(MindProspectiveSignalService.class)).overview();
         assertEquals(200, response.getStatusCode().value());
         assertEquals(expected, response.getBody());
         assertFalse(response.getBody().executionEnabled());
@@ -42,7 +43,7 @@ class CustomerMindControllerTest {
             "ABSTAIN", false, false);
         when(evidence.inspect(10)).thenReturn(expected);
 
-        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).evidence(10);
+        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class), mock(MindProspectiveSignalService.class)).evidence(10);
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -62,7 +63,7 @@ class CustomerMindControllerTest {
         var response = new CustomerMindController(
             mock(MindReadinessService.class),
             mock(MindEvidenceLedgerService.class), service,
-            mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class)).strategyReplay();
+            mock(MindMaWalkForwardService.class), mock(MindProspectiveCohortService.class), mock(MindProspectiveSignalService.class)).strategyReplay();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -85,7 +86,7 @@ class CustomerMindControllerTest {
         var response = new CustomerMindController(
             mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
             mock(MindStrategyReplayService.class), walkForward,
-            mock(MindProspectiveCohortService.class)).maWalkForward();
+            mock(MindProspectiveCohortService.class), mock(MindProspectiveSignalService.class)).maWalkForward();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -108,7 +109,7 @@ class CustomerMindControllerTest {
         var response = new CustomerMindController(
             mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
             mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class),
-            prospective).prospectiveCohort();
+            prospective, mock(MindProspectiveSignalService.class)).prospectiveCohort();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
