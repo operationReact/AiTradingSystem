@@ -35,6 +35,8 @@ permissions:
 
 jobs:
   build-android-apk:
+    # Signing credentials are available only on reviewed dev releases.
+    if: github.event_name == 'pull_request' || (github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -220,6 +222,8 @@ jobs:
           PY
           grep -q '^android.newDsl=false$' android/gradle.properties
           grep -q 'compilerOptions' android/app/build.gradle.kts
+          grep -q 'MINTTICK_REQUIRE_STABLE_SIGNING' android/app/build.gradle.kts
+          grep -q 'minttickRelease' android/app/build.gradle.kts
           ! grep -q 'kotlinOptions' android/app/build.gradle.kts
           grep -q 'package `in`\.aitradingsystem\.trading_client' android/app/src/main/kotlin/in/aitradingsystem/trading_client/MainActivity.kt
           grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml
@@ -376,6 +380,12 @@ jobs:
           MINTTICK_ANDROID_CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
         run: |
           set -euo pipefail
+          # Never use the private release key on a non-dev or custom-endpoint build.
+          test "$GITHUB_REPOSITORY" = 'operationReact/AiTradingSystem'
+          test "$GITHUB_REF" = 'refs/heads/dev'
+          test "$API_BASE_URL" = 'https://api.minttick.com'
+          test "$MINTTICK_COGNITO_USER_POOL_ID" = 'ap-south-1_jz2T8qbiY'
+          test "$MINTTICK_COGNITO_CLIENT_ID" = '6jm18v2mdpcfraip92hrjhqjnd'
           for name in MINTTICK_ANDROID_KEYSTORE_BASE64 MINTTICK_ANDROID_KEY_ALIAS MINTTICK_ANDROID_STORE_PASSWORD MINTTICK_ANDROID_KEY_PASSWORD MINTTICK_ANDROID_CERT_SHA256; do
             if test -z "${!name:-}"; then
               echo "::error::Missing permanent Android signing configuration: $name"
