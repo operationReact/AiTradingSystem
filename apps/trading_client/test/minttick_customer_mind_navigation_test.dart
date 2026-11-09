@@ -34,7 +34,7 @@ void main() {
       expect(find.byKey(const ValueKey('product-mobile-navigation')), findsOneWidget);
       expect(find.byType(MintickMindWorkspacePage), findsOneWidget);
       expect(find.byKey(const ValueKey('mind-original-overview')), findsOneWidget);
-      expect(find.byTooltip('All Mintick Mind screens'), findsOneWidget);
+      expect(find.byTooltip('All MintTick Mind screens'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
@@ -52,7 +52,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('All Mintick Mind screens'));
+    await tester.tap(find.byTooltip('All MintTick Mind screens'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Decision Intelligence').last);
     await tester.pumpAndSettle();
