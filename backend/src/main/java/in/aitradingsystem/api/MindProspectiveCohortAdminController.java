@@ -1,6 +1,7 @@
 package in.aitradingsystem.api;
 
 import in.aitradingsystem.mind.MindProspectiveCohortService;
+import in.aitradingsystem.mind.MindProspectiveSignalService;
 import org.springframework.http.CacheControl;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
@@ -19,12 +20,29 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/admin/model-governance/mind-prospective")
 public class MindProspectiveCohortAdminController {
     private final MindProspectiveCohortService service;
+    private final MindProspectiveSignalService signals;
 
-    public MindProspectiveCohortAdminController(MindProspectiveCohortService service) {
+    public MindProspectiveCohortAdminController(
+            MindProspectiveCohortService service,
+            MindProspectiveSignalService signals) {
         this.service = service;
+        this.signals = signals;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
+    /** Manual, ADMIN-gated collection inside a current completed-bar window. */
+    @PreAuthorize("hasRole('ADMIN')")
+    @PostMapping("/capture-signals")
+    public ResponseEntity<MindProspectiveSignalService.Capture> captureSignals() {
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                    .body(signals.capture());
+        } catch (IllegalStateException | IllegalArgumentException invalid) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "No eligible current-session signal window or verified cohort input");
+        }
+    }
+
     @PostMapping("/register")
     public ResponseEntity<MindProspectiveCohortService.Status> register() {
         try {
