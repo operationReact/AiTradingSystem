@@ -460,7 +460,7 @@ class _MobileProductNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Customer navigation retains every primary destination. Mintick Mind
+    // Customer navigation retains every primary destination. MintTick Mind
     // must never be hidden behind More after adding Trading Rooms.
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
@@ -569,7 +569,7 @@ class _DesktopProductRail extends StatelessWidget {
           if (isCustomer)
             _RailAction(label: 'Trading Rooms', icon: Icons.layers_rounded, active: selectedRoute == '/rooms', onTap: () => onNavigate('/rooms')),
           _RailAction(label: 'Markets', icon: Icons.candlestick_chart_rounded, active: selectedRoute == '/market', onTap: () => onNavigate('/market')),
-          if (isCustomer) _RailAction(label: 'Mintick Mind', icon: Icons.psychology_outlined, active: selectedRoute == '/mind', onTap: () => onNavigate('/mind')),
+          if (isCustomer) _RailAction(label: 'MintTick Mind', icon: Icons.psychology_outlined, active: selectedRoute == '/mind', onTap: () => onNavigate('/mind')),
           if (!isCustomer)
             _RailAction(label: 'AI Research', icon: Icons.auto_awesome_rounded, active: selectedRoute == '/research', onTap: () => onNavigate('/research')),
           _RailAction(label: 'Portfolio', icon: Icons.account_balance_wallet_rounded, active: selectedRoute == '/portfolio', onTap: () => onNavigate('/portfolio')),
@@ -637,7 +637,7 @@ class _MoreProductSheet extends StatelessWidget {
   static const _customerDestinations = <(String, IconData, String, String)>[
     ('/rooms', Icons.layers_outlined, 'Trading Rooms', 'Your room plans'),
     ('/brokers', Icons.account_balance_outlined, 'Connected brokers', 'Angel One and Upstox'),
-    ('/mind', Icons.psychology_outlined, 'Mintick Mind', 'Prototype UI with mock-only strategy data'),
+    ('/mind', Icons.psychology_outlined, 'MintTick Mind', 'Prototype UI with mock-only strategy data'),
     ('/activity', Icons.history_rounded, 'Mind activity', 'Decisions and audit history'),
     ('/notifications', Icons.notifications_none_rounded, 'Notifications', 'Account updates'),
     ('/account', Icons.person_outline_rounded, 'Account', 'Profile and sign out'),

@@ -70,7 +70,7 @@ abstract final class MintickMindScreens {
     MindScreenDescriptor('options-chain', 'Option Chain', Icons.table_chart_outlined, 'CAPITAL'),
     MindScreenDescriptor('option-builder', 'Strategy Payoff Builder', Icons.stacked_line_chart, 'CAPITAL'),
     MindScreenDescriptor('controls', 'Engine Control', Icons.settings_outlined, 'SYSTEM'),
-    MindScreenDescriptor('assistant', 'Ask Mintick Mind', Icons.forum_outlined, 'SYSTEM'),
+    MindScreenDescriptor('assistant', 'Ask MintTick Mind', Icons.forum_outlined, 'SYSTEM'),
     MindScreenDescriptor('room-detail', 'Trading Room Detail', Icons.sensors_outlined, 'SYSTEM'),
     MindScreenDescriptor('design-gallery', 'Visual Mockup Gallery', Icons.grid_view_outlined, 'SYSTEM'),
     MindScreenDescriptor('design-preview', 'Clickable Design Mode', Icons.touch_app_outlined, 'SYSTEM'),
@@ -206,7 +206,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       floatingActionButton: !wide && (widget.embeddedInProductShell || _route == 'overview')
         ? Padding(padding:EdgeInsets.only(bottom: widget.embeddedInProductShell ? 0 : 66),
             child:FloatingActionButton.small(
-              tooltip:'All Mintick Mind screens',
+              tooltip:'All MintTick Mind screens',
               backgroundColor:MindPalette.mint,
               onPressed:_showRouteSheet,
               child:const Icon(Icons.apps_rounded,color:Colors.white)))
@@ -242,7 +242,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         Expanded(child:Text('MintTick',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:MindPalette.text))),
       ]),
       const SizedBox(height: 7),
-      const Text('MINTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
+      const Text('MINTTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
       const SizedBox(height: 18),
       Expanded(child: SingleChildScrollView(child: Column(children: [
         for (final group in ['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM']) ...[
@@ -362,7 +362,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
               icon:const Icon(Icons.arrow_back,size:16),
               label:const Text('Back'),
               style:TextButton.styleFrom(foregroundColor:MindPalette.mint))),
-          const Text('MINTICK MIND · PERSONAL TRADING INTELLIGENCE',
+          const Text('MINTTICK MIND · PERSONAL TRADING INTELLIGENCE',
             style:TextStyle(color:MindPalette.mint,fontSize:10,letterSpacing:1.0,fontWeight:FontWeight.w700)),
           const SizedBox(height:7),
           Text(heading,style:const TextStyle(color:MindPalette.text,fontSize:28,fontWeight:FontWeight.w800,letterSpacing:-.8)),

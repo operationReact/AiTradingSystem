@@ -66,7 +66,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
               const SizedBox(height: 25),
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment:CrossAxisAlignment.start,children: const [
-                  Text('Mintick Mind',style:TextStyle(color:MindPalette.text,fontSize:30,fontWeight:FontWeight.w800,letterSpacing:-.8)),
+                  Text('MintTick Mind',style:TextStyle(color:MindPalette.text,fontSize:30,fontWeight:FontWeight.w800,letterSpacing:-.8)),
                   SizedBox(height:2),
                   Text('Personal Trading Intelligence',style:TextStyle(color:MindPalette.muted,fontSize:14)),
                 ])),
@@ -150,7 +150,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
       const SizedBox(width:13),
       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Wrap(crossAxisAlignment:WrapCrossAlignment.center,spacing:9,runSpacing:5,children:const [
-          Text('Mintick Mind Engine',style:TextStyle(fontSize:17,color:MindPalette.text,fontWeight:FontWeight.w800)),
+          Text('MintTick Mind Engine',style:TextStyle(fontSize:17,color:MindPalette.text,fontWeight:FontWeight.w800)),
           MindTag('Demo simulation'),
         ]),
         const SizedBox(height:7),
