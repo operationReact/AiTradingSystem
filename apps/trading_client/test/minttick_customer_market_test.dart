@@ -418,6 +418,56 @@ void main() {
     }), throwsFormatException);
   });
 
+  test('verified FULL detail fallback survives alongside unavailable stocks', () {
+    // PR #674 already emits STORED_LAST_DETAIL when market_last_tick is
+    // empty. A strict one-source client parser previously rejected the
+    // entire batched snapshot, hiding every otherwise valid saved quote.
+    final snapshot = CustomerMarketSnapshot.fromJson({
+      'generatedAt': '2026-11-10T01:15:00Z',
+      'rows': [
+        {
+          'instrumentId': 101, 'exchange': 'NSE',
+          'tradingSymbol': 'RELIANCE-EQ', 'status': 'LAST_CLOSE',
+          'ltp': 1324.40, 'exchangeAt': '2026-11-09T10:00:00Z',
+          'source': 'STORED_LAST_DETAIL', 'changePercent': 0.56,
+        },
+        {
+          'instrumentId': 102, 'exchange': 'NSE',
+          'tradingSymbol': 'TCS-EQ', 'status': 'UNAVAILABLE',
+          'ltp': null, 'exchangeAt': null, 'source': null,
+        },
+      ],
+    });
+    expect(snapshot.rows, hasLength(2));
+    expect(snapshot.rows.first.ltp, 1324.40);
+    expect(snapshot.rows.first.status, 'LAST_CLOSE');
+    expect(snapshot.rows.first.source, 'STORED_LAST_DETAIL');
+    expect(snapshot.rows.first.changePercent, 0.56);
+    expect(snapshot.rows.last.ltp, isNull);
+    expect(snapshot.rows.last.status, 'UNAVAILABLE');
+  });
+
+  test('a purported stored detail must not masquerade as LIVE or an unknown source', () {
+    Map<String, dynamic> saved(String status, String source) => {
+      'instrumentId': 101, 'exchange': 'NSE',
+      'tradingSymbol': 'RELIANCE-EQ', 'status': status,
+      'ltp': 1324.40, 'exchangeAt': '2026-11-09T10:00:00Z',
+      'source': source,
+    };
+    expect(CustomerLiveQuote.fromJson(
+      saved('LAST_CLOSE', 'STORED_LAST_DETAIL')).status, 'LAST_CLOSE');
+    expect(() => CustomerLiveQuote.fromJson(
+      saved('LIVE', 'STORED_LAST_DETAIL')), throwsFormatException);
+    expect(() => CustomerLiveQuote.fromJson(
+      saved('LAST_CLOSE', 'ANGEL_ONE_SMARTAPI_FULL_APP')), throwsFormatException);
+    expect(() => CustomerLiveQuote.fromJson(
+      saved('LAST_CLOSE', 'STORED_LAST_DETAIL')..['exchangeAt'] = null),
+      throwsFormatException);
+    expect(() => CustomerLiveQuote.fromJson(
+      saved('LAST_CLOSE', 'STORED_LAST_DETAIL')..['ltp'] = -1),
+      throwsFormatException);
+  });
+
   test('LAST_CLOSE carries a stored last traded price and change, never LIVE', () {
     final row = CustomerLiveQuote.fromJson({
       'instrumentId': 101, 'exchange': 'NSE', 'tradingSymbol': 'TEST-EQ',
