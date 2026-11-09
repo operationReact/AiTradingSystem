@@ -15,8 +15,8 @@ abstract final class MindPalette {
   // Semantic research states stay distinct from the brand accent.
   static const yellow = Color(0xFFE6BD73);
   static const red = Color(0xFFF48C93);
-  static const purple = Color(0xFFC6B6DB);
-  static const blue = Color(0xFF91B9D2);
+  static const purple = Color(0xFFC0C5C0);
+  static const blue = Color(0xFFA5ABA6);
 }
 
 class MindPanel extends StatelessWidget {
@@ -32,7 +32,7 @@ class MindPanel extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: highlight ? const Color(0xFF18231A) : MindPalette.card,
-        border: Border.all(color: highlight ? MintTickPalette.mint : MindPalette.border),
+        border: Border.all(color: highlight ? const Color(0xFF36533C) : MindPalette.border),
         borderRadius: BorderRadius.circular(18),
       ),
       child: child,
