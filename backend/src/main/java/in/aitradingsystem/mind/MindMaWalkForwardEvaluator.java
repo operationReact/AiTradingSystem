@@ -155,9 +155,11 @@ public final class MindMaWalkForwardEvaluator {
         BigDecimal maxRisk = equity.multiply(RISK_PERCENT).divide(HUNDRED, 8, RoundingMode.DOWN);
         BigDecimal maxNotional = equity.multiply(MAX_NOTIONAL_PERCENT)
             .divide(HUNDRED, 8, RoundingMode.DOWN);
-        int qtyRisk = maxRisk.divide(riskPerShare, 0, RoundingMode.DOWN).intValue();
+        int qtyRisk = maxRisk.divide(riskPerShare, 0, RoundingMode.DOWN)
+            .min(BigDecimal.valueOf(MAX_SHARES)).intValue();
         int qtyCapital = maxNotional.divide(
-            actual.multiply(BigDecimal.ONE.add(FEE_PER_SIDE)), 0, RoundingMode.DOWN).intValue();
+            actual.multiply(BigDecimal.ONE.add(FEE_PER_SIDE)), 0, RoundingMode.DOWN)
+            .min(BigDecimal.valueOf(MAX_SHARES)).intValue();
         int qty = Math.min(MAX_SHARES, Math.min(qtyRisk, qtyCapital));
         if (qty < 1) return null;
         BigDecimal entryFee = actual.multiply(BigDecimal.valueOf(qty)).multiply(FEE_PER_SIDE);
