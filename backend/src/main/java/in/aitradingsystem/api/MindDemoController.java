@@ -79,7 +79,7 @@ public class MindDemoController {
           Map.of("id","EVD-006","category","Capital authority","symbol","NTPC",
             "claim","Broker eligibility","knownAt","Not connected","status","Unavailable"),
           Map.of("id","EVD-007","category","Learning","symbol","CDSL",
-            "claim","Forward outcome label","knownAt","Mock +5d","status","Synthetic"))));
+            "claim","Forward outcome label","knownAt","Mock +5d","status","Synthetic")));
     }
 
     @GetMapping("/regime-weights")
@@ -168,6 +168,6 @@ public class MindDemoController {
             "cause","Margin-of-safety and governance checks incomplete"),
           Map.of("id","INC-105","symbol","TCS","severity","Medium",
             "kind","Regime mismatch","stage","Regime router",
-            "cause","Short-term signal conflicted with higher timeframe"))));
+            "cause","Short-term signal conflicted with higher timeframe")));
     }
 }
