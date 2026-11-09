@@ -1,8 +1,15 @@
 package in.aitradingsystem.marketdata;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser.Detail;
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
+import java.time.Clock;
+import java.time.ZoneOffset;
+import java.util.Optional;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -14,6 +21,87 @@ class MarketOverviewServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-09T04:00:00Z");
     private static final Instant TRADED = Instant.parse("2026-11-09T03:59:00Z");
     private static final LocalDate AS_OF = LocalDate.of(2026, 11, 9);
+
+    @Test
+    void indexExpectationUsesVerifiedNseTokenNotVariableProviderDisplayName() {
+        var expected = MarketOverviewService.indexExpectations(List.of(
+            new MarketOverviewRepository.IndexDefinition(
+                "NIFTY50", "Nifty 50", "99926000"),
+            new MarketOverviewRepository.IndexDefinition(
+                "BANKNIFTY", "Nifty Bank", "99926009")));
+        assertThat(expected).hasSize(2);
+        assertThat(expected.get(0).symbolToken()).isEqualTo("99926000");
+        assertThat(expected.get(1).symbolToken()).isEqualTo("99926009");
+        assertThat(expected).allSatisfy(row ->
+            assertThat(row.tradingSymbol()).isNull());
+    }
+
+    @Test
+    void failedEquityBulkDoesNotEraseVerifiedNiftyIndexQuote() {
+        var repository = mock(MarketOverviewRepository.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketOverviewSnapshotStore.class);
+        when(store.load()).thenReturn(Optional.empty());
+        when(repository.universe("NIFTY50")).thenReturn(List.of(
+            new MarketOverviewRepository.Member(
+                "AAA-EQ", "Alpha", "Banks", AS_OF, "src")));
+        when(repository.resolveEquityTokens(List.of("AAA-EQ")))
+            .thenReturn(Map.of("AAA-EQ", "1"));
+        when(repository.indices()).thenReturn(List.of(
+            new MarketOverviewRepository.IndexDefinition(
+                "NIFTY50", "Nifty 50", "99926000")));
+        when(feed.details(anyList())).thenAnswer(call -> {
+            List<in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser.Expected> request =
+                call.getArgument(0);
+            if ("1".equals(request.getFirst().symbolToken())) {
+                throw new MarketDataException("PROVIDER_RATE_LIMITED",
+                    "Equity bulk request temporarily unavailable");
+            }
+            assertThat(request.getFirst().symbolToken()).isEqualTo("99926000");
+            assertThat(request.getFirst().tradingSymbol()).isNull();
+            return Map.of("99926000", detail("24000", "23950", "23980"));
+        });
+
+        var service = new MarketOverviewService(repository, feed, calendar,
+            Clock.fixed(NOW, ZoneOffset.UTC), store);
+        var overview = service.overview();
+
+        assertThat(overview.indices()).hasSize(1);
+        assertThat(overview.indices().getFirst().indexCode()).isEqualTo("NIFTY50");
+        assertThat(overview.indices().getFirst().ltp()).isEqualByComparingTo("24000");
+        assertThat(overview.breadth().total()).isZero();
+        assertThat(overview.universe().returned()).isZero();
+        assertThat(overview.ideas()).isEmpty();
+        verify(store).save(overview);
+    }
+
+    @Test
+    void totalProviderOutageCannotCreateEmptySavedOverviewSnapshot() {
+        var repository = mock(MarketOverviewRepository.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketOverviewSnapshotStore.class);
+        when(store.load()).thenReturn(Optional.empty());
+        when(repository.universe("NIFTY50")).thenReturn(List.of(
+            new MarketOverviewRepository.Member(
+                "AAA-EQ", "Alpha", "Banks", AS_OF, "src")));
+        when(repository.resolveEquityTokens(List.of("AAA-EQ")))
+            .thenReturn(Map.of("AAA-EQ", "1"));
+        when(repository.indices()).thenReturn(List.of(
+            new MarketOverviewRepository.IndexDefinition(
+                "NIFTY50", "Nifty 50", "99926000")));
+        when(feed.details(anyList())).thenThrow(
+            new MarketDataException("PROVIDER_UNAVAILABLE", "No current verified provider data"));
+
+        var service = new MarketOverviewService(repository, feed, calendar,
+            Clock.fixed(NOW, ZoneOffset.UTC), store);
+        assertThatThrownBy(service::overview)
+            .isInstanceOf(MarketDataException.class)
+            .hasMessageContaining("no verified constituent or index quotes");
+        verify(store, never()).save(
+            org.mockito.ArgumentMatchers.any(MarketOverviewService.Overview.class));
+    }
 
     @Test
     void computesBreadthMoversGapSectorsAndIndicesFromVerifiedRowsOnly() {
