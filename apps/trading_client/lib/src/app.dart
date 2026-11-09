@@ -23,6 +23,7 @@ import 'features/trading_control/data/trading_control_repository.dart';
 import 'features/trading_rooms/domain/trading_room_draft.dart';
 import 'features/mintick_mind/presentation/mind_workspace_page.dart';
 import 'features/mintick_mind/data/mind_readiness_repository.dart';
+import 'features/mintick_mind/data/mind_evidence_repository.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -154,6 +155,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintickMindWorkspacePage(
                 embeddedInProductShell: true,
                 readinessRepository: HttpMindReadinessRepository(_api),
+                evidenceRepository: HttpMindEvidenceRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
