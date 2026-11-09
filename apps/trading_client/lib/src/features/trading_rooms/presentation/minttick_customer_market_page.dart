@@ -36,6 +36,11 @@ class MintTickCustomerMarketPage extends StatefulWidget {
 class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final TextEditingController _query = TextEditingController();
+  final TextEditingController _overviewSearch = TextEditingController();
+  List<InstrumentRecord>? _overviewHits;
+  String? _overviewSearchError;
+  bool _overviewSearching = false;
+  int _overviewSearchSeq = 0;
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final Map<int, CustomerLiveQuote> _rows = {};
   InstrumentCatalogueStatus? _catalogue;
@@ -65,22 +70,56 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   }
 
   /// Movers carry no instrument id, so resolve the exact symbol through the active catalogue.
-  Future<void> _openMover(CustomerMover mover) async {
+  Future<void> _openMover(CustomerMover mover) => _openSymbol(mover.tradingSymbol);
+
+  Future<void> _openSymbol(String symbol) async {
     void notify(String message) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
     }
     try {
-      final page = await widget.repository.search(query: mover.tradingSymbol);
+      final page = await widget.repository.search(query: symbol);
       if (!mounted) return;
-      final matches = page.content.where((s) => s.tradingSymbol == mover.tradingSymbol);
+      final matches = page.content.where((s) => s.tradingSymbol == symbol);
       if (matches.isEmpty) {
-        notify('${mover.tradingSymbol} is not in the active instrument catalogue, so its detail is unavailable.');
+        notify('$symbol is not in the active instrument catalogue, so its detail is unavailable.');
         return;
       }
       _openDetail(matches.first);
     } catch (_) {
-      notify('Could not open ${mover.tradingSymbol}. Try again.');
+      notify('Could not open $symbol. Try again.');
+    }
+  }
+
+  Future<void> _runOverviewSearch() async {
+    final query = _overviewSearch.text.trim();
+    final seq = ++_overviewSearchSeq;
+    if (query.isEmpty) {
+      setState(() {
+        _overviewHits = null;
+        _overviewSearchError = null;
+        _overviewSearching = false;
+      });
+      return;
+    }
+    setState(() {
+      _overviewSearching = true;
+      _overviewSearchError = null;
+    });
+    try {
+      final page = await widget.repository.search(query: query);
+      if (!mounted || seq != _overviewSearchSeq) return;
+      setState(() {
+        _overviewHits = page.content.take(8).toList();
+        _overviewSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _overviewSearchSeq) return;
+      setState(() {
+        _overviewHits = null;
+        _overviewSearchError = 'Search failed. Try again.';
+        _overviewSearching = false;
+      });
     }
   }
 
@@ -107,6 +146,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     _query.dispose();
+    _overviewSearch.dispose();
     super.dispose();
   }
 
@@ -343,16 +383,79 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const SizedBox(height: 12),
         TextField(
           key: const ValueKey('customer-market-overview-search'),
-          readOnly: true,
-          onTap: () => _tabs.animateTo(3),
-          decoration: const InputDecoration(
-            hintText: 'Search stocks, indices or sectors',
-            prefixIcon: Icon(Icons.search_rounded),
+          controller: _overviewSearch,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => unawaited(_runOverviewSearch()),
+          decoration: InputDecoration(
+            hintText: 'Search stocks by symbol or company',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: IconButton(
+              tooltip: 'Search',
+              icon: const Icon(Icons.arrow_forward_rounded),
+              onPressed: () => unawaited(_runOverviewSearch()),
+            ),
           ),
         ),
+        ..._overviewSearchResults(),
         const SizedBox(height: 16),
         ..._overviewSection(),
       ];
+
+  List<Widget> _overviewSearchResults() {
+    if (_overviewSearching) {
+      return const [
+        SizedBox(height: 8),
+        MintTickInfoText('Searching the instrument catalogue…', icon: Icons.hourglass_empty_rounded),
+      ];
+    }
+    final error = _overviewSearchError;
+    if (error != null) {
+      return [const SizedBox(height: 8), MintTickInfoText(error, icon: Icons.cloud_off_outlined)];
+    }
+    final hits = _overviewHits;
+    if (hits == null) return const [];
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    if (hits.isEmpty) {
+      return const [
+        SizedBox(height: 8),
+        MintTickInfoText('No stock in the active catalogue matches that search.'),
+      ];
+    }
+    return [
+      const SizedBox(height: 8),
+      MintTickSurface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final stock in hits)
+            InkWell(
+              key: ValueKey('overview-search-hit-${stock.id}'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _openDetail(stock),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(children: [
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(stock.tradingSymbol, style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(stock.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                    ],
+                  )),
+                  Text(stock.exchange, style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+                  const SizedBox(width: 6),
+                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+                ]),
+              ),
+            ),
+        ],
+      )),
+    ];
+  }
 
   List<Widget> _overviewStatus() {
     final error = _overviewError;
@@ -408,18 +511,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       if (overview.sectors.isEmpty)
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
-        for (final sector in overview.sectors.take(4)) ...[
-          _SectorCard(sector: sector),
+        for (final sector in overview.sectors.take(5)) ...[
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(5))),
           const SizedBox(height: 8),
         ],
       const SizedBox(height: 8),
-      const _NotAvailableBlock(
-        title: 'Market ideas',
-        reason: 'Ideas need a governed scanner output. MintTick shows none until one is verified.',
-      ),
+      _IdeasSection(ideas: overview.ideas, onOpen: _openSymbol),
       const SizedBox(height: 12),
       _OverviewFooter(overview: overview),
     ];
+  }
+
+  double _sectorScale(Iterable<CustomerSectorSummary> sectors) {
+    var scale = 0.0;
+    for (final sector in sectors) {
+      scale = math.max(scale, sector.avgChangePct.abs().toDouble());
+    }
+    return scale;
   }
 
   List<Widget> _moversTab() {
@@ -472,7 +580,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
         for (final sector in overview.sectors) ...[
-          _SectorCard(sector: sector),
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors)),
           const SizedBox(height: 8),
         ],
     ];
@@ -828,9 +936,10 @@ class _DeltaText extends StatelessWidget {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 14, color: color),
       const SizedBox(width: 2),
-      Text(text, maxLines: 1, style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: color, fontWeight: FontWeight.w800,
-          fontFeatures: const [FontFeature.tabularFigures()])),
+      Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: color, fontWeight: FontWeight.w800,
+              fontFeatures: const [FontFeature.tabularFigures()]))),
     ]);
   }
 }
@@ -1059,13 +1168,18 @@ class _MoverSection extends StatelessWidget {
 }
 
 class _SectorCard extends StatelessWidget {
-  const _SectorCard({required this.sector});
+  const _SectorCard({required this.sector, required this.scale});
   final CustomerSectorSummary sector;
+  /// Largest absolute average change among the sectors shown; bars are relative to it.
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final positive = sector.avgChangePct >= 0;
+    final color = positive ? scheme.primary : scheme.error;
+    final fraction = scale <= 0 ? 0.0 : (sector.avgChangePct.abs() / scale).clamp(0.0, 1.0).toDouble();
     return Semantics(
       container: true,
       label: '${sector.sector}, ${sector.members} stocks, ${sector.advancers} up, '
@@ -1074,23 +1188,145 @@ class _SectorCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: _cardDecoration(scheme),
-          child: Row(children: [
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(sector.sector, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('${sector.members} stocks · ${sector.advancers} up · '
-                    '${sector.decliners} down',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
-            )),
-            _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(_sectorIcon(sector.sector), size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(sector.sector, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text('${sector.members} stocks · ${sector.advancers} up · '
+                        '${sector.decliners} down',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                )),
+                _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
+              ]),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  minHeight: 4,
+                  color: color,
+                  backgroundColor: scheme.outlineVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+IconData _sectorIcon(String sector) {
+  final name = sector.toLowerCase();
+  if (name.contains('bank') || name.contains('financ')) return Icons.account_balance_outlined;
+  if (name == 'it' || name.contains('information') || name.contains('technology')) return Icons.code_rounded;
+  if (name.contains('pharma') || name.contains('health')) return Icons.medication_outlined;
+  if (name.contains('auto')) return Icons.directions_car_outlined;
+  if (name.contains('fmcg') || name.contains('consumer')) return Icons.shopping_cart_outlined;
+  if (name.contains('energy') || name.contains('oil')) return Icons.bolt_outlined;
+  if (name.contains('metal')) return Icons.factory_outlined;
+  return Icons.pie_chart_outline_rounded;
+}
+
+/// Rule-screen hits from the backend. Labels describe why a stock matched; they are not advice.
+class _IdeasSection extends StatelessWidget {
+  const _IdeasSection({required this.ideas, required this.onOpen});
+  final List<CustomerMarketIdea> ideas;
+  final Future<void> Function(String symbol) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: Text('Market ideas', style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800))),
+          Text('Rule screen · Nifty 50', style: theme.textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 8),
+        if (ideas.isEmpty)
+          const MintTickInfoText('No Nifty 50 stock meets a screen rule in this snapshot. '
+              'Screens are rules on verified quotes, not recommendations.')
+        else
+          MintTickSurface(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final idea in ideas)
+                InkWell(
+                  key: ValueKey('market-idea-${idea.tradingSymbol}'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => unawaited(onOpen(idea.tradingSymbol)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(children: [
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(idea.tradingSymbol, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800)),
+                          Text(idea.companyName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      )),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text('₹${idea.ltp.toStringAsFixed(2)}', style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                        _DeltaText(pct: idea.changePct, label: 'Chg'),
+                        const SizedBox(height: 4),
+                        _SignalChip(signal: idea.signal),
+                      ]),
+                    ]),
+                  ),
+                ),
+            ],
+          )),
+      ],
+    );
+  }
+}
+
+class _SignalChip extends StatelessWidget {
+  const _SignalChip({required this.signal});
+  final String signal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final (label, icon) = switch (signal) {
+      'BREAKOUT' => ('Breakout', Icons.flag_outlined),
+      'MOMENTUM' => ('Momentum', Icons.bolt_rounded),
+      _ => ('Gap up', Icons.north_east_rounded),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(label, style: theme.textTheme.labelSmall
+            ?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 }

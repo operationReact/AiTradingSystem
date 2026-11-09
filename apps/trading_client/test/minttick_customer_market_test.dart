@@ -37,6 +37,12 @@ Map<String, dynamic> overviewJson({String indexFreshness = 'LAST_CLOSE'}) => {
           'changePct': 0.08, 'open': 23950, 'high': 24010, 'low': 23940, 'volume': 0,
           'exchangeAt': '2026-11-07T09:29:58Z', 'freshness': indexFreshness},
       ],
+      'ideas': [
+        {'tradingSymbol': 'ALPHA-EQ', 'companyName': 'Alpha Ltd', 'ltp': 110, 'changePct': 10,
+          'gapPct': 5, 'signal': 'BREAKOUT', 'exchangeAt': '2026-11-07T09:29:58Z'},
+        {'tradingSymbol': 'GAMMA-EQ', 'companyName': 'Gamma Ltd', 'ltp': 101.5, 'changePct': 1.5,
+          'gapPct': 0.2, 'signal': 'GAP_UP', 'exchangeAt': '2026-11-07T09:29:58Z'},
+      ],
     };
 
 class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotMarketRepository,
@@ -507,7 +513,10 @@ void main() {
     expect(find.text('Advancing 2'), findsOneWidget);
     expect(find.text('Declining 1'), findsOneWidget);
     expect(find.byKey(const ValueKey('customer-market-status-pill')), findsOneWidget);
-    expect(find.text('Not available yet'), findsOneWidget);
+    expect(find.text('Market ideas'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market-idea-ALPHA-EQ')), findsOneWidget);
+    expect(find.text('Breakout'), findsOneWidget);
+    expect(find.text('Not available yet'), findsNothing);
 
     await tester.tap(find.text('Movers'));
     await tester.pumpAndSettle();
@@ -523,6 +532,41 @@ void main() {
     expect(find.text('Banks'), findsOneWidget);
     expect(find.text('Avg +1.50%'), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('overview search runs the catalogue search and opens the chosen stock',
+      (tester) async {
+    final fake = _CustomerMarketFake()..status = 'LIVE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('customer-market-overview-search')), 'ALPHA-EQ');
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('overview-search-hit-101')), findsOneWidget);
+    expect(find.byKey(const ValueKey('overview-search-hit-102')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('overview-search-hit-102')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MintTickStockDetailPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('tapping a market idea opens its stock detail through the active catalogue',
+      (tester) async {
+    final fake = _CustomerMarketFake()..status = 'LIVE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const ValueKey('market-idea-ALPHA-EQ')));
+    await tester.tap(find.byKey(const ValueKey('market-idea-ALPHA-EQ')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MintTickStockDetailPage), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

@@ -506,12 +506,42 @@ class CustomerUniverse {
   );
 }
 
+class CustomerMarketIdea {
+  const CustomerMarketIdea({required this.tradingSymbol, required this.companyName,
+    required this.ltp, required this.changePct, required this.gapPct,
+    required this.signal, required this.exchangeAt});
+  final String tradingSymbol;
+  final String companyName;
+  final num ltp;
+  final num changePct;
+  final num gapPct;
+  /// BREAKOUT, MOMENTUM or GAP_UP. A rule-screen label, never a recommendation.
+  final String signal;
+  final DateTime exchangeAt;
+
+  factory CustomerMarketIdea.fromJson(Map<String, dynamic> value) => CustomerMarketIdea(
+    tradingSymbol: _overviewText(value['tradingSymbol']),
+    companyName: _overviewText(value['companyName'], allowEmpty: true),
+    ltp: _overviewNumber(value['ltp'], positive: true),
+    changePct: _overviewNumber(value['changePct']),
+    gapPct: _overviewNumber(value['gapPct']),
+    signal: _overviewSignal(value['signal']),
+    exchangeAt: _overviewTime(value['exchangeAt']),
+  );
+}
+
+String _overviewSignal(Object? value) {
+  final text = _overviewText(value);
+  if (text == 'BREAKOUT' || text == 'MOMENTUM' || text == 'GAP_UP') return text;
+  throw const FormatException('Unknown market idea signal');
+}
+
 class CustomerMarketOverview {
   const CustomerMarketOverview({required this.generatedAt, required this.source,
     required this.breadthScope, required this.exchangeAsOf, required this.universe,
     required this.breadth, required this.gainers, required this.losers,
     required this.gapUp, required this.gapDown, required this.sectors,
-    required this.indices});
+    required this.indices, required this.ideas});
   final DateTime generatedAt;
   final String source;
   final String breadthScope;
@@ -524,6 +554,7 @@ class CustomerMarketOverview {
   final List<CustomerMover> gapDown;
   final List<CustomerSectorSummary> sectors;
   final List<CustomerIndexRow> indices;
+  final List<CustomerMarketIdea> ideas;
 
   factory CustomerMarketOverview.fromJson(Map<String, dynamic> value) {
     List<T> rows<T>(String key, T Function(Map<String, dynamic>) parse) {
@@ -555,6 +586,7 @@ class CustomerMarketOverview {
       gapDown: rows('gapDown', CustomerMover.fromJson),
       sectors: rows('sectors', CustomerSectorSummary.fromJson),
       indices: rows('indices', CustomerIndexRow.fromJson),
+      ideas: rows('ideas', CustomerMarketIdea.fromJson),
     );
   }
 }

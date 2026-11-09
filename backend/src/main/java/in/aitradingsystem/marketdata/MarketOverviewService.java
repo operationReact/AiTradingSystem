@@ -30,6 +30,8 @@ public class MarketOverviewService {
     static final String BREADTH_SCOPE = "NIFTY50_CONSTITUENTS";
     static final int PROVIDER_BATCH = 50;
     static final int LIST_LIMIT = 5;
+    static final BigDecimal MOMENTUM_PCT = new BigDecimal("2.00");
+    static final BigDecimal GAP_UP_PCT = new BigDecimal("1.00");
     static final Duration CACHE_TTL = Duration.ofSeconds(30);
     static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
     static final String INDEX_LIVE = "LIVE";
@@ -56,7 +58,16 @@ public class MarketOverviewService {
     }
 
     public record Mover(String tradingSymbol, String companyName, String sector, BigDecimal ltp,
-                        BigDecimal previousClose, BigDecimal changePct, BigDecimal gapPct, Instant exchangeAt) {}
+                        BigDecimal previousClose, BigDecimal changePct, BigDecimal gapPct, Instant exchangeAt,
+                        BigDecimal week52High) {}
+
+    /**
+     * A deterministic rule-screen hit from verified quotes. {@code signal} is BREAKOUT (last traded at or
+     * above the 52-week high), MOMENTUM (change at least {@link #MOMENTUM_PCT}) or GAP_UP (open gap at least
+     * {@link #GAP_UP_PCT}). These are screen results, not recommendations.
+     */
+    public record Idea(String tradingSymbol, String companyName, BigDecimal ltp, BigDecimal changePct,
+                       BigDecimal gapPct, String signal, Instant exchangeAt) {}
 
     public record Breadth(int advancers, int decliners, int unchanged, int total) {}
 
@@ -76,7 +87,7 @@ public class MarketOverviewService {
     public record Overview(Instant generatedAt, String source, String breadthScope, Instant exchangeAsOf,
                            Universe universe, Breadth breadth, List<Mover> gainers, List<Mover> losers,
                            List<Mover> gapUp, List<Mover> gapDown, List<SectorSummary> sectors,
-                           List<IndexRow> indices) {}
+                           List<IndexRow> indices, List<Idea> ideas) {}
 
     /** Cached for {@link #CACHE_TTL} so repeated page loads share one provider request per batch. */
     public synchronized Overview overview() {
@@ -152,7 +163,7 @@ public class MarketOverviewService {
             if (detail == null) continue;
             rows.add(new Mover(member.tradingSymbol(), member.companyName(), member.sector(), detail.ltp(),
                 detail.previousClose(), percent(detail.ltp(), detail.previousClose()),
-                percent(detail.open(), detail.previousClose()), detail.exchangeAt()));
+                percent(detail.open(), detail.previousClose()), detail.exchangeAt(), detail.week52High()));
         }
 
         int advancers = 0;
@@ -216,7 +227,22 @@ public class MarketOverviewService {
         return new Overview(generatedAt, SOURCE, BREADTH_SCOPE, exchangeAsOf,
             new Universe(UNIVERSE_CODE, sourceAsOf, members.size(), resolved, rows.size()),
             new Breadth(advancers, decliners, unchanged, rows.size()),
-            gainers, losers, gapUp, gapDown, sectors, indices);
+            gainers, losers, gapUp, gapDown, sectors, indices, ideas(rows));
+    }
+
+    static List<Idea> ideas(List<Mover> rows) {
+        List<Idea> hits = new ArrayList<>();
+        for (Mover row : rows) {
+            String signal = null;
+            if (row.week52High() != null && row.ltp().compareTo(row.week52High()) >= 0) signal = "BREAKOUT";
+            else if (row.changePct().compareTo(MOMENTUM_PCT) >= 0) signal = "MOMENTUM";
+            else if (row.gapPct().compareTo(GAP_UP_PCT) >= 0) signal = "GAP_UP";
+            if (signal == null) continue;
+            hits.add(new Idea(row.tradingSymbol(), row.companyName(), row.ltp(), row.changePct(),
+                row.gapPct(), signal, row.exchangeAt()));
+        }
+        hits.sort(Comparator.comparing(Idea::changePct).reversed().thenComparing(Idea::tradingSymbol));
+        return hits.size() > LIST_LIMIT ? new ArrayList<>(hits.subList(0, LIST_LIMIT)) : hits;
     }
 
     private static BigDecimal percent(BigDecimal value, BigDecimal base) {

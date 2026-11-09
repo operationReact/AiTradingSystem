@@ -89,6 +89,32 @@ class MarketOverviewServiceTest {
         assertThat(closed.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
     }
 
+    @Test
+    void ideasAreRuleScreenHitsWithBreakoutTakingPriorityOverMomentumAndGap() {
+        var members = List.of(
+            new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src"),
+            new MarketOverviewRepository.Member("BBB-EQ", "Beta", "IT", AS_OF, "src"),
+            new MarketOverviewRepository.Member("CCC-EQ", "Gamma", "IT", AS_OF, "src"),
+            new MarketOverviewRepository.Member("DDD-EQ", "Delta", "Pharma", AS_OF, "src"));
+        var tokens = Map.of("AAA-EQ", "1", "BBB-EQ", "2", "CCC-EQ", "3", "DDD-EQ", "4");
+        var stocks = Map.of(
+            "1", detailWith52High("110", "105", "100", "110"),
+            "2", detailWith52High("103", "101", "100", "150"),
+            "3", detailWith52High("100.5", "101.5", "100", "150"),
+            "4", detailWith52High("100.2", "100.1", "100", "150"));
+
+        var overview = MarketOverviewService.compute(NOW, members, tokens, stocks, List.of(), Map.of());
+
+        assertThat(overview.ideas()).extracting(i -> i.tradingSymbol() + ":" + i.signal())
+            .containsExactly("AAA-EQ:BREAKOUT", "BBB-EQ:MOMENTUM", "CCC-EQ:GAP_UP");
+    }
+
+    private static Detail detailWith52High(String ltp, String open, String previousClose, String week52High) {
+        return new Detail(new BigDecimal(ltp), new BigDecimal(open), new BigDecimal(ltp).max(new BigDecimal(open)),
+            new BigDecimal(ltp).min(new BigDecimal(open)), new BigDecimal(previousClose), 1000L,
+            Instant.parse("2026-11-09T03:59:00Z"), null, new BigDecimal(week52High), null, 0L, 0L, List.of(), List.of());
+    }
+
     private static Detail detail(String ltp, String open, String previousClose) {
         return detailAt(ltp, open, previousClose, "2026-11-09T03:59:00Z");
     }
