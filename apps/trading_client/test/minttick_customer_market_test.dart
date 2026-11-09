@@ -13,9 +13,10 @@ Map<String, dynamic> _mover(String symbol, String name, String sector, num ltp, 
       'exchangeAt': '2026-11-07T09:29:58Z',
     };
 
-Map<String, dynamic> overviewJson({String indexFreshness = 'LAST_CLOSE'}) => {
+Map<String, dynamic> overviewJson({String indexFreshness = 'LAST_CLOSE',
+    String source = 'ANGEL_ONE_SMARTAPI_FULL_BULK'}) => {
       'generatedAt': '2026-11-07T09:30:00Z',
-      'source': 'ANGEL_ONE_SMARTAPI_FULL_BULK',
+      'source': source,
       'breadthScope': 'NIFTY50_CONSTITUENTS',
       'exchangeAsOf': '2026-11-07T09:29:58Z',
       'universe': {'code': 'NIFTY50', 'sourceAsOf': '2026-11-09', 'members': 50,
@@ -50,6 +51,7 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
     CustomerOverviewRepository {
   bool failOverview = false;
   String indexFreshness = 'LAST_CLOSE';
+  bool storedOverview = false;
   String status = 'MARKET_CLOSED';
   bool failSnapshot = false;
   bool mismatchSymbol = false;
@@ -90,7 +92,10 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
   @override
   Future<CustomerMarketOverview> overview() async {
     if (failOverview) throw StateError('overview unavailable');
-    return CustomerMarketOverview.fromJson(overviewJson(indexFreshness: indexFreshness));
+    return CustomerMarketOverview.fromJson(overviewJson(
+      indexFreshness: indexFreshness,
+      source: storedOverview ? 'STORED_LAST_OVERVIEW' : 'ANGEL_ONE_SMARTAPI_FULL_BULK',
+    ));
   }
 
   @override
@@ -501,7 +506,7 @@ void main() {
 
   testWidgets('Overview, Movers and Sectors show verified Nifty 50 data with text direction labels',
       (tester) async {
-    final fake = _CustomerMarketFake()..status = 'LIVE';
+    final fake = _CustomerMarketFake()..status = 'LIVE'..indexFreshness = 'LIVE';
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerMarketPage(repository: fake),
@@ -557,7 +562,7 @@ void main() {
 
   testWidgets('tapping a market idea opens its stock detail through the active catalogue',
       (tester) async {
-    final fake = _CustomerMarketFake()..status = 'LIVE';
+    final fake = _CustomerMarketFake()..status = 'LIVE'..indexFreshness = 'LIVE';
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerMarketPage(repository: fake),
@@ -599,6 +604,41 @@ void main() {
     expect(find.text('+0.08%'), findsNothing);
     expect(find.textContaining('Stale · last tick'), findsOneWidget);
     expect(find.text('Value hidden'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('stored quotes do not claim the exchange is closed or expose current ideas',
+      (tester) async {
+    final fake = _CustomerMarketFake()
+      ..storedOverview = true
+      ..indexFreshness = 'LAST_CLOSE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Market feed · Stored snapshot'), findsOneWidget);
+    expect(find.textContaining('Historical snapshot only'), findsOneWidget);
+    expect(find.textContaining('Stored quote ·'), findsOneWidget);
+    expect(find.textContaining('Closed · Last close'), findsNothing);
+    expect(find.byKey(const ValueKey('market-idea-ALPHA-EQ')), findsNothing);
+    expect(find.textContaining('Current market ideas paused'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('stale index blocks current screening opportunities even with idea payload',
+      (tester) async {
+    final fake = _CustomerMarketFake()..indexFreshness = 'STALE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Market feed · Stale quotes'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market-idea-ALPHA-EQ')), findsNothing);
+    expect(find.textContaining('Current market ideas paused'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
