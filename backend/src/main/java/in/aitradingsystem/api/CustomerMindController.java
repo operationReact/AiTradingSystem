@@ -3,6 +3,7 @@ package in.aitradingsystem.api;
 import in.aitradingsystem.mind.MindReadinessService;
 import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
+import in.aitradingsystem.mind.MindMaWalkForwardService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -25,13 +26,16 @@ public class CustomerMindController {
     private final MindReadinessService service;
     private final MindEvidenceLedgerService evidence;
     private final MindStrategyReplayService replay;
+    private final MindMaWalkForwardService walkForward;
 
     public CustomerMindController(MindReadinessService service,
                                   MindEvidenceLedgerService evidence,
-                                  MindStrategyReplayService replay) {
+                                  MindStrategyReplayService replay,
+                                  MindMaWalkForwardService walkForward) {
         this.service = service;
         this.evidence = evidence;
         this.replay = replay;
+        this.walkForward = walkForward;
     }
 
     @GetMapping("/evidence")
@@ -46,6 +50,13 @@ public class CustomerMindController {
     public ResponseEntity<MindStrategyReplayService.Replay> strategyReplay() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(replay.inspect());
+    }
+
+    /** Research-only, after-assumed-cost walk-forward with explicit bias gates. */
+    @GetMapping("/ma-walkforward")
+    public ResponseEntity<MindMaWalkForwardService.Report> maWalkForward() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(walkForward.inspect());
     }
 
     @GetMapping("/overview")
