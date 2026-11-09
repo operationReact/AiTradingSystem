@@ -234,6 +234,26 @@ public class MarketDataRepository {
         return rows.reversed();
     }
 
+    /**
+     * Point-in-time, bounded replay window. Newer candles must never alter
+     * the input to a historical candidate. The caller independently validates
+     * fetched-at availability and catalogue/source provenance.
+     */
+    public List<MarketCandle> recentCandlesAsOf(long instrumentId, String interval,
+                                               Instant candleCutoff, int limit) {
+        if (instrumentId < 1 || interval == null || interval.isBlank()
+                || candleCutoff == null || limit < 1 || limit > 64) {
+            throw new IllegalArgumentException("Invalid bounded replay window");
+        }
+        List<MarketCandle> rows = jdbc.query("""
+                SELECT * FROM market_candle
+                 WHERE instrument_id = ? AND interval = ? AND candle_time <= ?
+                 ORDER BY candle_time DESC
+                 LIMIT ?
+                """, candleMapper, instrumentId, interval, offset(candleCutoff), limit);
+        return rows.reversed();
+    }
+
     public int countCandles(long instrumentId, String interval) {
         Integer count = jdbc.queryForObject(
                 "SELECT count(*) FROM market_candle WHERE instrument_id = ? AND interval = ?",
