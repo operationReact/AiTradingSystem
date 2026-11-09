@@ -1,68 +1,89 @@
-# Mintick Mind — Native Flutter UI parity tracker
+# Mintick Mind — Flutter UI implementation and parity tracker
 
-Source of visual truth: user-supplied `MintTick_Mind_Interactive_Prototype(1).html` and the nine original dark near-black MintTick Mind screen mockups. These references are not runtime implementations.
+**Branch:** \`feature/minttick-mind-ui-mockups-20261109\`  
+**Parent:** \`dev\` commit \`af9417aba64ede259397a527b4b2c0d5b9b6e063\`  
+**Source of product UX:** user-uploaded \`MintTick_Mind_Interactive_Prototype(1).html\` and nine Mintick Mind mockup screenshots.  
+**Technology:** Flutter under \`apps/trading_client\`; never modify the historical React product reference.  
+**Merge / deployment permission:** **NOT GRANTED**. Do not merge into \`dev\`, alter backend resources, deploy AWS, or submit orders.
 
-Implementation branch: `feature/minttick-mind-ui-mockups-20261109` (created from `dev`). **Never merge or deploy this work without separate user instruction.**
+## Implemented mock UI scope
 
-## Strict constraints
+All **32 named routes** from the prototype have Flutter screen definitions with a navigable shell. This is **functionally mapped and source-committed**, not yet pixel-certified. The screens use shared near-black/mint cards, text, diagrams, compact charts, metric grids, menus, navigation, dialogs, tabs, filters, buttons and hypothetical data.
 
-- Flutter-only app changes under `apps/trading_client/`; no Java, Python, exchange feeds, broker APIs, database, Terraform, or production-trading changes.
-- All values are generated sample fixtures. Every screen must clearly disclose demonstration data and must never display invented live claims.
-- Never make demo controls invoke order submission, broker account mutations, model promotion, or risk-authority endpoints.
-- Existing login stays the only login. Route `/mind` is displayed for authenticated customers.
-- Visual reference: near-black background, mint-highlight active tabs, consistent cards, readable financial hierarchy, restrained glows, responsive mobile and desktop behavior. No green wash on every element.
-- Maintain both light and dark themes in the overall product; the prototype itself is a deliberately dark demonstration design.
-- Before claiming pixel parity, capture Flutter golden screenshots at phone widths 360/393/411 and desktop 1440 and compare against the reference at corresponding crop/layout. Source-code compilation or an HTML screenshot alone cannot prove pixel parity.
-- Do not modify `frontend/` (legacy React behavior reference).
+| Route | Current Flutter screen coverage | UI parity gate |
+| --- | --- | --- |
+| app-home | Personal Mind landing + original MintTick home link | Golden pending |
+| overview | Approved first-pass Mind overview embedded in native shell | Golden pending |
+| trading-rooms | Mock room registry, statuses | Golden pending |
+| room-detail | Room allocations, strategies, decisions | Golden pending |
+| strategies | Search, 20-family filter, horizons, all 232 catalogue entries | Golden pending |
+| strategy-detail | Research metrics, dependencies, lifecycle, drilldowns | Golden pending |
+| models | 18-model registry, role filters, challenger comparison | Golden pending |
+| model-detail | Metrics, calibration, drift, history, contribution | Golden pending |
+| charts | Instruments, timeframes, nine chart-type selectors, signal stack | Golden pending |
+| decisions | Decision category filters and timeline | Golden pending |
+| decision-detail | Reasoning, evidence, risk, counterfactuals, outcomes | Golden pending |
+| decision-lab | Adjustable agreement/freshness/risk simulation | Golden pending |
+| dependencies | Graph/matrix, conflicts, correlated evidence, portfolio links | Golden pending |
+| research | Backtest, paper, shadow, walk-forward tabs and experiments | Golden pending |
+| experiment-detail | Hypothetical performance and methodology | Golden pending |
+| performance | Attribution, drawdowns, drift and learning links | Golden pending |
+| journal | Filterable decision audit timeline and mock export control | Golden pending |
+| multibagger | Screening, stages, company research scores and discovery queue | Golden pending |
+| thesis-detail | Thesis, hypothetical return cases, risks and watch state | Golden pending |
+| portfolio | Exposure, capital allocation and scenario slider | Golden pending |
+| risk | Risk limits, simulated emergency-stop and eligibility checks | Golden pending |
+| regimes | Market posture, regime weights and strategy activation guidance | Golden pending |
+| events | Event timeline and cross-sector effect hypothesis graph | Golden pending |
+| derivatives | Futures, options and short-selling research inventory | Golden pending |
+| options-chain | Strike/underlying selector, chain, IV/OI/Greeks samples | Golden pending |
+| option-builder | Structure switch, strike slider and payoff diagram | Golden pending |
+| controls | Local simulation toggles, kill switch, no live order capability | Golden pending |
+| assistant | Scripted read-only research question/answer interface | Golden pending |
+| design-gallery | Nine clickable **Flutter recreation thumbnails** | Original bitmaps not embedded |
+| design-preview | Native responsive phone preview mapped to a target screen | Bitmap/pixel parity pending |
+| coverage | Cross-linked 32-screen, 232-strategy, 18-model coverage inventory | Golden pending |
+| settings | Mind-only display and mock preference controls | Golden pending |
 
-## UI screen inventory
+## Strategy and model coverage
 
-| Prototype route / surface | Current Flutter stage | Expected next work |
-|---|---|---|
-| Mind Overview (`overview`) | **Initial native screen committed** | Pixel-level review + golden tests |
-| Strategy Universe (`strategies`) | Basic searchable native registry committed | Family views, status/sort/filter, performance, detail |
-| Strategy Detail (`strategy-detail`) | Basic details sheet | Full charts, parameters, dependencies |
-| Model Laboratory (`models`) | Basic browsable native registry committed | Leaderboard, champion comparisons, health |
-| Model Deep Dive (`model-detail`) | Basic details sheet | Provenance, drift, calibration, distributions |
-| Decision Explorer (`decisions`) | Basic decision feed committed | Timeline, advanced filters, explanations |
-| Decision Anatomy (`decision-detail`) | Basic details sheet | Evidence tree, counterfactuals, outcome tracing |
-| Chart Intelligence (`charts`) | Not started | OHLC chart, timeframes, transformed charts, signals |
-| Decision Simulator (`decision-lab`) | Not started | Risk/market/quality controls and abstention |
-| Dependency Map (`dependencies`) | Not started | Interactive strategy/model/filter/risk graph and matrix |
-| Research & Backtesting (`research`) | Not started | Backtest/paper/shadow/walk-forward modes |
-| Experiment Results (`experiment-detail`) | Not started | Equity curve, complete evidence, comparisons |
-| Performance & Learning (`performance`) | Not started | Model/strategy/portfolio attribution, decay, drift |
-| Decision Journal (`journal`) | Not started | Immutable-looking mock decision timeline and exports |
-| Multibagger Discovery (`multibagger`) | Initial research cards accessible from Overview | Screening, rankings, scores, deep review |
-| Investment Thesis (`thesis-detail`) | Basic scenario detail sheet | Growth/quality/valuation, bull/base/bear, red flags |
-| Portfolio Digital Twin (`portfolio`) | Not started | Exposure, allocation, hypothetical shock/holdings |
-| Risk Center (`risk`) | Not started | Limits, vetoes, loss states, no-order controls |
-| Engine Control (`controls`) | Not started | Mock switches, participation, emergency stop |
-| Market Regimes (`regimes`) | Not started | Regime matrix, gating, indicators |
-| Events & Knowledge Graph (`events`) | Not started | Corporate/news/macro event connections |
-| Trading Rooms (`trading-rooms`) | Not started in Mind mock workspace | Room overview, statuses, mode |
-| Trading Room Detail (`room-detail`) | Not started in Mind mock workspace | Room controls and evidence |
-| Futures & Options (`derivatives`) | Not started | Mock derivatives catalogue, separate non-executable mode |
-| Option Chain (`options-chain`) | Not started | Mock expiry/strike/OI/IV/Greeks |
-| Options Payoff Builder (`option-builder`) | Not started | Mock spreads, payoff, max loss/margin |
-| Ask Mintick Mind (`assistant`) | Not started | Safe read-only sample questions and explanations |
-| MintTick Home (`app-home`) | Existing production page, not modified | Mind entry deep link evaluation |
-| Visual Mockup Gallery (`design-gallery`) | Not started | Display nine design-reference images |
-| Clickable Design Mode (`design-preview`) | Not started | Original reference hotspots parity on Flutter |
-| Coverage Explorer (`coverage`) | Not started | Family/model/route inventory |
-| Preferences (`settings`) | Existing production page unchanged | Mind-specific mock settings later |
+- The source prototype's **232 named strategy templates across 20 families** are encoded in \`data/mind_fixtures.dart\`, each with a unique ID. Their catalogue presence is not the implementation of live trading algorithms.
+- The **18 model records** retain research/planned/advisory roles. No model result is represented as a verified live inference.
+- The app explicitly distinguishes research, paper, shadow, and disabled derivative execution. No new remote calls are imported into this feature.
+- Nine chart presentation options are selectable. The early mock chart painter is **illustrative only**; it is not a real OHLCV-to-Renko/Heikin-Ashi/Point-and-Figure conversion engine.
+- F&O payoff and chain visuals are simplified fictional approximations, not a broker risk calculator. Margin/fees/assignment/exercise are not production simulated.
+- The original source's nine PNG reference images are **not embedded** in this branch. Gallery previews are recreated with Flutter widgets, not actual screenshot assets. Therefore the claim of an exact pixel match would be incorrect.
 
-## Strategy and model completeness
+## Files and ownership
 
-The mock data layer holds **232 uniquely numbered strategy templates across 20 families** copied from the source prototype's named families and templates:
-Trend Following; Momentum; Breakout; Mean Reversion; Price Action & Candlesticks; Volume & Liquidity; Volatility; Statistical Arbitrage; Event Driven; Fundamental & Multibagger; Factor & Portfolio; Market Regime & Macro; Market Microstructure; AI & Machine Learning; Futures; Options — Directional; Options — Volatility; Options — Hedging; Short Selling; Execution & Risk.
+\`lib/src/app.dart\`: single authenticated \`/mind\` entry and route-specific navigation isolation.  
+\`lib/src/features/mintick_mind/data/mind_fixtures.dart\`: mock registry, names and statuses.  
+\`lib/src/features/mintick_mind/presentation/mind_widgets.dart\`: scoped visual tokens and widgets.  
+\`lib/src/features/mintick_mind/presentation/mintick_mind_page.dart\`: original first-pass Overview and sub-tabs.  
+\`lib/src/features/mintick_mind/presentation/mind_workspace_page.dart\`: responsive navigation and 32-route dispatch.  
+\`lib/src/features/mintick_mind/presentation/mind_analytics_screens.dart\`: strategy, model, chart, decision and dependency surfaces.  
+\`lib/src/features/mintick_mind/presentation/mind_investment_screens.dart\`: discovery, thesis, portfolio, risk, regimes, events.  
+\`lib/src/features/mintick_mind/presentation/mind_research_screens.dart\`: experiments, journal, performance, F&O.  
+\`lib/src/features/mintick_mind/presentation/mind_system_screens.dart\`: rooms, controls, assistant, gallery, preferences, coverage.  
+\`test/mintick_mind_mock_ui_test.dart\` and \`test/mintick_mind_workspace_coverage_test.dart\`: UI/data tests, **not executed here**.
 
-It also holds **18 named model records**, with research/planned/adapter statuses so mock data never implies actual live capability.
+## Strict guardrails
 
-**Important:** Complete catalogue coverage does not imply all 232 strategies are implemented as execution algorithms. Source HTML performance numbers and illustrations are fictional.
+1. Only same-session authenticated access. No additional admin account.
+2. All numbers, signals, scores, returns and business scenarios are mock data.
+3. Java risk authority, broker credential handling, real market APIs, Python research, authentication and actual execution are unchanged.
+4. UI toggles never grant live capital or change backend settings. No order methods, no offline order replay.
+5. Derivative execution disabled regardless of displayed option choices.
+6. Preserve existing MintTick app pages and navigation; the new workspace is an isolated route.
+7. Do not claim Pixel PERFECT, VERIFIED runtime or finished 3-platform acceptance until evidence exists.
 
-## Screen-by-screen release gates
+## Remaining acceptance gates
 
-Each screen must have: (1) visual reference and Flutter widget mapping; (2) mock-data completeness; (3) user interactions and drill-down/back navigation; (4) mobile 360/393/411 and desktop responsive checks; (5) no trading/backend calls; (6) widget and golden tests; (7) explicit review/approval recorded before marking completed.
+- Run \`flutter analyze\`, \`flutter test\`, then Flutter web/Android/iOS builds and platform smoke tests.
+- Render 360/393/411 logical-width mobile and desktop 1440 screens, check overflowing rows, navigation, accessibility, text scaling and touch target sizes.
+- Review visual screenshots against the nine original references; adjust fonts, cards, chart density, layout, spacing, stroke widths and motion until approved.
+- For the design-gallery screen, add approved source PNG assets as real Flutter assets in a separate UI-only change if requested.
+- Run route-by-route interaction verification and certify explicit mock-only enforcement.
+- Verify the commit diff continues to include **only Flutter/client UI, tests and documentation**, and remains unmerged.
 
-**Current verified scope:** GitHub commits and route/fixture source review only. Flutter analyzer, widget tests, native builds, screenshots and device runtime have **not** been run in this environment; status remains UNVERIFIED for those gates.
+**Current evidence:** GitHub source commits, static route inventory and delimiter checks. **Flutter runtime evidence: UNVERIFIED** (SDK unavailable in current session).
