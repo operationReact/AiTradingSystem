@@ -71,14 +71,19 @@ class CustomerLiveQuote {
       final tickAt = DateTime.tryParse('${value['exchangeAt'] ?? ''}');
       final change = value['changePercent'];
       if (price == null || !price.isFinite || price <= 0 || tickAt == null ||
-          value['source'] != 'STORED_LAST_LIVE_TICK' ||
+          !const {'STORED_LAST_LIVE_TICK', 'STORED_LAST_DETAIL'}
+              .contains(value['source']) ||
           (change != null && (change is! num || !change.isFinite))) {
         throw const FormatException('Unverified last traded price');
       }
+      // Preserve which independently stored source was used. PR #674 can
+      // correctly return a verified FULL detail snapshot even when the
+      // WebSocket tick table is still empty. Never relabel either as LIVE
+      // or as an official exchange closing price.
       return CustomerLiveQuote(instrumentId: id,
           exchange: exchange as String, tradingSymbol: tradingSymbol,
           status: status, ltp: price, exchangeAt: tickAt,
-          source: 'STORED_LAST_LIVE_TICK', changePercent: change as num?);
+          source: value['source'] as String, changePercent: change as num?);
     }
     if (status != 'LIVE') {
       // A disconnected or stale response must never carry a price to Flutter.
