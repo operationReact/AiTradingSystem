@@ -481,6 +481,14 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     final theme = Theme.of(context);
     return [
+      if (overview.source == 'STORED_LAST_OVERVIEW') ...[
+        MintTickInfoText(
+          'Historical snapshot only · saved ${overview.generatedAt.toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
+          'These are last recorded quotes, not a live market view.',
+          icon: Icons.history_rounded,
+        ),
+        const SizedBox(height: 12),
+      ],
       Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
@@ -488,7 +496,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const MintTickInfoText('Index quotes are not in this snapshot. None are shown.')
       else
         for (final index in overview.indices) ...[
-          _IndexCard(index: index),
+          _IndexCard(index: index, stored: overview.source == 'STORED_LAST_OVERVIEW'),
           const SizedBox(height: 8),
         ],
       const MintTickInfoText('SENSEX and intraday sparklines are not available yet: '
@@ -516,7 +524,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           const SizedBox(height: 8),
         ],
       const SizedBox(height: 8),
-      _IdeasSection(ideas: overview.ideas, onOpen: _openSymbol),
+      _IdeasSection(
+        ideas: overview.ideas,
+        onOpen: _openSymbol,
+        enabled: _overviewHasCurrentIdeaEvidence(overview),
+      ),
       const SizedBox(height: 12),
       _OverviewFooter(overview: overview),
     ];
@@ -726,7 +738,17 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   }
 }
 
-/// Session state from the backend's index freshness; never inferred from the clock.
+/// The quote freshness is NOT an exchange open/closed calendar or BSE session status.
+/// Show verified feed state only; live sessions and trade eligibility are separate.
+bool _overviewHasCurrentIdeaEvidence(CustomerMarketOverview overview) {
+  if (overview.source == 'STORED_LAST_OVERVIEW') return false;
+  if (!overview.indices.any((index) => index.freshness == 'LIVE')) return false;
+  final tick = overview.exchangeAsOf;
+  if (tick == null) return false;
+  final age = overview.generatedAt.difference(tick);
+  return !age.isNegative && age <= const Duration(minutes: 2);
+}
+
 class _MarketStatusPill extends StatelessWidget {
   const _MarketStatusPill({required this.overview, required this.failed});
   final CustomerMarketOverview? overview;
@@ -740,16 +762,17 @@ class _MarketStatusPill extends StatelessWidget {
     final label = switch ((overview, failed)) {
       (null, true) => 'Feed unavailable',
       (null, false) => 'Checking feed',
-      _ when indices.any((i) => i.freshness == 'LIVE') => 'Open · Live',
-      _ when indices.any((i) => i.freshness == 'STALE') => 'Open · Stale',
-      _ when indices.isNotEmpty => 'Closed · Last close',
-      _ => 'Status unknown',
+      _ when overview?.source == 'STORED_LAST_OVERVIEW' => 'Stored snapshot',
+      _ when indices.any((i) => i.freshness == 'LIVE') => 'Live quotes',
+      _ when indices.any((i) => i.freshness == 'STALE') => 'Stale quotes',
+      _ when indices.isNotEmpty => 'Last recorded quotes',
+      _ => 'Feed status unknown',
     };
-    final live = label == 'Open · Live';
+    final live = label == 'Live quotes';
     final color = live ? scheme.primary : scheme.onSurfaceVariant;
     return Semantics(
       container: true,
-      label: 'NSE and BSE status: $label',
+      label: 'Verified quote status: $label; not an exchange session indicator',
       child: ExcludeSemantics(
         child: Align(
           alignment: Alignment.centerLeft,
@@ -764,7 +787,7 @@ class _MarketStatusPill extends StatelessWidget {
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               Icon(live ? Icons.circle : Icons.bedtime_outlined, size: 10, color: color),
               const SizedBox(width: 8),
-              Flexible(child: Text('NSE & BSE · $label', overflow: TextOverflow.ellipsis,
+              Flexible(child: Text('Market feed · $label', overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.labelMedium?.copyWith(
                       color: color, fontWeight: FontWeight.w700))),
             ]),
@@ -951,8 +974,9 @@ BoxDecoration _cardDecoration(ColorScheme scheme) => BoxDecoration(
     );
 
 class _IndexCard extends StatelessWidget {
-  const _IndexCard({required this.index});
+  const _IndexCard({required this.index, required this.stored});
   final CustomerIndexRow index;
+  final bool stored;
 
   @override
   Widget build(BuildContext context) {
@@ -960,11 +984,14 @@ class _IndexCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final time = _clock(index.exchangeAt.toLocal());
     final stale = index.freshness == 'STALE';
-    final freshnessLabel = switch (index.freshness) {
-      'LIVE' => 'Live · exchange time $time',
-      'STALE' => 'Stale · last tick $time',
-      _ => 'Last close · $time',
-    };
+    final date = index.exchangeAt.toLocal().toIso8601String().split('T').first;
+    final freshnessLabel = stored
+        ? 'Stored quote · $date $time'
+        : switch (index.freshness) {
+            'LIVE' => 'Live · exchange time $time',
+            'STALE' => 'Stale · last tick $time',
+            _ => 'Last recorded · $date $time',
+          };
     final value = stale ? '—' : index.ltp.toStringAsFixed(2);
     return Semantics(
       container: true,
@@ -1240,9 +1267,10 @@ IconData _sectorIcon(String sector) {
 
 /// Rule-screen hits from the backend. Labels describe why a stock matched; they are not advice.
 class _IdeasSection extends StatelessWidget {
-  const _IdeasSection({required this.ideas, required this.onOpen});
+  const _IdeasSection({required this.ideas, required this.onOpen, required this.enabled});
   final List<CustomerMarketIdea> ideas;
   final Future<void> Function(String symbol) onOpen;
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -1258,7 +1286,13 @@ class _IdeasSection extends StatelessWidget {
               ?.copyWith(color: scheme.onSurfaceVariant)),
         ]),
         const SizedBox(height: 8),
-        if (ideas.isEmpty)
+        if (!enabled)
+          const MintTickInfoText(
+            'Current market ideas paused. Fresh exchange ticks and a live verified '
+            'index quote are required. Stored or stale screening results are hidden.',
+            icon: Icons.schedule_rounded,
+          )
+        else if (ideas.isEmpty)
           const MintTickInfoText('No Nifty 50 stock meets a screen rule in this snapshot. '
               'Screens are rules on verified quotes, not recommendations.')
         else
