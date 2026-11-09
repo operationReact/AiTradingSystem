@@ -235,7 +235,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
           style:const TextStyle(color:MindPalette.muted,fontSize:12)),
         const SizedBox(height:12),
         _mockChart(seed:_chartSeed+_instrument.length,height:265,
-          candles:_chartStyle!='Line'),
+          style:_chartStyle),
         _value('Fictional price','₹2,956.40'),
         _value('Support / Resistance','₹2,880 / ₹2,955'),
       ])),
