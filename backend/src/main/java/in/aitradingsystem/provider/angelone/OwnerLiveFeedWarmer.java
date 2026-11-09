@@ -1,6 +1,7 @@
 package in.aitradingsystem.provider.angelone;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import java.time.Clock;
@@ -30,6 +31,7 @@ public class OwnerLiveFeedWarmer {
     private final OwnerAngelOneSsmService ownerSsm;
     private final MarketSessionCalendar calendar;
     private final ResearchScanRepository scans;
+    private final MarketLastTickStore lastTicks;
     private final Clock clock;
     private final UUID owner;
     private final int universeLimit;
@@ -40,9 +42,10 @@ public class OwnerLiveFeedWarmer {
             OwnerAngelOneSsmService ownerSsm,
             MarketSessionCalendar calendar,
             ResearchScanRepository scans,
+            MarketLastTickStore lastTicks,
             @Value("${minttick.owner-feed.user-id}") String ownerUserId,
             @Value("${minttick.owner-feed.universe-limit:1000}") int universeLimit) {
-        this(liveQuotes, sessions, ownerSsm, calendar, scans, Clock.systemUTC(),
+        this(liveQuotes, sessions, ownerSsm, calendar, scans, lastTicks, Clock.systemUTC(),
                 UUID.fromString(ownerUserId.trim()), universeLimit);
     }
 
@@ -51,6 +54,7 @@ public class OwnerLiveFeedWarmer {
             OwnerAngelOneSsmService ownerSsm,
             MarketSessionCalendar calendar,
             ResearchScanRepository scans,
+            MarketLastTickStore lastTicks,
             Clock clock,
             UUID owner,
             int universeLimit) {
@@ -60,6 +64,7 @@ public class OwnerLiveFeedWarmer {
         this.ownerSsm = ownerSsm;
         this.calendar = calendar;
         this.scans = scans;
+        this.lastTicks = lastTicks;
         this.clock = clock;
         this.owner = owner;
         this.universeLimit = universeLimit;
@@ -76,7 +81,7 @@ public class OwnerLiveFeedWarmer {
             }
             List<Instrument> universe = scans.activeCashEquityUniverse(universeLimit);
             if (universe.isEmpty()) return;
-            liveQuotes.snapshot(owner, universe);
+            lastTicks.recordLive(liveQuotes.snapshot(owner, universe));
         } catch (RuntimeException ex) {
             log.warn("Owner live feed warm-up failed: {}", ex.getClass().getSimpleName());
         }

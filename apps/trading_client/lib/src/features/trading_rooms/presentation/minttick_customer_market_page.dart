@@ -299,7 +299,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (statuses.any(const {'LIVE', 'STALE', 'CONNECTING', 'RECONNECTING', 'PENDING'}.contains)) {
       return _activePoll;
     }
-    if (statuses.every((s) => s == 'MARKET_CLOSED')) return _closedPoll;
+    if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) return _closedPoll;
     return _degradedPoll;
   }
 
@@ -565,8 +565,10 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       return (text: 'Live feed connected. Each price carries its exchange tick time.',
         icon: Icons.sensors_rounded);
     }
-    if (statuses.every((s) => s == 'MARKET_CLOSED')) {
-      return (text: 'Market closed. Prices appear when the NSE and BSE cash session opens.',
+    if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) {
+      return (text: statuses.contains('LAST_CLOSE')
+          ? 'Market closed. Last traded prices are labelled and are not live.'
+          : 'Market closed. Prices appear when the NSE and BSE cash session opens.',
         icon: Icons.bedtime_outlined);
     }
     if (feedFailed) {
@@ -624,6 +626,7 @@ class _NotAvailableBlock extends StatelessWidget {
       'RECONNECTING' => (label: 'RECONNECTING', icon: Icons.sync_rounded, color: scheme.tertiary),
       'CONNECTING' => (label: 'CONNECTING', icon: Icons.sync_rounded, color: scheme.onSurfaceVariant),
       'MARKET_CLOSED' => (label: 'CLOSED', icon: Icons.bedtime_outlined, color: scheme.onSurfaceVariant),
+      'LAST_CLOSE' => (label: 'LAST TRADED', icon: Icons.history_rounded, color: scheme.onSurfaceVariant),
       'PENDING' => (label: 'LOADING', icon: Icons.hourglass_empty_rounded, color: scheme.onSurfaceVariant),
       _ => (label: 'NO FEED', icon: Icons.cloud_off_outlined, color: scheme.error),
     };
@@ -631,6 +634,11 @@ class _NotAvailableBlock extends StatelessWidget {
 String _clock(DateTime time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:'
     '${time.second.toString().padLeft(2, '0')}';
+
+String _dayClock(DateTime time) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${time.day.toString().padLeft(2, '0')} ${months[time.month - 1]} ${_clock(time).substring(0, 5)}';
+}
 
 class _StockRow extends StatelessWidget {
   const _StockRow({required this.stock, required this.quote, required this.status});
@@ -646,16 +654,21 @@ class _StockRow extends StatelessWidget {
     final name = stock.name.trim().isEmpty
         ? stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')
         : stock.name;
-    final price = status == 'LIVE' ? quote?.ltp : null;
-    final tickAt = status == 'LIVE' ? quote?.exchangeAt : null;
+    final isLast = status == 'LAST_CLOSE';
+    final price = status == 'LIVE' || isLast ? quote?.ltp : null;
+    final tickAt = status == 'LIVE' || isLast ? quote?.exchangeAt : null;
     final priceText = price == null ? '—' : '₹${price.toStringAsFixed(2)}';
+    final change = isLast ? quote?.changePercent : null;
     final statusLine = tickAt == null
         ? style.label
-        : '${style.label} · ${_clock(tickAt.toLocal())}';
+        : isLast
+            ? '${style.label} · ${_dayClock(tickAt.toLocal())}'
+                '${change == null ? '' : ' · ${_signedPct(change)}'}'
+            : '${style.label} · ${_clock(tickAt.toLocal())}';
     return Semantics(
       container: true,
       label: '$name, ${stock.tradingSymbol} ${stock.exchange}. '
-          '${price == null ? 'No verified price' : 'Price $priceText'}. '
+          '${price == null ? 'No verified price' : '${isLast ? 'Last traded' : 'Price'} $priceText'}. '
           'Status ${style.label.toLowerCase()}.',
       child: ExcludeSemantics(
         child: Container(

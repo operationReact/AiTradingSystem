@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
@@ -54,19 +55,20 @@ public class CustomerMarketDataController {
     private final CustomerAngelOneLiveQuoteService liveQuotes;
     private final AppAngelOneMarketFeedService applicationFeed;
     private final MarketOverviewService marketOverview;
+    private final MarketLastTickStore lastTickStore;
 
     /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode) {
-        this(identities, instruments, market, ownerSubject, providerMode, null, null, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, null, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode,
             CustomerAngelOneSessionService customerBroker) {
-        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -75,7 +77,7 @@ public class CustomerMarketDataController {
             CustomerAngelOneSessionService customerBroker,
             CustomerAngelOneLiveQuoteService liveQuotes) {
         this(identities, instruments, market, ownerSubject, providerMode,
-            customerBroker, liveQuotes, null, null);
+            customerBroker, liveQuotes, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -85,7 +87,7 @@ public class CustomerMarketDataController {
             CustomerAngelOneLiveQuoteService liveQuotes,
             AppAngelOneMarketFeedService applicationFeed) {
         this(identities, instruments, market, ownerSubject, providerMode,
-            customerBroker, liveQuotes, applicationFeed, null);
+            customerBroker, liveQuotes, applicationFeed, null, null);
     }
 
     @Autowired
@@ -96,7 +98,8 @@ public class CustomerMarketDataController {
             CustomerAngelOneSessionService customerBroker,
             CustomerAngelOneLiveQuoteService liveQuotes,
             AppAngelOneMarketFeedService applicationFeed,
-            MarketOverviewService marketOverview) {
+            MarketOverviewService marketOverview,
+            MarketLastTickStore lastTickStore) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
@@ -106,6 +109,7 @@ public class CustomerMarketDataController {
         this.liveQuotes = liveQuotes;
         this.applicationFeed = applicationFeed;
         this.marketOverview = marketOverview;
+        this.lastTickStore = lastTickStore;
     }
 
 
@@ -205,7 +209,8 @@ public class CustomerMarketDataController {
     }
 
     public record SnapshotRow(long instrumentId, String exchange, String tradingSymbol,
-                              BigDecimal ltp, Instant exchangeAt, String status, String source) {}
+                              BigDecimal ltp, Instant exchangeAt, String status, String source,
+                              BigDecimal changePercent) {}
 
     /**
      * Day OHLC, previous close and traded volume from one verified FULL quote. {@code previousClose}
@@ -276,21 +281,27 @@ public class CustomerMarketDataController {
                 "Application live market feed is unavailable");
         }
         var replies = applicationFeed.snapshot(stocks);
+        Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
+            ? Map.of() : lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
         List<SnapshotRow> rows = new ArrayList<>();
         for (int i = 0; i < stocks.size(); i++) {
-            rows.add(snapshotRow(stocks.get(i), replies.get(i)));
+            rows.add(snapshotRow(stocks.get(i), replies.get(i), lastTicks.get(stocks.get(i).id())));
         }
         return noStore(new Snapshot(Instant.now(), rows));
     }
 
+    /**
+     * A closed-market row carries the last stored LIVE tick as LAST_CLOSE, labelled stored and
+     * never as LIVE. The change is null until a previous session close has been stored.
+     */
     private static SnapshotRow snapshotRow(Instrument instrument,
-            CustomerAngelOneLiveQuoteService.LiveQuote reply) {
+            CustomerAngelOneLiveQuoteService.LiveQuote reply, MarketLastTickStore.LastTick lastTick) {
         boolean matches = reply.instrumentId() == instrument.id()
             && instrument.exchange().equals(reply.exchange())
             && instrument.tradingSymbol().equals(reply.tradingSymbol());
         if (!matches) {
             return new SnapshotRow(instrument.id(), instrument.exchange(),
-                instrument.tradingSymbol(), null, null, "UNAVAILABLE", null);
+                instrument.tradingSymbol(), null, null, "UNAVAILABLE", null, null);
         }
         boolean verifiedLive = "LIVE".equals(reply.status())
             && "ANGEL_ONE_SMARTAPI_WS_V2".equals(reply.source())
@@ -298,12 +309,17 @@ public class CustomerMarketDataController {
             && reply.exchangeAt() != null && reply.receivedAt() != null;
         if (verifiedLive) {
             return new SnapshotRow(instrument.id(), instrument.exchange(),
-                instrument.tradingSymbol(), reply.ltp(), reply.exchangeAt(), "LIVE", reply.source());
+                instrument.tradingSymbol(), reply.ltp(), reply.exchangeAt(), "LIVE", reply.source(), null);
+        }
+        if ("MARKET_CLOSED".equals(reply.status()) && lastTick != null) {
+            return new SnapshotRow(instrument.id(), instrument.exchange(),
+                instrument.tradingSymbol(), lastTick.ltp(), lastTick.exchangeAt(), "LAST_CLOSE",
+                "STORED_LAST_LIVE_TICK", lastTick.changePercent());
         }
         String status = java.util.Set.of("CONNECTING", "RECONNECTING", "STALE", "UNAVAILABLE",
                 "MARKET_CLOSED").contains(reply.status()) ? reply.status() : "UNAVAILABLE";
         return new SnapshotRow(instrument.id(), instrument.exchange(),
-            instrument.tradingSymbol(), null, null, status, null);
+            instrument.tradingSymbol(), null, null, status, null, null);
     }
 
     private static Instrument requireCashEquity(Instrument instrument) {

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.scanner.ResearchScanRepository;
 import java.math.BigDecimal;
@@ -30,12 +31,13 @@ class OwnerLiveFeedWarmerTest {
         var ssm = mock(OwnerAngelOneSsmService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
+        var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(false);
 
-        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans,
+        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
             Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500).warm();
 
-        verifyNoInteractions(liveQuotes, sessions, ssm, scans);
+        verifyNoInteractions(liveQuotes, sessions, ssm, scans, lastTicks);
     }
 
     @Test
@@ -45,16 +47,21 @@ class OwnerLiveFeedWarmerTest {
         var ssm = mock(OwnerAngelOneSsmService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
+        var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(true);
         when(ssm.available()).thenReturn(true);
         when(scans.activeCashEquityUniverse(eq(500))).thenReturn(List.of(NSE));
+        var reply = List.of(new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+            new BigDecimal("101.50"), NOW, NOW, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
+        when(liveQuotes.snapshot(OWNER, List.of(NSE))).thenReturn(reply);
 
-        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans,
+        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
             Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500).warm();
 
         verify(ssm).connect(OWNER);
         verify(scans).activeCashEquityUniverse(500);
         verify(liveQuotes).snapshot(OWNER, List.of(NSE));
+        verify(lastTicks).recordLive(reply);
     }
 
     @Test
@@ -64,11 +71,12 @@ class OwnerLiveFeedWarmerTest {
         var ssm = mock(OwnerAngelOneSsmService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
+        var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(true);
         when(ssm.available()).thenReturn(false);
         when(scans.activeCashEquityUniverse(anyInt())).thenThrow(new IllegalStateException("db down"));
 
-        var warmer = new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans,
+        var warmer = new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
             Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500);
         assertThatCode(warmer::warm).doesNotThrowAnyException();
         verify(liveQuotes, never()).snapshot(any(), anyList());
@@ -79,7 +87,7 @@ class OwnerLiveFeedWarmerTest {
         assertThatThrownBy(() -> new OwnerLiveFeedWarmer(mock(CustomerAngelOneLiveQuoteService.class),
             mock(CustomerAngelOneSessionService.class), mock(OwnerAngelOneSsmService.class),
             mock(MarketSessionCalendar.class), mock(ResearchScanRepository.class),
-            Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 0))
+            mock(MarketLastTickStore.class), Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 0))
             .isInstanceOf(IllegalArgumentException.class);
     }
 }

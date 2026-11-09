@@ -13,6 +13,7 @@ import in.aitradingsystem.user.CustomerIdentityStore;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -206,6 +207,38 @@ class CustomerMarketDataControllerTest {
         assertThat(response.status()).isEqualTo("MARKET_CLOSED");
         assertThat(response.ltp()).isNull();
         assertThat(response.exchangeAt()).isNull();
+        verifyNoInteractions(customerBroker, personalSockets);
+    }
+
+    @Test
+    void closedMarketShowsStoredLastTickAsLastCloseWithChangeOnlyWhenPreviousCloseKnown() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var exchangeAt = Instant.parse("2026-11-06T10:00:00Z");
+        var store = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(instrument))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("100.00"), new BigDecimal("98.00"), exchangeAt)));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "unrelated-owner-sub", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, store);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("100.00");
+        assertThat(row.exchangeAt()).isEqualTo(exchangeAt);
+        assertThat(row.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        assertThat(row.changePercent()).isEqualByComparingTo("2.0408");
+
+        when(store.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("100.00"), null, exchangeAt)));
+        var firstSession = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(firstSession.status()).isEqualTo("LAST_CLOSE");
+        assertThat(firstSession.changePercent()).isNull();
         verifyNoInteractions(customerBroker, personalSockets);
     }
 

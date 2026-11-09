@@ -403,6 +403,22 @@ void main() {
     }), throwsFormatException);
   });
 
+  test('LAST_CLOSE carries a stored last traded price and change, never LIVE', () {
+    final row = CustomerLiveQuote.fromJson({
+      'instrumentId': 101, 'exchange': 'NSE', 'tradingSymbol': 'TEST-EQ',
+      'status': 'LAST_CLOSE', 'ltp': 125.55, 'changePercent': 2.04,
+      'exchangeAt': '2026-11-06T10:00:00Z', 'source': 'STORED_LAST_LIVE_TICK',
+    });
+    expect(row.status, 'LAST_CLOSE');
+    expect(row.ltp, 125.55);
+    expect(row.changePercent, 2.04);
+    expect(() => CustomerLiveQuote.fromJson({
+      'instrumentId': 101, 'exchange': 'NSE', 'tradingSymbol': 'TEST-EQ',
+      'status': 'LAST_CLOSE', 'ltp': 125.55, 'exchangeAt': '2026-11-06T10:00:00Z',
+      'source': 'ANGEL_ONE_SMARTAPI_WS_V2',
+    }), throwsFormatException);
+  });
+
     for (final width in [320.0, 390.0]) {
     for (final brightness in [Brightness.dark, Brightness.light]) {
       testWidgets('customer Markets shows closed row without price at ${width.toInt()}dp ${brightness.name}',

@@ -40,7 +40,7 @@ class CustomerMarketQuote {
 class CustomerLiveQuote {
   const CustomerLiveQuote({required this.instrumentId, required this.exchange,
     required this.tradingSymbol, required this.status,
-    this.ltp, this.exchangeAt, this.source});
+    this.ltp, this.exchangeAt, this.source, this.changePercent});
   final int instrumentId;
   final String exchange;
   final String tradingSymbol;
@@ -48,6 +48,8 @@ class CustomerLiveQuote {
   final num? ltp;
   final DateTime? exchangeAt;
   final String? source;
+  /// Change vs the previous stored session close; only set for LAST_CLOSE rows.
+  final num? changePercent;
 
   factory CustomerLiveQuote.fromJson(Map<String, dynamic> value) {
     final id = value['instrumentId'];
@@ -58,9 +60,25 @@ class CustomerLiveQuote {
         (exchange != 'NSE' && exchange != 'BSE') ||
         tradingSymbol is! String || tradingSymbol.isEmpty ||
         status is! String ||
-        !const {'LIVE','CONNECTING','RECONNECTING','STALE','UNAVAILABLE',
+        !const {'LIVE','LAST_CLOSE','CONNECTING','RECONNECTING','STALE','UNAVAILABLE',
           'MARKET_CLOSED','BROKER_CONNECTION_REQUIRED'}.contains(status)) {
       throw const FormatException('Invalid live quote state');
+    }
+    if (status == 'LAST_CLOSE') {
+      // A stored last traded price, never presented as live; the source must name the stored path.
+      final price = value['ltp'] is num ? value['ltp'] as num :
+          num.tryParse('${value['ltp'] ?? ''}');
+      final tickAt = DateTime.tryParse('${value['exchangeAt'] ?? ''}');
+      final change = value['changePercent'];
+      if (price == null || !price.isFinite || price <= 0 || tickAt == null ||
+          value['source'] != 'STORED_LAST_LIVE_TICK' ||
+          (change != null && (change is! num || !change.isFinite))) {
+        throw const FormatException('Unverified last traded price');
+      }
+      return CustomerLiveQuote(instrumentId: id,
+          exchange: exchange as String, tradingSymbol: tradingSymbol,
+          status: status, ltp: price, exchangeAt: tickAt,
+          source: 'STORED_LAST_LIVE_TICK', changePercent: change as num?);
     }
     if (status != 'LIVE') {
       // A disconnected or stale response must never carry a price to Flutter.
