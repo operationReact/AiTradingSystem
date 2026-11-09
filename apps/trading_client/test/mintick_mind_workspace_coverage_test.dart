@@ -4,10 +4,12 @@ import 'package:trading_client/src/features/mintick_mind/data/mind_fixtures.dart
 import 'package:trading_client/src/features/mintick_mind/presentation/mind_workspace_page.dart';
 
 void main() {
-  test('all 32 interactive HTML prototype screens have native route descriptors', () {
-    expect(MintickMindScreens.all.length, 32);
-    expect(MintickMindScreens.all.map((r)=>r.id).toSet().length, 32);
+  test('all 42 interactive HTML prototype screens have native route descriptors', () {
+    expect(MintickMindScreens.all.length, 42);
+    expect(MintickMindScreens.all.map((r)=>r.id).toSet().length, 42);
     expect(MintickMindScreens.all.any((r)=>r.id=='options-chain'), isTrue);
+    expect(MintickMindScreens.all.any((r)=>r.id=='culprit-catcher'), isTrue);
+    expect(MintickMindScreens.all.any((r)=>r.id=='agent-council'), isTrue);
     expect(MintickMindScreens.all.any((r)=>r.id=='multibagger'), isTrue);
     expect(MintickMindScreens.all.any((r)=>r.id=='decision-lab'), isTrue);
     expect(MintickMindScreens.all.any((r)=>r.id=='dependency-map'), isFalse);
