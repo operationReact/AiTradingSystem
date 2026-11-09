@@ -5,6 +5,7 @@ import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
 import in.aitradingsystem.mind.MindMaWalkForwardService;
 import in.aitradingsystem.mind.MindProspectiveCohortService;
+import in.aitradingsystem.mind.MindProspectiveSignalService;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
@@ -29,17 +30,20 @@ public class CustomerMindController {
     private final MindStrategyReplayService replay;
     private final MindMaWalkForwardService walkForward;
     private final MindProspectiveCohortService prospective;
+    private final MindProspectiveSignalService prospectiveSignals;
 
     public CustomerMindController(MindReadinessService service,
                                   MindEvidenceLedgerService evidence,
                                   MindStrategyReplayService replay,
                                   MindMaWalkForwardService walkForward,
-                                  MindProspectiveCohortService prospective) {
+                                  MindProspectiveCohortService prospective,
+                                  MindProspectiveSignalService prospectiveSignals) {
         this.service = service;
         this.evidence = evidence;
         this.replay = replay;
         this.walkForward = walkForward;
         this.prospective = prospective;
+        this.prospectiveSignals = prospectiveSignals;
     }
 
     @GetMapping("/evidence")
@@ -68,6 +72,13 @@ public class CustomerMindController {
     public ResponseEntity<MindProspectiveCohortService.Status> prospectiveCohort() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(prospective.inspect());
+    }
+
+    /** Research receipt counts. No retrospective recomputation on GET. */
+    @GetMapping("/prospective-signals")
+    public ResponseEntity<MindProspectiveSignalService.Status> prospectiveSignals() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(prospectiveSignals.inspect());
     }
 
     @GetMapping("/overview")
