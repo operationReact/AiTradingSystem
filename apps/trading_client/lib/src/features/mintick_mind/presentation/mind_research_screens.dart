@@ -19,6 +19,12 @@ extension _MindResearchScreens on _MindWorkspaceState {
       _researchMode==e.$2||(_researchMode=='Backtests'&&e.$2=='Backtest')).toList();
     return _surface('Research & Backtesting',
       'Experiments, validation, paper and shadow performance',[
+      _section('External research engines · roadmap',Icons.extension_outlined,[
+        _tile('Research Engines Lab',
+          'VectorBT / Backtesting.py / Nautilus / LEAN / Freqtrade · NOT CONNECTED',
+          Icons.construction_outlined,route:'research-engines',
+          trailing:'PLANNED',color:MindPalette.yellow),
+      ]),
       _chips(['All','Backtests','Paper','Shadow','Walk-forward'],
         _researchMode,(v)=>_updateMind(()=>_researchMode=v)),
       const SizedBox(height:10),
@@ -114,6 +120,10 @@ extension _MindResearchScreens on _MindWorkspaceState {
       ),
       const SizedBox(height:13),
       _section('Compare Experiments',Icons.compare_arrows,[
+        _tile('External validation engines',
+          'No third-party engine results yet · see integration requirements',
+          Icons.extension_outlined,route:'research-engines',
+          trailing:'PLANNED',color:MindPalette.yellow),
         _tile('Research laboratory','Compare champion, challenger, and baselines',
           Icons.science_outlined,route:'research'),
         _tile('Model performance','Inspect model contribution and health',
