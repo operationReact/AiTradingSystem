@@ -92,6 +92,14 @@ class OwnerLiveFeedWarmerTest {
     }
 
     @Test
+    void configuredWebsocketBudgetNeverExceedsProviderWatchCap() {
+        assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(1000)).isEqualTo(50);
+        assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(20)).isEqualTo(20);
+        assertThatThrownBy(() -> CustomerAngelOneLiveQuoteService.boundedWatchCap(0))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void rejectsNonPositiveUniverseLimit() {
         assertThatThrownBy(() -> new OwnerLiveFeedWarmer(mock(AppAngelOneMarketFeedService.class),
             mock(MarketSessionCalendar.class), mock(ResearchScanRepository.class),
