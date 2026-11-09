@@ -119,4 +119,26 @@ class CustomerMindControllerTest {
         org.mockito.Mockito.verify(prospective).inspect();
     }
 
+    @Test
+    void prospectiveSignalsReadIsNoStoreAndNeverPlacesAnOrder() {
+        var signals = mock(MindProspectiveSignalService.class);
+        var expected = new MindProspectiveSignalService.Status(
+            "mind.prospective-signals.v1", Instant.parse("2026-11-09T16:00:00Z"),
+            "UNREGISTERED", null, null, 0, 0, 0, List.of(),
+            List.of("PROSPECTIVE_OUTCOMES_NOT_RECONCILED"), "ABSTAIN",
+            false, false, false);
+        when(signals.inspect()).thenReturn(expected);
+        var response = new CustomerMindController(
+            mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
+            mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class),
+            mock(MindProspectiveCohortService.class), signals).prospectiveSignals();
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        assertEquals("ABSTAIN", response.getBody().decisionPosture());
+        assertFalse(response.getBody().outcomeValidated());
+        assertFalse(response.getBody().paperOrderSubmitted());
+        assertFalse(response.getBody().executionEnabled());
+        org.mockito.Mockito.verify(signals).inspect();
+    }
+
 }
