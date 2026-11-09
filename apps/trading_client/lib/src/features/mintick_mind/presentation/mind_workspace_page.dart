@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
