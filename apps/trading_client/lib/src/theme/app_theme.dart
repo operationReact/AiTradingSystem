@@ -72,11 +72,11 @@ ThemeData buildTheme(Brightness brightness) {
     brightness: brightness,
   ).copyWith(
     primary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
-    onPrimary: Colors.white,
+    onPrimary: dark ? MintTickPalette.nearBlack : Colors.white,
     primaryContainer: dark ? const Color(0xFF142117) : const Color(0xFFDFF2E4),
     onPrimaryContainer: dark ? const Color(0xFFD5F4DE) : const Color(0xFF133A21),
     secondary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
-    onSecondary: Colors.white,
+    onSecondary: dark ? MintTickPalette.nearBlack : Colors.white,
     secondaryContainer: dark ? const Color(0xFF18241A) : const Color(0xFFE7F3E9),
     onSecondaryContainer: dark ? const Color(0xFFD5F4DE) : const Color(0xFF133A21),
     tertiary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
