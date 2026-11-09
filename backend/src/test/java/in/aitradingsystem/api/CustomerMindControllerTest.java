@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import in.aitradingsystem.mind.MindReadinessService;
 import in.aitradingsystem.mind.MindEvidenceLedgerService;
 import in.aitradingsystem.mind.MindStrategyReplayService;
+import in.aitradingsystem.mind.MindMaWalkForwardService;
 import java.util.List;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -22,7 +23,7 @@ class CustomerMindControllerTest {
             evidence, evidence, "ABSTAIN", false, false);
         when(service.inspect()).thenReturn(expected);
 
-        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class)).overview();
+        var response = new CustomerMindController(service, mock(MindEvidenceLedgerService.class), mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class)).overview();
         assertEquals(200, response.getStatusCode().value());
         assertEquals(expected, response.getBody());
         assertFalse(response.getBody().executionEnabled());
@@ -40,7 +41,7 @@ class CustomerMindControllerTest {
             "ABSTAIN", false, false);
         when(evidence.inspect(10)).thenReturn(expected);
 
-        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class)).evidence(10);
+        var response = new CustomerMindController(readiness, evidence, mock(MindStrategyReplayService.class), mock(MindMaWalkForwardService.class)).evidence(10);
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
@@ -59,13 +60,36 @@ class CustomerMindControllerTest {
         when(service.inspect()).thenReturn(expected);
         var response = new CustomerMindController(
             mock(MindReadinessService.class),
-            mock(MindEvidenceLedgerService.class), service).strategyReplay();
+            mock(MindEvidenceLedgerService.class), service,
+            mock(MindMaWalkForwardService.class)).strategyReplay();
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
         assertEquals(expected, response.getBody());
         assertFalse(response.getBody().paperOrderSubmitted());
         assertFalse(response.getBody().executionEnabled());
         org.mockito.Mockito.verify(service).inspect();
+    }
+
+    @Test
+    void fixedCostWalkForwardIsNoStoreAndAlwaysResearchOnly() {
+        var walkForward = mock(MindMaWalkForwardService.class);
+        var expected = new MindMaWalkForwardService.Report(
+            "mind.ma-walkforward.v1", Instant.parse("2026-11-09T09:00:00Z"),
+            "UNAVAILABLE", "MA_RECLAIM_V1", "1", null, "FIVE_MINUTE",
+            "RECENT_SCANNER_CANDIDATE_SELECTION_BIASED", null, null, null,
+            List.of(), 0, 0, null, null, null, null, null, null,
+            List.of("HISTORICAL_SOURCE_UNAVAILABLE"), "ABSTAIN",
+            false, false, false, false);
+        when(walkForward.inspect()).thenReturn(expected);
+        var response = new CustomerMindController(
+            mock(MindReadinessService.class), mock(MindEvidenceLedgerService.class),
+            mock(MindStrategyReplayService.class), walkForward).maWalkForward();
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        assertEquals(expected, response.getBody());
+        assertFalse(response.getBody().validatedTradingEdge());
+        assertFalse(response.getBody().paperOrderSubmitted());
+        assertFalse(response.getBody().executionEnabled());
     }
 
 }
