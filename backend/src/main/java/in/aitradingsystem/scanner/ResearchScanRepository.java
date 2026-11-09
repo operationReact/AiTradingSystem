@@ -1,6 +1,7 @@
 package in.aitradingsystem.scanner;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -66,6 +67,58 @@ public class ResearchScanRepository {
                 String.join("|", c.reasons()), fingerprint, strategyConfigVersion, catalogueVersion,
                 dataCutoffAt == null ? null : offset(dataCutoffAt));
         return inserted == 1;
+    }
+
+    /**
+     * Append the exact MA_RECLAIM input bundle once. A duplicate never edits
+     * earlier custody. This is intentionally not backfilled for old runs.
+     */
+    public void recordMindInputCustody(UUID runId, ScanCandidate candidate,
+                                       String strategyVersion, MindSourceSnapshot snapshot) {
+        if (runId == null || candidate == null || snapshot == null ||
+            !"MA_RECLAIM_V1".equals(candidate.strategy()) ||
+            !candidate.candleTime().equals(snapshot.lastCandleAt()) ||
+            snapshot.candleCount() != MindSourceSnapshot.BARS) {
+            throw new IllegalArgumentException("Invalid frozen Mind source");
+        }
+        String fingerprint = CandidateFingerprint.of(
+            candidate.instrumentId(), candidate.interval(), candidate.strategy(),
+            strategyVersion, candidate.candleTime(), candidate.referencePrice(),
+            candidate.suggestedStop(), candidate.suggestedTarget());
+        int count = jdbc.update("""
+                INSERT INTO mind_research_input_custody
+                    (scan_run_id, candidate_fingerprint, strategy_code, instrument_id,
+                     catalogue_version, candle_count, input_first_at, input_last_at,
+                     max_fetched_at, source_digest, canonical_input)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+                """, runId, fingerprint, candidate.strategy(), candidate.instrumentId(),
+                snapshot.catalogueVersion(), snapshot.candleCount(),
+                offset(snapshot.firstCandleAt()), offset(snapshot.lastCandleAt()),
+                offset(snapshot.maxFetchedAt()), snapshot.digest(), snapshot.canonicalInput());
+        if (count != 1) throw new IllegalStateException("Duplicate Mind source custody");
+    }
+
+    public record MindInputCustody(String sourceDigest, String canonicalInput,
+                                   Instant capturedAt, Instant inputLastAt,
+                                   Instant maxFetchedAt, UUID catalogueVersion) {}
+
+    public java.util.Optional<MindInputCustody> findMindInputCustody(UUID scanRunId,
+                                                                    String candidateFingerprint) {
+        if (scanRunId == null || candidateFingerprint == null ||
+            !candidateFingerprint.matches("[a-f0-9]{64}")) return java.util.Optional.empty();
+        return jdbc.query("""
+                SELECT source_digest, canonical_input, captured_at, input_last_at,
+                       max_fetched_at, catalogue_version
+                  FROM mind_research_input_custody
+                 WHERE scan_run_id = ? AND candidate_fingerprint = ?
+                """, (rs, row) -> new MindInputCustody(
+                rs.getString("source_digest").trim(), rs.getString("canonical_input"),
+                instant(rs.getObject("captured_at", OffsetDateTime.class)),
+                instant(rs.getObject("input_last_at", OffsetDateTime.class)),
+                instant(rs.getObject("max_fetched_at", OffsetDateTime.class)),
+                rs.getObject("catalogue_version", UUID.class)),
+                scanRunId, candidateFingerprint).stream().findFirst();
     }
 
     /** Legacy fixture signature; production code must provide explicit provenance. */
