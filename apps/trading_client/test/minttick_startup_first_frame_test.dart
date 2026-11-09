@@ -153,27 +153,26 @@ void main() {
     await tester.pumpWidget(MintTickStartupApp(
       restoreSession: (session) async {
         // Even partial restoration must be discarded before showing sign-in.
+        observed = session;
         session.markCustomerAuthenticated();
         throw StateError('private');
       },
-      readyBuilder: (session, route) {
-        observed = session;
-        return MaterialApp(
-          home: Scaffold(
-            body: Column(children: [
-              Text('Ready: $route'),
-              const TextField(key: ValueKey('editable-login-field')),
-            ]),
-          ),
-        );
-      },
     ));
     await tester.pump();
-    expect(find.text('Ready: /welcome'), findsOneWidget);
+    await tester.pumpAndSettle();
+    expect(find.byType(MintTickWelcomePage), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-username')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-password')),
+        findsOneWidget);
     expect(find.textContaining('private'), findsNothing);
     expect(find.byKey(const ValueKey('minttick-startup-retry')), findsNothing);
     await tester.enterText(
-      find.byKey(const ValueKey('editable-login-field')), 'test@example.com');
+        find.byKey(const ValueKey('minttick-inline-username')),
+        'test@example.com');
+    await tester.enterText(
+        find.byKey(const ValueKey('minttick-inline-password')),
+        'test-password');
     expect(find.text('test@example.com'), findsOneWidget);
     expect(observed?.isCustomerAuthenticated, isFalse);
     expect(tester.takeException(), isNull);
