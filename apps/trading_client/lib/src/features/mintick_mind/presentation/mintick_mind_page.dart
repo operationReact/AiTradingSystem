@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
+import '../data/mind_ma_walkforward_repository.dart';
+import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
 import 'mind_readiness_panel.dart';
 import 'mind_widgets.dart';
@@ -11,11 +13,13 @@ import 'mind_widgets.dart';
 /// Flutter from the approved standalone HTML/screenshot. No API calls or
 /// trading execution methods are reachable from this widget.
 class MintickMindPage extends StatefulWidget {
-  const MintickMindPage({this.readinessRepository, this.strategyReplayRepository, super.key});
+  const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
+    this.walkForwardRepository, super.key});
 
   /// Null in isolated demo/golden tests; authenticated app injects real API.
   final MindReadinessRepository? readinessRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
+  final MindMaWalkForwardRepository? walkForwardRepository;
 
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
@@ -77,6 +81,10 @@ class _MintickMindPageState extends State<MintickMindPage> {
               if(_tab==0) _overview(),
               if (_tab == 1 && widget.strategyReplayRepository != null) ...[
                 MindStrategyReplayPanel(repository: widget.strategyReplayRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.walkForwardRepository != null) ...[
+                MindMaWalkForwardPanel(repository: widget.walkForwardRepository!),
                 const SizedBox(height: 14),
               ],
               if(_tab==1) _strategies(),
