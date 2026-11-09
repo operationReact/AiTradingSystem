@@ -24,6 +24,22 @@ class VerifyApkSignerTest(unittest.TestCase):
             "Signer #1 certificate SHA-1 digest: x\n"
         ), SHA)
 
+    def test_source_stamp_certificate_is_not_apk_signer(self):
+        other = "A" * 64
+        report = (
+            f"Signer #1 certificate SHA-256 digest: {SHA}\n"
+            f"Source Stamp Signer #1 certificate SHA-256 digest: {other}\n"
+            f"  Source Stamp Signer #2 certificate SHA-256 digest: {other}\n"
+        )
+        self.assertEqual(parse_apksigner_certificate(report), SHA)
+
+    def test_categorical_failure_diagnostics_do_not_expose_fingerprints(self):
+        report = "Source Stamp Signer #1 certificate SHA-256 digest: " + SHA
+        with self.assertRaises(ValueError) as caught:
+            parse_apksigner_certificate(report)
+        self.assertIn("parsed_signer_count=0", str(caught.exception))
+        self.assertNotIn(SHA, str(caught.exception))
+
     def test_reject_no_signer_or_content_checksum(self):
         with self.assertRaises(ValueError):
             parse_apksigner_certificate(f"APK content SHA-256 digest: {SHA}")

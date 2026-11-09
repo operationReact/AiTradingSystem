@@ -12,7 +12,8 @@ import sys
 from pathlib import Path
 
 _LABEL = re.compile(
-    r"\bsigner\s*#\s*(\d+)\s+certificate\s+sha[\s-]?256\s+"
+    # Only APK signers; "Source Stamp Signer" certificates are independent.
+    r"^\s*signer\s*#\s*(\d+)\s+certificate\s+sha[\s-]?256\s+"
     r"(?:digest|fingerprint)\s*:\s*",
     re.IGNORECASE,
 )
@@ -41,7 +42,13 @@ def parse_apksigner_certificate(report: str) -> str:
             raise ValueError("Signer certificate SHA-256 fingerprint not parseable")
         found.append(normalize_digest(digest_match.group(1)))
     if signers != {1} or not found or len(set(found)) != 1:
-        raise ValueError("Missing, conflicting or multiple APK signing certificates")
+        # Only categorical public metadata; never reveal raw verifier output.
+        raise ValueError(
+            "Missing, conflicting or multiple APK signing certificates"
+            f" (parsed_signer_count={len(signers)},"
+            f" certificate_lines={len(found)},"
+            f" unique_certificates={len(set(found))})"
+        )
     return found[0]
 
 
