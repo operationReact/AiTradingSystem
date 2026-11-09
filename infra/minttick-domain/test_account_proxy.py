@@ -53,6 +53,11 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments/status"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/quotes"))
+        for path in ("/api/customer/market-data/quotes/detail", "/api/customer/market-data/overview", "/api/customer/market-data/snapshot", "/api/customer/market-data/candles", "/api/customer/watchlist"):
+            self.assertTrue(proxy.allowed("GET", path), path)
+        self.assertTrue(proxy.allowed("POST", "/api/customer/watchlist"))
+        self.assertTrue(proxy.allowed("DELETE", "/api/customer/watchlist/items/123"))
+        self.assertFalse(proxy.allowed("DELETE", "/api/customer/watchlist/items/abc"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
         for method, path in [
             ("GET","/api/admin/users"),
