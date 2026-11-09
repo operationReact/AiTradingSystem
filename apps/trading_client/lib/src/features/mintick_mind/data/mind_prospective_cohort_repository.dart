@@ -124,7 +124,7 @@ class MindProspectiveCohort {
         ((status == 'UNREGISTERED' || status == 'UNAVAILABLE') &&
           (registered != null || start != null || mature != null ||
             count != 0 || completed != 0 || ready != 0)) ||
-        (status != 'UNREGISTERED' &&
+        (status != 'UNREGISTERED' && status != 'UNAVAILABLE' &&
           (registered == null || start == null || mature == null ||
             registered.isAfter(generated) || !start.isAfter(registered) ||
             !mature.isAfter(start) || count != 20)) ||
