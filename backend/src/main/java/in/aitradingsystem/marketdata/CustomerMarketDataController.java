@@ -19,7 +19,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataAccessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
@@ -56,19 +58,20 @@ public class CustomerMarketDataController {
     private final AppAngelOneMarketFeedService applicationFeed;
     private final MarketOverviewService marketOverview;
     private final MarketLastTickStore lastTickStore;
+    private final MarketDetailSnapshotStore detailStore;
 
     /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode) {
-        this(identities, instruments, market, ownerSubject, providerMode, null, null, null, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, null, null, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
             String ownerSubject, String providerMode,
             CustomerAngelOneSessionService customerBroker) {
-        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null, null, null);
+        this(identities, instruments, market, ownerSubject, providerMode, customerBroker, null, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -77,7 +80,7 @@ public class CustomerMarketDataController {
             CustomerAngelOneSessionService customerBroker,
             CustomerAngelOneLiveQuoteService liveQuotes) {
         this(identities, instruments, market, ownerSubject, providerMode,
-            customerBroker, liveQuotes, null, null, null);
+            customerBroker, liveQuotes, null, null, null, null);
     }
 
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -87,7 +90,19 @@ public class CustomerMarketDataController {
             CustomerAngelOneLiveQuoteService liveQuotes,
             AppAngelOneMarketFeedService applicationFeed) {
         this(identities, instruments, market, ownerSubject, providerMode,
-            customerBroker, liveQuotes, applicationFeed, null, null);
+            customerBroker, liveQuotes, applicationFeed, null, null, null);
+    }
+
+    CustomerMarketDataController(CustomerIdentityStore identities,
+            InstrumentMasterService instruments, MarketDataProvider market,
+            String ownerSubject, String providerMode,
+            CustomerAngelOneSessionService customerBroker,
+            CustomerAngelOneLiveQuoteService liveQuotes,
+            AppAngelOneMarketFeedService applicationFeed,
+            MarketOverviewService marketOverview,
+            MarketLastTickStore lastTickStore) {
+        this(identities, instruments, market, ownerSubject, providerMode,
+            customerBroker, liveQuotes, applicationFeed, marketOverview, lastTickStore, null);
     }
 
     @Autowired
@@ -99,7 +114,8 @@ public class CustomerMarketDataController {
             CustomerAngelOneLiveQuoteService liveQuotes,
             AppAngelOneMarketFeedService applicationFeed,
             MarketOverviewService marketOverview,
-            MarketLastTickStore lastTickStore) {
+            MarketLastTickStore lastTickStore,
+            MarketDetailSnapshotStore detailStore) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
@@ -110,6 +126,7 @@ public class CustomerMarketDataController {
         this.applicationFeed = applicationFeed;
         this.marketOverview = marketOverview;
         this.lastTickStore = lastTickStore;
+        this.detailStore = detailStore;
     }
 
 
@@ -224,7 +241,14 @@ public class CustomerMarketDataController {
                               BigDecimal averagePrice, BigDecimal week52High, BigDecimal week52Low,
                               long totalBuyQuantity, long totalSellQuantity,
                               List<AngelOneQuoteDetailParser.DepthLevel> bids,
-                              List<AngelOneQuoteDetailParser.DepthLevel> asks) {}
+                              List<AngelOneQuoteDetailParser.DepthLevel> asks) {
+        /** The same verified values labelled as the stored last snapshot, never as an on-demand read. */
+        DetailQuote asStored() {
+            return new DetailQuote(instrumentId, exchange, tradingSymbol, ltp, open, high, low, previousClose,
+                volume, exchangeAt, fetchedAt, "STORED_LAST_DETAIL", "LAST_CLOSE", averagePrice, week52High,
+                week52Low, totalBuyQuantity, totalSellQuantity, bids, asks);
+        }
+    }
 
     /** Application-feed OHLC and volume for one cash equity; no customer broker credentials used. */
     @GetMapping("/quotes/detail")
@@ -232,17 +256,41 @@ public class CustomerMarketDataController {
             @RequestParam @Min(1) long instrumentId) {
         requireCustomer(authentication);
         Instrument instrument = requireCashEquity(instruments.requireActiveInstrument(instrumentId));
-        if (applicationFeed == null || !applicationFeed.available()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Application market feed has not been configured");
+        if (applicationFeed != null && applicationFeed.available()) {
+            try {
+                var detail = applicationFeed.detail(instrument);
+                DetailQuote live = new DetailQuote(instrument.id(), instrument.exchange(),
+                    instrument.tradingSymbol(), detail.ltp(), detail.open(), detail.high(), detail.low(),
+                    detail.previousClose(), detail.volume(), detail.exchangeAt(), Instant.now(),
+                    "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND", detail.averagePrice(), detail.week52High(),
+                    detail.week52Low(), detail.totalBuyQuantity(), detail.totalSellQuantity(),
+                    detail.bids(), detail.asks());
+                saveDetailQuietly(live);
+                return noStore(live);
+            } catch (RuntimeException ex) {
+                return noStore(storedDetail(instrument.id()).orElseThrow(() -> ex));
+            }
         }
-        var detail = applicationFeed.detail(instrument);
-        return noStore(new DetailQuote(instrument.id(), instrument.exchange(),
-            instrument.tradingSymbol(), detail.ltp(), detail.open(), detail.high(), detail.low(),
-            detail.previousClose(), detail.volume(), detail.exchangeAt(), Instant.now(),
-            "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND", detail.averagePrice(), detail.week52High(),
-            detail.week52Low(), detail.totalBuyQuantity(), detail.totalSellQuantity(),
-            detail.bids(), detail.asks()));
+        return noStore(storedDetail(instrument.id()).orElseThrow(() -> new ResponseStatusException(
+            HttpStatus.SERVICE_UNAVAILABLE, "Application market feed has not been configured")));
+    }
+
+    private Optional<DetailQuote> storedDetail(long instrumentId) {
+        if (detailStore == null) return Optional.empty();
+        try {
+            return detailStore.load(instrumentId).map(DetailQuote::asStored);
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+    }
+
+    private void saveDetailQuietly(DetailQuote detail) {
+        if (detailStore == null) return;
+        try {
+            detailStore.save(detail);
+        } catch (DataAccessException ex) {
+            // A failed snapshot write must not hide a verified live quote.
+        }
     }
 
     public record Snapshot(Instant generatedAt, List<SnapshotRow> rows) {}

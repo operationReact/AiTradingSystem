@@ -324,7 +324,8 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
             : quote == null
                 ? 'LOADING'
                 : _staleLabel(quote);
-    final ltp = quote != null && _isFreshLive(quote) ? quote.ltp : null;
+    final isStored = quote?.status == 'LAST_CLOSE';
+    final ltp = quote != null && (isStored || _isFreshLive(quote)) ? quote.ltp : null;
     final tickAt = quote?.exchangeAt;
     final previousClose = _detail?.previousClose;
     final String changeText;
@@ -332,7 +333,8 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       final diff = ltp - previousClose;
       final pct = diff / previousClose * 100;
       changeText = '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)} '
-          '(${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%) vs previous close';
+          '(${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%) vs previous close'
+          '${isStored ? ' · stored last trade' : ''}';
     } else if (previousClose == null) {
       changeText = 'Change needs the previous close from day statistics.';
     } else {
@@ -342,7 +344,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       container: true,
       label: ltp == null
           ? 'No verified price. Status ${statusLabel.toLowerCase()}.'
-          : 'Price ₹${ltp.toStringAsFixed(2)}. Status live.',
+          : 'Price ₹${ltp.toStringAsFixed(2)}. Status ${isStored ? 'last close' : 'live'}.',
       child: ExcludeSemantics(child: MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -581,6 +583,7 @@ String _staleLabel(CustomerLiveQuote quote) {
   if (quote.status == 'LIVE') return _isFreshLive(quote) ? 'LIVE' : 'STALE';
   return switch (quote.status) {
     'STALE' => 'STALE',
+    'LAST_CLOSE' => 'LAST CLOSE',
     'CONNECTING' => 'CONNECTING',
     'RECONNECTING' => 'RECONNECTING',
     'MARKET_CLOSED' => 'CLOSED',
