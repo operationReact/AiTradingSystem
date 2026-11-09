@@ -390,7 +390,7 @@ jobs:
             echo "::error::Signing keystore, alias or password could not be verified"
             exit 2
           }
-          actual="$(printf '%s\\n' "$cert_details" | sed -n -E 's/^[[:space:]]*SHA256:[[:space:]]*([[:xdigit:]:]+).*$/\\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          actual="$(printf '%s\n' "$cert_details" | sed -n -E 's/^[[:space:]]*SHA256:[[:space:]]*([[:xdigit:]:]+).*$/\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test "${#actual}" -eq 64 && test "$actual" = "$expected" || {
             echo "::error::Signing certificate differs from the pinned MintTick certificate"
@@ -440,13 +440,13 @@ jobs:
           }
           apk="build/app/outputs/flutter-apk/app-release.apk"
           report="$("$verifier" verify --print-certs "$apk")"
-          signer="$(printf '%s\\n' "$report" | sed -n -E 's/^Signer #1 certificate SHA-256 digest: ([[:xdigit:]]+).*$/\\1/p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
+          signer="$(printf '%s\n' "$report" | sed -n -E 's/^Signer #1 certificate SHA-256 digest: ([[:xdigit:]]+).*$/\1/p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
           expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           test "${#signer}" -eq 64 && test "$signer" = "$expected" || {
             echo "::error::APK signer does not match the permanent MintTick certificate"
             exit 2
           }
-          printf '%s\\n' "$signer" > "$apk.signer.sha256"
+          printf '%s\n' "$signer" > "$apk.signer.sha256"
           echo "PASS: signed release APK matches the pinned Android identity"
 
       - name: Record APK checksum
