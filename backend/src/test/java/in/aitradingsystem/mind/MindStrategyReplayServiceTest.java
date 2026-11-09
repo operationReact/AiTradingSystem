@@ -77,6 +77,15 @@ class MindStrategyReplayServiceTest {
         when(scans.latestCompletedRun()).thenReturn(Optional.of(scan("SUCCEEDED")));
         when(scans.rankedCandidates(RUN_ID, 200)).thenReturn(List.of(candidate));
         when(candles.recentCandlesAsOf(42L, "FIVE_MINUTE", SIGNAL_AT, 21)).thenReturn(input);
+        // Freeze original source independently of replay input: the scanner
+        // stored this at capture time, even if market_candle later changed.
+        var snapshot = MindSourceSnapshot.fromCandles(
+            bars(), 42L, "NSE", "INFY-EQ", "FIVE_MINUTE", SIGNAL_AT, SCAN_AT);
+        when(scans.findMindInputCustody(RUN_ID, candidate.candidateFingerprint()))
+            .thenReturn(Optional.of(new ResearchScanRepository.MindInputCustody(
+                snapshot.digest(), snapshot.canonicalInput(),
+                SCAN_AT.plusSeconds(5), SIGNAL_AT,
+                snapshot.maxFetchedAt(), CATALOGUE)));
     }
 
     @Test
@@ -134,6 +143,37 @@ class MindStrategyReplayServiceTest {
             "TEST_FIXTURE", bar.fetchedAt()));
         persisted(synthetic, candidate(original, null));
         assertEquals("INVALID", service.inspect().replayStatus());
+    }
+
+    @Test
+    void missingCapturedInputCannotBeBackfilledIntoSuccessfulResearch() {
+        var original = bars();
+        var candidate = candidate(original, null);
+        persisted(original, candidate);
+        when(scans.findMindInputCustody(RUN_ID, candidate.candidateFingerprint()))
+            .thenReturn(Optional.empty());
+        var result = service.inspect();
+        assertEquals("INVALID", result.replayStatus());
+        assertEquals("ABSTAIN", result.decisionPosture());
+        assertTrue(result.blockingReasons().contains("INPUT_CUSTODY_NOT_RECORDED"));
+        assertFalse(result.executionEnabled());
+    }
+
+    @Test
+    void retrospectiveCandleEditIsDetectedEvenIfTheSignalStillMatches() {
+        var original = bars();
+        var revised = new ArrayList<>(original);
+        var old = revised.getFirst();
+        revised.set(0, new MarketCandle(old.id(), old.instrumentId(),
+            old.exchange(), old.tradingSymbol(), old.symbolToken(),
+            old.catalogueVersion(), old.interval(), old.candleTime(),
+            new BigDecimal("100.25"), old.high(), old.low(), old.close(),
+            old.volume(), old.source(), old.fetchedAt()));
+        persisted(revised, candidate(original, null));
+        var result = service.inspect();
+        assertEquals("INVALID", result.replayStatus());
+        assertTrue(result.blockingReasons().contains("SOURCE_CANDLE_REVISION_DETECTED"));
+        assertFalse(result.paperOrderSubmitted());
     }
 
     @Test
