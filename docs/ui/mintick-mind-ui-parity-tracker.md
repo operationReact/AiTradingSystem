@@ -8,7 +8,7 @@
 
 ## Implemented mock UI scope
 
-All **32 named routes** from the prototype have Flutter screen definitions with a navigable shell. This is **functionally mapped and source-committed**, not yet pixel-certified. The screens use shared near-black/mint cards, text, diagrams, compact charts, metric grids, menus, navigation, dialogs, tabs, filters, buttons and hypothetical data.
+All **42 named routes** from the enhanced prototype (32 original + 10 agent additions) have Flutter screen definitions with a navigable shell. This is **functionally mapped and source-committed**, not yet pixel-certified. The screens use shared near-black/mint cards, text, diagrams, compact charts, metric grids, menus, navigation, dialogs, tabs, filters, buttons and hypothetical data.
 
 | Route | Current Flutter screen coverage | UI parity gate |
 | --- | --- | --- |
@@ -44,6 +44,16 @@ All **32 named routes** from the prototype have Flutter screen definitions with 
 | design-preview | Native responsive phone preview mapped to a target screen | Bitmap/pixel parity pending |
 | coverage | Cross-linked 32-screen, 232-strategy, 18-model coverage inventory | Golden pending |
 | settings | Mind-only display and mock preference controls | Golden pending |
+| intelligence-hub | Source-to-decision pipeline, horizon policy, capital veto | Golden pending |
+| agent-council | Bull/Bear/Fundamental/Flow/Critic debate with symbol and vote filter | Golden pending |
+| agent-evidence | Evidence ledger, timestamps, status and category filters | Golden pending |
+| regime-weights | Five market regimes, weighting changes, unknown-data abstention | Golden pending |
+| signal-scorecard | Horizon-specific mock performance metrics and restrictions | Golden pending |
+| confidence-lab | Reliability bins, sample labels, missing calibration warning | Golden pending |
+| shadow-arena | Shadow vs baseline comparisons, counterfactual tabs, no fills | Golden pending |
+| institutional-flow | Mock FII/DII flow with official-source-unavailable warning | Golden pending |
+| daily-verdict | Date-selectable market verdict and non-executable watchpoints | Golden pending |
+| culprit-catcher | Four example incidents, timeline, causes and preventive study links | Golden pending |
 
 ## Strategy and model coverage
 
@@ -71,10 +81,10 @@ All **32 named routes** from the prototype have Flutter screen definitions with 
 
 1. Only same-session authenticated access. No additional admin account.
 2. All numbers, signals, scores, returns and business scenarios are mock data.
-3. Java risk authority, broker credential handling, real market APIs, Python research, authentication and actual execution are unchanged.
+3. Java risk authority, broker credential handling, real market APIs, Python research, authentication and actual execution are unchanged. Only an opt-in read-only demonstration controller/test was added.
 4. UI toggles never grant live capital or change backend settings. No order methods, no offline order replay.
 5. Derivative execution disabled regardless of displayed option choices.
-6. Preserve existing MintTick app pages and navigation; the new workspace is an isolated route.
+6. Preserve existing MintTick app pages and navigation; the new workspace is an isolated authenticated `/mind` route.
 7. Do not claim Pixel PERFECT, VERIFIED runtime or finished 3-platform acceptance until evidence exists.
 
 ## Remaining acceptance gates
@@ -84,6 +94,6 @@ All **32 named routes** from the prototype have Flutter screen definitions with 
 - Review visual screenshots against the nine original references; adjust fonts, cards, chart density, layout, spacing, stroke widths and motion until approved.
 - For the design-gallery screen, add approved source PNG assets as real Flutter assets in a separate UI-only change if requested.
 - Run route-by-route interaction verification and certify explicit mock-only enforcement.
-- Verify the commit diff continues to include **only Flutter/client UI, tests and documentation**, and remains unmerged.
+- Verify the diff includes only Flutter/client mock UI, the explicit profile-gated Java mock controller/tests, and documentation. Check the branch against current `dev` and merge only when CI confirms no conflicts.
 
-**Current evidence:** GitHub source commits, static route inventory and delimiter checks. **Flutter runtime evidence: UNVERIFIED** (SDK unavailable in current session).
+**Current evidence:** GitHub source commits, static 42-route inventory, backend DTO fixtures and tests added. **Flutter runtime evidence: UNVERIFIED** until CI/platform builds; no device visual parity is certified.
