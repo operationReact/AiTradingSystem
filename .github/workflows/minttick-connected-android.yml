@@ -43,6 +43,20 @@ jobs:
           assert "MintTickIdentity.current.signIn" in client
           assert "flutter build apk --release" in apk
           assert "sha256sum" in apk
+          # The dispatch workflow may ship only stable-signed APKs.
+          gradle=Path("apps/trading_client/android/app/build.gradle.kts").read_text()
+          assert "MINTTICK_REQUIRE_STABLE_SIGNING" in gradle
+          assert 'signingConfigs.getByName("minttickRelease")' in gradle
+          for marker in (
+              "MINTTICK_ANDROID_KEYSTORE_BASE64",
+              "secrets.MINTTICK_ANDROID_STORE_PASSWORD",
+              "vars.MINTTICK_ANDROID_CERT_SHA256",
+              "Confirm APK is signed by the pinned permanent certificate",
+              "apksigner",
+              "--build-number",
+              "Build CI-only debug-signed APK without release credentials",
+          ):
+              assert marker in apk, f"Missing Android signing gate: {marker}"
           PY
 
   dispatch:
