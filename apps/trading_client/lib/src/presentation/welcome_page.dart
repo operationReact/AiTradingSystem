@@ -47,7 +47,9 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   )..forward();
 
   bool _passwordVisible = false;
-  bool _rememberMe = false;
+  // Keep a verified Cognito session across app restarts by default.
+  // Users can opt out and explicit sign-out still revokes local access.
+  bool _rememberMe = true;
   bool _busy = false;
   String _busyStage = 'Signing in…';
 
