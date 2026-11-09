@@ -132,7 +132,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
       final count=size.maxWidth >= 650?4:2;
       return GridView.count(
         physics:const NeverScrollableScrollPhysics(),shrinkWrap:true,crossAxisCount:count,
-        crossAxisSpacing:10,mainAxisSpacing:10,childAspectRatio:count==4?1.55:1.48,
+        crossAxisSpacing:10,mainAxisSpacing:10,mainAxisExtent:152,
         children:const [
           MindMetric(label:'Today P&L',value:'+₹38,420',caption:'+1.92% · Mock',seed:3),
           MindMetric(label:'Win Rate',value:'68.4%',caption:'Synthetic research sample',color:MindPalette.text,seed:4),
