@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 
 import '../data/mind_fixtures.dart';
+import '../data/mind_readiness_repository.dart';
+import 'mind_readiness_panel.dart';
 import 'mind_widgets.dart';
 
 /// MintTick Mind — mock-only first vertical slice, translated into native
 /// Flutter from the approved standalone HTML/screenshot. No API calls or
 /// trading execution methods are reachable from this widget.
 class MintickMindPage extends StatefulWidget {
-  const MintickMindPage({super.key});
+  const MintickMindPage({this.readinessRepository, super.key});
+
+  /// Null in isolated demo/golden tests; authenticated app injects real API.
+  final MindReadinessRepository? readinessRepository;
+
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
 }
@@ -59,6 +65,10 @@ class _MintickMindPageState extends State<MintickMindPage> {
               const SizedBox(height: 20),
               _tabsBar(),
               const SizedBox(height: 16),
+              if (widget.readinessRepository != null) ...[
+                MindReadinessPanel(repository: widget.readinessRepository!),
+                const SizedBox(height: 16),
+              ],
               _demoNotice(),
               const SizedBox(height: 13),
               if(_tab==0) _overview(),
