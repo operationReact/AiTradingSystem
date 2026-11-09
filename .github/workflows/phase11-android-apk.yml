@@ -470,15 +470,29 @@ jobs:
             exit 2
           }
           apk="build/app/outputs/flutter-apk/app-release.apk"
-          report="$("$verifier" verify --print-certs "$apk")"
-          # Android SDK output may contain spacing before the signer label.
-          # Fingerprints below are PUBLIC certificate metadata, never private key material.
-          signer="$(printf '%s\n' "$report" | sed -n -E 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([[:xdigit:]:]+).*$/\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          # Capture both streams: Android SDK versions may emit certificates on stderr.
+          report="$("$verifier" verify --print-certs "$apk" 2>&1)"
           expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          # Parse actual APK signer SHA256, never unrelated content hashes.
+          signer="$(printf '%s\n' "$report" | python3 -c '
+import re, sys
+lines=sys.stdin.read().splitlines()
+found=[]
+for line in lines:
+    if not re.search(r"certificate.*sha.?256", line, re.IGNORECASE):
+        continue
+    matches=re.findall(r"(?:[0-9a-fA-F]{2}:){31}[0-9a-fA-F]{2}|[0-9a-fA-F]{64}", line)
+    found.extend(x.replace(":", "").upper() for x in matches)
+print(found[0] if len(found)==1 else "")
+')"
           echo "APK public certificate SHA-256: ${signer:-UNPARSEABLE}"
           echo "Pinned public certificate SHA-256: $expected"
+          if [ -z "$signer" ]; then
+            echo "Public certificate-report labels for diagnostics:"
+            printf '%s\n' "$report" | grep -Ei 'signer|certificate|digest' | head -n 12 | cut -c 1-240 || true
+          fi
           test "${#signer}" -eq 64 && test "$signer" = "$expected" || {
-            echo "::error::APK signer does not match the permanent MintTick certificate"
+            echo "::error::APK signer is missing or does not match the pinned permanent MintTick certificate"
             exit 2
           }
           printf '%s\n' "$signer" > "$apk.signer.sha256"
