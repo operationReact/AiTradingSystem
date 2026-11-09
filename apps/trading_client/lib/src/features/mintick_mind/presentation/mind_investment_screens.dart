@@ -93,7 +93,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
                 ]),
               ]),
             ),
-          )),
+          ),
       ]),
       _section('Research Priorities',Icons.fact_check_outlined,[
         _tile('Early business inflections','Orders, margins, operating leverage',
