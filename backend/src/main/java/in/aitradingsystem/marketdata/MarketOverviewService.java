@@ -1,6 +1,7 @@
 package in.aitradingsystem.marketdata;
 
 import in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser;
+import in.aitradingsystem.provider.angelone.AngelOneException;
 import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -153,11 +154,20 @@ public class MarketOverviewService {
             String token = tokens.get(member.tradingSymbol());
             if (token != null) stockExpected.add(new AngelOneQuoteDetailParser.Expected(token, member.tradingSymbol()));
         }
-        List<AngelOneQuoteDetailParser.Expected> indexExpected = indexDefinitions.stream()
-            .map(d -> new AngelOneQuoteDetailParser.Expected(d.symbolToken(), d.displayName())).toList();
+        // An index's display name is a UI label, not the provider's tradingSymbol.
+        // The verified NSE index token is its canonical identity. The parser
+        // expressly supports token-only identity for indices; requiring a
+        // display-name match silently discarded legitimate NIFTY quote rows.
+        List<AngelOneQuoteDetailParser.Expected> indexExpected = indexExpectations(indexDefinitions);
 
         Map<String, AngelOneQuoteDetailParser.Detail> stockDetails = fetchInBatches(stockExpected);
         Map<String, AngelOneQuoteDetailParser.Detail> indexDetails = fetchInBatches(indexExpected);
+        // A broker outage must not overwrite a previously verified overview
+        // with an empty "success" snapshot.
+        if (stockDetails.isEmpty() && indexDetails.isEmpty()) {
+            throw new MarketDataException("MARKET_OVERVIEW_NO_VALID_QUOTES",
+                "Market overview has no verified constituent or index quotes");
+        }
         return compute(now, members, tokens, stockDetails, indexDefinitions, indexDetails, indexSession(now));
     }
 
@@ -177,13 +187,28 @@ public class MarketOverviewService {
         return INDEX_LIVE;
     }
 
+    static List<AngelOneQuoteDetailParser.Expected> indexExpectations(
+            List<MarketOverviewRepository.IndexDefinition> definitions) {
+        return definitions.stream()
+            .filter(d -> d.symbolToken() != null && !d.symbolToken().isBlank())
+            .map(d -> new AngelOneQuoteDetailParser.Expected(d.symbolToken(), null))
+            .toList();
+    }
+
     private Map<String, AngelOneQuoteDetailParser.Detail> fetchInBatches(
             List<AngelOneQuoteDetailParser.Expected> expected) {
         Map<String, AngelOneQuoteDetailParser.Detail> result = new HashMap<>();
         for (int from = 0; from < expected.size(); from += PROVIDER_BATCH) {
             List<AngelOneQuoteDetailParser.Expected> chunk =
                 expected.subList(from, Math.min(from + PROVIDER_BATCH, expected.size()));
-            result.putAll(feed.details(chunk));
+            try {
+                Map<String, AngelOneQuoteDetailParser.Detail> verified = feed.details(chunk);
+                if (verified != null) result.putAll(verified);
+            } catch (AngelOneException | MarketDataException providerFailure) {
+                // Preserve independently verified rows from other successful
+                // batches. Never create a quote from a failed call. An entirely
+                // empty result is rejected above and the saved snapshot is used.
+            }
         }
         return result;
     }
