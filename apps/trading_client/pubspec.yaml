@@ -18,9 +18,9 @@ dependencies:
   audioplayers: ^6.8.1
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
-  amplify_core: 2.11.0
-  amplify_flutter: 2.11.0
-  amplify_auth_cognito: 2.11.0
+  amplify_core: 2.16.0
+  amplify_flutter: 2.16.0
+  amplify_auth_cognito: 2.16.0
 
 dev_dependencies:
   flutter_test:

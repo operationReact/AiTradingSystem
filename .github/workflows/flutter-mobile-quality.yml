@@ -38,6 +38,19 @@ jobs:
       - run: flutter pub get
       - name: Static analysis
         run: flutter analyze
+      - name: Use system SQLite for Linux CI tests only
+        run: |
+          set -euo pipefail
+          test -f /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 || { echo "System SQLite missing"; exit 2; }
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("pubspec.yaml")
+          config = p.read_text()
+          nl = chr(10)
+          assert nl + "hooks:" not in config, "Unexpected existing hooks configuration"
+          p.write_text(config + nl.join(("", "hooks:", "  user_defines:", "    sqlite3:", "      source: system", "")))
+          PY
+          flutter pub get
       - name: Functional and responsive tests
         run: |
           set -euo pipefail
@@ -75,6 +88,19 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Use system SQLite for Linux CI tests only
+        run: |
+          set -euo pipefail
+          test -f /usr/lib/x86_64-linux-gnu/libsqlite3.so.0 || { echo "System SQLite missing"; exit 2; }
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("pubspec.yaml")
+          config = p.read_text()
+          nl = chr(10)
+          assert nl + "hooks:" not in config, "Unexpected existing hooks configuration"
+          p.write_text(config + nl.join(("", "hooks:", "  user_defines:", "    sqlite3:", "      source: system", "")))
+          PY
+          flutter pub get
       - name: Render current visual evidence without accepting baselines
         run: flutter test test/visual_golden_test.dart --update-goldens
       - name: Upload rendered visual evidence
