@@ -18,7 +18,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -129,14 +128,14 @@ public class MindStrategyReplayService {
                             "SOURCE_KNOWN_AT_NOT_INDEPENDENTLY_PROVEN",
                             "ACCOUNT_RISK_NOT_EVALUATED",
                             "PAPER_SHADOW_ENROLLMENT_REQUIRED"));
-        } catch (DataAccessException | IllegalStateException ex) {
+        } catch (RuntimeException ex) {
             return blocked(now, null, null, "UNAVAILABLE", "REPLAY_SOURCE_UNAVAILABLE");
         }
     }
 
     private boolean validCandidate(ResearchScanSummary run, ResearchScanCandidateView c, Instant now) {
         return run.id().equals(c.scanRunId()) && c.candidateId() > 0 &&
-            c.instrumentId() > 0 && Set.of("NSE", "BSE").contains(c.exchange()) &&
+            c.instrumentId() > 0 && c.exchange() != null && Set.of("NSE", "BSE").contains(c.exchange()) &&
             c.tradingSymbol() != null && c.tradingSymbol().endsWith("-EQ") &&
             "FIVE_MINUTE".equals(c.interval()) &&
             c.candleTime() != null && c.dataCutoffAt() != null &&
