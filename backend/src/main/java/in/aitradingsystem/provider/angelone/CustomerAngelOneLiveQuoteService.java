@@ -29,6 +29,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
@@ -63,18 +64,33 @@ public class CustomerAngelOneLiveQuoteService {
         return thread;
     });
 
+    private final int watchCap;
+    /** Shared market-data account whose feed serves every customer's reads; null when unset. */
+    private final UUID ownerUser;
+
     @Autowired
     public CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
-            MarketSessionCalendar calendar) {
-        this(sessions, calendar, HttpClient.newHttpClient(), Clock.systemUTC());
+            MarketSessionCalendar calendar,
+            @Value("${minttick.owner-feed.ws-token-cap:" + MAX_WATCHED_PER_FEED + "}") int watchCap,
+            @Value("${minttick.owner-feed.user-id:}") String ownerUserId) {
+        this(sessions, calendar, HttpClient.newHttpClient(), Clock.systemUTC(), watchCap,
+                ownerUserId == null || ownerUserId.isBlank() ? null : UUID.fromString(ownerUserId.trim()));
     }
 
     CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
             MarketSessionCalendar calendar, HttpClient client, Clock clock) {
+        this(sessions, calendar, client, clock, MAX_WATCHED_PER_FEED, null);
+    }
+
+    CustomerAngelOneLiveQuoteService(CustomerAngelOneSessionService sessions,
+            MarketSessionCalendar calendar, HttpClient client, Clock clock, int watchCap, UUID ownerUser) {
+        if (watchCap < 1) throw new IllegalArgumentException("watchCap must be positive");
         this.sessions = sessions;
         this.calendar = calendar;
         this.client = client;
         this.clock = clock;
+        this.watchCap = watchCap;
+        this.ownerUser = ownerUser;
         heartbeats.scheduleAtFixedRate(this::heartbeat, 10, 10, TimeUnit.SECONDS);
     }
 
@@ -100,6 +116,15 @@ public class CustomerAngelOneLiveQuoteService {
             else results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
         }
         if (eligible.isEmpty()) return ordered(instruments, results);
+        Feed ownerFeed = ownerUser == null || ownerUser.equals(user) ? null : feeds.get(ownerUser);
+        if (ownerFeed != null && ownerFeed.state == State.OPEN) {
+            for (Instrument instrument : eligible) {
+                boolean watched = watch(ownerFeed, instrument);
+                results.put(instrument.id(), watched ? read(ownerFeed, instrument, now)
+                    : empty(instrument, "UNAVAILABLE"));
+            }
+            return ordered(instruments, results);
+        }
         var credentials = sessions.credentialsForStream(user);
         if (credentials == null || !credentials.expiresAt().isAfter(now)) {
             disconnect(user);
@@ -174,7 +199,7 @@ public class CustomerAngelOneLiveQuoteService {
         synchronized (feed.sendLock) {
             Watch existing = feed.watches.get(key);
             if (existing != null) return existing.instrument.id() == instrument.id();
-            if (feed.watches.size() >= MAX_WATCHED_PER_FEED) return false;
+            if (feed.watches.size() >= watchCap) return false;
             Watch added = new Watch(instrument, venue);
             feed.watches.put(key, added);
             if (feed.state == State.OPEN && feed.socket != null) {

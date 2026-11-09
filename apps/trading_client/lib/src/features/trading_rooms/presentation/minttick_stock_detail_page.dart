@@ -9,7 +9,7 @@ import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
 import 'minttick_stock_detail_mock_sections.dart';
 
-const _quotePoll = Duration(seconds: 5);
+const _quotePoll = Duration(seconds: 2);
 
 /// Chart timeframes map to backend candle intervals. [lookbackDays] bounds the stored window.
 const _timeframes = [
