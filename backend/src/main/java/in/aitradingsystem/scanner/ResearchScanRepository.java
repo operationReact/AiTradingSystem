@@ -137,6 +137,29 @@ public class ResearchScanRepository {
                 """, status, scannedCount, candidateCount, bounded(code, 80), bounded(message, 500), id);
     }
 
+    /**
+     * Most recent persisted research run, including failures. An older successful
+     * scan must not appear current after a newer partial/failed run.
+     * This read never executes research or exposes instrument/private account data.
+     */
+    public java.util.Optional<ResearchScanSummary> latestCompletedRun() {
+        return jdbc.query("""
+                SELECT id, interval, status, requested_limit, scanned_count, candidate_count,
+                       strategy_set, started_at, completed_at, error_code, error_message
+                  FROM research_scan_run
+                 WHERE completed_at IS NOT NULL AND status IN ('SUCCEEDED', 'PARTIAL', 'FAILED')
+                 ORDER BY completed_at DESC, id DESC
+                 LIMIT 1
+                """, (rs, row) -> new ResearchScanSummary(
+                rs.getObject("id", UUID.class), rs.getString("interval"), rs.getString("status"),
+                rs.getInt("requested_limit"), rs.getInt("scanned_count"),
+                rs.getInt("candidate_count"), rs.getString("strategy_set"),
+                instant(rs.getObject("started_at", OffsetDateTime.class)),
+                instant(rs.getObject("completed_at", OffsetDateTime.class)),
+                rs.getString("error_code"), rs.getString("error_message")))
+                .stream().findFirst();
+    }
+
     public ResearchScanSummary requireRun(UUID id) {
         return jdbc.query("SELECT * FROM research_scan_run WHERE id = ?", (rs, row) -> new ResearchScanSummary(
                 rs.getObject("id", UUID.class), rs.getString("interval"), rs.getString("status"),
