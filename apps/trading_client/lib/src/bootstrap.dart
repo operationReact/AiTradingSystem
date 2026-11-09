@@ -151,7 +151,7 @@ Future<String> restoreMintTickSession(OperatorSession session) async {
         await SharedPreferencesAsync()
             .getBool('minttick.auth.remember_me.v1')
             .timeout(const Duration(seconds: 3)) ??
-        false,
+        true, // A missing preference defaults to persistence, not authorization.
     provision: () async {
       await MintTickCustomerAccountApi()
           .provision()
