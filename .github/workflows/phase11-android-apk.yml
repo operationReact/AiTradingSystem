@@ -471,8 +471,12 @@ jobs:
           }
           apk="build/app/outputs/flutter-apk/app-release.apk"
           report="$("$verifier" verify --print-certs "$apk")"
-          signer="$(printf '%s\n' "$report" | sed -n -E 's/^Signer #1 certificate SHA-256 digest: ([[:xdigit:]]+).*$/\1/p' | head -n 1 | tr '[:lower:]' '[:upper:]')"
+          # Android SDK output may contain spacing before the signer label.
+          # Fingerprints below are PUBLIC certificate metadata, never private key material.
+          signer="$(printf '%s\n' "$report" | sed -n -E 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([[:xdigit:]:]+).*$/\1/p' | head -n 1 | tr -d ':' | tr '[:lower:]' '[:upper:]')"
           expected="$(printf '%s' "$MINTTICK_ANDROID_CERT_SHA256" | tr -d ':' | tr '[:lower:]' '[:upper:]')"
+          echo "APK public certificate SHA-256: ${signer:-UNPARSEABLE}"
+          echo "Pinned public certificate SHA-256: $expected"
           test "${#signer}" -eq 64 && test "$signer" = "$expected" || {
             echo "::error::APK signer does not match the permanent MintTick certificate"
             exit 2
