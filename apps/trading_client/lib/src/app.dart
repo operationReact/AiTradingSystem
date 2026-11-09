@@ -118,7 +118,6 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
-          if (_selectedRoute == '/mind') return child ?? const SizedBox.shrink();
           if (_selectedRoute == '/auth-test' || _selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account' || _selectedRoute.startsWith('/rooms/')) {
             return child ?? const SizedBox.shrink();
           }
@@ -151,7 +150,7 @@ class _TradingAppState extends State<TradingApp> {
       routes: {
         '/': (_) => _overviewPage(),
         '/mind': (_) => widget.session.isCustomerAuthenticated
-            ? const MintickMindWorkspacePage()
+            ? const MintickMindWorkspacePage(embeddedInProductShell: true)
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
             ? MintTickTradingRoomsPage(
@@ -431,10 +430,15 @@ class _MobileProductNavigation extends StatelessWidget {
   final bool isCustomer;
 
   int get _index {
+    if (isCustomer) {
+      if (selectedRoute == '/') return 0;
+      if (selectedRoute == '/rooms' || selectedRoute.startsWith('/rooms/')) return 1;
+      if (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments') return 2;
+      if (selectedRoute == '/mind') return 3;
+      if (selectedRoute == '/portfolio' || selectedRoute == '/orders' || selectedRoute == '/paper-orders') return 4;
+      return 5;
+    }
     if (selectedRoute == '/') return 0;
-    if (isCustomer && selectedRoute == '/mind') return 2;
-    if (isCustomer && (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments')) return 1;
-    if (isCustomer && (selectedRoute == '/account' || selectedRoute == '/settings')) return 4;
     if (selectedRoute == '/market' || selectedRoute == '/market-data' || selectedRoute == '/instruments') return 1;
     if (selectedRoute == '/research' || selectedRoute == '/signals' || selectedRoute == '/backtests' || selectedRoute == '/scenarios') return 2;
     if (selectedRoute == '/portfolio' || selectedRoute == '/orders' || selectedRoute == '/paper-orders') return 3;
@@ -444,12 +448,18 @@ class _MobileProductNavigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Customer navigation retains every primary destination. Mintick Mind
+    // must never be hidden behind More after adding Trading Rooms.
     final items = <(IconData, IconData, String)>[
       (Icons.space_dashboard_outlined, Icons.space_dashboard_rounded, 'Home'),
+      if (isCustomer)
+        (Icons.layers_outlined, Icons.layers_rounded, 'Rooms'),
       (Icons.candlestick_chart_outlined, Icons.candlestick_chart_rounded, 'Markets'),
-      isCustomer ? (Icons.psychology_outlined, Icons.psychology_rounded, 'Mind') : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
+      isCustomer
+          ? (Icons.psychology_outlined, Icons.psychology_rounded, 'Mind')
+          : (Icons.auto_awesome_outlined, Icons.auto_awesome_rounded, 'AI'),
       (Icons.account_balance_wallet_outlined, Icons.account_balance_wallet_rounded, 'Portfolio'),
-      isCustomer ? (Icons.person_outline_rounded, Icons.person_rounded, 'Profile') : (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
+      (Icons.grid_view_outlined, Icons.grid_view_rounded, 'More'),
     ];
 
     return Material(
@@ -466,17 +476,25 @@ class _MobileProductNavigation extends StatelessWidget {
               final selected = _index == index;
               return Expanded(
                 child: InkWell(
-                  key: ValueKey('mobile-nav-${index == 2 && !isCustomer ? 'research' : item.$3.toLowerCase()}'),
+                  key: ValueKey('mobile-nav-${!isCustomer && index == 2 ? 'research' : item.$3.toLowerCase()}'),
                   onTap: () {
-                    if (index == 4 && !isCustomer) {
+                    if (index == items.length - 1) {
                       onMore();
+                    } else if (isCustomer) {
+                      onNavigate(switch (index) {
+                        0 => '/',
+                        1 => '/rooms',
+                        2 => '/market',
+                        3 => '/mind',
+                        4 => '/portfolio',
+                        _ => '/',
+                      });
                     } else {
                       onNavigate(switch (index) {
                         0 => '/',
                         1 => '/market',
-                        2 => isCustomer ? '/mind' : '/research',
+                        2 => '/research',
                         3 => '/portfolio',
-                        4 => '/account',
                         _ => '/',
                       });
                     }
@@ -495,7 +513,7 @@ class _MobileProductNavigation extends StatelessWidget {
                       children: [
                         Icon(selected ? item.$2 : item.$1, size: 22, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
                         const SizedBox(height: 2),
-                        Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 11.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
+                        Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: isCustomer ? 10.5 : 11.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
