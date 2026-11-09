@@ -39,6 +39,20 @@ jobs:
           assert 'MARKET_NETWORK_HEADERS:' in s
           for prohibited in ['--with-decryption','placeOrder','get-parameters','jwtToken','feedToken','print(settings)', 'print(values)']:
               assert prohibited not in s
+          assert s.count('def main():') == 1
+          assert s.count('def overview_evidence(postgres):') == 1
+          import importlib.util
+          from types import SimpleNamespace
+          from unittest.mock import patch
+          spec=importlib.util.spec_from_file_location('market_probe', 'infra/ec2-paper/probe_market_runtime.py')
+          module=importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(module)
+          evidence='ANGEL_ONE_BULK|2026-11-09T21:09:00Z|2026-11-09|NONEMPTY|NONEMPTY\\n'
+          with patch.object(module, 'run', return_value=SimpleNamespace(returncode=0,stdout=evidence)):
+              assert module.overview_evidence('postgres') == (
+                  'ANGEL_ONE_BULK','2026-11-09T21:09:00Z','2026-11-09','NONEMPTY','NONEMPTY')
+          with patch.object(module, 'run', return_value=SimpleNamespace(returncode=1,stdout='')):
+              assert module.overview_evidence('postgres')[0] == 'UNAVAILABLE'
           PY
 
   diagnose:
