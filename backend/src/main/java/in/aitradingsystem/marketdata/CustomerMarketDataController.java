@@ -279,7 +279,7 @@ public class CustomerMarketDataController {
         if (detailStore == null) return Optional.empty();
         try {
             return detailStore.load(instrumentId).map(DetailQuote::asStored);
-        } catch (DataAccessException ex) {
+        } catch (DataAccessException | IllegalStateException ex) {
             return Optional.empty();
         }
     }
@@ -345,12 +345,20 @@ public class CustomerMarketDataController {
             return noStore(new Snapshot(Instant.now(), storedSnapshotRows(stocks)));
         }
 
-        Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
-            ? Map.of() : lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
+        Map<Long, MarketLastTickStore.LastTick> lastTicks = storedTicks(stocks);
         List<SnapshotRow> rows = new ArrayList<>();
         List<CustomerAngelOneLiveQuoteService.LiveQuote> verifiedTicks = new ArrayList<>();
         for (int i = 0; i < stocks.size(); i++) {
-            SnapshotRow row = snapshotRow(stocks.get(i), replies.get(i), lastTicks.get(stocks.get(i).id()));
+            Instrument stock = stocks.get(i);
+            var reply = replies.get(i);
+            SnapshotRow row = snapshotRow(stock, reply, lastTicks.get(stock.id()));
+            if (!"LIVE".equals(row.status()) && verifiedEmptyReply(stock, reply)) {
+                // An empty but identity-matched socket reply may have an earlier
+                // independently verified FULL quote saved by the stock detail API.
+                // Do not convert spoofed, mismatched or invalid LIVE rows to cached prices.
+                SnapshotRow saved = storedSnapshotRow(stock, lastTicks.get(stock.id()));
+                if (saved.ltp() != null) row = saved;
+            }
             rows.add(row);
             // Persist ONLY source- and instrument-verified LIVE rows; missing, closed,
             // stale and spoofed ticks must never seed the historical price cache.
@@ -399,21 +407,68 @@ public class CustomerMarketDataController {
     }
 
     /**
-     * With the app feed down, each row is the stored last LIVE tick labelled LAST_CLOSE, or UNAVAILABLE
-     * when no tick was ever stored. Nothing is labelled LIVE without a verified feed.
+     * An application feed outage must not discard a verified saved FULL quote.
+     * Each cached value carries its exchange timestamp and LAST_CLOSE status;
+     * it is NOT an official exchange closing price or a live trade.
      */
     private List<SnapshotRow> storedSnapshotRows(List<Instrument> stocks) {
-        Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
-            ? Map.of() : lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
-        List<SnapshotRow> rows = new ArrayList<>();
-        for (Instrument stock : stocks) {
-            MarketLastTickStore.LastTick tick = lastTicks.get(stock.id());
-            rows.add(tick == null
-                ? new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(), null, null, "UNAVAILABLE", null, null)
-                : new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(), tick.ltp(), tick.exchangeAt(),
-                    "LAST_CLOSE", "STORED_LAST_LIVE_TICK", tick.changePercent()));
+        Map<Long, MarketLastTickStore.LastTick> lastTicks = storedTicks(stocks);
+        return stocks.stream()
+            .map(stock -> storedSnapshotRow(stock, lastTicks.get(stock.id()))).toList();
+    }
+
+    private Map<Long, MarketLastTickStore.LastTick> storedTicks(List<Instrument> stocks) {
+        if (lastTickStore == null) return Map.of();
+        try {
+            return lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
+        } catch (DataAccessException ex) {
+            // A missing cache migration must not fail the entire Markets page.
+            return Map.of();
         }
-        return rows;
+    }
+
+    private static boolean verifiedEmptyReply(Instrument stock,
+            CustomerAngelOneLiveQuoteService.LiveQuote reply) {
+        return reply != null && reply.instrumentId() == stock.id()
+            && stock.exchange().equals(reply.exchange())
+            && stock.tradingSymbol().equals(reply.tradingSymbol())
+            && java.util.Set.of("CONNECTING", "RECONNECTING", "STALE",
+                "UNAVAILABLE", "MARKET_CLOSED").contains(reply.status())
+            && reply.ltp() == null && reply.exchangeAt() == null
+            && reply.receivedAt() == null && reply.source() == null;
+    }
+
+    private SnapshotRow storedSnapshotRow(Instrument stock, MarketLastTickStore.LastTick tick) {
+        if (tick != null && tick.ltp() != null && tick.ltp().signum() > 0
+                && tick.exchangeAt() != null && !tick.exchangeAt().isAfter(Instant.now())) {
+            return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
+                tick.ltp(), tick.exchangeAt(), "LAST_CLOSE", "STORED_LAST_LIVE_TICK",
+                tick.changePercent());
+        }
+        // This table is populated by the existing verified FULL stock-detail
+        // endpoint. Unlike market_last_tick, it may already contain data after
+        // a deployment made outside market hours.
+        var cached = storedDetail(stock.id());
+        if (cached.isPresent()) {
+            DetailQuote detail = cached.get();
+            boolean sameInstrument = detail.instrumentId() == stock.id()
+                && stock.exchange().equals(detail.exchange())
+                && stock.tradingSymbol().equals(detail.tradingSymbol());
+            if (sameInstrument && "STORED_LAST_DETAIL".equals(detail.source())
+                    && detail.ltp() != null && detail.ltp().signum() > 0
+                    && detail.exchangeAt() != null
+                    && !detail.exchangeAt().isAfter(Instant.now())) {
+                BigDecimal change = detail.previousClose() == null
+                        || detail.previousClose().signum() <= 0 ? null
+                    : detail.ltp().subtract(detail.previousClose())
+                        .multiply(BigDecimal.valueOf(100))
+                        .divide(detail.previousClose(), 4, java.math.RoundingMode.HALF_UP);
+                return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
+                    detail.ltp(), detail.exchangeAt(), "LAST_CLOSE", "STORED_LAST_DETAIL", change);
+            }
+        }
+        return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
+            null, null, "UNAVAILABLE", null, null);
     }
 
     private static Instrument requireCashEquity(Instrument instrument) {
