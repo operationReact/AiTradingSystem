@@ -78,7 +78,7 @@ class MindProspectiveCohort {
       throw const FormatException('Unsafe prospective research contract');
     }
     final status = raw['sourceStatus'];
-    if (!const {'UNREGISTERED', 'AWAITING_FUTURE_SESSION',
+    if (!const {'UNREGISTERED', 'UNAVAILABLE', 'AWAITING_FUTURE_SESSION',
       'COLLECTING', 'INSUFFICIENT_COVERAGE',
       'SOURCE_COVERAGE_READY_RESEARCH_ONLY'}.contains(status)) {
       throw const FormatException('Unknown prospective state');
@@ -121,7 +121,7 @@ class MindProspectiveCohort {
     final symbols = members.map((m) => m.symbol).toSet();
     if (members.length != count || slots.length != count ||
         symbols.length != count ||
-        (status == 'UNREGISTERED' &&
+        ((status == 'UNREGISTERED' || status == 'UNAVAILABLE') &&
           (registered != null || start != null || mature != null ||
             count != 0 || completed != 0 || ready != 0)) ||
         (status != 'UNREGISTERED' &&
