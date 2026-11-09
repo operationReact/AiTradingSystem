@@ -113,7 +113,7 @@ class _MindSparkPainter extends CustomPainter {
     double height = 0.62;
     for (var i=0; i<17; i++) {
       final variation = (((i * 11 + seed * 7) % 9)-3) / 25;
-      height = (height - .035 + variation).clamp(.10, .88);
+      height = (height - .035 + variation).clamp(.10, .88).toDouble();
       points.add(Offset(size.width * i / 16, size.height * height));
     }
     final path = Path()..moveTo(points.first.dx, points.first.dy);
