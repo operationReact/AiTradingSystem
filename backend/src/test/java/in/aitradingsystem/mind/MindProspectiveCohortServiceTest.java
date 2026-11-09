@@ -201,7 +201,7 @@ class MindProspectiveCohortServiceTest {
             REGISTERED.plusSeconds(120), START, 10, original.members());
         when(repository.current()).thenReturn(Optional.of(backdated));
         var status = service(REGISTERED).inspect();
-        assertEquals("UNREGISTERED", status.sourceStatus());
+        assertEquals("UNAVAILABLE", status.sourceStatus());
         assertTrue(status.blockers().contains("COHORT_MEMBERSHIP_INVALID"));
         verify(repository, never()).observations(any(), any(), any(), anyInt());
     }
