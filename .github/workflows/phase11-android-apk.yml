@@ -398,9 +398,10 @@ jobs:
           }
           echo "PASS: permanent release keystore matches pinned certificate; credentials remain private"
 
-      - name: Build sideloadable release APK
+      - name: Build sideloadable stable-signed release APK
+        if: github.event_name != 'pull_request'
         env:
-          MINTTICK_REQUIRE_STABLE_SIGNING: ${{ github.event_name != 'pull_request' && 'true' || 'false' }}
+          MINTTICK_REQUIRE_STABLE_SIGNING: 'true'
           MINTTICK_ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/minttick-release-keystore.p12
           MINTTICK_ANDROID_KEY_ALIAS: ${{ secrets.MINTTICK_ANDROID_KEY_ALIAS }}
           MINTTICK_ANDROID_STORE_PASSWORD: ${{ secrets.MINTTICK_ANDROID_STORE_PASSWORD }}
@@ -422,6 +423,26 @@ jobs:
               echo "Release APK failed after bounded retries" >&2
               exit 1
             fi
+            sleep "$((attempt * 12))"
+          done
+
+      - name: Build CI-only debug-signed APK without release credentials
+        if: github.event_name == 'pull_request'
+        env:
+          MINTTICK_REQUIRE_STABLE_SIGNING: 'false'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if flutter build apk --release \
+              --build-number="$((100000 + GITHUB_RUN_NUMBER))" \
+              --dart-define=API_BASE_URL="$API_BASE_URL" \
+              --dart-define=MINTTICK_COGNITO_REGION=ap-south-1 \
+              --dart-define=MINTTICK_COGNITO_USER_POOL_ID="$MINTTICK_COGNITO_USER_POOL_ID" \
+              --dart-define=MINTTICK_COGNITO_CLIENT_ID="$MINTTICK_COGNITO_CLIENT_ID" \
+              --dart-define=MINTTICK_AUTH_ONLY_TEST="$MINTTICK_AUTH_ONLY_TEST"; then
+              break
+            fi
+            test "$attempt" -lt 3 || exit 1
             sleep "$((attempt * 12))"
           done
 
