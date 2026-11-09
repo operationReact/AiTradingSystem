@@ -35,6 +35,8 @@ public class MarketOverviewService {
     static final BigDecimal MOMENTUM_PCT = new BigDecimal("2.00");
     static final BigDecimal GAP_UP_PCT = new BigDecimal("1.00");
     static final Duration CACHE_TTL = Duration.ofSeconds(30);
+    // Exchange timestamps older than this are not current screening evidence.
+    static final Duration LIVE_QUOTE_MAX_AGE = Duration.ofMinutes(2);
     static final ZoneId MARKET_ZONE = ZoneId.of("Asia/Kolkata");
     static final String INDEX_LIVE = "LIVE";
     static final String INDEX_STALE = "STALE";
@@ -115,7 +117,8 @@ public class MarketOverviewService {
         Optional<Overview> stored;
         try {
             stored = store.load();
-        } catch (DataAccessException ex) {
+        } catch (DataAccessException | IllegalStateException ex) {
+            // A missing migration or unreadable stored payload is not valid market evidence.
             return Optional.empty();
         }
         return stored.map(MarketOverviewService::asStored);
@@ -128,13 +131,13 @@ public class MarketOverviewService {
         return new Overview(overview.generatedAt(), STORED_SOURCE, overview.breadthScope(),
                 overview.exchangeAsOf(), overview.universe(), overview.breadth(), overview.gainers(),
                 overview.losers(), overview.gapUp(), overview.gapDown(), overview.sectors(), indices,
-                overview.ideas());
+                List.of()); // Never replay old screening signals as current opportunities.
     }
 
     private void saveQuietly(Overview overview) {
         try {
             store.save(overview);
-        } catch (DataAccessException ex) {
+        } catch (DataAccessException | IllegalStateException ex) {
             // A failed snapshot write must not hide a verified live overview.
         }
     }
@@ -164,9 +167,14 @@ public class MarketOverviewService {
         return new IndexSession(true, calendar.session(today).open().toInstant());
     }
 
-    static String indexFreshness(Instant exchangeAt, IndexSession session) {
+    static String indexFreshness(Instant exchangeAt, IndexSession session, Instant evaluatedAt) {
         if (!session.insideCashSession() || session.sessionOpen() == null) return INDEX_LAST_CLOSE;
-        return exchangeAt.isBefore(session.sessionOpen()) ? INDEX_STALE : INDEX_LIVE;
+        if (exchangeAt == null || exchangeAt.isBefore(session.sessionOpen())
+                || exchangeAt.isAfter(evaluatedAt)
+                || Duration.between(exchangeAt, evaluatedAt).compareTo(LIVE_QUOTE_MAX_AGE) > 0) {
+            return INDEX_STALE;
+        }
+        return INDEX_LIVE;
     }
 
     private Map<String, AngelOneQuoteDetailParser.Detail> fetchInBatches(
@@ -265,19 +273,28 @@ public class MarketOverviewService {
             indexByCode.put(definition.indexCode(), new IndexRow(definition.indexCode(), definition.displayName(),
                 detail.ltp(), detail.previousClose(), percent(detail.ltp(), detail.previousClose()),
                 detail.open(), detail.high(), detail.low(), detail.volume(), detail.exchangeAt(),
-                indexFreshness(detail.exchangeAt(), indexSession)));
+                indexFreshness(detail.exchangeAt(), indexSession, generatedAt)));
         }
         indices.addAll(indexByCode.values());
 
         return new Overview(generatedAt, SOURCE, BREADTH_SCOPE, exchangeAsOf,
             new Universe(UNIVERSE_CODE, sourceAsOf, members.size(), resolved, rows.size()),
             new Breadth(advancers, decliners, unchanged, rows.size()),
-            gainers, losers, gapUp, gapDown, sectors, indices, ideas(rows));
+            gainers, losers, gapUp, gapDown, sectors, indices,
+            ideas(rows, generatedAt, indexSession));
     }
 
-    static List<Idea> ideas(List<Mover> rows) {
+    static List<Idea> ideas(List<Mover> rows, Instant generatedAt, IndexSession session) {
+        // Market ideas are ephemeral screening observations, not historical investment advice.
+        // Do not publish them outside an exchange session or from expired/future ticks.
+        if (!session.insideCashSession() || session.sessionOpen() == null) return List.of();
         List<Idea> hits = new ArrayList<>();
         for (Mover row : rows) {
+            Instant tick = row.exchangeAt();
+            if (tick == null || tick.isBefore(session.sessionOpen()) || tick.isAfter(generatedAt)
+                    || Duration.between(tick, generatedAt).compareTo(LIVE_QUOTE_MAX_AGE) > 0) {
+                continue;
+            }
             String signal = null;
             if (row.week52High() != null && row.ltp().compareTo(row.week52High()) >= 0) signal = "BREAKOUT";
             else if (row.changePct().compareTo(MOMENTUM_PCT) >= 0) signal = "MOMENTUM";
