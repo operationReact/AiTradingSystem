@@ -15,7 +15,9 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
+import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
 /**
@@ -38,18 +40,22 @@ public class MarketOverviewService {
     static final String INDEX_STALE = "STALE";
     static final String INDEX_LAST_CLOSE = "LAST_CLOSE";
 
+    static final String STORED_SOURCE = "STORED_LAST_OVERVIEW";
+
     private final MarketOverviewRepository repository;
     private final AppAngelOneMarketFeedService feed;
     private final MarketSessionCalendar calendar;
     private final Clock clock;
+    private final MarketOverviewSnapshotStore store;
     private Overview cached;
 
     public MarketOverviewService(MarketOverviewRepository repository, AppAngelOneMarketFeedService feed,
-            MarketSessionCalendar calendar, Clock clock) {
+            MarketSessionCalendar calendar, Clock clock, MarketOverviewSnapshotStore store) {
         this.repository = repository;
         this.feed = feed;
         this.calendar = calendar;
         this.clock = clock;
+        this.store = store;
     }
 
     /** Whether the cash market is open now, and if so when today's session opened. */
@@ -93,7 +99,47 @@ public class MarketOverviewService {
     public synchronized Overview overview() {
         Instant now = clock.instant();
         if (cached != null && now.isBefore(cached.generatedAt().plus(CACHE_TTL))) return cached;
+        try {
+            cached = computeLive(now);
+        } catch (RuntimeException ex) {
+            Optional<Overview> stored = storedOverview();
+            if (stored.isPresent()) return stored.get();
+            throw ex;
+        }
+        saveQuietly(cached);
+        return cached;
+    }
 
+    /** The last overview persisted from a verified live computation, labelled as stored; empty if none exists. */
+    public Optional<Overview> storedOverview() {
+        Optional<Overview> stored;
+        try {
+            stored = store.load();
+        } catch (DataAccessException ex) {
+            return Optional.empty();
+        }
+        return stored.map(MarketOverviewService::asStored);
+    }
+
+    static Overview asStored(Overview overview) {
+        List<IndexRow> indices = overview.indices().stream().map(i -> new IndexRow(i.indexCode(), i.displayName(),
+                i.ltp(), i.previousClose(), i.changePct(), i.open(), i.high(), i.low(), i.volume(),
+                i.exchangeAt(), INDEX_LAST_CLOSE)).toList();
+        return new Overview(overview.generatedAt(), STORED_SOURCE, overview.breadthScope(),
+                overview.exchangeAsOf(), overview.universe(), overview.breadth(), overview.gainers(),
+                overview.losers(), overview.gapUp(), overview.gapDown(), overview.sectors(), indices,
+                overview.ideas());
+    }
+
+    private void saveQuietly(Overview overview) {
+        try {
+            store.save(overview);
+        } catch (DataAccessException ex) {
+            // A failed snapshot write must not hide a verified live overview.
+        }
+    }
+
+    private Overview computeLive(Instant now) {
         List<MarketOverviewRepository.Member> members = repository.universe(UNIVERSE_CODE);
         List<MarketOverviewRepository.IndexDefinition> indexDefinitions = repository.indices();
         Map<String, String> tokens = repository.resolveEquityTokens(
@@ -109,8 +155,7 @@ public class MarketOverviewService {
 
         Map<String, AngelOneQuoteDetailParser.Detail> stockDetails = fetchInBatches(stockExpected);
         Map<String, AngelOneQuoteDetailParser.Detail> indexDetails = fetchInBatches(indexExpected);
-        cached = compute(now, members, tokens, stockDetails, indexDefinitions, indexDetails, indexSession(now));
-        return cached;
+        return compute(now, members, tokens, stockDetails, indexDefinitions, indexDetails, indexSession(now));
     }
 
     private IndexSession indexSession(Instant now) {

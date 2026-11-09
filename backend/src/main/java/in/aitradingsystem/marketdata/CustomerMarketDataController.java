@@ -251,9 +251,14 @@ public class CustomerMarketDataController {
     @GetMapping("/overview")
     public ResponseEntity<MarketOverviewService.Overview> overview(Authentication authentication) {
         requireCustomer(authentication);
-        if (marketOverview == null || applicationFeed == null || !applicationFeed.available()) {
+        if (marketOverview == null) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Application market feed has not been configured");
+                "Market overview is not configured");
+        }
+        if (applicationFeed == null || !applicationFeed.available()) {
+            var stored = marketOverview.storedOverview().orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.SERVICE_UNAVAILABLE, "Application market feed is unavailable and no stored overview exists yet"));
+            return noStore(stored);
         }
         return noStore(marketOverview.overview());
     }
@@ -277,8 +282,7 @@ public class CustomerMarketDataController {
             stocks.add(requireCashEquity(instruments.requireActiveInstrument(id)));
         }
         if (applicationFeed == null || !applicationFeed.available()) {
-            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Application live market feed is unavailable");
+            return noStore(new Snapshot(Instant.now(), storedSnapshotRows(stocks)));
         }
         var replies = applicationFeed.snapshot(stocks);
         Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
@@ -320,6 +324,24 @@ public class CustomerMarketDataController {
                 "MARKET_CLOSED").contains(reply.status()) ? reply.status() : "UNAVAILABLE";
         return new SnapshotRow(instrument.id(), instrument.exchange(),
             instrument.tradingSymbol(), null, null, status, null, null);
+    }
+
+    /**
+     * With the app feed down, each row is the stored last LIVE tick labelled LAST_CLOSE, or UNAVAILABLE
+     * when no tick was ever stored. Nothing is labelled LIVE without a verified feed.
+     */
+    private List<SnapshotRow> storedSnapshotRows(List<Instrument> stocks) {
+        Map<Long, MarketLastTickStore.LastTick> lastTicks = lastTickStore == null
+            ? Map.of() : lastTickStore.lastFor(stocks.stream().map(Instrument::id).toList());
+        List<SnapshotRow> rows = new ArrayList<>();
+        for (Instrument stock : stocks) {
+            MarketLastTickStore.LastTick tick = lastTicks.get(stock.id());
+            rows.add(tick == null
+                ? new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(), null, null, "UNAVAILABLE", null, null)
+                : new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(), tick.ltp(), tick.exchangeAt(),
+                    "LAST_CLOSE", "STORED_LAST_LIVE_TICK", tick.changePercent()));
+        }
+        return rows;
     }
 
     private static Instrument requireCashEquity(Instrument instrument) {

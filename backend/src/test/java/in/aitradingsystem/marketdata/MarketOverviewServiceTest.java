@@ -90,6 +90,20 @@ class MarketOverviewServiceTest {
     }
 
     @Test
+    void storedOverviewIsLabelledStoredAndIndicesAreLastClose() {
+        var index = new MarketOverviewService.IndexRow("NIFTY50", "Nifty 50", new BigDecimal("24000"),
+            new BigDecimal("23900"), new BigDecimal("0.42"), null, null, null, 0L, TRADED, "LIVE");
+        var overview = new MarketOverviewService.Overview(NOW, "ANGEL_ONE_SMARTAPI_FULL_BULK",
+            "NIFTY50_CONSTITUENTS", TRADED, new MarketOverviewService.Universe("NIFTY50", AS_OF, 50, 50, 50),
+            null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(index), List.of());
+        var stored = MarketOverviewService.asStored(overview);
+        assertThat(stored.source()).isEqualTo("STORED_LAST_OVERVIEW");
+        assertThat(stored.generatedAt()).isEqualTo(NOW);
+        assertThat(stored.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
+        assertThat(stored.indices().get(0).ltp()).isEqualByComparingTo("24000");
+    }
+
+    @Test
     void ideasAreRuleScreenHitsWithBreakoutTakingPriorityOverMomentumAndGap() {
         var members = List.of(
             new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src"),
