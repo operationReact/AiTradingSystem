@@ -344,9 +344,11 @@ Implementation is strictly sequential for **dependent changes**. PR numbers here
 - ARM64 wheels/Numba/Rust/dotnet compatibility must be demonstrated before selecting deployed architecture. Avoid permanently running all five frameworks.
 - Training on user fills is separate from the independent global market prediction outcome process; do not leak account data into research.
 
-## 9. Coverage across all 42 existing Mintick Mind screens
+## 9. Coverage across all 42 original Mintick Mind screens + one research planning screen
 
 **Primary direct consumers:** Strategy Universe, Strategy Detail, Research & Backtesting, Experiment Results, Model Laboratory, Model Deep Dive, Performance & Learning, Decision Simulator, Shadow Trading Arena, Signal Scorecard, Confidence Calibration, Decision Anatomy, Evidence Ledger, Culprit Catcher.
+
+**New visible placeholder:** The planned `research-engines` screen (43rd route, 42 core unchanged) provides five explicitly NOT CONNECTED records, integration prerequisites, exact proposed touchpoints, licence gates, planned OSS PR IDs, and links into existing screens. See [43rd-screen UI contract](RESEARCH_ENGINE_UI_PLACEHOLDERS.md) and [PR #660](https://github.com/operationReact/AiTradingSystem/pull/660); UI source commits are not evidence of a running research adapter.
 
 **Indirect consumers through the same typed normalized research views:** Mind Overview, Decision Intelligence, Agent Council & Debate, Regime Weight Studio, Trading Rooms, Room Detail, Decision Explorer, Dependency Map, Chart Intelligence, Market Regimes, Daily Market Verdict, Events & Knowledge Graph, Multibagger Discovery, Investment Thesis, Portfolio Digital Twin, Risk Center, Decision Journal and Ask Mintick Mind (read-only explanations only).
 
