@@ -4,6 +4,8 @@ import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
+import '../data/mind_prospective_cohort_repository.dart';
+import 'mind_prospective_cohort_panel.dart';
 import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
 import 'mind_readiness_panel.dart';
@@ -14,12 +16,13 @@ import 'mind_widgets.dart';
 /// trading execution methods are reachable from this widget.
 class MintickMindPage extends StatefulWidget {
   const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
-    this.walkForwardRepository, super.key});
+    this.walkForwardRepository, this.prospectiveRepository, super.key});
 
   /// Null in isolated demo/golden tests; authenticated app injects real API.
   final MindReadinessRepository? readinessRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindMaWalkForwardRepository? walkForwardRepository;
+  final MindProspectiveCohortRepository? prospectiveRepository;
 
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
@@ -85,6 +88,10 @@ class _MintickMindPageState extends State<MintickMindPage> {
               ],
               if (_tab == 1 && widget.walkForwardRepository != null) ...[
                 MindMaWalkForwardPanel(repository: widget.walkForwardRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.prospectiveRepository != null) ...[
+                MindProspectiveCohortPanel(repository: widget.prospectiveRepository!),
                 const SizedBox(height: 14),
               ],
               if(_tab==1) _strategies(),
