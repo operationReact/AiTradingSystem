@@ -27,6 +27,36 @@ public class ResearchScanRepository {
         this.jdbc = jdbc;
     }
 
+    /**
+     * Prioritise the actual NSE stocks displayed on MintTick Home before
+     * allocating the app-owned WebSocket's fixed 50-token watch budget.
+     * This is deliberately separate from the research scan universe order.
+     */
+    public List<Instrument> marketFeedPriorityUniverse(int limit) {
+        if (limit < 1 || limit > 50) throw new IllegalArgumentException("market feed limit must be 1..50");
+        return jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE
+                   AND i.exchange IN ('NSE', 'BSE')
+                   AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+                 ORDER BY CASE
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'INFY-EQ' THEN 2
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'HDFCBANK-EQ' THEN 3
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'ICICIBANK-EQ' THEN 4
+                     WHEN i.exchange = 'NSE' AND i.trading_symbol = 'SBIN-EQ' THEN 5
+                     ELSE 100 END,
+                     i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
+                 LIMIT ?
+                """, instrumentMapper, limit);
+    }
+
     public void createRun(UUID id, String interval, int requestedLimit, String strategySet) {
         jdbc.update("""
                 INSERT INTO research_scan_run (id, interval, status, requested_limit, strategy_set)
