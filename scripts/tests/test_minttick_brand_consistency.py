@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # The separate in-app engine is explicitly named "Mintick Mind".
 # Reject incorrect standalone product brand tokens, not that compound name.
 def has_incorrect_brand(value: str) -> bool:
-    without_engine = re.sub(r"mintick[\\s_-]*mind", "", value.lower())
+    without_engine = re.sub(r"mintick[\s_-]*mind", "", value.lower())
     return re.search(r"(?<![a-z0-9_])mintic(?:k)?(?![a-z0-9_])", without_engine) is not None
 
 
