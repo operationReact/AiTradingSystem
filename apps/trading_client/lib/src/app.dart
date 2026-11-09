@@ -464,8 +464,13 @@ class _MobileProductNavigation extends StatelessWidget {
 
     return Material(
       key: const ValueKey('product-mobile-navigation'),
-      color: theme.colorScheme.surfaceContainer,
+      color: theme.colorScheme.surface,
       elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(32),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: SafeArea(
         top: false,
         child: SizedBox(
@@ -499,21 +504,16 @@ class _MobileProductNavigation extends StatelessWidget {
                       });
                     }
                   },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 180),
-                    margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 5),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      color: selected ? theme.colorScheme.primary.withValues(alpha: 0.10) : Colors.transparent,
-                      border: selected ? Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.24)) : null,
-                      
-                    ),
+                  // Flat selection: green icon, white label; no filled pill,
+                  // gradient, halo or glow. Matches the owner-approved reference.
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 5),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(selected ? item.$2 : item.$1, size: 22, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant),
                         const SizedBox(height: 2),
-                        Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: isCustomer ? 10.5 : 11.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant)),
+                        Text(item.$3, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: isCustomer ? 10.5 : 11.5, fontWeight: selected ? FontWeight.w800 : FontWeight.w600, color: selected ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant)),
                       ],
                     ),
                   ),
@@ -653,7 +653,7 @@ class _MoreProductSheet extends StatelessWidget {
               (destination) => Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Material(
-                  color: theme.colorScheme.surfaceContainerHigh.withValues(alpha: 0.72),
+                  color: theme.colorScheme.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(14),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(14),
