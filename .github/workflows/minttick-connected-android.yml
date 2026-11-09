@@ -54,7 +54,11 @@ jobs:
               "Confirm APK is signed by the pinned permanent certificate",
               "apksigner",
               "--build-number",
-              "Build CI-only debug-signed APK without release credentials",
+              "MINTTICK_REQUIRE_STABLE_SIGNING: 'true'",
+              "MINTTICK_REQUIRE_STABLE_SIGNING: 'false'",
+              "if: github.event_name == 'pull_request'",
+              "if: github.event_name != 'pull_request'",
+              "Build CI-only debug-signed configured APK without release credentials",
           ):
               assert marker in apk, f"Missing Android signing gate: {marker}"
           PY
