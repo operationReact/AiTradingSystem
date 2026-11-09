@@ -318,8 +318,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
           decoration:BoxDecoration(
             borderRadius:BorderRadius.circular(30),
             color:const Color(0xFF020607),
-            border:Border.all(color:const Color(0xFF345B4C),width:3),
-            boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:35)]),
+            border:Border.all(color:MindPalette.border,width:2)),
           child:Column(children:[
             const SizedBox(height:8),
             const Row(children:[
