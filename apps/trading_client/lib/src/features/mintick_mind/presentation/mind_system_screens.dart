@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 part of 'mind_workspace_page.dart';
 
 extension _MindSystemScreens on _MindWorkspaceState {
@@ -158,7 +160,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
           style:TextStyle(color:MindPalette.muted,fontSize:11)),
         activeTrackColor:MindPalette.red,
         value:_emergencyStop,
-        onChanged:(v)=>setState(()=>_emergencyStop=v),
+        onChanged:(v)=>_updateMind(()=>_emergencyStop=v),
       )),
       const SizedBox(height:10),
       _tile('Capital limits','See the independent portfolio risk gate',
@@ -237,7 +239,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
       :l.contains('risk')
       ? 'Every proposed action must pass independent capital and risk checks. This demo cannot modify or invoke those controls.'
       : 'The prototype can explain its sample strategies, models, portfolio exposure, decisions and research workflows. It has no live market feed or external language model.';
-    setState(() {
+    _updateMind(() {
       _assistantHistory.add('You: '+message);
       _assistantHistory.add('Mind: '+reply);
       _assistantController.clear();
@@ -271,7 +273,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
         children:[
           for(var i=0;i<_references.length;i++)
             MindPanel(
-              onTap:()=>setState((){
+              onTap:()=>_updateMind((){
                 _reference=_references[i].$1;
                 _route='design-preview';
               }),
@@ -309,7 +311,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
     return _surface('Clickable Design Mode',
       'Interactive Flutter preview mapped to the reference screen layout',[
       _chips(_references.map((r)=>r.$1).toList(),_reference,
-        (v)=>setState(()=>_reference=v)),
+        (v)=>_updateMind(()=>_reference=v)),
       const SizedBox(height:12),
       Center(child:ConstrainedBox(constraints:const BoxConstraints(maxWidth:420),
         child:Container(padding:const EdgeInsets.all(12),
