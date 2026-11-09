@@ -1,9 +1,7 @@
 package in.aitradingsystem.provider.angelone;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.instrument.Instrument;
@@ -20,74 +18,84 @@ import org.junit.jupiter.api.Test;
 
 class OwnerLiveFeedWarmerTest {
     private static final Instant NOW = Instant.parse("2026-11-09T05:00:00Z");
-    private static final UUID OWNER = UUID.fromString("00000000-0000-0000-0000-00000000f00d");
     private static final Instrument NSE = new Instrument(42L, "NSE_CM", "NSE",
-        "2885", "TEST-EQ", "Test", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        "2885", "RELIANCE-EQ", "Reliance", "EQ", null, null, 1,
+        new BigDecimal("0.05"), UUID.randomUUID());
 
     @Test
-    void closedMarketDoesNothingAndNeverLogsIn() {
-        var liveQuotes = mock(CustomerAngelOneLiveQuoteService.class);
-        var sessions = mock(CustomerAngelOneSessionService.class);
-        var ssm = mock(OwnerAngelOneSsmService.class);
+    void closedMarketDoesNothingAndNeverAuthenticates() {
+        var feed = mock(AppAngelOneMarketFeedService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
         var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(false);
 
-        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
-            Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500).warm();
+        new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
+            Clock.fixed(NOW, ZoneOffset.UTC), 50).warm();
 
-        verifyNoInteractions(liveQuotes, sessions, ssm, scans, lastTicks);
+        verifyNoInteractions(feed, scans, lastTicks);
     }
 
     @Test
-    void openMarketLogsInWhenNoSessionAndSnapshotsCappedUniverse() {
-        var liveQuotes = mock(CustomerAngelOneLiveQuoteService.class);
-        var sessions = mock(CustomerAngelOneSessionService.class);
-        var ssm = mock(OwnerAngelOneSsmService.class);
+    void optInWarmUsesAppSessionAndPriorityUniverseNotAnotherOwnerSession() {
+        var feed = mock(AppAngelOneMarketFeedService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
         var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(true);
-        when(ssm.available()).thenReturn(true);
-        when(scans.activeCashEquityUniverse(eq(500))).thenReturn(List.of(NSE));
-        var reply = List.of(new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
-            new BigDecimal("101.50"), NOW, NOW, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
-        when(liveQuotes.snapshot(OWNER, List.of(NSE))).thenReturn(reply);
+        when(feed.available()).thenReturn(true);
+        when(scans.marketFeedPriorityUniverse(50)).thenReturn(List.of(NSE));
+        var reply = List.of(new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE",
+            "RELIANCE-EQ", new BigDecimal("101.50"), NOW, NOW,
+            "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
+        when(feed.snapshot(List.of(NSE))).thenReturn(reply);
 
-        new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
-            Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500).warm();
+        new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
+            Clock.fixed(NOW, ZoneOffset.UTC), 1000).warm();
 
-        verify(ssm).connect(OWNER);
-        verify(scans).activeCashEquityUniverse(500);
-        verify(liveQuotes).snapshot(OWNER, List.of(NSE));
+        verify(scans).marketFeedPriorityUniverse(50);
+        verify(feed).snapshot(List.of(NSE));
         verify(lastTicks).recordLive(reply);
     }
 
     @Test
-    void warmUpFailureIsContainedSoSchedulerKeepsRunning() {
-        var liveQuotes = mock(CustomerAngelOneLiveQuoteService.class);
-        var sessions = mock(CustomerAngelOneSessionService.class);
-        var ssm = mock(OwnerAngelOneSsmService.class);
+    void disabledSsmFeedDoesNotQueryUniverseOrPersist() {
+        var feed = mock(AppAngelOneMarketFeedService.class);
         var calendar = mock(MarketSessionCalendar.class);
         var scans = mock(ResearchScanRepository.class);
         var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(true);
-        when(ssm.available()).thenReturn(false);
-        when(scans.activeCashEquityUniverse(anyInt())).thenThrow(new IllegalStateException("db down"));
 
-        var warmer = new OwnerLiveFeedWarmer(liveQuotes, sessions, ssm, calendar, scans, lastTicks,
-            Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 500);
+        new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
+            Clock.fixed(NOW, ZoneOffset.UTC), 50).warm();
+
+        verify(feed).available();
+        verifyNoInteractions(scans, lastTicks);
+        verify(feed, never()).snapshot(anyList());
+    }
+
+    @Test
+    void warmUpFailureIsContainedSoSchedulerKeepsRunning() {
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var scans = mock(ResearchScanRepository.class);
+        var lastTicks = mock(MarketLastTickStore.class);
+        when(calendar.isInsideCashSession(NOW)).thenReturn(true);
+        when(feed.available()).thenReturn(true);
+        when(scans.marketFeedPriorityUniverse(50)).thenThrow(new IllegalStateException("db down"));
+
+        var warmer = new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
+            Clock.fixed(NOW, ZoneOffset.UTC), 50);
         assertThatCode(warmer::warm).doesNotThrowAnyException();
-        verify(liveQuotes, never()).snapshot(any(), anyList());
+        verify(feed, never()).snapshot(anyList());
+        verifyNoInteractions(lastTicks);
     }
 
     @Test
     void rejectsNonPositiveUniverseLimit() {
-        assertThatThrownBy(() -> new OwnerLiveFeedWarmer(mock(CustomerAngelOneLiveQuoteService.class),
-            mock(CustomerAngelOneSessionService.class), mock(OwnerAngelOneSsmService.class),
+        assertThatThrownBy(() -> new OwnerLiveFeedWarmer(mock(AppAngelOneMarketFeedService.class),
             mock(MarketSessionCalendar.class), mock(ResearchScanRepository.class),
-            mock(MarketLastTickStore.class), Clock.fixed(NOW, ZoneOffset.UTC), OWNER, 0))
+            mock(MarketLastTickStore.class), Clock.fixed(NOW, ZoneOffset.UTC), 0))
             .isInstanceOf(IllegalArgumentException.class);
     }
 }
