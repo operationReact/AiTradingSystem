@@ -1,0 +1,89 @@
+name: Mintick Mind stacked branch validation
+
+# Validates an unmerged feature stack when the dev-only PR workflows cannot
+# run due to concurrent dev changes. No deployment, release credentials or APK.
+on:
+  push:
+    branches:
+      - feature/mintick-mind-prospective-cohort-v1-20261109
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mind-stack-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java-postgres:
+    name: Java 21 and local PostgreSQL integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Setup isolated test databases
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql postgresql-client
+          fi
+          sudo systemctl start postgresql
+          sudo -u postgres psql -v ON_ERROR_STOP=1 -c "CREATE ROLE aitrading LOGIN PASSWORD 'aitrading';"
+          for db in aitrading_test aitrading_phase8_exit; do
+            sudo -u postgres createdb --owner=aitrading "$db"
+            pg_isready -h 127.0.0.1 -p 5432 -d "$db"
+          done
+      - name: Run all backend unit and PostgreSQL integration tests
+        working-directory: backend
+        env:
+          ATS_TEST_POSTGRES_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/aitrading_test
+          ATS_PHASE8_EXIT_POSTGRES_JDBC_URL: jdbc:postgresql://127.0.0.1:5432/aitrading_phase8_exit
+          ATS_TEST_POSTGRES_USERNAME: aitrading
+          ATS_TEST_POSTGRES_PASSWORD: aitrading
+        run: mvn --batch-mode --no-transfer-progress test
+
+  flutter-validation:
+    name: Flutter analyzer, mobile tests and web compile
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/trading_client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.0'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - name: Configure runner system SQLite for tests
+        run: |
+          set -euo pipefail
+          test -f /usr/lib/x86_64-linux-gnu/libsqlite3.so.0
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("pubspec.yaml")
+          config = p.read_text()
+          assert "\\nhooks:" not in config
+          p.write_text(config + "\\nhooks:\\n  user_defines:\\n    sqlite3:\\n      source: system\\n")
+          PY
+          flutter pub get
+      - name: Test native Flutter widgets and repositories
+        run: |
+          set -euo pipefail
+          mapfile -d '' tests < <(find test -type f -name '*_test.dart' ! -name 'visual_golden_test.dart' -print0)
+          test "${#tests[@]}" -gt 0
+          flutter test "${tests[@]}"
+      - name: Compile production Flutter web
+        run: flutter build web --release --no-wasm-dry-run --dart-define=API_BASE_URL=/
