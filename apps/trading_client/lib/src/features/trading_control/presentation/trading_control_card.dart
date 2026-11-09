@@ -109,13 +109,8 @@ class _TradingControlCardState extends State<TradingControlCard> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF081526), Color(0xFF100C28)],
-        ),
-        border: Border.all(color: tradingColors.neonCyan.withValues(alpha: 0.35)),
-        boxShadow: [BoxShadow(color: tradingColors.neonCyan.withValues(alpha: 0.10), blurRadius: 28)],
+        color: scheme.surfaceContainer,
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

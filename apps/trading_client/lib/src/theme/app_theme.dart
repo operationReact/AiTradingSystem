@@ -68,31 +68,33 @@ class TradingColors extends ThemeExtension<TradingColors> {
 ThemeData buildTheme(Brightness brightness) {
   final dark = brightness == Brightness.dark;
   final scheme = ColorScheme.fromSeed(
-    seedColor: MintTickPalette.teal,
+    seedColor: MintTickPalette.mint,
     brightness: brightness,
   ).copyWith(
-    primary: dark ? const Color(0xFF78B6AF) : MintTickPalette.readableGreen,
-    onPrimary: dark ? const Color(0xFF0E1620) : Colors.white,
-    primaryContainer: dark ? const Color(0xFF283845) : const Color(0xFFDDF3E8),
-    onPrimaryContainer: dark ? const Color(0xFFEDF2F4) : const Color(0xFF19402B),
-    secondary: dark ? const Color(0xFF78B6AF) : const Color(0xFF087C72),
-    onSecondary: dark ? const Color(0xFF0E1620) : Colors.white,
-    secondaryContainer: dark ? const Color(0xFF283845) : const Color(0xFFE0F2EE),
-    onSecondaryContainer: dark ? const Color(0xFFD9F0EC) : const Color(0xFF18433F),
+    primary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
+    onPrimary: dark ? MintTickPalette.nearBlack : Colors.white,
+    primaryContainer: dark ? const Color(0xFF142117) : const Color(0xFFDFF2E4),
+    onPrimaryContainer: dark ? const Color(0xFFD5F4DE) : const Color(0xFF133A21),
+    secondary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
+    onSecondary: dark ? MintTickPalette.nearBlack : Colors.white,
+    secondaryContainer: dark ? const Color(0xFF18241A) : const Color(0xFFE7F3E9),
+    onSecondaryContainer: dark ? const Color(0xFFD5F4DE) : const Color(0xFF133A21),
+    tertiary: dark ? MintTickPalette.mint : MintTickPalette.readableGreen,
     surface: dark ? MintTickPalette.nearBlack : MintTickPalette.ice,
     surfaceContainerLowest: dark ? MintTickPalette.nearBlack : Colors.white,
-    surfaceContainerLow: dark ? const Color(0xFF1B2732) : const Color(0xFFF5F8F8),
-    surfaceContainer: dark ? const Color(0xFF1B2732) : const Color(0xFFEDF3F2),
-    surfaceContainerHigh: dark ? const Color(0xFF283845) : const Color(0xFFE6EEEE),
-    surfaceContainerHighest: dark ? const Color(0xFF283845) : const Color(0xFFDDE8E5),
-    onSurface: dark ? const Color(0xFFEDF2F4) : MintTickPalette.navy,
-    onSurfaceVariant: dark ? const Color(0xFFB9C8CC) : const Color(0xFF526266),
-    outline: dark ? const Color(0xFF60737C) : const Color(0xFF788E91),
-    outlineVariant: dark ? const Color(0xFF34444C) : const Color(0xFFCFDDDA),
-    error: dark ? const Color(0xFFFF8291) : const Color(0xFFAE263A),
+    surfaceContainerLow: dark ? const Color(0xFF111512) : const Color(0xFFF4F6F3),
+    surfaceContainer: dark ? MintTickPalette.darkCard : const Color(0xFFEEF1EC),
+    surfaceContainerHigh: dark ? MintTickPalette.darkElevated : const Color(0xFFE8ECE6),
+    surfaceContainerHighest: dark ? const Color(0xFF232923) : const Color(0xFFE1E7DF),
+    onSurface: dark ? const Color(0xFFF5F6F4) : const Color(0xFF151A16),
+    onSurfaceVariant: dark ? MintTickPalette.mutedSilver : const Color(0xFF515D53),
+    outline: dark ? const Color(0xFF525A53) : const Color(0xFF7F8A81),
+    outlineVariant: dark ? MintTickPalette.darkBorder : const Color(0xFFD2DBD1),
+    error: dark ? const Color(0xFFFF9292) : const Color(0xFFAE263A),
+    surfaceTint: Colors.transparent,
   );
 
-  final panel = dark ? const Color(0xFF1B2732) : const Color(0xFFF3F7F7);
+  final panel = dark ? MintTickPalette.darkCard : const Color(0xFFFFFFFF);
   final statuses = dark
       ? const (
           healthy: Color(0xFF53D69D),
@@ -166,7 +168,7 @@ ThemeData buildTheme(Brightness brightness) {
       height: 68,
       elevation: 0,
       backgroundColor: scheme.surfaceContainerLow,
-      indicatorColor: scheme.primary.withValues(alpha: dark ? 0.14 : 0.11),
+      indicatorColor: Colors.transparent,
       iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
             color: states.contains(WidgetState.selected)
                 ? scheme.primary
@@ -174,7 +176,7 @@ ThemeData buildTheme(Brightness brightness) {
           )),
       labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
             color: states.contains(WidgetState.selected)
-                ? scheme.primary
+                ? scheme.onSurface
                 : scheme.onSurfaceVariant,
             fontSize: 12,
             fontWeight: states.contains(WidgetState.selected)

@@ -6,7 +6,7 @@ import 'package:trading_client/src/theme/app_theme.dart';
 void main() {
   test('dark mode uses the same neutral near-black background across screens', () {
     final theme = buildTheme(Brightness.dark);
-    expect(MintTickPalette.nearBlack, const Color(0xFF0B0D10));
+    expect(MintTickPalette.nearBlack, const Color(0xFF090B0A));
     expect(MintTickPalette.nearBlack, isNot(Colors.black));
     expect(theme.scaffoldBackgroundColor, MintTickPalette.nearBlack);
     expect(theme.canvasColor, MintTickPalette.nearBlack);
@@ -15,9 +15,9 @@ void main() {
     expect(theme.colorScheme.surfaceContainerLowest, MintTickPalette.nearBlack);
     expect(theme.bottomSheetTheme.backgroundColor, MintTickPalette.nearBlack);
 
-    // No alteration to the approved MintTick action palette and card styling.
-    expect(theme.colorScheme.primary, const Color(0xFF78B6AF));
-    expect(theme.cardTheme.color, const Color(0xFF1B2732));
+    // Premium flat palette is shared by cards, tabs and page surfaces.
+    expect(theme.colorScheme.primary, MintTickPalette.mint);
+    expect(theme.cardTheme.color, MintTickPalette.darkCard);
   });
 
   test('light mode is unchanged', () {

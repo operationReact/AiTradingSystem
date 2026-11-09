@@ -11,7 +11,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
   ];
 
   Widget homeScreen()=>_surface('MintTick Home · Mind Preview',
-    'A mock landing page demonstrating access to the complete Mintick Mind workspace',[
+    'A mock landing page demonstrating access to the complete MintTick Mind workspace',[
     MindPanel(highlight:true,child:Column(children:[
       const Row(children:[
         Icon(Icons.psychology_outlined,color:MindPalette.mint,size:34),
@@ -25,7 +25,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
       const SizedBox(height:14),
       FilledButton.icon(onPressed:()=>_go('overview'),
         icon:const Icon(Icons.psychology_outlined),
-        label:const Text('Open Mintick Mind')),
+        label:const Text('Open MintTick Mind')),
     ])),
     const SizedBox(height:13),
     _metricGrid([
@@ -174,7 +174,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ]),
   ]);
 
-  Widget assistantScreen()=>_surface('Ask Mintick Mind',
+  Widget assistantScreen()=>_surface('Ask MintTick Mind',
     'Conversational research explorer · scripted answers from mock evidence',[
     MindPanel(highlight:true,child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       const MindSectionTitle(title:'Research Conversation',icon:Icons.forum_outlined),
@@ -193,7 +193,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
           style:const TextStyle(color:MindPalette.text),
           onSubmitted:(_)=>_sendQuestion(),
           decoration:InputDecoration(
-            hintText:'Why did Mintick Mind wait?',
+            hintText:'Why did MintTick Mind wait?',
             hintStyle:const TextStyle(color:MindPalette.muted,fontSize:12),
             filled:true,fillColor:MindPalette.panel,
             enabledBorder:OutlineInputBorder(
@@ -214,7 +214,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
         'Compare LightGBM and CatBoost',
         'Which strategy handles a sideways market?',
         'What are the multibagger risks?',
-        'Can Mintick Mind trade options?',
+        'Can MintTick Mind trade options?',
       ])
         Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(q,
           'Read-only simulated explanation',Icons.chat_bubble_outline,
@@ -318,8 +318,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
           decoration:BoxDecoration(
             borderRadius:BorderRadius.circular(30),
             color:const Color(0xFF020607),
-            border:Border.all(color:const Color(0xFF345B4C),width:3),
-            boxShadow:const [BoxShadow(color:Colors.black54,blurRadius:35)]),
+            border:Border.all(color:MindPalette.border,width:2)),
           child:Column(children:[
             const SizedBox(height:8),
             const Row(children:[
@@ -339,7 +338,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
               const Row(children:[
                 Icon(Icons.psychology_outlined,color:MindPalette.mint,size:31),
                 SizedBox(width:9),
-                Expanded(child:Text('Mintick Mind',
+                Expanded(child:Text('MintTick Mind',
                   style:TextStyle(color:MindPalette.text,fontWeight:FontWeight.w800))),
               ]),
               const SizedBox(height:10),
@@ -405,7 +404,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
   }
 
   Widget settingsScreen()=>_surface('Preferences',
-    'Single-owner Mintick Mind mock UI settings; account settings are unchanged',[
+    'Single-owner MintTick Mind mock UI settings; account settings are unchanged',[
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'Personal Workspace',icon:Icons.tune_outlined),
       _value('User authentication','Existing MintTick login'),

@@ -3,6 +3,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
+import '../data/mind_readiness_repository.dart';
+import '../data/mind_evidence_repository.dart';
+import '../data/mind_strategy_replay_repository.dart';
+import '../data/mind_ma_walkforward_repository.dart';
+import '../data/mind_prospective_cohort_repository.dart';
+import '../data/mind_prospective_signals_repository.dart';
+import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
 import 'mind_widgets.dart';
@@ -64,7 +71,7 @@ abstract final class MintickMindScreens {
     MindScreenDescriptor('options-chain', 'Option Chain', Icons.table_chart_outlined, 'CAPITAL'),
     MindScreenDescriptor('option-builder', 'Strategy Payoff Builder', Icons.stacked_line_chart, 'CAPITAL'),
     MindScreenDescriptor('controls', 'Engine Control', Icons.settings_outlined, 'SYSTEM'),
-    MindScreenDescriptor('assistant', 'Ask Mintick Mind', Icons.forum_outlined, 'SYSTEM'),
+    MindScreenDescriptor('assistant', 'Ask MintTick Mind', Icons.forum_outlined, 'SYSTEM'),
     MindScreenDescriptor('room-detail', 'Trading Room Detail', Icons.sensors_outlined, 'SYSTEM'),
     MindScreenDescriptor('design-gallery', 'Visual Mockup Gallery', Icons.grid_view_outlined, 'SYSTEM'),
     MindScreenDescriptor('design-preview', 'Clickable Design Mode', Icons.touch_app_outlined, 'SYSTEM'),
@@ -75,7 +82,29 @@ abstract final class MintickMindScreens {
 }
 
 class MintickMindWorkspacePage extends StatefulWidget {
-  const MintickMindWorkspacePage({super.key});
+  const MintickMindWorkspacePage({
+    this.embeddedInProductShell = false,
+    this.readinessRepository,
+    this.evidenceRepository,
+    this.strategyReplayRepository,
+    this.walkForwardRepository,
+    this.prospectiveRepository,
+    this.prospectiveSignalsRepository,
+    super.key,
+  });
+
+  /// Keep the app's navigation visible instead of stacking two bottom bars.
+  final bool embeddedInProductShell;
+
+  /// A production app injects authenticated evidence, never fake balances.
+  final MindReadinessRepository? readinessRepository;
+
+  /// Null only in isolated prototype/golden tests. Production uses Cognito.
+  final MindEvidenceRepository? evidenceRepository;
+  final MindStrategyReplayRepository? strategyReplayRepository;
+  final MindMaWalkForwardRepository? walkForwardRepository;
+  final MindProspectiveCohortRepository? prospectiveRepository;
+  final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -167,7 +196,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(message), backgroundColor: const Color(0xFF15372B),
+      content: Text(message), backgroundColor: const Color(0xFF18231A),
       duration: const Duration(seconds: 3),
     ));
   }
@@ -177,11 +206,11 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     final wide = MediaQuery.sizeOf(context).width >= 870;
     return Scaffold(
       backgroundColor: MindPalette.background,
-      floatingActionButton: _route=='overview' && !wide
-        ? Padding(padding:const EdgeInsets.only(bottom:66),
+      floatingActionButton: !wide && (widget.embeddedInProductShell || _route == 'overview')
+        ? Padding(padding:EdgeInsets.only(bottom: widget.embeddedInProductShell ? 0 : 66),
             child:FloatingActionButton.small(
-              tooltip:'All Mintick Mind screens',
-              backgroundColor:const Color(0xFF1C7753),
+              tooltip:'All MintTick Mind screens',
+              backgroundColor:MindPalette.mint,
               onPressed:_showRouteSheet,
               child:const Icon(Icons.apps_rounded,color:Colors.white)))
         : null,
@@ -191,9 +220,16 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           Expanded(child: Column(children: [
             if (_route != 'overview') _topbar(wide),
             Expanded(child: _route == 'overview'
-                ? const MintickMindPage(key: ValueKey('mind-original-overview'))
+                ? MintickMindPage(
+                    key: const ValueKey('mind-original-overview'),
+                    readinessRepository: widget.readinessRepository,
+                    strategyReplayRepository: widget.strategyReplayRepository,
+                    walkForwardRepository: widget.walkForwardRepository,
+                    prospectiveRepository: widget.prospectiveRepository,
+                    prospectiveSignalsRepository: widget.prospectiveSignalsRepository,
+                  )
                 : _screen()),
-            if (!wide) _mobileNavigation(),
+            if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
           ])),
         ]),
       ),
@@ -202,7 +238,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _sidebar() => Container(
     width: 235, padding: const EdgeInsets.fromLTRB(12, 18, 12, 12),
-    decoration: const BoxDecoration(color: Color(0xFF071014), border: Border(right: BorderSide(color: MindPalette.border))),
+    decoration: const BoxDecoration(color: MindPalette.background, border: Border(right: BorderSide(color: MindPalette.border))),
     child: Column(children: [
       const Row(children: [
         Icon(Icons.stacked_line_chart, color: MindPalette.mint, size: 27),
@@ -210,7 +246,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         Expanded(child:Text('MintTick',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(fontSize:22,fontWeight:FontWeight.w800,color:MindPalette.text))),
       ]),
       const SizedBox(height: 7),
-      const Text('MINTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
+      const Text('MINTTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
       const SizedBox(height: 18),
       Expanded(child: SingleChildScrollView(child: Column(children: [
         for (final group in ['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM']) ...[
@@ -226,7 +262,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _menuItem(MindScreenDescriptor screen) {
     final selected = _route == screen.id;
-    return Material(color: selected ? const Color(0xFF123328) : Colors.transparent,
+    return Material(color: selected ? MindPalette.panel : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         key: ValueKey('mind-route-' + screen.id),
@@ -246,7 +282,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _topbar(bool wide) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    decoration: const BoxDecoration(color: Color(0xFF071013), border: Border(bottom: BorderSide(color: MindPalette.border))),
+    decoration: const BoxDecoration(color: MindPalette.background, border: Border(bottom: BorderSide(color: MindPalette.border))),
     child: Row(children: [
       if (!wide)
         IconButton(tooltip:'All Mind screens', onPressed:_showRouteSheet,
@@ -260,7 +296,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           overflow: TextOverflow.ellipsis, style: const TextStyle(color: MindPalette.muted))),
       ],
       const Spacer(),
-      if (MediaQuery.sizeOf(context).width >= 390)
+      if (MediaQuery.sizeOf(context).width >= 480)
         const MindTag('DEMO DATA', color: MindPalette.yellow),
       const SizedBox(width: 4),
       IconButton(tooltip:'Screen coverage',onPressed:()=>_go('coverage'),
@@ -270,7 +306,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _mobileNavigation() => Container(
     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-    decoration: const BoxDecoration(color: Color(0xFF071012), border: Border(top: BorderSide(color: MindPalette.border))),
+    decoration: const BoxDecoration(color: MindPalette.background, border: Border(top: BorderSide(color: MindPalette.border))),
     height: 65,
     child: Row(children: [
       for(final (id,label,icon) in [
@@ -285,7 +321,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           child:Container(
             margin:const EdgeInsets.symmetric(horizontal:3),
             decoration:BoxDecoration(
-              color:_route==id?const Color(0xFF123F2D):Colors.transparent,
+              color:_route==id?MindPalette.panel:Colors.transparent,
               borderRadius:BorderRadius.circular(12)),
             child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
               Icon(icon,color:_route==id?MindPalette.mint:MindPalette.muted,size:22),
@@ -330,7 +366,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
               icon:const Icon(Icons.arrow_back,size:16),
               label:const Text('Back'),
               style:TextButton.styleFrom(foregroundColor:MindPalette.mint))),
-          const Text('MINTICK MIND · PERSONAL TRADING INTELLIGENCE',
+          const Text('MINTTICK MIND · PERSONAL TRADING INTELLIGENCE',
             style:TextStyle(color:MindPalette.mint,fontSize:10,letterSpacing:1.0,fontWeight:FontWeight.w700)),
           const SizedBox(height:7),
           Text(heading,style:const TextStyle(color:MindPalette.text,fontSize:28,fontWeight:FontWeight.w800,letterSpacing:-.8)),
@@ -426,7 +462,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           selected:selected==value,
           onSelected:(_)=>setSelected(value),
           backgroundColor:MindPalette.card,
-          selectedColor:const Color(0xFF1B6548),
+          selectedColor:MindPalette.panel,
           side:const BorderSide(color:MindPalette.border),
           labelStyle:TextStyle(fontSize:11,color:selected==value?MindPalette.mint:MindPalette.text),
         )),
@@ -495,7 +531,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           style:const TextStyle(color:MindPalette.muted,fontSize:11))),
         Expanded(child:ClipRRect(borderRadius:BorderRadius.circular(5),
           child:LinearProgressIndicator(value:value.clamp(0.0,1.0),minHeight:7,
-            backgroundColor:const Color(0xFF263638),color:color))),
+            backgroundColor:MindPalette.border,color:color))),
         const SizedBox(width:10),
         SizedBox(width:43,child:Text((value*100).round().toString()+'%',
           style:const TextStyle(color:MindPalette.text,fontSize:11))),
@@ -511,7 +547,7 @@ class _MindResearchChart extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final grid=Paint()..color=const Color(0xFF28423D)..strokeWidth=.65;
+    final grid=Paint()..color=MindPalette.border..strokeWidth=.65;
     for(var i=0;i<=4;i++) {
       final y=size.height*i/4;
       canvas.drawLine(Offset(0,y),Offset(size.width,y),grid);

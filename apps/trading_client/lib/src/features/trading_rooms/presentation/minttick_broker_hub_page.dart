@@ -153,13 +153,6 @@ class _BrokerOption extends StatelessWidget {
             color: scheme.surfaceContainerLow.withValues(alpha: 0.88),
             border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.67)),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: scheme.shadow.withValues(alpha: 0.035),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
-              ),
-            ],
           ),
           child: Row(children: [
             Container(

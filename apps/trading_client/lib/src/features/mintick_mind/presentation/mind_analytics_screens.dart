@@ -272,7 +272,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
         ]),
       ),
       const SizedBox(height:12),
-      _section('What Mintick Mind Sees',Icons.psychology_outlined,[
+      _section('What MintTick Mind Sees',Icons.psychology_outlined,[
         MindPanel(highlight:true,child:const Text(
           'The synthetic chart suggests a breakout attempt, but higher-timeframe and volume confirmation are not strong enough. Wait until independent inputs justify entry; do not count derived charts as separate votes.',
           style:TextStyle(color:MindPalette.text,height:1.6))),

@@ -13,7 +13,7 @@ import 'theme/app_theme.dart';
 
 /// Draws the welcome screen immediately. Network-backed Cognito startup and
 /// restored-session verification must NEVER block Flutter's first frame.
-/// During bootstrap, the form is visible but cannot submit credentials.
+/// After any restore failure, the editable unauthenticated welcome is shown.
 class MintTickStartupApp extends StatefulWidget {
   const MintTickStartupApp({
     super.key,
@@ -32,7 +32,6 @@ class MintTickStartupApp extends StatefulWidget {
 class _MintTickStartupAppState extends State<MintTickStartupApp> {
   final OperatorSession _session = OperatorSession();
   String? _readyRoute;
-  bool _failed = false;
   int _generation = 0;
 
   @override
@@ -45,7 +44,6 @@ class _MintTickStartupAppState extends State<MintTickStartupApp> {
     final generation = ++_generation;
     _session.clear();
     _readyRoute = null;
-    _failed = false;
     unawaited(_finishStartup(generation));
   }
 
@@ -56,9 +54,11 @@ class _MintTickStartupAppState extends State<MintTickStartupApp> {
       if (!mounted || generation != _generation) return;
       setState(() => _readyRoute = route);
     } catch (_) {
-      // Fail closed: never show a protected route if session restoration fails.
+      // Failed session restoration must never trap users on a disabled form.
+      // Discard partial admission and show the editable guest sign-in only.
       if (!mounted || generation != _generation) return;
-      setState(() => _failed = true);
+      _session.clear();
+      setState(() => _readyRoute = '/welcome');
     }
   }
 
@@ -94,34 +94,18 @@ class _MintTickStartupAppState extends State<MintTickStartupApp> {
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 14, vertical: 12),
-                  child: _failed
-                      ? Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'Secure sign-in initialization did not finish. '
-                              'Check your Cognito connection and retry.',
-                              textAlign: TextAlign.center,
-                            ),
-                            TextButton(
-                              key: const ValueKey('minttick-startup-retry'),
-                              onPressed: () => setState(_start),
-                              child: const Text('Retry secure sign-in'),
-                            ),
-                          ],
-                        )
-                      : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            SizedBox(
-                              width: 17,
-                              height: 17,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                            SizedBox(width: 12),
-                            Flexible(child: Text('Preparing secure sign-in…')),
-                          ],
-                        ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      SizedBox(
+                        width: 17,
+                        height: 17,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 12),
+                      Flexible(child: Text('Preparing secure sign-in…')),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -143,6 +127,7 @@ class _MintTickStartupAppState extends State<MintTickStartupApp> {
 /// provisioning. No remembered preference can authorize product access.
 Future<String> restoreMintTickSession(OperatorSession session) async {
   await MintTickIdentity.initialize().timeout(const Duration(seconds: 12));
+  if (!MintTickIdentity.current.isConfigured) return '/welcome';
   return restoreMintTickSessionAfterInit(
     session,
     identity: MintTickIdentity.current,

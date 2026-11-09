@@ -1,6 +1,7 @@
 package in.aitradingsystem.scanner;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
 import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataQualityService;
@@ -119,6 +120,15 @@ public class ResearchScanService {
                         Integer configVersion = activeConfig == null ? null : activeConfig.configVersion();
                         if (scans.saveCandidate(runId, candidate, strategy.descriptor().version(), configVersion,
                                 instrument.catalogueVersion(), dataCutoffAt)) {
+                            // Capture at the exact scanner evaluation boundary.
+                            // A custody failure marks this scan PARTIAL; later Mind
+                            // replay refuses a candidate without frozen inputs.
+                            if (MovingAverageReclaimStrategy.NAME.equals(candidate.strategy())) {
+                                MindSourceSnapshot frozen = MindSourceSnapshot.capture(
+                                    candles, candidate, evaluatedAt);
+                                scans.recordMindInputCustody(runId, candidate,
+                                    strategy.descriptor().version(), frozen);
+                            }
                             candidateCount++;
                         }
                     }

@@ -8,13 +8,18 @@ abstract final class MintTickBrand {
 
 /// Display-only identity. Trading authorization remains server-side.
 abstract final class MintTickPalette {
-  static const mint = Color(0xFF00E676);
-  static const teal = Color(0xFF00BFA5);
-  static const navy = Color(0xFF0B0F1A);
-  // Neutral near-black page canvas, intentionally not pure black or navy.
-  static const nearBlack = Color(0xFF0B0D10);
-  static const ice = Color(0xFFF8FAFC);
-  static const readableGreen = Color(0xFF007A52);
+  // Matte, solid-colour premium identity, approved for all app surfaces.
+  // Never use a gradient/glow as an alternative to these tokens.
+  static const mint = Color(0xFF00A83B);
+  static const teal = mint; // Legacy alias; single brand accent.
+  static const navy = Color(0xFF090B0A);
+  static const nearBlack = Color(0xFF090B0A);
+  static const darkCard = Color(0xFF151916);
+  static const darkElevated = Color(0xFF1B201C);
+  static const darkBorder = Color(0xFF292F2A);
+  static const mutedSilver = Color(0xFFA5ABA6);
+  static const ice = Color(0xFFF8FAF8);
+  static const readableGreen = Color(0xFF006D42);
 }
 
 /// Resolution-independent mark, based on the approved rising-M identity.
@@ -113,16 +118,9 @@ class _MintTickPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     canvas.save();
     canvas.scale(size.width / 280, size.height / 170);
-    final paint = Paint()..isAntiAlias = true;
-    if (solidColor == null) {
-      paint.shader = const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [MintTickPalette.teal, MintTickPalette.mint],
-      ).createShader(const Rect.fromLTWH(0, 0, 280, 170));
-    } else {
-      paint.color = solidColor!;
-    }
+    final paint = Paint()
+      ..isAntiAlias = true
+      ..color = solidColor ?? MintTickPalette.mint;
 
     final mark = Path()
       ..moveTo(6, 151)

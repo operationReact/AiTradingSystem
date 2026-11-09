@@ -241,14 +241,14 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
   InputDecoration _fieldDecoration(String hint, IconData icon, {Widget? suffix}) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: Icon(icon, size: 21, color: const Color(0xFFA9B9C2)),
+      prefixIcon: Icon(icon, size: 21, color: const Color(0xFFA5ABA6)),
       suffixIcon: suffix,
       filled: true,
-      fillColor: const Color(0xFF14232D),
+      fillColor: const Color(0xFF151916),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: Color(0xFF34525D)),
+        borderSide: const BorderSide(color: Color(0xFF292F2A)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
@@ -298,7 +298,7 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
                 onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
                 icon: Icon(
                   _passwordVisible ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                  color: const Color(0xFFAFBFC8),
+                  color: const Color(0xFFA5ABA6),
                 ),
               ),
             ),
@@ -369,12 +369,12 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
           const SizedBox(height: 20),
           Row(
             children: [
-              const Expanded(child: Divider(color: Color(0xFF34434C))),
+              const Expanded(child: Divider(color: Color(0xFF292F2A))),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text('or', style: TextStyle(color: Colors.white.withValues(alpha: 0.58))),
               ),
-              const Expanded(child: Divider(color: Color(0xFF34434C))),
+              const Expanded(child: Divider(color: Color(0xFF292F2A))),
             ],
           ),
           const SizedBox(height: 20),
@@ -385,8 +385,8 @@ class _MintTickWelcomePageState extends State<MintTickWelcomePage>
               onPressed: _busy ? null : _createAccount,
               style: OutlinedButton.styleFrom(
                 foregroundColor: MintTickPalette.ice,
-                backgroundColor: const Color(0xFF14232D),
-                side: const BorderSide(color: Color(0xFF4E8989)),
+                backgroundColor: const Color(0xFF151916),
+                side: const BorderSide(color: Color(0xFF414B43)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 textStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
               ),

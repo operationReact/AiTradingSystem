@@ -167,6 +167,22 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
   }
 
   Widget agentEvidenceScreen(){
+    if (widget.evidenceRepository != null) {
+      return _surface('Evidence & Provenance Ledger',
+        'Persisted scan records with traceable source/cutoff evidence', [
+          _agentLinks(),
+          const SizedBox(height: 14),
+          MindEvidenceLedgerPanel(repository: widget.evidenceRepository!),
+          const SizedBox(height: 12),
+          const MindPanel(child: Text(
+            'Evidence availability is not a model prediction. The '
+            'known-at chain, out-of-sample performance and capital '
+            'authorization remain unverified. No broker order can be '
+            'submitted from this screen.',
+            style: TextStyle(color: MindPalette.muted, fontSize: 11))),
+        ]);
+    }
+    // Only the isolated UI gallery retains old clearly labelled fixtures.
     final categories=<String>['All',
       ...{for(final e in MindAgentFixtures.evidence)e.category}];
     final filtered=MindAgentFixtures.evidence.where((e)=>

@@ -200,7 +200,7 @@ extension _MindResearchEngineScreens on _MindWorkspaceState {
             ),
           ),
         ]),
-        _section('Affected Mintick Mind screens', Icons.grid_view_outlined, [
+        _section('Affected MintTick Mind screens', Icons.grid_view_outlined, [
           for (final id in selected.targetScreens)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
