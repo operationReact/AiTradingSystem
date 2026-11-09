@@ -420,9 +420,11 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       ]),
   );
 
-  Widget _mockChart({int seed=7,double height=210,bool candles=false, Color color=MindPalette.mint}) =>
+  Widget _mockChart({int seed=7,double height=210,bool candles=false,
+    String? style, Color color=MindPalette.mint}) =>
     SizedBox(height:height,width:double.infinity,
-      child:CustomPaint(painter:_MindResearchChart(seed:seed,color:color,candles:candles)));
+      child:CustomPaint(painter:_MindResearchChart(seed:seed,color:color,
+        style:style??(candles?'Candlestick':'Line'))));
 
   Widget _toggle(String title,String description,{bool locked=false}) => MindPanel(
     child:Row(children:[
@@ -455,50 +457,107 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 }
 
 class _MindResearchChart extends CustomPainter {
-  const _MindResearchChart({required this.seed,required this.color,required this.candles});
+  const _MindResearchChart({required this.seed,required this.color,required this.style});
   final int seed;
   final Color color;
-  final bool candles;
+  final String style;
+
   @override
   void paint(Canvas canvas, Size size) {
-    final line=Paint()..color=const Color(0xFF28423D)..strokeWidth=.6;
-    for(var i=0;i<=4;i++){
+    final grid=Paint()..color=const Color(0xFF28423D)..strokeWidth=.65;
+    for(var i=0;i<=4;i++) {
       final y=size.height*i/4;
-      canvas.drawLine(Offset(0,y),Offset(size.width,y),line);
+      canvas.drawLine(Offset(0,y),Offset(size.width,y),grid);
     }
     for(var i=0;i<=6;i++) {
       final x=size.width*i/6;
-      canvas.drawLine(Offset(x,0),Offset(x,size.height),line);
+      canvas.drawLine(Offset(x,0),Offset(x,size.height),grid);
     }
-    final path=Path();
+    final points=<Offset>[];
     var y=size.height*.65;
-    for(var i=0;i<65;i++){
+    for(var i=0;i<65;i++) {
       final x=(size.width-8)*i/64;
       final diff=math.sin(i*1.6+seed)*size.height*.027+
         math.cos(i*.39+seed)*size.height*.026-size.height*.004;
-      final previous=y;
       y=(y+diff).clamp(size.height*.10,size.height*.88).toDouble();
-      if(candles){
-        final up=y<previous;
-        final paint=Paint()..color=(up?MindPalette.mint:MindPalette.red)..strokeWidth=1.0;
-        canvas.drawLine(Offset(x+2,math.min(y,previous)-5),
-          Offset(x+2,math.max(y,previous)+6),paint);
-        canvas.drawRect(Rect.fromLTRB(x,math.min(y,previous),
-          x+math.max(2,size.width/85),math.max(y,previous)+1),
-          paint..style=PaintingStyle.fill);
-      } else {
-        if(i==0)path.moveTo(x,y);else path.lineTo(x,y);
+      points.add(Offset(x,y));
+    }
+
+    if(style=='Line'||style=='Kagi'){
+      final path=Path()..moveTo(points.first.dx,points.first.dy);
+      for(var i=1;i<points.length;i++){
+        final p=points[i];
+        if(style=='Kagi'){
+          path.lineTo(p.dx,points[i-1].dy);
+          path.lineTo(p.dx,p.dy);
+        } else {
+          path.lineTo(p.dx,p.dy);
+        }
+      }
+      canvas.drawPath(path,Paint()
+        ..color=color
+        ..style=PaintingStyle.stroke
+        ..strokeWidth=style=='Kagi'?2.8:2.0
+        ..strokeCap=StrokeCap.round);
+      return;
+    }
+
+    final cellWidth=math.max(2.0,size.width/79);
+    for(var i=1;i<points.length;i++) {
+      final prev=points[i-1],now=points[i];
+      final up=now.dy<prev.dy;
+      final positive=up?MindPalette.mint:MindPalette.red;
+      final paint=Paint()..color=positive..strokeWidth=1.1;
+      final high=math.min(now.dy,prev.dy);
+      final low=math.max(now.dy,prev.dy);
+      final bodyHeight=math.max(2.0,low-high);
+      final boxWidth=cellWidth*1.65;
+      switch(style) {
+        case 'Volume':
+          final amplitude=(.12+(.5+.5*math.sin(i*1.8+seed))*.73);
+          canvas.drawRect(Rect.fromLTWH(now.dx,size.height*(1-amplitude),
+            boxWidth,size.height*amplitude),paint);
+          break;
+        case 'Point & Figure':
+          if(i%3!=0)break;
+          if(up){
+            canvas.drawLine(Offset(now.dx-3,now.dy-3),Offset(now.dx+4,now.dy+4),paint);
+            canvas.drawLine(Offset(now.dx+4,now.dy-3),Offset(now.dx-3,now.dy+4),paint);
+          } else {
+            canvas.drawCircle(now,4,paint..style=PaintingStyle.stroke);
+          }
+          break;
+        case 'Renko':
+          if(i%3!=0)break;
+          canvas.drawRect(Rect.fromLTWH(now.dx,now.dy,
+            cellWidth*3,math.max(6,bodyHeight)),paint..style=PaintingStyle.stroke);
+          break;
+        case 'OHLC':
+          canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
+          canvas.drawLine(Offset(now.dx-3,prev.dy),Offset(now.dx,prev.dy),paint);
+          canvas.drawLine(Offset(now.dx,now.dy),Offset(now.dx+3,now.dy),paint);
+          break;
+        case 'Heikin Ashi':
+          final smoothed=now.dy*.5+prev.dy*.5;
+          canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
+          canvas.drawRect(Rect.fromLTWH(now.dx-cellWidth*.5,
+            math.min(smoothed,prev.dy),cellWidth,math.max(3,(smoothed-prev.dy).abs())),
+            paint..style=PaintingStyle.fill);
+          break;
+        case 'Range':
+          if(i%2!=0)break;
+          canvas.drawRect(Rect.fromLTWH(now.dx,high,cellWidth*2,
+            math.max(7,bodyHeight)),paint..style=PaintingStyle.stroke);
+          break;
+        default:
+          canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
+          canvas.drawRect(Rect.fromLTWH(now.dx-cellWidth*.45,high,
+            boxWidth,bodyHeight),paint..style=PaintingStyle.fill);
       }
     }
-    if(!candles){
-      canvas.drawPath(path,Paint()..shader=LinearGradient(
-        colors:[color.withValues(alpha:.55),color],
-        begin:Alignment.centerLeft,end:Alignment.centerRight,
-      ).createShader(Offset.zero&size)..style=PaintingStyle.stroke
-        ..strokeWidth=2.0..strokeCap=StrokeCap.round);
-    }
   }
+
   @override
   bool shouldRepaint(covariant _MindResearchChart old)=>
-      old.seed!=seed||old.candles!=candles||old.color!=color;
+      old.seed!=seed||old.style!=style||old.color!=color;
 }
