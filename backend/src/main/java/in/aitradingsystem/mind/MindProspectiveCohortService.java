@@ -228,7 +228,7 @@ public class MindProspectiveCohortService {
             o.slot() < 1 || o.slot() > MindProspectiveCohortRepository.SIZE ||
             !expected.contains(o.candleTime()) ||
             o.fetchedAt().isBefore(registered) ||
-            o.fetchedAt().isBefore(o.candleTime()) ||
+            o.fetchedAt().isBefore(o.candleTime().plus(Duration.ofMinutes(5))) ||
             o.fetchedAt().isAfter(o.candleTime().plus(FETCH_GRACE)) ||
             o.fetchedAt().isAfter(now) ||
             o.source() == null || o.source().isBlank() ||
