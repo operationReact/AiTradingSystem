@@ -25,6 +25,7 @@ import 'features/mintick_mind/presentation/mind_workspace_page.dart';
 import 'features/mintick_mind/data/mind_readiness_repository.dart';
 import 'features/mintick_mind/data/mind_evidence_repository.dart';
 import 'features/mintick_mind/data/mind_strategy_replay_repository.dart';
+import 'features/mintick_mind/data/mind_ma_walkforward_repository.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -158,6 +159,7 @@ class _TradingAppState extends State<TradingApp> {
                 readinessRepository: HttpMindReadinessRepository(_api),
                 evidenceRepository: HttpMindEvidenceRepository(_api),
                 strategyReplayRepository: HttpMindStrategyReplayRepository(_api),
+                walkForwardRepository: HttpMindMaWalkForwardRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
