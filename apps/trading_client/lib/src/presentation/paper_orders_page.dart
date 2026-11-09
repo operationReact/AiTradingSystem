@@ -233,9 +233,7 @@ class _PaperOrdersPageState extends State<PaperOrdersPage> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
-                gradient: LinearGradient(
-                  colors: [theme.colorScheme.primaryContainer, theme.colorScheme.surfaceContainerHighest],
-                ),
+                color: theme.colorScheme.surfaceContainer,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
