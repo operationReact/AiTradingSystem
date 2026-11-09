@@ -56,12 +56,32 @@ class MindMaWalkForwardServiceTest {
             NOW.minusSeconds(900), 7L);
         when(scans.latestCompletedRun()).thenReturn(Optional.of(run));
         when(scans.rankedCandidates(RUN, 200)).thenReturn(List.of(candidate));
+        var frozen = MindSourceSnapshot.fromCandles(
+            referenceBars(), 42L, "NSE", "INFY-EQ", "FIVE_MINUTE",
+            NOW.minusSeconds(900), NOW.minusSeconds(600));
         when(scans.findMindInputCustody(RUN, FINGERPRINT)).thenReturn(
             Optional.of(new ResearchScanRepository.MindInputCustody(
-                "b".repeat(64), "FROZEN", NOW.minusSeconds(450),
-                NOW.minusSeconds(900), NOW.minusSeconds(1200), CATALOGUE)));
+                frozen.digest(), frozen.canonicalInput(), NOW.minusSeconds(450),
+                NOW.minusSeconds(900), frozen.maxFetchedAt(), CATALOGUE)));
+        when(market.recentCandlesAsOf(
+            42L, "FIVE_MINUTE", NOW.minusSeconds(900), 21))
+            .thenReturn(referenceBars());
         when(calendar.expectedSlots(any(LocalDate.class), eq(HistoricalCandleInterval.FIVE_MINUTE)))
             .thenAnswer(invocation -> slots(invocation.getArgument(0)));
+    }
+
+    private static List<MarketCandle> referenceBars() {
+        List<MarketCandle> bars = new ArrayList<>();
+        Instant at = NOW.minusSeconds(900);
+        for (int i = 0; i < 21; i++) {
+            bars.add(new MarketCandle(100000L + i, 42, "NSE", "INFY-EQ",
+                "1234", CATALOGUE, "FIVE_MINUTE",
+                at.minusSeconds((20 - i) * 300L),
+                new BigDecimal("100"), new BigDecimal("101"),
+                new BigDecimal("99"), new BigDecimal("100"), 1000,
+                "ANGEL_ONE_SMARTAPI", NOW.minusSeconds(840)));
+        }
+        return List.copyOf(bars);
     }
 
     private static List<ExpectedCandleSlot> slots(LocalDate date) {
@@ -171,6 +191,26 @@ class MindMaWalkForwardServiceTest {
         assertEquals("UNAVAILABLE", report.status());
         assertTrue(report.blockers().contains("REFERENCE_SCAN_CUSTODY_MISSING"));
         verifyNoInteractions(market, calendar);
+    }
+
+    @Test
+    void modifiedReferenceSnapshotIsRejectedBeforeTestingAnyHoldout() {
+        setupReference();
+        var source = new ArrayList<>(referenceBars());
+        MarketCandle first = source.getFirst();
+        source.set(0, new MarketCandle(first.id(), first.instrumentId(),
+            first.exchange(), first.tradingSymbol(), first.symbolToken(),
+            first.catalogueVersion(), first.interval(), first.candleTime(),
+            new BigDecimal("100.25"), first.high(), first.low(), first.close(),
+            first.volume(), first.source(), first.fetchedAt()));
+        when(market.recentCandlesAsOf(
+            42L, "FIVE_MINUTE", NOW.minusSeconds(900), 21)).thenReturn(source);
+        var report = service.inspect();
+        assertEquals("UNAVAILABLE", report.status());
+        assertTrue(report.blockers().contains("REFERENCE_INPUT_REVISION_DETECTED"));
+        assertFalse(report.executionEnabled());
+        verify(market, never()).backtestCandles(anyLong(), anyString(),
+            any(Instant.class), any(Instant.class), anyInt());
     }
 
     @Test
