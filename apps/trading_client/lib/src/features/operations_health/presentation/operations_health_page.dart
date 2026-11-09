@@ -85,13 +85,7 @@ class _OperationsHealthPageState extends State<OperationsHealthPage> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: LinearGradient(
-          colors: [
-            colors.neonCyan.withValues(alpha: 0.10),
-            colors.neonViolet.withValues(alpha: 0.08),
-            colors.neonMagenta.withValues(alpha: 0.05),
-          ],
-        ),
+        color: theme.colorScheme.surfaceContainer,
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
       child: Row(

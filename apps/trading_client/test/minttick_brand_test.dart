@@ -12,12 +12,12 @@ void main() {
   test('One MintTick design system supports accessible dark and light modes', () {
     final dark = buildTheme(Brightness.dark);
     final light = buildTheme(Brightness.light);
-    expect(dark.colorScheme.primary, const Color(0xFF78B6AF));
+    expect(dark.colorScheme.primary, MintTickPalette.mint);
     expect(light.colorScheme.primary, MintTickPalette.readableGreen);
     expect(dark.colorScheme.surface, MintTickPalette.nearBlack);
-    expect(dark.colorScheme.surfaceContainerLow, const Color(0xFF1B2732));
-    expect(dark.colorScheme.surfaceContainerHigh, const Color(0xFF283845));
-    expect(dark.colorScheme.onSurface, const Color(0xFFEDF2F4));
+    expect(dark.colorScheme.surfaceContainerLow, const Color(0xFF111512));
+    expect(dark.colorScheme.surfaceContainerHigh, MintTickPalette.darkElevated);
+    expect(dark.colorScheme.onSurface, const Color(0xFFF5F6F4));
     expect(light.colorScheme.surface, MintTickPalette.ice);
     expect(dark.colorScheme.surface, isNot(light.colorScheme.surface));
     expect(dark.extension<TradingColors>()!.unsafe, isNot(dark.colorScheme.primary));

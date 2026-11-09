@@ -147,31 +147,35 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('bootstrap failure stays on disabled welcome and allows retry',
+  testWidgets('startup failure opens editable unauthenticated sign-in',
       (tester) async {
-    var calls = 0;
-    final retry = Completer<String>();
+    OperatorSession? observed;
     await tester.pumpWidget(MintTickStartupApp(
-      restoreSession: (_) {
-        calls++;
-        if (calls == 1) return Future<String>.error(StateError('private'));
-        return retry.future;
+      restoreSession: (session) async {
+        // Even partial restoration must be discarded before showing sign-in.
+        observed = session;
+        session.markCustomerAuthenticated();
+        throw StateError('private');
       },
-      readyBuilder: (_, route) =>
-          MaterialApp(home: Scaffold(body: Text('Ready: $route'))),
     ));
     await tester.pump();
-    expect(find.textContaining('Secure sign-in initialization did not finish'),
-        findsOneWidget);
-    expect(find.byType(MintTickWelcomePage), findsOneWidget);
-    expect(find.textContaining('private'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('minttick-startup-retry')));
-    await tester.pump();
-    expect(calls, 2);
-    expect(find.text('Preparing secure sign-in…'), findsOneWidget);
-    retry.complete('/welcome');
-    await tester.pump();
     await tester.pumpAndSettle();
-    expect(find.text('Ready: /welcome'), findsOneWidget);
+    expect(find.byType(MintTickWelcomePage), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-username')),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-inline-password')),
+        findsOneWidget);
+    expect(find.textContaining('private'), findsNothing);
+    expect(find.byKey(const ValueKey('minttick-startup-retry')), findsNothing);
+    await tester.enterText(
+        find.byKey(const ValueKey('minttick-inline-username')),
+        'test@example.com');
+    await tester.enterText(
+        find.byKey(const ValueKey('minttick-inline-password')),
+        'test-password');
+    expect(find.text('test@example.com'), findsOneWidget);
+    expect(observed?.isCustomerAuthenticated, isFalse);
+    expect(tester.takeException(), isNull);
   });
+
 }

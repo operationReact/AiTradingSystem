@@ -1,4 +1,4 @@
-/// Deterministic, synthetic Indian-market examples for the Mintick Mind agent UI.
+/// Deterministic, synthetic Indian-market examples for the MintTick Mind agent UI.
 /// None of these are quotes, verified evidence, recommendations, or executable signals.
 class MindAgentVote {
   const MindAgentVote(this.id, this.role, this.position, this.weight, this.score,

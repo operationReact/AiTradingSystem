@@ -1,6 +1,7 @@
 package in.aitradingsystem.scanner;
 
 import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.mind.MindSourceSnapshot;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -68,6 +69,58 @@ public class ResearchScanRepository {
         return inserted == 1;
     }
 
+    /**
+     * Append the exact MA_RECLAIM input bundle once. A duplicate never edits
+     * earlier custody. This is intentionally not backfilled for old runs.
+     */
+    public void recordMindInputCustody(UUID runId, ScanCandidate candidate,
+                                       String strategyVersion, MindSourceSnapshot snapshot) {
+        if (runId == null || candidate == null || snapshot == null ||
+            !"MA_RECLAIM_V1".equals(candidate.strategy()) ||
+            !candidate.candleTime().equals(snapshot.lastCandleAt()) ||
+            snapshot.candleCount() != MindSourceSnapshot.BARS) {
+            throw new IllegalArgumentException("Invalid frozen Mind source");
+        }
+        String fingerprint = CandidateFingerprint.of(
+            candidate.instrumentId(), candidate.interval(), candidate.strategy(),
+            strategyVersion, candidate.candleTime(), candidate.referencePrice(),
+            candidate.suggestedStop(), candidate.suggestedTarget());
+        int count = jdbc.update("""
+                INSERT INTO mind_research_input_custody
+                    (scan_run_id, candidate_fingerprint, strategy_code, instrument_id,
+                     catalogue_version, candle_count, input_first_at, input_last_at,
+                     max_fetched_at, source_digest, canonical_input)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+                """, runId, fingerprint, candidate.strategy(), candidate.instrumentId(),
+                snapshot.catalogueVersion(), snapshot.candleCount(),
+                offset(snapshot.firstCandleAt()), offset(snapshot.lastCandleAt()),
+                offset(snapshot.maxFetchedAt()), snapshot.digest(), snapshot.canonicalInput());
+        if (count != 1) throw new IllegalStateException("Duplicate Mind source custody");
+    }
+
+    public record MindInputCustody(String sourceDigest, String canonicalInput,
+                                   Instant capturedAt, Instant inputLastAt,
+                                   Instant maxFetchedAt, UUID catalogueVersion) {}
+
+    public java.util.Optional<MindInputCustody> findMindInputCustody(UUID scanRunId,
+                                                                    String candidateFingerprint) {
+        if (scanRunId == null || candidateFingerprint == null ||
+            !candidateFingerprint.matches("[a-f0-9]{64}")) return java.util.Optional.empty();
+        return jdbc.query("""
+                SELECT source_digest, canonical_input, captured_at, input_last_at,
+                       max_fetched_at, catalogue_version
+                  FROM mind_research_input_custody
+                 WHERE scan_run_id = ? AND candidate_fingerprint = ?
+                """, (rs, row) -> new MindInputCustody(
+                rs.getString("source_digest").trim(), rs.getString("canonical_input"),
+                instant(rs.getObject("captured_at", OffsetDateTime.class)),
+                instant(rs.getObject("input_last_at", OffsetDateTime.class)),
+                instant(rs.getObject("max_fetched_at", OffsetDateTime.class)),
+                rs.getObject("catalogue_version", UUID.class)),
+                scanRunId, candidateFingerprint).stream().findFirst();
+    }
+
     /** Legacy fixture signature; production code must provide explicit provenance. */
     @Deprecated
     public void saveCandidate(UUID runId, ScanCandidate c) {
@@ -80,6 +133,22 @@ public class ResearchScanRepository {
                     (scan_run_id, instrument_id, strategy, severity, code, message)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """, runId, instrumentId, bounded(strategy, 80), bounded(severity, 12), bounded(code, 80), bounded(message, 300));
+    }
+
+    /** Bounded diagnostic read for the read-only Mind evidence ledger. */
+    public List<ResearchScanDiagnostic> recentDiagnostics(UUID runId, int limit) {
+        if (limit < 1 || limit > 30) throw new IllegalArgumentException("limit must be 1..30");
+        return jdbc.query("""
+                SELECT id, scan_run_id, instrument_id, strategy, severity, code, message, created_at
+                  FROM research_scan_diagnostic
+                 WHERE scan_run_id = ?
+                 ORDER BY created_at DESC, id DESC
+                 LIMIT ?
+                """, (rs, row) -> new ResearchScanDiagnostic(
+                    rs.getLong("id"), rs.getObject("scan_run_id", UUID.class),
+                    (Long) rs.getObject("instrument_id"), rs.getString("strategy"),
+                    rs.getString("severity"), rs.getString("code"), rs.getString("message"),
+                    instant(rs.getObject("created_at", OffsetDateTime.class))), runId, limit);
     }
 
     public List<ResearchScanDiagnostic> diagnostics(UUID runId) {
@@ -135,6 +204,29 @@ public class ResearchScanRepository {
                        error_code = ?, error_message = ?
                  WHERE id = ? AND status = 'RUNNING'
                 """, status, scannedCount, candidateCount, bounded(code, 80), bounded(message, 500), id);
+    }
+
+    /**
+     * Most recent persisted research run, including failures. An older successful
+     * scan must not appear current after a newer partial/failed run.
+     * This read never executes research or exposes instrument/private account data.
+     */
+    public java.util.Optional<ResearchScanSummary> latestCompletedRun() {
+        return jdbc.query("""
+                SELECT id, interval, status, requested_limit, scanned_count, candidate_count,
+                       strategy_set, started_at, completed_at, error_code, error_message
+                  FROM research_scan_run
+                 WHERE completed_at IS NOT NULL AND status IN ('SUCCEEDED', 'PARTIAL', 'FAILED')
+                 ORDER BY completed_at DESC, id DESC
+                 LIMIT 1
+                """, (rs, row) -> new ResearchScanSummary(
+                rs.getObject("id", UUID.class), rs.getString("interval"), rs.getString("status"),
+                rs.getInt("requested_limit"), rs.getInt("scanned_count"),
+                rs.getInt("candidate_count"), rs.getString("strategy_set"),
+                instant(rs.getObject("started_at", OffsetDateTime.class)),
+                instant(rs.getObject("completed_at", OffsetDateTime.class)),
+                rs.getString("error_code"), rs.getString("error_message")))
+                .stream().findFirst();
     }
 
     public ResearchScanSummary requireRun(UUID id) {

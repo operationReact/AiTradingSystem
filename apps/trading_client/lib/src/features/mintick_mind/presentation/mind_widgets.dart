@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
+import '../../../brand/minttick_brand.dart';
 
 /// Visual tokens matched to the approved MintTick Mind HTML reference.
 /// Restricted to the mock-only Mind screens; existing app themes stay intact.
 abstract final class MindPalette {
-  static const background = Color(0xFF050A0C);
-  static const panel = Color(0xFF0A1518);
-  static const card = Color(0xFF0D1B1E);
-  static const border = Color(0xFF25423E);
-  static const mint = Color(0xFF4EE9B0);
-  static const green = Color(0xFF24C888);
-  static const text = Color(0xFFF5FAF9);
-  static const muted = Color(0xFFA3B4B7);
-  static const yellow = Color(0xFFF3CB73);
-  static const red = Color(0xFFF1818B);
-  static const purple = Color(0xFFBFA5F6);
-  static const blue = Color(0xFF7AC9EE);
+  static const background = MintTickPalette.nearBlack;
+  static const panel = Color(0xFF111512);
+  static const card = MintTickPalette.darkCard;
+  static const border = MintTickPalette.darkBorder;
+  static const mint = MintTickPalette.mint;
+  static const green = MintTickPalette.mint;
+  static const text = Color(0xFFF5F6F4);
+  static const muted = MintTickPalette.mutedSilver;
+  // Semantic research states stay distinct from the brand accent.
+  static const yellow = Color(0xFFE6BD73);
+  static const red = Color(0xFFF48C93);
+  static const purple = Color(0xFFC0C5C0);
+  static const blue = Color(0xFFA5ABA6);
 }
 
 class MindPanel extends StatelessWidget {
@@ -26,28 +28,21 @@ class MindPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface = Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: highlight
-              ? const [Color(0xFF102C24), Color(0xFF09171A)]
-              : const [Color(0xFF0D1D1F), Color(0xFF0A1218)],
-        ),
-        border: Border.all(color: highlight ? const Color(0xFF286447) : MindPalette.border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: child,
-    );
-    if (onTap == null) return surface;
+    // A flat Material is essential when cards contain ListTile. A coloured
+    // DecoratedBox between ListTile and Material hides ink and triggers
+    // Flutter assertions; paint the surface on Material itself instead.
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
+      color: highlight ? const Color(0xFF18231A) : MindPalette.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: highlight ? const Color(0xFF36533C) : MindPalette.border,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: onTap,
-        child: surface,
+        child: Padding(padding: padding, child: child),
       ),
     );
   }
@@ -123,7 +118,7 @@ class _MindSparkPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..lineTo(0, size.height)
       ..close();
-    canvas.drawPath(shade, Paint()..shader=LinearGradient(begin:Alignment.topCenter,end:Alignment.bottomCenter,colors:[color.withValues(alpha:.2),Colors.transparent]).createShader(Offset.zero & size));
+    canvas.drawPath(shade, Paint()..color=color.withValues(alpha:.06));
     canvas.drawPath(path, Paint()..color=color..strokeWidth=1.7..style=PaintingStyle.stroke..strokeJoin=StrokeJoin.round..strokeCap=StrokeCap.round);
   }
   @override

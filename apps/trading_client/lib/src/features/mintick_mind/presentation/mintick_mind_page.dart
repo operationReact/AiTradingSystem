@@ -1,13 +1,33 @@
 import 'package:flutter/material.dart';
 
 import '../data/mind_fixtures.dart';
+import '../data/mind_readiness_repository.dart';
+import '../data/mind_strategy_replay_repository.dart';
+import '../data/mind_ma_walkforward_repository.dart';
+import '../data/mind_prospective_cohort_repository.dart';
+import '../data/mind_prospective_signals_repository.dart';
+import 'mind_prospective_signals_panel.dart';
+import 'mind_prospective_cohort_panel.dart';
+import 'mind_ma_walkforward_panel.dart';
+import 'mind_strategy_replay_panel.dart';
+import 'mind_readiness_panel.dart';
 import 'mind_widgets.dart';
 
 /// MintTick Mind — mock-only first vertical slice, translated into native
 /// Flutter from the approved standalone HTML/screenshot. No API calls or
 /// trading execution methods are reachable from this widget.
 class MintickMindPage extends StatefulWidget {
-  const MintickMindPage({super.key});
+  const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
+    this.walkForwardRepository, this.prospectiveRepository,
+    this.prospectiveSignalsRepository, super.key});
+
+  /// Null in isolated demo/golden tests; authenticated app injects real API.
+  final MindReadinessRepository? readinessRepository;
+  final MindStrategyReplayRepository? strategyReplayRepository;
+  final MindMaWalkForwardRepository? walkForwardRepository;
+  final MindProspectiveCohortRepository? prospectiveRepository;
+  final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
+
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
 }
@@ -50,7 +70,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
               const SizedBox(height: 25),
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment:CrossAxisAlignment.start,children: const [
-                  Text('Mintick Mind',style:TextStyle(color:MindPalette.text,fontSize:30,fontWeight:FontWeight.w800,letterSpacing:-.8)),
+                  Text('MintTick Mind',style:TextStyle(color:MindPalette.text,fontSize:30,fontWeight:FontWeight.w800,letterSpacing:-.8)),
                   SizedBox(height:2),
                   Text('Personal Trading Intelligence',style:TextStyle(color:MindPalette.muted,fontSize:14)),
                 ])),
@@ -59,9 +79,30 @@ class _MintickMindPageState extends State<MintickMindPage> {
               const SizedBox(height: 20),
               _tabsBar(),
               const SizedBox(height: 16),
+              if (widget.readinessRepository != null) ...[
+                MindReadinessPanel(repository: widget.readinessRepository!),
+                const SizedBox(height: 16),
+              ],
               _demoNotice(),
               const SizedBox(height: 13),
               if(_tab==0) _overview(),
+              if (_tab == 1 && widget.strategyReplayRepository != null) ...[
+                MindStrategyReplayPanel(repository: widget.strategyReplayRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.walkForwardRepository != null) ...[
+                MindMaWalkForwardPanel(repository: widget.walkForwardRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.prospectiveRepository != null) ...[
+                MindProspectiveCohortPanel(repository: widget.prospectiveRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.prospectiveSignalsRepository != null) ...[
+                MindProspectiveSignalsPanel(
+                  repository: widget.prospectiveSignalsRepository!),
+                const SizedBox(height: 14),
+              ],
               if(_tab==1) _strategies(),
               if(_tab==2) _models(),
               if(_tab==3) _decisionsView(),
@@ -118,7 +159,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
       const SizedBox(width:13),
       Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Wrap(crossAxisAlignment:WrapCrossAlignment.center,spacing:9,runSpacing:5,children:const [
-          Text('Mintick Mind Engine',style:TextStyle(fontSize:17,color:MindPalette.text,fontWeight:FontWeight.w800)),
+          Text('MintTick Mind Engine',style:TextStyle(fontSize:17,color:MindPalette.text,fontWeight:FontWeight.w800)),
           MindTag('Demo simulation'),
         ]),
         const SizedBox(height:7),
