@@ -258,7 +258,8 @@ public class MindProspectiveCohortService {
     private static Status unavailable(Instant now, String code) {
         List<String> blockers = new ArrayList<>(safetyBlockers());
         blockers.add(code);
-        return new Status("mind.prospective-cohort.v1", now, "UNREGISTERED",
+        return new Status("mind.prospective-cohort.v1", now,
+            "COHORT_NOT_REGISTERED".equals(code) ? "UNREGISTERED" : "UNAVAILABLE",
             null, "MA_RECLAIM_V1",
             MindProspectiveCohortRepository.SELECTION, null,
             null, null, null, TARGET_SESSIONS, 0, 0, 0,
