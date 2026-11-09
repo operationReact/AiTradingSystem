@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
+import '../data/mind_agent_fixtures.dart';
 import 'mind_widgets.dart';
 import 'mintick_mind_page.dart';
 
@@ -8,6 +9,7 @@ part 'mind_analytics_screens.dart';
 part 'mind_investment_screens.dart';
 part 'mind_system_screens.dart';
 part 'mind_research_screens.dart';
+part 'mind_agent_screens.dart';
 
 /// All prototype surfaces run inside one signed-in Flutter route. This
 /// mock-only workspace does not import any broker, API or execution repository.
@@ -23,6 +25,16 @@ abstract final class MintickMindScreens {
   static const all = <MindScreenDescriptor>[
     MindScreenDescriptor('app-home', 'MintTick Home', Icons.home_outlined, 'PRIMARY'),
     MindScreenDescriptor('overview', 'Mind Overview', Icons.psychology_outlined, 'PRIMARY'),
+    MindScreenDescriptor('intelligence-hub', 'Decision Intelligence', Icons.hub_outlined, 'AGENTS'),
+    MindScreenDescriptor('agent-council', 'Agent Council & Debate', Icons.groups_outlined, 'AGENTS'),
+    MindScreenDescriptor('agent-evidence', 'Evidence Ledger', Icons.source_outlined, 'AGENTS'),
+    MindScreenDescriptor('regime-weights', 'Regime Weight Studio', Icons.tune_outlined, 'AGENTS'),
+    MindScreenDescriptor('signal-scorecard', 'Signal Scorecard', Icons.assessment_outlined, 'AGENTS'),
+    MindScreenDescriptor('confidence-lab', 'Confidence Calibration', Icons.track_changes_outlined, 'AGENTS'),
+    MindScreenDescriptor('shadow-arena', 'Shadow Trading Arena', Icons.science_outlined, 'AGENTS'),
+    MindScreenDescriptor('institutional-flow', 'FII / DII Flow', Icons.account_balance_outlined, 'AGENTS'),
+    MindScreenDescriptor('daily-verdict', 'Daily Market Verdict', Icons.event_note_outlined, 'AGENTS'),
+    MindScreenDescriptor('culprit-catcher', 'Culprit Catcher', Icons.bug_report_outlined, 'AGENTS'),
     MindScreenDescriptor('trading-rooms', 'Trading Rooms', Icons.meeting_room_outlined, 'PRIMARY'),
     MindScreenDescriptor('strategies', 'Strategy Universe', Icons.layers_outlined, 'PRIMARY'),
     MindScreenDescriptor('strategy-detail', 'Strategy Detail', Icons.insights_outlined, 'PRIMARY'),
@@ -65,6 +77,17 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
 class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _route = 'overview';
+  String _agentCouncilSymbol = 'CDSL';
+  String _agentCouncilView = 'All';
+  String _agentEvidenceScope = 'All';
+  String _agentRegime = 'Trending Up';
+  String _agentSignalHorizon = 'Swing';
+  String _agentCalMode = 'Swing';
+  String _agentShadowTab = 'Strategies';
+  String _agentShadowCompare = 'Baseline';
+  String _agentFlowDate = '2026-11-09';
+  String _agentVerdictDate = '2026-11-09';
+  String _agentIncident = 'INC-102';
   String _selectedStrategy = 'STR-001';
   String _selectedModel = 'LightGBM';
   String _selectedDecision = 'TITAN';
@@ -177,7 +200,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       const Text('MINTICK MIND · MOCK WORKSPACE', style: TextStyle(color: MindPalette.purple, fontSize: 9, letterSpacing: 1.0)),
       const SizedBox(height: 18),
       Expanded(child: ListView(children: [
-        for (final group in ['PRIMARY','RESEARCH','CAPITAL','SYSTEM']) ...[
+        for (final group in ['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM']) ...[
           Padding(padding: const EdgeInsets.fromLTRB(11, 14, 11, 6),
             child: Text(group, style: const TextStyle(color: MindPalette.muted, fontSize: 10, letterSpacing: 1.3))),
           for (final screen in MintickMindScreens.all.where((s) => s.group == group))
@@ -310,6 +333,16 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _screen() => switch(_route) {
     'app-home' => homeScreen(),
+    'intelligence-hub' => intelligenceHubScreen(),
+    'agent-council' => agentCouncilScreen(),
+    'agent-evidence' => agentEvidenceScreen(),
+    'regime-weights' => regimeWeightsScreen(),
+    'signal-scorecard' => signalScorecardScreen(),
+    'confidence-lab' => confidenceLabScreen(),
+    'shadow-arena' => shadowArenaScreen(),
+    'institutional-flow' => institutionalFlowScreen(),
+    'daily-verdict' => dailyVerdictScreen(),
+    'culprit-catcher' => culpritCatcherScreen(),
     'trading-rooms' => roomsScreen(),
     'room-detail' => roomDetailScreen(),
     'strategies' => strategiesScreen(),
