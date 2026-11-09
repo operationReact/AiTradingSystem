@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - feature/mintick-mind-prospective-cohort-v1-20261109
+      - feature/minttick-mind-prospective-signal-receipts-v1-20261109
   workflow_dispatch:
 
 permissions:
