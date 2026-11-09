@@ -84,9 +84,85 @@ class MarketOverviewServiceTest {
             Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T03:00:00Z")), open);
         assertThat(stale.indices().get(0).freshness()).isEqualTo("STALE");
 
+        var expired = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
+            Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T03:55:00Z")), open);
+        assertThat(expired.indices().get(0).freshness()).isEqualTo("STALE");
+
+        var future = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
+            Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T04:05:00Z")), open);
+        assertThat(future.indices().get(0).freshness()).isEqualTo("STALE");
+
         var closed = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
             Map.of("99926000", detail("24000", "23950", "23980")), MarketOverviewService.IndexSession.CLOSED);
         assertThat(closed.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
+    }
+
+    @Test
+    void storedOverviewIsLabelledStoredAndIndicesAreLastClose() {
+        var index = new MarketOverviewService.IndexRow("NIFTY50", "Nifty 50", new BigDecimal("24000"),
+            new BigDecimal("23900"), new BigDecimal("0.42"), null, null, null, 0L, TRADED, "LIVE");
+        var overview = new MarketOverviewService.Overview(NOW, "ANGEL_ONE_SMARTAPI_FULL_BULK",
+            "NIFTY50_CONSTITUENTS", TRADED, new MarketOverviewService.Universe("NIFTY50", AS_OF, 50, 50, 50),
+            null, List.of(), List.of(), List.of(), List.of(), List.of(), List.of(index),
+            List.of(new MarketOverviewService.Idea("AAA-EQ", "Alpha", new BigDecimal("110"),
+                new BigDecimal("10"), new BigDecimal("5"), "BREAKOUT", TRADED)));
+        var stored = MarketOverviewService.asStored(overview);
+        assertThat(stored.source()).isEqualTo("STORED_LAST_OVERVIEW");
+        assertThat(stored.generatedAt()).isEqualTo(NOW);
+        assertThat(stored.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
+        assertThat(stored.indices().get(0).ltp()).isEqualByComparingTo("24000");
+        assertThat(stored.ideas()).isEmpty(); // Historical screening signals must never be actionable.
+    }
+
+    @Test
+    void ideasAreRuleScreenHitsWithBreakoutTakingPriorityOverMomentumAndGap() {
+        var members = List.of(
+            new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src"),
+            new MarketOverviewRepository.Member("BBB-EQ", "Beta", "IT", AS_OF, "src"),
+            new MarketOverviewRepository.Member("CCC-EQ", "Gamma", "IT", AS_OF, "src"),
+            new MarketOverviewRepository.Member("DDD-EQ", "Delta", "Pharma", AS_OF, "src"));
+        var tokens = Map.of("AAA-EQ", "1", "BBB-EQ", "2", "CCC-EQ", "3", "DDD-EQ", "4");
+        var stocks = Map.of(
+            "1", detailWith52High("110", "105", "100", "110"),
+            "2", detailWith52High("103", "101", "100", "150"),
+            "3", detailWith52High("100.5", "101.5", "100", "150"),
+            "4", detailWith52High("100.2", "100.1", "100", "150"));
+
+        var marketOpen = new MarketOverviewService.IndexSession(true, Instant.parse("2026-11-09T03:45:00Z"));
+        var overview = MarketOverviewService.compute(NOW, members, tokens, stocks, List.of(), Map.of(),
+            marketOpen);
+
+        assertThat(overview.ideas()).extracting(i -> i.tradingSymbol() + ":" + i.signal())
+            .containsExactly("AAA-EQ:BREAKOUT", "BBB-EQ:MOMENTUM", "CCC-EQ:GAP_UP");
+    }
+
+    @Test
+    void marketIdeasDisappearWhenClosedOrTicksAreStaleOrFromTheFuture() {
+        var member = new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src");
+        var tokens = Map.of("AAA-EQ", "1");
+        var session = new MarketOverviewService.IndexSession(true, Instant.parse("2026-11-09T03:45:00Z"));
+        var fresh = Map.of("1", detailWith52High("110", "105", "100", "110"));
+
+        assertThat(MarketOverviewService.compute(NOW, List.of(member), tokens, fresh, List.of(), Map.of(),
+            MarketOverviewService.IndexSession.CLOSED).ideas()).isEmpty();
+        assertThat(MarketOverviewService.compute(NOW, List.of(member), tokens,
+            Map.of("1", quoteAt("2026-11-09T03:55:00Z")), List.of(), Map.of(), session).ideas()).isEmpty();
+        assertThat(MarketOverviewService.compute(NOW, List.of(member), tokens,
+            Map.of("1", quoteAt("2026-11-09T04:05:00Z")), List.of(), Map.of(), session).ideas()).isEmpty();
+        assertThat(MarketOverviewService.compute(NOW, List.of(member), tokens, fresh, List.of(), Map.of(),
+            session).ideas()).hasSize(1);
+    }
+
+    private static Detail quoteAt(String instant) {
+        return new Detail(new BigDecimal("110"), new BigDecimal("105"), new BigDecimal("110"),
+            new BigDecimal("105"), new BigDecimal("100"), 1000L, Instant.parse(instant),
+            null, new BigDecimal("110"), null, 0L, 0L, List.of(), List.of());
+    }
+
+    private static Detail detailWith52High(String ltp, String open, String previousClose, String week52High) {
+        return new Detail(new BigDecimal(ltp), new BigDecimal(open), new BigDecimal(ltp).max(new BigDecimal(open)),
+            new BigDecimal(ltp).min(new BigDecimal(open)), new BigDecimal(previousClose), 1000L,
+            Instant.parse("2026-11-09T03:59:00Z"), null, new BigDecimal(week52High), null, 0L, 0L, List.of(), List.of());
     }
 
     private static Detail detail(String ltp, String open, String previousClose) {

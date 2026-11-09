@@ -8,7 +8,6 @@ import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
-import 'minttick_market_preview.dart';
 import 'minttick_stock_detail_page.dart';
 
 const _maxSnapshotRows = 30;
@@ -37,6 +36,11 @@ class MintTickCustomerMarketPage extends StatefulWidget {
 class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   final TextEditingController _query = TextEditingController();
+  final TextEditingController _overviewSearch = TextEditingController();
+  List<InstrumentRecord>? _overviewHits;
+  String? _overviewSearchError;
+  bool _overviewSearching = false;
+  int _overviewSearchSeq = 0;
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final Map<int, CustomerLiveQuote> _rows = {};
   InstrumentCatalogueStatus? _catalogue;
@@ -66,22 +70,56 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   }
 
   /// Movers carry no instrument id, so resolve the exact symbol through the active catalogue.
-  Future<void> _openMover(CustomerMover mover) async {
+  Future<void> _openMover(CustomerMover mover) => _openSymbol(mover.tradingSymbol);
+
+  Future<void> _openSymbol(String symbol) async {
     void notify(String message) {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(message)));
     }
     try {
-      final page = await widget.repository.search(query: mover.tradingSymbol);
+      final page = await widget.repository.search(query: symbol);
       if (!mounted) return;
-      final matches = page.content.where((s) => s.tradingSymbol == mover.tradingSymbol);
+      final matches = page.content.where((s) => s.tradingSymbol == symbol);
       if (matches.isEmpty) {
-        notify('${mover.tradingSymbol} is not in the active instrument catalogue, so its detail is unavailable.');
+        notify('$symbol is not in the active instrument catalogue, so its detail is unavailable.');
         return;
       }
       _openDetail(matches.first);
     } catch (_) {
-      notify('Could not open ${mover.tradingSymbol}. Try again.');
+      notify('Could not open $symbol. Try again.');
+    }
+  }
+
+  Future<void> _runOverviewSearch() async {
+    final query = _overviewSearch.text.trim();
+    final seq = ++_overviewSearchSeq;
+    if (query.isEmpty) {
+      setState(() {
+        _overviewHits = null;
+        _overviewSearchError = null;
+        _overviewSearching = false;
+      });
+      return;
+    }
+    setState(() {
+      _overviewSearching = true;
+      _overviewSearchError = null;
+    });
+    try {
+      final page = await widget.repository.search(query: query);
+      if (!mounted || seq != _overviewSearchSeq) return;
+      setState(() {
+        _overviewHits = page.content.take(8).toList();
+        _overviewSearching = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _overviewSearchSeq) return;
+      setState(() {
+        _overviewHits = null;
+        _overviewSearchError = 'Search failed. Try again.';
+        _overviewSearching = false;
+      });
     }
   }
 
@@ -108,6 +146,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     _tabs.removeListener(_onTabChanged);
     _tabs.dispose();
     _query.dispose();
+    _overviewSearch.dispose();
     super.dispose();
   }
 
@@ -340,13 +379,83 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   }
 
   List<Widget> _overviewTab() => [
-        MintTickMarketPreview(
-          repository: widget.repository,
-          onConnectBroker: widget.onConnectBroker,
+        _MarketStatusPill(overview: _overview, failed: _overviewError != null),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('customer-market-overview-search'),
+          controller: _overviewSearch,
+          textInputAction: TextInputAction.search,
+          onSubmitted: (_) => unawaited(_runOverviewSearch()),
+          decoration: InputDecoration(
+            hintText: 'Search stocks by symbol or company',
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: IconButton(
+              tooltip: 'Search',
+              icon: const Icon(Icons.arrow_forward_rounded),
+              onPressed: () => unawaited(_runOverviewSearch()),
+            ),
+          ),
         ),
+        ..._overviewSearchResults(),
         const SizedBox(height: 16),
         ..._overviewSection(),
       ];
+
+  List<Widget> _overviewSearchResults() {
+    if (_overviewSearching) {
+      return const [
+        SizedBox(height: 8),
+        MintTickInfoText('Searching the instrument catalogue…', icon: Icons.hourglass_empty_rounded),
+      ];
+    }
+    final error = _overviewSearchError;
+    if (error != null) {
+      return [const SizedBox(height: 8), MintTickInfoText(error, icon: Icons.cloud_off_outlined)];
+    }
+    final hits = _overviewHits;
+    if (hits == null) return const [];
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    if (hits.isEmpty) {
+      return const [
+        SizedBox(height: 8),
+        MintTickInfoText('No stock in the active catalogue matches that search.'),
+      ];
+    }
+    return [
+      const SizedBox(height: 8),
+      MintTickSurface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final stock in hits)
+            InkWell(
+              key: ValueKey('overview-search-hit-${stock.id}'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _openDetail(stock),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(children: [
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(stock.tradingSymbol, style: theme.textTheme.titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w800)),
+                      Text(stock.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: scheme.onSurfaceVariant)),
+                    ],
+                  )),
+                  Text(stock.exchange, style: theme.textTheme.labelSmall
+                      ?.copyWith(color: scheme.onSurfaceVariant)),
+                  const SizedBox(width: 6),
+                  Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+                ]),
+              ),
+            ),
+        ],
+      )),
+    ];
+  }
 
   List<Widget> _overviewStatus() {
     final error = _overviewError;
@@ -370,22 +479,76 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     final overview = _overview;
     if (overview == null) return _overviewStatus();
+    final theme = Theme.of(context);
     return [
-      Text('Major indices', style: Theme.of(context).textTheme.titleMedium
+      if (overview.source == 'STORED_LAST_OVERVIEW') ...[
+        MintTickInfoText(
+          'Historical snapshot only · saved ${overview.generatedAt.toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
+          'These are last recorded quotes, not a live market view.',
+          icon: Icons.history_rounded,
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (overview.source != 'STORED_LAST_OVERVIEW' &&
+          !overview.indices.any((index) => index.freshness == 'LIVE')) ...[
+        const MintTickInfoText(
+          'No verified live index quote. Market breadth, movers and sectors '
+          'reflect last recorded provider data, not an active trading signal.',
+          icon: Icons.schedule_rounded,
+        ),
+        const SizedBox(height: 12),
+      ],
+      Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.indices.isEmpty)
         const MintTickInfoText('Index quotes are not in this snapshot. None are shown.')
       else
         for (final index in overview.indices) ...[
-          _IndexCard(index: index),
+          _IndexCard(index: index, stored: overview.source == 'STORED_LAST_OVERVIEW'),
           const SizedBox(height: 8),
         ],
-      const SizedBox(height: 12),
+      const MintTickInfoText('SENSEX and intraday sparklines are not available yet: '
+          'no verified SENSEX token and no stored intraday history. None are estimated.',
+          icon: Icons.hourglass_empty_rounded),
+      const SizedBox(height: 16),
       _BreadthCard(overview: overview),
+      const SizedBox(height: 16),
+      _MoverSection(title: 'Top gainers', rows: overview.gainers.take(3).toList(),
+          emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
+          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
+      const SizedBox(height: 16),
+      _MoverSection(title: 'Top losers', rows: overview.losers.take(3).toList(),
+          emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
+          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
+      const SizedBox(height: 16),
+      Text('Sector performance', style: theme.textTheme.titleMedium
+          ?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      if (overview.sectors.isEmpty)
+        const MintTickInfoText('No sector has a verified quote in this snapshot.')
+      else
+        for (final sector in overview.sectors.take(5)) ...[
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(5))),
+          const SizedBox(height: 8),
+        ],
+      const SizedBox(height: 8),
+      _IdeasSection(
+        ideas: overview.ideas,
+        onOpen: _openSymbol,
+        enabled: _overviewHasCurrentIdeaEvidence(overview),
+      ),
       const SizedBox(height: 12),
       _OverviewFooter(overview: overview),
     ];
+  }
+
+  double _sectorScale(Iterable<CustomerSectorSummary> sectors) {
+    var scale = 0.0;
+    for (final sector in sectors) {
+      scale = math.max(scale, sector.avgChangePct.abs().toDouble());
+    }
+    return scale;
   }
 
   List<Widget> _moversTab() {
@@ -438,7 +601,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
         for (final sector in overview.sectors) ...[
-          _SectorCard(sector: sector),
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors)),
           const SizedBox(height: 8),
         ],
     ];
@@ -581,6 +744,66 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     return (text: 'Live prices are unavailable right now. No prices are shown.',
       icon: Icons.cloud_off_outlined);
+  }
+}
+
+/// The quote freshness is NOT an exchange open/closed calendar or BSE session status.
+/// Show verified feed state only; live sessions and trade eligibility are separate.
+bool _overviewHasCurrentIdeaEvidence(CustomerMarketOverview overview) {
+  if (overview.source == 'STORED_LAST_OVERVIEW') return false;
+  if (!overview.indices.any((index) => index.freshness == 'LIVE')) return false;
+  final tick = overview.exchangeAsOf;
+  if (tick == null) return false;
+  final age = overview.generatedAt.difference(tick);
+  return !age.isNegative && age <= const Duration(minutes: 2);
+}
+
+class _MarketStatusPill extends StatelessWidget {
+  const _MarketStatusPill({required this.overview, required this.failed});
+  final CustomerMarketOverview? overview;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final indices = overview?.indices ?? const <CustomerIndexRow>[];
+    final label = switch ((overview, failed)) {
+      (null, true) => 'Feed unavailable',
+      (null, false) => 'Checking feed',
+      _ when overview?.source == 'STORED_LAST_OVERVIEW' => 'Stored snapshot',
+      _ when indices.any((i) => i.freshness == 'LIVE') => 'Live quotes',
+      _ when indices.any((i) => i.freshness == 'STALE') => 'Stale quotes',
+      _ when indices.isNotEmpty => 'Last recorded quotes',
+      _ => 'Feed status unknown',
+    };
+    final live = label == 'Live quotes';
+    final color = live ? scheme.primary : scheme.onSurfaceVariant;
+    return Semantics(
+      container: true,
+      label: 'Verified quote status: $label; not an exchange session indicator',
+      child: ExcludeSemantics(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            key: const ValueKey('customer-market-status-pill'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(live ? Icons.circle : Icons.bedtime_outlined, size: 10, color: color),
+              const SizedBox(width: 8),
+              Flexible(child: Text('Market feed · $label', overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      color: color, fontWeight: FontWeight.w700))),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -745,9 +968,10 @@ class _DeltaText extends StatelessWidget {
     return Row(mainAxisSize: MainAxisSize.min, children: [
       Icon(icon, size: 14, color: color),
       const SizedBox(width: 2),
-      Text(text, maxLines: 1, style: Theme.of(context).textTheme.labelMedium?.copyWith(
-          color: color, fontWeight: FontWeight.w800,
-          fontFeatures: const [FontFeature.tabularFigures()])),
+      Flexible(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: color, fontWeight: FontWeight.w800,
+              fontFeatures: const [FontFeature.tabularFigures()]))),
     ]);
   }
 }
@@ -759,8 +983,9 @@ BoxDecoration _cardDecoration(ColorScheme scheme) => BoxDecoration(
     );
 
 class _IndexCard extends StatelessWidget {
-  const _IndexCard({required this.index});
+  const _IndexCard({required this.index, required this.stored});
   final CustomerIndexRow index;
+  final bool stored;
 
   @override
   Widget build(BuildContext context) {
@@ -768,11 +993,14 @@ class _IndexCard extends StatelessWidget {
     final scheme = theme.colorScheme;
     final time = _clock(index.exchangeAt.toLocal());
     final stale = index.freshness == 'STALE';
-    final freshnessLabel = switch (index.freshness) {
-      'LIVE' => 'Live · exchange time $time',
-      'STALE' => 'Stale · last tick $time',
-      _ => 'Last close · $time',
-    };
+    final date = index.exchangeAt.toLocal().toIso8601String().split('T').first;
+    final freshnessLabel = stored
+        ? 'Stored quote · $date $time'
+        : switch (index.freshness) {
+            'LIVE' => 'Live · exchange time $time',
+            'STALE' => 'Stale · last tick $time',
+            _ => 'Last recorded · $date $time',
+          };
     final value = stale ? '—' : index.ltp.toStringAsFixed(2);
     return Semantics(
       container: true,
@@ -976,13 +1204,18 @@ class _MoverSection extends StatelessWidget {
 }
 
 class _SectorCard extends StatelessWidget {
-  const _SectorCard({required this.sector});
+  const _SectorCard({required this.sector, required this.scale});
   final CustomerSectorSummary sector;
+  /// Largest absolute average change among the sectors shown; bars are relative to it.
+  final double scale;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final positive = sector.avgChangePct >= 0;
+    final color = positive ? scheme.primary : scheme.error;
+    final fraction = scale <= 0 ? 0.0 : (sector.avgChangePct.abs() / scale).clamp(0.0, 1.0).toDouble();
     return Semantics(
       container: true,
       label: '${sector.sector}, ${sector.members} stocks, ${sector.advancers} up, '
@@ -991,23 +1224,152 @@ class _SectorCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: _cardDecoration(scheme),
-          child: Row(children: [
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(sector.sector, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text('${sector.members} stocks · ${sector.advancers} up · '
-                    '${sector.decliners} down',
-                  style: theme.textTheme.labelSmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-              ],
-            )),
-            _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
-          ]),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Icon(_sectorIcon(sector.sector), size: 18, color: scheme.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(sector.sector, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text('${sector.members} stocks · ${sector.advancers} up · '
+                        '${sector.decliners} down',
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                  ],
+                )),
+                _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
+              ]),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: fraction,
+                  minHeight: 4,
+                  color: color,
+                  backgroundColor: scheme.outlineVariant,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+IconData _sectorIcon(String sector) {
+  final name = sector.toLowerCase();
+  if (name.contains('bank') || name.contains('financ')) return Icons.account_balance_outlined;
+  if (name == 'it' || name.contains('information') || name.contains('technology')) return Icons.code_rounded;
+  if (name.contains('pharma') || name.contains('health')) return Icons.medication_outlined;
+  if (name.contains('auto')) return Icons.directions_car_outlined;
+  if (name.contains('fmcg') || name.contains('consumer')) return Icons.shopping_cart_outlined;
+  if (name.contains('energy') || name.contains('oil')) return Icons.bolt_outlined;
+  if (name.contains('metal')) return Icons.factory_outlined;
+  return Icons.pie_chart_outline_rounded;
+}
+
+/// Rule-screen hits from the backend. Labels describe why a stock matched; they are not advice.
+class _IdeasSection extends StatelessWidget {
+  const _IdeasSection({required this.ideas, required this.onOpen, required this.enabled});
+  final List<CustomerMarketIdea> ideas;
+  final Future<void> Function(String symbol) onOpen;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: Text('Market ideas', style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w800))),
+          Text('Rule screen · Nifty 50', style: theme.textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
+        ]),
+        const SizedBox(height: 8),
+        if (!enabled)
+          const MintTickInfoText(
+            'Current market ideas paused. Fresh exchange ticks and a live verified '
+            'index quote are required. Stored or stale screening results are hidden.',
+            icon: Icons.schedule_rounded,
+          )
+        else if (ideas.isEmpty)
+          const MintTickInfoText('No Nifty 50 stock meets a screen rule in this snapshot. '
+              'Screens are rules on verified quotes, not recommendations.')
+        else
+          MintTickSurface(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final idea in ideas)
+                InkWell(
+                  key: ValueKey('market-idea-${idea.tradingSymbol}'),
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => unawaited(onOpen(idea.tradingSymbol)),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(children: [
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(idea.tradingSymbol, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800)),
+                          Text(idea.companyName, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall
+                                  ?.copyWith(color: scheme.onSurfaceVariant)),
+                        ],
+                      )),
+                      Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                        Text('₹${idea.ltp.toStringAsFixed(2)}', style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w700)),
+                        _DeltaText(pct: idea.changePct, label: 'Chg'),
+                        const SizedBox(height: 4),
+                        _SignalChip(signal: idea.signal),
+                      ]),
+                    ]),
+                  ),
+                ),
+            ],
+          )),
+      ],
+    );
+  }
+}
+
+class _SignalChip extends StatelessWidget {
+  const _SignalChip({required this.signal});
+  final String signal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final (label, icon) = switch (signal) {
+      'BREAKOUT' => ('Breakout', Icons.flag_outlined),
+      'MOMENTUM' => ('Momentum', Icons.bolt_rounded),
+      _ => ('Gap up', Icons.north_east_rounded),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: scheme.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(label, style: theme.textTheme.labelSmall
+            ?.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 }
