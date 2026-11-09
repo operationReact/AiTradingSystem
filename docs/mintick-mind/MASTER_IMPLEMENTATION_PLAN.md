@@ -18,6 +18,7 @@
 5. [Phase-by-phase delivery runbook](PHASE_DELIVERY_RUNBOOK.md) — phase-specific tasks, sequence, ownership boundaries, integration tests, release/rollback evidence.
 6. [Repository reuse and gap audit](EXISTING_REUSE_AND_GAPS.md) — actual reusable code, migrations, workflows, dormant features and non-verifications.
 7. [Traceability and nonfunctional acceptance](TRACEABILITY_AND_RELEASE_GATES.md) — screen × contract × phase, model eligibility, performance, safety, cost budgets, test matrix.
+8. [Five open-source research engines and 14-PR runbook](THIRD_PARTY_RESEARCH_ENGINES.md) — VectorBT, Backtesting.py, NautilusTrader, LEAN, Freqtrade; source files, licence gates, optional adapters, cost/performance benchmarks, PR #656 compatibility and research-only safety. [Notion annex](https://app.notion.com/p/41336a828cb6815dab4eca25bc04f27a).
 
 ## 0. Agreed product decisions and explicit non-goals
 
