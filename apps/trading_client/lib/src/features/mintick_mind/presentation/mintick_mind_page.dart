@@ -76,8 +76,7 @@ class _MintickMindPageState extends State<MintickMindPage> {
   Widget _header() => Row(children: [
     const Icon(Icons.stacked_line_chart_rounded,color:MindPalette.mint,size:27),
     const SizedBox(width:6),
-    const Text('MintTick',style:TextStyle(color:MindPalette.text,fontSize:21,fontWeight:FontWeight.w800,letterSpacing:-.6)),
-    const Spacer(),
+    const Expanded(child:Text('MintTick',maxLines:1,overflow:TextOverflow.ellipsis,style:TextStyle(color:MindPalette.text,fontSize:21,fontWeight:FontWeight.w800,letterSpacing:-.6))),
     const MindTag('Owner'),
     IconButton(tooltip:'Search strategies',onPressed:()=>_setTab(1),icon:const Icon(Icons.search_rounded,color:MindPalette.text,size:21)),
     IconButton(tooltip:'Mock notifications',onPressed:()=>_showDetails('Notifications',const ['3 research model events','4 decision candidates','1 simulated risk notice']),icon:const Icon(Icons.notifications_none_rounded,color:MindPalette.text,size:21)),
