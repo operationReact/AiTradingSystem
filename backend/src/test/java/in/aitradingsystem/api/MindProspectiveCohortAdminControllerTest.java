@@ -56,4 +56,36 @@ class MindProspectiveCohortAdminControllerTest {
         assertEquals(HttpStatus.CONFLICT, failure.getStatusCode());
         assertFalse(failure.getReason().contains("secret"));
     }
+    @Test
+    void prospectiveCaptureIsExplicitAdminOnlyAndReturnsNoTradeAuthority()
+            throws Exception {
+        var method = MindProspectiveCohortAdminController.class
+            .getMethod("captureSignals");
+        var preauthorize = method.getAnnotation(PreAuthorize.class);
+        assertNotNull(preauthorize);
+        assertEquals("hasRole('ADMIN')", preauthorize.value());
+
+        var signals = mock(MindProspectiveSignalService.class);
+        var expected = new MindProspectiveSignalService.Capture(
+            Instant.parse("2026-11-10T05:31:00Z"),
+            Instant.parse("2026-11-10T05:25:00Z"),
+            20, 1, 0, 19, 0, "ABSTAIN", false);
+        when(signals.capture()).thenReturn(expected);
+        var controller = new MindProspectiveCohortAdminController(
+            mock(MindProspectiveCohortService.class), signals);
+        var response = controller.captureSignals();
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals("no-store", response.getHeaders().getCacheControl());
+        assertEquals(expected, response.getBody());
+        assertFalse(response.getBody().executionEnabled());
+        verify(signals).capture();
+
+        when(signals.capture()).thenThrow(
+            new IllegalStateException("internal provider details"));
+        var error = assertThrows(ResponseStatusException.class,
+            controller::captureSignals);
+        assertEquals(HttpStatus.CONFLICT, error.getStatusCode());
+        assertFalse(error.getReason().contains("provider"));
+    }
+
 }
