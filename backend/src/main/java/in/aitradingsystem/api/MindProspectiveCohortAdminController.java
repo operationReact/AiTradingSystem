@@ -2,6 +2,7 @@ package in.aitradingsystem.api;
 
 import in.aitradingsystem.mind.MindProspectiveCohortService;
 import org.springframework.http.CacheControl;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +24,7 @@ public class MindProspectiveCohortAdminController {
         this.service = service;
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/register")
     public ResponseEntity<MindProspectiveCohortService.Status> register() {
         try {
