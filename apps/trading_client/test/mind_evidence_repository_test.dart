@@ -91,8 +91,10 @@ void main() {
     expect(() => MindEvidenceLedger.fromJson(future), throwsFormatException);
 
     final noFingerprint = _payload();
-    ((noFingerprint['entries'] as List).first as Map<String, dynamic>)
-      ['fingerprint'] = null;
+    final incomplete = Map<String, dynamic>.from(
+      (noFingerprint['entries'] as List).first as Map);
+    incomplete['fingerprint'] = null;
+    noFingerprint['entries'] = [incomplete];
     expect(() => MindEvidenceLedger.fromJson(noFingerprint), throwsFormatException);
   });
 
