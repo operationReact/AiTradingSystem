@@ -26,7 +26,7 @@ Map<String, dynamic> payload() => {
   'interval': 'FIVE_MINUTE',
   'signalAt': '2026-11-09T08:50:00Z',
   'dataCutoffAt': '2026-11-09T08:50:00Z',
-  'candidateFingerprint': 'a' * 64,
+  'candidateFingerprint': List.filled(64, 'a').join(),
   'replayStatus': 'REPRODUCED',
   'decisionPosture': 'WAIT',
   'blockingReasons': [
