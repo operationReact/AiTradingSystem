@@ -7,6 +7,7 @@ import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
+import 'minttick_stock_detail_mock_sections.dart';
 
 const _quotePoll = Duration(seconds: 5);
 
@@ -257,6 +258,8 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               key: const ValueKey('stock-detail-watchlist-error'),
               style: theme.textTheme.bodySmall?.copyWith(color: scheme.error)),
           ],
+          const SizedBox(height: 16),
+          MintTickStockDetailMockSections(symbol: stock.tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '')),
           const SizedBox(height: 16),
           Text('Prices are shown only when verified LIVE by MintTick’s backend. Chart bars are '
               'stored historical candles, not live ticks. Information only, not investment advice.',

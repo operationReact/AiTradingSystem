@@ -292,6 +292,9 @@ void main() {
     expect(find.text('125.60'), findsOneWidget);
     expect(find.text('Buy 52.6%'), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-detail-market-badge')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-data-badge')), findsNWidgets(3));
+    expect(find.text('Mock sector: Sample sector'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mock-analyze-trade-room')), findsOneWidget);
     expect(find.text('₹121.00'), findsOneWidget);
     expect(find.text('₹120.00'), findsOneWidget);
     expect(find.text('987654'), findsOneWidget);
