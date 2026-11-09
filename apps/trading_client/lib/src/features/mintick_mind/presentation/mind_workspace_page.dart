@@ -224,7 +224,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           overflow: TextOverflow.ellipsis, style: const TextStyle(color: MindPalette.muted))),
       ],
       const Spacer(),
-      const MindTag('DEMO DATA', color: MindPalette.yellow),
+      if (MediaQuery.sizeOf(context).width >= 390)
+        const MindTag('DEMO DATA', color: MindPalette.yellow),
       const SizedBox(width: 4),
       IconButton(tooltip:'Screen coverage',onPressed:()=>_go('coverage'),
         icon:const Icon(Icons.fact_check_outlined,color:MindPalette.muted,size:20)),
@@ -404,7 +405,9 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     Padding(padding:const EdgeInsets.symmetric(vertical:7),
       child:Row(children:[
         Expanded(child:Text(label,style:const TextStyle(color:MindPalette.muted,fontSize:12))),
-        Text(value,style:TextStyle(color:color,fontSize:12,fontWeight:FontWeight.w700)),
+        Flexible(child:Text(value,textAlign:TextAlign.right,maxLines:2,
+          overflow:TextOverflow.ellipsis,
+          style:TextStyle(color:color,fontSize:12,fontWeight:FontWeight.w700))),
       ]),
     );
 
