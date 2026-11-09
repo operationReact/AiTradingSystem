@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_agent_fixtures.dart';
+import '../data/mind_research_engine_fixtures.dart';
 import 'mind_widgets.dart';
 import 'mintick_mind_page.dart';
 
@@ -12,6 +13,7 @@ part 'mind_investment_screens.dart';
 part 'mind_system_screens.dart';
 part 'mind_research_screens.dart';
 part 'mind_agent_screens.dart';
+part 'mind_research_engine_screens.dart';
 
 /// All prototype surfaces run inside one signed-in Flutter route. This
 /// mock-only workspace does not import any broker, API or execution repository.
@@ -48,6 +50,7 @@ abstract final class MintickMindScreens {
     MindScreenDescriptor('models', 'Model Laboratory', Icons.memory_outlined, 'RESEARCH'),
     MindScreenDescriptor('model-detail', 'Model Deep Dive', Icons.biotech_outlined, 'RESEARCH'),
     MindScreenDescriptor('research', 'Research & Backtesting', Icons.science_outlined, 'RESEARCH'),
+    MindScreenDescriptor('research-engines', 'Research Engines Lab', Icons.extension_outlined, 'RESEARCH'),
     MindScreenDescriptor('experiment-detail', 'Experiment Results', Icons.assessment_outlined, 'RESEARCH'),
     MindScreenDescriptor('performance', 'Performance & Learning', Icons.show_chart, 'RESEARCH'),
     MindScreenDescriptor('journal', 'Decision Journal', Icons.history_outlined, 'RESEARCH'),
@@ -104,6 +107,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _strategyQuery = '';
   String _modelFilter = 'All';
   String _researchMode = 'Backtests';
+  String _researchEngineFilter = 'All';
+  String _selectedResearchEngine = 'VECTORBT';
   String _mbStage = 'All';
   String _decisionFilter = 'All';
   String _optionUnderlying = 'NIFTY';
@@ -363,6 +368,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     'decision-lab' => decisionLabScreen(),
     'dependencies' => dependenciesScreen(),
     'research' => researchScreen(),
+    'research-engines' => researchEnginesScreen(),
     'experiment-detail' => experimentDetailScreen(),
     'performance' => performanceScreen(),
     'journal' => journalScreen(),

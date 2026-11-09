@@ -10,7 +10,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     const SizedBox(width:9),
     const Expanded(child:Text('AGENT RESEARCH · SYNTHETIC INDIAN-MARKET DATA · NO VERIFIED SIGNALS OR ORDERS',
       style:TextStyle(color:MindPalette.yellow,fontSize:10,fontWeight:FontWeight.w700))),
-    TextButton(onPressed:()=>_go('coverage'),child:const Text('42 screens',
+    TextButton(onPressed:()=>_go('coverage'),child:const Text('43 screens',
       style:TextStyle(color:MindPalette.mint,fontSize:11))),
   ]));
 

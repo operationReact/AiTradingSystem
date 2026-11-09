@@ -123,6 +123,10 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
         ])),
       ]),
       _section('Strategy Workflows',Icons.science_outlined,[
+        _tile('Research engine benchmarks',
+          'VectorBT pilot and independent validators · NOT CONNECTED',
+          Icons.extension_outlined,route:'research-engines',
+          trailing:'PLANNED',color:MindPalette.yellow),
         _tile('Experiment results','Backtests, paper and shadow',Icons.science_outlined,
           route:'research'),
         _tile('Decision journal','Track contribution and alternatives',Icons.history,
@@ -137,6 +141,12 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     final visible=MindFixtures.models.where((m)=>_modelFilter=='All'||
       m.status==_modelFilter||m.role==_modelFilter).toList();
     return _surface('Model Laboratory','Models, challengers and performance health',[
+      _section('Research tool integrations',Icons.extension_outlined,[
+        _tile('Research Engines Lab',
+          'Five optional frameworks · all NOT CONNECTED · view PR checklists',
+          Icons.construction_outlined,route:'research-engines',
+          trailing:'PLANNED',color:MindPalette.yellow),
+      ]),
       _metricGrid([
         ('Model records','18','Research catalogue'),
         ('Champions','2','Provisional research'),
