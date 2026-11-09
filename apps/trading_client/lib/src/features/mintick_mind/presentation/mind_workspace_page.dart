@@ -3,6 +3,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
+import '../data/mind_readiness_repository.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
 import 'mind_widgets.dart';
@@ -75,10 +76,17 @@ abstract final class MintickMindScreens {
 }
 
 class MintickMindWorkspacePage extends StatefulWidget {
-  const MintickMindWorkspacePage({this.embeddedInProductShell = false, super.key});
+  const MintickMindWorkspacePage({
+    this.embeddedInProductShell = false,
+    this.readinessRepository,
+    super.key,
+  });
 
   /// Keep the app's navigation visible instead of stacking two bottom bars.
   final bool embeddedInProductShell;
+
+  /// A production app injects authenticated evidence, never fake balances.
+  final MindReadinessRepository? readinessRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -194,7 +202,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           Expanded(child: Column(children: [
             if (_route != 'overview') _topbar(wide),
             Expanded(child: _route == 'overview'
-                ? const MintickMindPage(key: ValueKey('mind-original-overview'))
+                ? MintickMindPage(
+                    key: const ValueKey('mind-original-overview'),
+                    readinessRepository: widget.readinessRepository,
+                  )
                 : _screen()),
             if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
           ])),
