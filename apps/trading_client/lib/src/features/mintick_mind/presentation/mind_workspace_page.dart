@@ -530,7 +530,7 @@ class _MindResearchChart extends CustomPainter {
         case 'Renko':
           if(i%3!=0)break;
           canvas.drawRect(Rect.fromLTWH(now.dx,now.dy,
-            cellWidth*3,math.max(6,bodyHeight)),paint..style=PaintingStyle.stroke);
+            cellWidth*3,math.max(6.0,bodyHeight)),paint..style=PaintingStyle.stroke);
           break;
         case 'OHLC':
           canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
@@ -541,13 +541,13 @@ class _MindResearchChart extends CustomPainter {
           final smoothed=now.dy*.5+prev.dy*.5;
           canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
           canvas.drawRect(Rect.fromLTWH(now.dx-cellWidth*.5,
-            math.min(smoothed,prev.dy),cellWidth,math.max(3,(smoothed-prev.dy).abs())),
+            math.min(smoothed,prev.dy),cellWidth,math.max(3.0,(smoothed-prev.dy).abs())),
             paint..style=PaintingStyle.fill);
           break;
         case 'Range':
           if(i%2!=0)break;
           canvas.drawRect(Rect.fromLTWH(now.dx,high,cellWidth*2,
-            math.max(7,bodyHeight)),paint..style=PaintingStyle.stroke);
+            math.max(7.0,bodyHeight)),paint..style=PaintingStyle.stroke);
           break;
         default:
           canvas.drawLine(Offset(now.dx,high-4),Offset(now.dx,low+4),paint);
