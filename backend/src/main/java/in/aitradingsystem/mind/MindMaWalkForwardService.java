@@ -111,8 +111,34 @@ public final class MindMaWalkForwardService {
                 .findFirst().orElse(null);
             if (selected == null) return unavailable(now, from, to,
                 "NO_ELIGIBLE_MA_RECLAIM_CANDIDATE");
-            if (scans.findMindInputCustody(run.id(), selected.candidateFingerprint()).isEmpty()) {
+            var custody = scans.findMindInputCustody(run.id(), selected.candidateFingerprint());
+            if (custody.isEmpty()) {
                 return unavailable(now, from, to, "REFERENCE_SCAN_CUSTODY_MISSING");
+            }
+            // V72 custody must match the original scan's 21 inputs before
+            // this instrument is even considered for historical research.
+            // Presence of a hash alone is not an integrity verification.
+            if (run.startedAt() == null || run.startedAt().isAfter(run.completedAt()) ||
+                selected.candleTime() == null || selected.catalogueVersion() == null ||
+                custody.get().capturedAt() == null ||
+                custody.get().capturedAt().isBefore(run.startedAt()) ||
+                custody.get().capturedAt().isAfter(run.completedAt()) ||
+                !selected.catalogueVersion().equals(custody.get().catalogueVersion()) ||
+                !selected.candleTime().equals(custody.get().inputLastAt()) ||
+                custody.get().maxFetchedAt() == null ||
+                custody.get().maxFetchedAt().isAfter(run.startedAt())) {
+                return unavailable(now, from, to, "REFERENCE_CUSTODY_CHRONOLOGY_INVALID");
+            }
+            List<MarketCandle> referenceBars = candles.recentCandlesAsOf(
+                selected.instrumentId(), selected.interval(),
+                selected.candleTime(), MindSourceSnapshot.BARS);
+            MindSourceSnapshot reference = MindSourceSnapshot.fromCandles(
+                referenceBars, selected.instrumentId(), selected.exchange(),
+                selected.tradingSymbol(), selected.interval(),
+                selected.candleTime(), run.startedAt());
+            if (!reference.digest().equals(custody.get().sourceDigest()) ||
+                !reference.canonicalInput().equals(custody.get().canonicalInput())) {
+                return unavailable(now, from, to, "REFERENCE_INPUT_REVISION_DETECTED");
             }
 
             Instant start = from.atStartOfDay(IST).toInstant();
