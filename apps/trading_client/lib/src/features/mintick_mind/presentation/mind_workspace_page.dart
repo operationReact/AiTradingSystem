@@ -141,6 +141,14 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     final wide = MediaQuery.sizeOf(context).width >= 870;
     return Scaffold(
       backgroundColor: MindPalette.background,
+      floatingActionButton: _route=='overview' && !wide
+        ? Padding(padding:const EdgeInsets.only(bottom:66),
+            child:FloatingActionButton.small(
+              tooltip:'All Mintick Mind screens',
+              backgroundColor:const Color(0xFF1C7753),
+              onPressed:_showRouteSheet,
+              child:const Icon(Icons.apps_rounded,color:Colors.white)))
+        : null,
       body: SafeArea(
         child: Row(children: [
           if (wide) _sidebar(),
@@ -352,7 +360,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         const SizedBox(width:10),
         Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
           Text(title,maxLines:1,overflow:TextOverflow.ellipsis,
-            style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w750,fontSize:14)),
+            style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700,fontSize:14)),
           const SizedBox(height:2),
           Text(caption,maxLines:2,overflow:TextOverflow.ellipsis,
             style:const TextStyle(color:MindPalette.muted,fontSize:11)),
@@ -383,7 +391,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         crossAxisCount:cols,
         crossAxisSpacing:9,mainAxisSpacing:9,shrinkWrap:true,
         physics:const NeverScrollableScrollPhysics(),
-        childAspectRatio:cols==4?1.62:1.48,
+        childAspectRatio:cols==4?1.08:1.0,
         children:[
           for(var i=0;i<values.length;i++) MindMetric(
             label:values[i].$1,value:values[i].$2,caption:values[i].$3,seed:i+4),
@@ -469,7 +477,7 @@ class _MindResearchChart extends CustomPainter {
       y=(y+diff).clamp(size.height*.10,size.height*.88).toDouble();
       if(candles){
         final up=y<previous;
-        final paint=Paint()..color=up?MindPalette.mint:MindPalette.red..strokeWidth=1.0;
+        final paint=Paint()..color=(up?MindPalette.mint:MindPalette.red)..strokeWidth=1.0;
         canvas.drawLine(Offset(x+2,math.min(y,previous)-5),
           Offset(x+2,math.max(y,previous)+6),paint);
         canvas.drawRect(Rect.fromLTRB(x,math.min(y,previous),
