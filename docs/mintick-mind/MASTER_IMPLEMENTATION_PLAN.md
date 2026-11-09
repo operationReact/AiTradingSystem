@@ -19,6 +19,7 @@
 6. [Repository reuse and gap audit](EXISTING_REUSE_AND_GAPS.md) — actual reusable code, migrations, workflows, dormant features and non-verifications.
 7. [Traceability and nonfunctional acceptance](TRACEABILITY_AND_RELEASE_GATES.md) — screen × contract × phase, model eligibility, performance, safety, cost budgets, test matrix.
 8. [Five open-source research engines and 14-PR runbook](THIRD_PARTY_RESEARCH_ENGINES.md) — VectorBT, Backtesting.py, NautilusTrader, LEAN, Freqtrade; source files, licence gates, optional adapters, cost/performance benchmarks, PR #656 compatibility and research-only safety. [Notion annex](https://app.notion.com/p/41336a828cb6815dab4eca25bc04f27a).
+9. [Research Engines Lab UI placeholder](RESEARCH_ENGINE_UI_PLACEHOLDERS.md) — new 43rd research planning route in [UI PR #660](https://github.com/operationReact/AiTradingSystem/pull/660); original 42 source prototype screens remain intact.
 
 ## 0. Agreed product decisions and explicit non-goals
 
