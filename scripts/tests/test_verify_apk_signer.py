@@ -24,6 +24,52 @@ class VerifyApkSignerTest(unittest.TestCase):
             "Signer #1 certificate SHA-1 digest: x\n"
         ), SHA)
 
+    def test_new_android_build_tools_37_scheme_labels(self):
+        report = (
+            "Verifies\n"
+            "Verified using v2 scheme (APK Signature Scheme v2): true\n"
+            "Verified using v3 scheme (APK Signature Scheme v3): true\n"
+            "Number of signers: 1\n"
+            f"V2 Signer: certificate SHA-256 digest: {SHA.lower()}\n"
+            f"V3.0 Signer: certificate SHA-256 digest: {SHA.lower()}\n"
+            f"V3.1 Signer: certificate SHA-256 digest: {SHA.lower()}\n"
+            f"Source Stamp Signer: certificate SHA-256 digest: {'A' * 64}\n"
+        )
+        self.assertEqual(parse_apksigner_certificate(report), SHA)
+
+    def test_scheme_numbered_signer_label(self):
+        self.assertEqual(
+            parse_apksigner_certificate(
+                f"V2 Signer #1 certificate SHA-256 digest: {SHA}\n"
+            ),
+            SHA,
+        )
+        with self.assertRaises(ValueError):
+            parse_apksigner_certificate(
+                f"V2 Signer #2 certificate SHA-256 digest: {SHA}\n"
+            )
+
+    def test_different_scheme_certificates_fail_closed(self):
+        with self.assertRaises(ValueError):
+            parse_apksigner_certificate(
+                f"V2 Signer: certificate SHA-256 digest: {SHA}\n"
+                f"V3.0 Signer: certificate SHA-256 digest: {'A' * 64}\n"
+            )
+
+    def test_multi_signer_fails_even_if_certificates_equal(self):
+        with self.assertRaises(ValueError):
+            parse_apksigner_certificate(
+                "Number of signers: 2\n"
+                f"V2 Signer: certificate SHA-256 digest: {SHA}\n"
+            )
+
+    def test_unknown_signer_label_does_not_get_ignored(self):
+        with self.assertRaises(ValueError):
+            parse_apksigner_certificate(
+                f"V2 Signer: certificate SHA-256 digest: {SHA}\n"
+                f"Unknown Signer certificate SHA-256 digest: {'A' * 64}\n"
+            )
+
     def test_source_stamp_certificate_is_not_apk_signer(self):
         other = "A" * 64
         report = (
