@@ -375,7 +375,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
     return _surface('Screen & Strategy Coverage',
       'All source prototype routes available inside one mock workspace',[
       _metricGrid([
-        ('Connected screens','42','Reachable in workspace'),
+        ('Connected screens','43','42 original + 1 research-planning route'),
         ('Strategies','232','20 families'),
         ('Models','18','Research fixtures'),
         ('Original UI refs','9','Preview records'),
@@ -389,6 +389,12 @@ extension _MindSystemScreens on _MindWorkspaceState {
                 ' · Mock frontend only',screen.icon,
                 trailing:'Open',tap:()=>_go(screen.id))),
         ]),
+      _section('External research integration status',Icons.extension_outlined,[
+        _tile('Research Engines Lab',
+          '5 assessed · 0 connected · all research-only placeholders',
+          Icons.construction_outlined,route:'research-engines',
+          trailing:'PLANNED',color:MindPalette.yellow),
+      ]),
       _section('Safety & Verification',Icons.shield_outlined,[
         _value('Backend API calls','None in Mind UI'),
         _value('Futures/options execution','Disabled'),
