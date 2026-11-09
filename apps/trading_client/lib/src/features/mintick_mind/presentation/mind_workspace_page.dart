@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
+import '../data/mind_evidence_repository.dart';
+import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
 import 'mind_widgets.dart';
@@ -79,6 +81,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   const MintickMindWorkspacePage({
     this.embeddedInProductShell = false,
     this.readinessRepository,
+    this.evidenceRepository,
     super.key,
   });
 
@@ -87,6 +90,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// A production app injects authenticated evidence, never fake balances.
   final MindReadinessRepository? readinessRepository;
+
+  /// Null only in isolated prototype/golden tests. Production uses Cognito.
+  final MindEvidenceRepository? evidenceRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
