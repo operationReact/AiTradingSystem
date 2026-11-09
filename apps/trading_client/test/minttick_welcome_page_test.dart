@@ -82,6 +82,17 @@ void main() {
   }
 
 
+  testWidgets('remember me defaults on but can be explicitly disabled',
+      (tester) async {
+    await pumpWelcome(tester);
+    final checkbox = find.byKey(const ValueKey('minttick-remember-me'));
+    expect(tester.widget<Checkbox>(checkbox).value, isTrue);
+    await tester.tap(checkbox);
+    await tester.pump();
+    expect(tester.widget<Checkbox>(checkbox).value, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('logo has a visible finite entrance without shifting sign-in fields',
       (tester) async {
     tester.view.devicePixelRatio = 1;
