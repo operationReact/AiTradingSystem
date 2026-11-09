@@ -21,7 +21,7 @@ import 'data/risk_approval_repository.dart';
 import 'data/scenario_evidence_repository.dart';
 import 'features/trading_control/data/trading_control_repository.dart';
 import 'features/trading_rooms/domain/trading_room_draft.dart';
-import 'features/mintick_mind/presentation/mintick_mind_page.dart';
+import 'features/mintick_mind/presentation/mind_workspace_page.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -118,6 +118,7 @@ class _TradingAppState extends State<TradingApp> {
         builder: (context, constraints) {
           // Sign-in is a focused account experience. Never overlay the product
           // bottom bar or desktop trading rail on authentication pages.
+          if (_selectedRoute == '/mind') return child ?? const SizedBox.shrink();
           if (_selectedRoute == '/auth-test' || _selectedRoute == '/sign-in' || _selectedRoute == '/sign-up' || _selectedRoute == '/welcome' || _selectedRoute == '/welcome-replay' || _selectedRoute == '/forgot-password' || _selectedRoute == '/account' || _selectedRoute.startsWith('/rooms/')) {
             return child ?? const SizedBox.shrink();
           }
@@ -150,7 +151,7 @@ class _TradingAppState extends State<TradingApp> {
       routes: {
         '/': (_) => _overviewPage(),
         '/mind': (_) => widget.session.isCustomerAuthenticated
-            ? const MintickMindPage()
+            ? const MintickMindWorkspacePage()
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
             ? MintTickTradingRoomsPage(
