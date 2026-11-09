@@ -369,11 +369,11 @@ extension _MindSystemScreens on _MindWorkspaceState {
       child:Text(label,style:const TextStyle(color:MindPalette.mint)));
 
   Widget coverageScreen() {
-    final groups=['PRIMARY','RESEARCH','CAPITAL','SYSTEM'];
+    final groups=['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM'];
     return _surface('Screen & Strategy Coverage',
       'All source prototype routes available inside one mock workspace',[
       _metricGrid([
-        ('Connected screens','32','Reachable in workspace'),
+        ('Connected screens','42','Reachable in workspace'),
         ('Strategies','232','20 families'),
         ('Models','18','Research fixtures'),
         ('Original UI refs','9','Preview records'),
