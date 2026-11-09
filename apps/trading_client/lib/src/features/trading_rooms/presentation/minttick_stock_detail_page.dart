@@ -344,7 +344,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       container: true,
       label: ltp == null
           ? 'No verified price. Status ${statusLabel.toLowerCase()}.'
-          : 'Price ₹${ltp.toStringAsFixed(2)}. Status ${isStored ? 'last close' : 'live'}.',
+          : 'Price ₹${ltp.toStringAsFixed(2)}. Status ${isStored ? 'stored last trade, not live' : 'live'}.',
       child: ExcludeSemantics(child: MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -362,7 +362,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
             style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
           ),
           if (tickAt != null) Text(
-            'Exchange tick ${_clock(tickAt.toLocal())} · source ${quote?.source ?? '—'}',
+            'Exchange tick ${_istDate(tickAt)} ${_clock(tickAt.toLocal())} · source ${quote?.source ?? '—'}',
             style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
           ),
         ],
@@ -576,14 +576,15 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
 bool _isFreshLive(CustomerLiveQuote quote) {
   if (quote.status != 'LIVE' || quote.exchangeAt == null || quote.ltp == null) return false;
   // The backend only marks LIVE for trades in the current session; a quiet stock keeps its last trade.
-  return DateTime.now().toUtc().difference(quote.exchangeAt!.toUtc()) >= const Duration(seconds: -5);
+  final age = DateTime.now().toUtc().difference(quote.exchangeAt!.toUtc());
+  return age >= const Duration(seconds: -5) && age <= const Duration(minutes: 2);
 }
 
 String _staleLabel(CustomerLiveQuote quote) {
   if (quote.status == 'LIVE') return _isFreshLive(quote) ? 'LIVE' : 'STALE';
   return switch (quote.status) {
     'STALE' => 'STALE',
-    'LAST_CLOSE' => 'LAST CLOSE',
+    'LAST_CLOSE' => 'LAST TRADED',
     'CONNECTING' => 'CONNECTING',
     'RECONNECTING' => 'RECONNECTING',
     'MARKET_CLOSED' => 'CLOSED',
