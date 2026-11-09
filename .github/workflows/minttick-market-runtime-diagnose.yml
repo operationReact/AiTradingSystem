@@ -47,7 +47,7 @@ jobs:
           spec=importlib.util.spec_from_file_location('market_probe', 'infra/ec2-paper/probe_market_runtime.py')
           module=importlib.util.module_from_spec(spec)
           spec.loader.exec_module(module)
-          evidence='ANGEL_ONE_BULK|2026-11-09T21:09:00Z|2026-11-09|NONEMPTY|NONEMPTY\\n'
+          evidence='ANGEL_ONE_BULK|2026-11-09T21:09:00Z|2026-11-09|NONEMPTY|NONEMPTY\n'
           with patch.object(module, 'run', return_value=SimpleNamespace(returncode=0,stdout=evidence)):
               assert module.overview_evidence('postgres') == (
                   'ANGEL_ONE_BULK','2026-11-09T21:09:00Z','2026-11-09','NONEMPTY','NONEMPTY')
