@@ -75,7 +75,10 @@ abstract final class MintickMindScreens {
 }
 
 class MintickMindWorkspacePage extends StatefulWidget {
-  const MintickMindWorkspacePage({super.key});
+  const MintickMindWorkspacePage({this.embeddedInProductShell = false, super.key});
+
+  /// Keep the app's navigation visible instead of stacking two bottom bars.
+  final bool embeddedInProductShell;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -177,8 +180,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     final wide = MediaQuery.sizeOf(context).width >= 870;
     return Scaffold(
       backgroundColor: MindPalette.background,
-      floatingActionButton: _route=='overview' && !wide
-        ? Padding(padding:const EdgeInsets.only(bottom:66),
+      floatingActionButton: !wide && (widget.embeddedInProductShell || _route == 'overview')
+        ? Padding(padding:EdgeInsets.only(bottom: widget.embeddedInProductShell ? 0 : 66),
             child:FloatingActionButton.small(
               tooltip:'All Mintick Mind screens',
               backgroundColor:const Color(0xFF1C7753),
@@ -193,7 +196,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
             Expanded(child: _route == 'overview'
                 ? const MintickMindPage(key: ValueKey('mind-original-overview'))
                 : _screen()),
-            if (!wide) _mobileNavigation(),
+            if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
           ])),
         ]),
       ),
