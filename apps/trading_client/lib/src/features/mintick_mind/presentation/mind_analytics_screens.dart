@@ -1,3 +1,5 @@
+// Prototype UI source may use existing explicit string concatenation for compact mock labels.
+// ignore_for_file: prefer_interpolation_to_compose_strings
 part of 'mind_workspace_page.dart';
 
 extension _MindAnalyticsScreens on _MindWorkspaceState {
@@ -18,7 +20,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       ]),
       const SizedBox(height:14),
       TextField(controller:_strategySearch,
-        onChanged:(v)=>setState((){_strategyQuery=v;_showStrategies=25;}),
+        onChanged:(v)=>_updateMind((){_strategyQuery=v;_showStrategies=25;}),
         style:const TextStyle(color:MindPalette.text),
         decoration:InputDecoration(
           hintText:'Search strategies (VWAP, breakout, options...)',
@@ -30,9 +32,9 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       ),
       const SizedBox(height:11),
       _chips(['All','Intraday','Swing','Delivery','Long-Term','Research','F&O'],
-        _strategyMode,(v)=>setState((){_strategyMode=v;_showStrategies=25;})),
+        _strategyMode,(v)=>_updateMind((){_strategyMode=v;_showStrategies=25;})),
       _chips(['All',...MindFixtures.strategyFamilies],_family,
-        (v)=>setState((){_family=v;_showStrategies=25;})),
+        (v)=>_updateMind((){_family=v;_showStrategies=25;})),
       const SizedBox(height:9),
       _section('Strategy Families',Icons.category_outlined,[
         MindPanel(child:Wrap(spacing:7,runSpacing:7,children:[
@@ -42,7 +44,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
               backgroundColor:MindPalette.panel,
               side:BorderSide(color:_family==name?MindPalette.mint:MindPalette.border),
               labelStyle:const TextStyle(color:MindPalette.text,fontSize:10),
-              onPressed:()=>setState(()=>_family=name)),
+              onPressed:()=>_updateMind(()=>_family=name)),
         ])),
       ]),
       _section('Strategy Catalog · '+matches.length.toString(),Icons.layers_outlined,[
@@ -56,7 +58,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
               s.status=='Paused'?MindPalette.red:MindPalette.mint,
             tap:()=>_selectStrategy(s.id))),
         if(matches.length>_showStrategies)
-          OutlinedButton(onPressed:()=>setState(()=>_showStrategies+=25),
+          OutlinedButton(onPressed:()=>_updateMind(()=>_showStrategies+=25),
             child:Text('Load more ('+(matches.length-_showStrategies).toString()+' remaining)',
               style:const TextStyle(color:MindPalette.mint))),
       ]),
@@ -143,7 +145,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       ]),
       const SizedBox(height:13),
       _chips(['All','Champion','Challenger','Research','Planned','Adapter',
-        'License review'],_modelFilter,(v)=>setState(()=>_modelFilter=v)),
+        'License review'],_modelFilter,(v)=>_updateMind(()=>_modelFilter=v)),
       const SizedBox(height:11),
       _section('Model Leaderboard',Icons.emoji_events_outlined,[
         for(final model in visible)
@@ -217,12 +219,12 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
   Widget chartIntelligenceScreen() {
     return _surface('Chart Intelligence','Multi-timeframe technical interpretation',[
       _chips(['RELIANCE','TCS','HDFCBANK','TITAN','CDSL','IREDA','INFY'],
-        _instrument,(v)=>setState((){_instrument=v;_chartSeed++;})),
+        _instrument,(v)=>_updateMind((){_instrument=v;_chartSeed++;})),
       _chips(['5m','15m','1H','1D','1W','1M'],_chartPeriod,
-        (v)=>setState((){_chartPeriod=v;_chartSeed++;})),
+        (v)=>_updateMind((){_chartPeriod=v;_chartSeed++;})),
       _chips(['Candlestick','Line','OHLC','Heikin Ashi','Renko',
         'Point & Figure','Range','Volume','Kagi'],_chartStyle,
-        (v)=>setState((){_chartStyle=v;_chartSeed++;})),
+        (v)=>_updateMind((){_chartStyle=v;_chartSeed++;})),
       const SizedBox(height:9),
       MindPanel(highlight:true,child:Column(children:[
         Row(children:[
@@ -297,7 +299,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     return _surface('Decision Explorer','Why the engine bought, waited or abstained',[
       _chips(['All','WAIT','BUY CANDIDATE','WATCH','HOLD','ABSTAIN',
         'Intraday','Swing','Long-Term','Futures','Options'],
-        _decisionFilter,(v)=>setState(()=>_decisionFilter=v)),
+        _decisionFilter,(v)=>_updateMind(()=>_decisionFilter=v)),
       _section('Recent Decisions · Sample Timeline',Icons.history_outlined,[
         for(final row in matches)
           Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(
@@ -368,16 +370,16 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
         _value('Model agreement',_modelWeight.toStringAsFixed(0)+'%'),
         Slider(value:_modelWeight,min:0,max:100,divisions:20,
           activeColor:MindPalette.mint,
-          onChanged:(v)=>setState(()=>_modelWeight=v)),
+          onChanged:(v)=>_updateMind(()=>_modelWeight=v)),
         SwitchListTile.adaptive(value:_dataFresh,
           activeTrackColor:MindPalette.mint,
-          onChanged:(v)=>setState(()=>_dataFresh=v),
+          onChanged:(v)=>_updateMind(()=>_dataFresh=v),
           title:const Text('Fresh market data',style:TextStyle(color:MindPalette.text)),
           subtitle:const Text('Turn off to force abstention',
             style:TextStyle(color:MindPalette.muted,fontSize:11))),
         SwitchListTile.adaptive(value:_riskApproved,
           activeTrackColor:MindPalette.mint,
-          onChanged:(v)=>setState(()=>_riskApproved=v),
+          onChanged:(v)=>_updateMind(()=>_riskApproved=v),
           title:const Text('Independent risk gate passes',
             style:TextStyle(color:MindPalette.text)),
           subtitle:const Text('Risk veto overrides all model votes',
@@ -404,7 +406,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
   Widget dependenciesScreen() {
     return _surface('Dependency Map','How models, strategies, filters and risk authority connect',[
       _chips(['Graph','Matrix'],_graphMode?'Graph':'Matrix',
-        (v)=>setState(()=>_graphMode=v=='Graph')),
+        (v)=>_updateMind(()=>_graphMode=v=='Graph')),
       const SizedBox(height:10),
       MindPanel(highlight:true,child:_graphMode
         ? _dependencyDiagram()
