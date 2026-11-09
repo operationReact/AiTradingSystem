@@ -8,7 +8,6 @@ import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
-import 'minttick_market_preview.dart';
 import 'minttick_stock_detail_page.dart';
 
 const _maxSnapshotRows = 30;
@@ -340,9 +339,16 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   }
 
   List<Widget> _overviewTab() => [
-        MintTickMarketPreview(
-          repository: widget.repository,
-          onConnectBroker: widget.onConnectBroker,
+        _MarketStatusPill(overview: _overview, failed: _overviewError != null),
+        const SizedBox(height: 12),
+        TextField(
+          key: const ValueKey('customer-market-overview-search'),
+          readOnly: true,
+          onTap: () => _tabs.animateTo(3),
+          decoration: const InputDecoration(
+            hintText: 'Search stocks, indices or sectors',
+            prefixIcon: Icon(Icons.search_rounded),
+          ),
         ),
         const SizedBox(height: 16),
         ..._overviewSection(),
@@ -370,8 +376,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     final overview = _overview;
     if (overview == null) return _overviewStatus();
+    final theme = Theme.of(context);
     return [
-      Text('Major indices', style: Theme.of(context).textTheme.titleMedium
+      Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.indices.isEmpty)
@@ -381,8 +388,35 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           _IndexCard(index: index),
           const SizedBox(height: 8),
         ],
-      const SizedBox(height: 12),
+      const MintTickInfoText('SENSEX and intraday sparklines are not available yet: '
+          'no verified SENSEX token and no stored intraday history. None are estimated.',
+          icon: Icons.hourglass_empty_rounded),
+      const SizedBox(height: 16),
       _BreadthCard(overview: overview),
+      const SizedBox(height: 16),
+      _MoverSection(title: 'Top gainers', rows: overview.gainers.take(3).toList(),
+          emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
+          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
+      const SizedBox(height: 16),
+      _MoverSection(title: 'Top losers', rows: overview.losers.take(3).toList(),
+          emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
+          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
+      const SizedBox(height: 16),
+      Text('Sector performance', style: theme.textTheme.titleMedium
+          ?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 8),
+      if (overview.sectors.isEmpty)
+        const MintTickInfoText('No sector has a verified quote in this snapshot.')
+      else
+        for (final sector in overview.sectors.take(4)) ...[
+          _SectorCard(sector: sector),
+          const SizedBox(height: 8),
+        ],
+      const SizedBox(height: 8),
+      const _NotAvailableBlock(
+        title: 'Market ideas',
+        reason: 'Ideas need a governed scanner output. MintTick shows none until one is verified.',
+      ),
       const SizedBox(height: 12),
       _OverviewFooter(overview: overview),
     ];
@@ -581,6 +615,55 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     return (text: 'Live prices are unavailable right now. No prices are shown.',
       icon: Icons.cloud_off_outlined);
+  }
+}
+
+/// Session state from the backend's index freshness; never inferred from the clock.
+class _MarketStatusPill extends StatelessWidget {
+  const _MarketStatusPill({required this.overview, required this.failed});
+  final CustomerMarketOverview? overview;
+  final bool failed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final indices = overview?.indices ?? const <CustomerIndexRow>[];
+    final label = switch ((overview, failed)) {
+      (null, true) => 'Feed unavailable',
+      (null, false) => 'Checking feed',
+      _ when indices.any((i) => i.freshness == 'LIVE') => 'Open · Live',
+      _ when indices.any((i) => i.freshness == 'STALE') => 'Open · Stale',
+      _ when indices.isNotEmpty => 'Closed · Last close',
+      _ => 'Status unknown',
+    };
+    final live = label == 'Open · Live';
+    final color = live ? scheme.primary : scheme.onSurfaceVariant;
+    return Semantics(
+      container: true,
+      label: 'NSE and BSE status: $label',
+      child: ExcludeSemantics(
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Container(
+            key: const ValueKey('customer-market-status-pill'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: scheme.outlineVariant),
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Icon(live ? Icons.circle : Icons.bedtime_outlined, size: 10, color: color),
+              const SizedBox(width: 8),
+              Flexible(child: Text('NSE & BSE · $label', overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                      color: color, fontWeight: FontWeight.w700))),
+            ]),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -506,8 +506,8 @@ void main() {
     expect(find.text('+0.08%'), findsOneWidget);
     expect(find.text('Advancing 2'), findsOneWidget);
     expect(find.text('Declining 1'), findsOneWidget);
-    expect(find.text('Not available yet'), findsNothing);
-    expect(find.byKey(const ValueKey('customer-market-stock-101')), findsNothing);
+    expect(find.byKey(const ValueKey('customer-market-status-pill')), findsOneWidget);
+    expect(find.text('Not available yet'), findsOneWidget);
 
     await tester.tap(find.text('Movers'));
     await tester.pumpAndSettle();
