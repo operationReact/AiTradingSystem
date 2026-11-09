@@ -28,22 +28,21 @@ class MindPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final surface = Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: highlight ? const Color(0xFF18231A) : MindPalette.card,
-        border: Border.all(color: highlight ? const Color(0xFF36533C) : MindPalette.border),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: child,
-    );
-    if (onTap == null) return surface;
+    // A flat Material is essential when cards contain ListTile. A coloured
+    // DecoratedBox between ListTile and Material hides ink and triggers
+    // Flutter assertions; paint the surface on Material itself instead.
     return Material(
-      color: Colors.transparent,
-      child: InkWell(
+      color: highlight ? const Color(0xFF18231A) : MindPalette.card,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(18),
+        side: BorderSide(
+          color: highlight ? const Color(0xFF36533C) : MindPalette.border,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
         onTap: onTap,
-        child: surface,
+        child: Padding(padding: padding, child: child),
       ),
     );
   }
