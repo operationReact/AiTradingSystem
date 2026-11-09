@@ -38,7 +38,9 @@ jobs:
           assert "workflow_dispatch:" in apk
           assert "Verify live HTTPS account API before packaging device APK" in apk
           assert "MINTTICK_AUTH_ONLY_TEST" in apk
-          assert "await MintTickCustomerAccountApi().provision()" in client
+          assert "MintTickCustomerAccountApi().provision()" in client
+          assert "widget.provisionAccount" in client
+          assert "MintTickIdentity.current.signIn" in client
           assert "flutter build apk --release" in apk
           assert "sha256sum" in apk
           PY
