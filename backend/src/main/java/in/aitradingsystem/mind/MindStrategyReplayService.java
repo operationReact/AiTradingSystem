@@ -96,6 +96,34 @@ public class MindStrategyReplayService {
             if (!validBars(run, candidate, bars)) return blocked(now, run,
                     candidate, "INVALID", "SOURCE_BARS_UNAVAILABLE_OR_UNVERIFIED");
 
+            // The original 21 input rows must have been captured during the
+            // source scan. Missing historical custody cannot be retroactively
+            // reconstructed and labelled verified.
+            var frozen = scans.findMindInputCustody(run.id(), candidate.candidateFingerprint());
+            if (frozen.isEmpty()) return blocked(now, run, candidate, "INVALID",
+                    "INPUT_CUSTODY_NOT_RECORDED");
+            var custody = frozen.get();
+            if (custody.capturedAt() == null ||
+                custody.capturedAt().isBefore(run.startedAt()) ||
+                custody.capturedAt().isAfter(run.completedAt()) ||
+                custody.capturedAt().isAfter(now) ||
+                !candidate.candleTime().equals(custody.inputLastAt()) ||
+                !candidate.catalogueVersion().equals(custody.catalogueVersion()) ||
+                custody.maxFetchedAt() == null ||
+                custody.maxFetchedAt().isAfter(run.startedAt())) {
+                return blocked(now, run, candidate, "INVALID",
+                    "SOURCE_CUSTODY_CHRONOLOGY_INVALID");
+            }
+            MindSourceSnapshot reconstructed = MindSourceSnapshot.fromCandles(
+                bars, candidate.instrumentId(), candidate.exchange(),
+                candidate.tradingSymbol(), candidate.interval(),
+                candidate.candleTime(), run.startedAt());
+            if (!reconstructed.digest().equals(custody.sourceDigest()) ||
+                !reconstructed.canonicalInput().equals(custody.canonicalInput())) {
+                return blocked(now, run, candidate, "INVALID",
+                    "SOURCE_CANDLE_REVISION_DETECTED");
+            }
+
             // This replay is historical, not a real-time signal. Re-evaluation
             // is deterministic and its fingerprint must exactly match the
             // persisted scanner result, even after any candle revisions.
@@ -125,7 +153,9 @@ public class MindStrategyReplayService {
                     now, run, candidate, "REPRODUCED", "CASH_MARKET_CLOSED");
             return result(now, run, candidate, "REPRODUCED", "WAIT",
                     List.of("STRUCTURAL_REPLAY_ONLY",
+                            "CAPTURED_INPUT_DIGEST_REPRODUCED",
                             "SOURCE_KNOWN_AT_NOT_INDEPENDENTLY_PROVEN",
+                            "AFTER_COST_WALK_FORWARD_NOT_VALIDATED",
                             "ACCOUNT_RISK_NOT_EVALUATED",
                             "PAPER_SHADOW_ENROLLMENT_REQUIRED"));
         } catch (RuntimeException ex) {
