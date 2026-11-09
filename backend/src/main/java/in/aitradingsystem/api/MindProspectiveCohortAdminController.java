@@ -29,7 +29,6 @@ public class MindProspectiveCohortAdminController {
         this.signals = signals;
     }
 
-    @PreAuthorize("hasRole('ADMIN')")
     /** Manual, ADMIN-gated collection inside a current completed-bar window. */
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/capture-signals")
@@ -43,6 +42,7 @@ public class MindProspectiveCohortAdminController {
         }
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/register")
     public ResponseEntity<MindProspectiveCohortService.Status> register() {
         try {
