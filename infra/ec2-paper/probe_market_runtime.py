@@ -53,6 +53,111 @@ def count_category(postgres, name):
     return "NONEMPTY" if int(value) > 0 else "EMPTY"
 
 
+
+def overview_evidence(postgres):
+    """Read only fixed, non-price overview provenance and completeness evidence."""
+    unavailable = ("UNAVAILABLE", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN")
+    if postgres is None:
+        return unavailable
+    sql = """
+        SELECT
+          CASE WHEN payload->>'source' = 'ANGEL_ONE_SMARTAPI_FULL_BULK'
+               THEN 'ANGEL_ONE_BULK' ELSE 'OTHER' END,
+          to_char(generated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+          COALESCE(substring(payload->>'exchangeAsOf'
+                             FROM '^[0-9]{4}-[0-9]{2}-[0-9]{2}'), 'UNKNOWN'),
+          CASE WHEN jsonb_typeof(payload->'indices') = 'array'
+                     AND jsonb_array_length(payload->'indices') > 0
+               THEN 'NONEMPTY' ELSE 'EMPTY' END,
+          CASE WHEN COALESCE(payload->'universe'->>'returned', '0') ~ '^[0-9]{1,5}    backend = container("backend")
+    postgres = container("postgres")
+    print("MARKET_BACKEND: " + ("RUNNING" if backend else "UNAVAILABLE"))
+    print("MARKET_POSTGRES: " + ("RUNNING" if postgres else "UNAVAILABLE"))
+    print("MARKET_HOST_IMDS: " + ("AVAILABLE" if metadata_token() else "UNAVAILABLE"))
+    if backend is None:
+        print("MARKET_CONTAINER_IMDS: UNAVAILABLE")
+        print("MARKET_APP_STREAM: UNKNOWN")
+        print("MARKET_OWNER_WARMER: UNKNOWN")
+        print("MARKET_NETWORK_HEADERS: UNKNOWN")
+        print("MARKET_PROVIDER_MODE: UNKNOWN")
+    else:
+        p = run(["docker", "inspect", "-f", "{{.State.Pid}}", backend], 5)
+        pid = p.stdout.strip() if p is not None and p.returncode == 0 else ""
+        if not pid.isdigit() or int(pid) < 1:
+            print("MARKET_CONTAINER_IMDS: UNAVAILABLE")
+        else:
+            print("MARKET_CONTAINER_IMDS: " +
+                  ("AVAILABLE" if metadata_token(int(pid)) else "UNAVAILABLE"))
+        e = run(["docker", "inspect", "-f", "{{json .Config.Env}}", backend], 5)
+        settings = {}
+        try:
+            values = json.loads(e.stdout) if e is not None and e.returncode == 0 else []
+            for item in values:
+                if isinstance(item, str) and "=" in item:
+                    k, v = item.split("=", 1)
+                    if k in ("MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED",
+                             "OWNER_FEED_ENABLED", "ANGELONE_CLIENT_MAC_ADDRESS",
+                             "MARKET_DATA_PROVIDER"):
+                        settings[k] = v
+        except (ValueError, TypeError):
+            pass
+        print("MARKET_APP_STREAM: " +
+              ("ENABLED" if settings.get("MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED") == "true" else "DISABLED"))
+        print("MARKET_OWNER_WARMER: " +
+              ("ENABLED" if settings.get("OWNER_FEED_ENABLED") == "true" else "DISABLED"))
+        print("MARKET_NETWORK_HEADERS: " +
+              ("CONFIGURED" if bool(re.fullmatch(
+                  r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}",
+                  settings.get("ANGELONE_CLIENT_MAC_ADDRESS", ""), re.I)) else "MISSING"))
+        provider = settings.get("MARKET_DATA_PROVIDER", "")
+        print("MARKET_PROVIDER_MODE: " +
+              (provider if provider in ("ANGEL_ONE", "ANGEL_ONE_LAMBDA") else "OTHER"))
+    print("MARKET_LAST_TICKS: " + count_category(postgres, "market_last_tick"))
+    print("MARKET_OVERVIEW_CACHE: " + count_category(postgres, "market_overview_snapshot"))
+    print("MARKET_DETAIL_CACHE: " + count_category(postgres, "market_detail_snapshot"))
+    source, generated, exchange_day, indices, equities = overview_evidence(postgres)
+    print("MARKET_OVERVIEW_SOURCE: " + source)
+    print("MARKET_OVERVIEW_GENERATED_UTC: " + generated)
+    print("MARKET_OVERVIEW_EXCHANGE_DATE: " + exchange_day)
+    print("MARKET_OVERVIEW_INDEX_QUOTES: " + indices)
+    print("MARKET_OVERVIEW_EQUITY_QUOTES: " + equities)
+
+
+if __name__ == "__main__":
+    main()
+
+                     AND COALESCE((payload->'universe'->>'returned')::int, 0) > 0
+               THEN 'NONEMPTY' ELSE 'EMPTY' END
+        FROM market_overview_snapshot
+        WHERE universe_code = 'NIFTY50'
+        LIMIT 1
+    """
+    p = run(["docker", "exec", postgres, "psql", "-U", "aitrading",
+             "-d", "aitrading", "-tA", "-F", "|", "-c", sql], 8)
+    if p is None or p.returncode != 0:
+        return unavailable
+    rows = p.stdout.strip().splitlines()
+    if not rows:
+        return ("EMPTY", "UNKNOWN", "UNKNOWN", "EMPTY", "EMPTY")
+    if len(rows) != 1:
+        return unavailable
+    fields = rows[0].split("|")
+    if len(fields) != 5:
+        return unavailable
+    source, generated, exchange_day, indices, equities = fields
+    if source not in ("ANGEL_ONE_BULK", "OTHER"):
+        source = "UNAVAILABLE"
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", generated):
+        generated = "UNKNOWN"
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", exchange_day):
+        exchange_day = "UNKNOWN"
+    if indices not in ("EMPTY", "NONEMPTY"):
+        indices = "UNKNOWN"
+    if equities not in ("EMPTY", "NONEMPTY"):
+        equities = "UNKNOWN"
+    return source, generated, exchange_day, indices, equities
+
+
 def main():
     backend = container("backend")
     postgres = container("postgres")

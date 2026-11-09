@@ -112,7 +112,7 @@ jobs:
               --instance-id "$INSTANCE_ID" --output json \
               > "$RUNNER_TEMP/market-diagnostic-out.json" 2>/dev/null || true
             result="$(python3 - <<'PY'
-          import json, os
+          import json, os, re
           from pathlib import Path
           try:
               data=json.loads((Path(os.environ['RUNNER_TEMP'])/'market-diagnostic-out.json').read_text())
@@ -131,12 +131,23 @@ jobs:
             'MARKET_LAST_TICKS':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
             'MARKET_OVERVIEW_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
             'MARKET_DETAIL_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
+            'MARKET_OVERVIEW_SOURCE':{'ANGEL_ONE_BULK','OTHER','EMPTY','UNAVAILABLE'},
+            'MARKET_OVERVIEW_GENERATED_UTC':{'UNKNOWN'},
+            'MARKET_OVERVIEW_EXCHANGE_DATE':{'UNKNOWN'},
+            'MARKET_OVERVIEW_INDEX_QUOTES':{'EMPTY','NONEMPTY','UNKNOWN'},
+            'MARKET_OVERVIEW_EQUITY_QUOTES':{'EMPTY','NONEMPTY','UNKNOWN'},
           }
           hits={}
           for line in data.get('StandardOutputContent','').splitlines():
               if ': ' not in line: continue
               key,value=line.split(': ',1)
               if key in allow and value in allow[key]: hits[key]=value
+              elif key=='MARKET_OVERVIEW_GENERATED_UTC' and re.fullmatch(
+                  r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z', value):
+                  hits[key]=value
+              elif key=='MARKET_OVERVIEW_EXCHANGE_DATE' and re.fullmatch(
+                  r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
+                  hits[key]=value
           for key in sorted(hits): print(key+': '+hits[key])
           status=data.get('Status')
           if status=='Success' and len(hits)==len(allow):
