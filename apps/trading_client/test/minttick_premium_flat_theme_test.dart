@@ -38,13 +38,16 @@ void main() {
         MindPanel(highlight: true, child: Text('Selected')),
       ])),
     ));
-    final panelDecorations = tester.widgetList<Container>(
-      find.descendant(of: find.byType(MindPanel), matching: find.byType(Container)),
-    ).map((widget) => widget.decoration).whereType<BoxDecoration>().toList();
-    expect(panelDecorations, hasLength(2));
-    for (final decoration in panelDecorations) {
-      expect(decoration.gradient, isNull);
-      expect(decoration.boxShadow, isNull);
+    final panels = tester.widgetList<Material>(
+      find.descendant(of: find.byType(MindPanel), matching: find.byType(Material)),
+    ).toList();
+    expect(panels, hasLength(2));
+    expect(panels.map((panel) => panel.color), contains(MindPalette.card));
+    expect(panels.map((panel) => panel.color),
+        contains(const Color(0xFF18231A)));
+    for (final panel in panels) {
+      expect(panel.shape, isA<RoundedRectangleBorder>());
+      expect(panel.elevation, 0);
     }
     expect(tester.takeException(), isNull);
   });
