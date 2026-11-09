@@ -6,6 +6,7 @@ import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_evidence_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
+import '../data/mind_ma_walkforward_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -84,6 +85,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.readinessRepository,
     this.evidenceRepository,
     this.strategyReplayRepository,
+    this.walkForwardRepository,
     super.key,
   });
 
@@ -96,6 +98,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   /// Null only in isolated prototype/golden tests. Production uses Cognito.
   final MindEvidenceRepository? evidenceRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
+  final MindMaWalkForwardRepository? walkForwardRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -215,6 +218,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
                     key: const ValueKey('mind-original-overview'),
                     readinessRepository: widget.readinessRepository,
                     strategyReplayRepository: widget.strategyReplayRepository,
+                    walkForwardRepository: widget.walkForwardRepository,
                   )
                 : _screen()),
             if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
