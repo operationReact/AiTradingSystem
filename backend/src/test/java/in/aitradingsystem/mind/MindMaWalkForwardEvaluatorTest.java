@@ -47,10 +47,10 @@ class MindMaWalkForwardEvaluatorTest {
         assertTrue(metrics.closedTrades() > 0, "At least one 21-bar MA reclaim signal");
         assertTrue(metrics.feeCost().signum() > 0);
         assertTrue(metrics.slippageCost().signum() > 0);
-        assertEquals(0, metrics.grossPnl()
+        assertTrue(metrics.grossPnl()
             .subtract(metrics.feeCost())
             .subtract(metrics.slippageCost())
-            .subtract(metrics.netPnl()).abs().compareTo(new BigDecimal("0.03")));
+            .subtract(metrics.netPnl()).abs().compareTo(new BigDecimal("0.03")) <= 0);
         assertEquals(0, metrics.returnPercent()
             .subtract(metrics.netPnl().multiply(new BigDecimal("100"))
                 .divide(new BigDecimal("100000"), 4, java.math.RoundingMode.HALF_UP))
