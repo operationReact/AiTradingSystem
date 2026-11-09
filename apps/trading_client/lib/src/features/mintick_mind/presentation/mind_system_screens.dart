@@ -356,7 +356,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
             const SizedBox(height:9),
           ]),
         )),
-      )),
+      ),
       const SizedBox(height:10),
       const Text('This is a native Flutter recreation, not an embedded bitmap or the original standalone HTML. Exact pixel parity requires screenshot comparison.',
         style:TextStyle(color:MindPalette.yellow,fontSize:11)),
