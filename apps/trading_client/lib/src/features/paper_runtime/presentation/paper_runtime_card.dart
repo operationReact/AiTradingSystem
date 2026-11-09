@@ -116,8 +116,6 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
             ? 'Auto Trading: Running'
             : 'Manual Trading';
 
-    final panelStart = Color.alphaBlend(accent.withValues(alpha: 0.10), scheme.surface);
-    final panelEnd = Color.alphaBlend(scheme.secondary.withValues(alpha: 0.08), scheme.surface);
 
     return Container(
       key: const ValueKey('paper-runtime-card'),
@@ -125,13 +123,8 @@ class _PaperRuntimeCardState extends State<PaperRuntimeCard> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [panelStart, panelEnd],
-        ),
-        border: Border.all(color: accent.withValues(alpha: 0.38)),
-        boxShadow: [BoxShadow(color: accent.withValues(alpha: 0.10), blurRadius: 28)],
+        color: scheme.surfaceContainer,
+        border: Border.all(color: scheme.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
