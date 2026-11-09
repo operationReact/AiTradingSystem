@@ -184,7 +184,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         ? Padding(padding:EdgeInsets.only(bottom: widget.embeddedInProductShell ? 0 : 66),
             child:FloatingActionButton.small(
               tooltip:'All Mintick Mind screens',
-              backgroundColor:const MintTickPalette.mint,
+              backgroundColor:MindPalette.mint,
               onPressed:_showRouteSheet,
               child:const Icon(Icons.apps_rounded,color:Colors.white)))
         : null,
@@ -229,7 +229,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   Widget _menuItem(MindScreenDescriptor screen) {
     final selected = _route == screen.id;
-    return Material(color: selected ? const MindPalette.panel : Colors.transparent,
+    return Material(color: selected ? MindPalette.panel : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         key: ValueKey('mind-route-' + screen.id),
@@ -288,7 +288,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           child:Container(
             margin:const EdgeInsets.symmetric(horizontal:3),
             decoration:BoxDecoration(
-              color:_route==id?const MindPalette.panel:Colors.transparent,
+              color:_route==id?MindPalette.panel:Colors.transparent,
               borderRadius:BorderRadius.circular(12)),
             child:Column(mainAxisAlignment:MainAxisAlignment.center,children:[
               Icon(icon,color:_route==id?MindPalette.mint:MindPalette.muted,size:22),
@@ -429,7 +429,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           selected:selected==value,
           onSelected:(_)=>setSelected(value),
           backgroundColor:MindPalette.card,
-          selectedColor:const MindPalette.panel,
+          selectedColor:MindPalette.panel,
           side:const BorderSide(color:MindPalette.border),
           labelStyle:TextStyle(fontSize:11,color:selected==value?MindPalette.mint:MindPalette.text),
         )),
@@ -498,7 +498,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           style:const TextStyle(color:MindPalette.muted,fontSize:11))),
         Expanded(child:ClipRRect(borderRadius:BorderRadius.circular(5),
           child:LinearProgressIndicator(value:value.clamp(0.0,1.0),minHeight:7,
-            backgroundColor:const MindPalette.border,color:color))),
+            backgroundColor:MindPalette.border,color:color))),
         const SizedBox(width:10),
         SizedBox(width:43,child:Text((value*100).round().toString()+'%',
           style:const TextStyle(color:MindPalette.text,fontSize:11))),
@@ -514,7 +514,7 @@ class _MindResearchChart extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final grid=Paint()..color=const MindPalette.border..strokeWidth=.65;
+    final grid=Paint()..color=MindPalette.border..strokeWidth=.65;
     for(var i=0;i<=4;i++) {
       final y=size.height*i/4;
       canvas.drawLine(Offset(0,y),Offset(size.width,y),grid);
