@@ -295,6 +295,92 @@ class CustomerMarketDataControllerTest {
         verify(store, never()).recordLive(any());
     }
 
+    private CustomerMarketDataController.DetailQuote verifiedSavedDetail(String symbol) {
+        Instant exchangeAt = Instant.parse("2026-11-09T09:58:00Z");
+        return new CustomerMarketDataController.DetailQuote(42L, "NSE", symbol,
+            new BigDecimal("126.20"), new BigDecimal("123.00"),
+            new BigDecimal("127.00"), new BigDecimal("122.00"),
+            new BigDecimal("125.00"), 12400L, exchangeAt,
+            exchangeAt.plusSeconds(4), "ANGEL_ONE_SMARTAPI_FULL_APP",
+            "ON_DEMAND", new BigDecimal("125.40"),
+            new BigDecimal("148.00"), new BigDecimal("87.00"),
+            1000L, 800L, List.of(), List.of());
+    }
+
+    @Test
+    void exploreUsesPreviouslyVerifiedDetailWhenNoLiveTickWasEverSaved() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of());
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, ticks, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(row.changePercent()).isEqualByComparingTo("0.9600");
+        assertThat(row.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T09:58:00Z"));
+        verify(ticks, never()).recordLive(any());
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void brokerOutageUsesSavedFullDetailEvenIfTickTableIsMissing() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenThrow(new IllegalStateException("reconnect"));
+        when(ticks.lastFor(List.of(42L))).thenThrow(
+            new org.springframework.dao.DataRetrievalFailureException("cache table not migrated"));
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, ticks, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+    }
+
+    @Test
+    void cachedDetailCannotCrossInstrumentIdentityOrRepairSpoofedProviderReply() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var detail = mock(MarketDetailSnapshotStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("WRONG-EQ")));
+        when(applicationFeed.available()).thenReturn(false);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed, null, null, detail);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+
+        when(detail.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(999L, "NSE", "WRONG-EQ",
+                new BigDecimal("9999"), null, null, "LIVE", "UNKNOWN")));
+        row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+    }
+
     @Test
     void spoofedTickOrSourceIsRejectedRatherThanRenderedLive() {
         var customer = principal("independent-customer");
