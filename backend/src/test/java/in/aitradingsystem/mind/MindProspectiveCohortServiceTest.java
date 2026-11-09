@@ -166,6 +166,31 @@ class MindProspectiveCohortServiceTest {
     }
 
     @Test
+    void candleFetchedBeforeItsFiveMinuteCloseCannotCountAsCompleted() {
+        configureCalendar();
+        when(repository.current()).thenReturn(Optional.of(registered()));
+        List<MindProspectiveCohortRepository.Observation> records =
+            new ArrayList<>();
+        for (var record : futureObservations(false)) {
+            records.add(record.slot() == 1
+                ? new MindProspectiveCohortRepository.Observation(
+                    record.slot(), record.candleTime(),
+                    record.candleTime().plusSeconds(60),
+                    record.source(), record.open(), record.high(),
+                    record.low(), record.close(), record.volume())
+                : record);
+        }
+        when(repository.observations(eq(ID), eq(START), any(Instant.class), eq(20001)))
+            .thenReturn(records);
+        var state = service(Instant.parse("2026-12-01T16:00:00Z")).inspect();
+        assertEquals("INSUFFICIENT_COVERAGE", state.sourceStatus());
+        assertEquals(19, state.membersWithSufficientCoverage());
+        assertEquals(0, state.members().getFirst().validCandles());
+        assertEquals("ABSTAIN", state.decisionPosture());
+        assertFalse(state.executionEnabled());
+    }
+
+    @Test
     void futureRegisteredAtOrInvalidMembershipNeverExecutesAResearchScan() {
         configureCalendar();
         var original = registered();
