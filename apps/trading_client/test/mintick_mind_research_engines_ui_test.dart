@@ -53,10 +53,14 @@ void main() {
         findsOneWidget);
     expect(find.text('Place Live Order'), findsNothing);
 
-    await tester.ensureVisible(
-        find.byKey(const ValueKey('mind-research-engine-NAUTILUS')));
-    await tester.tap(
-        find.byKey(const ValueKey('mind-research-engine-NAUTILUS')));
+    // Filter to the single candidate before tapping so the long
+    // scrollable checklist cannot place its centre off-screen.
+    await tester.tap(find.text('Advanced'));
+    await tester.pumpAndSettle();
+    final nautilus = find.byKey(const ValueKey('mind-research-engine-NAUTILUS'));
+    await tester.ensureVisible(nautilus);
+    await tester.pumpAndSettle();
+    await tester.tap(nautilus);
     await tester.pumpAndSettle();
     expect(find.text('Selected candidate · NautilusTrader'), findsOneWidget);
     expect(find.text('OSS-01, OSS-09–10, OSS-12–14'), findsOneWidget);
