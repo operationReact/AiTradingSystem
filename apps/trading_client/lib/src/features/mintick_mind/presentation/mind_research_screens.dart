@@ -334,7 +334,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
 
   Widget optionBuilderScreen() {
     final spot=_optionUnderlying=='NIFTY'?25480.0:56160.0;
-    final width=math.max(100,spot*.01);
+    final width=math.max(100.0,spot*.01);
     final samplePayoff=_estimatePayoff(spot,spot,width);
     return _surface('Options Payoff Builder',
       'Evaluate illustrative defined-risk options scenarios',[
