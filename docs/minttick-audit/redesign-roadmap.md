@@ -64,7 +64,7 @@ Governance (AGENTS.md): every Flutter UI item needs web, Android, and iOS build/
 
 **Acceptance:** state-machine tests cover every transition; UNKNOWN shows "Check status" with no retry; reconnect test; load test on quotes.
 
-## Phase 5: Mintick Mind experience
+## Phase 5: MintTick Mind experience
 
 | ID | Item | Issues | Size | Depends on |
 |---|---|---|---|---|
