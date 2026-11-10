@@ -97,12 +97,26 @@ public class ResearchScanService {
         int scannedCount = 0;
         int candidateCount = 0;
         int diagnosticCount = 0;
+        int incompleteHistoryCount = 0;
         try {
             List<Instrument> universe = scans.activeCashEquityUniverse(requestedLimit);
             Instant evaluatedAt = clock.instant();
             for (Instrument instrument : universe) {
                 try {
                     List<MarketCandle> candles = marketData.recentCandles(instrument.id(), interval.name(), REQUIRED_CANDLES);
+                    if (candles.size() < REQUIRED_CANDLES) {
+                        // A 2,756-instrument request does not imply 2,756
+                        // analyzable stocks. Preserve explicit gaps rather
+                        // than reporting a fully successful universe scan.
+                        incompleteHistoryCount++;
+                        scans.saveDiagnostic(runId, instrument.id(), null, "WARN",
+                                "INSUFFICIENT_CANDLE_HISTORY",
+                                "Fewer than 64 stored candles; full strategy coverage unavailable");
+                        if (candles.isEmpty()) {
+                            scannedCount++;
+                            continue;
+                        }
+                    }
                     if (quality != null && (candles.isEmpty()
                             || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
                         scannedCount++;
@@ -139,11 +153,16 @@ public class ResearchScanService {
                             "Instrument scan failed; remaining universe continued");
                 }
             }
-            if (diagnosticCount == 0) {
+            if (diagnosticCount == 0 && incompleteHistoryCount == 0) {
                 scans.finishRun(runId, scannedCount, candidateCount);
-            } else {
+            } else if (diagnosticCount > 0) {
                 scans.partialRun(runId, scannedCount, candidateCount, "PARTIAL_SCAN",
-                        diagnosticCount + " instrument(s) failed during scan");
+                        diagnosticCount + " instrument(s) failed during scan"
+                        + (incompleteHistoryCount == 0 ? ""
+                            : "; " + incompleteHistoryCount + " instrument(s) lack full candle history"));
+            } else {
+                scans.partialRun(runId, scannedCount, candidateCount, "INCOMPLETE_HISTORY_COVERAGE",
+                        incompleteHistoryCount + " instrument(s) lack the 64-candle research window");
             }
         } catch (RuntimeException e) {
             scans.saveDiagnostic(runId, null, null, "ERROR", "SCAN_FAILED",
