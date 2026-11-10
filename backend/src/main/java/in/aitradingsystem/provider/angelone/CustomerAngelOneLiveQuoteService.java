@@ -428,7 +428,8 @@ public class CustomerAngelOneLiveQuoteService {
         }
     }
 
-    private void heartbeat() {
+    /** Package-visible for deterministic socket/heartbeat contract tests. */
+    void heartbeat() {
         try {
             Instant now = clock.instant();
             for (Map.Entry<UUID, Feed> entry : feeds.entrySet()) {
