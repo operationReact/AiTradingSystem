@@ -177,6 +177,9 @@ public class CustomerAngelOneLiveQuoteService {
     private List<LiveQuote> snapshotShard(UUID user, int shard,
             List<Instrument> instruments, boolean allowPersonalOwnerSharing) {
         Instant now = clock.instant();
+        // Cache the session boundary per request; a 3000-stock batch must
+        // not issue 3000 holiday/session lookups through PostgreSQL.
+        Instant[] sessionOpenMemo = new Instant[1];
         if (!calendar.isInsideCashSession(now)) {
             disconnect(user);
             return instruments.stream().map(i -> empty(i, "MARKET_CLOSED")).toList();
@@ -193,7 +196,7 @@ public class CustomerAngelOneLiveQuoteService {
         if (ownerFeed != null && ownerFeed.state == State.OPEN) {
             for (Instrument instrument : eligible) {
                 boolean watched = watch(ownerFeed, instrument);
-                results.put(instrument.id(), watched ? read(ownerFeed, instrument, now)
+                results.put(instrument.id(), watched ? read(ownerFeed, instrument, now, sessionOpenMemo)
                     : empty(instrument, "UNAVAILABLE"));
             }
             return ordered(instruments, results);
@@ -209,7 +212,7 @@ public class CustomerAngelOneLiveQuoteService {
         Feed feed = feedFor(new FeedKey(user, shard), credentials, now, eligible);
         for (Instrument instrument : eligible) {
             boolean watched = feed != null && watch(feed, instrument);
-            results.put(instrument.id(), watched ? read(feed, instrument, now)
+            results.put(instrument.id(), watched ? read(feed, instrument, now, sessionOpenMemo)
                 : empty(instrument, "UNAVAILABLE"));
         }
         return ordered(instruments, results);
@@ -225,7 +228,8 @@ public class CustomerAngelOneLiveQuoteService {
                 instrument.tradingSymbol(), null, null, null, status, null);
     }
 
-    private LiveQuote read(Feed feed, Instrument instrument, Instant now) {
+    private LiveQuote read(Feed feed, Instrument instrument, Instant now,
+            Instant[] sessionOpenMemo) {
         if (feed.state == State.CLOSED) return empty(instrument, "RECONNECTING");
         Watch watch = feed.watches.get(key(venue(instrument), instrument.symbolToken()));
         Tick tick = watch == null ? null : watch.latest;
@@ -233,7 +237,11 @@ public class CustomerAngelOneLiveQuoteService {
         // SmartAPI LTP frames arrive only on trades, so a quiet stock legitimately has an
         // older last trade. Such a price stays valid for the rest of the session; a tick
         // from a previous session is not.
-        Instant sessionOpen = sessionOpen(now);
+        Instant sessionOpen = sessionOpenMemo[0];
+        if (sessionOpen == null) {
+            sessionOpen = sessionOpen(now);
+            sessionOpenMemo[0] = sessionOpen;
+        }
         if (tick.exchangeAt.isAfter(now.plus(FUTURE_SKEW))
                 || tick.exchangeAt.isBefore(sessionOpen)
                 || Duration.between(feed.lastHeartbeat, now).compareTo(MAX_CONNECTION_IDLE) > 0) {
