@@ -18,6 +18,7 @@ test "$(stat -c %a "$root/.env")" = 600
 grep -Fq 'MINTTICK_ANGEL_ONE_OWNER_SUB:' "$root/paper-compose.yml"
 grep -Fq 'MARKET_DATA_LAMBDA_FUNCTION_NAME:' "$root/paper-compose.yml"
 grep -Fq 'TRADING_MODE: PAPER' "$root/paper-compose.yml"
+grep -Fq 'OWNER_FEED_ENABLED:' "$root/paper-compose.yml"
 
 # Invoke the *private IAM-only* Lambda with no broker input or credentials.
 # Stop before changing configuration if the SSM feed or IAM is unavailable.
@@ -46,11 +47,14 @@ cp -p "$root/.env" "$work/old-compose-env"
 for file in runtime.env .env; do
   old="$root/$file"
   temp="$(mktemp "$root/.owner-feed.XXXXXXXX")"
-  grep -Ev '^(MARKET_DATA_PROVIDER|MARKET_DATA_LAMBDA_FUNCTION_NAME|MINTTICK_ANGEL_ONE_OWNER_SUB)=' "$old" > "$temp" || true
+  grep -Ev '^(MARKET_DATA_PROVIDER|MARKET_DATA_LAMBDA_FUNCTION_NAME|MINTTICK_ANGEL_ONE_OWNER_SUB|OWNER_FEED_ENABLED)=' "$old" > "$temp" || true
   {
     printf 'MARKET_DATA_PROVIDER=ANGEL_ONE_LAMBDA\n'
     printf 'MARKET_DATA_LAMBDA_FUNCTION_NAME=minttick-dev-angelone-feed\n'
     printf 'MINTTICK_ANGEL_ONE_OWNER_SUB=%s\n' "$owner"
+    # Only the privately authorized PAPER EC2 opts into an independent
+    # collector. Never change the default for production/customer releases.
+    printf 'OWNER_FEED_ENABLED=true\n'
   } >> "$temp"
   chmod 0600 "$temp"
   install -o root -g root -m 0600 "$temp" "$old"
@@ -69,10 +73,16 @@ fi
 
 for i in $(seq 1 35); do
   if curl --silent --fail --max-time 4 http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
-    auth="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 4 http://127.0.0.1:8080/api/customer/market-data/quotes?instrumentId=1 || true)"
+    auth="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 4 'http://127.0.0.1:8080/api/customer/market-data/quotes?instrumentId=1' || true)"
     if [[ "$auth" == 401 || "$auth" == 403 ]]; then
-      echo 'PASS: verified private owner market feed mode and JWT gate; no live order permission'
-      exit 0
+      # Confirm real backend runtime settings, not just an edited host file.
+      backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
+      if [[ -n "$backend" ]] &&
+         docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
+           grep -qx 'OWNER_FEED_ENABLED=true'; then
+        echo 'PASS: private owner feed, autonomous session warmer and JWT gate verified; no live orders'
+        exit 0
+      fi
     fi
   fi
   sleep 3
