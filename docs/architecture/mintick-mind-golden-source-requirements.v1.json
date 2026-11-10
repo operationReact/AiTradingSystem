@@ -1,5 +1,5 @@
 {
-  "contract_version": "mintick.mind.golden-source-requirements.v1",
+  "contract_version": "minttick.mind.golden-source-requirements.v1",
   "source_of_truth": "Flutter MintickMindScreens.all / MindFixtures.models and strategy catalog, repository dev",
   "provenance": "Code-audited requirements only; proposed fields are NOT a claim that commercial data is acquired, model is deployed or backend has records",
   "global_invariants": [
