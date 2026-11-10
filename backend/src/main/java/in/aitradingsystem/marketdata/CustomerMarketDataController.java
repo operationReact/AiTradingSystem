@@ -59,6 +59,7 @@ public class CustomerMarketDataController {
     private final MarketOverviewService marketOverview;
     private final MarketLastTickStore lastTickStore;
     private final MarketDetailSnapshotStore detailStore;
+    private final MarketSessionCalendar cashCalendar;
 
     /** Existing five-argument constructor retained for deterministic owner-only unit tests. */
     CustomerMarketDataController(CustomerIdentityStore identities,
@@ -105,6 +106,21 @@ public class CustomerMarketDataController {
             customerBroker, liveQuotes, applicationFeed, marketOverview, lastTickStore, null);
     }
 
+    CustomerMarketDataController(CustomerIdentityStore identities,
+            InstrumentMasterService instruments, MarketDataProvider market,
+            String ownerSubject,
+            String providerMode,
+            CustomerAngelOneSessionService customerBroker,
+            CustomerAngelOneLiveQuoteService liveQuotes,
+            AppAngelOneMarketFeedService applicationFeed,
+            MarketOverviewService marketOverview,
+            MarketLastTickStore lastTickStore,
+            MarketDetailSnapshotStore detailStore) {
+        this(identities, instruments, market, ownerSubject, providerMode,
+            customerBroker, liveQuotes, applicationFeed, marketOverview, lastTickStore, detailStore, null);
+    }
+
+
     @Autowired
     public CustomerMarketDataController(CustomerIdentityStore identities,
             InstrumentMasterService instruments, MarketDataProvider market,
@@ -115,7 +131,8 @@ public class CustomerMarketDataController {
             AppAngelOneMarketFeedService applicationFeed,
             MarketOverviewService marketOverview,
             MarketLastTickStore lastTickStore,
-            MarketDetailSnapshotStore detailStore) {
+            MarketDetailSnapshotStore detailStore,
+            MarketSessionCalendar cashCalendar) {
         this.identities = identities;
         this.instruments = instruments;
         this.market = market;
@@ -127,6 +144,7 @@ public class CustomerMarketDataController {
         this.marketOverview = marketOverview;
         this.lastTickStore = lastTickStore;
         this.detailStore = detailStore;
+        this.cashCalendar = cashCalendar;
     }
 
 
@@ -259,6 +277,12 @@ public class CustomerMarketDataController {
         if (applicationFeed != null && applicationFeed.available()) {
             try {
                 var detail = applicationFeed.detail(instrument);
+                // Off-hours FULL quotes can carry a holiday fetch date, not an exchange trade.
+                if (!validStoredExchangeTime(detail.exchangeAt())) {
+                    return noStore(storedDetail(instrument.id()).orElseThrow(() ->
+                        new MarketDataException("QUOTE_DETAIL_OUTSIDE_SESSION",
+                            "No verified trading-session detail is available")));
+                }
                 DetailQuote live = new DetailQuote(instrument.id(), instrument.exchange(),
                     instrument.tradingSymbol(), detail.ltp(), detail.open(), detail.high(), detail.low(),
                     detail.previousClose(), detail.volume(), detail.exchangeAt(), Instant.now(),
@@ -278,7 +302,12 @@ public class CustomerMarketDataController {
     private Optional<DetailQuote> storedDetail(long instrumentId) {
         if (detailStore == null) return Optional.empty();
         try {
-            return detailStore.load(instrumentId).map(DetailQuote::asStored);
+            return detailStore.load(instrumentId)
+                .filter(detail -> ("ANGEL_ONE_SMARTAPI_FULL_APP".equals(detail.source())
+                        || "STORED_LAST_DETAIL".equals(detail.source()))
+                    && detail.ltp() != null && detail.ltp().signum() > 0
+                    && validStoredExchangeTime(detail.exchangeAt()))
+                .map(DetailQuote::asStored);
         } catch (DataAccessException | IllegalStateException ex) {
             return Optional.empty();
         }
@@ -378,7 +407,7 @@ public class CustomerMarketDataController {
      * A closed-market row carries the last stored LIVE tick as LAST_CLOSE, labelled stored and
      * never as LIVE. The change is null until a previous session close has been stored.
      */
-    private static SnapshotRow snapshotRow(Instrument instrument,
+    private SnapshotRow snapshotRow(Instrument instrument,
             CustomerAngelOneLiveQuoteService.LiveQuote reply, MarketLastTickStore.LastTick lastTick) {
         boolean matches = reply != null && reply.instrumentId() == instrument.id()
             && instrument.exchange().equals(reply.exchange())
@@ -395,7 +424,9 @@ public class CustomerMarketDataController {
             return new SnapshotRow(instrument.id(), instrument.exchange(),
                 instrument.tradingSymbol(), reply.ltp(), reply.exchangeAt(), "LIVE", reply.source(), null);
         }
-        if ("MARKET_CLOSED".equals(reply.status()) && lastTick != null) {
+        if ("MARKET_CLOSED".equals(reply.status()) && lastTick != null
+                && lastTick.ltp() != null && lastTick.ltp().signum() > 0
+                && validStoredExchangeTime(lastTick.exchangeAt())) {
             return new SnapshotRow(instrument.id(), instrument.exchange(),
                 instrument.tradingSymbol(), lastTick.ltp(), lastTick.exchangeAt(), "LAST_CLOSE",
                 "STORED_LAST_LIVE_TICK", lastTick.changePercent());
@@ -440,7 +471,7 @@ public class CustomerMarketDataController {
 
     private SnapshotRow storedSnapshotRow(Instrument stock, MarketLastTickStore.LastTick tick) {
         if (tick != null && tick.ltp() != null && tick.ltp().signum() > 0
-                && tick.exchangeAt() != null && !tick.exchangeAt().isAfter(Instant.now())) {
+                && validStoredExchangeTime(tick.exchangeAt())) {
             return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
                 tick.ltp(), tick.exchangeAt(), "LAST_CLOSE", "STORED_LAST_LIVE_TICK",
                 tick.changePercent());
@@ -456,8 +487,7 @@ public class CustomerMarketDataController {
                 && stock.tradingSymbol().equals(detail.tradingSymbol());
             if (sameInstrument && "STORED_LAST_DETAIL".equals(detail.source())
                     && detail.ltp() != null && detail.ltp().signum() > 0
-                    && detail.exchangeAt() != null
-                    && !detail.exchangeAt().isAfter(Instant.now())) {
+                    && validStoredExchangeTime(detail.exchangeAt())) {
                 BigDecimal change = detail.previousClose() == null
                         || detail.previousClose().signum() <= 0 ? null
                     : detail.ltp().subtract(detail.previousClose())
@@ -469,6 +499,19 @@ public class CustomerMarketDataController {
         }
         return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
             null, null, "UNAVAILABLE", null, null);
+    }
+
+    /** Only a real cash-session exchange timestamp qualifies for a saved fallback. */
+    private boolean validStoredExchangeTime(Instant exchangeAt) {
+        if (exchangeAt == null || exchangeAt.isAfter(Instant.now())) return false;
+        // The running Spring application always injects the trading calendar.
+        // Null is retained only for historical isolated constructor fixtures.
+        if (cashCalendar == null) return true;
+        try {
+            return cashCalendar.isInsideCashSession(exchangeAt);
+        } catch (DataAccessException ex) {
+            return false;
+        }
     }
 
     private static Instrument requireCashEquity(Instrument instrument) {
