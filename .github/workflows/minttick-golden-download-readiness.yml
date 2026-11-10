@@ -1,0 +1,150 @@
+name: MintTick - Golden Source licensed download runtime prerequisite audit
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/golden_download_runtime_preflight.py'
+      - 'scripts/tests/test_golden_download_runtime_preflight.py'
+      - 'docs/architecture/minttick-golden-real-download-runtime-preflight.md'
+      - '.github/workflows/minttick-golden-download-readiness.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/golden-download-readiness.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Read-only Golden Source inspection contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline contract and bounded status-only output tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/golden_download_runtime_preflight.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_golden_download_runtime_preflight.py -v
+
+  inspect-existing:
+    name: Existing private EC2 data licence and archive prerequisites
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file, no-data request on latest dev
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/golden-download-readiness.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('infra/ec2-paper/requests/golden-download-readiness.json').read_text())
+          assert d == {
+              'application':'MintTick',
+              'account':'098859530205',
+              'region':'ap-south-1',
+              'instance_id':'i-09c01b470fb39b85a',
+              'operation':'read-only-golden-download-preflight',
+              'scope':'20-year-all-stock-readiness',
+              'store_market_data':False,
+              'enable_trading':False,
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-golden-audit-${{ github.run_id }}
+      - name: Verify known existing account, host, running state and SSM identity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Inspect aggregate rights and storage prerequisites; no historical downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          source=Path('infra/ec2-paper/golden_download_runtime_preflight.py').read_bytes()
+          assert len(source)<24000
+          cmd="printf '%s' '"+base64.b64encode(source).decode()+"' | base64 -d | python3 -"
+          filename=Path(os.environ['RUNNER_TEMP'])/'golden-readiness-command.json'
+          filename.write_text(json.dumps({'commands':[cmd]}))
+          filename.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID" \
+            --timeout-seconds 150 --parameters "file://$RUNNER_TEMP/golden-readiness-command.json" \
+            --comment 'MintTick Golden Source read-only readiness counts; no download' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/golden-readiness-command.json"
+          for attempt in $(seq 1 26); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/golden-readiness-response.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              z=json.loads((Path(os.environ['RUNNER_TEMP'])/'golden-readiness-response.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING');raise SystemExit
+          if z.get('Status') not in ('Success','Failed','TimedOut','Cancelled'):
+              print('PENDING');raise SystemExit
+          stdout=z.get('StandardOutputContent') or ''
+          matches=[]
+          allow=r'GOLDEN_(?:DATABASE|TABLE_[A-Z_]+|COUNT_[A-Z_]+|LEGAL_AGREEMENT_INDEPENDENTLY_VERIFIED|STORAGE_BUCKET_KMS_VERSIONED_CONFIRMED|BULK_DOWNLOAD_EXECUTED): (?:[0-9]{1,9}|AVAILABLE|UNAVAILABLE|PRESENT|MISSING_OR_UNAVAILABLE|NOT_DETERMINED|NO)'
+          for line in stdout.splitlines():
+              if len(line)<=125 and re.fullmatch(allow,line):
+                  matches.append(line)
+          if z.get('Status')=='Success' and any(x.startswith('GOLDEN_DATABASE:') for x in matches):
+              for line in matches: print(line)
+              print('RESULT_OK')
+          else:
+              print('GOLDEN_RUNTIME_INSPECTION: UNAVAILABLE')
+              print('RESULT_FAILED')
+          PY
+          )"
+            if [[ "$result" == *$'\nRESULT_OK' ]]; then
+              printf '%s\n' "${result%$'\nRESULT_OK'}"
+              echo 'Private read-only source readiness audited; no market data fetched'
+              exit 0
+            fi
+            if [[ "$result" == *$'\nRESULT_FAILED' ]]; then
+              printf '%s\n' "$result"
+              exit 2
+            fi
+            sleep 5
+          done
+          echo 'Readiness audit timed out without publishing any sensitive details'
+          exit 2
+
+# Never authorizes commercial data rights, downloads price rows, provisions
+# paid AWS resources, enables background collection or places broker orders.
