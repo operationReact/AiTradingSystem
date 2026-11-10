@@ -32,9 +32,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/probe_market_runtime.py').read_text()
-          assert len(s) < 10000
+          assert len(s) < 12500
           assert 'market_overview_snapshot' in s
           assert 'market_last_tick' in s
+          assert 'market_candle' in s
+          assert 'OWNER_HISTORY_BACKFILL_ENABLED' in s
+          assert s.count('def history_coverage(postgres):') == 1
           assert 'MARKET_CONTAINER_IMDS:' in s
           assert 'MARKET_NETWORK_HEADERS:' in s
           for prohibited in ['--with-decryption','placeOrder','get-parameters','jwtToken','feedToken','print(settings)', 'print(values)']:
@@ -140,6 +143,7 @@ jobs:
             'MARKET_CONTAINER_IMDS':{'AVAILABLE','UNAVAILABLE'},
             'MARKET_APP_STREAM':{'ENABLED','DISABLED','UNKNOWN'},
             'MARKET_OWNER_WARMER':{'ENABLED','DISABLED','UNKNOWN'},
+            'MARKET_HISTORY_COLLECTOR':{'ENABLED','DISABLED','UNKNOWN'},
             'MARKET_NETWORK_HEADERS':{'CONFIGURED','MISSING','UNKNOWN'},
             'MARKET_PROVIDER_MODE':{'ANGEL_ONE','ANGEL_ONE_LAMBDA','OTHER','UNKNOWN'},
             'MARKET_LAST_TICKS':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
@@ -148,6 +152,9 @@ jobs:
             'MARKET_EQUITY_CATALOGUE_COUNT':{'UNAVAILABLE'},
             'MARKET_EQUITY_SAVED_TICK_COUNT':{'UNAVAILABLE'},
             'MARKET_EQUITY_SAVED_DETAIL_COUNT':{'UNAVAILABLE'},
+            'MARKET_HISTORY_COVERED_64':{'UNAVAILABLE'},
+            'MARKET_HISTORY_INCOMPLETE':{'UNAVAILABLE'},
+            'MARKET_HISTORY_EMPTY':{'UNAVAILABLE'},
             'MARKET_OVERVIEW_SOURCE':{'ANGEL_ONE_BULK','OTHER','EMPTY','UNAVAILABLE'},
             'MARKET_OVERVIEW_GENERATED_UTC':{'UNKNOWN'},
             'MARKET_OVERVIEW_EXCHANGE_DATE':{'UNKNOWN'},
@@ -166,7 +173,9 @@ jobs:
                   r'[0-9]{4}-[0-9]{2}-[0-9]{2}', value):
                   hits[key]=value
               elif key in ('MARKET_EQUITY_CATALOGUE_COUNT','MARKET_EQUITY_SAVED_TICK_COUNT',
-                           'MARKET_EQUITY_SAVED_DETAIL_COUNT') and re.fullmatch(r'[0-9]{1,6}', value):
+                           'MARKET_EQUITY_SAVED_DETAIL_COUNT',
+                           'MARKET_HISTORY_COVERED_64','MARKET_HISTORY_INCOMPLETE',
+                           'MARKET_HISTORY_EMPTY') and re.fullmatch(r'[0-9]{1,6}', value):
                   hits[key]=value
           for key in sorted(hits): print(key+': '+hits[key])
           status=data.get('Status')

@@ -130,6 +130,46 @@ def equity_coverage(postgres):
         return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
     return tuple(fields)
 
+
+def history_coverage(postgres):
+    """64-bar historical coverage in last 14 completed IST calendar days; counts only."""
+    if postgres is None:
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    sql = """
+    SELECT COUNT(*) FILTER (WHERE bars.n >= 64),
+           COUNT(*) FILTER (WHERE bars.n < 64),
+           COUNT(*) FILTER (WHERE bars.n = 0)
+    FROM instrument_master i
+    JOIN instrument_catalogue_state s
+      ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+    CROSS JOIN LATERAL (
+      SELECT COUNT(*) AS n FROM (
+        SELECT m.candle_time
+        FROM market_candle m
+        WHERE m.exchange = i.exchange
+          AND m.symbol_token = i.symbol_token
+          AND m.interval = 'FIVE_MINUTE'
+          AND m.candle_time >=
+            (((now() AT TIME ZONE 'Asia/Kolkata')::date - interval '14 days')
+              AT TIME ZONE 'Asia/Kolkata')
+          AND m.candle_time <
+            (((now() AT TIME ZONE 'Asia/Kolkata')::date)
+              AT TIME ZONE 'Asia/Kolkata')
+        ORDER BY m.candle_time DESC LIMIT 64
+      ) latest
+    ) bars
+    WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
+      AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+    """
+    result = run(["docker", "exec", postgres, "psql", "-U", "aitrading",
+                  "-d", "aitrading", "-tA", "-F", "|", "-c", sql], 25)
+    if result is None or result.returncode:
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    fields = result.stdout.strip().split("|")
+    if len(fields) != 3 or any(not re.fullmatch(r"[0-9]{1,6}", v) for v in fields):
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    return tuple(fields)
+
 def main():
     backend = container("backend")
     postgres = container("postgres")
@@ -140,6 +180,7 @@ def main():
         print("MARKET_CONTAINER_IMDS: UNAVAILABLE")
         print("MARKET_APP_STREAM: UNKNOWN")
         print("MARKET_OWNER_WARMER: UNKNOWN")
+        print("MARKET_HISTORY_COLLECTOR: UNKNOWN")
         print("MARKET_NETWORK_HEADERS: UNKNOWN")
         print("MARKET_PROVIDER_MODE: UNKNOWN")
     else:
@@ -158,7 +199,8 @@ def main():
                 if isinstance(item, str) and "=" in item:
                     k, v = item.split("=", 1)
                     if k in ("MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED",
-                             "OWNER_FEED_ENABLED", "ANGELONE_CLIENT_MAC_ADDRESS",
+                             "OWNER_FEED_ENABLED", "OWNER_HISTORY_BACKFILL_ENABLED",
+                             "ANGELONE_CLIENT_MAC_ADDRESS",
                              "MARKET_DATA_PROVIDER"):
                         settings[k] = v
         except (ValueError, TypeError):
@@ -167,6 +209,9 @@ def main():
               ("ENABLED" if settings.get("MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED") == "true" else "DISABLED"))
         print("MARKET_OWNER_WARMER: " +
               ("ENABLED" if settings.get("OWNER_FEED_ENABLED") == "true" else "DISABLED"))
+        print("MARKET_HISTORY_COLLECTOR: " +
+              ("ENABLED" if settings.get("OWNER_FEED_ENABLED") == "true"
+               and settings.get("OWNER_HISTORY_BACKFILL_ENABLED") == "true" else "DISABLED"))
         print("MARKET_NETWORK_HEADERS: " +
               ("CONFIGURED" if bool(re.fullmatch(
                   r"(?:[0-9a-f]{2}:){5}[0-9a-f]{2}",
@@ -187,6 +232,10 @@ def main():
     print("MARKET_EQUITY_CATALOGUE_COUNT: " + catalogue)
     print("MARKET_EQUITY_SAVED_TICK_COUNT: " + ticks)
     print("MARKET_EQUITY_SAVED_DETAIL_COUNT: " + details)
+    covered, incomplete, empty = history_coverage(postgres)
+    print("MARKET_HISTORY_COVERED_64: " + covered)
+    print("MARKET_HISTORY_INCOMPLETE: " + incomplete)
+    print("MARKET_HISTORY_EMPTY: " + empty)
 
 
 if __name__ == "__main__":
