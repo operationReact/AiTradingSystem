@@ -94,9 +94,9 @@ class MindProspectiveEvidenceCompletenessServiceTest {
         given(cohort(10, 20), signals(550, 30, false), outcomes(30, 30));
         var value = service().inspect();
         assertEquals("RESEARCH_ACCOUNTING_COMPLETE_NOT_VALIDATED", value.status());
-        assertEquals(11000, value.expectedSignalWindowsAtMaturity());
+        assertEquals(11000, value.expectedSignalWindowsAtMaturity().intValue());
         assertEquals(11000, value.recordedSignalWindows());
-        assertEquals(0, value.missingSignalWindows());
+        assertEquals(0, value.missingSignalWindows().intValue());
         assertEquals(30, value.precommittedCandidates());
         assertEquals(0, value.pendingOutcomes());
         assertEquals("ABSTAIN", value.decisionPosture());
@@ -125,7 +125,7 @@ class MindProspectiveEvidenceCompletenessServiceTest {
         var value = service().inspect();
         assertEquals("SIGNAL_RECEIPT_WINDOWS_INCOMPLETE", value.status());
         assertEquals(10999, value.recordedSignalWindows());
-        assertEquals(1, value.missingSignalWindows());
+        assertEquals(1, value.missingSignalWindows().intValue());
         assertTrue(value.blockers().contains(
             "PROSPECTIVE_NO_SIGNAL_OR_CANDIDATE_WINDOWS_MISSING"));
     }
