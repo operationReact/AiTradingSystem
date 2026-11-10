@@ -473,6 +473,13 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         self.assertNotIn("09:15",report)
         self.assertNotIn("2885",report)
 
+    def test_catalogue_skips_nse_test_symbols_without_rejecting_real_numeric_prefix(self):
+        from types import SimpleNamespace
+        data = "011NSETEST-EQ|14747\n360ONE-EQ|13061\nRELIANCE-EQ|2885\n"
+        with patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=data)):
+            self.assertEqual(f("select_catalogue_symbols")(),
+                             [("360ONE-EQ", "13061"), ("RELIANCE-EQ", "2885")])
+
     def test_invalid_current_nse_catalogue_and_token_collisions_block(self):
         class Proc:
             returncode=0
