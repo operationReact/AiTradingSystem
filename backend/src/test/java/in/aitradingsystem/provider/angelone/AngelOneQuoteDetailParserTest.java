@@ -135,7 +135,7 @@ class AngelOneQuoteDetailParserTest {
         // They must still carry a true, nonfuture exchange timestamp and OHLC.
         String index = row("NSE", "Nifty 50", "99926000", "02-Nov-2026 15:29:59",
                 "24000", "23950", "24100", "23900", "23980", 0)
-                .replace(",\\"tradeVolume\\":0", "");
+                .replace(",\"tradeVolume\":0", "");
         var expected = java.util.List.of(
             new AngelOneQuoteDetailParser.Expected("99926000", null));
         var valid = AngelOneQuoteDetailParser.parseBatch(data(index), expected, AVAILABLE_AT);
@@ -149,7 +149,7 @@ class AngelOneQuoteDetailParserTest {
             expected, AVAILABLE_AT);
         assertThat(invalid).isEmpty();
         var negative = AngelOneQuoteDetailParser.parseBatch(
-            data(index.replace("}", ",\\"tradeVolume\\":-1}")),
+            data(index.replace("}", ",\"tradeVolume\":-1}")),
             expected, AVAILABLE_AT);
         assertThat(negative).isEmpty();
     }
@@ -158,7 +158,7 @@ class AngelOneQuoteDetailParserTest {
     void equityFullQuoteMissingVolumeIsStillRejected() throws Exception {
         String equity = row("NSE", "INFY-EQ", "1594", "02-Nov-2026 15:29:59",
                 "1500", "1480", "1510", "1475", "1490", 0)
-                .replace(",\\"tradeVolume\\":0", "");
+                .replace(",\"tradeVolume\":0", "");
         var parsed = AngelOneQuoteDetailParser.parseBatch(data(equity),
             java.util.List.of(new AngelOneQuoteDetailParser.Expected("1594", "INFY-EQ")),
             AVAILABLE_AT);
