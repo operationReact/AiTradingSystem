@@ -48,16 +48,19 @@ public class CustomerAngelOneLiveQuoteService {
     private static final Duration FUTURE_SKEW = Duration.ofSeconds(2);
     private static final Duration RECONNECT_BACKOFF = Duration.ofSeconds(5);
     private static final Duration MAX_CONNECTION_IDLE = Duration.ofSeconds(45);
-    private static final int MAX_CUSTOMER_CONNECTIONS = 3;
-    /** SmartAPI accepts at most 50 tokens per subscription request. */
-    static final int MAX_WATCHED_PER_FEED = 50;
+    /** WebSocket V2: 1000 LTP subscriptions per connection, up to 3 per client.
+     * REST FULL quotes have a separate 50-token-per-request limit.
+     */
+    static final int MAX_WATCHED_PER_FEED = 1000;
+    static final int MAX_WEBSOCKETS_PER_CLIENT = 3;
     private static final int FRAME_LENGTH = 51;
 
     private final CustomerAngelOneSessionService sessions;
     private final MarketSessionCalendar calendar;
     private final HttpClient client;
     private final Clock clock;
-    private final ConcurrentHashMap<UUID, Feed> feeds = new ConcurrentHashMap<>();
+    private record FeedKey(UUID user, int shard) {}
+    private final ConcurrentHashMap<FeedKey, Feed> feeds = new ConcurrentHashMap<>();
     private final ScheduledExecutorService heartbeats = Executors.newSingleThreadScheduledExecutor(r -> {
         Thread thread = new Thread(r, "minttick-private-readonly-heartbeats");
         thread.setDaemon(true);
@@ -89,7 +92,7 @@ public class CustomerAngelOneLiveQuoteService {
         this.calendar = calendar;
         this.client = client;
         this.clock = clock;
-        // A misconfigured env var must not exceed the one-request V2 watch budget.
+        // Enforce the per-WebSocket subscription quota, not the REST quote batch size.
         this.watchCap = boundedWatchCap(watchCap);
         this.ownerUser = ownerUser;
         heartbeats.scheduleAtFixedRate(this::heartbeat, 10, 10, TimeUnit.SECONDS);
@@ -108,8 +111,28 @@ public class CustomerAngelOneLiveQuoteService {
         return snapshot(user, List.of(instrument)).get(0);
     }
 
-    /** One result per requested instrument, in request order. Only LIVE carries a price. */
+    /** Personal broker reads stay on one socket. */
     public List<LiveQuote> snapshot(UUID user, List<Instrument> instruments) {
+        return snapshotShard(user, 0, instruments);
+    }
+
+    /** Private application feed may use three independently subscribed shards.
+     * Any overflow is UNAVAILABLE, never fabricated LIVE coverage.
+     */
+    List<LiveQuote> snapshotApplication(UUID user, List<Instrument> instruments) {
+        List<LiveQuote> result = new ArrayList<>(instruments.size());
+        int maximum = MAX_WEBSOCKETS_PER_CLIENT * watchCap;
+        for (int from = 0; from < instruments.size() && from < maximum; from += watchCap) {
+            int to = Math.min(from + watchCap, Math.min(instruments.size(), maximum));
+            result.addAll(snapshotShard(user, from / watchCap, instruments.subList(from, to)));
+        }
+        for (int i = maximum; i < instruments.size(); i++) {
+            result.add(empty(instruments.get(i), "UNAVAILABLE"));
+        }
+        return List.copyOf(result);
+    }
+
+    private List<LiveQuote> snapshotShard(UUID user, int shard, List<Instrument> instruments) {
         Instant now = clock.instant();
         if (!calendar.isInsideCashSession(now)) {
             disconnect(user);
@@ -122,7 +145,8 @@ public class CustomerAngelOneLiveQuoteService {
             else results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
         }
         if (eligible.isEmpty()) return ordered(instruments, results);
-        Feed ownerFeed = ownerUser == null || ownerUser.equals(user) ? null : feeds.get(ownerUser);
+        Feed ownerFeed = ownerUser == null || ownerUser.equals(user)
+            ? null : feeds.get(new FeedKey(ownerUser, 0));
         if (ownerFeed != null && ownerFeed.state == State.OPEN) {
             for (Instrument instrument : eligible) {
                 boolean watched = watch(ownerFeed, instrument);
@@ -139,7 +163,7 @@ public class CustomerAngelOneLiveQuoteService {
             }
             return ordered(instruments, results);
         }
-        Feed feed = feedFor(user, credentials, now);
+        Feed feed = feedFor(new FeedKey(user, shard), credentials, now, eligible);
         for (Instrument instrument : eligible) {
             boolean watched = feed != null && watch(feed, instrument);
             results.put(instrument.id(), watched ? read(feed, instrument, now)
@@ -177,24 +201,37 @@ public class CustomerAngelOneLiveQuoteService {
                 tick.receivedAt, "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2");
     }
 
-    private Feed feedFor(UUID user, CustomerAngelOneSessionService.StreamCredentials credentials,
-            Instant now) {
-        Feed feed = feeds.get(user);
+    private synchronized Feed feedFor(FeedKey key,
+            CustomerAngelOneSessionService.StreamCredentials credentials,
+            Instant now, List<Instrument> requested) {
+        Feed feed = feeds.get(key);
         if (feed != null && !feed.credentials.jwt().equals(credentials.jwt())) {
-            disconnect(user);
+            disconnect(key);
             feed = null;
         }
         if (feed != null && feed.state == State.CLOSED
                 && Duration.between(feed.startedAt, now).compareTo(RECONNECT_BACKOFF) >= 0) {
-            disconnect(user);
+            disconnect(key);
             feed = null;
         }
         if (feed != null) return feed;
-        if (feeds.size() >= MAX_CUSTOMER_CONNECTIONS) return null;
+        // Quota is per Angel One client code, not all MintTick accounts combined.
+        long sameAccount = feeds.values().stream()
+            .filter(f -> f.credentials.clientCode().equals(credentials.clientCode())).count();
+        if (sameAccount >= MAX_WEBSOCKETS_PER_CLIENT) return null;
         Feed candidate = new Feed(credentials, now);
-        Feed existing = feeds.putIfAbsent(user, candidate);
+        // Populate the bounded shard before socket onOpen so subscriptions are
+        // sent in one batched control message, not 1000 individual messages.
+        for (Instrument instrument : requested) {
+            if (eligible(instrument) && candidate.watches.size() < watchCap) {
+                candidate.watches.putIfAbsent(
+                    key(venue(instrument), instrument.symbolToken()),
+                    new Watch(instrument, venue(instrument)));
+            }
+        }
+        Feed existing = feeds.putIfAbsent(key, candidate);
         if (existing != null) return existing;
-        start(user, candidate);
+        start(key, candidate);
         return candidate;
     }
 
@@ -215,7 +252,7 @@ public class CustomerAngelOneLiveQuoteService {
         }
     }
 
-    private void start(UUID user, Feed feed) {
+    private void start(FeedKey key, Feed feed) {
         try {
             // Broker authentication is transmitted only in TLS WebSocket headers
             // from the backend, never as query params or client payload.
@@ -224,9 +261,9 @@ public class CustomerAngelOneLiveQuoteService {
                     .header("x-api-key", feed.credentials.apiKey())
                     .header("x-client-code", feed.credentials.clientCode())
                     .header("x-feed-token", feed.credentials.feedToken())
-                    .buildAsync(BROKER, new Listener(user, feed))
+                    .buildAsync(BROKER, new Listener(key, feed))
                     .whenComplete((ws, error) -> {
-                        if (error != null || feeds.get(user) != feed) {
+                        if (error != null || feeds.get(key) != feed) {
                             closeFeed(feed);
                             if (ws != null) ws.abort();
                         } else {
@@ -239,14 +276,14 @@ public class CustomerAngelOneLiveQuoteService {
     }
 
     private final class Listener implements WebSocket.Listener {
-        private final UUID user;
+        private final FeedKey key;
         private final Feed feed;
-        Listener(UUID user, Feed feed) {
-            this.user = user;
+        Listener(FeedKey key, Feed feed) {
+            this.key = key;
             this.feed = feed;
         }
         @Override public void onOpen(WebSocket ws) {
-            if (feeds.get(user) != feed) {
+            if (feeds.get(key) != feed) {
                 ws.abort();
                 return;
             }
@@ -267,7 +304,7 @@ public class CustomerAngelOneLiveQuoteService {
             ws.request(1);
         }
         @Override public CompletionStage<?> onBinary(WebSocket ws, ByteBuffer packet, boolean last) {
-            if (feeds.get(user) != feed) {
+            if (feeds.get(key) != feed) {
                 ws.abort();
                 return CompletableFuture.completedFuture(null);
             }
@@ -435,7 +472,7 @@ public class CustomerAngelOneLiveQuoteService {
             for (Map.Entry<UUID, Feed> entry : feeds.entrySet()) {
                 Feed feed = entry.getValue();
                 if (feed.state != State.OPEN || feed.socket == null) continue;
-                var latestCredentials = sessions.credentialsForStream(entry.getKey());
+                var latestCredentials = sessions.credentialsForStream(entry.getKey().user());
                 if (latestCredentials == null
                         || !latestCredentials.jwt().equals(feed.credentials.jwt())
                         || !feed.credentials.expiresAt().isAfter(now)) {
@@ -466,12 +503,17 @@ public class CustomerAngelOneLiveQuoteService {
         feed.watches.values().forEach(w -> w.latest = null);
     }
 
-    public void disconnect(UUID user) {
-        Feed old = feeds.remove(user);
+    private void disconnect(FeedKey key) {
+        Feed old = feeds.remove(key);
         if (old != null) {
             closeFeed(old);
             if (old.socket != null) old.socket.abort();
         }
+    }
+
+    public void disconnect(UUID user) {
+        feeds.keySet().stream().filter(key -> key.user().equals(user))
+            .toList().forEach(this::disconnect);
     }
 
     @PreDestroy public void close() {
