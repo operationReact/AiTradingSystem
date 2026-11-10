@@ -35,7 +35,7 @@ class MindProspectiveEvidenceCompletenessControllerTest {
 
         assertEquals(200, response.getStatusCode().value());
         assertEquals("no-store", response.getHeaders().getCacheControl());
-        assertEquals(1, response.getBody().missingSignalWindows());
+        assertEquals(1, response.getBody().missingSignalWindows().intValue());
         assertEquals("ABSTAIN", response.getBody().decisionPosture());
         assertFalse(response.getBody().outcomeValidated());
         assertFalse(response.getBody().paperOrderSubmitted());
