@@ -10,6 +10,7 @@ import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
 import '../data/mind_prospective_outcomes_repository.dart';
+import '../data/mind_prospective_evidence_completeness_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -92,6 +93,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.prospectiveRepository,
     this.prospectiveSignalsRepository,
     this.prospectiveOutcomesRepository,
+    this.prospectiveEvidenceCompletenessRepository,
     super.key,
   });
 
@@ -108,6 +110,8 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindProspectiveCohortRepository? prospectiveRepository;
   final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
   final MindProspectiveOutcomesRepository? prospectiveOutcomesRepository;
+  final MindProspectiveEvidenceCompletenessRepository?
+      prospectiveEvidenceCompletenessRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -230,7 +234,9 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
                     walkForwardRepository: widget.walkForwardRepository,
                     prospectiveRepository: widget.prospectiveRepository,
                     prospectiveSignalsRepository: widget.prospectiveSignalsRepository,
-                     prospectiveOutcomesRepository: widget.prospectiveOutcomesRepository,
+                    prospectiveOutcomesRepository: widget.prospectiveOutcomesRepository,
+                    prospectiveEvidenceCompletenessRepository:
+                        widget.prospectiveEvidenceCompletenessRepository,
                   )
                 : _screen()),
             if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),
