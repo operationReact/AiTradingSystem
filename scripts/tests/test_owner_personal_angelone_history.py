@@ -338,6 +338,32 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
                                    "COVERAGE_UNVERIFIED")
         self.assertEqual(selection(self.conn, catalogue), [])
 
+    def test_short_recovery_scans_each_day_once_and_resumes_after_dense_response(self):
+        first, through = list(f("windows")())[0]
+        symbol, token = "RELIANCE-EQ", "2885"
+        catalogue = [(symbol, token)]
+        f("persist_page")(self.conn, self.root, symbol, token,
+                          first, through, [], None, None)
+        slices = []
+        while f("select_recovery_windows")(self.conn, catalogue):
+            low, high = f("recovery_slice")(self.conn, token, first, through)
+            slices.append((low, high))
+            self.assertEqual(f("recovery_slice")(self.conn, token, first, through),
+                             (low, high))
+            if len(slices) == 1:
+                rows = [candle((low + dt.timedelta(days=i)).isoformat()) for i in range(11)]
+                self.assertEqual(f("recover_page")(
+                    self.conn, self.root, symbol, token, first, through, rows), (11, 11))
+            f("checkpoint_recovery")(self.conn, token, first, through, low)
+            self.assertLessEqual(len(slices), 5)
+        self.assertEqual(len(slices), 5)
+        self.assertEqual(slices[0][1], through)
+        self.assertEqual(slices[-1][0], first)
+        self.assertTrue(all((high - low).days == 399 for low, high in slices))
+        self.assertTrue(all(a[0] == b[1] + dt.timedelta(days=1)
+                            for a, b in zip(slices, slices[1:])))
+        self.assertEqual(f("verify_archive_integrity")(self.conn, self.root), (1, 11))
+
     def test_recovery_merges_by_trading_date_and_preserves_prior_blob(self):
         first, through = list(f("windows")())[0]
         old = f("persist_page")(self.conn, self.root, "RELIANCE-EQ", "2885",

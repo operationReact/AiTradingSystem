@@ -32,6 +32,7 @@ MAX_ROWS = 2000
 MAX_STOCKS_PER_RUN = 5
 MIN_REQUEST_SPACING = 10.0
 SPARSE_WINDOW_MAX_ROWS = 10
+RECOVERY_SLICE_DAYS = 400
 MAX_FETCH_SECONDS = 540
 MIN_FREE_BYTES = 256 * 1024 * 1024
 PILOT = ("RELIANCE-EQ", "TCS-EQ", "INFY-EQ", "HDFCBANK-EQ", "ICICIBANK-EQ")
@@ -60,6 +61,13 @@ FAILURE_SCHEMA = """CREATE TABLE IF NOT EXISTS page_failure (
     attempts INTEGER NOT NULL CHECK(attempts BETWEEN 1 AND 5),
     retry_after TEXT NOT NULL,
     PRIMARY KEY(exchange, token, from_date, through_date)
+)"""
+RECOVERY_SCHEMA = """CREATE TABLE IF NOT EXISTS recovery_scan (
+    token TEXT NOT NULL,
+    from_date TEXT NOT NULL,
+    through_date TEXT NOT NULL,
+    next_through TEXT,
+    PRIMARY KEY(token, from_date, through_date)
 )"""
 COOLDOWN_SCHEMA = """CREATE TABLE IF NOT EXISTS provider_cooldown (
     provider TEXT PRIMARY KEY CHECK(provider = 'ANGEL_ONE'),
@@ -207,9 +215,12 @@ def select_recovery_windows(conn, catalogue):
     candidates = conn.execute("""
         SELECT p.symbol,p.token,p.from_date,p.through_date
           FROM page p LEFT JOIN page_failure f USING (exchange,token,from_date,through_date)
-         WHERE p.exchange='NSE' AND p.row_count<=?
+          LEFT JOIN recovery_scan r USING (token,from_date,through_date)
+         WHERE p.exchange='NSE' AND (r.next_through IS NOT NULL
+               OR (r.token IS NULL AND p.row_count<=?))
            AND (f.attempts IS NULL OR (f.attempts<5 AND f.retry_after<=?))
-         ORDER BY COALESCE(f.attempts,0), p.through_date DESC, p.symbol, p.from_date
+         ORDER BY r.token IS NOT NULL, COALESCE(f.attempts,0),
+                  p.through_date DESC, p.symbol, p.from_date
     """, (SPARSE_WINDOW_MAX_ROWS, now))
     selected = set()
     result = []
@@ -334,6 +345,7 @@ def init_db(root):
     conn.execute(SCHEMA)
     conn.execute(FAILURE_SCHEMA)
     conn.execute(COOLDOWN_SCHEMA)
+    conn.execute(RECOVERY_SCHEMA)
     conn.commit()
     return conn
 
@@ -457,6 +469,30 @@ def recover_page(conn, root, symbol, token, first, through, data):
         persist_page(conn, root, symbol, token, first, through, merged,
                      min(by_session), max(by_session), repair=True)
     return added, len(by_session)
+
+
+def recovery_slice(conn, token, first, through):
+    saved = conn.execute("""SELECT next_through FROM recovery_scan
+        WHERE token=? AND from_date=? AND through_date=?""",
+        (token, first.isoformat(), through.isoformat())).fetchone()
+    end = dt.date.fromisoformat(saved[0]) if saved and saved[0] else through
+    if (saved and saved[0] is None) or not first <= end <= through:
+        raise PersonalHistoryBlocked("INVALID_RECOVERY_CURSOR")
+    return max(first, end - dt.timedelta(days=RECOVERY_SLICE_DAYS - 1)), end
+
+
+def checkpoint_recovery(conn, token, first, through, slice_first):
+    # Advance only after recovered candles are durable. A crash before this
+    # commit replays one slice and merges it idempotently by trading date.
+    key = (token, first.isoformat(), through.isoformat())
+    next_end = ((slice_first - dt.timedelta(days=1)).isoformat()
+                if slice_first > first else None)
+    conn.execute("""INSERT INTO recovery_scan VALUES (?,?,?,?)
+        ON CONFLICT(token,from_date,through_date)
+        DO UPDATE SET next_through=excluded.next_through""", (*key, next_end))
+    conn.execute("""DELETE FROM page_failure WHERE exchange='NSE'
+        AND token=? AND from_date=? AND through_date=?""", key)
+    conn.commit()
 
 
 def verify_archive_integrity(conn, root):
@@ -593,6 +629,10 @@ def print_archive_progress(conn):
         """SELECT COALESCE(sum(row_count=0),0),
                   COALESCE(sum(row_count BETWEEN 1 AND ?),0) FROM page""",
         (SPARSE_WINDOW_MAX_ROWS,)).fetchone()
+    pending, checked = conn.execute("""SELECT COALESCE(sum(next_through IS NOT NULL),0),
+        COALESCE(sum(next_through IS NULL),0) FROM recovery_scan""").fetchone()
+    print("PERSONAL_RECOVERY_SCANS_PENDING: " + str(pending), flush=True)
+    print("PERSONAL_RECOVERY_SCANS_FINISHED: " + str(checked), flush=True)
     print("PERSONAL_EMPTY_WINDOWS_TOTAL: " + str(empty), flush=True)
     print("PERSONAL_SPARSE_WINDOWS_TOTAL: " + str(sparse), flush=True)
     print("PERSONAL_PAGES_STORED_TOTAL: " + str(pages), flush=True)
@@ -695,6 +735,8 @@ def run():
             headers = authenticated_headers()
             completed = 0
             new_bars = 0
+            short_responses = 0
+            short_rows = 0
             previous_call = None
             for sym, token, start, end in remaining:
                 if previous_call is not None:
@@ -705,19 +747,24 @@ def run():
                     print("PERSONAL_DOWNLOAD_PAUSED: RUN_TIME_BUDGET", flush=True)
                     break
                 try:
-                    rows, first, last = fetch(headers, token, start, end)
+                    request_start, request_end = (recovery_slice(conn, token, start, end)
+                                                  if recovery else (start, end))
+                    rows, first, last = fetch(headers, token, request_start, request_end)
                     if recovery:
-                        gained, count = recover_page(conn, root, sym, token, start, end, rows)
+                        short_responses += 1
+                        short_rows += len(rows)
+                        gained, _ = recover_page(conn, root, sym, token, start, end, rows)
+                        checkpoint_recovery(conn, token, start, end, request_start)
                     else:
                         persist_page(conn, root, sym, token, start, end, rows, first, last)
-                        gained = count = len(rows)
-                    if count <= SPARSE_WINDOW_MAX_ROWS:
-                        record_window_failure(conn, token, start, end, "COVERAGE_UNVERIFIED")
-                    else:
-                        conn.execute("""DELETE FROM page_failure WHERE exchange='NSE'
-                            AND token=? AND from_date=? AND through_date=?""",
-                            (token, start.isoformat(), end.isoformat()))
-                        conn.commit()
+                        gained = len(rows)
+                        if gained <= SPARSE_WINDOW_MAX_ROWS:
+                            record_window_failure(conn, token, start, end, "COVERAGE_UNVERIFIED")
+                        else:
+                            conn.execute("""DELETE FROM page_failure WHERE exchange='NSE'
+                                AND token=? AND from_date=? AND through_date=?""",
+                                (token, start.isoformat(), end.isoformat()))
+                            conn.commit()
                 except PersonalHistoryBlocked as exc:
                     if str(exc) not in FAILURE_CODES:
                         raise
@@ -735,6 +782,8 @@ def run():
                 print("PERSONAL_PAGE_" + str(completed) + ": " + sym
                       + " " + str(gained) + " VALIDATED_ROWS", flush=True)
             print_archive_progress(conn)
+            print("PERSONAL_SHORT_WINDOW_RESPONSES: " + str(short_responses), flush=True)
+            print("PERSONAL_SHORT_WINDOW_CANDLES_RETURNED: " + str(short_rows), flush=True)
             print("PERSONAL_PAGES_DOWNLOADED_THIS_RUN: " + str(completed), flush=True)
             print("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: " + str(new_bars), flush=True)
             print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
