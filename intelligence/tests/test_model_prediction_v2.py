@@ -20,11 +20,11 @@ from aitrading_intelligence.lightgbm_model import (
 from aitrading_intelligence.model_prediction_v2 import (
     MAX_ATTRIBUTION_FEATURES,
     ModelPredictionV2,
+    _feature_vector,
     adapt_catboost_prediction,
     adapt_lightgbm_prediction,
     adapt_logistic_prediction,
     adapt_pytorch_prediction,
-    _feature_vector,
 )
 from aitrading_intelligence.pytorch_target import (
     ForwardReturnTargetSpec,
