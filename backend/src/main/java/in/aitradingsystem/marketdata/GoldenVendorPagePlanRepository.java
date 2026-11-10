@@ -138,7 +138,7 @@ public class GoldenVendorPagePlanRepository {
                        AND (status IN ('PENDING','RETRY')
                             OR (status = 'LEASED' AND lease_until <= ?))
                      ORDER BY from_date, page_id
-                     FOR UPDATE SKIP LOCKED LIMIT 1
+                     LIMIT 1 FOR UPDATE SKIP LOCKED
                     """, (rs, i) -> new Candidate(
                     rs.getObject("page_id", UUID.class),
                     rs.getObject("listing_id", UUID.class),
