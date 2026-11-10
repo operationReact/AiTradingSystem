@@ -111,7 +111,12 @@ public class InstrumentMasterRepository {
                     (catalogue_version, instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
                      instrument_name, instrument_type, expiry, strike, lot_size, tick_size, source_updated_at)
                 SELECT catalogue_version, instrument_id, exchange_segment, exchange, symbol_token, trading_symbol,
-                       instrument_name, instrument_type, expiry, strike, lot_size, tick_size, source_updated_at
+                       instrument_name,
+                       CASE WHEN coalesce(instrument_type, '') = ''
+                                  AND exchange_segment IN ('NSE_CM','BSE_CM')
+                                  AND trading_symbol LIKE '%-EQ'
+                            THEN 'EQ' ELSE instrument_type END,
+                       expiry, strike, lot_size, tick_size, source_updated_at
                   FROM instrument_master
                  WHERE catalogue_version = ?
                    AND active = TRUE
