@@ -131,7 +131,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
+        if (didPop) { return; }
         if (_panel != MintTickAngelPanel.overview) {
           _open(MintTickAngelPanel.overview);
         } else {
