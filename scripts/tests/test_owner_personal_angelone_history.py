@@ -325,6 +325,39 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
                           "APOLLOHOSP-EQ","ASIANPAINT-EQ"])
         self.assertEqual(len(selected),5)
 
+    def test_recovery_selects_old_sparse_pages_and_respects_backoff_and_identity(self):
+        first, through = list(f("windows")())[0]
+        f("persist_page")(self.conn, self.root, "RELIANCE-EQ", "2885",
+                          first, through, [], None, None)
+        selection = f("select_recovery_windows")
+        catalogue = [("RELIANCE-EQ", "2885")]
+        self.assertEqual(selection(self.conn, catalogue),
+                         [("RELIANCE-EQ", "2885", first, through)])
+        self.assertEqual(selection(self.conn, [("OTHER-EQ", "2885")]), [])
+        f("record_window_failure")(self.conn, "2885", first, through,
+                                   "COVERAGE_UNVERIFIED")
+        self.assertEqual(selection(self.conn, catalogue), [])
+
+    def test_recovery_merges_by_trading_date_and_preserves_prior_blob(self):
+        first, through = list(f("windows")())[0]
+        old = f("persist_page")(self.conn, self.root, "RELIANCE-EQ", "2885",
+                                first, through, [candle()], first, first)
+        extra = candle("2006-11-13")
+        self.assertEqual(f("recover_page")(
+            self.conn, self.root, "RELIANCE-EQ", "2885", first, through, [extra]),
+            (1, 2))
+        self.assertEqual(f("recover_page")(
+            self.conn, self.root, "RELIANCE-EQ", "2885", first, through, [extra]),
+            (0, 2))
+        self.assertTrue((self.root / "pages" / (old + ".json.gz")).exists())
+        self.assertEqual(f("verify_archive_integrity")(self.conn, self.root), (1, 2))
+        changed = candle()
+        changed[-1] = 42
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"), "RECOVERY_CONFLICT"):
+            f("recover_page")(self.conn, self.root, "RELIANCE-EQ", "2885",
+                              first, through, [changed])
+        self.assertEqual(f("verify_archive_integrity")(self.conn, self.root), (1, 2))
+
     def test_partial_progress_gets_resumed_before_advance(self):
         catalogue=[("ABB-EQ","601"),("RELIANCE-EQ","2885")]
         dates=list(f("windows")())
