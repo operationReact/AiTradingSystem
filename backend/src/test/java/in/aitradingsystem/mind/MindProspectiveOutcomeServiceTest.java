@@ -148,6 +148,8 @@ class MindProspectiveOutcomeServiceTest {
         assertEquals(8, result.precommittedCandidates());
         assertEquals(3, result.reconciledOutcomes());
         assertEquals("ABSTAIN", result.decisionPosture());
+        assertTrue(result.blockers().contains(
+            "ENTRY_BAR_OPEN_MAY_PRECEDE_RESEARCH_RECEIPT"));
         assertFalse(result.outcomeValidated());
         assertFalse(result.paperOrderSubmitted());
         assertFalse(result.executionEnabled());
