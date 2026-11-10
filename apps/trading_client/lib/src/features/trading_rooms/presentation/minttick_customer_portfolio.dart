@@ -535,14 +535,14 @@ class _MintTickCustomerPortfolioPageState
           onSelectionChanged: (value) => setState(() => _selectedBroker = value.first),
         ),
         const SizedBox(height: 13),
-        MintTickEyebrow('Live · ' + _name(broker.name)),
+        MintTickEyebrow('Live · ${_name(broker.name)}'),
         const SizedBox(height: 7),
         Text(!broker.statusKnown ? 'Connection status unavailable'
           : broker.connected ? 'Connected · Read-only' : 'Not connected',
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.w800)),
         if (broker.account != null)
-          Text('Account ' + broker.account!, style:
+          Text('Account ${broker.account!}', style:
             Theme.of(context).textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant)),
         if (broker.connected) ...[
@@ -599,8 +599,7 @@ class _MintTickCustomerPortfolioPageState
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w800)),
           const SizedBox(height: 4),
-          Text('Available across ' + _paperAccounts.length.toString() +
-              ' funded Paper rooms',
+          Text('Available across ${_paperAccounts.length} funded Paper rooms',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant)),
           const SizedBox(height: 12),
@@ -691,10 +690,10 @@ class _MintTickCustomerPortfolioPageState
                   Text(item.symbol, style: Theme.of(context).textTheme.titleSmall
                     ?.copyWith(fontWeight: FontWeight.w800)),
                   const SizedBox(height: 4),
-                  Text(_name(item.broker) + ' · BROKER REPORTED',
+                  Text('${_name(item.broker)} · BROKER REPORTED',
                     style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(height: 4),
-                  Text('Quantity: ' + (item.quantity?.toString() ?? '—')),
+                  Text('Quantity: ${item.quantity?.toString() ?? '—'}'),
                 ],
               )),
               Text(portfolioRupees(item.marketValue),
@@ -711,17 +710,17 @@ class _MintTickCustomerPortfolioPageState
     _open(item.name ?? item.symbol, [
       MintTickSurface(accent: true, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
-          MintTickEyebrow(_name(item.broker) + ' · Broker reported'),
+          MintTickEyebrow('${_name(item.broker)} · Broker reported'),
           const SizedBox(height: 10),
-          Text('Market value: ' + portfolioRupees(item.marketValue)),
+          Text('Market value: ${portfolioRupees(item.marketValue)}'),
           const SizedBox(height: 9),
           Text('Quantity: ' + (item.quantity?.toString() ?? '—')),
           const SizedBox(height: 7),
-          Text('Last price: ' + portfolioRupees(item.lastPrice)),
+          Text('Last price: ${portfolioRupees(item.lastPrice)}'),
           const SizedBox(height: 7),
-          Text('Average buy price: ' + portfolioRupees(item.averagePrice)),
+          Text('Average buy price: ${portfolioRupees(item.averagePrice)}'),
           const SizedBox(height: 7),
-          Text('Broker P&L: ' + portfolioRupees(item.pnl)),
+          Text('Broker P&L: ${portfolioRupees(item.pnl)}'),
         ],
       )),
       const SizedBox(height: 12),
@@ -769,13 +768,13 @@ class _MintTickCustomerPortfolioPageState
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           const MintTickEyebrow('Virtual wallet · Paper only'),
           const SizedBox(height: 9),
-          Text('Available: ' + _formatPaise(account.wallet.availableCashPaise)),
+          Text('Available: ${_formatPaise(account.wallet.availableCashPaise)}'),
           const SizedBox(height: 7),
-          Text('Initial: ' + _formatPaise(account.wallet.initialCashPaise)),
+          Text('Initial: ${_formatPaise(account.wallet.initialCashPaise)}'),
           const SizedBox(height: 7),
-          Text('Reserved: ' + _formatPaise(account.wallet.reservedCashPaise)),
+          Text('Reserved: ${_formatPaise(account.wallet.reservedCashPaise)}'),
           const SizedBox(height: 7),
-          Text('Realized P&L: ' + _formatPaise(account.wallet.realizedPnlPaise)),
+          Text('Realized P&L: ${_formatPaise(account.wallet.realizedPnlPaise)}'),
         ],
       )),
       const SizedBox(height: 12),
