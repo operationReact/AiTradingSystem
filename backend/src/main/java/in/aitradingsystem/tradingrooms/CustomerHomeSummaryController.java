@@ -150,6 +150,47 @@ public final class CustomerHomeSummaryController {
                 nextAction(mode, rooms, brokers), false));
     }
 
+    /**
+     * Bounded, customer-owned timeline of persisted room plans and virtual
+     * PAPER ledger events. The query deliberately does not infer trading fills,
+     * profit/loss, external brokerage transactions or recommendation history.
+     */
+    @GetMapping("/activity")
+    public ResponseEntity<List<LatestActivity>> activity(
+            @RequestParam(defaultValue = "PAPER") String mode,
+            Authentication authentication) {
+        if (!"PAPER".equals(mode) && !"LIVE".equals(mode)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Workspace mode must be PAPER or LIVE");
+        }
+        UUID owner = customer(authentication);
+        List<LatestActivity> events = jdbc.sql("""
+            SELECT kind, description, occurred_at, room_id FROM (
+              SELECT 'ROOM_PLAN_SAVED'::text AS kind,
+                     'Trading Room plan saved'::text AS description,
+                     r.created_at AS occurred_at, r.id AS room_id
+              FROM customer_trading_room r
+              WHERE r.user_id = :owner AND r.mode = :mode
+              UNION ALL
+              SELECT 'PAPER_CASH_EVENT'::text AS kind,
+                     e.event_kind AS description,
+                     e.created_at AS occurred_at, e.room_id AS room_id
+              FROM customer_paper_cash_event e
+              JOIN customer_trading_room r
+                ON r.id = e.room_id AND r.user_id = e.user_id
+              WHERE e.user_id = :owner AND r.mode = 'PAPER' AND :mode = 'PAPER'
+            ) events
+            ORDER BY occurred_at DESC, room_id DESC
+            LIMIT 40
+            """).param("owner", owner).param("mode", mode)
+            .query((rs, row) -> new LatestActivity(
+                rs.getString("kind"), rs.getString("description"),
+                rs.getTimestamp("occurred_at").toInstant(),
+                rs.getObject("room_id", UUID.class))).list();
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(events);
+    }
+
     private LatestActivity latestActivity(UUID owner, String mode) {
         // A persisted room plan is activity, not evidence of order execution.
         List<LatestActivity> latestRoom = jdbc.sql("""
