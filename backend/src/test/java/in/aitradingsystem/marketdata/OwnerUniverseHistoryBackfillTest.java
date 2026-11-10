@@ -1,5 +1,7 @@
 package in.aitradingsystem.marketdata;
 
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
+
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -44,14 +46,15 @@ class OwnerUniverseHistoryBackfillTest {
         var run = mock(CandleBackfillRun.class);
         when(run.status()).thenReturn("SUCCEEDED");
         when(run.id()).thenReturn(UUID.randomUUID());
-        when(history.start(42L, HistoricalCandleInterval.FIVE_MINUTE,
-                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9)))
+        when(history.startWithProvider(42L, HistoricalCandleInterval.FIVE_MINUTE,
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class)))
                 .thenReturn(run);
 
-        new OwnerUniverseHistoryBackfill(service, history).collectOne();
+        new OwnerUniverseHistoryBackfill(service, history,
+                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne();
 
         verify(history, times(1)).start(42L, HistoricalCandleInterval.FIVE_MINUTE,
-                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9));
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class));
         verifyNoMoreInteractions(history);
     }
 
@@ -61,7 +64,8 @@ class OwnerUniverseHistoryBackfillTest {
         var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
         var history = mock(HistoricalCandleService.class);
 
-        new OwnerUniverseHistoryBackfill(service, history).collectOne();
+        new OwnerUniverseHistoryBackfill(service, history,
+                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne();
 
         verifyNoInteractions(history);
     }
@@ -74,11 +78,12 @@ class OwnerUniverseHistoryBackfillTest {
         var w = service.window();
         when(repo.nextDue(w.fromInclusive(), w.toExclusive(),
                 NOW.minus(Duration.ofHours(18)))).thenReturn(Optional.of(42L));
-        when(history.start(anyLong(), any(), any(), any()))
+        when(history.startWithProvider(anyLong(), any(), any(), any(), any()))
                 .thenThrow(new IllegalStateException("provider not configured"));
 
-        assertThatCode(() -> new OwnerUniverseHistoryBackfill(service, history).collectOne())
+        assertThatCode(() -> new OwnerUniverseHistoryBackfill(service, history,
+                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne())
                 .doesNotThrowAnyException();
-        verify(history, times(1)).start(anyLong(), any(), any(), any());
+        verify(history, times(1)).startWithProvider(anyLong(), any(), any(), any(), any());
     }
 }
