@@ -529,6 +529,51 @@ def print_archive_progress(conn):
     print("PERSONAL_QUARANTINED_WINDOWS_TOTAL: " + str(terminal), flush=True)
 
 
+
+def audit_private_archive(root=ROOT, *, expected_owner=0):
+    """Offline audit of the owner-private archive, with zero API or DB writes.
+
+    Production defaults require uid 0. Tests inject their temporary directory
+    owner only; the fixed-path root-owned wrapper offers no such override.
+    """
+    if (os.geteuid() != expected_owner or not sys.platform.startswith("linux")
+            or root.is_symlink() or (root / "pages").is_symlink()):
+        raise PersonalHistoryBlocked("UNTRUSTED_AUDIT_IDENTITY")
+    for directory in (root, root / "pages"):
+        if (not directory.is_dir()
+                or directory.stat().st_uid != expected_owner
+                or directory.stat().st_mode & 0o077):
+            raise PersonalHistoryBlocked("UNTRUSTED_AUDIT_DIRECTORY")
+    manifest = root / "manifest.sqlite3"
+    lock = root / ".exclusive.lock"
+    for file in (manifest, lock):
+        if (file.is_symlink() or not file.is_file()
+                or file.stat().st_uid != expected_owner
+                or file.stat().st_mode & 0o077):
+            raise PersonalHistoryBlocked("UNTRUSTED_AUDIT_FILE")
+    fd = os.open(str(lock), os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise PersonalHistoryBlocked("ACTIVE_COLLECTOR") from None
+        conn = sqlite3.connect("file:" + str(manifest) + "?mode=ro", uri=True,
+                               timeout=4)
+        try:
+            conn.execute("PRAGMA query_only=ON")
+            pages, rows = verify_archive_integrity(conn, root)
+        finally:
+            conn.close()
+    finally:
+        os.close(fd)
+    print("PERSONAL_ARCHIVE_VERIFIED_PAGES: " + str(pages), flush=True)
+    print("PERSONAL_ARCHIVE_VERIFIED_ROWS: " + str(rows), flush=True)
+    print("PERSONAL_ARCHIVE_API_CALLS: 0", flush=True)
+    print("PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED", flush=True)
+    print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
+    return pages, rows
+
+
 def run():
     root = ensure_private_store()
     lockfile = root / ".exclusive.lock"
@@ -612,6 +657,11 @@ def run():
 
 if __name__ == "__main__":
     try:
+        if sys.argv[1:] == ["audit-only"]:
+            audit_private_archive()
+            sys.exit(0)
+        if sys.argv[1:]:
+            raise PersonalHistoryBlocked("UNSUPPORTED_OPERATION")
         sys.exit(run())
     except (PersonalHistoryBlocked, ProbeFailure) as error:
         safe = str(error)
