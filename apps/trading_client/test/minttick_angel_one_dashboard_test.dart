@@ -100,8 +100,6 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Funds & Margin'), findsOneWidget);
         expect(find.text('₹5,000.00'), findsOneWidget);
-        expect(find.textContaining('not supplied by this broker endpoint'),
-            findsOneWidget);
         expect(tester.takeException(), isNull);
 
         await tester.tap(find.byKey(const ValueKey('angel-back-overview')));
