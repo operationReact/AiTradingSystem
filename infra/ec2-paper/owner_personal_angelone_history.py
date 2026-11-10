@@ -432,7 +432,7 @@ def verify_archive_integrity(conn, root):
             raise PersonalHistoryBlocked("INVALID_ARCHIVE_MANIFEST") from None
         filename = root / rel
         if (filename.is_symlink() or not filename.is_file()
-                or filename.stat().st_uid != 0
+                or filename.stat().st_uid != os.geteuid()
                 or filename.stat().st_mode & 0o077
                 or filename.stat().st_size > 1024 * 1024):
             raise PersonalHistoryBlocked("ARCHIVE_FILE_NOT_PRIVATE")
