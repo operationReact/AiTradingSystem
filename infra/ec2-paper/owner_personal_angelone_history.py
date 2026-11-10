@@ -245,9 +245,12 @@ def fetch(headers, token, first, through):
                 raise PersonalHistoryBlocked("PROVIDER_HTTP_ERROR")
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except HTTPError as error:
-        if error.code == 429:
+        # Angel One documents historical rate-limit responses as HTTP 403,
+        # not only 429. Conservatively pause the entire account on either;
+        # a 403 could also mean forbidden access, so never retry it rapidly.
+        if error.code in (403, 429):
             raise PersonalHistoryBlocked("PROVIDER_RATE_LIMITED") from None
-        if error.code in (400, 401, 403, 422):
+        if error.code in (400, 401, 422):
             raise PersonalHistoryBlocked("PROVIDER_REJECTED") from None
         raise PersonalHistoryBlocked("PROVIDER_HTTP_ERROR") from None
     except (OSError, URLError, TimeoutError):
