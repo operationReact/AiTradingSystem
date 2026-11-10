@@ -56,9 +56,9 @@ class GoldenDatasetManifestIT extends AbstractPostgresIT {
         assertThat(manifestCount(f.chunk())).isEqualTo(1L);
         assertThat(inspections).hasValue(2);
         assertThat(repo.findAuthorizedBronze(manifest.manifestId(),
-                GoldenSourceRightsRepository.Use.MODEL_TRAINING())).isEmpty();
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING)).isEmpty();
         assertThat(repo.findAuthorizedBronze(manifest.manifestId(),
-                GoldenSourceRightsRepository.Use.RAW_RETENTION())).isPresent();
+                GoldenSourceRightsRepository.Use.RAW_RETENTION)).isPresent();
     }
 
     @Test
@@ -73,7 +73,7 @@ class GoldenDatasetManifestIT extends AbstractPostgresIT {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("new source revision");
         assertThat(repo.findAuthorizedBronze(original.manifestId(),
-                GoldenSourceRightsRepository.Use.RAW_RETENTION())).isPresent();
+                GoldenSourceRightsRepository.Use.RAW_RETENTION)).isPresent();
         assertThat(manifestCount(f.chunk())).isEqualTo(1L);
     }
 
@@ -109,11 +109,11 @@ class GoldenDatasetManifestIT extends AbstractPostgresIT {
         var m = repo.publishBronze(f.chunk(),
                 inspected(new AtomicInteger(), HASH, "version-1"), "bars.v1");
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.MODEL_TRAINING())).isPresent();
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING)).isPresent();
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.END_USER_DISPLAY())).isEmpty();
+                GoldenSourceRightsRepository.Use.END_USER_DISPLAY)).isEmpty();
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.REDISTRIBUTION())).isEmpty();
+                GoldenSourceRightsRepository.Use.REDISTRIBUTION)).isEmpty();
     }
 
     @Test
@@ -125,13 +125,13 @@ class GoldenDatasetManifestIT extends AbstractPostgresIT {
         var m = repo.publishBronze(f.chunk(),
                 inspected(new AtomicInteger(), HASH, "version-1"), "bars.v1");
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.MODEL_TRAINING())).isPresent();
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING)).isPresent();
         revoke(f, "MODEL_TRAINING");
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.MODEL_TRAINING())).isEmpty();
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING)).isEmpty();
         revoke(f, "RAW_RETENTION");
         assertThat(repo.findAuthorizedBronze(m.manifestId(),
-                GoldenSourceRightsRepository.Use.RAW_RETENTION())).isEmpty();
+                GoldenSourceRightsRepository.Use.RAW_RETENTION)).isEmpty();
     }
 
     @Test
