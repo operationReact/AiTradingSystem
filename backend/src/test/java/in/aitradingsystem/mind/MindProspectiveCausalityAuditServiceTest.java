@@ -92,6 +92,7 @@ class MindProspectiveCausalityAuditServiceTest {
         assertFalse(result.paperOrderSubmitted());
         assertFalse(result.executionEnabled());
         assertEquals("ABSTAIN", result.decisionPosture());
+        verify(outcomes).candidatePage(COHORT, 0, 100);
         verify(outcomes).recordedOutcome(receipt());
         verifyNoMoreInteractions(outcomes);
     }
