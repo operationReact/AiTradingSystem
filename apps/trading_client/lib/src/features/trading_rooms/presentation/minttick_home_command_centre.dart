@@ -117,7 +117,9 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
     try {
       final result = await widget.summaryRepository.load(mode);
       if (!mounted || request != _generation ||
-          result.mode != widget.mode.selected) return;
+          result.mode != widget.mode.selected) {
+        return;
+      }
       setState(() => _summary = result);
     } catch (_) {
       if (!mounted || request != _generation) return;
