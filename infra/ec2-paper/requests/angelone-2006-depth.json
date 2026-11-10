@@ -6,9 +6,9 @@
   "operation": "read-only-angelone-sequential-daily-depth",
   "instrument": "RELIANCE-EQ",
   "interval": "ONE_DAY",
-  "phase": 2,
-  "from_date": "2012-05-02",
-  "through_date": "2017-10-22",
+  "phase": 3,
+  "from_date": "2017-10-23",
+  "through_date": "2023-04-14",
   "window_calendar_days": 2000,
   "store_data": false,
   "trading_enabled": false
