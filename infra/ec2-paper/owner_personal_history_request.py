@@ -22,8 +22,8 @@ APPROVALS = {
         "operation": "owner-personal-angelone-daily-history-pilot",
         "from_date": "2006-11-10",
         "through_date": "2026-11-10",
-        "max_equities": 5,
-        "max_provider_calls": 20,
+        "max_equities": 20,
+        "max_provider_calls": 80,
         "min_spacing_seconds": 10,
     }),
     AUDIT: ("audit-only", {

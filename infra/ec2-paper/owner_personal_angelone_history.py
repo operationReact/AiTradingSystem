@@ -29,7 +29,9 @@ WINDOW_END = dt.date(2026, 11, 10)
 WINDOW_DAYS = 2000
 MAX_RESPONSE_BYTES = 262144
 MAX_ROWS = 2000
-MAX_STOCKS_PER_RUN = 5
+MAX_STOCKS_PER_RUN = 20
+MAX_PROVIDER_CALLS_PER_RUN = 80
+MAX_PROVIDER_RUN_SECONDS = 900
 MIN_REQUEST_SPACING = 10.0
 MIN_FREE_BYTES = 256 * 1024 * 1024
 PILOT = ("RELIANCE-EQ", "TCS-EQ", "INFY-EQ", "HDFCBANK-EQ", "ICICIBANK-EQ")
@@ -605,6 +607,8 @@ def run():
                     remaining.append((sym, token, start, end))
                 else:
                     skipped += 1
+            if len(planned) > MAX_PROVIDER_CALLS_PER_RUN:
+                raise PersonalHistoryBlocked("RUN_REQUEST_LIMIT")
             print("PERSONAL_STOCKS_SELECTED: " + str(len(entries)), flush=True)
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
@@ -622,11 +626,23 @@ def run():
             completed = 0
             new_bars = 0
             previous_call = None
+            calls = 0
+            run_started = time.monotonic()
             for sym, token, start, end in remaining:
+                # No unbounded backfill inside one GitHub/SSM execution.
+                # Keep 45s for the final provider timeout and summary output.
+                if (calls >= MAX_PROVIDER_CALLS_PER_RUN
+                        or time.monotonic() - run_started >= MAX_PROVIDER_RUN_SECONDS - 45):
+                    print("PERSONAL_RUN_PAUSED: BOUNDED_BUDGET", flush=True)
+                    break
                 if previous_call is not None:
                     time.sleep(max(0, MIN_REQUEST_SPACING
                                    - (time.monotonic() - previous_call)))
+                if time.monotonic() - run_started >= MAX_PROVIDER_RUN_SECONDS - 45:
+                    print("PERSONAL_RUN_PAUSED: BOUNDED_BUDGET", flush=True)
+                    break
                 previous_call = time.monotonic()
+                calls += 1
                 try:
                     rows, first, last = fetch(headers, token, start, end)
                 except PersonalHistoryBlocked as exc:
