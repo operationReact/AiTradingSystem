@@ -10,6 +10,7 @@ on:
     branches: [dev]
     paths:
       - 'infra/ec2-paper/requests/owner-personal-history-download.json'
+      - 'infra/ec2-paper/requests/owner-personal-history-audit.json'
 
 permissions:
   contents: read
@@ -30,6 +31,7 @@ jobs:
           set -euo pipefail
           bash -n infra/ec2-paper/run_owner_personal_history.sh
           python3 -m unittest discover -s scripts/tests -p test_owner_personal_angelone_history.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_request.py -v
 
   execute:
     name: One fixed-path private owner historical pilot on existing PAPER EC2
@@ -51,28 +53,8 @@ jobs:
       - name: Verify exact owner approval and only one changed file
         run: |
           set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
-            'infra/ec2-paper/requests/owner-personal-history-download.json'
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          d=json.loads(Path('infra/ec2-paper/requests/owner-personal-history-download.json').read_text())
-          assert d=={
-            'application':'MintTick',
-            'operation':'owner-personal-angelone-daily-history-pilot',
-            'account':'098859530205',
-            'region':'ap-south-1',
-            'instance_id':'i-09c01b470fb39b85a',
-            'from_date':'2006-11-10',
-            'through_date':'2026-11-10',
-            'max_equities':5,
-            'max_provider_calls':20,
-            'min_spacing_seconds':10,
-            'private_ec2_only':True,
-            'no_redistribution':True,
-            'enable_trading':False,
-          }
-          PY
+          changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
+          python3 infra/ec2-paper/owner_personal_history_request.py "$changed"
       - name: Refuse new history after 21:20 IST before cloud access
         run: |
           set -euo pipefail
@@ -186,14 +168,17 @@ jobs:
           install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
           install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
           install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
-          "$root/run_owner_personal_history.sh" """
-          script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest)
+          "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@' """
+          mode=os.environ.get('OWNER_HISTORY_MODE')
+          if mode not in ('download','audit-only'):
+              raise SystemExit('Invalid fixed owner mode')
+          script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest).replace('@@OWNER_MODE@@',mode)
           path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
           path.write_text(json.dumps({'commands':[script]}))
           path.chmod(0o600)
           PY
           rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
-      - name: Execute pinned reviewed personal download on one existing EC2
+      - name: Execute fixed reviewed owner audit or bounded download on existing EC2
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -221,6 +206,28 @@ jobs:
           if z.get('Status') not in ('Success','Failed','TimedOut','Cancelled'):
               print('PENDING');raise SystemExit
           output=z.get('StandardOutputContent','') or ''
+          mode=os.environ.get('OWNER_HISTORY_MODE')
+          lines=output.splitlines()
+          if mode == 'audit-only':
+              required={'PERSONAL_ARCHIVE_API_CALLS: 0',
+                        'PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED',
+                        'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE'}
+              counts=[line for line in lines if re.fullmatch(
+                  r'PERSONAL_ARCHIVE_VERIFIED_(?:PAGES|ROWS): [0-9]{1,9}',line)]
+              verified=(z['Status']=='Success' and required.issubset(set(lines))
+                        and len(counts)==2
+                        and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_PAGES: ') for x in counts)
+                        and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_ROWS: ') for x in counts))
+              if verified:
+                  for line in counts:
+                      print(line)
+                  print('PERSONAL_ARCHIVE_API_CALLS: 0')
+                  print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
+              print('SUCCESS' if verified else 'FAILED')
+              raise SystemExit(0)
+          if mode != 'download':
+              print('FAILED')
+              raise SystemExit(0)
           for line in output.splitlines():
               if len(line)>120: continue
               if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
