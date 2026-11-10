@@ -134,9 +134,9 @@ String portfolioRupees(num? value) {
       remaining = remaining.substring(0, remaining.length - 2);
     }
     if (remaining.isNotEmpty) groups.insert(0, remaining);
-    integral = groups.join(',') + ',' + last;
+    integral = "${groups.join(',')},$last";
   }
-  return (value < 0 ? '-' : '') + '₹' + integral + '.' + bits.last;
+  return "${value < 0 ? '-' : ''}₹$integral.${bits.last}";
 }
 
 num? portfolioAmount(Object? raw, {required String broker}) {
