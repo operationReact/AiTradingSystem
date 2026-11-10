@@ -380,7 +380,14 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return MintTickCustomerScaffold(showHeader: false, children: [
+    return PopScope<void>(
+      // Drill-down routes pop naturally. Within Markets, the first gesture
+      // returns to Overview instead of dropping the entire Markets section.
+      canPop: _tabs.index == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _tabs.index != 0) _tabs.animateTo(0);
+      },
+      child: MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 18),
       const MintTickEyebrow('MintTick / Markets'),
       const SizedBox(height: 6),
@@ -407,7 +414,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         2 => _sectorsTab(),
         _ => _exploreTab(context),
       },
-    ]);
+    ]),
+    );
   }
 
   List<Widget> _overviewTab() => [

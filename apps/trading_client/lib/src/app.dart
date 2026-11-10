@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth/customer_identity.dart';
@@ -93,6 +95,7 @@ class _TradingAppState extends State<TradingApp> {
   late final TradingWorkspaceMode _workspaceMode;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
+  bool _exitDialogOpen = false;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
@@ -157,7 +160,7 @@ class _TradingAppState extends State<TradingApp> {
         },
       ),
       routes: {
-        '/': (_) => _overviewPage(),
+        '/': (_) => _guardedOverviewPage(),
         '/mind': (_) => widget.session.isCustomerAuthenticated
             ? MintickMindWorkspacePage(
                 embeddedInProductShell: true,
@@ -197,7 +200,7 @@ class _TradingAppState extends State<TradingApp> {
         '/broker/angel-one': (_) => widget.session.isCustomerAuthenticated
             ? MintTickCustomerBrokerPage(
                 repository: HttpCustomerAngelOneRepository(_api),
-                onBack: () => _navigate('/brokers'),
+                onBack: _backToPreviousScreen,
               )
             : _overviewPage(),
         '/activity': (_) => widget.session.isCustomerAuthenticated
@@ -318,17 +321,110 @@ class _TradingAppState extends State<TradingApp> {
       // User must still return to login. Access JWTs expire on the server.
     }
     if (!mounted) return;
-    _navigate('/welcome');
+    _resetNavigation('/welcome');
   }
 
   void _onCustomerAuthenticated() {
     widget.session.markCustomerAuthenticated();
-    _navigate('/');
+    _resetNavigation('/');
   }
 
-  void _navigate(String route) {
+  /// Only authentication boundaries clear history. Normal navigation must
+  /// preserve Android's back stack for system gestures and predictive back.
+  void _resetNavigation(String route) {
+    if (!mounted) return;
     setState(() => _selectedRoute = route);
-    _navigatorKey.currentState?.pushNamedAndRemoveUntil(route, (candidate) => false);
+    _navigatorKey.currentState?.pushNamedAndRemoveUntil(
+      route, (candidate) => false,
+    );
+  }
+
+  void _backToPreviousScreen() {
+    final navigator = _navigatorKey.currentState;
+    if (navigator != null && navigator.canPop()) {
+      navigator.pop();
+    } else {
+      _navigate('/brokers');
+    }
+  }
+
+  /// Primary navigation and feature links share one coherent route history.
+  /// Re-selecting the same tab returns to its root rather than stacking copies.
+  void _navigate(String route) {
+    if (!mounted) return;
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+
+    if (route == _selectedRoute) {
+      navigator.popUntil((candidate) =>
+          candidate.settings.name == route || candidate.isFirst);
+      return;
+    }
+    if (route == '/' && widget.session.isCustomerAuthenticated) {
+      // Home is the anchored destination of a signed-in workspace.
+      // Returning there must not create duplicate Home routes.
+      bool foundHome = false;
+      navigator.popUntil((candidate) {
+        if (candidate.settings.name == '/') {
+          foundHome = true;
+          return true;
+        }
+        return candidate.isFirst;
+      });
+      if (foundHome) {
+        setState(() => _selectedRoute = '/');
+        return;
+      }
+    }
+    setState(() => _selectedRoute = route);
+    navigator.pushNamed(route);
+  }
+
+  /// A root-level gesture should never silently terminate a trading session.
+  /// Nested routes and dialogs pop normally; only Home needs this safeguard.
+  Widget _guardedOverviewPage() => PopScope<void>(
+    key: const ValueKey('minttick-home-exit-guard'),
+    canPop: false,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _confirmAppExit();
+    },
+    child: _overviewPage(),
+  );
+
+  Future<void> _confirmAppExit() async {
+    if (_exitDialogOpen || !mounted) return;
+    final context = _navigatorKey.currentContext;
+    if (context == null || !context.mounted) return;
+    _exitDialogOpen = true;
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Exit MintTick?'),
+          content: const Text(
+            'Leave the app? Your trading account remains protected. '
+            'No live orders will be placed by closing MintTick.',
+          ),
+          actions: [
+            TextButton(
+              key: const ValueKey('navigation-stay'),
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Stay'),
+            ),
+            FilledButton(
+              key: const ValueKey('navigation-exit'),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Exit app'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true && mounted && !kIsWeb) {
+        await SystemNavigator.pop();
+      }
+    } finally {
+      _exitDialogOpen = false;
+    }
   }
 
   Future<void> _openMoreNavigation() async {
