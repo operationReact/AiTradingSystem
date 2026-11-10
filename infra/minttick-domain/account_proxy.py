@@ -40,6 +40,7 @@ EXACT = {
     ("GET", "/api/customer/brokers/upstox/orders"),
     ("GET", "/api/customer/brokers/upstox/registered-ips"),
     ("GET", "/api/customer/portfolio/records"),
+    ("GET", "/api/customer/home/v1/summary"),
     ("GET", "/api/customer/market-data/instruments/status"),
     ("GET", "/api/customer/market-data/instruments"),
     ("GET", "/api/customer/market-data/quotes"),
