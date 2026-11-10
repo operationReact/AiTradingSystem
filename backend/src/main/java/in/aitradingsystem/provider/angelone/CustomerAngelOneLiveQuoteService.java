@@ -111,28 +111,71 @@ public class CustomerAngelOneLiveQuoteService {
         return snapshot(user, List.of(instrument)).get(0);
     }
 
-    /** Personal broker reads stay on one socket. */
+    /** Personal broker reads stay on their own single connection. */
     public List<LiveQuote> snapshot(UUID user, List<Instrument> instruments) {
-        return snapshotShard(user, 0, instruments);
+        return snapshotShard(user, 0, instruments, true);
     }
 
-    /** Private application feed may use three independently subscribed shards.
-     * Any overflow is UNAVAILABLE, never fabricated LIVE coverage.
+    /**
+     * Route application-owned equities by their ALREADY SUBSCRIBED token/venue,
+     * not their position in the caller's request. The warmer sends a 2756-row
+     * catalogue, while mobile pages and single-stock detail calls request small
+     * unrelated subsets. Using request offsets would always send those subsets
+     * to shard zero, dropping valid quotes held on shards one or two.
+     *
+     * Serialize assignment of new watches so overlapping warm/page requests
+     * cannot over-allocate the three broker-limited connections.
      */
-    List<LiveQuote> snapshotApplication(UUID user, List<Instrument> instruments) {
-        List<LiveQuote> result = new ArrayList<>(instruments.size());
-        int maximum = MAX_WEBSOCKETS_PER_CLIENT * watchCap;
-        for (int from = 0; from < instruments.size() && from < maximum; from += watchCap) {
-            int to = Math.min(from + watchCap, Math.min(instruments.size(), maximum));
-            result.addAll(snapshotShard(user, from / watchCap, instruments.subList(from, to)));
+    synchronized List<LiveQuote> snapshotApplication(UUID user, List<Instrument> instruments) {
+        if (instruments.isEmpty()) return List.of();
+        Map<Integer, List<Instrument>> byShard = new TreeMap<>();
+        Map<Integer, Integer> reserved = new HashMap<>();
+        Map<Long, LiveQuote> results = new HashMap<>();
+        for (Instrument instrument : instruments) {
+            if (!eligible(instrument)) {
+                results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
+                continue;
+            }
+            String tokenKey = key(venue(instrument), instrument.symbolToken());
+            int target = -1;
+            // First reuse a subscription on ANY shard, including shard two.
+            for (int shard = 0; shard < MAX_WEBSOCKETS_PER_CLIENT; shard++) {
+                Feed existing = feeds.get(new FeedKey(user, shard));
+                Watch subscribed = existing == null ? null : existing.watches.get(tokenKey);
+                if (subscribed != null && subscribed.instrument.id() == instrument.id()) {
+                    target = shard;
+                    break;
+                }
+            }
+            if (target < 0) {
+                // New tokens fill free capacity without displacing existing
+                // subscriptions; a full roster remains a hard unpriced state.
+                for (int shard = 0; shard < MAX_WEBSOCKETS_PER_CLIENT; shard++) {
+                    Feed existing = feeds.get(new FeedKey(user, shard));
+                    int active = existing == null ? 0 : existing.watches.size();
+                    if (active + reserved.getOrDefault(shard, 0) < watchCap) {
+                        target = shard;
+                        reserved.merge(shard, 1, Integer::sum);
+                        break;
+                    }
+                }
+            }
+            if (target < 0) {
+                results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
+            } else {
+                byShard.computeIfAbsent(target, ignored -> new ArrayList<>()).add(instrument);
+            }
         }
-        for (int i = maximum; i < instruments.size(); i++) {
-            result.add(empty(instruments.get(i), "UNAVAILABLE"));
+        for (Map.Entry<Integer, List<Instrument>> group : byShard.entrySet()) {
+            for (LiveQuote quote : snapshotShard(user, group.getKey(), group.getValue(), false)) {
+                results.put(quote.instrumentId(), quote);
+            }
         }
-        return List.copyOf(result);
+        return ordered(instruments, results);
     }
 
-    private List<LiveQuote> snapshotShard(UUID user, int shard, List<Instrument> instruments) {
+    private List<LiveQuote> snapshotShard(UUID user, int shard,
+            List<Instrument> instruments, boolean allowPersonalOwnerSharing) {
         Instant now = clock.instant();
         if (!calendar.isInsideCashSession(now)) {
             disconnect(user);
@@ -145,7 +188,7 @@ public class CustomerAngelOneLiveQuoteService {
             else results.put(instrument.id(), empty(instrument, "UNAVAILABLE"));
         }
         if (eligible.isEmpty()) return ordered(instruments, results);
-        Feed ownerFeed = ownerUser == null || ownerUser.equals(user)
+        Feed ownerFeed = !allowPersonalOwnerSharing || ownerUser == null || ownerUser.equals(user)
             ? null : feeds.get(new FeedKey(ownerUser, 0));
         if (ownerFeed != null && ownerFeed.state == State.OPEN) {
             for (Instrument instrument : eligible) {
