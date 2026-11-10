@@ -44,7 +44,9 @@ public class ResearchScanRepository {
                  WHERE i.active = TRUE
                    AND i.exchange IN ('NSE', 'BSE')
                    AND i.exchange_segment IN ('NSE_CM','BSE_CM')
-                   AND i.trading_symbol LIKE '%-EQ'
+                   AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                        OR (coalesce(i.instrument_type, '') = ''
+                            AND i.trading_symbol LIKE '%-EQ'))
                  ORDER BY CASE
                      WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
                      WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
@@ -77,7 +79,9 @@ public class ResearchScanRepository {
                  WHERE i.active = TRUE
                    AND i.exchange IN ('NSE', 'BSE')
                    AND i.exchange_segment IN ('NSE_CM','BSE_CM')
-                   AND i.trading_symbol LIKE '%-EQ'
+                   AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                        OR (coalesce(i.instrument_type, '') = ''
+                            AND i.trading_symbol LIKE '%-EQ'))
                  ORDER BY i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
                  LIMIT ?
                 """, instrumentMapper, limit);
