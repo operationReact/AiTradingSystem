@@ -408,8 +408,7 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
           ? 'No order activity inferred from plans'
           : 'Persisted in your workspace',
         Icons.history_rounded,
-        s.activity?.roomId == null
-          ? widget.onActivity : () => _openRoom(s.activity!.roomId),
+        widget.onActivity,
         key: const ValueKey('home-recent-activity')),
       const SizedBox(height: 8),
       Text('Planned room allocations are not actual balances. '
@@ -446,10 +445,19 @@ class _MintTickHomeCommandCentreState extends State<MintTickHomeCommandCentre> {
         ] else ...[
           MintTickEyebrow('${widget.mode.selected} · Trading workspace'),
           const SizedBox(height: 4),
-          Text('Your trading overview',
-            key: const ValueKey('home-compact-title'),
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontSize: 23, fontWeight: FontWeight.w800)),
+          Row(children: [
+            Expanded(child: Text('Your trading overview',
+              key: const ValueKey('home-compact-title'),
+              style: theme.textTheme.titleLarge?.copyWith(
+                fontSize: 23, fontWeight: FontWeight.w800))),
+            IconButton(
+              key: const ValueKey('home-refresh-summary'),
+              tooltip: 'Refresh verified Home summary',
+              visualDensity: VisualDensity.compact,
+              onPressed: _loadingSummary ? null : _refresh,
+              icon: const Icon(Icons.refresh_rounded, size: 21),
+            ),
+          ]),
           const SizedBox(height: 8),
           MintTickModeSwitcher(mode: widget.mode),
           const SizedBox(height: 11),
