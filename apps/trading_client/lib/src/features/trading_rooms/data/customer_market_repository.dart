@@ -51,6 +51,23 @@ class CustomerLiveQuote {
   /// Change vs the previous stored session close; only set for LAST_CLOSE rows.
   final num? changePercent;
 
+  /// Local fallback after a verified quote was seen earlier in this screen.
+  /// Never reuse LIVE when the API fails or the app is backgrounded.
+  /// The local source is deliberately distinct from backend-persisted sources.
+  CustomerLiveQuote? asLastRecorded() {
+    if (status == 'LAST_CLOSE' && ltp != null && exchangeAt != null) {
+      return this;
+    }
+    if (status != 'LIVE' || source != 'ANGEL_ONE_SMARTAPI_WS_V2' ||
+        ltp == null || !ltp!.isFinite || ltp! <= 0 || exchangeAt == null) {
+      return null;
+    }
+    return CustomerLiveQuote(
+      instrumentId: instrumentId, exchange: exchange, tradingSymbol: tradingSymbol,
+      status: 'LAST_CLOSE', ltp: ltp, exchangeAt: exchangeAt,
+      source: 'IN_MEMORY_LAST_VERIFIED_TICK');
+  }
+
   factory CustomerLiveQuote.fromJson(Map<String, dynamic> value) {
     final id = value['instrumentId'];
     final status = value['status'];
@@ -560,6 +577,32 @@ class CustomerMarketOverview {
   final List<CustomerSectorSummary> sectors;
   final List<CustomerIndexRow> indices;
   final List<CustomerMarketIdea> ideas;
+
+  /// A server-verified overview retained in memory during a transient API outage.
+  /// Downgrade every index from LIVE and discard time-sensitive trade ideas.
+  CustomerMarketOverview asLastRecorded() => CustomerMarketOverview(
+    generatedAt: generatedAt,
+    source: 'STORED_LAST_OVERVIEW',
+    breadthScope: breadthScope,
+    exchangeAsOf: exchangeAsOf,
+    universe: universe,
+    breadth: breadth,
+    gainers: gainers,
+    losers: losers,
+    gapUp: gapUp,
+    gapDown: gapDown,
+    sectors: sectors,
+    indices: [
+      for (final index in indices)
+        CustomerIndexRow(
+          indexCode: index.indexCode, displayName: index.displayName,
+          ltp: index.ltp, previousClose: index.previousClose,
+          changePct: index.changePct, open: index.open,
+          high: index.high, low: index.low, volume: index.volume,
+          exchangeAt: index.exchangeAt, freshness: 'LAST_CLOSE'),
+    ],
+    ideas: const [],
+  );
 
   factory CustomerMarketOverview.fromJson(Map<String, dynamic> value) {
     List<T> rows<T>(String key, T Function(Map<String, dynamic>) parse) {
