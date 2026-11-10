@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One explicit 2006->2012 ONE_DAY Angel One depth request; never store OHLCV.
+"""One strictly pinned 2,000-day ONE_DAY Angel One depth request; never store OHLCV.
 
 SSM assembles this with the previously reviewed owner authentication helper
 in-memory; only bounded, sanitized counts and dates leave the EC2 host.
