@@ -105,14 +105,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('home-next-action')), findsOneWidget);
       expect(find.byKey(const ValueKey('home-market-pulse')), findsOneWidget);
-      // 320dp ListViews build offscreen rows lazily; scroll to the row
-      // before checking it, rather than assuming it exists in the first frame.
+      expect(find.text('Long-term Compounding'), findsOneWidget);
+      expect(find.textContaining('20,000 planned'), findsWidgets);
+      // 320dp ListViews build offscreen rows lazily; scroll before checking.
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-mind-status')),
         150, scrollable: find.byType(Scrollable).first);
       expect(find.byKey(const ValueKey('home-mind-status')), findsOneWidget);
-      expect(find.text('Long-term Compounding'), findsOneWidget);
-      expect(find.textContaining('20,000 planned'), findsWidgets);
       // The disclaimer is intentionally below the fold. Verify by actually
       // scrolling the same compact viewport a customer uses.
       await tester.scrollUntilVisible(
