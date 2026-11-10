@@ -90,7 +90,17 @@ class ModelPredictionV2(BaseModel):
 def _feature_vector(row: FeatureRow, feature_names: list[str]) -> list[float]:
     if row.data_cutoff > row.as_of:
         raise ValueError("prediction feature row is not causal")
-    values = [float(row.features.get(name, 0.0)) for name in feature_names]
+    # The fitted artifact's ordered feature list is the authoritative schema.
+    # A missing event, filing or market feature is not the numeric value 0.0.
+    # Do not silently manufacture a prediction from an incomplete golden source.
+    if not feature_names or len(set(feature_names)) != len(feature_names):
+        raise ValueError("model feature names must be non-empty and unique")
+    missing = [name for name in feature_names if name not in row.features]
+    if missing:
+        raise ValueError(
+            "missing trained model features: " + ", ".join(sorted(missing))
+        )
+    values = [float(row.features[name]) for name in feature_names]
     if any(not math.isfinite(value) for value in values):
         raise ValueError("prediction feature values must be finite")
     return values
