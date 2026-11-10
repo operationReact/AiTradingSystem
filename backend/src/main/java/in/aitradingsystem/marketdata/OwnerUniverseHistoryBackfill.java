@@ -25,6 +25,7 @@ public class OwnerUniverseHistoryBackfill {
 
     private final UniverseCandleCoverageService coverage;
     private final HistoricalCandleService historical;
+    private final AppAngelOneMarketFeedService appFeed;
     private final MarketDataProvider privateSource;
 
     public OwnerUniverseHistoryBackfill(UniverseCandleCoverageService coverage,
@@ -33,12 +34,14 @@ public class OwnerUniverseHistoryBackfill {
                                         HistoricalCandleParser parser) {
         this.coverage = coverage;
         this.historical = historical;
+        this.appFeed = appFeed;
         this.privateSource = new OwnerAngelOneHistoricalProvider(appFeed, parser);
     }
 
     @Scheduled(fixedDelayString = "${minttick.owner-feed.history-backfill-poll-ms:2000}")
     public void collectOne() {
         try {
+            if (!appFeed.available()) return;
             var next = coverage.nextDue();
             if (next.isEmpty()) return;
             var window = coverage.window();
