@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from aitrading_intelligence.prospective_timing import (
     TimingStatus,
     assess_prospective_next_bar,
 )
 
-T = datetime(2026, 11, 10, 9, 20, tzinfo=timezone.utc)
+T = datetime(2026, 11, 10, 9, 20, tzinfo=UTC)
 
 
 def check(**changes):
@@ -38,10 +38,15 @@ def test_custody_and_coverage_abstain():
 
 
 def test_late_evidence_or_nonprospective_bar_abstains():
-    assert check(source_received_at=T + timedelta(seconds=1)).reason == "EVIDENCE_NOT_AVAILABLE_AT_DECISION"
-    assert check(source_published_at=T + timedelta(seconds=1), source_received_at=T + timedelta(seconds=2)).status == TimingStatus.ABSTAIN
+    assert (check(source_received_at=T + timedelta(seconds=1)).reason
+            == "EVIDENCE_NOT_AVAILABLE_AT_DECISION")
+    assert (check(source_published_at=T + timedelta(seconds=1),
+                  source_received_at=T + timedelta(seconds=2)).status
+            == TimingStatus.ABSTAIN)
     assert check(next_bar_open_at=T).reason == "NEXT_BAR_NOT_PROSPECTIVE"
 
 
 def test_inconsistent_publication_clock_abstains():
-    assert check(source_published_at=T, source_received_at=T - timedelta(seconds=1)).reason == "SOURCE_CLOCK_INCONSISTENT"
+    assert (check(source_published_at=T,
+                  source_received_at=T - timedelta(seconds=1)).reason
+            == "SOURCE_CLOCK_INCONSISTENT")
