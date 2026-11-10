@@ -119,7 +119,7 @@ class CustomerAngelOneLiveQuoteServiceTest {
             var initial = feed.snapshot(user, List.of(NSE));
             assertThat(initial.getFirst().status()).isEqualTo("CONNECTING");
             listener.getValue().onOpen(socket);
-            verify(socket).sendText(contains("\\"action\\":1"), eq(true));
+            verify(socket).sendText(contains("\"action\":1"), eq(true));
 
             listener.getValue().onBinary(socket,
                 ByteBuffer.wrap(frame(1, NSE.symbolToken(), 3, NOW.toEpochMilli(), 125455)), true);
