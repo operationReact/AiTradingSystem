@@ -32,6 +32,18 @@ class ResearchScanServiceTest {
     }
 
     @Test
+    void acceptsFullEquityUniverseAboveOldFiveHundredInstrumentCeiling() {
+        ResearchScanService service = new ResearchScanService(scans, marketData, clock, 3500, 60);
+        when(scans.activeCashEquityUniverse(2756)).thenReturn(List.of());
+        when(scans.requireRun(any(UUID.class))).thenReturn(
+            new ResearchScanSummary(UUID.randomUUID(), "FIVE_MINUTE", "SUCCEEDED",
+                2756, 0, 0, "VOLUME_BREAKOUT_V1,MA_RECLAIM_V1",
+                clock.instant(), clock.instant(), null, null));
+        service.run(HistoricalCandleInterval.FIVE_MINUTE, 2756);
+        verify(scans).activeCashEquityUniverse(2756);
+    }
+
+    @Test
     void rejectsDailyIntervalForIntradayScanner() {
         ResearchScanService service = new ResearchScanService(scans, marketData, clock, 200, 60);
         assertThrows(IllegalArgumentException.class,

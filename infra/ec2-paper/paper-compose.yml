@@ -44,8 +44,8 @@ services:
       MINTTICK_ANGEL_ONE_SSM_STREAM_ENABLED: "true"
       # Opt-in only, enabled by a separate controlled deployment after market-hours verification.
       OWNER_FEED_ENABLED: ${OWNER_FEED_ENABLED:-false}
-      OWNER_FEED_UNIVERSE_LIMIT: ${OWNER_FEED_UNIVERSE_LIMIT:-50}
-      OWNER_FEED_WS_TOKEN_CAP: ${OWNER_FEED_WS_TOKEN_CAP:-50}
+      OWNER_FEED_UNIVERSE_LIMIT: ${OWNER_FEED_UNIVERSE_LIMIT:-3000}
+      OWNER_FEED_WS_TOKEN_CAP: ${OWNER_FEED_WS_TOKEN_CAP:-1000}
       OWNER_FEED_POLL_MS: ${OWNER_FEED_POLL_MS:-10000}
       # Actual registered EC2 EIP, host private IPv4 and host NIC MAC are sent
       # to Angel One in official REST login/profile request headers only.

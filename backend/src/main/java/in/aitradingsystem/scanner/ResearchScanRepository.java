@@ -29,11 +29,11 @@ public class ResearchScanRepository {
 
     /**
      * Prioritise the actual NSE stocks displayed on MintTick Home before
-     * allocating the app-owned WebSocket's fixed 50-token watch budget.
+     * allocating the three private 1000-token WebSocket subscription shards.
      * This is deliberately separate from the research scan universe order.
      */
     public List<Instrument> marketFeedPriorityUniverse(int limit) {
-        if (limit < 1 || limit > 50) throw new IllegalArgumentException("market feed limit must be 1..50");
+        if (limit < 1 || limit > 3000) throw new IllegalArgumentException("market feed limit must be 1..3000");
         return jdbc.query("""
                 SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
                        i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,

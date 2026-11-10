@@ -20,15 +20,17 @@ import org.springframework.stereotype.Component;
  * session used by customer market-data APIs. Never signs in a separate owner
  * UUID, opens a customer trading session, or places an order.
  *
- * The WebSocket V2 implementation supports at most 50 watched instruments per
- * shared feed. Subscribing an arbitrary 1,000-stock universe on every poll
- * would exhaust the watch budget and omit homepage instruments.
+ * Angel One WebSocket V2 supports up to 1000 mode-1 tokens per socket and
+ * three sockets per client code. A full ~2800 equity universe is sharded
+ * across those sockets, with unavailable coverage explicitly reported.
  */
 @Component
 @ConditionalOnProperty(name = "minttick.owner-feed.enabled", havingValue = "true")
 public class OwnerLiveFeedWarmer {
     private static final Logger log = LoggerFactory.getLogger(OwnerLiveFeedWarmer.class);
-    private static final int MAX_WATCHED = CustomerAngelOneLiveQuoteService.MAX_WATCHED_PER_FEED;
+    private static final int MAX_WATCHED =
+        CustomerAngelOneLiveQuoteService.MAX_WATCHED_PER_FEED
+        * CustomerAngelOneLiveQuoteService.MAX_WEBSOCKETS_PER_CLIENT;
 
     private final AppAngelOneMarketFeedService appFeed;
     private final MarketSessionCalendar calendar;
@@ -36,13 +38,14 @@ public class OwnerLiveFeedWarmer {
     private final MarketLastTickStore lastTicks;
     private final Clock clock;
     private final int universeLimit;
+    private final java.util.Map<Long, Instant> recordedExchangeTimes = new java.util.HashMap<>();
 
     @Autowired
     public OwnerLiveFeedWarmer(AppAngelOneMarketFeedService appFeed,
             MarketSessionCalendar calendar,
             ResearchScanRepository scans,
             MarketLastTickStore lastTicks,
-            @Value("${minttick.owner-feed.universe-limit:50}") int universeLimit) {
+            @Value("${minttick.owner-feed.universe-limit:3000}") int universeLimit) {
         this(appFeed, calendar, scans, lastTicks, Clock.systemUTC(), universeLimit);
     }
 
@@ -70,7 +73,21 @@ public class OwnerLiveFeedWarmer {
             if (universe.isEmpty()) return;
             // The app-owned session is shared with quote/detail/overview APIs.
             // recordLive ignores CONNECTING, STALE, UNAVAILABLE and MARKET_CLOSED.
-            lastTicks.recordLive(appFeed.snapshot(universe));
+            var latest = appFeed.snapshot(universe);
+            // Only write tick advances. Without this, polling 2756 quiet symbols
+            // every 10 seconds produces unnecessary thousands of DB writes.
+            List<CustomerAngelOneLiveQuoteService.LiveQuote> changed = latest.stream()
+                .filter(q -> "LIVE".equals(q.status()) && q.ltp() != null
+                    && q.ltp().signum() > 0 && q.exchangeAt() != null
+                    && q.exchangeAt().isAfter(recordedExchangeTimes.getOrDefault(
+                        q.instrumentId(), Instant.EPOCH)))
+                .toList();
+            if (!changed.isEmpty()) {
+                lastTicks.recordLive(changed);
+                for (var quote : changed) {
+                    recordedExchangeTimes.put(quote.instrumentId(), quote.exchangeAt());
+                }
+            }
         } catch (RuntimeException ex) {
             // Never log SSM contents, provider response text, JWT or feed token.
             log.warn("Application market feed warm-up failed: {}", ex.getClass().getSimpleName());
