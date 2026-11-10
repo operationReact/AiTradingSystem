@@ -55,15 +55,19 @@ jobs:
           set -euo pipefail
           changed="$(git diff-tree --no-commit-id --name-only -r HEAD)"
           python3 infra/ec2-paper/owner_personal_history_request.py "$changed"
-      - name: Restrict owner audit and download to 09:00-21:20 IST before AWS
+      - name: Allow private archive audit anytime and prevent late downloads before AWS
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from datetime import datetime, time
           from zoneinfo import ZoneInfo
+          import os
+          mode = os.environ.get('OWNER_HISTORY_MODE')
+          if mode not in ('audit-only', 'download'):
+              raise SystemExit('PERSONAL_HISTORY_BLOCKED: INVALID_APPROVED_MODE')
           local_time = datetime.now(ZoneInfo('Asia/Kolkata')).time()
-          if not time(9, 0) <= local_time < time(21, 20):
-              raise SystemExit('PERSONAL_HISTORY_BLOCKED: OUTSIDE_0900_2120_IST')
+          if mode == 'download' and local_time >= time(21, 20):
+              raise SystemExit('PERSONAL_HISTORY_BLOCKED: NIGHTLY_STOP_CUTOFF')
           PY
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -185,9 +189,13 @@ jobs:
           python3 - <<'PY'
           from datetime import datetime, time
           from zoneinfo import ZoneInfo
+          import os
+          mode = os.environ.get('OWNER_HISTORY_MODE')
+          if mode not in ('audit-only', 'download'):
+              raise SystemExit('PERSONAL_HISTORY_BLOCKED: INVALID_APPROVED_MODE')
           local_time = datetime.now(ZoneInfo('Asia/Kolkata')).time()
-          if not time(9, 0) <= local_time < time(21, 20):
-              raise SystemExit('PERSONAL_HISTORY_BLOCKED: OUTSIDE_0900_2120_IST')
+          if mode == 'download' and local_time >= time(21, 20):
+              raise SystemExit('PERSONAL_HISTORY_BLOCKED: NIGHTLY_STOP_CUTOFF')
           PY
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
             --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
