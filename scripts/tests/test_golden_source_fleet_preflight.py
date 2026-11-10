@@ -101,13 +101,11 @@ class FleetPreflightTest(unittest.TestCase):
         self.assertIn("fundamental_filings", report["source_families"])
         self.assertIn("derivatives_chain", report["source_families"])
         self.assertIn("corporate_actions", report["source_families"])
-        self.assertIn("daily_bars", report["source_families"]
-                      ["required_by_models"] if False else report["source_families"])
 
     def test_missing_source_prevents_any_model_readiness_claim(self):
         report = fleet.generate()
-        self.assertIn("Daily", report["source_families"]["daily_bars"]
-                      ["history_requirement"].capitalize())
+        self.assertIn("20-25y", report["source_families"]["daily_bars"]
+                      ["history_requirement"])
         self.assertTrue(report["source_families"]["fundamental_filings"]
                         ["required_by_screens"])
         self.assertIn("Financial NLP Challenger",
