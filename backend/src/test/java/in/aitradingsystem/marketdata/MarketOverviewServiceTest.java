@@ -134,6 +134,57 @@ class MarketOverviewServiceTest {
     }
 
     @Test
+    void equityRefreshPreservesPreviouslyVerifiedNiftyIndexWithoutInventingLive() {
+        var repository = mock(MarketOverviewRepository.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketOverviewSnapshotStore.class);
+        var definitions = List.of(new MarketOverviewRepository.IndexDefinition(
+            "NIFTY50", "Nifty 50", "99926000"));
+        var member = new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src");
+        when(repository.universe("NIFTY50")).thenReturn(List.of(member));
+        when(repository.indices()).thenReturn(definitions);
+        when(repository.resolveEquityTokens(List.of("AAA-EQ"))).thenReturn(Map.of("AAA-EQ", "1"));
+        when(feed.details(anyList())).thenAnswer(call -> {
+            List<in.aitradingsystem.provider.angelone.AngelOneQuoteDetailParser.Expected> request =
+                call.getArgument(0);
+            return "1".equals(request.getFirst().symbolToken())
+                ? Map.of("1", detail("110", "105", "100"))
+                : Map.of(); // Index provider batch failed while equity succeeded.
+        });
+        var priorIndexAt = Instant.parse("2026-11-09T03:55:00Z");
+        var priorIndex = new MarketOverviewService.IndexRow(
+            "NIFTY50", "Nifty 50", new BigDecimal("24000"),
+            new BigDecimal("23980"), new BigDecimal("0.08"),
+            new BigDecimal("23950"), new BigDecimal("24100"), new BigDecimal("23900"),
+            0, priorIndexAt, "LIVE");
+        var last = new MarketOverviewService.Overview(NOW.minusSeconds(60),
+            MarketOverviewService.SOURCE, "NIFTY50_CONSTITUENTS", priorIndexAt,
+            new MarketOverviewService.Universe("NIFTY50", AS_OF, 50, 50, 50),
+            new MarketOverviewService.Breadth(30, 20, 0, 50), List.of(), List.of(),
+            List.of(), List.of(), List.of(), List.of(priorIndex), List.of());
+        when(store.load()).thenReturn(Optional.of(last));
+        when(calendar.isInsideCashSession(priorIndexAt)).thenReturn(true);
+        when(calendar.session(AS_OF)).thenReturn(new MarketSession(AS_OF,
+            java.time.ZonedDateTime.of(AS_OF, java.time.LocalTime.of(9, 15),
+                java.time.ZoneId.of("Asia/Kolkata")),
+            java.time.ZonedDateTime.of(AS_OF, java.time.LocalTime.of(15, 30),
+                java.time.ZoneId.of("Asia/Kolkata")), true));
+
+        var service = new MarketOverviewService(repository, feed, calendar,
+            Clock.fixed(NOW, ZoneOffset.UTC), store);
+        var overview = service.overview();
+
+        assertThat(overview.universe().returned()).isEqualTo(1);
+        assertThat(overview.indices()).hasSize(1);
+        assertThat(overview.indices().getFirst().ltp()).isEqualByComparingTo("24000");
+        assertThat(overview.indices().getFirst().exchangeAt()).isEqualTo(priorIndexAt);
+        assertThat(overview.indices().getFirst().freshness()).isEqualTo("LAST_CLOSE");
+        assertThat(overview.ideas()).isEmpty();
+        verify(store).save(overview);
+    }
+
+    @Test
     void totalProviderOutageCannotCreateEmptySavedOverviewSnapshot() {
         var repository = mock(MarketOverviewRepository.class);
         var feed = mock(AppAngelOneMarketFeedService.class);
@@ -227,11 +278,11 @@ class MarketOverviewServiceTest {
 
         var stale = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
             Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T03:00:00Z")), open);
-        assertThat(stale.indices().get(0).freshness()).isEqualTo("STALE");
+        assertThat(stale.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
 
         var expired = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
             Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T03:55:00Z")), open);
-        assertThat(expired.indices().get(0).freshness()).isEqualTo("STALE");
+        assertThat(expired.indices().get(0).freshness()).isEqualTo("LAST_CLOSE");
 
         var future = MarketOverviewService.compute(NOW, List.of(), Map.of(), Map.of(), indexDefs,
             Map.of("99926000", detailAt("24000", "23950", "23980", "2026-11-09T04:05:00Z")), open);

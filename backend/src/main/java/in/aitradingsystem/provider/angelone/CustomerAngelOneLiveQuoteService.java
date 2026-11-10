@@ -291,8 +291,20 @@ public class CustomerAngelOneLiveQuoteService {
             return CompletableFuture.completedFuture(null);
         }
         @Override public CompletionStage<?> onText(WebSocket ws, CharSequence message, boolean last) {
-            // Text control messages are not prices or evidence of fresh ticks.
-            if ("pong".contentEquals(message)) feed.lastHeartbeat = clock.instant();
+            // Text control messages are never evidence of an exchange price.
+            // Fragmented provider pongs are assembled with a strict size cap.
+            synchronized (feed.control) {
+                if (feed.control.length() + message.length() > 2048) {
+                    feed.control.setLength(0);
+                } else {
+                    feed.control.append(message);
+                    if (last) {
+                        if ("pong".contentEquals(feed.control))
+                            feed.lastHeartbeat = clock.instant();
+                        feed.control.setLength(0);
+                    }
+                }
+            }
             ws.request(1);
             return CompletableFuture.completedFuture(null);
         }
@@ -318,7 +330,12 @@ public class CustomerAngelOneLiveQuoteService {
         if (watch == null) return;
         Instant received = clock.instant();
         Tick verified = verify(watch.instrument, frame, received, watch.latest, sessionOpen(received));
-        if (verified != null) watch.latest = verified;
+        if (verified != null) {
+            watch.latest = verified;
+            // A verified tick proves this socket is alive even if a proxy
+            // drops heartbeat responses. Never change exchangeAt here.
+            feed.lastHeartbeat = received;
+        }
     }
 
     private Instant sessionOpen(Instant now) {
@@ -411,7 +428,8 @@ public class CustomerAngelOneLiveQuoteService {
         }
     }
 
-    private void heartbeat() {
+    /** Package-visible for deterministic socket/heartbeat contract tests. */
+    void heartbeat() {
         try {
             Instant now = clock.instant();
             for (Map.Entry<UUID, Feed> entry : feeds.entrySet()) {
@@ -424,10 +442,15 @@ public class CustomerAngelOneLiveQuoteService {
                     disconnect(entry.getKey());
                     continue;
                 }
-                // Official Python SDK uses websocket ping *control frames*
-                // with payload "ping", not an application text message.
-                // Heartbeats never refresh exchange tick age.
+                // The official SDK uses ping control frames; the published
+                // SmartAPI V2 protocol also documents text "ping"/"pong".
+                // Support both keepalive paths without inventing any quote.
                 feed.socket.sendPing(ByteBuffer.wrap("ping".getBytes(StandardCharsets.US_ASCII)))
+                        .exceptionally(error -> {
+                    closeFeed(feed);
+                    return null;
+                });
+                feed.socket.sendText("ping", true)
                         .exceptionally(error -> {
                     closeFeed(feed);
                     return null;
@@ -477,6 +500,7 @@ public class CustomerAngelOneLiveQuoteService {
         final Map<String, Watch> watches = new ConcurrentHashMap<>();
         final Object sendLock = new Object();
         final ByteArrayOutputStream parts = new ByteArrayOutputStream(FRAME_LENGTH);
+        final StringBuilder control = new StringBuilder(32);
         volatile State state = State.CONNECTING;
         volatile Instant lastHeartbeat;
         volatile WebSocket socket;
