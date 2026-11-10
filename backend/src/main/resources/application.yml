@@ -176,6 +176,15 @@ app:
       instrument-master-max-rejected-percent: 5
       instrument-master-min-retained-percent: 80
 minttick:
+  golden-source:
+    s3:
+      # D20-04B is storage-only and remains fully inert unless explicitly enabled.
+      # No collector, provider, model access or paid cloud resource is enabled here.
+      enabled: ${MINTTICK_GOLDEN_S3_ENABLED:false}
+      bucket: ${MINTTICK_GOLDEN_S3_BUCKET:}
+      expected-owner: ${MINTTICK_GOLDEN_S3_EXPECTED_OWNER:}
+      kms-key-arn: ${MINTTICK_GOLDEN_S3_KMS_KEY_ARN:}
+      prefix: golden-source/bronze/v1/
   owner-feed:
     enabled: ${OWNER_FEED_ENABLED:false}
     user-id: ${OWNER_FEED_USER_ID:f3122ced-5304-4f06-9a4d-3edeccbe07c1}
