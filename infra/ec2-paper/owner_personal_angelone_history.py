@@ -393,6 +393,90 @@ def persist_page(conn, root, symbol, token, first, through, data, earliest, late
     return digest
 
 
+def verify_archive_integrity(conn, root):
+    """Verify all existing manifest rows before planning ANY new provider call.
+
+    The root-private file content is never logged, exported or promoted to the
+    shared Golden Source. Read bounded gzip payloads; reject absent, altered,
+    symlinked, inconsistent and over-large files rather than treating corrupt
+    files as successfully collected windows.
+    """
+    entries = conn.execute("""SELECT exchange,symbol,token,from_date,through_date,
+                                     source_sha256,archive_relative_path,row_count,
+                                     earliest,latest,state
+                                FROM page ORDER BY token,from_date,through_date""").fetchall()
+    if len(entries) > 50000:
+        raise PersonalHistoryBlocked("MANIFEST_TOO_LARGE")
+    count = 0
+    rows_total = 0
+    for exchange,symbol,token,first,last,digest,rel,n,earliest,latest,state in entries:
+        if (exchange != "NSE"
+                or not isinstance(token, str)
+                or not re.fullmatch(r"[0-9]{1,12}", token)
+                or not isinstance(symbol, str)
+                or not re.fullmatch(r"[A-Z0-9][A-Z0-9_.&-]{0,36}-EQ", symbol)
+                or not isinstance(digest, str)
+                or not re.fullmatch(r"[a-f0-9]{64}", digest)
+                or rel != "pages/" + digest + ".json.gz"
+                or not isinstance(n, int) or not 0 <= n <= MAX_ROWS
+                or state not in ("NONEMPTY", "EMPTY")
+                or (n == 0) != (state == "EMPTY")):
+            raise PersonalHistoryBlocked("INVALID_ARCHIVE_MANIFEST")
+        try:
+            first_date = dt.date.fromisoformat(first)
+            last_date = dt.date.fromisoformat(last)
+            if (first_date > last_date
+                    or (last_date - first_date).days >= WINDOW_DAYS):
+                raise ValueError("bad window")
+        except (TypeError, ValueError):
+            raise PersonalHistoryBlocked("INVALID_ARCHIVE_MANIFEST") from None
+        filename = root / rel
+        if (filename.is_symlink() or not filename.is_file()
+                or filename.stat().st_uid != os.geteuid()
+                or filename.stat().st_mode & 0o077
+                or filename.stat().st_size > 1024 * 1024):
+            raise PersonalHistoryBlocked("ARCHIVE_FILE_NOT_PRIVATE")
+        try:
+            with gzip.open(filename, "rb") as stream:
+                canonical = stream.read(786433)
+            if len(canonical) > 786432:
+                raise PersonalHistoryBlocked("ARCHIVE_DECOMPRESSION_LIMIT")
+            if hashlib.sha256(canonical).hexdigest() != digest:
+                raise PersonalHistoryBlocked("ARCHIVE_CONTENT_HASH_MISMATCH")
+            source = json.loads(canonical)
+        except (OSError, EOFError, UnicodeError, ValueError, TypeError):
+            raise PersonalHistoryBlocked("ARCHIVE_FILE_CORRUPT") from None
+        if (not isinstance(source, dict)
+                or source.get("format") != "minttick.owner.personal.angelone.daily.v1"
+                or source.get("scope") != "PRIVATE_OWNER_PERSONAL_RESEARCH_ONLY"
+                or source.get("exchange") != "NSE"
+                or source.get("symbol") != symbol or source.get("token") != token
+                or source.get("window_start") != first
+                or source.get("window_end") != last
+                or source.get("interval") != "ONE_DAY"
+                or source.get("historical_listing_identity_verified") is not False
+                or source.get("session_completeness_verified") is not False
+                or not isinstance(source.get("rows"), list)
+                or len(source["rows"]) != n
+                or (n == 0 and (earliest is not None or latest is not None))):
+            raise PersonalHistoryBlocked("ARCHIVE_MANIFEST_MISMATCH")
+        if n:
+            try:
+                first_row_date = dt.datetime.fromisoformat(
+                    source["rows"][0][0]).astimezone(
+                        ZoneInfo("Asia/Kolkata")).date().isoformat()
+                last_row_date = dt.datetime.fromisoformat(
+                    source["rows"][-1][0]).astimezone(
+                        ZoneInfo("Asia/Kolkata")).date().isoformat()
+            except (TypeError, ValueError, IndexError, AttributeError):
+                raise PersonalHistoryBlocked("ARCHIVE_MANIFEST_MISMATCH") from None
+            if earliest != first_row_date or latest != last_row_date:
+                raise PersonalHistoryBlocked("ARCHIVE_MANIFEST_MISMATCH")
+        count += 1
+        rows_total += n
+    return count, rows_total
+
+
 def provider_cooldown_active(conn, now=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     row = conn.execute("""SELECT retry_after FROM provider_cooldown
@@ -453,6 +537,11 @@ def run():
     try:
         conn = init_db(root)
         try:
+            verified_pages, verified_rows = verify_archive_integrity(conn, root)
+            print("PERSONAL_ARCHIVE_VERIFIED_PAGES: " + str(verified_pages),
+                  flush=True)
+            print("PERSONAL_ARCHIVE_VERIFIED_ROWS: " + str(verified_rows),
+                  flush=True)
             catalogue = select_catalogue_symbols()
             entries = select_next_batch(conn, catalogue)
             print("PERSONAL_UNIVERSE_EQUITIES: " + str(len(catalogue)), flush=True)
