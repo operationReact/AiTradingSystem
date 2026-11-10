@@ -256,6 +256,19 @@ class CustomerAngelOneLiveQuoteServiceTest {
             assertThat(single.status()).isEqualTo("LIVE");
             assertThat(single.ltp()).isEqualByComparingTo("1234.56");
             assertThat(single.exchangeAt()).isEqualTo(NOW);
+
+            // Two active stocks in one shard must share one cash-session
+            // calendar read; checking every tick separately scales poorly.
+            var firstShard = listeners.getAllValues().get(0);
+            for (int i = 0; i < 2; i++) {
+                firstShard.onBinary(socket, ByteBuffer.wrap(frame(1,
+                    equities.get(i).symbolToken(), 1, NOW.toEpochMilli(), 123456)), true);
+            }
+            clearInvocations(calendar);
+            var firstTwo = feed.snapshotApplication(user, equities.subList(0, 2));
+            assertThat(firstTwo).allMatch(q -> "LIVE".equals(q.status()));
+            verify(calendar, times(1)).session(muhurat);
+
             verify(builder, times(3))
                 .buildAsync(any(java.net.URI.class), any(java.net.http.WebSocket.Listener.class));
         } finally {
