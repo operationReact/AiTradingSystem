@@ -6,8 +6,6 @@ reviewed SSM/login helper. No customer API, commercial Golden Source state,
 broker order endpoint, live-trading permission, external object store, or
 GitHub candle output. Never put JWT/keys in a file.
 """
-from __future__ import annotations
-
 import datetime as dt
 import decimal
 import fcntl
