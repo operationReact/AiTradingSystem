@@ -53,7 +53,7 @@ class OwnerUniverseHistoryBackfillTest {
         new OwnerUniverseHistoryBackfill(service, history,
                 mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne();
 
-        verify(history, times(1)).start(42L, HistoricalCandleInterval.FIVE_MINUTE,
+        verify(history, times(1)).startWithProvider(42L, HistoricalCandleInterval.FIVE_MINUTE,
                 LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class));
         verifyNoMoreInteractions(history);
     }
