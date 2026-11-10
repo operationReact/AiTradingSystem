@@ -1,0 +1,37 @@
+name: MintTick - owner-only daily history archive contract
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/owner_personal_angelone_history.py'
+      - 'scripts/tests/test_owner_personal_angelone_history.py'
+      - '.github/workflows/minttick-owner-personal-history-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check private archive syntax and offline data contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/owner_personal_angelone_history.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_owner_personal_angelone_history.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          auth=Path('infra/ec2-paper/probe_owner_angelone_auth.py').read_text()
+          collector=Path('infra/ec2-paper/owner_personal_angelone_history.py').read_text()
+          assert '\nif __name__ == "__main__":' in auth
+          merged=auth.split('\nif __name__ == "__main__":',1)[0]+'\n'+collector
+          compile(merged,'<owner-only-review>','exec')
+          assert merged.count('if __name__ == "__main__":')==1
+          print('No provider API or AWS activity in this CI job')
+          PY
