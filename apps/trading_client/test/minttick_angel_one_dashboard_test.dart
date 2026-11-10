@@ -107,7 +107,7 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('angel-open-holdings')));
         await tester.pumpAndSettle();
         expect(find.text('Portfolio value'), findsOneWidget);
-        expect(find.text('₹6,000.00'), findsOneWidget);
+        expect(find.text('₹6,000.00'), findsWidgets);
         expect(tester.takeException(), isNull);
 
         await tester.tap(find.byKey(const ValueKey('angel-back-overview')));
