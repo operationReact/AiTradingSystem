@@ -256,6 +256,27 @@ public class AngelOneApiClient {
         return data;
     }
 
+    /** Read-only historical candles under an already verified application/customer API key. */
+    public JsonNode customerCandles(String apiKey, String jwtToken, String exchange,
+                                    String symbolToken, String interval, String fromDate, String toDate) {
+        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
+                || jwtToken == null || jwtToken.isBlank()) {
+            throw new IllegalArgumentException("Valid broker read session required");
+        }
+        ObjectNode body = mapper.createObjectNode()
+                .put("exchange", exchange)
+                .put("symboltoken", symbolToken)
+                .put("interval", interval)
+                .put("fromdate", fromDate)
+                .put("todate", toDate);
+        JsonNode data = post(CANDLE_PATH, jwtToken, body, apiKey);
+        if (!data.isArray()) {
+            throw new AngelOneException(AngelOneException.Kind.INVALID_RESPONSE, "CANDLES_NOT_ARRAY",
+                    "Candle response data was not an array");
+        }
+        return data;
+    }
+
     public JsonNode rms(String jwtToken) {
         return get(RMS_PATH, jwtToken);
     }

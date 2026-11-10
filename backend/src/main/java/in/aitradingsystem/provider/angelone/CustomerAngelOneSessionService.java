@@ -180,6 +180,27 @@ public class CustomerAngelOneSessionService {
         }
     }
 
+    /**
+     * Read-only historical OHLCV under the existing verified session. The
+     * application feed uses its reserved internal UUID, never a customer ID.
+     * Historical request pacing is shared with the regular provider adapter.
+     */
+    public JsonNode historicalCandles(UUID userId, String exchange, String symbolToken,
+                                      String interval, String fromDate, String toDate) {
+        BrokerSession session = current(userId);
+        if (session == null) throw new BrokerConnectionRequiredException();
+        limiter.acquireForRecovery(AngelOneRateLimiter.Category.HISTORICAL_CANDLES);
+        try {
+            return api.customerCandles(session.apiKey(), session.jwt(), exchange,
+                    symbolToken, interval, fromDate, toDate);
+        } catch (AngelOneException ex) {
+            if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
+                sessions.remove(userId, session);
+            }
+            throw ex;
+        }
+    }
+
     private BrokerRead read(UUID userId, AngelOneRateLimiter.Category category, AccountCall call) {
         BrokerSession session = current(userId);
         if (session == null) throw new BrokerConnectionRequiredException();
