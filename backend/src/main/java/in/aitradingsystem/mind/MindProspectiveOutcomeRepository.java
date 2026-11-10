@@ -124,6 +124,47 @@ public class MindProspectiveOutcomeRepository {
                 cohortId);
     }
 
+    /**
+     * Audit reads the original immutable V76 evidence only. It never edits
+     * or recomputes previously recorded performance figures.
+     */
+    public record AuditedOutcome(Instant entryCandleAt, Instant exitCandleAt,
+                                 Instant evaluatedAt, String candidateFingerprint,
+                                 String signalSourceDigest, String outcomeSourceDigest,
+                                 BigDecimal rawEntry, BigDecimal rawExit,
+                                 BigDecimal grossReturnPercent,
+                                 BigDecimal illustrativeNetReturnPercent,
+                                 String exitReason, int sourceBars) {}
+
+    public java.util.Optional<AuditedOutcome> recordedOutcome(Receipt receipt) {
+        if (receipt == null || receipt.cohortId() == null ||
+            receipt.signalCandleAt() == null) {
+            throw new IllegalArgumentException("Invalid outcome audit lookup");
+        }
+        return jdbc.query("""
+                SELECT entry_candle_at, exit_candle_at, evaluated_at,
+                       candidate_fingerprint, signal_source_digest,
+                       outcome_source_digest, raw_entry, raw_exit,
+                       gross_return_percent, illustrative_net_return_percent,
+                       exit_reason, source_bar_count
+                  FROM mind_prospective_outcome
+                 WHERE cohort_id = ? AND member_slot = ?
+                   AND signal_candle_at = ?
+                """, (rs, n) -> new AuditedOutcome(
+                    instant(rs.getObject("entry_candle_at", OffsetDateTime.class)),
+                    instant(rs.getObject("exit_candle_at", OffsetDateTime.class)),
+                    instant(rs.getObject("evaluated_at", OffsetDateTime.class)),
+                    rs.getString("candidate_fingerprint"),
+                    rs.getString("signal_source_digest"),
+                    rs.getString("outcome_source_digest"),
+                    rs.getBigDecimal("raw_entry"), rs.getBigDecimal("raw_exit"),
+                    rs.getBigDecimal("gross_return_percent"),
+                    rs.getBigDecimal("illustrative_net_return_percent"),
+                    rs.getString("exit_reason"), rs.getInt("source_bar_count")),
+                receipt.cohortId(), receipt.memberSlot(), utc(receipt.signalCandleAt()))
+                .stream().findFirst();
+    }
+
     private static OffsetDateTime utc(Instant instant) {
         return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);
     }
