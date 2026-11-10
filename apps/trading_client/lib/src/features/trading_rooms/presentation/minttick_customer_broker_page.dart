@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../data/customer_angel_one_repository.dart';
 import 'minttick_angel_one_manual_login.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_angel_one_dashboard.dart';
 
 /// Customer-owned, interactive, READ-ONLY broker connection. Never renders
 /// provider access tokens, PIN, TOTP or API key after submission.
@@ -184,6 +185,16 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final connection = _connection;
+    if (connection?.connected == true) {
+      return MintTickAngelOneDashboard(
+        repository: widget.repository,
+        connection: connection!,
+        busy: _busy,
+        error: _error,
+        onRefresh: _refresh,
+        onDisconnect: _disconnect,
+      );
+    }
     return MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 19),
       const MintTickEyebrow('Connected brokers'),
