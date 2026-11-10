@@ -177,7 +177,7 @@ def test_duplicate_sources_and_unbounded_contracts_rejected() -> None:
         SourceSliceEvidence.model_validate(
             source().model_dump() | {"rights_receipt_digest": None}
         )
-    with pytest.raises(ValidationError, match="cannot precede"):
+    with pytest.raises(ValidationError, match="cannot be available before"):
         SourceSliceEvidence.model_validate(
             source().model_dump() | {
                 "latest_event_at": AS_OF,
