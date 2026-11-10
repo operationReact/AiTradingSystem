@@ -103,7 +103,7 @@ public class MarketOverviewService {
         Instant now = clock.instant();
         if (cached != null && now.isBefore(cached.generatedAt().plus(CACHE_TTL))) return cached;
         try {
-            cached = computeLive(now);
+            cached = retainMissingVerifiedIndices(computeLive(now));
         } catch (RuntimeException ex) {
             Optional<Overview> stored = storedOverview();
             if (stored.isPresent()) return stored.get();
@@ -126,9 +126,47 @@ public class MarketOverviewService {
         // session are not verified last trades (e.g. the broker may stamp a
         // holiday quote with today's fetch date). Fail closed, never relabel
         // such a row as a completed exchange session.
-        return stored.filter(snapshot -> snapshot.exchangeAsOf() != null
-                && calendar.isInsideCashSession(snapshot.exchangeAsOf()))
+        return stored.filter(snapshot -> SOURCE.equals(snapshot.source())
+                && snapshot.exchangeAsOf() != null
+                && verifiedSessionTime(snapshot.exchangeAsOf()))
+            // A newer verified constituent must never legitimize an older invalid
+            // index row which happened to be included in the same snapshot.
+            .map(snapshot -> withIndices(snapshot, snapshot.indices().stream()
+                .filter(index -> verifiedSessionTime(index.exchangeAt())).toList()))
             .map(MarketOverviewService::asStored);
+    }
+
+    /** Only reuse previously captured, calendar-verified index values.
+     * An intermittent index batch failure must not erase a valid last recorded
+     * index when constituent quotes keep updating the overview snapshot.
+     */
+    private Overview retainMissingVerifiedIndices(Overview fresh) {
+        if (fresh.indices().size() >= repository.indices().size()) return fresh;
+        Optional<Overview> stored = storedOverview();
+        if (stored.isEmpty()) return fresh;
+        Map<String, IndexRow> result = new LinkedHashMap<>();
+        for (IndexRow row : fresh.indices()) result.put(row.indexCode(), row);
+        for (IndexRow previous : stored.get().indices()) {
+            result.putIfAbsent(previous.indexCode(), previous);
+        }
+        if (result.size() == fresh.indices().size()) return fresh;
+        return withIndices(fresh, List.copyOf(result.values()));
+    }
+
+    private boolean verifiedSessionTime(Instant timestamp) {
+        if (timestamp == null || timestamp.isAfter(clock.instant())) return false;
+        try {
+            return calendar.isInsideCashSession(timestamp);
+        } catch (DataAccessException ex) {
+            return false;
+        }
+    }
+
+    private static Overview withIndices(Overview source, List<IndexRow> indices) {
+        return new Overview(source.generatedAt(), source.source(), source.breadthScope(),
+            source.exchangeAsOf(), source.universe(), source.breadth(),
+            source.gainers(), source.losers(), source.gapUp(), source.gapDown(),
+            source.sectors(), indices, source.ideas());
     }
 
     static Overview asStored(Overview overview) {
@@ -193,10 +231,14 @@ public class MarketOverviewService {
 
     static String indexFreshness(Instant exchangeAt, IndexSession session, Instant evaluatedAt) {
         if (!session.insideCashSession() || session.sessionOpen() == null) return INDEX_LAST_CLOSE;
-        if (exchangeAt == null || exchangeAt.isBefore(session.sessionOpen())
-                || exchangeAt.isAfter(evaluatedAt)
-                || Duration.between(exchangeAt, evaluatedAt).compareTo(LIVE_QUOTE_MAX_AGE) > 0) {
+        if (exchangeAt == null || exchangeAt.isAfter(evaluatedAt)) {
             return INDEX_STALE;
+        }
+        // A genuine older index quote is displayable as last recorded, never
+        // an active LIVE index signal. STALE is reserved for invalid time evidence.
+        if (exchangeAt.isBefore(session.sessionOpen())
+                || Duration.between(exchangeAt, evaluatedAt).compareTo(LIVE_QUOTE_MAX_AGE) > 0) {
+            return INDEX_LAST_CLOSE;
         }
         return INDEX_LIVE;
     }
