@@ -59,6 +59,14 @@ public class HistoricalCandleService {
 
     public CandleBackfillRun start(long instrumentId, HistoricalCandleInterval interval,
                                    LocalDate fromDate, LocalDate toDate) {
+        return startWithProvider(instrumentId, interval, fromDate, toDate, provider);
+    }
+
+    /** Owner-only adapter selection; the public backfill API always uses the default provider. */
+    public CandleBackfillRun startWithProvider(long instrumentId, HistoricalCandleInterval interval,
+                                               LocalDate fromDate, LocalDate toDate,
+                                               MarketDataProvider sourceProvider) {
+        if (sourceProvider == null) throw new IllegalArgumentException("A source provider is required");
         validateRange(fromDate, toDate);
         if (interval == null) throw new MarketDataException("INVALID_INTERVAL", "A supported candle interval is required");
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
@@ -69,17 +77,17 @@ public class HistoricalCandleService {
         CandleBackfillRun run = repository.createRun(UUID.randomUUID(), instrument.id(), instrument.exchange(),
                 instrument.tradingSymbol(), instrument.symbolToken(), instrument.catalogueVersion(),
                 interval.name(), fromDate, toDate);
-        process(run.id());
+        process(run.id(), sourceProvider);
         return repository.requireRun(run.id());
     }
 
     public CandleBackfillRun resume(UUID id) {
         repository.claimForResume(id);
-        process(id);
+        process(id, provider);
         return repository.requireRun(id);
     }
 
-    private void process(UUID runId) {
+    private void process(UUID runId, MarketDataProvider activeProvider) {
         CandleBackfillRun run = repository.requireRun(runId);
         int chunks = 0;
         while (!run.nextFromDate().isAfter(run.toDate()) && chunks < maxChunksPerRun) {
@@ -89,7 +97,7 @@ public class HistoricalCandleService {
             try {
                 String from = LocalDateTime.of(chunkFrom, MARKET_OPEN).format(PROVIDER_DATE);
                 String to = LocalDateTime.of(chunkTo, MARKET_CLOSE).format(PROVIDER_DATE);
-                List<HistoricalCandleParser.CandleValues> values = provider.historicalCandles(
+                List<HistoricalCandleParser.CandleValues> values = activeProvider.historicalCandles(
                         run.exchange(), run.symbolToken(), run.interval(), from, to);
                 validateTimestamps(values, chunkFrom, chunkTo);
                 Instant fetchedAt = Instant.now();
@@ -97,7 +105,7 @@ public class HistoricalCandleService {
                 List<MarketCandle> bars = values.stream().map(value -> new MarketCandle(
                         0, chunkRun.instrumentId(), chunkRun.exchange(), chunkRun.tradingSymbol(), chunkRun.symbolToken(),
                         chunkRun.catalogueVersion(), chunkRun.interval(), value.candleTime(), value.open(), value.high(),
-                        value.low(), value.close(), value.volume(), provider.source(), fetchedAt)).toList();
+                        value.low(), value.close(), value.volume(), activeProvider.source(), fetchedAt)).toList();
                 repository.persistChunk(run.id(), chunkFrom, chunkTo, chunkTo.plusDays(1), bars);
             } catch (RuntimeException ex) {
                 repository.recordChunkFailure(run.id(), chunkFrom, chunkTo, errorCode(ex), errorMessage(ex));
