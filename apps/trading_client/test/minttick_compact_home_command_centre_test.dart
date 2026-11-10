@@ -121,6 +121,9 @@ void main() {
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-next-action')),
         -200, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('home-next-action')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('home-next-action')));
       await tester.pumpAndSettle();
       expect(openedRoom, 1);
@@ -128,6 +131,9 @@ void main() {
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-mind-status')),
         180, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('home-mind-status')));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('home-mind-status')));
       await tester.pumpAndSettle();
       expect(openedMind, 1);
@@ -138,6 +144,9 @@ void main() {
       await tester.scrollUntilVisible(
         find.byKey(const ValueKey('home-next-action')),
         -200, scrollable: find.byType(Scrollable).first);
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('home-next-action')));
+      await tester.pumpAndSettle();
       expect(find.text('Connect your brokerage account'), findsOneWidget);
       expect(find.textContaining('20,000 planned'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('home-next-action')));
