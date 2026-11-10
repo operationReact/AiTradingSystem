@@ -1,9 +1,9 @@
 {
-  "application": "MintTick",
-  "environment": "paper",
-  "aws_account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
-  "operation": "probe-private-owner-historical-api",
-  "purpose": "one-completed-session-read-only-no-persistence"
+    "application": "MintTick",
+    "environment": "paper",
+    "aws_account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "operation": "probe-private-owner-historical-api",
+    "purpose": "one-completed-session-read-only-no-persistence"
 }
