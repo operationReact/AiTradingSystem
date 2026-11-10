@@ -108,16 +108,26 @@ void main() {
       expect(find.byKey(const ValueKey('home-mind-status')), findsOneWidget);
       expect(find.text('Long-term Compounding'), findsOneWidget);
       expect(find.textContaining('20,000 planned'), findsWidgets);
+      // The disclaimer is intentionally below the fold. Verify by actually
+      // scrolling the same compact viewport a customer uses.
+      await tester.scrollUntilVisible(
+        find.textContaining('Mode selection does not enable execution'),
+        180, scrollable: find.byType(Scrollable).first);
       expect(find.textContaining('Mode selection does not enable execution'),
           findsWidgets);
       expect(find.textContaining('P&L'), findsNothing);
       expect(tester.takeException(), isNull);
 
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('home-next-action')),
+        -200, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byKey(const ValueKey('home-next-action')));
       await tester.pumpAndSettle();
       expect(openedRoom, 1);
 
-      await tester.ensureVisible(find.byKey(const ValueKey('home-mind-status')));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('home-mind-status')),
+        180, scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byKey(const ValueKey('home-mind-status')));
       await tester.pumpAndSettle();
       expect(openedMind, 1);
@@ -125,6 +135,9 @@ void main() {
       mode.select('LIVE');
       await tester.pumpAndSettle();
       expect(repo.requested, containsAllInOrder(['PAPER', 'LIVE']));
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('home-next-action')),
+        -200, scrollable: find.byType(Scrollable).first);
       expect(find.text('Connect your brokerage account'), findsOneWidget);
       expect(find.textContaining('20,000 planned'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('home-next-action')));
