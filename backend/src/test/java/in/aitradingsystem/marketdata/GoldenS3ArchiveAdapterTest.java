@@ -70,15 +70,14 @@ class GoldenS3ArchiveAdapterTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("versioning");
 
-        s3 = configured();
-        when(s3.getPublicAccessBlock(any(software.amazon.awssdk.services.s3.model
+        S3Client open = configured();
+        when(open.getPublicAccessBlock(any(software.amazon.awssdk.services.s3.model
                 .GetPublicAccessBlockRequest.class))).thenReturn(
                 GetPublicAccessBlockResponse.builder()
                     .publicAccessBlockConfiguration(PublicAccessBlockConfiguration.builder()
                         .blockPublicAcls(false).ignorePublicAcls(true)
                         .blockPublicPolicy(true).restrictPublicBuckets(true).build())
                     .build());
-        S3Client open = s3;
         assertThatThrownBy(() -> adapter(open))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("public access");
