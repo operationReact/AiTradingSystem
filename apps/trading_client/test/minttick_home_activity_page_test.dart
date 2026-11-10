@@ -33,6 +33,18 @@ class _History implements CustomerHomeActivityRepository {
 }
 
 void main() {
+  test('activity data refuses unverified or unsupported account events', () {
+    expect(() => HomeActivity.decode({
+      'kind': 'LIVE_ORDER_FILLED', 'description': 'Not established',
+      'occurredAt': '2026-11-10T10:00:00Z',
+      'roomId': null,
+    }), throwsFormatException);
+    expect(() => HomeActivity.decode({
+      'kind': 'ROOM_PLAN_SAVED', 'description': 'Room saved',
+      'occurredAt': 'bad timestamp', 'roomId': null,
+    }), throwsFormatException);
+  });
+
   for (final width in [320.0, 390.0]) {
     testWidgets('activity history is persisted-source only on ${width.toInt()}dp',
         (tester) async {
