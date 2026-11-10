@@ -1,0 +1,10 @@
+{
+  "application": "MintTick",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-golden-download-preflight",
+  "scope": "20-year-all-stock-readiness",
+  "store_market_data": false,
+  "enable_trading": false
+}
