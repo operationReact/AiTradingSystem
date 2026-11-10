@@ -198,10 +198,8 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
       );
     }
     return PopScope(
-      canPop: widget.onBack == null,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) { widget.onBack?.call(); }
-      },
+      // The app shell owns the back stack; Android back must pop this route.
+      canPop: true,
       child: MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 19),
       if (widget.onBack != null)
