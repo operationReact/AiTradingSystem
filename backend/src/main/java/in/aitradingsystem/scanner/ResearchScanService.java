@@ -37,7 +37,7 @@ public class ResearchScanService {
             Clock clock,
             StrategyRegistry registry,
             StrategyConfigService strategyConfigs,
-            @Value("${app.research.scan.max-universe-size:200}") int maxUniverseSize,
+            @Value("${app.research.scan.max-universe-size:3500}") int maxUniverseSize,
             @Value("${app.research.scan.max-candle-age-minutes:60}") int maxCandleAgeMinutes) {
         this(scans, marketData, quality, clock, registry, strategyConfigs,
                 maxUniverseSize, maxCandleAgeMinutes, false);
@@ -61,8 +61,8 @@ public class ResearchScanService {
             MarketDataQualityService quality, Clock clock, StrategyRegistry registry,
             StrategyConfigService strategyConfigs, int maxUniverseSize, int maxCandleAgeMinutes,
             boolean fixtureBypass) {
-        if (maxUniverseSize < 1 || maxUniverseSize > 500) {
-            throw new IllegalArgumentException("maxUniverseSize must be between 1 and 500");
+        if (maxUniverseSize < 1 || maxUniverseSize > 10000) {
+            throw new IllegalArgumentException("maxUniverseSize must be between 1 and 10000");
         }
         if (maxCandleAgeMinutes < 1 || maxCandleAgeMinutes > 1440) {
             throw new IllegalArgumentException("maxCandleAgeMinutes must be between 1 and 1440");
