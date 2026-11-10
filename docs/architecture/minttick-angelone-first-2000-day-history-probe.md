@@ -25,3 +25,16 @@ The vendor documents `ONE_DAY` max request range of 2,000 days; it does **not** 
 For each next step, **first examine actual earliest/latest year coverage and any provider limits**. Do not trigger another window automatically, and do not store/redistribute data before permissions are verified. A provider historical API success is not a data-reuse license, nor does a current ticker guarantee delisted/past identities.
 
 **No new AWS resources, IAM roles, database writes, synthetic candles, model promotion or broker orders** are introduced.
+
+
+## Actual first-window evidence (2026-11-10, real owner app SmartAPI)
+
+- Exactly one live read-only SSM provider request was triggered by the one-file `dev` commit `62256a310f3322b3faf03ef659b220641bb31608`, using PR #717's guarded implementation, with the running exact EC2 host `i-09c01b470fb39b85a`.
+- GitHub Actions SSM result job **129870285287** completed **successfully**; sanitized machine response: `DEPTH_STATUS: NONEMPTY`, `DEPTH_VALIDATED_ROWS: 1356`, `DEPTH_FIRST_CANDLE: 2006-11-10`, `DEPTH_LAST_CANDLE: 2012-04-30`.
+- Returned daily candle counts by calendar year, **partial boundary years**: 2006=35, 2007=249, 2008=246, 2009=243, 2010=252, 2011=247, 2012=84. These counts reflect Angel One's response only; **no independent historical exchange-session calendar completeness or corporate-action reconciliation was performed**.
+- Angel One served some daily RELIANCE-EQ candles from 2006, which was the original technical uncertainty; neither current symbol token continuity nor contractual retention/training/display rights are established.
+- **No actual price data was persisted**. The probe returned only status, bounded count and dates. The operational Golden Source V78 rights registry and V80 object archive were not populated by this test.
+
+## Sequential bounded depth checks: no automatic bulk download
+
+The continuation PR allows only explicitly committed phases 2, 3 and 4. An exact one-file push to the existing request path triggers ONE provider request per phase on the existing EC2 role, validating date ranges, rights-independent read-only status, and sanitized counts. No provider archive/storage activation or hidden repeat polling. Phase 4 is a shorter, 1,306-day window through 2026-11-10. Each stage must complete before authorization of the next; an absent early result is not backfilled with fabricated bars.

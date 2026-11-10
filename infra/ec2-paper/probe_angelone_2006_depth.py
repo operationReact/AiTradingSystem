@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One explicit 2006->2012 ONE_DAY Angel One depth request; never store OHLCV.
+"""One strictly pinned 2,000-day ONE_DAY Angel One depth request; never store OHLCV.
 
 SSM assembles this with the previously reviewed owner authentication helper
 in-memory; only bounded, sanitized counts and dates leave the EC2 host.
@@ -8,14 +8,27 @@ This is a source AVAILABILITY probe, not Golden Source licensed ingestion.
 import datetime as dt
 import decimal
 import json
+import os
 import re
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
-START = dt.date(2006, 11, 10)
-END = START + dt.timedelta(days=1999)  # inclusive 2000 calendar dates
+# Only these four audited windows can ever be selected. Default phase 1.
+# The last phase stops at the user's 2026-11-10 target date.
+WINDOWS = {
+    "1": (dt.date(2006, 11, 10), dt.date(2012, 5, 1)),
+    "2": (dt.date(2012, 5, 2), dt.date(2017, 10, 22)),
+    "3": (dt.date(2017, 10, 23), dt.date(2023, 4, 14)),
+    "4": (dt.date(2023, 4, 15), dt.date(2026, 11, 10)),
+}
+PHASE = os.environ.get("MINTTICK_DEPTH_PHASE", "1")
+if PHASE not in WINDOWS:
+    raise ValueError("only four reviewed historical depth phases are permitted")
+START, END = WINDOWS[PHASE]
+if (END - START).days + 1 > 2000:
+    raise AssertionError("historical window exceeds Angel One daily request limit")
 MAX_ROWS = 2000
 MAX_RESPONSE_BYTES = 262144
 NSE_TOKEN = "2885"  # current known RELIANCE-EQ token, historical identity unverified
@@ -131,6 +144,7 @@ def run_depth():
 
 
 def main():
+    print("DEPTH_PHASE: " + PHASE, flush=True)
     print("DEPTH_WINDOW_START: " + START.isoformat(), flush=True)
     print("DEPTH_WINDOW_END: " + END.isoformat(), flush=True)
     print("DEPTH_INSTRUMENT: RELIANCE_EQ_PROBE", flush=True)
