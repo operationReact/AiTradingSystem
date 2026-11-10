@@ -160,6 +160,20 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         self.assertIn("PRIVATE_OWNER_PERSONAL_RESEARCH_ONLY",code)
         self.assertIn("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE",code)
 
+    def test_private_root_encryption_configuration_and_no_unverified_extra_volumes(self):
+        import re
+        tf=(ROOT / "infra/ec2-paper/main.tf").read_text()
+        match=re.search(r"root_block_device\\s*\\{([^{}]+)\\}",tf)
+        self.assertIsNotNone(match)
+        self.assertRegex(match.group(1),r"\\bencrypted\\s*=\\s*true\\b")
+        self.assertRegex(match.group(1),r"delete_on_termination\\s*=\\s*false")
+        workflow=(ROOT / ".github/workflows/minttick-owner-private-candle-pilot.yml").read_text()
+        self.assertIn("ec2 describe-volumes --volume-ids",workflow)
+        self.assertIn('test "$count" -eq 1',workflow)
+        self.assertIn('test "$encrypted" = "True"',workflow)
+        self.assertIn("live AWS encryption status not independently",workflow)
+        self.assertIn("ONLY",workflow.upper())
+
     def test_no_data_exposed_outside_storage_on_resume(self):
         date=dt.date(2006,11,10)
         f("persist_page")(self.conn,self.root,"INFY-EQ","1594",
