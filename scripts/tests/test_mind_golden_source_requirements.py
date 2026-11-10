@@ -35,7 +35,7 @@ def extract_source_truth():
 
 
 def verify_contract(c):
-    if c["contract_version"] != "mintick.mind.golden-source-requirements.v1":
+    if c["contract_version"] != "minttick.mind.golden-source-requirements.v1":
         raise ValueError("Unexpected or unreviewed data-requirement contract version")
     expected_routes, expected_models, expected_families = extract_source_truth()
     routes, models, families = c["screens"], c["models"], c["strategy_families"]
