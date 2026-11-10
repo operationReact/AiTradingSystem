@@ -85,13 +85,19 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    // Overview shows real source counts without inventing an aggregate
+    // valuation from a quote-less Upstox holding.
+    expect(find.byKey(const ValueKey('portfolio-total-holdings')),
+        findsOneWidget);
+    expect(find.textContaining('Valuation incomplete'), findsOneWidget);
+    await tester.tap(find.text('Broker accounts').first);
+    await tester.pumpAndSettle();
     expect(find.text('LIVE · UPSTOX'), findsOneWidget);
-    expect(find.textContaining('₹1250.5'), findsOneWidget);
-    expect(find.textContaining('Holdings: 1'), findsOneWidget);
-    await tester.tap(find.text('Angel One').first);
+    expect(find.textContaining('₹1,250.50'), findsOneWidget);
+    await tester.tap(find.text('Angel One').last);
     await tester.pumpAndSettle();
     expect(find.text('LIVE · ANGEL ONE'), findsOneWidget);
-    expect(find.textContaining('₹1250.5'), findsNothing);
+    expect(find.textContaining('₹1,250.50'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
