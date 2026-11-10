@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 
-class TimingStatus(str, Enum):
+class TimingStatus(StrEnum):
     ELIGIBLE_RESEARCH_ONLY = "ELIGIBLE_RESEARCH_ONLY"
     ABSTAIN = "ABSTAIN"
 
