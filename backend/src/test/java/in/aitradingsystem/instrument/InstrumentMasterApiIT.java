@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import in.aitradingsystem.scanner.ResearchScanRepository;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ class InstrumentMasterApiIT extends AbstractPostgresIT {
     @Autowired MockMvc mvc;
     @Autowired InstrumentMasterService service;
     @Autowired JdbcTemplate jdbc;
+    @Autowired ResearchScanRepository scans;
 
     @BeforeEach
     void resetInstrumentCatalogue() {
@@ -34,6 +36,29 @@ class InstrumentMasterApiIT extends AbstractPostgresIT {
               {"token":"11128","symbol":"SBIN-AF","name":"STATE BANK OF INDIA","expiry":"","strike":"-1.000000","lotsize":"1","instrumenttype":"EQ","exch_seg":"nse_cm","tick_size":"5.000000"}
             ]
             """;
+
+    @Test
+    void collectorAndResearchUseCanonicalCashEquityIdentityWhenInstrumentTypeIsBlank() {
+        // SmartAPI master cash-equity rows frequently omit instrumenttype.
+        // These must enter BOTH the autonomous 3000-token feed and the Mind scan.
+        String actualProviderShape = """
+                [
+                  {"token":"2885","symbol":"RELIANCE-EQ","name":"RELIANCE","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"3045","symbol":"SBIN-EQ","name":"SBIN","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"991","symbol":"011NSETEST-EQ","name":"Test only","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"26000","symbol":"NIFTY","name":"Index","expiry":"","strike":"-1","lotsize":"1","instrumenttype":"","exch_seg":"NSE","tick_size":"5"},
+                  {"token":"12345","symbol":"OTHER-FUT","name":"Derivative","expiry":"25DEC2026","strike":"0","lotsize":"50","instrumenttype":"FUTSTK","exch_seg":"NFO","tick_size":"5"}
+                ]
+                """;
+        var summary = service.importSource(actualProviderShape.getBytes(StandardCharsets.UTF_8));
+        assertThat(summary.status()).isEqualTo("SUCCEEDED");
+        assertThat(scans.marketFeedPriorityUniverse(3000))
+            .extracting(Instrument::tradingSymbol)
+            .containsExactly("RELIANCE-EQ", "SBIN-EQ");
+        assertThat(scans.activeCashEquityUniverse(3500))
+            .extracting(Instrument::tradingSymbol)
+            .containsExactly("RELIANCE-EQ", "SBIN-EQ");
+    }
 
     @Test
     void searchRequiresOperatorApiKey() throws Exception {
