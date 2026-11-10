@@ -40,6 +40,8 @@ class OwnerUniverseHistoryBackfillTest {
         var repo = mock(UniverseCandleCoverageRepository.class);
         var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
         var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        when(feed.available()).thenReturn(true);
         var window = service.window();
         when(repo.nextDue(window.fromInclusive(), window.toExclusive(),
                 NOW.minus(Duration.ofHours(18)))).thenReturn(Optional.of(42L));
@@ -51,7 +53,7 @@ class OwnerUniverseHistoryBackfillTest {
                 .thenReturn(run);
 
         new OwnerUniverseHistoryBackfill(service, history,
-                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne();
+                feed, new HistoricalCandleParser()).collectOne();
 
         verify(history, times(1)).startWithProvider(42L, HistoricalCandleInterval.FIVE_MINUTE,
                 LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class));
@@ -63,9 +65,11 @@ class OwnerUniverseHistoryBackfillTest {
         var repo = mock(UniverseCandleCoverageRepository.class);
         var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
         var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        when(feed.available()).thenReturn(true);
 
         new OwnerUniverseHistoryBackfill(service, history,
-                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne();
+                feed, new HistoricalCandleParser()).collectOne();
 
         verifyNoInteractions(history);
     }
@@ -75,6 +79,8 @@ class OwnerUniverseHistoryBackfillTest {
         var repo = mock(UniverseCandleCoverageRepository.class);
         var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
         var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        when(feed.available()).thenReturn(true);
         var w = service.window();
         when(repo.nextDue(w.fromInclusive(), w.toExclusive(),
                 NOW.minus(Duration.ofHours(18)))).thenReturn(Optional.of(42L));
@@ -82,7 +88,7 @@ class OwnerUniverseHistoryBackfillTest {
                 .thenThrow(new IllegalStateException("provider not configured"));
 
         assertThatCode(() -> new OwnerUniverseHistoryBackfill(service, history,
-                mock(AppAngelOneMarketFeedService.class), new HistoricalCandleParser()).collectOne())
+                feed, new HistoricalCandleParser()).collectOne())
                 .doesNotThrowAnyException();
         verify(history, times(1)).startWithProvider(anyLong(), any(), any(), any(), any());
     }
