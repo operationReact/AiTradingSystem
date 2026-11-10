@@ -31,6 +31,24 @@ class MarketSnapshotMigrationIT extends AbstractPostgresIT {
     }
 
     @Test
+    void flywaySeedsOfficial2026TradingHolidaysForSessionValidation() {
+        assertThat(jdbc.queryForObject("""
+            SELECT COUNT(*) FROM flyway_schema_history
+            WHERE version = '75' AND success = TRUE
+            """, Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT COUNT(*) FROM market_holiday
+            WHERE trade_date = DATE '2026-11-10'
+                AND market = 'NSE_CASH'
+                AND source = 'NSE_TRADING_HOLIDAYS_2026'
+            """, Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+            SELECT COUNT(*) FROM market_holiday
+            WHERE trade_date = DATE '2026-11-24' AND market = 'NSE_CASH'
+            """, Integer.class)).isEqualTo(1);
+    }
+
+    @Test
     void flywayAppliesBothMigrationsAndRepositoriesRoundTripActualJsonb() {
         Integer installed = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM flyway_schema_history
