@@ -1,0 +1,184 @@
+name: MintTick - one 2006 Angel One daily history depth probe
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/probe_angelone_2006_depth.py'
+      - 'scripts/tests/test_angelone_2006_depth_probe.py'
+      - '.github/workflows/minttick-angelone-2006-depth-probe.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/angelone-2006-depth.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Offline historical depth probe contract
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile exact one-range nonsecret probe and run synthetic tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/probe_angelone_2006_depth.py
+          python3 -m unittest discover -s scripts/tests -p test_angelone_2006_depth_probe.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          original=Path('infra/ec2-paper/probe_owner_angelone_auth.py').read_text()
+          extra=Path('infra/ec2-paper/probe_angelone_2006_depth.py').read_text()
+          assert '\nif __name__ == "__main__":' in original
+          merged=original.split('\nif __name__ == "__main__":',1)[0]+'\n'+extra
+          assert 4000 < len(merged.encode()) < 22000
+          compile(merged, '<restricted-ssm-probe>', 'exec')
+          assert merged.count('if __name__ == "__main__":') == 1
+          PY
+
+  probe:
+    name: One no-storage 2006-2012 Angel One ONE_DAY request
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      INSTANCE_ID: i-09c01b470fb39b85a
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file historical probe request (never PR merge)
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/angelone-2006-depth.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("infra/ec2-paper/requests/angelone-2006-depth.json").read_text())
+          assert d == {
+              "application":"MintTick",
+              "aws_account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "operation":"read-only-angelone-2006-daily-depth",
+              "instrument":"RELIANCE-EQ",
+              "interval":"ONE_DAY",
+              "from_date":"2006-11-10",
+              "window_calendar_days":2000,
+              "store_data":False,
+              "trading_enabled":False,
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-depth-2006-${{ github.run_id }}
+      - name: Require existing running PAPER instance in approved account/region
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0, 'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Run exactly one Angel One historical request using host-side SSM credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          old=Path('infra/ec2-paper/probe_owner_angelone_auth.py').read_text()
+          new=Path('infra/ec2-paper/probe_angelone_2006_depth.py').read_text()
+          assert '\nif __name__ == "__main__":' in old
+          source=(old.split('\nif __name__ == "__main__":',1)[0]+'\n'+new).encode()
+          assert 4000 < len(source) < 22000
+          cmd="printf '%s' '"+base64.b64encode(source).decode()+"' | base64 -d | python3 -"
+          dest=Path(os.environ['RUNNER_TEMP'])/'angelone-depth-command.json'
+          dest.write_text(json.dumps({"commands":[cmd]}))
+          dest.chmod(0o600)
+          PY
+          command_id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds 130 \
+            --parameters "file://$RUNNER_TEMP/angelone-depth-command.json" \
+            --comment 'MintTick owner ONE_DAY Angel One first 2000-day coverage probe, no writes or orders' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/angelone-depth-command.json"
+          for attempt in $(seq 1 30); do
+            aws ssm get-command-invocation --command-id "$command_id" \
+              --instance-id "$INSTANCE_ID" --output json > "$RUNNER_TEMP/angelone-depth-out.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              data=json.loads((Path(os.environ['RUNNER_TEMP'])/'angelone-depth-out.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING');raise SystemExit
+          text=data.get('StandardOutputContent','')
+          if not isinstance(text,str):text=''
+          allowed={'NONEMPTY','EMPTY_OR_UNSUPPORTED','INVALID_RESPONSE','PROVIDER_REJECTED',
+                   'PROVIDER_RATE_LIMITED','NETWORK_UNAVAILABLE','SOURCE_UNAVAILABLE',
+                   'OWNER_AUTH_UNAVAILABLE','IP_UNAVAILABLE','SOURCE_OUT_OF_RANGE',
+                   'INCONSISTENT_CANDLES'}
+          found={}
+          for line in text.splitlines():
+              if re.fullmatch(r'DEPTH_STATUS: [A-Z_]+',line):
+                  value=line.split(': ',1)[1]
+                  if value in allowed: found['status']=value
+              elif re.fullmatch(r'DEPTH_(?:WINDOW_START|WINDOW_END|FIRST_CANDLE|LAST_CANDLE): 20[0-9]{2}-[0-9]{2}-[0-9]{2}',line):
+                  key,value=line.split(': ',1);found[key]=value
+              elif re.fullmatch(r'DEPTH_(?:VALIDATED_ROWS|YEAR_20[0-9]{2}): [0-9]{1,4}',line):
+                  key,value=line.split(': ',1);found[key]=int(value)
+              elif line in ('DEPTH_STORED: FALSE','DEPTH_LICENCE_VERIFIED: FALSE',
+                            'DEPTH_INSTRUMENT: RELIANCE_EQ_PROBE'):
+                  found[line.split(': ',1)[0]]=line.split(': ',1)[1]
+          if data.get('Status') in ('Success','Failed','TimedOut','Cancelled'):
+              if found.get('DEPTH_STORED') != 'FALSE' or found.get('DEPTH_LICENCE_VERIFIED') != 'FALSE':
+                  print('PROBE_CONTRACT_INVALID');raise SystemExit
+              for key in ('DEPTH_WINDOW_START','DEPTH_WINDOW_END','DEPTH_INSTRUMENT'):
+                  if key in found:print(key+': '+str(found[key]))
+              print('DEPTH_STATUS: '+found.get('status','UNAVAILABLE'))
+              if found.get('status')=='NONEMPTY':
+                  for key in ('DEPTH_VALIDATED_ROWS','DEPTH_FIRST_CANDLE','DEPTH_LAST_CANDLE'):
+                      if key in found: print(key+': '+str(found[key]))
+                  for year in range(2006,2013):
+                      key='DEPTH_YEAR_'+str(year)
+                      if key in found:print(key+': '+str(found[key]))
+              print('PASS' if data.get('Status')=='Success' and found.get('status')=='NONEMPTY'
+                    else 'FAILED')
+          else:
+              print('PENDING')
+          PY
+          )"
+            if [[ "$result" == *$'\nPASS' ]]; then
+              printf '%s\n' "$result"
+              echo 'One period scanned in memory; data NOT retained or licensed'
+              exit 0
+            fi
+            if [[ "$result" == *$'\nFAILED' ]] || [[ "$result" == 'PROBE_CONTRACT_INVALID' ]]; then
+              printf '%s\n' "$result"
+              exit 2
+            fi
+            sleep 4
+          done
+          echo 'Probe timed out without disclosing market data, tokens or credentials' >&2
+          exit 2
+
+# Intentionally no auto-schedule, no S3 writes, no permissions to trade,
+# no license claim, no rollout beyond first 2000 days in this workflow.
