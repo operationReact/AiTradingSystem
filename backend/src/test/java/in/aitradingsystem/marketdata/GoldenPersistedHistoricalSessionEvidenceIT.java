@@ -228,8 +228,12 @@ class GoldenPersistedHistoricalSessionEvidenceIT extends AbstractPostgresIT {
         Instant published = date.atStartOfDay(INDIA).toInstant().plusSeconds(86400);
         if (close != null && !published.isAfter(close)) published = close.plusSeconds(60);
         Instant available = published.plusSeconds(60);
+        Instant baseline = Instant.parse("2026-11-01T00:00:00Z");
         OffsetDateTime verified = captured.toInstant().isAfter(NOW)
-                ? captured.minusHours(1) : at("2026-11-01T00:00:00Z");
+                ? captured.minusHours(1)
+                : OffsetDateTime.ofInstant(
+                    available.isAfter(baseline) ? available.plusSeconds(60) : baseline,
+                    ZoneOffset.UTC);
         jdbc.update("""
                 INSERT INTO golden_historical_exchange_session_evidence
                     (evidence_id, provider_id, source_domain, exchange,
