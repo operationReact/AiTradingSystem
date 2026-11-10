@@ -39,7 +39,9 @@ public class UniverseCandleCoverageRepository {
             WHERE i.active = TRUE
               AND i.exchange IN ('NSE', 'BSE')
               AND i.exchange_segment IN ('NSE_CM','BSE_CM')
-              AND i.trading_symbol LIKE '%-EQ'
+              AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                   OR (coalesce(i.instrument_type, '') = ''
+                       AND i.trading_symbol LIKE '%-EQ'))
             """;
 
     private final JdbcTemplate jdbc;
