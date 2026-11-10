@@ -16,8 +16,8 @@ import org.springframework.stereotype.Service;
  * Reads the same existing SSM parameters used for the owner's optional
  * account connection. No credentials are sent to Flutter or other customers.
  *
- * The socket implementation currently supports one selected live symbol at a
- * time; on-demand quote requests use the same backend session for all users.
+ * The server uses bounded, shared application-owned WebSocket shards. Individual
+ * quote reads follow the existing token subscription rather than opening a personal broker stream.
  * Live order execution is never enabled by this service.
  */
 @Service
@@ -63,7 +63,8 @@ public final class AppAngelOneMarketFeedService {
 
     public CustomerAngelOneLiveQuoteService.LiveQuote live(Instrument instrument) {
         ensureSession();
-        return withoutPersonalBrokerPrompt(liveQuotes.quote(APPLICATION_FEED_ID, instrument));
+        return withoutPersonalBrokerPrompt(
+            liveQuotes.snapshotApplication(APPLICATION_FEED_ID, List.of(instrument)).getFirst());
     }
 
     /** One live result per instrument, sharing the single application-owned stream. */
