@@ -46,11 +46,10 @@ class MindProspectiveOutcomesStatus {
         !states.contains(raw['status'])) {
       throw const FormatException('Unsafe MintTick Mind outcome evidence');
     }
-    final timestamp = raw['generatedAt'];
-    // Reject ambiguous timezone-less response timestamps.
-    final generated = timestamp is String &&
-            (timestamp.endsWith('Z') ||
-             RegExp(r'[+-][0-9]{2}:[0-9]{2}
+    final rawTimestamp = raw['generatedAt'];
+    // Java Instant timestamps must include their UTC Z suffix.
+    final generated = rawTimestamp is String && rawTimestamp.endsWith('Z')
+        ? DateTime.tryParse(rawTimestamp) : null;
     final candidates = raw['precommittedCandidates'];
     final reconciled = raw['reconciledOutcomes'];
     final positive = raw['positiveNetObservations'];
@@ -59,63 +58,6 @@ class MindProspectiveOutcomesStatus {
         candidates is! int || reconciled is! int || positive is! int ||
         candidates < 0 || candidates > 15000 ||
         reconciled < 0 || positive < 0 ||
-        reconciled > candidates || positive > reconciled ||
-        gates is! List || gates.isEmpty ||
-        gates.any((element) => element is! String || element.isEmpty)) {
-      throw const FormatException('Invalid prospective outcome totals');
-    }
-    final blockers = gates.cast<String>();
-    if (mandatoryGates.any((gate) => !blockers.contains(gate))) {
-      throw const FormatException('Research safety blockers were omitted');
-    }
-    final state = raw['status'] as String;
-    if (switch (state) {
-      'UNREGISTERED' || 'UNAVAILABLE' => candidates != 0 || reconciled != 0,
-      'AWAITING_CANDIDATES' => candidates != 0,
-      'AWAITING_OUTCOMES' => candidates <= 0 || reconciled != 0,
-      'PARTIAL_RESEARCH_OUTCOMES' =>
-        reconciled <= 0 || reconciled >= candidates,
-      'RESEARCH_OUTCOMES_RECORDED' =>
-        candidates <= 0 || reconciled != candidates,
-      _ => true,
-    }) {
-      throw const FormatException('Misleading research outcome status');
-    }
-    return MindProspectiveOutcomesStatus(
-      generatedAt: generated.toUtc(),
-      status: state,
-      precommittedCandidates: candidates,
-      reconciledOutcomes: reconciled,
-      positiveNetObservations: positive,
-      blockers: List.unmodifiable(blockers),
-    );
-  }
-}
-
-abstract interface class MindProspectiveOutcomesRepository {
-  Future<MindProspectiveOutcomesStatus> load();
-}
-
-class HttpMindProspectiveOutcomesRepository
-    implements MindProspectiveOutcomesRepository {
-  const HttpMindProspectiveOutcomesRepository(this.api);
-
-  final AuthenticatedApiClient api;
-
-  @override
-  Future<MindProspectiveOutcomesStatus> load() async =>
-      MindProspectiveOutcomesStatus.fromJson(
-        await api.getJson('/api/customer/mind/v1/prospective-outcomes'));
-}
-).hasMatch(timestamp))
-        ? DateTime.tryParse(timestamp) : null;
-    final candidates = raw['precommittedCandidates'];
-    final reconciled = raw['reconciledOutcomes'];
-    final positive = raw['positiveNetObservations'];
-    final gates = raw['blockers'];
-    if (generated == null ||
-        candidates is! int || reconciled is! int || positive is! int ||
-        candidates < 0 || reconciled < 0 || positive < 0 ||
         reconciled > candidates || positive > reconciled ||
         gates is! List || gates.isEmpty ||
         gates.any((element) => element is! String || element.isEmpty)) {
