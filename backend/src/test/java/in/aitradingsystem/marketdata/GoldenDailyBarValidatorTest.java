@@ -149,13 +149,13 @@ class GoldenDailyBarValidatorTest {
     @Test
     void invalidOhlcVolumeAndOverPrecisionQuarantineInsteadOfSkipping() {
         assertThatThrownBy(() -> validator.inspect(request(),
-                source(row(FRI).replace(",110,90,105,100,", ",80,90,105,100,"))))
+                source(row(FRI).replace(",105,110,90,100,", ",105,80,90,100,"))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> validator.inspect(request(),
                 source(row(FRI).replace(",1000,", ",0,"))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> validator.inspect(request(),
-                source(row(FRI).replace(",110,90,105,100,", ",110.12345678901,90,105,100,"))))
+                source(row(FRI).replace(",105,110,90,100,", ",105,110.12345678901,90,100,"))))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
