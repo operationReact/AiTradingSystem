@@ -714,7 +714,7 @@ class _MintTickCustomerPortfolioPageState
           const SizedBox(height: 10),
           Text('Market value: ${portfolioRupees(item.marketValue)}'),
           const SizedBox(height: 9),
-          Text('Quantity: ' + (item.quantity?.toString() ?? '—')),
+          Text('Quantity: ${item.quantity?.toString() ?? '—'}'),
           const SizedBox(height: 7),
           Text('Last price: ${portfolioRupees(item.lastPrice)}'),
           const SizedBox(height: 7),
