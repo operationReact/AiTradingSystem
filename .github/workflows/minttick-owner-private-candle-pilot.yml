@@ -109,14 +109,75 @@ jobs:
           test "$n" -gt 0
           rm "$RUNNER_TEMP/personal-ebs.txt"
           echo 'Existing EBS storage encryption verified'
-      - name: Invoke only installed SHA-reviewed, fixed-path owner collector
+      - name: Upload only reviewed nonsecret owner scripts as SHA256-verified transient release asset
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REF" = "refs/heads/dev"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          tar -cf "$RUNNER_TEMP/owner-personal-scripts.tar" -C infra/ec2-paper \
+            probe_owner_angelone_auth.py \
+            owner_personal_angelone_history.py \
+            run_owner_personal_history.sh
+          digest="$(sha256sum "$RUNNER_TEMP/owner-personal-scripts.tar" | cut -d' ' -f1)"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          aws s3 cp "$RUNNER_TEMP/owner-personal-scripts.tar" \
+            "s3://aitrading-paper-releases-098859530205/releases/$GITHUB_SHA/owner-personal/$digest/scripts.tar" \
+            --region ap-south-1 --sse AES256 --no-progress --only-show-errors
+          python3 - "$GITHUB_SHA" "$digest" <<'PY'
+          import json,os,re,sys
+          from pathlib import Path
+          sha,digest=sys.argv[1:]
+          assert re.fullmatch('[a-f0-9]{40}',sha) and re.fullmatch('[a-f0-9]{64}',digest)
+          script=r"""set -Eeuo pipefail
+          umask 077
+          test "$(id -u)" -eq 0
+          test "$(uname -m)" = aarch64
+          root=/opt/aitradingsystem-paper
+          test -d "$root" && test ! -L "$root"
+          work="$(mktemp -d "$root/.personal-release.XXXXXXXX")"
+          cleanup() { rm -rf -- "$work"; }
+          trap cleanup EXIT
+          chmod 0700 "$work"
+          aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-personal/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
+          printf '%s  %s\n' '@@HASH@@' "$work/scripts.tar" | sha256sum -c - >/dev/null
+          files="$(tar -tf "$work/scripts.tar" | LC_ALL=C sort)"
+          expected="$(printf 'probe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh\n' | LC_ALL=C sort)"
+          test "$files" = "$expected"
+          tar -xf "$work/scripts.tar" -C "$work"
+          for file in probe_owner_angelone_auth.py owner_personal_angelone_history.py run_owner_personal_history.sh; do
+            test -f "$work/$file" && test ! -L "$work/$file"
+          done
+          bash -n "$work/run_owner_personal_history.sh"
+          python3 - "$work" <<'PYCHECK'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          a=(p/'probe_owner_angelone_auth.py').read_text()
+          b=(p/'owner_personal_angelone_history.py').read_text()
+          assert '\nif __name__ == "__main__":' in a
+          merged=a.split('\nif __name__ == "__main__":',1)[0]+'\n'+b
+          compile(merged,'<restricted-owner-review>','exec')
+          PYCHECK
+          install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
+          install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
+          install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
+          "$root/run_owner_personal_history.sh" """
+          script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest)
+          path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
+          path.write_text(json.dumps({'commands':[script]}))
+          path.chmod(0o600)
+          PY
+          rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
+      - name: Execute pinned reviewed personal download on one existing EC2
         run: |
           set -euo pipefail
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
             --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
-            --parameters '{"commands":["/opt/aitradingsystem-paper/run_owner_personal_history.sh"]}' \
-            --comment 'MintTick personal trading only; five NSE equities maximum; no redistribution' \
+            --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
+            --comment 'MintTick private personal trading: max five equities, no redistribution' \
             --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-personal-ssm.json"
           for attempt in $(seq 1 165); do
             aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
               --output json > "$RUNNER_TEMP/personal-history-status.json" 2>/dev/null || true
