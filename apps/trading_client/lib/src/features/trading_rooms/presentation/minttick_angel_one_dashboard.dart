@@ -390,7 +390,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
             const SizedBox(height: 12),
             ...rows.asMap().entries.take(8).map((entry) {
               final value = valuation[entry.key];
-              final ratio = (value / sum).clamp(0.0, 1.0);
+              final ratio = (value / sum).clamp(0.0, 1.0).toDouble();
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Column(children: [
@@ -836,13 +836,13 @@ class _AngelOneMarkPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = math.max(2, size.width * .14);
+      ..strokeWidth = math.max(2.0, size.width * .14);
     final orange = Paint()
       ..color = const Color(0xFFF38D39)
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round
-      ..strokeWidth = math.max(2, size.width * .13);
+      ..strokeWidth = math.max(2.0, size.width * .13);
     final shape = Path()
       ..moveTo(size.width * .1, size.height * .8)
       ..lineTo(size.width * .45, size.height * .12)
