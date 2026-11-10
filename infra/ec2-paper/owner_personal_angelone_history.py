@@ -62,6 +62,16 @@ FAILURE_SCHEMA = """CREATE TABLE IF NOT EXISTS page_failure (
     retry_after TEXT NOT NULL,
     PRIMARY KEY(exchange, token, from_date, through_date)
 )"""
+REQUEST_SCHEMA = """CREATE TABLE IF NOT EXISTS candle_request (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    token TEXT NOT NULL,
+    from_date TEXT NOT NULL,
+    through_date TEXT NOT NULL,
+    attempted_at TEXT NOT NULL,
+    outcome TEXT NOT NULL,
+    returned_rows INTEGER
+)"""
 RECOVERY_SCHEMA = """CREATE TABLE IF NOT EXISTS recovery_scan (
     token TEXT NOT NULL,
     from_date TEXT NOT NULL,
@@ -346,6 +356,7 @@ def init_db(root):
     conn.execute(FAILURE_SCHEMA)
     conn.execute(COOLDOWN_SCHEMA)
     conn.execute(RECOVERY_SCHEMA)
+    conn.execute(REQUEST_SCHEMA)
     conn.commit()
     return conn
 
@@ -642,6 +653,70 @@ def print_archive_progress(conn):
 
 
 
+def tracked_fetch(conn, headers, symbol, token, first, through):
+    entry = conn.execute("""INSERT INTO candle_request
+        (symbol,token,from_date,through_date,attempted_at,outcome)
+        VALUES (?,?,?,?,?,'OUTCOME_UNKNOWN')""",
+        (symbol, token, first.isoformat(), through.isoformat(),
+         dt.datetime.now(dt.timezone.utc).isoformat()))
+    conn.commit()
+    try:
+        result = fetch(headers, token, first, through)
+    except PersonalHistoryBlocked as error:
+        conn.execute("UPDATE candle_request SET outcome=? WHERE id=?",
+                     (str(error), entry.lastrowid))
+        conn.commit()
+        raise
+    count = len(result[0])
+    conn.execute("UPDATE candle_request SET outcome=?,returned_rows=? WHERE id=?",
+                 ("CANDLES_RETURNED" if count else "EMPTY_CAUSE_UNKNOWN",
+                  count, entry.lastrowid))
+    conn.commit()
+    return result
+
+
+def encrypted_request_report(conn, recipient):
+    import base64
+    import subprocess
+    import tempfile
+
+    if not re.fullmatch(r"[A-Za-z0-9+/]{900,1900}={0,2}", recipient):
+        raise PersonalHistoryBlocked("INVALID_REPORT_RECIPIENT")
+    queries = {
+        "archive_windows": """SELECT symbol,token,from_date,through_date,
+            state,row_count,earliest,latest FROM page ORDER BY symbol,from_date""",
+        "recovery_cursors": """SELECT p.symbol,p.token,p.from_date,
+            p.through_date,r.next_through FROM recovery_scan r
+            JOIN page p USING (token,from_date,through_date)
+            WHERE p.exchange='NSE' ORDER BY p.symbol,p.from_date""",
+        "attempts": """SELECT symbol,token,from_date,through_date,attempted_at,
+            outcome,returned_rows FROM candle_request ORDER BY id""",
+    }
+    report = {}
+    for name, query in queries.items():
+        exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            ({"archive_windows":"page", "recovery_cursors":"recovery_scan",
+              "attempts":"candle_request"}[name],)).fetchone()
+        if exists:
+            report[name] = conn.execute(query + " LIMIT 501").fetchall()
+            if len(report[name]) > 500:
+                raise PersonalHistoryBlocked("REPORT_SNAPSHOT_TOO_LARGE")
+        else:
+            report[name] = []
+    data = gzip.compress(json.dumps(report, separators=(",", ":")).encode(), mtime=0)
+    with tempfile.TemporaryDirectory(prefix="minttick-report-") as temp:
+        cert = Path(temp) / "recipient.pem"
+        cert.write_bytes(b"-----BEGIN CERTIFICATE-----\n" +
+                         recipient.encode("ascii") + b"\n-----END CERTIFICATE-----\n")
+        result = subprocess.run(["openssl","cms","-encrypt","-binary","-aes-256-gcm",
+                                 "-outform","DER",str(cert)], input=data,
+                                capture_output=True, timeout=15, check=False)
+    encoded = base64.b64encode(result.stdout).decode("ascii")
+    if result.returncode or not 100 < len(encoded) <= 18000:
+        raise PersonalHistoryBlocked("REPORT_ENCRYPTION_FAILED")
+    return encoded
+
+
 def audit_private_archive(root=ROOT, *, expected_owner=0):
     """Offline audit of the owner-private archive, with zero API or DB writes.
 
@@ -674,6 +749,10 @@ def audit_private_archive(root=ROOT, *, expected_owner=0):
         try:
             conn.execute("PRAGMA query_only=ON")
             pages, rows = verify_archive_integrity(conn, root)
+            recipient = os.environ.get('OWNER_REPORT_RECIPIENT')
+            if recipient:
+                print('PERSONAL_ENCRYPTED_REQUEST_REPORT: ' +
+                      encrypted_request_report(conn, recipient), flush=True)
         finally:
             conn.close()
     finally:
@@ -749,7 +828,8 @@ def run():
                 try:
                     request_start, request_end = (recovery_slice(conn, token, start, end)
                                                   if recovery else (start, end))
-                    rows, first, last = fetch(headers, token, request_start, request_end)
+                    rows, first, last = tracked_fetch(
+                        conn, headers, sym, token, request_start, request_end)
                     if recovery:
                         short_responses += 1
                         short_rows += len(rows)
