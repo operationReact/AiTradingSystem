@@ -108,4 +108,73 @@ class OwnerUniverseHistoryBackfillTest {
         verify(feed).available();
         verifyNoInteractions(repo, history);
     }
+
+    @Test
+    void providerFailurePausesEntireUniverseUntilBackoffExpires() {
+        var coverage = mock(UniverseCandleCoverageService.class);
+        var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var clock = new ManualClock(NOW);
+        when(feed.available()).thenReturn(true);
+        when(coverage.nextDue()).thenReturn(Optional.of(42L));
+        when(coverage.window()).thenReturn(new UniverseCandleCoverageService.Window(
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9),
+                NOW.minus(Duration.ofDays(14)), NOW));
+        var successful = mock(CandleBackfillRun.class);
+        when(successful.status()).thenReturn("SUCCEEDED");
+        when(history.startWithProvider(anyLong(), any(), any(), any(), any()))
+                .thenThrow(new IllegalStateException("provider outage"))
+                .thenReturn(successful);
+
+        var collector = new OwnerUniverseHistoryBackfill(coverage, history, feed,
+                new HistoricalCandleParser(), clock);
+        collector.collectOne();
+        clock.advance(Duration.ofSeconds(20));
+        collector.collectOne();
+        verify(history, times(1)).startWithProvider(anyLong(), any(), any(), any(), any());
+        clock.advance(Duration.ofSeconds(11));
+        collector.collectOne();
+        verify(history, times(2)).startWithProvider(anyLong(), any(), any(), any(), any());
+        // A successful follow-up clears global backoff immediately.
+        collector.collectOne();
+        verify(history, times(3)).startWithProvider(anyLong(), any(), any(), any(), any());
+    }
+
+    @Test
+    void persistedFailedRunAlsoTriggersGlobalBackoff() {
+        var coverage = mock(UniverseCandleCoverageService.class);
+        var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var clock = new ManualClock(NOW);
+        when(feed.available()).thenReturn(true);
+        when(coverage.nextDue()).thenReturn(Optional.of(42L));
+        when(coverage.window()).thenReturn(new UniverseCandleCoverageService.Window(
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9),
+                NOW.minus(Duration.ofDays(14)), NOW));
+        var failed = mock(CandleBackfillRun.class);
+        when(failed.id()).thenReturn(UUID.randomUUID());
+        when(failed.status()).thenReturn("FAILED");
+        when(history.startWithProvider(anyLong(), any(), any(), any(), any()))
+                .thenReturn(failed);
+
+        var collector = new OwnerUniverseHistoryBackfill(coverage, history, feed,
+                new HistoricalCandleParser(), clock);
+        collector.collectOne();
+        collector.collectOne();
+        verify(history, times(1)).startWithProvider(anyLong(), any(), any(), any(), any());
+        verify(coverage, times(1)).nextDue();
+    }
+
+    private static final class ManualClock extends Clock {
+        private Instant now;
+
+        ManualClock(Instant now) { this.now = now; }
+
+        void advance(Duration duration) { now = now.plus(duration); }
+
+        @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+        @Override public Clock withZone(java.time.ZoneId zone) { return this; }
+        @Override public Instant instant() { return now; }
+    }
+
 }
