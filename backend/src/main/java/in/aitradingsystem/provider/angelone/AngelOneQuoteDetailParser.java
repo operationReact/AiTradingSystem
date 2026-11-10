@@ -61,7 +61,7 @@ public final class AngelOneQuoteDetailParser {
                 || !expected.symbolToken().equals(text(row, "symbolToken"))) {
             throw invalid("QUOTE_DETAIL_IDENTITY");
         }
-        return parseRow(row, availableAt);
+        return parseRow(row, availableAt, false);
     }
 
     /** One identity to match against a batch row; a null trading symbol matches the token only (indices). */
@@ -88,7 +88,8 @@ public final class AngelOneQuoteDetailParser {
                 continue;
             }
             try {
-                result.put(match.symbolToken(), parseRow(row, availableAt));
+                result.put(match.symbolToken(),
+                    parseRow(row, availableAt, match.tradingSymbol() == null));
             } catch (AngelOneException invalidRow) {
                 // Dropped by design; the caller reports the symbol as unavailable.
             }
@@ -96,7 +97,7 @@ public final class AngelOneQuoteDetailParser {
         return result;
     }
 
-    private static Detail parseRow(JsonNode row, Instant availableAt) {
+    private static Detail parseRow(JsonNode row, Instant availableAt, boolean isIndex) {
         Instant exchangeAt = parseFeedTime(text(row, "exchFeedTime"));
         if (exchangeAt.isAfter(availableAt)) throw invalid("QUOTE_DETAIL_FUTURE_EVENT");
 
@@ -110,7 +111,13 @@ public final class AngelOneQuoteDetailParser {
                 || open.compareTo(low) < 0 || open.compareTo(high) > 0) {
             throw invalid("QUOTE_DETAIL_RANGE");
         }
-        long volume = nonNegativeLong(row, "tradeVolume");
+        // Published Angel One index FULL rows may omit tradeVolume entirely:
+        // an index has no traded share volume. Equity rows still require it.
+        // Missing index volume becomes 0 (unknown); a present invalid/negative
+        // index volume is rejected rather than silently coerced.
+        long volume = isIndex && (row.get("tradeVolume") == null
+                || row.get("tradeVolume").isNull())
+            ? 0L : nonNegativeLong(row, "tradeVolume");
         BigDecimal averagePrice = optionalPositive(row, "avgPrice");
         BigDecimal week52High = optionalPositive(row, "52WeekHigh");
         BigDecimal week52Low = optionalPositive(row, "52WeekLow");
