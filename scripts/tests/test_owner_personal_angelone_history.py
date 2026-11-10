@@ -266,12 +266,24 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         self.assertEqual(seen[0][2],35)
 
     def test_provider_rate_limit_halts_without_unbounded_retry(self):
-        with patch.dict(NAMESPACE,{"urlopen":lambda *args,**kwargs:
-                        (_ for _ in ()).throw(urllib.error.HTTPError(
-                            "https://invalid.example",429,"rate",{},None))}):
-            with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
-                                        "RATE_LIMITED"):
-                f("fetch")({},"2885",dt.date(2006,11,10),dt.date(2006,11,10))
+        # SmartAPI's rate limit can be returned as HTTP 403 or HTTP 429.
+        # Both must halt globally via the existing 60-minute cooldown.
+        for code in (403, 429):
+            with self.subTest(code=code), patch.dict(NAMESPACE,{"urlopen":lambda *args,**kwargs:
+                            (_ for _ in ()).throw(urllib.error.HTTPError(
+                                "https://invalid.example",code,"rate",{},None))}):
+                with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                            "RATE_LIMITED"):
+                    f("fetch")({},"2885",dt.date(2006,11,10),dt.date(2006,11,10))
+
+    def test_other_permission_or_bad_request_errors_stay_rejected(self):
+        for code in (400,401,422):
+            with self.subTest(code=code), patch.dict(NAMESPACE,{"urlopen":lambda *args,**kwargs:
+                            (_ for _ in ()).throw(urllib.error.HTTPError(
+                                "https://invalid.example",code,"reject",{},None))}):
+                with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                            "PROVIDER_REJECTED"):
+                    f("fetch")({},"2885",dt.date(2006,11,10),dt.date(2006,11,10))
 
     def test_current_nse_catalogue_is_verified_and_no_tokens_fabricated(self):
         class Proc:
