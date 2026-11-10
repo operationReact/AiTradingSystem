@@ -691,7 +691,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('Market feed · Stored snapshot'), findsOneWidget);
-    expect(find.textContaining('Historical snapshot only'), findsOneWidget);
+    expect(find.textContaining('Last verified snapshot'), findsOneWidget);
     expect(find.textContaining('Stored quote ·'), findsOneWidget);
     expect(find.textContaining('Closed · Last close'), findsNothing);
     expect(find.byKey(const ValueKey('market-idea-ALPHA-EQ')), findsNothing);
@@ -729,7 +729,50 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('app pause clears LIVE prices and resume refreshes them', (tester) async {
+  testWidgets('live quote survives failed refresh only as last traded', (tester) async {
+    final fake = _CustomerMarketFake()..status = 'LIVE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await _openExplore(tester);
+    expect(find.text('₹125.55'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsOneWidget);
+
+    fake.failSnapshot = true;
+    await tester.tap(find.byKey(const ValueKey('customer-market-refresh-prices')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+    expect(find.text('₹125.55'), findsOneWidget);
+    expect(find.textContaining('LAST TRADED'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('overview from earlier successful call survives app pause as historical snapshot',
+      (tester) async {
+    final fake = _CustomerMarketFake()..indexFreshness = 'LIVE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.light),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Market feed · Live quotes'), findsOneWidget);
+    final state = tester.state(find.byType(MintTickCustomerMarketPage));
+    (state as WidgetsBindingObserver).didChangeAppLifecycleState(AppLifecycleState.paused);
+    await tester.pump();
+
+    expect(find.text('Market feed · Stored snapshot'), findsOneWidget);
+    expect(find.textContaining('Last verified snapshot'), findsOneWidget);
+    expect(find.byKey(const ValueKey('market-idea-ALPHA-EQ')), findsNothing);
+    expect(find.text('NIFTY 50'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('app pause retains last price without LIVE badge and resume refreshes', (tester) async {
     final fake = _CustomerMarketFake()..status = 'LIVE';
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.light),
@@ -744,7 +787,9 @@ void main() {
     final state = tester.state(find.byType(MintTickCustomerMarketPage));
     (state as WidgetsBindingObserver).didChangeAppLifecycleState(AppLifecycleState.paused);
     await tester.pump();
-    expect(find.text('₹125.55'), findsNothing);
+    expect(find.text('₹125.55'), findsOneWidget);
+    expect(find.textContaining('LAST TRADED'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsNothing);
 
     final before = fake.snapshotRequests;
     (state as WidgetsBindingObserver).didChangeAppLifecycleState(AppLifecycleState.resumed);
