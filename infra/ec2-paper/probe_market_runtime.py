@@ -102,6 +102,34 @@ def overview_evidence(postgres):
     return source, generated, exchange_day, indices, equities
 
 
+def equity_coverage(postgres):
+    """Counts only; never prints symbols, prices, identities or session secrets."""
+    if postgres is None:
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    sql = """
+    SELECT
+      COUNT(DISTINCT i.instrument_id),
+      COUNT(DISTINCT CASE WHEN t.instrument_id IS NOT NULL THEN i.instrument_id END),
+      COUNT(DISTINCT CASE WHEN d.instrument_id IS NOT NULL THEN i.instrument_id END)
+    FROM instrument_master i
+    JOIN instrument_catalogue_state s
+      ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+    LEFT JOIN market_last_tick t ON t.instrument_id = i.instrument_id
+    LEFT JOIN market_detail_snapshot d ON d.instrument_id = i.instrument_id
+    WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
+      AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+    """
+    p = run(["docker", "exec", postgres, "psql", "-U", "aitrading",
+             "-d", "aitrading", "-tA", "-F", "|", "-c", sql], 10)
+    if p is None or p.returncode:
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    fields = p.stdout.strip().split("|")
+    if len(fields) != 3 or any(not re.fullmatch(r"[0-9]{1,6}", v) for v in fields):
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    if int(fields[1]) > int(fields[0]) or int(fields[2]) > int(fields[0]):
+        return "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"
+    return tuple(fields)
+
 def main():
     backend = container("backend")
     postgres = container("postgres")
@@ -155,6 +183,10 @@ def main():
     print("MARKET_OVERVIEW_EXCHANGE_DATE: " + exchange_day)
     print("MARKET_OVERVIEW_INDEX_QUOTES: " + indices)
     print("MARKET_OVERVIEW_EQUITY_QUOTES: " + equities)
+    catalogue, ticks, details = equity_coverage(postgres)
+    print("MARKET_EQUITY_CATALOGUE_COUNT: " + catalogue)
+    print("MARKET_EQUITY_SAVED_TICK_COUNT: " + ticks)
+    print("MARKET_EQUITY_SAVED_DETAIL_COUNT: " + details)
 
 
 if __name__ == "__main__":

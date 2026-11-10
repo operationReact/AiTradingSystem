@@ -47,7 +47,7 @@ cp -p "$root/.env" "$work/old-compose-env"
 for file in runtime.env .env; do
   old="$root/$file"
   temp="$(mktemp "$root/.owner-feed.XXXXXXXX")"
-  grep -Ev '^(MARKET_DATA_PROVIDER|MARKET_DATA_LAMBDA_FUNCTION_NAME|MINTTICK_ANGEL_ONE_OWNER_SUB|OWNER_FEED_ENABLED)=' "$old" > "$temp" || true
+  grep -Ev '^(MARKET_DATA_PROVIDER|MARKET_DATA_LAMBDA_FUNCTION_NAME|MINTTICK_ANGEL_ONE_OWNER_SUB|OWNER_FEED_ENABLED|OWNER_FEED_UNIVERSE_LIMIT|OWNER_FEED_WS_TOKEN_CAP)=' "$old" > "$temp" || true
   {
     printf 'MARKET_DATA_PROVIDER=ANGEL_ONE_LAMBDA\n'
     printf 'MARKET_DATA_LAMBDA_FUNCTION_NAME=minttick-dev-angelone-feed\n'
@@ -55,6 +55,10 @@ for file in runtime.env .env; do
     # Only the privately authorized PAPER EC2 opts into an independent
     # collector. Never change the default for production/customer releases.
     printf 'OWNER_FEED_ENABLED=true\n'
+    # Distinct from REST's 50-token batch limit: V2 permits 1000 LTP tokens
+    # per socket and three sockets per broker account.
+    printf 'OWNER_FEED_UNIVERSE_LIMIT=3000\n'
+    printf 'OWNER_FEED_WS_TOKEN_CAP=1000\n'
   } >> "$temp"
   chmod 0600 "$temp"
   install -o root -g root -m 0600 "$temp" "$old"
@@ -79,7 +83,11 @@ for i in $(seq 1 35); do
       backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
       if [[ -n "$backend" ]] &&
          docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
-           grep -qx 'OWNER_FEED_ENABLED=true'; then
+           grep -qx 'OWNER_FEED_ENABLED=true' &&
+         docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
+           grep -qx 'OWNER_FEED_UNIVERSE_LIMIT=3000' &&
+         docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
+           grep -qx 'OWNER_FEED_WS_TOKEN_CAP=1000'; then
         echo 'PASS: private owner feed, autonomous session warmer and JWT gate verified; no live orders'
         exit 0
       fi

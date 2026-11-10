@@ -141,6 +141,142 @@ class CustomerAngelOneLiveQuoteServiceTest {
     }
 
     @Test
+    void applicationFeedShardsEntire2756SymbolUniverseAcrossThreeSockets()
+            throws Exception {
+        var sessions = mock(CustomerAngelOneSessionService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var client = mock(HttpClient.class);
+        var builder = mock(java.net.http.WebSocket.Builder.class);
+        var socket = mock(java.net.http.WebSocket.class);
+        var user = UUID.fromString("ff000000-0000-4000-8000-000000000001");
+        when(calendar.isInsideCashSession(NOW)).thenReturn(true);
+        when(sessions.credentialsForStream(user)).thenReturn(
+            new CustomerAngelOneSessionService.StreamCredentials(
+                "test-key", "TESTCODE", "test-jwt", "test-feed", NOW.plusSeconds(3600)));
+        when(client.newWebSocketBuilder()).thenReturn(builder);
+        when(builder.connectTimeout(any())).thenReturn(builder);
+        when(builder.header(anyString(), anyString())).thenReturn(builder);
+        when(builder.buildAsync(any(java.net.URI.class), any(java.net.http.WebSocket.Listener.class)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        when(socket.sendText(anyString(), eq(true)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        var catalogue = new java.util.ArrayList<Instrument>();
+        var catalogueVersion = UUID.randomUUID();
+        for (int i = 0; i < 2756; i++) {
+            catalogue.add(new Instrument(i + 1L, "NSE_CM", "NSE",
+                Integer.toString(10000 + i), "STOCK" + i + "-EQ", "Stock " + i,
+                "EQ", null, null, 1, new BigDecimal("0.05"), catalogueVersion));
+        }
+
+        var service = new CustomerAngelOneLiveQuoteService(sessions, calendar,
+            client, Clock.fixed(NOW, ZoneOffset.UTC), 1000, null);
+        try {
+            var rows = service.snapshotApplication(user, catalogue);
+            assertThat(rows).hasSize(2756);
+            assertThat(rows).allMatch(q -> q.ltp() == null && "CONNECTING".equals(q.status()));
+            assertThat(rows.getFirst().instrumentId()).isEqualTo(1L);
+            assertThat(rows.getLast().instrumentId()).isEqualTo(2756L);
+            var listeners = org.mockito.ArgumentCaptor
+                .forClass(java.net.http.WebSocket.Listener.class);
+            verify(builder, times(3))
+                .buildAsync(any(java.net.URI.class), listeners.capture());
+            for (var listener : listeners.getAllValues()) listener.onOpen(socket);
+            var sent = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(socket, times(3)).sendText(sent.capture(), eq(true));
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var sizes = new java.util.ArrayList<Integer>();
+            var tokens = new java.util.HashSet<String>();
+            for (String payload : sent.getAllValues()) {
+                var groups = mapper.readTree(payload).at("/params/tokenList");
+                int count = 0;
+                for (var group : groups) {
+                    for (var token : group.get("tokens")) {
+                        assertThat(tokens.add(token.asText())).isTrue();
+                        count++;
+                    }
+                }
+                sizes.add(count);
+            }
+            assertThat(sizes).containsExactlyInAnyOrder(1000, 1000, 756);
+            assertThat(tokens).hasSize(2756);
+            verify(client, times(3)).newWebSocketBuilder();
+        } finally {
+            service.close();
+        }
+    }
+
+    @Test
+    void applicationSingleStockReadsSubscribedThirdShardInsteadOfOverfullFirstShard()
+            throws Exception {
+        var sessions = mock(CustomerAngelOneSessionService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var client = mock(HttpClient.class);
+        var builder = mock(java.net.http.WebSocket.Builder.class);
+        var socket = mock(java.net.http.WebSocket.class);
+        var user = UUID.fromString("ff000000-0000-4000-8000-000000000001");
+        when(calendar.isInsideCashSession(NOW)).thenReturn(true);
+        var muhurat = java.time.LocalDate.of(2026, 11, 8);
+        when(calendar.session(muhurat)).thenReturn(new in.aitradingsystem.marketdata.MarketSession(
+            muhurat, java.time.ZonedDateTime.of(muhurat, java.time.LocalTime.of(14, 20),
+                java.time.ZoneId.of("Asia/Kolkata")),
+            java.time.ZonedDateTime.of(muhurat, java.time.LocalTime.of(15, 15),
+                java.time.ZoneId.of("Asia/Kolkata")), true));
+        when(sessions.credentialsForStream(user)).thenReturn(
+            new CustomerAngelOneSessionService.StreamCredentials(
+                "test-key", "TESTCODE", "test-jwt", "test-feed", NOW.plusSeconds(3600)));
+        when(client.newWebSocketBuilder()).thenReturn(builder);
+        when(builder.connectTimeout(any())).thenReturn(builder);
+        when(builder.header(anyString(), anyString())).thenReturn(builder);
+        var listeners = org.mockito.ArgumentCaptor.forClass(java.net.http.WebSocket.Listener.class);
+        when(builder.buildAsync(any(java.net.URI.class), listeners.capture()))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        when(socket.sendText(anyString(), eq(true)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        var equities = new java.util.ArrayList<Instrument>();
+        for (int i = 0; i < 5; i++) {
+            equities.add(new Instrument(i + 1L, "NSE_CM", "NSE",
+                Integer.toString(10000 + i), "STOCK" + i + "-EQ", "Stock " + i,
+                "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID()));
+        }
+        var feed = new CustomerAngelOneLiveQuoteService(sessions, calendar,
+            client, Clock.fixed(NOW, ZoneOffset.UTC), 2, null);
+        try {
+            var starting = feed.snapshotApplication(user, equities);
+            assertThat(starting).hasSize(5);
+            assertThat(starting).allMatch(q -> "CONNECTING".equals(q.status()));
+            assertThat(listeners.getAllValues()).hasSize(3);
+            for (var listener : listeners.getAllValues()) listener.onOpen(socket);
+            var thirdShardListener = listeners.getAllValues().get(2);
+            Instrument last = equities.get(4);
+            thirdShardListener.onBinary(socket,
+                ByteBuffer.wrap(frame(1, last.symbolToken(), 1, NOW.toEpochMilli(), 123456)), true);
+
+            var single = feed.snapshotApplication(user, List.of(last)).getFirst();
+            assertThat(single.instrumentId()).isEqualTo(last.id());
+            assertThat(single.status()).isEqualTo("LIVE");
+            assertThat(single.ltp()).isEqualByComparingTo("1234.56");
+            assertThat(single.exchangeAt()).isEqualTo(NOW);
+
+            // Two active stocks in one shard must share one cash-session
+            // calendar read; checking every tick separately scales poorly.
+            var firstShard = listeners.getAllValues().get(0);
+            for (int i = 0; i < 2; i++) {
+                firstShard.onBinary(socket, ByteBuffer.wrap(frame(1,
+                    equities.get(i).symbolToken(), 1, NOW.toEpochMilli(), 123456)), true);
+            }
+            clearInvocations(calendar);
+            var firstTwo = feed.snapshotApplication(user, equities.subList(0, 2));
+            assertThat(firstTwo).allMatch(q -> "LIVE".equals(q.status()));
+            verify(calendar, times(1)).session(muhurat);
+
+            verify(builder, times(3))
+                .buildAsync(any(java.net.URI.class), any(java.net.http.WebSocket.Listener.class));
+        } finally {
+            feed.close();
+        }
+    }
+
+    @Test
     void closedMarketCannotOpenSocketOrReturnInventedLiveQuote() {
         var sessions = mock(CustomerAngelOneSessionService.class);
         var calendar = mock(MarketSessionCalendar.class);

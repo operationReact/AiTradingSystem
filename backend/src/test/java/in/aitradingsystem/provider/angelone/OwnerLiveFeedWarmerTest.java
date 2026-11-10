@@ -44,7 +44,7 @@ class OwnerLiveFeedWarmerTest {
         var lastTicks = mock(MarketLastTickStore.class);
         when(calendar.isInsideCashSession(NOW)).thenReturn(true);
         when(feed.available()).thenReturn(true);
-        when(scans.marketFeedPriorityUniverse(50)).thenReturn(List.of(NSE));
+        when(scans.marketFeedPriorityUniverse(1000)).thenReturn(List.of(NSE));
         var reply = List.of(new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE",
             "RELIANCE-EQ", new BigDecimal("101.50"), NOW, NOW,
             "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
@@ -53,7 +53,7 @@ class OwnerLiveFeedWarmerTest {
         new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
             Clock.fixed(NOW, ZoneOffset.UTC), 1000).warm();
 
-        verify(scans).marketFeedPriorityUniverse(50);
+        verify(scans).marketFeedPriorityUniverse(1000);
         verify(feed).snapshot(List.of(NSE));
         verify(lastTicks).recordLive(reply);
     }
@@ -93,10 +93,34 @@ class OwnerLiveFeedWarmerTest {
 
     @Test
     void configuredWebsocketBudgetNeverExceedsProviderWatchCap() {
-        assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(1000)).isEqualTo(50);
+        assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(1000)).isEqualTo(1000);
+        assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(5000)).isEqualTo(1000);
         assertThat(CustomerAngelOneLiveQuoteService.boundedWatchCap(20)).isEqualTo(20);
         assertThatThrownBy(() -> CustomerAngelOneLiveQuoteService.boundedWatchCap(0))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void unchangedVerifiedTicksAreNotWrittenAgainEveryTenSeconds() {
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var scans = mock(ResearchScanRepository.class);
+        var lastTicks = mock(MarketLastTickStore.class);
+        when(calendar.isInsideCashSession(NOW)).thenReturn(true);
+        when(feed.available()).thenReturn(true);
+        when(scans.marketFeedPriorityUniverse(3000)).thenReturn(List.of(NSE));
+        var reply = List.of(new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE",
+            "RELIANCE-EQ", new BigDecimal("101.50"), NOW, NOW,
+            "LIVE", "ANGEL_ONE_SMARTAPI_WS_V2"));
+        when(feed.snapshot(List.of(NSE))).thenReturn(reply);
+        var warmer = new OwnerLiveFeedWarmer(feed, calendar, scans, lastTicks,
+            Clock.fixed(NOW, ZoneOffset.UTC), 3000);
+
+        warmer.warm();
+        warmer.warm();
+
+        verify(feed, times(2)).snapshot(List.of(NSE));
+        verify(lastTicks, times(1)).recordLive(reply);
     }
 
     @Test
