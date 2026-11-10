@@ -77,6 +77,14 @@ public class InstrumentMasterParser {
         int lotSize = positiveInt(requiredText(node, "lotsize", 20));
         BigDecimal tickSize = positiveDecimal(requiredText(node, "tick_size", 50)).movePointLeft(2).stripTrailingZeros();
         String type = optionalText(node, "instrumenttype", 30);
+        // Official SmartAPI cash EQ instruments may have an empty instrumenttype.
+        // Canonicalize only the unambiguous cash -EQ series, never derivatives
+        // or other NSE/BSE series (e.g. BE/BL/AF). V48 historical custody
+        // requires EQ as a non-null, immutable classification.
+        if (type == null && (segment.equals("NSE_CM") || segment.equals("BSE_CM"))
+                && symbol.endsWith("-EQ")) {
+            type = "EQ";
+        }
         String expiryText = optionalText(node, "expiry", 20);
         LocalDate expiry = parseExpiry(expiryText);
         BigDecimal strike = parseStrike(optionalText(node, "strike", 50));
