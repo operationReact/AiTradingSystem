@@ -118,6 +118,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
 class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _route = 'overview';
+  final List<String> _mindRouteHistory = <String>[];
   String _agentCouncilSymbol = 'CDSL';
   String _agentCouncilView = 'All';
   String _agentEvidenceScope = 'All';
@@ -190,15 +191,55 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   }
 
   void _go(String route) {
-    if (!MintickMindScreens.all.any((e) => e.id == route)) return;
-    setState(() => _route = route);
+    if (!MintickMindScreens.all.any((e) => e.id == route) || _route == route) {
+      return;
+    }
+    setState(() {
+      final previousIndex = _mindRouteHistory.lastIndexOf(route);
+      if (previousIndex >= 0) {
+        // Breadcrumb navigation closes the child chain instead of
+        // re-opening duplicate parent screens.
+        _mindRouteHistory.removeRange(previousIndex, _mindRouteHistory.length);
+      } else {
+        _mindRouteHistory.add(_route);
+        if (_mindRouteHistory.length > 24) _mindRouteHistory.removeAt(0);
+      }
+      _route = route;
+    });
   }
-  void _selectStrategy(String id) => setState(() { _selectedStrategy = id; _route = 'strategy-detail'; });
-  void _selectModel(String name) => setState(() { _selectedModel = name; _route = 'model-detail'; });
-  void _selectDecision(String id) => setState(() { _selectedDecision = id; _route = 'decision-detail'; });
-  void _selectCompany(String symbol) => setState(() { _selectedCompany = symbol; _route = 'thesis-detail'; });
-  void _selectExperiment(String name) => setState(() { _selectedExperiment = name; _route = 'experiment-detail'; });
-  void _selectRoom(String name) => setState(() { _selectedRoom = name; _route = 'room-detail'; });
+
+  void _backMindScreen() {
+    if (_mindRouteHistory.isEmpty) {
+      setState(() => _route = 'overview');
+      return;
+    }
+    setState(() => _route = _mindRouteHistory.removeLast());
+  }
+
+  void _selectStrategy(String id) {
+    setState(() => _selectedStrategy = id);
+    _go('strategy-detail');
+  }
+  void _selectModel(String name) {
+    setState(() => _selectedModel = name);
+    _go('model-detail');
+  }
+  void _selectDecision(String id) {
+    setState(() => _selectedDecision = id);
+    _go('decision-detail');
+  }
+  void _selectCompany(String symbol) {
+    setState(() => _selectedCompany = symbol);
+    _go('thesis-detail');
+  }
+  void _selectExperiment(String name) {
+    setState(() => _selectedExperiment = name);
+    _go('experiment-detail');
+  }
+  void _selectRoom(String name) {
+    setState(() => _selectedRoom = name);
+    _go('room-detail');
+  }
   void _notice(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
@@ -211,7 +252,12 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   @override
   Widget build(BuildContext context) {
     final wide = MediaQuery.sizeOf(context).width >= 870;
-    return Scaffold(
+    return PopScope<void>(
+      canPop: _route == 'overview',
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _route != 'overview') _backMindScreen();
+      },
+      child: Scaffold(
       backgroundColor: MindPalette.background,
       floatingActionButton: !wide && (widget.embeddedInProductShell || _route == 'overview')
         ? Padding(padding:EdgeInsets.only(bottom: widget.embeddedInProductShell ? 0 : 66),
@@ -243,7 +289,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           ])),
         ]),
       ),
-    );
+    ));
   }
 
   Widget _sidebar() => Container(
