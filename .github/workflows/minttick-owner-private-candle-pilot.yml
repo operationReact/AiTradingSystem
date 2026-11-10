@@ -73,6 +73,15 @@ jobs:
             'enable_trading':False,
           }
           PY
+      - name: Refuse new history after 21:20 IST before cloud access
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime, time
+          from zoneinfo import ZoneInfo
+          if datetime.now(ZoneInfo('Asia/Kolkata')).time() >= time(21, 20):
+              raise SystemExit('PERSONAL_DOWNLOAD_BLOCKED: NIGHTLY_STOP_SAFETY_WINDOW')
+          PY
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
@@ -187,6 +196,12 @@ jobs:
       - name: Execute pinned reviewed personal download on one existing EC2
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from datetime import datetime, time
+          from zoneinfo import ZoneInfo
+          if datetime.now(ZoneInfo('Asia/Kolkata')).time() >= time(21, 20):
+              raise SystemExit('PERSONAL_DOWNLOAD_BLOCKED: NIGHTLY_STOP_SAFETY_WINDOW')
+          PY
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
             --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
             --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
