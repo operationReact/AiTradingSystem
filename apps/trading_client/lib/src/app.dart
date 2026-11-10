@@ -196,6 +196,7 @@ class _TradingAppState extends State<TradingApp> {
         '/broker/angel-one': (_) => widget.session.isCustomerAuthenticated
             ? MintTickCustomerBrokerPage(
                 repository: HttpCustomerAngelOneRepository(_api),
+                onBack: () => _navigate('/brokers'),
               )
             : _overviewPage(),
         '/activity': (_) => widget.session.isCustomerAuthenticated
