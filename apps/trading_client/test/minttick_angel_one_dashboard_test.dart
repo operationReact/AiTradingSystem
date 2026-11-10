@@ -79,8 +79,7 @@ Future<void> _showDashboard(WidgetTester tester, _ConnectedAngel repo,
 void main() {
   for (final width in <double>[320, 390]) {
     for (final brightness in <Brightness>[Brightness.dark, Brightness.light]) {
-      testWidgets('broker panels at ' + width.toInt().toString() + 'dp ' +
-          brightness.toString(), (tester) async {
+      testWidgets('broker panels at ${width.toInt()}dp $brightness', (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = Size(width, 844);
         addTearDown(tester.view.resetPhysicalSize);
