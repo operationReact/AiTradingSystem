@@ -1,0 +1,15 @@
+{
+  "application": "MintTick",
+  "operation": "owner-personal-angelone-daily-history-pilot",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "from_date": "2006-11-10",
+  "through_date": "2026-11-10",
+  "max_equities": 5,
+  "max_provider_calls": 20,
+  "min_spacing_seconds": 10,
+  "private_ec2_only": true,
+  "no_redistribution": true,
+  "enable_trading": false
+}
