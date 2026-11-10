@@ -469,7 +469,7 @@ public class CustomerAngelOneLiveQuoteService {
     void heartbeat() {
         try {
             Instant now = clock.instant();
-            for (Map.Entry<UUID, Feed> entry : feeds.entrySet()) {
+            for (Map.Entry<FeedKey, Feed> entry : feeds.entrySet()) {
                 Feed feed = entry.getValue();
                 if (feed.state != State.OPEN || feed.socket == null) continue;
                 var latestCredentials = sessions.credentialsForStream(entry.getKey().user());
