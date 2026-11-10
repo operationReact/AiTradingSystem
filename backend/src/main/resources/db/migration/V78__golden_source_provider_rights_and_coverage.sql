@@ -46,7 +46,8 @@ CREATE TABLE golden_source_rights_receipt (
     ),
     CONSTRAINT ck_golden_rights_verification CHECK (
         receipt_status <> 'VERIFIED'
-        OR (verified_at IS NOT NULL AND length(trim(verified_by)) > 0
+        OR (verified_at IS NOT NULL AND verified_by IS NOT NULL
+            AND length(trim(verified_by)) > 0
             AND verified_at <= captured_at AND revoked_at IS NULL)
     ),
     CONSTRAINT ck_golden_rights_revocation CHECK (
