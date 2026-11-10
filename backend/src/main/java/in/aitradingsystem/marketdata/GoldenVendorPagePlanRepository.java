@@ -175,6 +175,18 @@ public class GoldenVendorPagePlanRepository {
         if (lease == null) throw new IllegalArgumentException("lease required");
         Instant now = clock.instant();
         return Boolean.TRUE.equals(tx.execute(ignored -> {
+            // Always lock provider gate BEFORE the page, as in claim().
+            // Reverse lock order would deadlock concurrent claim/retry workers.
+            List<UUID> owners = jdbc.query("""
+                    SELECT provider_id FROM golden_vendor_page_plan
+                     WHERE page_id = ?
+                    """, (rs, i) -> rs.getObject("provider_id", UUID.class), lease.pageId());
+            if (owners.size() != 1) return false;
+            List<UUID> locked = jdbc.query("""
+                    SELECT provider_id FROM golden_vendor_page_provider_gate
+                     WHERE provider_id = ? FOR UPDATE
+                    """, (rs, i) -> rs.getObject("provider_id", UUID.class), owners.getFirst());
+            if (locked.size() != 1) return false;
             List<Failure> affected = jdbc.query("""
                     SELECT provider_id, attempts
                       FROM golden_vendor_page_plan
