@@ -1,4 +1,4 @@
-name: MintTick - one 2006 Angel One daily history depth probe
+name: MintTick - sequential 2000-day Angel One history depth probes
 
 on:
   pull_request:
@@ -45,7 +45,7 @@ jobs:
           PY
 
   probe:
-    name: One no-storage 2006-2012 Angel One ONE_DAY request
+    name: One approved sequential Angel One ONE_DAY request
     needs: validate
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
@@ -69,16 +69,28 @@ jobs:
           import json
           from pathlib import Path
           d=json.loads(Path("infra/ec2-paper/requests/angelone-2006-depth.json").read_text())
+          from datetime import date
+          windows = {
+              2: ("2012-05-02", "2017-10-22"),
+              3: ("2017-10-23", "2023-04-14"),
+              4: ("2023-04-15", "2026-11-10"),
+          }
+          phase = d.get("phase")
+          assert type(phase) is int and phase in windows
+          start, end = windows[phase]
+          expected_days = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
           assert d == {
               "application":"MintTick",
               "aws_account":"098859530205",
               "region":"ap-south-1",
               "instance_id":"i-09c01b470fb39b85a",
-              "operation":"read-only-angelone-2006-daily-depth",
+              "operation":"read-only-angelone-sequential-daily-depth",
               "instrument":"RELIANCE-EQ",
               "interval":"ONE_DAY",
-              "from_date":"2006-11-10",
-              "window_calendar_days":2000,
+              "phase":phase,
+              "from_date":start,
+              "through_date":end,
+              "window_calendar_days":expected_days,
               "store_data":False,
               "trading_enabled":False,
           }
@@ -109,7 +121,10 @@ jobs:
           assert '\nif __name__ == "__main__":' in old
           source=(old.split('\nif __name__ == "__main__":',1)[0]+'\n'+new).encode()
           assert 4000 < len(source) < 22000
-          cmd="printf '%s' '"+base64.b64encode(source).decode()+"' | base64 -d | python3 -"
+          request=json.loads(Path('infra/ec2-paper/requests/angelone-2006-depth.json').read_text())
+          phase=request["phase"]
+          assert type(phase) is int and phase in (2,3,4)
+          cmd="printf '%s' '"+base64.b64encode(source).decode()+"' | base64 -d | MINTTICK_DEPTH_PHASE="+str(phase)+" python3 -"
           dest=Path(os.environ['RUNNER_TEMP'])/'angelone-depth-command.json'
           dest.write_text(json.dumps({"commands":[cmd]}))
           dest.chmod(0o600)
@@ -138,7 +153,9 @@ jobs:
                    'INCONSISTENT_CANDLES'}
           found={}
           for line in text.splitlines():
-              if re.fullmatch(r'DEPTH_STATUS: [A-Z_]+',line):
+              if re.fullmatch(r'DEPTH_PHASE: [1-4]',line):
+                  found['DEPTH_PHASE']=line.split(': ',1)[1]
+              elif re.fullmatch(r'DEPTH_STATUS: [A-Z_]+',line):
                   value=line.split(': ',1)[1]
                   if value in allowed: found['status']=value
               elif re.fullmatch(r'DEPTH_(?:WINDOW_START|WINDOW_END|FIRST_CANDLE|LAST_CANDLE): 20[0-9]{2}-[0-9]{2}-[0-9]{2}',line):
@@ -151,13 +168,24 @@ jobs:
           if data.get('Status') in ('Success','Failed','TimedOut','Cancelled'):
               if found.get('DEPTH_STORED') != 'FALSE' or found.get('DEPTH_LICENCE_VERIFIED') != 'FALSE':
                   print('PROBE_CONTRACT_INVALID');raise SystemExit
-              for key in ('DEPTH_WINDOW_START','DEPTH_WINDOW_END','DEPTH_INSTRUMENT'):
+              request=json.loads(Path('infra/ec2-paper/requests/angelone-2006-depth.json').read_text())
+              want=str(request.get('phase'))
+              expected={
+                  '2':('2012-05-02','2017-10-22'),
+                  '3':('2017-10-23','2023-04-14'),
+                  '4':('2023-04-15','2026-11-10'),
+              }
+              if (want not in expected or found.get('DEPTH_PHASE')!=want
+                  or found.get('DEPTH_WINDOW_START')!=expected[want][0]
+                  or found.get('DEPTH_WINDOW_END')!=expected[want][1]):
+                  print('PROBE_CONTRACT_INVALID');raise SystemExit
+              for key in ('DEPTH_PHASE','DEPTH_WINDOW_START','DEPTH_WINDOW_END','DEPTH_INSTRUMENT'):
                   if key in found:print(key+': '+str(found[key]))
               print('DEPTH_STATUS: '+found.get('status','UNAVAILABLE'))
               if found.get('status')=='NONEMPTY':
                   for key in ('DEPTH_VALIDATED_ROWS','DEPTH_FIRST_CANDLE','DEPTH_LAST_CANDLE'):
                       if key in found: print(key+': '+str(found[key]))
-                  for year in range(2006,2013):
+                  for year in range(2006,2027):
                       key='DEPTH_YEAR_'+str(year)
                       if key in found:print(key+': '+str(found[key]))
               print('PASS' if data.get('Status')=='Success' and found.get('status')=='NONEMPTY'
