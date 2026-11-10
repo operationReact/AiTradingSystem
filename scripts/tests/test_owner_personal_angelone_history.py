@@ -109,6 +109,61 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         row=self.conn.execute("SELECT row_count, state, earliest, latest FROM page").fetchone()
         self.assertEqual(row,(0,"EMPTY",None,None))
 
+    def test_archive_audit_verifies_saved_real_shaped_candles_without_network(self):
+        a=dt.date(2006,11,10)
+        b=dt.date(2006,11,11)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          a,a,[candle()],a,a)
+        f("persist_page")(self.conn,self.root,"TCS-EQ","11536",
+                          b,b,[],None,None)
+        self.assertEqual(f("verify_archive_integrity")(self.conn,self.root),(2,1))
+
+    def test_archive_audit_blocks_tampered_manifest_count(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        self.conn.execute("UPDATE page SET row_count=2")
+        self.conn.commit()
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                     "ARCHIVE_MANIFEST_MISMATCH"):
+            f("verify_archive_integrity")(self.conn,self.root)
+
+    def test_archive_audit_blocks_missing_page_and_modified_candle_bytes(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        target=next((self.root/"pages").glob("*.json.gz"))
+        target.write_bytes(gzip.compress(b'{"data":"synthetic tampering"}'))
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                     "ARCHIVE_CONTENT_HASH_MISMATCH"):
+            f("verify_archive_integrity")(self.conn,self.root)
+        target.unlink()
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                     "ARCHIVE_FILE_NOT_PRIVATE"):
+            f("verify_archive_integrity")(self.conn,self.root)
+
+    def test_archive_audit_rejects_nonprivate_permissions(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        path=next((self.root/"pages").glob("*.json.gz"))
+        path.chmod(0o644)
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                     "ARCHIVE_FILE_NOT_PRIVATE"):
+            f("verify_archive_integrity")(self.conn,self.root)
+
+    def test_archive_audit_does_not_claim_vendor_session_completeness(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"INFY-EQ","1594",
+                          date,date,[candle()],date,date)
+        n,rows=f("verify_archive_integrity")(self.conn,self.root)
+        self.assertEqual((n,rows),(1,1))
+        file=next((self.root/"pages").glob("*.json.gz"))
+        archive=json.loads(gzip.decompress(file.read_bytes()))
+        self.assertIs(archive["historical_listing_identity_verified"],False)
+        self.assertIs(archive["session_completeness_verified"],False)
+        self.assertIs(archive["source_publication_times_verified"],False)
+
     def test_provider_request_keeps_token_secret_in_memory_not_file(self):
         class DummyResponse:
             status=200
