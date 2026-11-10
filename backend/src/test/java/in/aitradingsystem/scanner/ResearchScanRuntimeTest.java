@@ -40,7 +40,7 @@ class ResearchScanRuntimeTest {
         when(marketData.recentCandles(continued.id(), interval.name(), 64)).thenReturn(List.of());
         when(scans.requireRun(any(UUID.class))).thenReturn(new ResearchScanSummary(
                 UUID.randomUUID(), interval.name(), "PARTIAL", 2, 1, 0, "TEST", now, now,
-                "PARTIAL_SCAN", "1 instrument(s) failed during scan"));
+                "PARTIAL_SCAN", "1 instrument(s) failed during scan; 1 instrument(s) lack full candle history"));
 
         ResearchScanService service = new ResearchScanService(scans, marketData, quality, clock, 200, 60);
         ResearchScanSummary result = service.run(interval, 2);
@@ -49,8 +49,11 @@ class ResearchScanRuntimeTest {
         verify(marketData).recentCandles(continued.id(), interval.name(), 64);
         verify(scans).saveDiagnostic(any(UUID.class), eq(failed.id()), eq(null), eq("ERROR"),
                 eq("INSTRUMENT_SCAN_FAILED"), eq("Instrument scan failed; remaining universe continued"));
+        verify(scans).saveDiagnostic(any(UUID.class), eq(continued.id()), eq(null), eq("WARN"),
+                eq("INSUFFICIENT_CANDLE_HISTORY"),
+                eq("Fewer than 64 stored candles; full strategy coverage unavailable"));
         verify(scans).partialRun(any(UUID.class), eq(1), eq(0), eq("PARTIAL_SCAN"),
-                eq("1 instrument(s) failed during scan"));
+                eq("1 instrument(s) failed during scan; 1 instrument(s) lack full candle history"));
     }
 
     @Test
