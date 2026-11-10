@@ -97,13 +97,8 @@ jobs:
           test -s "$work/images.tar.gz"
           cp infra/ec2-paper/paper-compose.yml "$work/paper-compose.yml"
           cp infra/ec2-paper/run_paper.sh "$work/run_paper.sh"
-          cp infra/ec2-paper/probe_owner_angelone_auth.py "$work/probe_owner_angelone_auth.py"
-          cp infra/ec2-paper/owner_personal_angelone_history.py "$work/owner_personal_angelone_history.py"
-          cp infra/ec2-paper/run_owner_personal_history.sh "$work/run_owner_personal_history.sh"
           tar -cf "$RUNNER_TEMP/release.tar" -C "$work" \
-            images.tar.gz paper-compose.yml run_paper.sh \
-            probe_owner_angelone_auth.py owner_personal_angelone_history.py \
-            run_owner_personal_history.sh
+            images.tar.gz paper-compose.yml run_paper.sh
           sha256sum "$RUNNER_TEMP/release.tar" | cut -d' ' -f1 > "$RUNNER_TEMP/release.sha256"
           test "$(wc -c < "$RUNNER_TEMP/release.sha256")" -eq 65
           export POSTGRES_PASSWORD="temporary-ci-only" APP_API_KEY="temporary-ci-only" RELEASE_SHA="$GITHUB_SHA"
