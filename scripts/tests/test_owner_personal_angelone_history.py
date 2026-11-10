@@ -109,6 +109,87 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         row=self.conn.execute("SELECT row_count, state, earliest, latest FROM page").fetchone()
         self.assertEqual(row,(0,"EMPTY",None,None))
 
+    def test_readonly_private_status_audits_real_archive_without_market_calls(self):
+        from contextlib import redirect_stdout
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        lock=self.root/".exclusive.lock"
+        lock.touch(mode=0o600)
+        lock.chmod(0o600)
+        manifest=self.root/"manifest.sqlite3"
+        before=manifest.stat().st_mtime_ns
+        report=io.StringIO()
+        blocked=lambda *args,**kwargs: (_ for _ in ()).throw(
+            AssertionError("audit must never access provider or catalogue"))
+        with patch.dict(NAMESPACE,{
+                "authenticated_headers":blocked,
+                "fetch":blocked,
+                "select_catalogue_symbols":blocked,
+                "ensure_private_store":blocked,
+        }),redirect_stdout(report):
+            result=f("audit_private_archive")(
+                self.root,expected_owner=os.geteuid())
+        self.assertEqual(result,(1,1))
+        self.assertEqual(before,manifest.stat().st_mtime_ns)
+        self.assertIn("PERSONAL_ARCHIVE_VERIFIED_ROWS: 1",report.getvalue())
+        self.assertIn("PERSONAL_ARCHIVE_API_CALLS: 0",report.getvalue())
+        self.assertIn("PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED",report.getvalue())
+        self.assertNotIn("09:15",report.getvalue())
+        self.assertNotIn("2885",report.getvalue())
+
+    def test_readonly_status_refuses_missing_lock_before_opening_archive(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"TCS-EQ","11536",
+                          date,date,[candle()],date,date)
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"UNTRUSTED_AUDIT_FILE"):
+            f("audit_private_archive")(self.root,expected_owner=os.geteuid())
+
+    def test_readonly_status_refuses_concurrent_writer_lock(self):
+        import fcntl
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        lock=self.root/".exclusive.lock"
+        with lock.open("w+") as writer:
+            os.chmod(lock,0o600)
+            fcntl.flock(writer.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+            with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"ACTIVE_COLLECTOR"):
+                f("audit_private_archive")(
+                    self.root,expected_owner=os.geteuid())
+
+    def test_readonly_status_refuses_public_permissions(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"INFY-EQ","1594",
+                          date,date,[candle()],date,date)
+        lock=self.root/".exclusive.lock"
+        lock.touch(mode=0o600)
+        lock.chmod(0o600)
+        self.root.chmod(0o755)
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"UNTRUSTED_AUDIT_DIRECTORY"):
+            f("audit_private_archive")(
+                self.root,expected_owner=os.geteuid())
+
+    def test_readonly_status_rejects_modified_saved_candles(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"INFY-EQ","1594",
+                          date,date,[candle()],date,date)
+        lock=self.root/".exclusive.lock"
+        lock.touch(mode=0o600)
+        lock.chmod(0o600)
+        target=next((self.root/"pages").glob("*.json.gz"))
+        target.write_bytes(gzip.compress(b'{"rows":"tampered"}'))
+        with self.assertRaises(f("PersonalHistoryBlocked")):
+            f("audit_private_archive")(
+                self.root,expected_owner=os.geteuid())
+
+    def test_fixed_host_wrapper_offers_only_download_and_audit_only_modes(self):
+        wrapper=(ROOT/"infra/ec2-paper/run_owner_personal_history.sh").read_text()
+        self.assertIn('test "$#" -le 1',wrapper)
+        self.assertIn('test "$mode" = download -o "$mode" = audit-only',wrapper)
+        self.assertIn("['audit-only'] if mode=='audit-only' else []",wrapper)
+        self.assertNotIn("placeOrder",wrapper)
+
     def test_archive_audit_verifies_saved_real_shaped_candles_without_network(self):
         a=dt.date(2006,11,10)
         b=dt.date(2006,11,11)
