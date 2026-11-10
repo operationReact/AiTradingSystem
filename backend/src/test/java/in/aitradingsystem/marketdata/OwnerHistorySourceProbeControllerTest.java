@@ -63,7 +63,7 @@ class OwnerHistorySourceProbeControllerTest {
     }
 
     @Test
-    void unauthorizedUnavailableFeedDoesNotIssueProviderRequest() {
+    void unavailableFeedDoesNotIssueProviderRequest() {
         var result = controller().probe().getBody();
         assertThat(result.status()).isEqualTo("OWNER_FEED_UNAVAILABLE");
         verifyNoInteractions(instruments);
