@@ -92,4 +92,18 @@ class OwnerUniverseHistoryBackfillTest {
                 .doesNotThrowAnyException();
         verify(history, times(1)).startWithProvider(anyLong(), any(), any(), any(), any());
     }
+
+    @Test
+    void unavailableSsmFeedNeverCreatesFailedRuns() {
+        var repo = mock(UniverseCandleCoverageRepository.class);
+        var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));
+        var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+
+        new OwnerUniverseHistoryBackfill(service, history,
+                feed, new HistoricalCandleParser()).collectOne();
+
+        verify(feed).available();
+        verifyNoInteractions(repo, history);
+    }
 }
