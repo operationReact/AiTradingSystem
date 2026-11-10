@@ -338,6 +338,15 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
                                    "COVERAGE_UNVERIFIED")
         self.assertEqual(selection(self.conn, catalogue), [])
 
+    def test_request_ledger_records_exact_window_and_empty_outcome(self):
+        low, high = dt.date(2026, 1, 2), dt.date(2026, 1, 9)
+        with patch.dict(NAMESPACE, {"fetch": lambda *args: ([], None, None)}):
+            self.assertEqual(f("tracked_fetch")(
+                self.conn, {}, "TCS-EQ", "11536", low, high), ([], None, None))
+        self.assertEqual(self.conn.execute("""SELECT symbol,token,from_date,
+            through_date,outcome,returned_rows FROM candle_request""").fetchone(),
+            ("TCS-EQ", "11536", "2026-01-02", "2026-01-09", "EMPTY_CAUSE_UNKNOWN", 0))
+
     def test_short_recovery_scans_each_day_once_and_resumes_after_dense_response(self):
         first, through = list(f("windows")())[0]
         symbol, token = "RELIANCE-EQ", "2885"
@@ -463,6 +472,13 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         self.assertIn("PERSONAL_FAILED_WINDOWS_TOTAL: 0",report)
         self.assertNotIn("09:15",report)
         self.assertNotIn("2885",report)
+
+    def test_catalogue_skips_nse_test_symbols_without_rejecting_real_numeric_prefix(self):
+        from types import SimpleNamespace
+        data = "011NSETEST-EQ|14747\n360ONE-EQ|13061\nRELIANCE-EQ|2885\n"
+        with patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stdout=data)):
+            self.assertEqual(f("select_catalogue_symbols")(),
+                             [("360ONE-EQ", "13061"), ("RELIANCE-EQ", "2885")])
 
     def test_invalid_current_nse_catalogue_and_token_collisions_block(self):
         class Proc:

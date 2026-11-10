@@ -179,6 +179,14 @@ jobs:
           mode=os.environ.get('OWNER_HISTORY_MODE')
           if mode not in ('download','audit-only'):
               raise SystemExit('Invalid fixed owner mode')
+          recipient = ""
+          if mode == "audit-only":
+              recipient_path = Path("infra/ec2-paper/owner_history_report_recipient.b64")
+              if recipient_path.is_file():
+                  recipient = recipient_path.read_text().strip()
+                  assert re.fullmatch(r"[A-Za-z0-9+/]{900,1900}={0,2}", recipient)
+          if recipient:
+              script = "export OWNER_REPORT_RECIPIENT='" + recipient + "'\n" + script
           script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest).replace('@@OWNER_MODE@@',mode)
           path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
           path.write_text(json.dumps({'commands':[script]}))
@@ -233,6 +241,10 @@ jobs:
               if verified:
                   for line in counts:
                       print(line)
+                  encrypted = [line for line in lines if re.fullmatch(
+                      r"PERSONAL_ENCRYPTED_REQUEST_REPORT: [A-Za-z0-9+/]{100,18000}={0,2}", line)]
+                  if len(encrypted) == 1:
+                      print(encrypted[0])
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
                   print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
               print('SUCCESS' if verified else 'FAILED')
@@ -242,7 +254,7 @@ jobs:
               raise SystemExit(0)
           for line in output.splitlines():
               if len(line)>120: continue
-              if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|RECOVERY_WINDOWS_SELECTED|RECOVERY_SCANS_PENDING|RECOVERY_SCANS_FINISHED|SHORT_WINDOW_RESPONSES|SHORT_WINDOW_CANDLES_RETURNED|EMPTY_WINDOWS_TOTAL|SPARSE_WINDOWS_TOTAL|FAILED_WINDOWS_TOTAL|QUARANTINED_WINDOWS_TOTAL|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
+              if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|RECOVERY_WINDOWS_SELECTED|RECOVERY_SCANS_PENDING|RECOVERY_SCANS_FINISHED|SHORT_WINDOW_RESPONSES|SHORT_WINDOW_CANDLES_RETURNED|TEST_ROWS_EXCLUDED|REAL_EQUITY_ROWS_STORED_TOTAL|EMPTY_WINDOWS_TOTAL|SPARSE_WINDOWS_TOTAL|FAILED_WINDOWS_TOTAL|QUARANTINED_WINDOWS_TOTAL|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
                   print(line)
               if re.fullmatch(r'PERSONAL_PAGE_[0-9]{1,2}: (?:RELIANCE-EQ|TCS-EQ|INFY-EQ|HDFCBANK-EQ|ICICIBANK-EQ) [0-9]{1,4} VALIDATED_ROWS',line):
                   print(line)
