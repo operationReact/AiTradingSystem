@@ -12,7 +12,7 @@ CREATE TABLE golden_dataset_backfill_job (
     through_date DATE NOT NULL,
     dataset_revision INTEGER NOT NULL CHECK (dataset_revision > 0),
     status VARCHAR(16) NOT NULL DEFAULT 'PENDING'
-        CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETE')),
+        CHECK (status IN ('PENDING', 'RUNNING', 'COMPLETE', 'BLOCKED')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (from_date <= through_date),
