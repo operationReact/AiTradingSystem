@@ -42,7 +42,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/market-data/quotes/detail",
         "/api/customer/market-data/overview");
     private static final Set<String> PORTFOLIO_READS = Set.of(
-        "/api/customer/portfolio/records");
+        "/api/customer/portfolio/records",
+        "/api/customer/home/v1/summary");
     private static final String CUSTOMER_WATCHLIST = "/api/customer/watchlist";
     private static final java.util.regex.Pattern CUSTOMER_WATCHLIST_ITEM =
         java.util.regex.Pattern.compile("^/api/customer/watchlist/items/[0-9]{1,18}$");
