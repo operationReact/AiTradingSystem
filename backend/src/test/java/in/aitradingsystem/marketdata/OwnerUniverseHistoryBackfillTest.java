@@ -48,15 +48,17 @@ class OwnerUniverseHistoryBackfillTest {
         var run = mock(CandleBackfillRun.class);
         when(run.status()).thenReturn("SUCCEEDED");
         when(run.id()).thenReturn(UUID.randomUUID());
-        when(history.startWithProvider(42L, HistoricalCandleInterval.FIVE_MINUTE,
-                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class)))
+        when(history.startWithProvider(eq(42L), eq(HistoricalCandleInterval.FIVE_MINUTE),
+                eq(LocalDate.of(2026, 10, 27)), eq(LocalDate.of(2026, 11, 9)),
+                any(MarketDataProvider.class)))
                 .thenReturn(run);
 
         new OwnerUniverseHistoryBackfill(service, history,
                 feed, new HistoricalCandleParser()).collectOne();
 
-        verify(history, times(1)).startWithProvider(42L, HistoricalCandleInterval.FIVE_MINUTE,
-                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9), any(MarketDataProvider.class));
+        verify(history, times(1)).startWithProvider(eq(42L), eq(HistoricalCandleInterval.FIVE_MINUTE),
+                eq(LocalDate.of(2026, 10, 27)), eq(LocalDate.of(2026, 11, 9)),
+                any(MarketDataProvider.class));
         verifyNoMoreInteractions(history);
     }
 
