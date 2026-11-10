@@ -54,30 +54,16 @@ printf '%s  %s\n' "$expected_hash" "$bundle" | sha256sum -c - >/dev/null || {
 # Expected archive produced on the GitHub runner. Deny extra paths.
 stage=archive_validation
 list="$(tar -tf "$bundle" | LC_ALL=C sort)"
-expected="$(printf 'images.tar.gz\npaper-compose.yml\nrun_paper.sh\nprobe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh' | LC_ALL=C sort)"
+expected="$(printf 'images.tar.gz\npaper-compose.yml\nrun_paper.sh' | LC_ALL=C sort)"
 test "$list" = "$expected" || { echo "Unexpected archive members" >&2; exit 2; }
 tar -xf "$bundle" -C "$work"
-for f in images.tar.gz paper-compose.yml run_paper.sh \
-    probe_owner_angelone_auth.py owner_personal_angelone_history.py \
-    run_owner_personal_history.sh; do
+for f in images.tar.gz paper-compose.yml run_paper.sh; do
   test -f "$work/$f" && test ! -L "$work/$f" || exit 2
 done
 test "$(du -b "$work/images.tar.gz" | cut -f1)" -gt 1000000 || exit 2
 
 # Validate scripts and image names before replacing active release.
 bash -n "$work/run_paper.sh"
-bash -n "$work/run_owner_personal_history.sh"
-python3 - "$work" <<'PY'
-from pathlib import Path
-import sys
-p=Path(sys.argv[1])
-a=(p/'probe_owner_angelone_auth.py').read_text()
-b=(p/'owner_personal_angelone_history.py').read_text()
-assert '\nif __name__ == "__main__":' in a
-merged=a.split('\nif __name__ == "__main__":',1)[0]+'\n'+b
-assert len(merged)<42000 and merged.count('if __name__ == "__main__":')==1
-compile(merged,'<owner-private-reviewed>','exec')
-PY
 grep -q 'TRADING_MODE: PAPER' "$work/paper-compose.yml"
 stage=image_load
 docker load --input "$work/images.tar.gz" >/dev/null
@@ -86,9 +72,5 @@ docker load --input "$work/images.tar.gz" >/dev/null
 stage=host_activation
 install -o root -g root -m 0600 "$work/paper-compose.yml" "$root/paper-compose.yml"
 install -o root -g root -m 0700 "$work/run_paper.sh" "$root/run_paper.sh"
-# Reviewed owner-only scripts are installed but NEVER executed by deployment.
-install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
-install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
-install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
 bash "$root/run_paper.sh" "$sha"
 echo "SSM ARM64 PAPER application acceptance passed for exact release $sha"
