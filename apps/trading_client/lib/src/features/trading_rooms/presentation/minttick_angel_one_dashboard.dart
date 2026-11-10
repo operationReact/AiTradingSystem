@@ -199,7 +199,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
                 style: theme.textTheme.titleMedium
                     ?.copyWith(fontWeight: FontWeight.w800)),
               const SizedBox(height: 5),
-              Text('Account: ' + (connection.clientCodeMasked ?? 'Verified'),
+              Text('Account: ${connection.clientCodeMasked ?? 'Verified'}',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: scheme.onSurfaceVariant)),
               const SizedBox(height: 9),
@@ -378,7 +378,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
             style: Theme.of(context).textTheme.headlineMedium
                 ?.copyWith(fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          Text(canPnl ? 'Total reported P&L: ' + _money(totalPnl)
+          Text(canPnl ? 'Total reported P&L: ${_money(totalPnl)}'
                   : 'Total P&L not available for every holding',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant)),
@@ -397,7 +397,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
                   Row(children: [
                     Expanded(child: Text(_symbol(entry.value),
                         maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    Text((ratio * 100).toStringAsFixed(1) + '%'),
+                    Text('${(ratio * 100).toStringAsFixed(1)}%'),
                   ]),
                   const SizedBox(height: 5),
                   LinearProgressIndicator(
@@ -409,7 +409,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
               );
             }),
             if (rows.length > 8)
-              Text('Showing 8 of ' + rows.length.toString() + ' allocation rows'),
+              Text('Showing 8 of ${rows.length} allocation rows'),
           ] else
             Text('Allocation requires verified quantities and prices.',
                 style: Theme.of(context).textTheme.bodySmall),
@@ -431,8 +431,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
         ]);
       }),
       const SizedBox(height: 25),
-      _heading('Holdings (' + (_loading.contains(MintTickAngelPanel.holdings)
-          ? '…' : rows.length.toString()) + ')',
+      _heading("Holdings (${_loading.contains(MintTickAngelPanel.holdings) ? '…' : rows.length})",
           'Positions owned in your Angel One account.'),
       const SizedBox(height: 12),
       _sectionState(MintTickAngelPanel.holdings),
@@ -547,7 +546,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
         side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       child: InkWell(
-        key: ValueKey('angel-open-' + panel.name),
+        key: ValueKey('angel-open-${panel.name}'),
         borderRadius: BorderRadius.circular(16),
         onTap: () => _open(panel),
         child: Padding(
@@ -672,9 +671,9 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
     final pnl = _num(_field(row, ['pnl', 'profitandloss']));
     final details = <String>[
       if (side != null && side.isNotEmpty) side.toUpperCase(),
-      if (quantity != null) 'Qty ' + quantity.toString(),
-      if (average != null) 'Avg ' + _money(average),
-      if (last != null) 'LTP ' + _money(last),
+      if (quantity != null) 'Qty $quantity',
+      if (average != null) 'Avg ${_money(average)}',
+      if (last != null) 'LTP ${_money(last)}',
     ];
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -717,7 +716,7 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
 
   String _count(MintTickAngelPanel panel) {
     if (_loading.contains(panel) || _failures.containsKey(panel) ||
-        !_payloads.containsKey(panel)) return '—';
+        !_payloads.containsKey(panel)) { return '—'; }
     return _rows(panel).length.toString();
   }
 
@@ -786,14 +785,14 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
       final tail = digits.substring(digits.length - 3);
       head = digits.substring(0, digits.length - 3);
       while (head.length > 2) {
-        grouped = ',' + head.substring(head.length - 2) + grouped;
+        grouped = ',${head.substring(head.length - 2)}$grouped';
         head = head.substring(0, head.length - 2);
       }
-      grouped = head + grouped + ',' + tail;
+      grouped = '$head$grouped,$tail';
     } else {
       grouped = digits;
     }
-    return (negative ? '−' : '') + '₹' + grouped + '.' + parts.last;
+    return "${negative ? '−' : ''}₹$grouped.${parts.last}";
   }
 
   String _expiry(DateTime? at) {
