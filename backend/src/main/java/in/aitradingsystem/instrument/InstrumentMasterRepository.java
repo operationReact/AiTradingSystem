@@ -116,7 +116,10 @@ public class InstrumentMasterRepository {
                  WHERE catalogue_version = ?
                    AND active = TRUE
                    AND exchange IN ('NSE', 'BSE')
-                   AND instrument_type = 'EQ'
+                   AND (instrument_type = 'EQ'
+                        OR (coalesce(instrument_type, '') = ''
+                            AND exchange_segment IN ('NSE_CM','BSE_CM')
+                            AND trading_symbol LIKE '%-EQ'))
                 ON CONFLICT DO NOTHING
                 """, runId);
     }
