@@ -112,6 +112,12 @@ class _MindProspectiveOutcomesPanelState
         key: ValueKey('minttick-outcomes-cost-caveat'),
         style: TextStyle(color: MindPalette.muted, fontSize: 11)),
       const SizedBox(height: 7),
+      const Text('Illustrative entry uses the next five-minute bar opening. '
+        'That price may predate the research receipt and is not an '
+        'executable entry or verified P&L.',
+        key: ValueKey('minttick-outcomes-entry-lookahead-warning'),
+        style: TextStyle(color: MindPalette.yellow, fontSize: 11)),
+      const SizedBox(height: 7),
       const Text('Provider provenance is not independently attested. '
         'No account risk approval, PAPER or LIVE orders.',
         key: ValueKey('minttick-outcomes-no-execution'),
