@@ -34,6 +34,7 @@ class SourceSliceEvidence(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     source_id: SourceId
+    scope_id: Annotated[str, Field(min_length=1, max_length=160)]
     source_kind: SourceKind
     dataset_digest: Hash64
     latest_event_at: datetime
@@ -69,6 +70,7 @@ class ModelFeatureSlice(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     decision_at: datetime
+    scope_id: Annotated[str, Field(min_length=1, max_length=160)]
     data_cutoff: datetime
     feature_schema_digest: Hash64
     feature_digest: Hash64
@@ -118,6 +120,11 @@ class ModelSourceRequirements(BaseModel):
         default_factory=dict,
         max_length=32,
     )
+    # Global market observations must be explicitly scoped by their reviewed
+    # source contract; never mix one listing's candle slice with another's.
+    source_scope_overrides: dict[SourceId, str] = Field(
+        default_factory=dict, max_length=32,
+    )
 
     @model_validator(mode="after")
     def validate_requirements(self) -> ModelSourceRequirements:
@@ -130,6 +137,10 @@ class ModelSourceRequirements(BaseModel):
             raise ValueError("minimum rows must reference required sources")
         if not set(self.maximum_age_seconds).issubset(required):
             raise ValueError("freshness thresholds must reference required sources")
+        if not set(self.source_scope_overrides).issubset(required):
+            raise ValueError("scope overrides must reference required sources")
+        if any(not scope or len(scope) > 160 for scope in self.source_scope_overrides.values()):
+            raise ValueError("source scopes must be nonempty and bounded")
         return self
 
 
@@ -187,6 +198,11 @@ def evaluate_model_data_readiness(
         if source is None:
             blockers.add(f"SOURCE_UNAVAILABLE:{source_id}")
             continue
+        expected_scope = requirements.source_scope_overrides.get(
+            source_id, features.scope_id
+        )
+        if source.scope_id != expected_scope:
+            blockers.add(f"WRONG_SOURCE_SCOPE:{source_id}")
         if source.source_kind != "EXTERNAL":
             blockers.add(f"SYNTHETIC_SOURCE:{source_id}")
         if source.quality != "VERIFIED":
@@ -242,6 +258,7 @@ def requirements_from_reviewed_catalogue(
     requested_use: Right,
     minimum_valid_rows: dict[str, int] | None = None,
     maximum_age_seconds: dict[str, int] | None = None,
+    source_scope_overrides: dict[str, str] | None = None,
 ) -> ModelSourceRequirements:
     """Resolve one exact registered model's mandatory sources.
 
@@ -271,4 +288,5 @@ def requirements_from_reviewed_catalogue(
         expected_feature_schema_digest=feature_schema_digest,
         minimum_valid_rows=minimum_valid_rows or {},
         maximum_age_seconds=maximum_age_seconds or {},
+        source_scope_overrides=source_scope_overrides or {},
     )
