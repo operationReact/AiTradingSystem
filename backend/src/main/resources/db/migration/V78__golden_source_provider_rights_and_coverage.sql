@@ -51,8 +51,9 @@ CREATE TABLE golden_source_rights_receipt (
             AND verified_at <= captured_at AND revoked_at IS NULL)
     ),
     CONSTRAINT ck_golden_rights_revocation CHECK (
-        (receipt_status = 'REVOKED' AND revoked_at IS NOT NULL)
-        OR receipt_status <> 'REVOKED'
+        (receipt_status = 'REVOKED' AND revoked_at IS NOT NULL
+            AND revoked_at <= captured_at)
+        OR (receipt_status <> 'REVOKED' AND revoked_at IS NULL)
     )
 );
 CREATE INDEX ix_golden_rights_lookup ON golden_source_rights_receipt
@@ -85,6 +86,8 @@ CREATE TABLE golden_source_coverage_evidence (
     recorded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (from_date <= through_date),
     CHECK (valid_records <= expected_records),
+    CHECK (quality_status <> 'VERIFIED'
+        OR (expected_records > 0 AND valid_records = expected_records)),
     CHECK (first_available_at <= last_available_at),
     CHECK (last_available_at <= recorded_at),
     CHECK (source_domain ~ '^[a-z][a-z0-9_]{2,79}$'),
