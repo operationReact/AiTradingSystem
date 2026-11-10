@@ -157,8 +157,9 @@ public class ResearchScanService {
                 scans.finishRun(runId, scannedCount, candidateCount);
             } else if (diagnosticCount > 0) {
                 scans.partialRun(runId, scannedCount, candidateCount, "PARTIAL_SCAN",
-                        diagnosticCount + " instrument(s) failed; "
-                            + incompleteHistoryCount + " instrument(s) lack full candle history");
+                        diagnosticCount + " instrument(s) failed during scan"
+                        + (incompleteHistoryCount == 0 ? ""
+                            : "; " + incompleteHistoryCount + " instrument(s) lack full candle history"));
             } else {
                 scans.partialRun(runId, scannedCount, candidateCount, "INCOMPLETE_HISTORY_COVERAGE",
                         incompleteHistoryCount + " instrument(s) lack the 64-candle research window");
