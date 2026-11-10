@@ -1,6 +1,7 @@
 package in.aitradingsystem.marketdata;
 
 import org.springframework.http.CacheControl;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,6 +18,7 @@ public class UniverseCandleCoverageController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public ResponseEntity<UniverseCandleCoverageRepository.Coverage> coverage() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.coverage());
     }
