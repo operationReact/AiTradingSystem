@@ -173,6 +173,9 @@ def select_catalogue_symbols():
         if (not re.fullmatch(r"[A-Z0-9][A-Z0-9_.&-]{0,36}-EQ", sym)
                 or not re.fullmatch(r"[0-9]{1,12}", token)):
             raise PersonalHistoryBlocked("INVALID_CATALOGUE")
+        # NSE CMTR/54503 reserves the NSETEST suffix for dummy securities.
+        if sym.endswith("NSETEST-EQ"):
+            continue
         if sym in entries and entries[sym] != token:
             raise PersonalHistoryBlocked("AMBIGUOUS_CATALOGUE_TOKEN")
         if token in by_token and by_token[token] != sym:
@@ -646,6 +649,10 @@ def print_archive_progress(conn):
     print("PERSONAL_RECOVERY_SCANS_FINISHED: " + str(checked), flush=True)
     print("PERSONAL_EMPTY_WINDOWS_TOTAL: " + str(empty), flush=True)
     print("PERSONAL_SPARSE_WINDOWS_TOTAL: " + str(sparse), flush=True)
+    test_rows = conn.execute("""SELECT COALESCE(sum(row_count),0) FROM page
+        WHERE substr(symbol,-10)='NSETEST-EQ'""").fetchone()[0]
+    print("PERSONAL_TEST_ROWS_EXCLUDED: " + str(test_rows), flush=True)
+    print("PERSONAL_REAL_EQUITY_ROWS_STORED_TOTAL: " + str(bars - test_rows), flush=True)
     print("PERSONAL_PAGES_STORED_TOTAL: " + str(pages), flush=True)
     print("PERSONAL_ROWS_STORED_TOTAL: " + str(bars), flush=True)
     print("PERSONAL_FAILED_WINDOWS_TOTAL: " + str(failures), flush=True)
