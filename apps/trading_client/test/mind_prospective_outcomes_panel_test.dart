@@ -47,6 +47,9 @@ void main() {
         findsOneWidget);
       expect(find.byKey(const ValueKey('minttick-outcomes-no-execution')),
         findsOneWidget);
+      expect(find.byKey(
+        const ValueKey('minttick-outcomes-entry-lookahead-warning')),
+        findsOneWidget);
       expect(find.textContaining('Place order'), findsNothing);
       expect(tester.takeException(), isNull);
     });
