@@ -7,8 +7,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import in.aitradingsystem.support.AbstractPostgresIT;
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
+import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -29,6 +30,7 @@ class StrategyApiIT extends AbstractPostgresIT {
 
     @Autowired MockMvc mvc;
     @Autowired JdbcTemplate jdbc;
+    @Autowired MarketSessionCalendar sessions;
     private long instrumentId;
 
     @BeforeEach
@@ -84,11 +86,18 @@ class StrategyApiIT extends AbstractPostgresIT {
 
     @Test
     void evaluationPersistsOneIdempotentSignalAndListsIt() throws Exception {
+        // Select a *real* market session: a weekday can still be an NSE holiday.
+        // The fixture requires 21 regular five-minute slots, so skip short
+        // special sessions such as the 2026 Diwali Muhurat session as well.
         LocalDate tradingDay = LocalDate.now(MARKET_ZONE).minusDays(1);
-        while (tradingDay.getDayOfWeek() == DayOfWeek.SATURDAY || tradingDay.getDayOfWeek() == DayOfWeek.SUNDAY) {
+        int attempts = 0;
+        while (sessions.expectedSlots(tradingDay, HistoricalCandleInterval.FIVE_MINUTE).size() < 21) {
+            if (++attempts > 14) {
+                throw new IllegalStateException("No full NSE test session in the past 15 days");
+            }
             tradingDay = tradingDay.minusDays(1);
         }
-        Instant firstCandle = tradingDay.atTime(9, 15).atZone(MARKET_ZONE).toInstant();
+        Instant firstCandle = sessions.session(tradingDay).open().toInstant();
         for (int i = 0; i < 21; i++) {
             BigDecimal close = BigDecimal.valueOf(100 + i);
             Instant candleTime = firstCandle.plusSeconds(300L * i);
