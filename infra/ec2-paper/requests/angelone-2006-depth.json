@@ -1,0 +1,13 @@
+{
+  "application": "MintTick",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-angelone-2006-daily-depth",
+  "instrument": "RELIANCE-EQ",
+  "interval": "ONE_DAY",
+  "from_date": "2006-11-10",
+  "window_calendar_days": 2000,
+  "store_data": false,
+  "trading_enabled": false
+}
