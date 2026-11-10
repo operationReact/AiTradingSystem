@@ -6,7 +6,9 @@ import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
+import '../data/mind_prospective_outcomes_repository.dart';
 import 'mind_prospective_signals_panel.dart';
+import 'mind_prospective_outcomes_panel.dart';
 import 'mind_prospective_cohort_panel.dart';
 import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
@@ -19,7 +21,8 @@ import 'mind_widgets.dart';
 class MintickMindPage extends StatefulWidget {
   const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
     this.walkForwardRepository, this.prospectiveRepository,
-    this.prospectiveSignalsRepository, super.key});
+    this.prospectiveSignalsRepository, this.prospectiveOutcomesRepository,
+    super.key});
 
   /// Null in isolated demo/golden tests; authenticated app injects real API.
   final MindReadinessRepository? readinessRepository;
@@ -27,6 +30,7 @@ class MintickMindPage extends StatefulWidget {
   final MindMaWalkForwardRepository? walkForwardRepository;
   final MindProspectiveCohortRepository? prospectiveRepository;
   final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
+  final MindProspectiveOutcomesRepository? prospectiveOutcomesRepository;
 
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
@@ -101,6 +105,11 @@ class _MintickMindPageState extends State<MintickMindPage> {
               if (_tab == 1 && widget.prospectiveSignalsRepository != null) ...[
                 MindProspectiveSignalsPanel(
                   repository: widget.prospectiveSignalsRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 && widget.prospectiveOutcomesRepository != null) ...[
+                MindProspectiveOutcomesPanel(
+                  repository: widget.prospectiveOutcomesRepository!),
                 const SizedBox(height: 14),
               ],
               if(_tab==1) _strategies(),
