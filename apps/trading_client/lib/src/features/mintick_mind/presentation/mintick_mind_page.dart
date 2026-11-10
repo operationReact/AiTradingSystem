@@ -7,8 +7,10 @@ import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
 import '../data/mind_prospective_outcomes_repository.dart';
+import '../data/mind_prospective_evidence_completeness_repository.dart';
 import 'mind_prospective_signals_panel.dart';
 import 'mind_prospective_outcomes_panel.dart';
+import 'mind_prospective_evidence_completeness_panel.dart';
 import 'mind_prospective_cohort_panel.dart';
 import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
@@ -22,6 +24,7 @@ class MintickMindPage extends StatefulWidget {
   const MintickMindPage({this.readinessRepository, this.strategyReplayRepository,
     this.walkForwardRepository, this.prospectiveRepository,
     this.prospectiveSignalsRepository, this.prospectiveOutcomesRepository,
+    this.prospectiveEvidenceCompletenessRepository,
     super.key});
 
   /// Null in isolated demo/golden tests; authenticated app injects real API.
@@ -31,6 +34,8 @@ class MintickMindPage extends StatefulWidget {
   final MindProspectiveCohortRepository? prospectiveRepository;
   final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
   final MindProspectiveOutcomesRepository? prospectiveOutcomesRepository;
+  final MindProspectiveEvidenceCompletenessRepository?
+      prospectiveEvidenceCompletenessRepository;
 
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
@@ -110,6 +115,12 @@ class _MintickMindPageState extends State<MintickMindPage> {
               if (_tab == 1 && widget.prospectiveOutcomesRepository != null) ...[
                 MindProspectiveOutcomesPanel(
                   repository: widget.prospectiveOutcomesRepository!),
+                const SizedBox(height: 14),
+              ],
+              if (_tab == 1 &&
+                  widget.prospectiveEvidenceCompletenessRepository != null) ...[
+                MindProspectiveEvidenceCompletenessPanel(
+                  repository: widget.prospectiveEvidenceCompletenessRepository!),
                 const SizedBox(height: 14),
               ],
               if(_tab==1) _strategies(),
