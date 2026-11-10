@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../data/customer_angel_one_repository.dart';
 import '../data/customer_upstox_repository.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_angel_one_dashboard.dart';
 
 /// Broker selection is a separate concept from PAPER/LIVE workspace mode.
 /// Connecting one broker never authorizes orders through another.
@@ -155,15 +156,18 @@ class _BrokerOption extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(children: [
-            Container(
-              width: 44, height: 44,
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHigh.withValues(alpha: 0.80),
-                borderRadius: BorderRadius.circular(12),
+            if (name == 'Angel One')
+              const AngelOneSymbol(size: 44)
+            else
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHigh.withValues(alpha: 0.80),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(Icons.account_balance_outlined,
+                  color: scheme.onSurfaceVariant, size: 21),
               ),
-              child: Icon(Icons.account_balance_outlined,
-                color: scheme.onSurfaceVariant, size: 21),
-            ),
             const SizedBox(width: 13),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start, children: [
