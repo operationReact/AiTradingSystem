@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/minttick-owner-private-candle-pilot.yml'
       - 'infra/ec2-paper/run_owner_personal_history.sh'
+      - 'infra/ec2-paper/owner_personal_angelone_history.py'
+      - 'scripts/tests/test_owner_personal_angelone_history.py'
   push:
     branches: [dev]
     paths:
@@ -240,9 +242,12 @@ jobs:
               raise SystemExit(0)
           for line in output.splitlines():
               if len(line)>120: continue
-              if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
+              if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|RECOVERY_WINDOWS_SELECTED|EMPTY_WINDOWS_TOTAL|SPARSE_WINDOWS_TOTAL|FAILED_WINDOWS_TOTAL|QUARANTINED_WINDOWS_TOTAL|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
                   print(line)
               if re.fullmatch(r'PERSONAL_PAGE_[0-9]{1,2}: (?:RELIANCE-EQ|TCS-EQ|INFY-EQ|HDFCBANK-EQ|ICICIBANK-EQ) [0-9]{1,4} VALIDATED_ROWS',line):
+                  print(line)
+              if line in ('PERSONAL_DOWNLOAD_PAUSED: PROVIDER_COOLDOWN',
+                          'PERSONAL_DOWNLOAD_PAUSED: RUN_TIME_BUDGET'):
                   print(line)
               if re.fullmatch(r'PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_: ]{3,80}',line):
                   print(line)
