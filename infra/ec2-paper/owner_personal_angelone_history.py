@@ -31,6 +31,8 @@ MAX_RESPONSE_BYTES = 262144
 MAX_ROWS = 2000
 MAX_STOCKS_PER_RUN = 5
 MIN_REQUEST_SPACING = 10.0
+SPARSE_WINDOW_MAX_ROWS = 10
+MAX_FETCH_SECONDS = 540
 MIN_FREE_BYTES = 256 * 1024 * 1024
 PILOT = ("RELIANCE-EQ", "TCS-EQ", "INFY-EQ", "HDFCBANK-EQ", "ICICIBANK-EQ")
 URL = API_ROOT + "/rest/secure/angelbroking/historical/v1/getCandleData"
@@ -67,7 +69,7 @@ FAILURE_CODES = frozenset((
     "PROVIDER_REJECTED", "PROVIDER_HTTP_ERROR",
     "PROVIDER_RATE_LIMITED", "PROVIDER_UNREACHABLE",
     "INVALID_PROVIDER_ROWS", "PROVIDER_RESPONSE_TOO_LARGE",
-    "INVALID_PROVIDER_JSON",
+    "INVALID_PROVIDER_JSON", "COVERAGE_UNVERIFIED", "RECOVERY_CONFLICT",
 ))
 
 
@@ -196,6 +198,33 @@ def select_next_batch(conn, catalogue):
             if len(selected) == MAX_STOCKS_PER_RUN:
                 break
     return selected
+
+
+def select_recovery_windows(conn, catalogue):
+    """Triage known sparse windows. This is not a session-completeness test."""
+    current = {(symbol, token) for symbol, token in catalogue}
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    candidates = conn.execute("""
+        SELECT p.symbol,p.token,p.from_date,p.through_date
+          FROM page p LEFT JOIN page_failure f USING (exchange,token,from_date,through_date)
+         WHERE p.exchange='NSE' AND p.row_count<=?
+           AND (f.attempts IS NULL OR (f.attempts<5 AND f.retry_after<=?))
+         ORDER BY COALESCE(f.attempts,0), p.through_date DESC, p.symbol, p.from_date
+    """, (SPARSE_WINDOW_MAX_ROWS, now))
+    selected = set()
+    result = []
+    for symbol, token, first, through in candidates:
+        identity = (symbol, token)
+        if identity not in current:
+            continue
+        if identity not in selected and len(selected) >= MAX_STOCKS_PER_RUN:
+            continue
+        selected.add(identity)
+        result.append((symbol, token, dt.date.fromisoformat(first),
+                       dt.date.fromisoformat(through)))
+        if len(result) == MAX_STOCKS_PER_RUN * len(list(windows())):
+            break
+    return result
 
 
 def validate_rows(payload, first, through):
@@ -331,7 +360,8 @@ def existing_page(conn, root, token, first, through):
     return count
 
 
-def persist_page(conn, root, symbol, token, first, through, data, earliest, latest):
+def persist_page(conn, root, symbol, token, first, through, data, earliest, latest,
+                 *, repair=False):
     # Only provider candle rows and public instrument identity are persisted;
     # there is NO account code, API key, PIN, TOTP, JWT or request headers.
     obj = {
@@ -382,11 +412,16 @@ def persist_page(conn, root, symbol, token, first, through, data, earliest, late
         finally:
             if temp.exists():
                 temp.unlink()
+    conflict = """DO UPDATE SET
+            source_sha256=excluded.source_sha256,
+            archive_relative_path=excluded.archive_relative_path,
+            row_count=excluded.row_count, earliest=excluded.earliest, latest=excluded.latest,
+            inspected_at=excluded.inspected_at, state=excluded.state""" if repair else "DO NOTHING"
     conn.execute("""INSERT INTO page (
             exchange,symbol,token,from_date,through_date,source_sha256,
             archive_relative_path,row_count,earliest,latest,inspected_at,state)
         VALUES ('NSE',?,?,?,?,?,?,?,?,?,?,?)
-        ON CONFLICT(exchange,token,from_date,through_date) DO NOTHING""",
+        ON CONFLICT(exchange,token,from_date,through_date) """ + conflict,
         (symbol, token, first.isoformat(), through.isoformat(), digest, rel,
          len(data), earliest.isoformat() if earliest else None,
          latest.isoformat() if latest else None,
@@ -394,6 +429,34 @@ def persist_page(conn, root, symbol, token, first, through, data, earliest, late
          "NONEMPTY" if data else "EMPTY"))
     conn.commit()
     return digest
+
+
+def recover_page(conn, root, symbol, token, first, through, data):
+    # The manifest and blob have been verified under the exclusive lock.
+    previous = conn.execute("""
+        SELECT symbol,archive_relative_path FROM page WHERE exchange='NSE'
+           AND token=? AND from_date=? AND through_date=?
+    """, (token, first.isoformat(), through.isoformat())).fetchone()
+    if previous is None or previous[0] != symbol:
+        raise PersonalHistoryBlocked("RECOVERY_CONFLICT")
+    with gzip.open(root / previous[1], "rb") as stream:
+        stored = json.load(stream)["rows"]
+
+    def session(row):
+        return dt.datetime.fromisoformat(row[0]).astimezone(ZoneInfo("Asia/Kolkata")).date()
+
+    by_session = {session(row): row for row in stored}
+    for row in data:
+        day = session(row)
+        if day in by_session and by_session[day][1:] != row[1:]:
+            raise PersonalHistoryBlocked("RECOVERY_CONFLICT")
+        by_session.setdefault(day, row)
+    added = len(by_session) - len(stored)
+    if added:
+        merged = [by_session[day] for day in sorted(by_session)]
+        persist_page(conn, root, symbol, token, first, through, merged,
+                     min(by_session), max(by_session), repair=True)
+    return added, len(by_session)
 
 
 def verify_archive_integrity(conn, root):
@@ -526,6 +589,12 @@ def print_archive_progress(conn):
     failures, terminal = conn.execute(
         """SELECT count(*),COALESCE(sum(CASE WHEN attempts>=5 THEN 1 ELSE 0 END),0)
              FROM page_failure""").fetchone()
+    empty, sparse = conn.execute(
+        """SELECT COALESCE(sum(row_count=0),0),
+                  COALESCE(sum(row_count BETWEEN 1 AND ?),0) FROM page""",
+        (SPARSE_WINDOW_MAX_ROWS,)).fetchone()
+    print("PERSONAL_EMPTY_WINDOWS_TOTAL: " + str(empty), flush=True)
+    print("PERSONAL_SPARSE_WINDOWS_TOTAL: " + str(sparse), flush=True)
     print("PERSONAL_PAGES_STORED_TOTAL: " + str(pages), flush=True)
     print("PERSONAL_ROWS_STORED_TOTAL: " + str(bars), flush=True)
     print("PERSONAL_FAILED_WINDOWS_TOTAL: " + str(failures), flush=True)
@@ -591,20 +660,24 @@ def run():
             print("PERSONAL_ARCHIVE_VERIFIED_ROWS: " + str(verified_rows),
                   flush=True)
             catalogue = select_catalogue_symbols()
-            entries = select_next_batch(conn, catalogue)
+            recovery = select_recovery_windows(conn, catalogue)
+            entries = (sorted({(symbol, token) for symbol, token, _, _ in recovery})
+                       if recovery else select_next_batch(conn, catalogue))
             print("PERSONAL_UNIVERSE_EQUITIES: " + str(len(catalogue)), flush=True)
             if len(entries) > MAX_STOCKS_PER_RUN:
                 raise PersonalHistoryBlocked("RUN_STOCK_LIMIT")
-            planned = [(sym, token, start, end)
-                       for sym, token in entries for start, end in windows()]
-            # Validate previous files BEFORE authenticating or making requests.
-            remaining = []
+            remaining = recovery.copy()
             skipped = 0
-            for sym, token, start, end in planned:
-                if existing_page(conn, root, token, start, end) is None:
-                    remaining.append((sym, token, start, end))
-                else:
-                    skipped += 1
+            if not recovery:
+                planned = [(sym, token, start, end)
+                           for sym, token in entries for start, end in windows()]
+                # Validate previous files before making any provider requests.
+                for sym, token, start, end in planned:
+                    if existing_page(conn, root, token, start, end) is None:
+                        remaining.append((sym, token, start, end))
+                    else:
+                        skipped += 1
+            print("PERSONAL_RECOVERY_WINDOWS_SELECTED: " + str(len(recovery)), flush=True)
             print("PERSONAL_STOCKS_SELECTED: " + str(len(entries)), flush=True)
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
@@ -618,6 +691,7 @@ def run():
                 print_archive_progress(conn)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
                 return 0
+            deadline = time.monotonic() + MAX_FETCH_SECONDS
             headers = authenticated_headers()
             completed = 0
             new_bars = 0
@@ -627,8 +701,23 @@ def run():
                     time.sleep(max(0, MIN_REQUEST_SPACING
                                    - (time.monotonic() - previous_call)))
                 previous_call = time.monotonic()
+                if previous_call >= deadline:
+                    print("PERSONAL_DOWNLOAD_PAUSED: RUN_TIME_BUDGET", flush=True)
+                    break
                 try:
                     rows, first, last = fetch(headers, token, start, end)
+                    if recovery:
+                        gained, count = recover_page(conn, root, sym, token, start, end, rows)
+                    else:
+                        persist_page(conn, root, sym, token, start, end, rows, first, last)
+                        gained = count = len(rows)
+                    if count <= SPARSE_WINDOW_MAX_ROWS:
+                        record_window_failure(conn, token, start, end, "COVERAGE_UNVERIFIED")
+                    else:
+                        conn.execute("""DELETE FROM page_failure WHERE exchange='NSE'
+                            AND token=? AND from_date=? AND through_date=?""",
+                            (token, start.isoformat(), end.isoformat()))
+                        conn.commit()
                 except PersonalHistoryBlocked as exc:
                     if str(exc) not in FAILURE_CODES:
                         raise
@@ -640,12 +729,11 @@ def run():
                     # Do not pretend an error means 0 candles. Continue
                     # with other symbols; quarantine this symbol until retry.
                     continue
-                persist_page(conn, root, sym, token, start, end, rows, first, last)
                 completed += 1
-                new_bars += len(rows)
+                new_bars += gained
                 # Symbol/candle count only; NEVER show raw OHLCV in public CI logs.
                 print("PERSONAL_PAGE_" + str(completed) + ": " + sym
-                      + " " + str(len(rows)) + " VALIDATED_ROWS", flush=True)
+                      + " " + str(gained) + " VALIDATED_ROWS", flush=True)
             print_archive_progress(conn)
             print("PERSONAL_PAGES_DOWNLOADED_THIS_RUN: " + str(completed), flush=True)
             print("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: " + str(new_bars), flush=True)
