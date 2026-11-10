@@ -631,12 +631,12 @@ class _MintTickCustomerPortfolioPageState
 
   void _open(String title, List<Widget> content) {
     Navigator.of(context).push(MaterialPageRoute<void>(
-      builder: (_) => MintTickCustomerScaffold(showHeader: false, children: [
+      builder: (routeContext) => MintTickCustomerScaffold(showHeader: false, children: [
         Row(children: [
-          IconButton(onPressed: () => Navigator.of(_).pop(),
+          IconButton(onPressed: () => Navigator.of(routeContext).pop(),
             icon: const Icon(Icons.arrow_back_rounded),
             tooltip: 'Back to Portfolio'),
-          Expanded(child: Text(title, style: Theme.of(_).textTheme.titleLarge
+          Expanded(child: Text(title, style: Theme.of(routeContext).textTheme.titleLarge
             ?.copyWith(fontWeight: FontWeight.w800))),
         ]),
         const SizedBox(height: 7),
