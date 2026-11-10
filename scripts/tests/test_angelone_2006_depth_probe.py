@@ -28,6 +28,26 @@ class AngelOneDepthProbeContractTest(unittest.TestCase):
         self.assertLessEqual(m["MAX_RESPONSE_BYTES"], 262144)
         self.assertEqual(m["NSE_TOKEN"], "2885")
 
+    def test_only_four_explicit_windows_with_last_bounded_at_2026(self):
+        expected = [
+            ("2006-11-10", "2012-05-01"),
+            ("2012-05-02", "2017-10-22"),
+            ("2017-10-23", "2023-04-14"),
+            ("2023-04-15", "2026-11-10"),
+        ]
+        for phase, (start, end) in enumerate(expected, 1):
+            with self.subTest(phase=phase):
+                ns = {"__name__": "_offline_probe_test"}
+                with patch.dict("os.environ", {"MINTTICK_DEPTH_PHASE": str(phase)}):
+                    exec(compile(self.source, "<phase-verified>", "exec"), ns)
+                self.assertEqual(ns["START"].isoformat(), start)
+                self.assertEqual(ns["END"].isoformat(), end)
+                self.assertLessEqual((ns["END"] - ns["START"]).days + 1, 2000)
+        with patch.dict("os.environ", {"MINTTICK_DEPTH_PHASE": "5"}):
+            with self.assertRaises(ValueError):
+                exec(compile(self.source, "<invalid-phase>", "exec"),
+                     {"__name__": "_offline_probe_test"})
+
     def test_sanitized_response_validation_and_date_coverage(self):
         row = ["2006-11-10T09:15:00+05:30", 105, 110, 90, 100, 1000]
         state, report = self.module["candle_summary"]({"status": True, "data": [row]})
