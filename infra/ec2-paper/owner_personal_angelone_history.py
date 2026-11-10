@@ -290,8 +290,15 @@ def persist_page(conn, root, symbol, token, first, through, data, earliest, late
             raise PersonalHistoryBlocked("ARCHIVE_HASH_COLLISION")
     else:
         temp = target.with_name(target.name + ".pending")
-        if temp.exists() or temp.is_symlink():
-            raise PersonalHistoryBlocked("STALE_ARCHIVE_PENDING")
+        if temp.is_symlink():
+            raise PersonalHistoryBlocked("UNTRUSTED_ARCHIVE_TARGET")
+        if temp.exists():
+            if not temp.is_file() or temp.stat().st_uid != 0:
+                raise PersonalHistoryBlocked("UNTRUSTED_ARCHIVE_PENDING")
+            # The exclusive collector lock guarantees a .pending file can
+            # only be an interrupted previous write; atomic final path stays
+            # authoritative and is never overwritten by this recovery.
+            temp.unlink()
         fd = os.open(str(temp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
             with os.fdopen(fd, "wb") as fh:
