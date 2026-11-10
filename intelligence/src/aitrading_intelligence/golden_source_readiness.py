@@ -108,7 +108,7 @@ class ModelSourceRequirements(BaseModel):
     model_version: Annotated[str, Field(min_length=1, max_length=160)]
     requested_use: Right
     required_source_ids: list[SourceId] = Field(min_length=1, max_length=32)
-    required_feature_names: list[str] = Field(default_factory=list, max_length=128)
+    required_feature_names: list[str] = Field(min_length=1, max_length=128)
     expected_feature_schema_digest: Hash64
     minimum_valid_rows: dict[SourceId, Annotated[int, Field(ge=1)]] = Field(
         default_factory=dict,
@@ -229,4 +229,46 @@ def evaluate_model_data_readiness(
             and all(ch in "0123456789abcdef" for ch in model_artifact_digest)
             else None
         ),
+    )
+
+
+def requirements_from_reviewed_catalogue(
+    *,
+    catalogue: dict,
+    model_name: str,
+    model_version: str,
+    feature_names: list[str],
+    feature_schema_digest: str,
+    requested_use: Right,
+    minimum_valid_rows: dict[str, int] | None = None,
+    maximum_age_seconds: dict[str, int] | None = None,
+) -> ModelSourceRequirements:
+    """Resolve one exact registered model's mandatory sources.
+
+    The caller must load and authenticate the reviewed/version-pinned catalogue
+    artifact before invoking this function. Fixture labels are not evidence
+    that the associated trained model or dataset exists.
+    """
+
+    if catalogue.get("contract_version") != "minttick.mind.golden-source-requirements.v1":
+        raise ValueError("unrecognized Golden Source model catalogue version")
+    entries = catalogue.get("models")
+    sources = catalogue.get("data_sources")
+    if not isinstance(entries, list) or not isinstance(sources, dict):
+        raise ValueError("Golden Source model catalogue is malformed")
+    matches = [m for m in entries if isinstance(m, dict) and m.get("name") == model_name]
+    if len(matches) != 1:
+        raise ValueError("model must be uniquely present in reviewed catalogue")
+    mandatory = matches[0].get("required_sources")
+    if not isinstance(mandatory, list) or not mandatory or not set(mandatory) <= set(sources):
+        raise ValueError("registered model has unrecognized mandatory sources")
+    return ModelSourceRequirements(
+        model_name=model_name,
+        model_version=model_version,
+        requested_use=requested_use,
+        required_source_ids=mandatory,
+        required_feature_names=feature_names,
+        expected_feature_schema_digest=feature_schema_digest,
+        minimum_valid_rows=minimum_valid_rows or {},
+        maximum_age_seconds=maximum_age_seconds or {},
     )
