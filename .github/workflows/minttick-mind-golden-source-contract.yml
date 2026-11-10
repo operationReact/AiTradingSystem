@@ -1,0 +1,36 @@
+name: Mintick Mind golden-source requirements audit
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'docs/architecture/mintick-mind-golden-source-requirements.v1.json'
+      - 'apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart'
+      - 'apps/trading_client/lib/src/features/mintick_mind/data/mind_fixtures.dart'
+      - 'scripts/tests/test_mind_golden_source_requirements.py'
+      - '.github/workflows/minttick-mind-golden-source-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'docs/architecture/mintick-mind-golden-source-requirements.v1.json'
+      - 'apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart'
+      - 'apps/trading_client/lib/src/features/mintick_mind/data/mind_fixtures.dart'
+      - 'scripts/tests/test_mind_golden_source_requirements.py'
+      - '.github/workflows/minttick-mind-golden-source-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  golden-source-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate all Mind routes, model fields, strategy families and data-source mappings
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_mind_golden_source_requirements.py -v
+# This gate does not fetch market data, authenticate providers, run a model,
+# grant redistribution permission, enable backfill, or authorize orders.
