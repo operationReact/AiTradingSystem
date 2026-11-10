@@ -116,7 +116,8 @@ def test_missing_or_wrong_licensing_blocks() -> None:
 
 def test_synthetic_source_and_features_always_block() -> None:
     test_data = source().model_copy(update={"source_kind": "SYNTHETIC_TEST"})
-    result = inspect(evidence=[test_data], features=snapshot().model_copy(update={"synthetic": True}))
+    synthetic_features = snapshot().model_copy(update={"synthetic": True})
+    result = inspect(evidence=[test_data], features=synthetic_features)
     assert result.status == "BLOCKED"
     assert "SYNTHETIC_SOURCE:daily_bars" in result.blockers
     assert "SYNTHETIC_FEATURE_SNAPSHOT" in result.blockers
