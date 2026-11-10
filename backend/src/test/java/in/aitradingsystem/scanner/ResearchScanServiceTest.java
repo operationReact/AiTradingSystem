@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,6 +42,33 @@ class ResearchScanServiceTest {
                 clock.instant(), clock.instant(), null, null));
         service.run(HistoricalCandleInterval.FIVE_MINUTE, 2756);
         verify(scans).activeCashEquityUniverse(2756);
+    }
+
+    @Test
+    void emptyCandleHistoryIsReportedAsIncompleteCoverageNotAFullScan() {
+        ResearchScanService service = new ResearchScanService(scans, marketData, clock, 3500, 60);
+        Instrument stock = new Instrument(42L, "NSE_CM", "NSE", "42",
+            "TEST-EQ", "Test equity", "EQ", null, null, 1,
+            new BigDecimal("0.05"), UUID.randomUUID());
+        when(scans.activeCashEquityUniverse(2756)).thenReturn(List.of(stock));
+        when(marketData.recentCandles(42L, "FIVE_MINUTE", 64)).thenReturn(List.of());
+        ResearchScanSummary expected = new ResearchScanSummary(
+            UUID.randomUUID(), "FIVE_MINUTE", "PARTIAL", 2756, 1, 0,
+            "VOLUME_BREAKOUT_V1,MA_RECLAIM_V1", clock.instant(),
+            clock.instant(), "INCOMPLETE_HISTORY_COVERAGE",
+            "1 instrument(s) lack the 64-candle research window");
+        when(scans.requireRun(any(UUID.class))).thenReturn(expected);
+
+        ResearchScanSummary actual = service.run(HistoricalCandleInterval.FIVE_MINUTE, 2756);
+
+        assertEquals("PARTIAL", actual.status());
+        verify(scans).saveDiagnostic(any(UUID.class), eq(42L), eq(null),
+            eq("WARN"), eq("INSUFFICIENT_CANDLE_HISTORY"),
+            eq("Fewer than 64 stored candles; full strategy coverage unavailable"));
+        verify(scans).partialRun(any(UUID.class), eq(1), eq(0),
+            eq("INCOMPLETE_HISTORY_COVERAGE"),
+            eq("1 instrument(s) lack the 64-candle research window"));
+        verify(scans, never()).finishRun(any(UUID.class), eq(1), eq(0));
     }
 
     @Test
