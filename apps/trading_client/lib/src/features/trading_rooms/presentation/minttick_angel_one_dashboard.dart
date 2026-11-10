@@ -20,6 +20,7 @@ class MintTickAngelOneDashboard extends StatefulWidget {
     required this.busy,
     required this.onRefresh,
     required this.onDisconnect,
+    this.onBack,
     this.error,
     super.key,
   });
@@ -30,6 +31,7 @@ class MintTickAngelOneDashboard extends StatefulWidget {
   final String? error;
   final Future<void> Function() onRefresh;
   final Future<void> Function() onDisconnect;
+  final VoidCallback? onBack;
 
   @override
   State<MintTickAngelOneDashboard> createState() =>
@@ -126,7 +128,17 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
     final theme = Theme.of(context);
     final ink = theme.colorScheme.onSurface;
     final muted = theme.colorScheme.onSurfaceVariant;
-    return MintTickCustomerScaffold(showHeader: false, children: [
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_panel != MintTickAngelPanel.overview) {
+          _open(MintTickAngelPanel.overview);
+        } else {
+          widget.onBack?.call();
+        }
+      },
+      child: MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 10),
       const Align(
         alignment: Alignment.centerLeft,
@@ -134,13 +146,16 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
       ),
       const SizedBox(height: 16),
       Row(children: [
-        if (_panel != MintTickAngelPanel.overview)
-          IconButton(
-            key: const ValueKey('angel-back-overview'),
-            tooltip: 'Back to Angel One overview',
-            onPressed: () => _open(MintTickAngelPanel.overview),
-            icon: const Icon(Icons.arrow_back_rounded),
-          ),
+        IconButton(
+          key: const ValueKey('angel-back-overview'),
+          tooltip: _panel == MintTickAngelPanel.overview
+              ? 'Back to connected brokers'
+              : 'Back to Angel One overview',
+          onPressed: _panel == MintTickAngelPanel.overview
+              ? widget.onBack
+              : () => _open(MintTickAngelPanel.overview),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
         Expanded(
           child: Text(
             'Angel One',
@@ -180,7 +195,8 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
       const SizedBox(height: 20),
       Text('Read-only access · MintTick never enables order execution from this screen.',
         style: theme.textTheme.bodySmall?.copyWith(color: muted)),
-    ]);
+      ]),
+    );
   }
 
   Widget _brokerHero() {
