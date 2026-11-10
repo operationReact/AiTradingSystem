@@ -43,6 +43,11 @@ class MarketOverviewServiceTest {
         var calendar = mock(MarketSessionCalendar.class);
         var store = mock(MarketOverviewSnapshotStore.class);
         when(store.load()).thenReturn(Optional.empty());
+        when(calendar.session(AS_OF)).thenReturn(new MarketSession(AS_OF,
+            java.time.ZonedDateTime.of(AS_OF, java.time.LocalTime.of(9, 15),
+                java.time.ZoneId.of("Asia/Kolkata")),
+            java.time.ZonedDateTime.of(AS_OF, java.time.LocalTime.of(15, 30),
+                java.time.ZoneId.of("Asia/Kolkata")), true));
         when(repository.universe("NIFTY50")).thenReturn(List.of(
             new MarketOverviewRepository.Member(
                 "AAA-EQ", "Alpha", "Banks", AS_OF, "src")));
@@ -74,6 +79,58 @@ class MarketOverviewServiceTest {
         assertThat(overview.universe().returned()).isZero();
         assertThat(overview.ideas()).isEmpty();
         verify(store).save(overview);
+    }
+
+    @Test
+    void holidayStampedBulkQuotesCannotProduceFalseMarketEvidence() {
+        var holiday = LocalDate.of(2026, 11, 10);
+        var now = Instant.parse("2026-11-10T05:30:00Z");
+        var repository = mock(MarketOverviewRepository.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketOverviewSnapshotStore.class);
+        when(store.load()).thenReturn(Optional.empty());
+        when(calendar.session(holiday)).thenReturn(new MarketSession(holiday,
+            java.time.ZonedDateTime.of(holiday, java.time.LocalTime.of(9, 15),
+                java.time.ZoneId.of("Asia/Kolkata")),
+            java.time.ZonedDateTime.of(holiday, java.time.LocalTime.of(15, 30),
+                java.time.ZoneId.of("Asia/Kolkata")), false));
+        when(repository.universe("NIFTY50")).thenReturn(List.of(
+            new MarketOverviewRepository.Member("AAA-EQ", "Alpha", "Banks", AS_OF, "src")));
+        when(repository.resolveEquityTokens(List.of("AAA-EQ"))).thenReturn(Map.of("AAA-EQ", "1"));
+        when(repository.indices()).thenReturn(List.of());
+        when(feed.details(anyList())).thenReturn(Map.of(
+            "1", detailAt("110", "105", "100", "2026-11-10T05:28:40Z")));
+
+        var service = new MarketOverviewService(repository, feed, calendar,
+            Clock.fixed(now, ZoneOffset.UTC), store);
+
+        assertThatThrownBy(service::overview)
+            .isInstanceOf(MarketDataException.class)
+            .hasMessageContaining("no verified constituent or index quotes");
+        verify(store, never()).save(any(MarketOverviewService.Overview.class));
+    }
+
+    @Test
+    void storedOverviewWithHolidayExchangeTimestampIsNotPresentedAsLastTrade() {
+        var holidayAt = Instant.parse("2026-11-10T05:28:40Z");
+        var repository = mock(MarketOverviewRepository.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketOverviewSnapshotStore.class);
+        var snapshot = new MarketOverviewService.Overview(holidayAt,
+            MarketOverviewService.SOURCE, "NIFTY50_CONSTITUENTS", holidayAt,
+            new MarketOverviewService.Universe("NIFTY50", AS_OF, 50, 50, 1),
+            new MarketOverviewService.Breadth(1, 0, 0, 1), List.of(), List.of(),
+            List.of(), List.of(), List.of(), List.of(), List.of());
+        when(store.load()).thenReturn(Optional.of(snapshot));
+        when(calendar.isInsideCashSession(holidayAt)).thenReturn(false);
+
+        var service = new MarketOverviewService(repository, feed, calendar,
+            Clock.fixed(holidayAt.plusSeconds(5), ZoneOffset.UTC), store);
+
+        assertThat(service.storedOverview()).isEmpty();
+        verify(calendar).isInsideCashSession(holidayAt);
     }
 
     @Test

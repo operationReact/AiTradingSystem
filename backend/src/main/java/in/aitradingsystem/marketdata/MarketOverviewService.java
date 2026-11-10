@@ -122,7 +122,13 @@ public class MarketOverviewService {
             // A missing migration or unreadable stored payload is not valid market evidence.
             return Optional.empty();
         }
-        return stored.map(MarketOverviewService::asStored);
+        // Cached provider FULL rows with a timestamp outside an official cash
+        // session are not verified last trades (e.g. the broker may stamp a
+        // holiday quote with today's fetch date). Fail closed, never relabel
+        // such a row as a completed exchange session.
+        return stored.filter(snapshot -> snapshot.exchangeAsOf() != null
+                && calendar.isInsideCashSession(snapshot.exchangeAsOf()))
+            .map(MarketOverviewService::asStored);
     }
 
     static Overview asStored(Overview overview) {
@@ -160,8 +166,16 @@ public class MarketOverviewService {
         // display-name match silently discarded legitimate NIFTY quote rows.
         List<AngelOneQuoteDetailParser.Expected> indexExpected = indexExpectations(indexDefinitions);
 
-        Map<String, AngelOneQuoteDetailParser.Detail> stockDetails = fetchInBatches(stockExpected);
-        Map<String, AngelOneQuoteDetailParser.Detail> indexDetails = fetchInBatches(indexExpected);
+        // The provider can return positive LTP/OHLC with an exchFeedTime on a
+        // non-trading holiday. Identity and price range alone do not establish
+        // a real exchange trade. Validate the reported exchange timestamp against
+        // the official session calendar, including special Muhurat sessions.
+        // Resolve each date once to avoid one PostgreSQL holiday lookup per row.
+        Map<LocalDate, MarketSession> sessions = new HashMap<>();
+        Map<String, AngelOneQuoteDetailParser.Detail> stockDetails =
+            validSessionQuotes(fetchInBatches(stockExpected), now, sessions);
+        Map<String, AngelOneQuoteDetailParser.Detail> indexDetails =
+            validSessionQuotes(fetchInBatches(indexExpected), now, sessions);
         // A broker outage must not overwrite a previously verified overview
         // with an empty "success" snapshot.
         if (stockDetails.isEmpty() && indexDetails.isEmpty()) {
@@ -193,6 +207,24 @@ public class MarketOverviewService {
             .filter(d -> d.symbolToken() != null && !d.symbolToken().isBlank())
             .map(d -> new AngelOneQuoteDetailParser.Expected(d.symbolToken(), null))
             .toList();
+    }
+
+    /** Preserve provider rows only if their exchange timestamp belongs to an actual cash session. */
+    private Map<String, AngelOneQuoteDetailParser.Detail> validSessionQuotes(
+            Map<String, AngelOneQuoteDetailParser.Detail> providerRows, Instant evaluatedAt,
+            Map<LocalDate, MarketSession> sessions) {
+        Map<String, AngelOneQuoteDetailParser.Detail> trusted = new HashMap<>();
+        for (Map.Entry<String, AngelOneQuoteDetailParser.Detail> entry : providerRows.entrySet()) {
+            var detail = entry.getValue();
+            Instant at = detail == null ? null : detail.exchangeAt();
+            if (at == null || at.isAfter(evaluatedAt)) continue;
+            LocalDate exchangeDate = at.atZone(MARKET_ZONE).toLocalDate();
+            MarketSession session = sessions.computeIfAbsent(exchangeDate, calendar::session);
+            if (!session.tradingDay() || at.isBefore(session.open().toInstant())
+                    || !at.isBefore(session.close().toInstant())) continue;
+            trusted.put(entry.getKey(), detail);
+        }
+        return trusted;
     }
 
     private Map<String, AngelOneQuoteDetailParser.Detail> fetchInBatches(
