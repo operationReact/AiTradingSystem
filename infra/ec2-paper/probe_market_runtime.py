@@ -117,7 +117,9 @@ def equity_coverage(postgres):
     LEFT JOIN market_last_tick t ON t.instrument_id = i.instrument_id
     LEFT JOIN market_detail_snapshot d ON d.instrument_id = i.instrument_id
     WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
-      AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+      AND i.exchange_segment IN ('NSE_CM','BSE_CM')
+      AND i.trading_symbol LIKE '%-EQ'
+      AND upper(i.trading_symbol) NOT LIKE '%NSETEST%'
     """
     p = run(["docker", "exec", postgres, "psql", "-U", "aitrading",
              "-d", "aitrading", "-tA", "-F", "|", "-c", sql], 10)
