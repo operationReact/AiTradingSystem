@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../data/customer_angel_one_repository.dart';
 import '../data/customer_portfolio_models.dart';
+import '../data/customer_portfolio_repository.dart';
 import '../data/customer_room_repository.dart';
 import '../data/customer_upstox_repository.dart';
 import '../domain/trading_room_draft.dart';
@@ -39,6 +40,7 @@ class MintTickCustomerPortfolioPage extends StatefulWidget {
     required this.paperRepository,
     required this.brokerRepository,
     required this.upstoxRepository,
+    this.portfolioRepository,
     required this.onRooms,
     required this.onBroker,
     super.key,
@@ -49,6 +51,7 @@ class MintTickCustomerPortfolioPage extends StatefulWidget {
   final HttpCustomerRoomRepository paperRepository;
   final HttpCustomerAngelOneRepository brokerRepository;
   final HttpCustomerUpstoxRepository upstoxRepository;
+  final HttpCustomerPortfolioRepository? portfolioRepository;
   final VoidCallback onRooms;
   final VoidCallback onBroker;
 
@@ -97,6 +100,19 @@ class _MintTickCustomerPortfolioPageState
     }
   }
 
+  Future<Object?> _recordsRead(
+      String broker, bool positions, Future<Object?> Function() legacy) async {
+    final normalized = widget.portfolioRepository;
+    if (normalized != null) {
+      try {
+        return await normalized.records(broker, positions: positions);
+      } catch (_) {
+        // During API-edge rollout, use the existing protected provider route.
+      }
+    }
+    return _read(legacy);
+  }
+
   Future<_BrokerPortfolio> _angel() async {
     final CustomerAngelOneConnection status;
     try {
@@ -113,8 +129,8 @@ class _MintTickCustomerPortfolioPageState
     }
     final values = await Future.wait<Object?>([
       _read(widget.brokerRepository.funds),
-      _read(widget.brokerRepository.holdings),
-      _read(widget.brokerRepository.positions),
+      _recordsRead('ANGEL_ONE', false, widget.brokerRepository.holdings),
+      _recordsRead('ANGEL_ONE', true, widget.brokerRepository.positions),
     ]);
     return _BrokerPortfolio(
       name: 'ANGEL_ONE', connected: true, statusKnown: true,
@@ -143,8 +159,8 @@ class _MintTickCustomerPortfolioPageState
     }
     final values = await Future.wait<Object?>([
       _read(widget.upstoxRepository.funds),
-      _read(widget.upstoxRepository.holdings),
-      _read(widget.upstoxRepository.positions),
+      _recordsRead('UPSTOX', false, widget.upstoxRepository.holdings),
+      _recordsRead('UPSTOX', true, widget.upstoxRepository.positions),
     ]);
     return _BrokerPortfolio(
       name: 'UPSTOX', connected: true, statusKnown: true,
