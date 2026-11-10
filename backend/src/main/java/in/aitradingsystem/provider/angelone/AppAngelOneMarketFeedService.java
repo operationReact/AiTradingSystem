@@ -69,7 +69,7 @@ public final class AppAngelOneMarketFeedService {
     /** One live result per instrument, sharing the single application-owned stream. */
     public List<CustomerAngelOneLiveQuoteService.LiveQuote> snapshot(List<Instrument> instruments) {
         ensureSession();
-        return liveQuotes.snapshot(APPLICATION_FEED_ID, instruments).stream()
+        return liveQuotes.snapshotApplication(APPLICATION_FEED_ID, instruments).stream()
             .map(AppAngelOneMarketFeedService::withoutPersonalBrokerPrompt).toList();
     }
 
