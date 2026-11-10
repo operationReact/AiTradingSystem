@@ -105,7 +105,7 @@ class PortfolioInstrument {
 List<dynamic>? portfolioRecords(Object? raw, String section) {
   if (raw is List) return raw;
   if (raw is! Map) return null;
-  for (final name in [section, 'data', 'holdings', 'positions', 'orderBook', 'orders']) {
+  for (final name in [section, 'rows', 'data', 'holdings', 'positions', 'orderBook', 'orders']) {
     final nested = raw[name];
     if (nested is List) return nested;
     if (nested is Map && !identical(nested, raw)) {
