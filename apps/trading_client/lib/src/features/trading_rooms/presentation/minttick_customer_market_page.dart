@@ -162,10 +162,15 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     _pollTimer?.cancel();
     _pollTimer = null;
     if (!active) {
-      // Hidden app must never keep a LIVE price or index quote on screen.
+      // Preserve only last verified values, never a backgrounded LIVE quote.
       setState(() {
+        final previous = Map<int, CustomerLiveQuote>.of(_rows);
         _rows.clear();
-        _overview = null;
+        for (final entry in previous.entries) {
+          final saved = entry.value.asLastRecorded();
+          if (saved != null) _rows[entry.key] = saved;
+        }
+        _overview = _overview?.asLastRecorded();
       });
     } else {
       _schedulePoll(Duration.zero);
@@ -188,9 +193,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     } catch (_) {
       if (mounted && _appActive) {
         setState(() {
-          _overview = null;
-          _overviewError = 'The Nifty 50 overview is unavailable right now. '
-              'Retrying automatically; no index or breadth values are shown.';
+          _overview = _overview?.asLastRecorded();
+          _overviewError = _overview == null
+              ? 'The Nifty 50 overview is unavailable. No verified snapshot '
+                  'has been saved yet; retrying automatically.'
+              : 'Could not refresh. Showing the last verified snapshot, not live prices.';
         });
       }
     } finally {
@@ -299,18 +306,43 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         for (var i = 0; i < batch.length; i++) {
           final stock = batch[i];
           final row = snapshot.rows[i];
-          if (row.exchange != stock.exchange || row.tradingSymbol != stock.tradingSymbol) {
+          if (row.instrumentId != stock.id ||
+              row.exchange != stock.exchange ||
+              row.tradingSymbol != stock.tradingSymbol) {
             failed = true;
-            _rows.remove(stock.id);
+            final saved = _rows[stock.id]?.asLastRecorded();
+            if (saved != null) {
+              _rows[stock.id] = saved;
+            } else {
+              _rows.remove(stock.id);
+            }
             continue;
           }
-          _rows[stock.id] = row;
+          if (row.status == 'LIVE' || row.status == 'LAST_CLOSE') {
+            final previous = _rows[stock.id]?.asLastRecorded();
+            if (row.status == 'LAST_CLOSE' && previous?.exchangeAt != null &&
+                row.exchangeAt != null &&
+                previous!.exchangeAt!.isAfter(row.exchangeAt!)) {
+              _rows[stock.id] = previous;
+            } else {
+              _rows[stock.id] = row;
+            }
+          } else {
+            _rows[stock.id] = _rows[stock.id]?.asLastRecorded() ?? row;
+          }
         }
       }
     } catch (_) {
       failed = true;
     } finally {
       _polling = false;
+    }
+    if (failed) {
+      // A partly failed poll must not leave an old LIVE badge on screen.
+      for (final id in _rows.keys.toList()) {
+        final recorded = _rows[id]?.asLastRecorded();
+        if (recorded != null) _rows[id] = recorded;
+      }
     }
     if (!mounted || !_appActive) return;
     setState(() {
@@ -481,10 +513,14 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     final theme = Theme.of(context);
     return [
+      if (_overviewError != null) ...[
+        MintTickInfoText(_overviewError!, icon: Icons.cloud_off_outlined),
+        const SizedBox(height: 12),
+      ],
       if (overview.source == 'STORED_LAST_OVERVIEW') ...[
         MintTickInfoText(
-          'Historical snapshot only · saved ${overview.generatedAt.toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
-          'These are last recorded quotes, not a live market view.',
+          'Last verified snapshot · exchange ${(overview.exchangeAsOf ?? overview.generatedAt).toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
+          'Historical prices only, not a live market view.',
           icon: Icons.history_rounded,
         ),
         const SizedBox(height: 12),
@@ -678,7 +714,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       if (_generatedAt != null)
-        Text('Updated ${_clock(_generatedAt!.toLocal())} · exchange tick time shown per row',
+        Text('Last API check ${_clock(_generatedAt!.toLocal())} · exchange tick time shown per row',
           style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 8),
       if (!_loading && _stocks.isEmpty && _error == null)
@@ -714,7 +750,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         )),
       ],
       const SizedBox(height: 16),
-      Text('Prices are shown only when verified LIVE by MintTick’s backend. '
+      Text('Live prices require backend verification. When unavailable, the last '
+          'verified snapshot is shown with its original exchange time, never as LIVE. '
           'Information only, not investment advice.',
         style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
     ];
@@ -747,14 +784,14 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         icon: Icons.history_rounded);
     }
     if (feedFailed) {
-      return (text: 'Market feed request failed. Retrying automatically; no prices are shown.',
+      return (text: 'Market feed request failed. No verified saved prices yet; retrying.',
         icon: Icons.cloud_off_outlined);
     }
     if (statuses.any((s) => s == 'CONNECTING' || s == 'RECONNECTING' || s == 'PENDING' || s == 'STALE')) {
       return (text: 'Connecting to the live feed. Prices stay hidden until verified.',
         icon: Icons.sync_rounded);
     }
-    return (text: 'Live prices are unavailable right now. No prices are shown.',
+    return (text: 'Live prices are unavailable and no verified snapshot is saved.',
       icon: Icons.cloud_off_outlined);
   }
 }
