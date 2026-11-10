@@ -88,7 +88,14 @@ void main() {
     expect(find.byKey(const ValueKey('portfolio-total-holdings')),
         findsOneWidget);
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('All holdings'));
+    // The section is intentionally below the initial narrow-phone viewport.
+    // Scroll it into the hit-testable area before tapping.
+    await tester.dragUntilVisible(
+      find.text('All holdings'),
+      find.byType(ListView).first,
+      const Offset(0, -220),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('All holdings'));
     await tester.pumpAndSettle();
     expect(find.text('SBIN'), findsOneWidget);
