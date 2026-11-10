@@ -90,10 +90,10 @@ def ensure_private_store(root=ROOT):
     return root
 
 
-def select_pilot_symbols():
-    # The active catalogue is a research-only present-day token list.
-    # Historical symbol-token lineage must be independently reconciled;
-    # these files are NOT automatically model/Golden-Source eligible.
+def select_catalogue_symbols():
+    # The actively listed NSE_CM-EQ catalogue is NOT a historical security
+    # master. It supplies only owner account's current broker tokens. Never
+    # mark historical identity or survivorship bias as resolved by this list.
     db = [
         "docker", "compose",
         "--env-file", "/opt/aitradingsystem-paper/.env",
@@ -107,9 +107,9 @@ def select_pilot_symbols():
             WHERE s.singleton_id=1
               AND i.active=TRUE
               AND i.exchange_segment='NSE_CM'
-              AND i.trading_symbol IN
-                ('RELIANCE-EQ','TCS-EQ','INFY-EQ','HDFCBANK-EQ','ICICIBANK-EQ')
-            ORDER BY i.trading_symbol, i.symbol_token"""
+              AND i.trading_symbol LIKE '%-EQ'
+            ORDER BY i.trading_symbol, i.symbol_token
+            LIMIT 6000"""
     ]
     import subprocess
     try:
@@ -119,21 +119,51 @@ def select_pilot_symbols():
     if r.returncode != 0:
         raise PersonalHistoryBlocked("PRIVATE_CATALOGUE_UNAVAILABLE")
     entries = {}
-    for line in r.stdout.splitlines():
+    by_token = {}
+    lines = r.stdout.splitlines()
+    if len(lines) > 5999:
+        # Refuse silently truncated catalogues. Do not claim all-market scope.
+        raise PersonalHistoryBlocked("CATALOGUE_TOO_LARGE")
+    for line in lines:
         parts = line.split("|")
         if len(parts) != 2:
             raise PersonalHistoryBlocked("INVALID_CATALOGUE")
         sym, token = parts
-        if sym not in PILOT or not re.fullmatch(r"[0-9]{1,12}", token):
+        if (not re.fullmatch(r"[A-Z0-9][A-Z0-9_.&-]{0,36}-EQ", sym)
+                or not re.fullmatch(r"[0-9]{1,12}", token)):
             raise PersonalHistoryBlocked("INVALID_CATALOGUE")
         if sym in entries and entries[sym] != token:
             raise PersonalHistoryBlocked("AMBIGUOUS_CATALOGUE_TOKEN")
+        if token in by_token and by_token[token] != sym:
+            raise PersonalHistoryBlocked("AMBIGUOUS_CATALOGUE_TOKEN")
         entries[sym] = token
+        by_token[token] = sym
     if not entries:
-        raise PersonalHistoryBlocked("NO_ACTIVE_PILOT_STOCKS")
-    # Collect only real observed catalogue identities, never assume
-    # current tokens prove earlier ticker validity or issuer continuity.
-    return [(symbol, entries[symbol]) for symbol in PILOT if symbol in entries]
+        raise PersonalHistoryBlocked("NO_ACTIVE_NSE_EQUITIES")
+    return [(sym, entries[sym]) for sym in sorted(entries)]
+
+
+def select_next_batch(conn, catalogue):
+    # Use the manifest as a persisted cursor, not an in-memory index that
+    # resets after every GitHub run. Prefer the original five if unfinished;
+    # afterwards advance deterministically through all active NSE equities.
+    completed = {
+        (token, first, through)
+        for token, first, through in conn.execute(
+            "SELECT token, from_date, through_date FROM page WHERE exchange='NSE'")
+    }
+    mapping = dict(catalogue)
+    ordered = [sym for sym in PILOT if sym in mapping]
+    ordered += [sym for sym in sorted(mapping) if sym not in PILOT]
+    selected = []
+    for sym in ordered:
+        token = mapping[sym]
+        if any((token, a.isoformat(), b.isoformat()) not in completed
+               for a, b in windows()):
+            selected.append((sym, token))
+            if len(selected) == MAX_STOCKS_PER_RUN:
+                break
+    return selected
 
 
 def validate_rows(payload, first, through):
@@ -335,11 +365,13 @@ def run():
     fd = os.open(str(lockfile), os.O_RDWR | os.O_CREAT, 0o600)
     fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     try:
-        entries = select_pilot_symbols()
-        if len(entries) > MAX_STOCKS_PER_RUN:
-            raise PersonalHistoryBlocked("RUN_STOCK_LIMIT")
         conn = init_db(root)
         try:
+            catalogue = select_catalogue_symbols()
+            entries = select_next_batch(conn, catalogue)
+            print("PERSONAL_UNIVERSE_EQUITIES: " + str(len(catalogue)), flush=True)
+            if len(entries) > MAX_STOCKS_PER_RUN:
+                raise PersonalHistoryBlocked("RUN_STOCK_LIMIT")
             planned = [(sym, token, start, end)
                        for sym, token in entries for start, end in windows()]
             # Validate previous files BEFORE authenticating or making requests.
@@ -354,6 +386,8 @@ def run():
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
             if not remaining:
+                print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
+                print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
                 return 0
             headers = authenticated_headers()
             completed = 0
