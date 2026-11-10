@@ -137,19 +137,66 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
                                         "RATE_LIMITED"):
                 f("fetch")({},"2885",dt.date(2006,11,10),dt.date(2006,11,10))
 
-    def test_catalogue_is_bounded_to_five_known_stocks_no_synthetic_tokens(self):
+    def test_current_nse_catalogue_is_verified_and_no_tokens_fabricated(self):
         class Proc:
             returncode=0
             stdout="RELIANCE-EQ|2885\nTCS-EQ|11536\nINFY-EQ|1594\n"
         with patch("subprocess.run",return_value=Proc()) as mock:
-            values=f("select_pilot_symbols")()
-            self.assertEqual(values,[("RELIANCE-EQ","2885"),
-                                     ("TCS-EQ","11536"),("INFY-EQ","1594")])
+            values=f("select_catalogue_symbols")()
+            self.assertEqual(values,[("INFY-EQ","1594"),
+                                     ("RELIANCE-EQ","2885"),("TCS-EQ","11536")])
             self.assertIn("instrument_catalogue_state",mock.call_args[0][0][-1])
+            self.assertIn("LIKE '%-EQ'",mock.call_args[0][0][-1])
         Proc.stdout="RELIANCE-EQ|2885\nRELIANCE-EQ|9999\n"
         with patch("subprocess.run",return_value=Proc()):
             with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"AMBIGUOUS"):
-                f("select_pilot_symbols")()
+                f("select_catalogue_symbols")()
+        Proc.stdout="RELIANCE-EQ|2885\nTCS-EQ|2885\n"
+        with patch("subprocess.run",return_value=Proc()):
+            with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"AMBIGUOUS"):
+                f("select_catalogue_symbols")()
+
+    def test_first_five_stay_prioritized_when_manifest_empty(self):
+        catalogue=[("ABB-EQ","123"),("ASIANPAINT-EQ","456")] + [
+            (sym,str(i+1000)) for i,sym in enumerate(f("PILOT"))]
+        selected=f("select_next_batch")(self.conn,catalogue)
+        self.assertEqual([sym for sym,_ in selected],list(f("PILOT")))
+
+    def test_completed_first_five_advance_to_next_five_alphabetically(self):
+        catalogue=[("AARTIIND-EQ","600"),("ABB-EQ","601"),
+                   ("AMBUJACEM-EQ","602"),("APOLLOHOSP-EQ","603"),
+                   ("ASIANPAINT-EQ","604")] + [
+                   (sym,str(i+1000)) for i,sym in enumerate(f("PILOT"))]
+        for sym,token in catalogue[-5:]:
+            for first,through in f("windows")():
+                f("persist_page")(self.conn,self.root,sym,token,
+                                  first,through,[],None,None)
+        selected=f("select_next_batch")(self.conn,catalogue)
+        self.assertEqual([sym for sym,_ in selected],
+                         ["AARTIIND-EQ","ABB-EQ","AMBUJACEM-EQ",
+                          "APOLLOHOSP-EQ","ASIANPAINT-EQ"])
+        self.assertEqual(len(selected),5)
+
+    def test_partial_progress_gets_resumed_before_advance(self):
+        catalogue=[("ABB-EQ","601"),("RELIANCE-EQ","2885")]
+        dates=list(f("windows")())
+        for first,through in dates[:-1]:
+            f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                              first,through,[],None,None)
+        selected=f("select_next_batch")(self.conn,catalogue)
+        self.assertEqual(selected,[("RELIANCE-EQ","2885"),("ABB-EQ","601")])
+
+    def test_invalid_current_nse_catalogue_and_token_collisions_block(self):
+        class Proc:
+            returncode=0
+            stdout="TCS-EQ|secret-value\n"
+        with patch("subprocess.run",return_value=Proc()):
+            with self.assertRaises(f("PersonalHistoryBlocked")):
+                f("select_catalogue_symbols")()
+        Proc.stdout="STOCK|1234\n"
+        with patch("subprocess.run",return_value=Proc()):
+            with self.assertRaises(f("PersonalHistoryBlocked")):
+                f("select_catalogue_symbols")()
 
     def test_code_does_not_use_order_api_or_public_source_distribution(self):
         code=SOURCE.read_text()
