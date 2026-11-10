@@ -49,6 +49,8 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/portfolio/records"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments/status"))
