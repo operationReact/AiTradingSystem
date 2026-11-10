@@ -1,5 +1,7 @@
 package in.aitradingsystem.marketdata;
 
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -23,11 +25,15 @@ public class OwnerUniverseHistoryBackfill {
 
     private final UniverseCandleCoverageService coverage;
     private final HistoricalCandleService historical;
+    private final MarketDataProvider privateSource;
 
     public OwnerUniverseHistoryBackfill(UniverseCandleCoverageService coverage,
-                                        HistoricalCandleService historical) {
+                                        HistoricalCandleService historical,
+                                        AppAngelOneMarketFeedService appFeed,
+                                        HistoricalCandleParser parser) {
         this.coverage = coverage;
         this.historical = historical;
+        this.privateSource = new OwnerAngelOneHistoricalProvider(appFeed, parser);
     }
 
     @Scheduled(fixedDelayString = "${minttick.owner-feed.history-backfill-poll-ms:2000}")
@@ -36,8 +42,9 @@ public class OwnerUniverseHistoryBackfill {
             var next = coverage.nextDue();
             if (next.isEmpty()) return;
             var window = coverage.window();
-            CandleBackfillRun run = historical.start(next.get(),
-                    HistoricalCandleInterval.FIVE_MINUTE, window.fromDate(), window.toDate());
+            CandleBackfillRun run = historical.startWithProvider(next.get(),
+                    HistoricalCandleInterval.FIVE_MINUTE, window.fromDate(), window.toDate(),
+                    privateSource);
             // A run marked SUCCEEDED with zero rows does not imply candle coverage;
             // the same instrument remains under-covered and cools down before retry.
             if (!"SUCCEEDED".equals(run.status())) {
