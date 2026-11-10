@@ -66,6 +66,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('compact Live portfolio fits a 320dp phone and opens real holdings',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 740);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final mode = TradingWorkspaceMode()..select('LIVE');
+    final store = TradingRoomDraftStore();
+    addTearDown(mode.dispose);
+    addTearDown(store.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerPortfolioPage(
+        mode: mode, rooms: store, paperRepository: _Rooms(),
+        brokerRepository: _Angel(), upstoxRepository: _Upstox(),
+        onRooms: () {}, onBroker: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('portfolio-total-holdings')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+    // The section is intentionally below the initial narrow-phone viewport.
+    // Scroll it into the hit-testable area before tapping.
+    await tester.dragUntilVisible(
+      find.text('All holdings'),
+      find.byType(ListView).first,
+      const Offset(0, -220),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All holdings'));
+    await tester.pumpAndSettle();
+    expect(find.text('SBIN'), findsOneWidget);
+    expect(find.textContaining('BROKER REPORTED'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Live portfolio reads Upstox but never merges it with Angel One',
       (tester) async {
     final mode = TradingWorkspaceMode()..select('LIVE');
@@ -85,13 +122,19 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    // Overview shows real source counts without inventing an aggregate
+    // valuation from a quote-less Upstox holding.
+    expect(find.byKey(const ValueKey('portfolio-total-holdings')),
+        findsOneWidget);
+    expect(find.textContaining('Valuation incomplete'), findsOneWidget);
+    await tester.tap(find.text('Broker accounts').first);
+    await tester.pumpAndSettle();
     expect(find.text('LIVE · UPSTOX'), findsOneWidget);
-    expect(find.textContaining('₹1250.5'), findsOneWidget);
-    expect(find.textContaining('Holdings: 1'), findsOneWidget);
-    await tester.tap(find.text('Angel One').first);
+    expect(find.textContaining('₹1,250.50'), findsOneWidget);
+    await tester.tap(find.text('Angel One').last);
     await tester.pumpAndSettle();
     expect(find.text('LIVE · ANGEL ONE'), findsOneWidget);
-    expect(find.textContaining('₹1250.5'), findsNothing);
+    expect(find.textContaining('₹1,250.50'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

@@ -41,6 +41,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/market-data/candles",
         "/api/customer/market-data/quotes/detail",
         "/api/customer/market-data/overview");
+    private static final Set<String> PORTFOLIO_READS = Set.of(
+        "/api/customer/portfolio/records");
     private static final String CUSTOMER_WATCHLIST = "/api/customer/watchlist";
     private static final java.util.regex.Pattern CUSTOMER_WATCHLIST_ITEM =
         java.util.regex.Pattern.compile("^/api/customer/watchlist/items/[0-9]{1,18}$");
@@ -100,6 +102,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (CUSTOMER_ROOM_DETAIL.matcher(path).matches()
                 && Set.of("GET", "DELETE", "OPTIONS").contains(method))
             || (BROKER_READS.contains(path)
+                && Set.of("GET", "OPTIONS").contains(method))
+            || (PORTFOLIO_READS.contains(path)
                 && Set.of("GET", "OPTIONS").contains(method))
             || (CUSTOMER_MARKET_READS.contains(path)
                 && Set.of("GET", "OPTIONS").contains(method))
