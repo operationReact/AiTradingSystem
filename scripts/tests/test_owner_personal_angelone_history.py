@@ -186,6 +186,77 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         selected=f("select_next_batch")(self.conn,catalogue)
         self.assertEqual(selected,[("RELIANCE-EQ","2885"),("ABB-EQ","601")])
 
+    def test_failed_historical_range_skips_only_affected_symbol(self):
+        now=dt.datetime.now(dt.timezone.utc)
+        f("record_window_failure")(self.conn,"2885",
+            dt.date(2006,11,10),dt.date(2012,5,1),
+            "PROVIDER_REJECTED",now=now)
+        current=[("RELIANCE-EQ","2885"),("ABB-EQ","601"),("TCS-EQ","11536")]
+        selected=f("select_next_batch")(self.conn,current)
+        self.assertNotIn(("RELIANCE-EQ","2885"),selected)
+        self.assertEqual(selected,[("TCS-EQ","11536"),("ABB-EQ","601")])
+        self.assertFalse(f("provider_cooldown_active")(self.conn,now))
+
+    def test_quarantined_symbol_reenters_after_backoff(self):
+        old=dt.datetime.now(dt.timezone.utc)-dt.timedelta(hours=10)
+        first,through=list(f("windows")())[0]
+        count=f("record_window_failure")(
+            self.conn,"2885",first,through,"INVALID_PROVIDER_ROWS",now=old)
+        self.assertEqual(count,1)
+        selected=f("select_next_batch")(
+            self.conn,[("RELIANCE-EQ","2885")])
+        self.assertEqual(selected,[("RELIANCE-EQ","2885")])
+
+    def test_exhausted_bad_symbol_never_blocks_other_equities(self):
+        now=dt.datetime.now(dt.timezone.utc)
+        first,through=list(f("windows")())[0]
+        for attempt in range(7):
+            count=f("record_window_failure")(
+                self.conn,"2885",first,through,"PROVIDER_REJECTED",now=now)
+        self.assertEqual(count,5)
+        selected=f("select_next_batch")(
+            self.conn,[("RELIANCE-EQ","2885"),("ABB-EQ","601")])
+        self.assertEqual(selected,[("ABB-EQ","601")])
+        failures=self.conn.execute(
+            "SELECT attempts FROM page_failure").fetchone()[0]
+        self.assertEqual(failures,5)
+
+    def test_429_creates_provider_wide_pause_and_does_not_write_fake_zero_page(self):
+        now=dt.datetime.now(dt.timezone.utc)
+        start,end=list(f("windows")())[0]
+        f("record_window_failure")(self.conn,"2885",start,end,
+            "PROVIDER_RATE_LIMITED",now=now)
+        self.assertTrue(f("provider_cooldown_active")(self.conn,now))
+        self.assertFalse(f("provider_cooldown_active")(
+            self.conn,now+dt.timedelta(hours=2)))
+        self.assertEqual(
+            self.conn.execute("SELECT count(*) FROM page").fetchone()[0],0)
+        self.assertEqual(
+            self.conn.execute("SELECT reason FROM page_failure").fetchone()[0],
+            "PROVIDER_RATE_LIMITED")
+
+    def test_unrecognized_failure_cannot_poison_retry_state(self):
+        first,end=list(f("windows")())[0]
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"UNRECOGNIZED"):
+            f("record_window_failure")(self.conn,"2885",first,end,"random-secret")
+        self.assertEqual(
+            self.conn.execute("SELECT count(*) FROM page_failure").fetchone()[0],0)
+
+    def test_progress_reports_only_counts_not_market_data_or_client_secrets(self):
+        from contextlib import redirect_stdout
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        output=io.StringIO()
+        with redirect_stdout(output):
+            f("print_archive_progress")(self.conn)
+        report=output.getvalue()
+        self.assertIn("PERSONAL_ROWS_STORED_TOTAL: 1",report)
+        self.assertIn("PERSONAL_PAGES_STORED_TOTAL: 1",report)
+        self.assertIn("PERSONAL_FAILED_WINDOWS_TOTAL: 0",report)
+        self.assertNotIn("09:15",report)
+        self.assertNotIn("2885",report)
+
     def test_invalid_current_nse_catalogue_and_token_collisions_block(self):
         class Proc:
             returncode=0

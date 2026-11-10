@@ -49,6 +49,27 @@ SCHEMA = """CREATE TABLE IF NOT EXISTS page (
     state TEXT NOT NULL CHECK(state IN ('NONEMPTY','EMPTY')),
     PRIMARY KEY(exchange,token,from_date,through_date)
 )"""
+FAILURE_SCHEMA = """CREATE TABLE IF NOT EXISTS page_failure (
+    exchange TEXT NOT NULL CHECK(exchange = 'NSE'),
+    token TEXT NOT NULL,
+    from_date TEXT NOT NULL,
+    through_date TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    attempts INTEGER NOT NULL CHECK(attempts BETWEEN 1 AND 5),
+    retry_after TEXT NOT NULL,
+    PRIMARY KEY(exchange, token, from_date, through_date)
+)"""
+COOLDOWN_SCHEMA = """CREATE TABLE IF NOT EXISTS provider_cooldown (
+    provider TEXT PRIMARY KEY CHECK(provider = 'ANGEL_ONE'),
+    retry_after TEXT NOT NULL
+)"""
+FAILURE_CODES = frozenset((
+    "PROVIDER_REJECTED", "PROVIDER_HTTP_ERROR",
+    "PROVIDER_RATE_LIMITED", "PROVIDER_UNREACHABLE",
+    "INVALID_PROVIDER_ROWS", "PROVIDER_RESPONSE_TOO_LARGE",
+    "INVALID_PROVIDER_JSON",
+))
+
 
 
 class PersonalHistoryBlocked(Exception):
@@ -152,14 +173,25 @@ def select_next_batch(conn, catalogue):
         for token, first, through in conn.execute(
             "SELECT token, from_date, through_date FROM page WHERE exchange='NSE'")
     }
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
+    blocked = {
+        (token, first, through)
+        for token, first, through in conn.execute(
+            """SELECT token, from_date, through_date FROM page_failure
+                 WHERE attempts >= 5 OR retry_after > ?""", (now,))
+    }
     mapping = dict(catalogue)
     ordered = [sym for sym in PILOT if sym in mapping]
     ordered += [sym for sym in sorted(mapping) if sym not in PILOT]
     selected = []
     for sym in ordered:
         token = mapping[sym]
-        if any((token, a.isoformat(), b.isoformat()) not in completed
-               for a, b in windows()):
+        periods = [(token, a.isoformat(), b.isoformat()) for a, b in windows()]
+        if any(period in blocked for period in periods if period not in completed):
+            # Temporarily or permanently ineligible; do not repeatedly stall
+            # the all-stock cursor on one rejected historical token/window.
+            continue
+        if any(period not in completed for period in periods):
             selected.append((sym, token))
             if len(selected) == MAX_STOCKS_PER_RUN:
                 break
@@ -268,6 +300,8 @@ def init_db(root):
     conn.execute("PRAGMA journal_mode=DELETE")
     conn.execute("PRAGMA synchronous=FULL")
     conn.execute(SCHEMA)
+    conn.execute(FAILURE_SCHEMA)
+    conn.execute(COOLDOWN_SCHEMA)
     conn.commit()
     return conn
 
@@ -359,6 +393,58 @@ def persist_page(conn, root, symbol, token, first, through, data, earliest, late
     return digest
 
 
+def provider_cooldown_active(conn, now=None):
+    now = now or dt.datetime.now(dt.timezone.utc)
+    row = conn.execute("""SELECT retry_after FROM provider_cooldown
+                           WHERE provider='ANGEL_ONE'""").fetchone()
+    return bool(row and row[0] > now.isoformat())
+
+
+def record_window_failure(conn, token, first, through, reason, now=None):
+    if reason not in FAILURE_CODES:
+        raise PersonalHistoryBlocked("UNRECOGNIZED_SOURCE_FAILURE")
+    now = now or dt.datetime.now(dt.timezone.utc)
+    existing = conn.execute(
+        """SELECT attempts FROM page_failure WHERE exchange='NSE'
+             AND token=? AND from_date=? AND through_date=?""",
+        (token, first.isoformat(), through.isoformat())).fetchone()
+    attempts = min(5, (existing[0] if existing else 0) + 1)
+    # One rejected token should not block the full universe. A capped
+    # exponential pause prevents repeated provider calls for that window.
+    wait_minutes = min(1440, 30 * (2 ** (attempts - 1)))
+    retry_after = (now + dt.timedelta(minutes=wait_minutes)).isoformat()
+    conn.execute("""INSERT INTO page_failure
+           (exchange,token,from_date,through_date,reason,attempts,retry_after)
+           VALUES ('NSE',?,?,?,?,?,?)
+           ON CONFLICT(exchange,token,from_date,through_date)
+           DO UPDATE SET reason=excluded.reason, attempts=excluded.attempts,
+                         retry_after=excluded.retry_after""",
+        (token, first.isoformat(), through.isoformat(),
+         reason, attempts, retry_after))
+    if reason == "PROVIDER_RATE_LIMITED":
+        # Provider-wide cooldown, not merely the offending instrument.
+        global_after = (now + dt.timedelta(minutes=60)).isoformat()
+        conn.execute("""INSERT INTO provider_cooldown(provider,retry_after)
+               VALUES ('ANGEL_ONE',?)
+               ON CONFLICT(provider) DO UPDATE SET
+                 retry_after=MAX(provider_cooldown.retry_after,excluded.retry_after)""",
+            (global_after,))
+    conn.commit()
+    return attempts
+
+
+def print_archive_progress(conn):
+    pages, bars = conn.execute(
+        "SELECT count(*),COALESCE(sum(row_count),0) FROM page").fetchone()
+    failures, terminal = conn.execute(
+        """SELECT count(*),COALESCE(sum(CASE WHEN attempts>=5 THEN 1 ELSE 0 END),0)
+             FROM page_failure""").fetchone()
+    print("PERSONAL_PAGES_STORED_TOTAL: " + str(pages), flush=True)
+    print("PERSONAL_ROWS_STORED_TOTAL: " + str(bars), flush=True)
+    print("PERSONAL_FAILED_WINDOWS_TOTAL: " + str(failures), flush=True)
+    print("PERSONAL_QUARANTINED_WINDOWS_TOTAL: " + str(terminal), flush=True)
+
+
 def run():
     root = ensure_private_store()
     lockfile = root / ".exclusive.lock"
@@ -386,7 +472,13 @@ def run():
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
             if not remaining:
+                print_archive_progress(conn)
                 print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
+                print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
+                return 0
+            if provider_cooldown_active(conn):
+                print("PERSONAL_DOWNLOAD_PAUSED: PROVIDER_COOLDOWN", flush=True)
+                print_archive_progress(conn)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
                 return 0
             headers = authenticated_headers()
@@ -398,17 +490,26 @@ def run():
                     time.sleep(max(0, MIN_REQUEST_SPACING
                                    - (time.monotonic() - previous_call)))
                 previous_call = time.monotonic()
-                rows, first, last = fetch(headers, token, start, end)
+                try:
+                    rows, first, last = fetch(headers, token, start, end)
+                except PersonalHistoryBlocked as exc:
+                    if str(exc) not in FAILURE_CODES:
+                        raise
+                    record_window_failure(conn, token, start, end, str(exc))
+                    print("PERSONAL_SOURCE_WINDOW_SKIPPED: " + str(exc), flush=True)
+                    if str(exc) == "PROVIDER_RATE_LIMITED":
+                        print("PERSONAL_DOWNLOAD_PAUSED: PROVIDER_COOLDOWN", flush=True)
+                        break
+                    # Do not pretend an error means 0 candles. Continue
+                    # with other symbols; quarantine this symbol until retry.
+                    continue
                 persist_page(conn, root, sym, token, start, end, rows, first, last)
                 completed += 1
                 new_bars += len(rows)
                 # Symbol/candle count only; NEVER show raw OHLCV in public CI logs.
                 print("PERSONAL_PAGE_" + str(completed) + ": " + sym
                       + " " + str(len(rows)) + " VALIDATED_ROWS", flush=True)
-            summary = conn.execute(
-                "SELECT count(*), COALESCE(sum(row_count),0) FROM page").fetchone()
-            print("PERSONAL_PAGES_STORED_TOTAL: " + str(summary[0]), flush=True)
-            print("PERSONAL_ROWS_STORED_TOTAL: " + str(summary[1]), flush=True)
+            print_archive_progress(conn)
             print("PERSONAL_PAGES_DOWNLOADED_THIS_RUN: " + str(completed), flush=True)
             print("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: " + str(new_bars), flush=True)
             print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
