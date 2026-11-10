@@ -182,6 +182,9 @@ minttick:
     ws-token-cap: ${OWNER_FEED_WS_TOKEN_CAP:1000}
     universe-limit: ${OWNER_FEED_UNIVERSE_LIMIT:3000}
     poll-ms: ${OWNER_FEED_POLL_MS:10000}
+    # Private historical bootstrap only, off by default until source access is confirmed.
+    history-backfill-enabled: ${OWNER_HISTORY_BACKFILL_ENABLED:false}
+    history-backfill-poll-ms: ${OWNER_HISTORY_BACKFILL_POLL_MS:2000}
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
