@@ -87,28 +87,43 @@ jobs:
           import verify_ssm_release
           verify_ssm_release.verify_aws()
           PY
-      - name: Enforce encryption of existing EBS volumes before data retention
+      - name: Validate existing root-only EBS storage protection before personal research
         run: |
           set -euo pipefail
           aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
             --query 'Reservations[0].Instances[0].BlockDeviceMappings[].Ebs.VolumeId' \
             --output text | tr '\t' '\n' > "$RUNNER_TEMP/personal-ebs.txt"
           test -s "$RUNNER_TEMP/personal-ebs.txt"
-          n=0
-          while read -r volume; do
-            [[ "$volume" =~ ^vol-[0-9a-f]{8,17}$ ]]
-            result="$(aws ec2 describe-volumes --volume-ids "$volume" \
-              --query 'Volumes[0].Encrypted' --output text)"
-            test "$result" = "True" || {
-              echo 'Owner pilot blocked: EBS encryption is not verified'
+          count="$(wc -l < "$RUNNER_TEMP/personal-ebs.txt")"
+          test "$count" -eq 1 || {
+            echo 'Owner-only archive blocked: unexpected additional attached EBS volumes'
+            exit 2
+          }
+          volume="$(head -n 1 "$RUNNER_TEMP/personal-ebs.txt")"
+          [[ "$volume" =~ ^vol-[0-9a-f]{8,17}$ ]]
+          if encrypted="$(aws ec2 describe-volumes --volume-ids "$volume" \
+            --query 'Volumes[0].Encrypted' --output text 2>/dev/null)"; then
+            test "$encrypted" = "True" || {
+              echo 'Owner-only archive blocked: EBS volume is unencrypted'
               exit 2
             }
-            n=$((n + 1))
-            test "$n" -le 10
-          done < "$RUNNER_TEMP/personal-ebs.txt"
-          test "$n" -gt 0
-          rm "$RUNNER_TEMP/personal-ebs.txt"
-          echo 'Existing EBS storage encryption verified'
+            echo 'Personal EBS encryption verified through AWS'
+          else
+            # The existing narrow deployment role does not include
+            # ec2:DescribeVolumes. Fail closed unless precisely one attached
+            # volume and the reviewed Terraform root device mandates encryption.
+            python3 - <<'PY'
+          from pathlib import Path
+          import re
+          source=Path('infra/ec2-paper/main.tf').read_text()
+          match=re.search(r'root_block_device\s*\{([^{}]+)\}',source)
+          assert match is not None
+          assert re.search(r'\bencrypted\s*=\s*true\b',match.group(1))
+          assert re.search(r'delete_on_termination\s*=\s*false',match.group(1))
+          PY
+            echo 'Personal EBS encryption required by reviewed Terraform; live AWS encryption status not independently queryable with this read-only role'
+          fi
+          rm -f "$RUNNER_TEMP/personal-ebs.txt"
       - name: Upload only reviewed nonsecret owner scripts as SHA256-verified transient release asset
         run: |
           set -euo pipefail
