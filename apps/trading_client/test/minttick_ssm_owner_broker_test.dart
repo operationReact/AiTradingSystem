@@ -105,7 +105,7 @@ void main() {
         expect(find.byKey(const ValueKey('broker-pin')), findsNothing);
         expect(find.byKey(const ValueKey('broker-totp')), findsNothing);
         expect(find.text('CONNECTED'), findsOneWidget);
-        expect(find.textContaining('***234'), findsOneWidget);
+        expect(find.text('Account: ***234'), findsOneWidget);
         expect(tester.takeException(), isNull);
       });
     }

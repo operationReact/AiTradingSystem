@@ -4,12 +4,14 @@ import 'package:flutter/services.dart';
 import '../data/customer_angel_one_repository.dart';
 import 'minttick_angel_one_manual_login.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_angel_one_dashboard.dart';
 
 /// Customer-owned, interactive, READ-ONLY broker connection. Never renders
 /// provider access tokens, PIN, TOTP or API key after submission.
 class MintTickCustomerBrokerPage extends StatefulWidget {
-  const MintTickCustomerBrokerPage({required this.repository, super.key});
+  const MintTickCustomerBrokerPage({required this.repository, this.onBack, super.key});
   final HttpCustomerAngelOneRepository repository;
+  final VoidCallback? onBack;
 
   @override
   State<MintTickCustomerBrokerPage> createState() => _MintTickCustomerBrokerPageState();
@@ -184,8 +186,31 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final connection = _connection;
-    return MintTickCustomerScaffold(showHeader: false, children: [
+    if (connection?.connected == true) {
+      return MintTickAngelOneDashboard(
+        repository: widget.repository,
+        connection: connection!,
+        busy: _busy,
+        error: _error,
+        onRefresh: _refresh,
+        onDisconnect: _disconnect,
+        onBack: widget.onBack,
+      );
+    }
+    return PopScope(
+      canPop: widget.onBack == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) { widget.onBack?.call(); }
+      },
+      child: MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 19),
+      if (widget.onBack != null)
+        Align(alignment: Alignment.centerLeft, child: IconButton(
+          key: const ValueKey('broker-back-to-hub'),
+          tooltip: 'Back to connected brokers',
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: widget.onBack,
+        )),
       const MintTickEyebrow('Connected brokers'),
       const SizedBox(height: 7),
       Text('Angel One', style: theme.textTheme.headlineSmall
@@ -371,7 +396,8 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
         icon: const Icon(Icons.refresh_rounded),
         label: const Text('Refresh connection status'),
       ),
-    ]);
+      ]),
+    );
   }
 
   List<Widget> _dataSummary(ThemeData theme) {
