@@ -57,8 +57,20 @@ public class GoldenSourceRightsRepository {
                    AND r.verified_at <= ?
                    AND r.valid_from <= ?
                    AND (r.valid_to IS NULL OR r.valid_to > ?)
+                   -- An explicit recorded revocation overrides older verified
+                   -- receipts for this provider/source/use. No re-grant is
+                   -- inferred after a revocation without fresh policy review.
+                   AND NOT EXISTS (
+                       SELECT 1 FROM golden_source_rights_receipt revoked
+                        WHERE revoked.provider_id = r.provider_id
+                          AND revoked.source_domain = r.source_domain
+                          AND revoked.permitted_use = r.permitted_use
+                          AND revoked.receipt_status = 'REVOKED'
+                          AND revoked.revoked_at <= ?
+                          AND revoked.captured_at <= ?
+                   )
                 """, Long.class, providerCode, sourceDomain, use.name(),
-                at, at, at, at);
+                at, at, at, at, at, at);
         return Objects.requireNonNullElse(count, 0L) > 0;
     }
 
