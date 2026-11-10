@@ -86,6 +86,23 @@ class GoldenSourceRightsIT extends AbstractPostgresIT {
     }
 
     @Test
+    void recordedRevocationOverridesAnExistingVerifiedUseGrant() {
+        String provider = provider("EXTERNAL");
+        receipt(provider, "daily_bars", "MODEL_TRAINING", "VERIFIED",
+                "2024-01-01T00:00:00Z", null,
+                "2024-01-03T00:00:00Z", null);
+        assertThat(rights.isPermitted(provider, "daily_bars",
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING,
+                Instant.parse("2024-02-01T12:00:00Z"))).isTrue();
+
+        receipt(provider, "daily_bars", "MODEL_TRAINING", "REVOKED",
+                "2024-01-01T00:00:00Z", null,
+                "2024-01-03T00:00:00Z", "2024-03-01T00:00:00Z");
+        assertThat(rights.isPermitted(provider, "daily_bars",
+                GoldenSourceRightsRepository.Use.MODEL_TRAINING, USE_TIME)).isFalse();
+    }
+
+    @Test
     void verifiedClaimsRequireIndependentVerifierIdentityAndTimestamp() {
         String provider = provider("EXTERNAL");
         UUID id = lookupProviderId(provider);
@@ -168,7 +185,9 @@ class GoldenSourceRightsIT extends AbstractPostgresIT {
                 verified == null ? null : at(verified),
                 verified == null ? null : "TEST_VERIFIER_ONLY",
                 revoked == null ? null : at(revoked),
-                at("2024-01-05T00:00:00Z"));
+                revoked == null
+                        ? at("2024-01-05T00:00:00Z")
+                        : at("2024-03-02T00:00:00Z"));
     }
 
     private static OffsetDateTime at(String timestamp) {
