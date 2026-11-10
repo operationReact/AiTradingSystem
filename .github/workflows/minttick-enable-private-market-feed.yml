@@ -29,6 +29,12 @@ jobs:
           bash -n infra/ec2-paper/enable_private_market_feed.sh
           grep -Fq 'MINTTICK_ANGEL_ONE_OWNER_SUB:' infra/ec2-paper/paper-compose.yml
           grep -Fq 'TRADING_MODE: PAPER' infra/ec2-paper/paper-compose.yml
+          grep -Fq 'OWNER_FEED_ENABLED:' infra/ec2-paper/paper-compose.yml
+          # A successful private feed activation must also start autonomous
+          # collector warm-up; merely configuring the Lambda is insufficient.
+          grep -Fq "printf 'OWNER_FEED_ENABLED=true" infra/ec2-paper/enable_private_market_feed.sh
+          grep -Fq "grep -qx 'OWNER_FEED_ENABLED=true'" infra/ec2-paper/enable_private_market_feed.sh
+          grep -Fq 'cp -p "$work/old-runtime"' infra/ec2-paper/enable_private_market_feed.sh
           ! grep -Eq '^[[:space:]]+ANGELONE_(API_KEY|PASSWORD|TOTP_SECRET):' infra/ec2-paper/paper-compose.yml
   enable:
     needs: validate
