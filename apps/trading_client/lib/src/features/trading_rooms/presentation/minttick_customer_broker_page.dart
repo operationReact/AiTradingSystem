@@ -200,7 +200,7 @@ class _MintTickCustomerBrokerPageState extends State<MintTickCustomerBrokerPage>
     return PopScope(
       canPop: widget.onBack == null,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) widget.onBack?.call();
+        if (!didPop) { widget.onBack?.call(); }
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 19),
