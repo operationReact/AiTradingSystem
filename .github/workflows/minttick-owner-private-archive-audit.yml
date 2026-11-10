@@ -114,7 +114,7 @@ jobs:
           digest="$(sha256sum "$RUNNER_TEMP/owner-audit-source.tar" | cut -d' ' -f1)"
           [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
           aws s3 cp "$RUNNER_TEMP/owner-audit-source.tar" \
-            "s3://aitrading-paper-releases-098859530205/releases/$GITHUB_SHA/owner-audit/$digest/scripts.tar" \
+            "s3://aitrading-paper-releases-098859530205/releases/$GITHUB_SHA/owner-personal/$digest/scripts.tar" \
             --region ap-south-1 --sse AES256 --no-progress --only-show-errors
           python3 - "$GITHUB_SHA" "$digest" <<'PY'
           import json
@@ -134,7 +134,7 @@ jobs:
           cleanup() { rm -rf -- "$work"; }
           trap cleanup EXIT
           chmod 0700 "$work"
-          aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-audit/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
+          aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-personal/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
           printf '%s  %s\n' '@@HASH@@' "$work/scripts.tar" | sha256sum -c - >/dev/null
           files="$(tar -tf "$work/scripts.tar" | LC_ALL=C sort)"
           expected="$(printf 'probe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh\n' | LC_ALL=C sort)"
