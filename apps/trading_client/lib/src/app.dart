@@ -43,7 +43,8 @@ import 'features/trading_rooms/data/customer_upstox_repository.dart';
 import 'features/trading_rooms/presentation/minttick_upstox_page.dart';
 import 'features/trading_rooms/presentation/minttick_broker_hub_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_broker_page.dart';
-import 'features/trading_rooms/presentation/minttick_customer_home.dart';
+import 'features/trading_rooms/data/customer_home_summary_repository.dart';
+import 'features/trading_rooms/presentation/minttick_home_command_centre.dart';
 import 'features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'features/trading_rooms/presentation/minttick_customer_states.dart';
 import 'features/trading_rooms/presentation/minttick_rooms_pages.dart';
@@ -469,18 +470,21 @@ class _TradingAppState extends State<TradingApp> {
       );
 
   Widget _overviewPage() => widget.session.isCustomerAuthenticated
-      ? MintTickCustomerHomePage(
+      ? MintTickHomeCommandCentre(
           loadProfile: _loadCustomerProfile,
+          summaryRepository: HttpCustomerHomeSummaryRepository(_api),
           drafts: _roomDrafts,
           mode: _workspaceMode,
-          marketRepository: HttpCustomerMarketRepository(_api),
           onCreateRoom: _openCreateRoom,
+          onOpenRoom: _openRoom,
           onRooms: () => _navigate('/rooms'),
           onMarkets: () => _navigate('/market'),
+          onMind: () => _navigate('/mind'),
           onPortfolio: () => _navigate('/portfolio'),
+          onActivity: () => _navigate('/activity'),
+          onBroker: () => _navigate('/brokers'),
           onAccount: () => _navigate('/account'),
           onNotifications: () => _navigate('/notifications'),
-          onBroker: () => _navigate('/brokers'),
         )
       : OverviewPage(
           session: widget.session,
