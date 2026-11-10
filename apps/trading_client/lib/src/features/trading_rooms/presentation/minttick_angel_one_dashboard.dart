@@ -129,13 +129,12 @@ class _MintTickAngelOneDashboardState extends State<MintTickAngelOneDashboard> {
     final ink = theme.colorScheme.onSurface;
     final muted = theme.colorScheme.onSurfaceVariant;
     return PopScope(
-      canPop: false,
+      // A gesture inside a dashboard detail returns to its overview.
+      // From overview, let Android pop to the actual previous app screen.
+      canPop: _panel == MintTickAngelPanel.overview,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) { return; }
-        if (_panel != MintTickAngelPanel.overview) {
+        if (!didPop && _panel != MintTickAngelPanel.overview) {
           _open(MintTickAngelPanel.overview);
-        } else {
-          widget.onBack?.call();
         }
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
