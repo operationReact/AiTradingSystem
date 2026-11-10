@@ -382,6 +382,39 @@ class CustomerMarketDataControllerTest {
     }
 
     @Test
+    void savedEquityFallbackRejectsInvalidHolidayEventTimeButRetainsVerifiedSessionQuote() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var calendar = mock(MarketSessionCalendar.class);
+        var ticks = mock(MarketLastTickStore.class);
+        var details = mock(MarketDetailSnapshotStore.class);
+        var holiday = Instant.parse("2026-11-10T09:50:00Z");
+        var monday = Instant.parse("2026-11-09T09:58:00Z");
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(false);
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("999.00"), null, holiday)));
+        when(details.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        when(calendar.isInsideCashSession(holiday)).thenReturn(false);
+        when(calendar.isInsideCashSession(monday)).thenReturn(true);
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, ticks, details, calendar);
+
+        var row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+
+        assertThat(row.status()).isEqualTo("LAST_CLOSE");
+        assertThat(row.ltp()).isEqualByComparingTo("126.20");
+        assertThat(row.exchangeAt()).isEqualTo(monday);
+        assertThat(row.source()).isEqualTo("STORED_LAST_DETAIL");
+
+        when(calendar.isInsideCashSession(monday)).thenReturn(false);
+        row = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(row.status()).isEqualTo("UNAVAILABLE");
+        assertThat(row.ltp()).isNull();
+    }
+
+    @Test
     void spoofedTickOrSourceIsRejectedRatherThanRenderedLive() {
         var customer = principal("independent-customer");
         var instrument = equity();
