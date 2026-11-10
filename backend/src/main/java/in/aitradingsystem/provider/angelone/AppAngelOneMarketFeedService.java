@@ -61,6 +61,13 @@ public final class AppAngelOneMarketFeedService {
         return sessions.quoteDetailsBatch(APPLICATION_FEED_ID, expected);
     }
 
+    /** Source-authenticated private history; shares the SSM app session and rate limiter. */
+    public com.fasterxml.jackson.databind.JsonNode historicalCandles(String exchange, String token,
+                                     String interval, String from, String to) {
+        ensureSession();
+        return sessions.historicalCandles(APPLICATION_FEED_ID, exchange, token, interval, from, to);
+    }
+
     public CustomerAngelOneLiveQuoteService.LiveQuote live(Instrument instrument) {
         ensureSession();
         return withoutPersonalBrokerPrompt(
