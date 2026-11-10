@@ -59,8 +59,8 @@ data "aws_iam_policy_document" "archive_role" {
 
 data "aws_iam_policy_document" "bucket_policy" {
   statement {
-    sid    = "DenyAllNonTlsAccess"
-    effect = "Deny"
+    sid     = "DenyAllNonTlsAccess"
+    effect  = "Deny"
     actions = ["s3:*"]
     resources = [
       local.source_bucket_arn,
