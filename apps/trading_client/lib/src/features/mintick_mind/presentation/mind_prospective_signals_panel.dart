@@ -101,8 +101,8 @@ class _MindProspectiveSignalsPanelState
            '${result.memberCount} cohort stocks',
           style: const TextStyle(color: MindPalette.muted, fontSize: 11)),
       const SizedBox(height: 8),
-      const Text('Signal candidates have not been reconciled with future '
-          'fills, transaction costs or realized returns.',
+      const Text('These are original signal receipts, not performance results. '
+          'Separate prospective outcome evidence is shown below.',
         key: ValueKey('minttick-receipts-no-outcomes'),
         style: TextStyle(color: MindPalette.muted, fontSize: 11)),
       const SizedBox(height: 6),
