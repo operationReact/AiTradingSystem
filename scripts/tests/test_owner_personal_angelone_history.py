@@ -308,7 +308,19 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         catalogue=[("ABB-EQ","123"),("ASIANPAINT-EQ","456")] + [
             (sym,str(i+1000)) for i,sym in enumerate(f("PILOT"))]
         selected=f("select_next_batch")(self.conn,catalogue)
-        self.assertEqual([sym for sym,_ in selected],list(f("PILOT")))
+        self.assertEqual([sym for sym,_ in selected][:5],list(f("PILOT")))
+        self.assertEqual(len(selected),7)
+
+    def test_bounded_twenty_stock_pagination_and_eighty_call_cap(self):
+        symbols=[(f"TEST{i:03d}-EQ", str(10000+i)) for i in range(26)]
+        selected=f("select_next_batch")(self.conn,symbols)
+        self.assertEqual(len(selected),20)
+        self.assertEqual([sym for sym,_ in selected], [sym for sym,_ in symbols[:20]])
+        self.assertEqual(f("MAX_STOCKS_PER_RUN"),20)
+        self.assertEqual(f("MAX_PROVIDER_CALLS_PER_RUN"),80)
+        self.assertEqual(f("MAX_PROVIDER_RUN_SECONDS"),900)
+        self.assertEqual(f("MIN_REQUEST_SPACING"),10.0)
+        self.assertEqual(len(list(f("windows")())),4)
 
     def test_completed_first_five_advance_to_next_five_alphabetically(self):
         catalogue=[("AARTIIND-EQ","600"),("ABB-EQ","601"),
