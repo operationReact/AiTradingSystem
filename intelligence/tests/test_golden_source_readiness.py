@@ -35,6 +35,7 @@ def requirements() -> ModelSourceRequirements:
 def snapshot() -> ModelFeatureSlice:
     return ModelFeatureSlice(
         decision_at=AS_OF,
+        scope_id="LISTING:NSE:INTERNAL-42",
         data_cutoff=AS_OF - timedelta(minutes=2),
         feature_schema_digest="a" * 64,
         feature_digest="b" * 64,
@@ -47,6 +48,7 @@ def source() -> SourceSliceEvidence:
     # This is fabricated *test evidence*, never a claim of a real vendor licence.
     return SourceSliceEvidence(
         source_id="daily_bars",
+        scope_id="LISTING:NSE:INTERNAL-42",
         source_kind="EXTERNAL",
         dataset_digest="c" * 64,
         latest_event_at=AS_OF - timedelta(minutes=11),
@@ -217,3 +219,18 @@ def test_no_capital_permission_can_enter_contracts() -> None:
         ModelFeatureSlice.model_validate(
             snapshot().model_dump() | {"can_authorize_capital": True}
         )
+
+
+def test_source_scope_binding_prevents_cross_stock_data_contamination() -> None:
+    from_another_stock = source().model_copy(
+        update={"scope_id": "LISTING:NSE:INTERNAL-999"}
+    )
+    outcome = inspect(evidence=[from_another_stock])
+    assert "WRONG_SOURCE_SCOPE:daily_bars" in outcome.blockers
+
+    market_scope = source().model_copy(update={"scope_id": "MARKET:NSE"})
+    allowed_global = requirements().model_copy(
+        update={"source_scope_overrides": {"daily_bars": "MARKET:NSE"}}
+    )
+    assert inspect(req=allowed_global, evidence=[market_scope]).status == "RESEARCH_READY"
+    assert inspect(evidence=[market_scope]).status == "BLOCKED"
