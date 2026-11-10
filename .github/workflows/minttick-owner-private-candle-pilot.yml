@@ -1,0 +1,222 @@
+name: MintTick - owner personal private daily candle pilot
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-owner-private-candle-pilot.yml'
+      - 'infra/ec2-paper/run_owner_personal_history.sh'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/owner-personal-history-download.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/run_owner_personal_history.sh
+          python3 -m unittest discover -s scripts/tests -p test_owner_personal_angelone_history.py -v
+
+  execute:
+    name: One fixed-path private owner historical pilot on existing PAPER EC2
+    needs: verify
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify exact owner approval and only one changed file
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/owner-personal-history-download.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path('infra/ec2-paper/requests/owner-personal-history-download.json').read_text())
+          assert d=={
+            'application':'MintTick',
+            'operation':'owner-personal-angelone-daily-history-pilot',
+            'account':'098859530205',
+            'region':'ap-south-1',
+            'instance_id':'i-09c01b470fb39b85a',
+            'from_date':'2006-11-10',
+            'through_date':'2026-11-10',
+            'max_equities':5,
+            'max_provider_calls':20,
+            'min_spacing_seconds':10,
+            'private_ec2_only':True,
+            'no_redistribution':True,
+            'enable_trading':False,
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-owner-personal
+      - name: Validate fixed AWS account, EC2 host and running SSM target
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Enforce encryption of existing EBS volumes before data retention
+        run: |
+          set -euo pipefail
+          aws ec2 describe-instances --instance-ids "$INSTANCE_ID" \
+            --query 'Reservations[0].Instances[0].BlockDeviceMappings[].Ebs.VolumeId' \
+            --output text | tr '\t' '\n' > "$RUNNER_TEMP/personal-ebs.txt"
+          test -s "$RUNNER_TEMP/personal-ebs.txt"
+          n=0
+          while read -r volume; do
+            [[ "$volume" =~ ^vol-[0-9a-f]{8,17}$ ]]
+            result="$(aws ec2 describe-volumes --volume-ids "$volume" \
+              --query 'Volumes[0].Encrypted' --output text)"
+            test "$result" = "True" || {
+              echo 'Owner pilot blocked: EBS encryption is not verified'
+              exit 2
+            }
+            n=$((n + 1))
+            test "$n" -le 10
+          done < "$RUNNER_TEMP/personal-ebs.txt"
+          test "$n" -gt 0
+          rm "$RUNNER_TEMP/personal-ebs.txt"
+          echo 'Existing EBS storage encryption verified'
+      - name: Upload only reviewed nonsecret owner scripts as SHA256-verified transient release asset
+        run: |
+          set -euo pipefail
+          umask 077
+          test "$GITHUB_REF" = "refs/heads/dev"
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          tar -cf "$RUNNER_TEMP/owner-personal-scripts.tar" -C infra/ec2-paper \
+            probe_owner_angelone_auth.py \
+            owner_personal_angelone_history.py \
+            run_owner_personal_history.sh
+          digest="$(sha256sum "$RUNNER_TEMP/owner-personal-scripts.tar" | cut -d' ' -f1)"
+          [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+          aws s3 cp "$RUNNER_TEMP/owner-personal-scripts.tar" \
+            "s3://aitrading-paper-releases-098859530205/releases/$GITHUB_SHA/owner-personal/$digest/scripts.tar" \
+            --region ap-south-1 --sse AES256 --no-progress --only-show-errors
+          python3 - "$GITHUB_SHA" "$digest" <<'PY'
+          import json,os,re,sys
+          from pathlib import Path
+          sha,digest=sys.argv[1:]
+          assert re.fullmatch('[a-f0-9]{40}',sha) and re.fullmatch('[a-f0-9]{64}',digest)
+          script=r"""set -Eeuo pipefail
+          umask 077
+          test "$(id -u)" -eq 0
+          test "$(uname -m)" = aarch64
+          root=/opt/aitradingsystem-paper
+          test -d "$root" && test ! -L "$root"
+          work="$(mktemp -d "$root/.personal-release.XXXXXXXX")"
+          cleanup() { rm -rf -- "$work"; }
+          trap cleanup EXIT
+          chmod 0700 "$work"
+          aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-personal/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
+          printf '%s  %s\n' '@@HASH@@' "$work/scripts.tar" | sha256sum -c - >/dev/null
+          files="$(tar -tf "$work/scripts.tar" | LC_ALL=C sort)"
+          expected="$(printf 'probe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh\n' | LC_ALL=C sort)"
+          test "$files" = "$expected"
+          tar -xf "$work/scripts.tar" -C "$work"
+          for file in probe_owner_angelone_auth.py owner_personal_angelone_history.py run_owner_personal_history.sh; do
+            test -f "$work/$file" && test ! -L "$work/$file"
+          done
+          bash -n "$work/run_owner_personal_history.sh"
+          python3 - "$work" <<'PYCHECK'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          a=(p/'probe_owner_angelone_auth.py').read_text()
+          b=(p/'owner_personal_angelone_history.py').read_text()
+          assert '\nif __name__ == "__main__":' in a
+          merged=a.split('\nif __name__ == "__main__":',1)[0]+'\n'+b
+          compile(merged,'<restricted-owner-review>','exec')
+          PYCHECK
+          install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
+          install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
+          install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
+          "$root/run_owner_personal_history.sh" """
+          script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest)
+          path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
+          path.write_text(json.dumps({'commands':[script]}))
+          path.chmod(0o600)
+          PY
+          rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
+      - name: Execute pinned reviewed personal download on one existing EC2
+        run: |
+          set -euo pipefail
+          id="$(aws ssm send-command --document-name AWS-RunShellScript \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
+            --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
+            --comment 'MintTick private personal trading: max five equities, no redistribution' \
+            --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/owner-personal-ssm.json"
+          for attempt in $(seq 1 165); do
+            aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
+              --output json > "$RUNNER_TEMP/personal-history-status.json" 2>/dev/null || true
+            status="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              z=json.loads((Path(os.environ['RUNNER_TEMP'])/'personal-history-status.json').read_text())
+          except (ValueError,OSError):
+              print('PENDING');raise SystemExit
+          if z.get('Status') not in ('Success','Failed','TimedOut','Cancelled'):
+              print('PENDING');raise SystemExit
+          output=z.get('StandardOutputContent','') or ''
+          for line in output.splitlines():
+              if len(line)>120: continue
+              if re.fullmatch(r'PERSONAL_(?:STOCKS_SELECTED|PAGES_ALREADY_VERIFIED|PAGES_REMAINING|PAGES_STORED_TOTAL|ROWS_STORED_TOTAL|PAGES_DOWNLOADED_THIS_RUN|ROWS_DOWNLOADED_THIS_RUN): [0-9]{1,8}',line):
+                  print(line)
+              if re.fullmatch(r'PERSONAL_PAGE_[0-9]{1,2}: (?:RELIANCE-EQ|TCS-EQ|INFY-EQ|HDFCBANK-EQ|ICICIBANK-EQ) [0-9]{1,4} VALIDATED_ROWS',line):
+                  print(line)
+              if re.fullmatch(r'PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_: ]{3,80}',line):
+                  print(line)
+          if z['Status']=='Success' and 'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE' in output:
+              print('SUCCESS')
+          else:
+              print('FAILED')
+          PY
+          )"
+            if [[ "$status" == *$'\nSUCCESS' ]]; then
+              printf '%s\n' "$status"
+              rm -f "$RUNNER_TEMP/personal-history-status.json"
+              exit 0
+            fi
+            if [[ "$status" == *$'\nFAILED' ]]; then
+              printf '%s\n' "$status"
+              rm -f "$RUNNER_TEMP/personal-history-status.json"
+              exit 2
+            fi
+            sleep 5
+          done
+          echo 'Owner pilot timed out; resumable private archive remains on host'
+          rm -f "$RUNNER_TEMP/personal-history-status.json"
+          exit 2

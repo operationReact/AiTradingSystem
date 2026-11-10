@@ -1,0 +1,174 @@
+"""Offline, no credentials/cloud/provider tests for EC2 owner-only personal archive."""
+import datetime as dt
+import decimal
+import gzip
+import hashlib
+import importlib.util
+import io
+import json
+import os
+from pathlib import Path
+import sqlite3
+import tempfile
+import unittest
+from unittest.mock import patch
+import urllib.error
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / "infra/ec2-paper/owner_personal_angelone_history.py"
+NAMESPACE = {"__name__": "_offline_personal_history", "API_ROOT": "https://invalid.example"}
+exec(compile(SOURCE.read_text(), str(SOURCE), "exec"), NAMESPACE)
+
+
+def f(name):
+    return NAMESPACE[name]
+
+
+def candle(date="2006-11-10"):
+    return [date + "T09:15:00+05:30", 101, 115, 90, 105, 1000]
+
+
+class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name) / "private"
+        self.root.mkdir(mode=0o700)
+        (self.root / "pages").mkdir(mode=0o700)
+        self.conn = f("init_db")(self.root)
+        self.addCleanup(self.conn.close)
+
+    def test_fixed_20year_windows_are_consecutive_with_max_2000(self):
+        windows = list(f("windows")())
+        self.assertEqual(len(windows), 4)
+        self.assertEqual(windows[0], (dt.date(2006,11,10),dt.date(2012,5,1)))
+        self.assertEqual(windows[1][0],dt.date(2012,5,2))
+        self.assertEqual(windows[2][1],dt.date(2023,4,14))
+        self.assertEqual(windows[-1][1],dt.date(2026,11,10))
+        self.assertTrue(all((end-start).days+1 <= 2000 for start,end in windows))
+        for a,b in zip(windows,windows[1:]):
+            self.assertEqual(a[1]+dt.timedelta(days=1),b[0])
+
+    def test_validate_real_shaped_candles_and_no_historical_completeness_claim(self):
+        start=dt.date(2006,11,10)
+        rows,first,last=f("validate_rows")(
+            {"status":True,"data":[candle()]},start,start+dt.timedelta(days=1))
+        self.assertEqual(len(rows),1)
+        self.assertEqual(first,start)
+        self.assertEqual(last,start)
+        self.assertEqual(f("validate_rows")(
+            {"status":True,"data":[]},start,start)[0],[])
+
+    def test_rejects_duplicate_out_of_order_bad_ohlc_and_outside_window(self):
+        start=dt.date(2006,11,10)
+        wrong=["2006-11-10T09:15:00+05:30",101,90,100,105,1000]
+        for data in [
+            [candle(),candle()], [candle("2006-11-11"),candle()],
+            [wrong], [candle("2006-11-12")],
+            [["2006-11-10T09:15:00",101,115,90,105,1000]],
+            [["2006-11-10T09:15:00+05:30",101,115,90,105,-1]],
+            [["2006-11-10T09:15:00+05:30",101,115,90,105,1.5]],
+        ]:
+            with self.subTest(data=data):
+                with self.assertRaises(f("PersonalHistoryBlocked")):
+                    f("validate_rows")({"status":True,"data":data},
+                                       start,start+dt.timedelta(days=1))
+
+    def test_store_is_atomic_hash_checked_root_private_and_resume_safe(self):
+        date=dt.date(2006,11,10)
+        digest=f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                                 date,date,[candle()],date,date)
+        self.assertRegex(digest,r"^[a-f0-9]{64}$")
+        archived=list((self.root/"pages").glob("*.json.gz"))
+        self.assertEqual(len(archived),1)
+        self.assertEqual(archived[0].stat().st_mode & 0o777,0o600)
+        p=json.loads(gzip.decompress(archived[0].read_bytes()))
+        self.assertEqual(p["rows"],[candle()])
+        self.assertFalse(p["historical_listing_identity_verified"])
+        self.assertFalse(p["session_completeness_verified"])
+        self.assertEqual(
+            f("existing_page")(self.conn,self.root,"2885",date,date),1)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          date,date,[candle()],date,date)
+        self.assertEqual(
+            self.conn.execute("SELECT count(*) FROM page").fetchone()[0],1)
+
+    def test_corrupt_archived_file_is_rejected_not_re_downloaded_silently(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"TCS-EQ","11536",
+                          date,date,[candle()],date,date)
+        target=next((self.root/"pages").glob("*.json.gz"))
+        target.write_bytes(b"modified")
+        with self.assertRaises(f("PersonalHistoryBlocked")):
+            f("existing_page")(self.conn,self.root,"11536",date,date)
+
+    def test_empty_session_data_is_saved_but_not_fabricated(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"TCS-EQ","11536",
+                          date,date,[],None,None)
+        row=self.conn.execute("SELECT row_count, state, earliest, latest FROM page").fetchone()
+        self.assertEqual(row,(0,"EMPTY",None,None))
+
+    def test_provider_request_keeps_token_secret_in_memory_not_file(self):
+        class DummyResponse:
+            status=200
+            def __enter__(self): return self
+            def __exit__(self,*args): return None
+            def read(self,n): return b'{"status":true,"data":[["2006-11-10T09:15:00+05:30",101,115,90,105,1000]]}'
+        seen=[]
+        def fake(req,timeout):
+            seen.append((req.data,req.headers,timeout))
+            return DummyResponse()
+        with patch.dict(NAMESPACE,{"urlopen":fake}):
+            rows,earliest,latest=f("fetch")(
+                {"Authorization":"Bearer do-not-log"},"2885",
+                dt.date(2006,11,10),dt.date(2006,11,10))
+        self.assertEqual(len(rows),1)
+        self.assertEqual(earliest,dt.date(2006,11,10))
+        self.assertEqual(json.loads(seen[0][0])["interval"],"ONE_DAY")
+        self.assertNotIn(b"do-not-log",seen[0][0])
+        self.assertEqual(seen[0][2],35)
+
+    def test_provider_rate_limit_halts_without_unbounded_retry(self):
+        with patch.dict(NAMESPACE,{"urlopen":lambda *args,**kwargs:
+                        (_ for _ in ()).throw(urllib.error.HTTPError(
+                            "https://invalid.example",429,"rate",{},None))}):
+            with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                        "RATE_LIMITED"):
+                f("fetch")({},"2885",dt.date(2006,11,10),dt.date(2006,11,10))
+
+    def test_catalogue_is_bounded_to_five_known_stocks_no_synthetic_tokens(self):
+        class Proc:
+            returncode=0
+            stdout="RELIANCE-EQ|2885\nTCS-EQ|11536\nINFY-EQ|1594\n"
+        with patch("subprocess.run",return_value=Proc()) as mock:
+            values=f("select_pilot_symbols")()
+            self.assertEqual(values,[("RELIANCE-EQ","2885"),
+                                     ("TCS-EQ","11536"),("INFY-EQ","1594")])
+            self.assertIn("instrument_catalogue_state",mock.call_args[0][0][-1])
+        Proc.stdout="RELIANCE-EQ|2885\nRELIANCE-EQ|9999\n"
+        with patch("subprocess.run",return_value=Proc()):
+            with self.assertRaisesRegex(f("PersonalHistoryBlocked"),"AMBIGUOUS"):
+                f("select_pilot_symbols")()
+
+    def test_code_does_not_use_order_api_or_public_source_distribution(self):
+        code=SOURCE.read_text()
+        for banned in ("placeOrder", "modifyOrder", "cancelOrder",
+                       "boto3", "github.com/api", "S3Client", "openUrl",
+                       "redistribute(", "prints(raw)", "print(jwt)"):
+            self.assertNotIn(banned,code)
+        self.assertIn("PRIVATE_OWNER_PERSONAL_RESEARCH_ONLY",code)
+        self.assertIn("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE",code)
+
+    def test_no_data_exposed_outside_storage_on_resume(self):
+        date=dt.date(2006,11,10)
+        f("persist_page")(self.conn,self.root,"INFY-EQ","1594",
+                          date,date,[candle()],date,date)
+        record=self.conn.execute("SELECT source_sha256,archive_relative_path FROM page").fetchone()
+        self.assertEqual(len(record[0]),64)
+        self.assertNotIn("101",repr(record))
+        self.assertTrue((self.root/record[1]).is_file())
+
+
+if __name__=="__main__":
+    unittest.main()
