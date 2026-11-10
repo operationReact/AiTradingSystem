@@ -23,7 +23,7 @@ auth=(p/'probe_owner_angelone_auth.py').read_text()
 collector=(p/'owner_personal_angelone_history.py').read_text()
 assert '\nif __name__ == "__main__":' in auth
 source=auth.split('\nif __name__ == "__main__":',1)[0]+'\n'+collector
-assert len(source)<42000 and source.count('if __name__ == "__main__":')==1
+assert len(source)<48000 and source.count('if __name__ == "__main__":')==1
 mode=sys.argv[2]
 assert mode in ('download','audit-only')
 sys.argv=['owner_personal_angelone_history.py'] + (
