@@ -20,6 +20,7 @@ from aitrading_intelligence.lightgbm_model import (
 from aitrading_intelligence.model_prediction_v2 import (
     MAX_ATTRIBUTION_FEATURES,
     ModelPredictionV2,
+    _feature_vector,
     adapt_catboost_prediction,
     adapt_lightgbm_prediction,
     adapt_logistic_prediction,
@@ -225,3 +226,27 @@ def test_pytorch_adapter_uses_same_contract_when_optional_dependency_is_availabl
     assert prediction.attribution_summary
     assert prediction.promotion_allowed is False
     assert prediction.can_authorize_capital is False
+
+
+def test_missing_required_model_inputs_are_not_silently_zero_imputed() -> None:
+    """A model trained on a feature must not infer when that source is absent."""
+    row = _series(3)[-1]
+    # Both an unlicensed filing and missing NLP evidence must fail closed,
+    # rather than be treated as two real observed 0.0 feature values.
+    with pytest.raises(ValueError, match="missing trained model features"):
+        _feature_vector(row, [
+            "market.return_1",
+            "fundamental.roce",
+            "event.NEWS.materiality",
+        ])
+    # An explicitly observed zero remains valid and distinguishable.
+    vector = _feature_vector(row, ["market.return_1", "market.close"])
+    assert len(vector) == 2
+
+
+def test_feature_vector_rejects_duplicate_or_empty_artifact_schema() -> None:
+    row = _series(3)[-1]
+    with pytest.raises(ValueError, match="non-empty and unique"):
+        _feature_vector(row, [])
+    with pytest.raises(ValueError, match="non-empty and unique"):
+        _feature_vector(row, ["market.close", "market.close"])
