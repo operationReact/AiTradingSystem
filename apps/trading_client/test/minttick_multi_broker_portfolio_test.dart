@@ -66,6 +66,36 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('compact Live portfolio fits a 320dp phone and opens real holdings',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 740);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final mode = TradingWorkspaceMode()..select('LIVE');
+    final store = TradingRoomDraftStore();
+    addTearDown(mode.dispose);
+    addTearDown(store.dispose);
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerPortfolioPage(
+        mode: mode, rooms: store, paperRepository: _Rooms(),
+        brokerRepository: _Angel(), upstoxRepository: _Upstox(),
+        onRooms: () {}, onBroker: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('portfolio-total-holdings')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.text('All holdings'));
+    await tester.tap(find.text('All holdings'));
+    await tester.pumpAndSettle();
+    expect(find.text('SBIN'), findsOneWidget);
+    expect(find.textContaining('BROKER REPORTED'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Live portfolio reads Upstox but never merges it with Angel One',
       (tester) async {
     final mode = TradingWorkspaceMode()..select('LIVE');
