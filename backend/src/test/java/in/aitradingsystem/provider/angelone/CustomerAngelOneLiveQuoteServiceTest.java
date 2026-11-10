@@ -83,6 +83,64 @@ class CustomerAngelOneLiveQuoteServiceTest {
     }
 
     @Test
+    void serverSideSocketSubscribesPersistsVerifiedFrameAndKeepsAliveWithBothHeartbeats()
+            throws Exception {
+        var sessions = mock(CustomerAngelOneSessionService.class);
+        var calendar = mock(MarketSessionCalendar.class);
+        var client = mock(HttpClient.class);
+        var builder = mock(java.net.http.WebSocket.Builder.class);
+        var socket = mock(java.net.http.WebSocket.class);
+        var user = UUID.fromString("ff000000-0000-4000-8000-000000000001");
+        when(calendar.isInsideCashSession(NOW)).thenReturn(true);
+        var muhurat = java.time.LocalDate.of(2026, 11, 8);
+        when(calendar.session(muhurat)).thenReturn(new in.aitradingsystem.marketdata.MarketSession(
+            muhurat, java.time.ZonedDateTime.of(muhurat, java.time.LocalTime.of(14, 20),
+            java.time.ZoneId.of("Asia/Kolkata")), java.time.ZonedDateTime.of(
+            muhurat, java.time.LocalTime.of(15, 15),
+            java.time.ZoneId.of("Asia/Kolkata")), true));
+        when(sessions.credentialsForStream(user)).thenReturn(
+            new CustomerAngelOneSessionService.StreamCredentials(
+                "test-key", "TESTCODE", "test-jwt", "test-feed",
+                NOW.plusSeconds(3600)));
+        when(client.newWebSocketBuilder()).thenReturn(builder);
+        when(builder.connectTimeout(any())).thenReturn(builder);
+        when(builder.header(anyString(), anyString())).thenReturn(builder);
+        var listener = org.mockito.ArgumentCaptor.forClass(java.net.http.WebSocket.Listener.class);
+        when(builder.buildAsync(any(java.net.URI.class), listener.capture()))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        when(socket.sendText(anyString(), eq(true)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+        when(socket.sendPing(any(ByteBuffer.class)))
+            .thenReturn(java.util.concurrent.CompletableFuture.completedFuture(socket));
+
+        var feed = new CustomerAngelOneLiveQuoteService(sessions, calendar,
+            client, Clock.fixed(NOW, ZoneOffset.UTC));
+        try {
+            var initial = feed.snapshot(user, List.of(NSE));
+            assertThat(initial.getFirst().status()).isEqualTo("CONNECTING");
+            listener.getValue().onOpen(socket);
+            verify(socket).sendText(contains("\\"action\\":1"), eq(true));
+
+            listener.getValue().onBinary(socket,
+                ByteBuffer.wrap(frame(1, NSE.symbolToken(), 3, NOW.toEpochMilli(), 125455)), true);
+            var actual = feed.snapshot(user, List.of(NSE)).getFirst();
+            assertThat(actual.status()).isEqualTo("LIVE");
+            assertThat(actual.source()).isEqualTo("ANGEL_ONE_SMARTAPI_WS_V2");
+            assertThat(actual.ltp()).isEqualByComparingTo("1254.55");
+            assertThat(actual.exchangeAt()).isEqualTo(NOW);
+
+            feed.heartbeat();
+            verify(socket).sendPing(any(ByteBuffer.class));
+            verify(socket).sendText("ping", true);
+            listener.getValue().onText(socket, "po", false);
+            listener.getValue().onText(socket, "ng", true);
+            assertThat(feed.snapshot(user, List.of(NSE)).getFirst().status()).isEqualTo("LIVE");
+        } finally {
+            feed.close();
+        }
+    }
+
+    @Test
     void closedMarketCannotOpenSocketOrReturnInventedLiveQuote() {
         var sessions = mock(CustomerAngelOneSessionService.class);
         var calendar = mock(MarketSessionCalendar.class);
