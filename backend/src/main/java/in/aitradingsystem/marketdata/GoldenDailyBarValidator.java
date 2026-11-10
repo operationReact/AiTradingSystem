@@ -69,7 +69,7 @@ public final class GoldenDailyBarValidator implements GoldenDatasetChunkValidato
         Instant now = clock.instant();
         if (request.listingId() == null || request.fromDate() == null
                 || request.throughDate() == null
-                || !request.intervalName().equals("ONE_DAY")
+                || !"ONE_DAY".equals(request.intervalName())
                 || request.fromDate().isAfter(request.throughDate())
                 || ChronoUnit.DAYS.between(request.fromDate(), request.throughDate()) >= MAX_DAYS
                 || request.maxBytes() <= 0
