@@ -43,7 +43,9 @@ public class ResearchScanRepository {
                     ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
                  WHERE i.active = TRUE
                    AND i.exchange IN ('NSE', 'BSE')
-                   AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+                   AND i.exchange_segment IN ('NSE_CM', 'BSE_CM')
+                   AND i.trading_symbol LIKE '%-EQ'
+                   AND upper(i.trading_symbol) NOT LIKE '%NSETEST%'
                  ORDER BY CASE
                      WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
                      WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
@@ -64,7 +66,7 @@ public class ResearchScanRepository {
                 """, id, interval, requestedLimit, strategySet);
     }
 
-    /** Bounded active cash-equity universe only; excludes derivatives and inactive catalogue rows. */
+    /** Bounded active cash-equity universe only; follows catalogue cash segment + -EQ identity. */
     public List<Instrument> activeCashEquityUniverse(int limit) {
         return jdbc.query("""
                 SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
@@ -75,7 +77,9 @@ public class ResearchScanRepository {
                     ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
                  WHERE i.active = TRUE
                    AND i.exchange IN ('NSE', 'BSE')
-                   AND upper(coalesce(i.instrument_type, '')) = 'EQ'
+                   AND i.exchange_segment IN ('NSE_CM', 'BSE_CM')
+                   AND i.trading_symbol LIKE '%-EQ'
+                   AND upper(i.trading_symbol) NOT LIKE '%NSETEST%'
                  ORDER BY i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
                  LIMIT ?
                 """, instrumentMapper, limit);
