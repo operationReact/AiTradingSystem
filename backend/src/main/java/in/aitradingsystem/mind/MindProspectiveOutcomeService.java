@@ -183,6 +183,7 @@ public class MindProspectiveOutcomeService {
     private static List<String> blockers(String reason) {
         return List.of(reason,
             "SOURCE_PROVENANCE_NOT_INDEPENDENTLY_ATTESTED",
+            "ENTRY_BAR_OPEN_MAY_PRECEDE_RESEARCH_RECEIPT",
             "ESTIMATED_COSTS_NOT_ACTUAL_INDIAN_STATUTORY_CHARGES",
             "ACCOUNT_RISK_NOT_EVALUATED",
             "PAPER_SHADOW_ENROLLMENT_REQUIRED",
