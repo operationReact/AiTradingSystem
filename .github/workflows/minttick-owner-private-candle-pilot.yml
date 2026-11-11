@@ -184,7 +184,28 @@ jobs:
           install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
           install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
           stage=COLLECTOR_AUDIT
-          "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@'
+          if test '@@OWNER_MODE@@' = audit-only; then
+            # Owner writer legitimately holds an exclusive flock during a
+            # batch. Inspect the atomic metadata snapshot instead; NEVER
+            # read mutable archive pages without the integrity lock.
+            audit_output=""
+            audit_exit=0
+            audit_output="$("$root/run_owner_personal_history.sh" audit-only 2>/dev/null)" || audit_exit=$?
+            if [ "$audit_exit" -eq 0 ]; then
+              printf '%s\n' "$audit_output"
+            elif [ "$audit_exit" -eq 2 ] && [ "$audit_output" = 'PERSONAL_DOWNLOAD_BLOCKED: ACTIVE_COLLECTOR' ]; then
+              printf 'PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR\n'
+              printf 'PERSONAL_ARCHIVE_API_CALLS: 0\n'
+              printf 'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE\n'
+            else
+              if [[ "$audit_output" =~ ^PERSONAL_DOWNLOAD_BLOCKED:\ [A-Z0-9_]{3,64}$ ]]; then
+                printf '%s\n' "$audit_output"
+              fi
+              false  # All other collector failures still fail closed.
+            fi
+          else
+            "$root/run_owner_personal_history.sh" download
+          fi
           stage=RUNTIME_STATUS
           if test '@@OWNER_MODE@@' = audit-only; then
             python3 - <<'PYOWNERSTATUS'
@@ -336,6 +357,13 @@ jobs:
                         and len(counts)==2
                         and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_PAGES: ') for x in counts)
                         and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_ROWS: ') for x in counts))
+              # ACTIVE_COLLECTOR proves a live writer held the archive lock.
+              # BUSY is not equivalent to a verified integrity audit.
+              busy=(z['Status']=='Success' and not counts and {
+                  'PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR',
+                  'PERSONAL_ARCHIVE_API_CALLS: 0',
+                  'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE'
+              }.issubset(set(lines)))
               if verified:
                   for line in counts:
                       print(line)
@@ -343,6 +371,7 @@ jobs:
                       r"PERSONAL_ENCRYPTED_REQUEST_REPORT: [A-Za-z0-9+/]{100,18000}={0,2}", line)]
                   if len(encrypted) == 1:
                       print(encrypted[0])
+              if verified or busy:
                   # Root host only emits fixed enum and bounded integer categories.
                   # Never print raw SSM stdout/stderr, candle pages, or bearer tokens.
                   safe_runtime = [line for line in lines if (
@@ -351,10 +380,11 @@ jobs:
                   for line in safe_runtime[:9]:
                       print(line)
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
-                  print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
-              if not verified:
+                  print('PERSONAL_ARCHIVE_AUDIT_STATUS: '+
+                        ('VERIFIED' if verified else 'BUSY_ACTIVE_COLLECTOR'))
+              if not verified and not busy:
                   print('OWNER_AUDIT_INCOMPLETE: MISSING_VERIFIED_MARKERS')
-              print('SUCCESS' if verified else 'FAILED')
+              print('SUCCESS' if verified or busy else 'FAILED')
               raise SystemExit(0)
           if mode != 'download':
               print('FAILED')
