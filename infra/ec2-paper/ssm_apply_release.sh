@@ -54,17 +54,22 @@ printf '%s  %s\n' "$expected_hash" "$bundle" | sha256sum -c - >/dev/null || {
 # Expected archive produced on the GitHub runner. Deny extra paths.
 stage=archive_validation
 list="$(tar -tf "$bundle" | LC_ALL=C sort)"
-expected="$(printf 'images.tar.gz\npaper-compose.yml\nrun_paper.sh' | LC_ALL=C sort)"
+expected="$(printf 'images.tar.gz\npaper-compose.yml\nrun_paper.sh\ninstall_owner_history_monitor.sh\nowner_history_scheduler.py\nowner_history_progress.py\nminttick-owner-history.service\nminttick-owner-history.timer' | LC_ALL=C sort)"
 test "$list" = "$expected" || { echo "Unexpected archive members" >&2; exit 2; }
 tar -xf "$bundle" -C "$work"
-for f in images.tar.gz paper-compose.yml run_paper.sh; do
+for f in images.tar.gz paper-compose.yml run_paper.sh install_owner_history_monitor.sh owner_history_scheduler.py owner_history_progress.py minttick-owner-history.service minttick-owner-history.timer; do
   test -f "$work/$f" && test ! -L "$work/$f" || exit 2
 done
 test "$(du -b "$work/images.tar.gz" | cut -f1)" -gt 1000000 || exit 2
 
 # Validate scripts and image names before replacing active release.
 bash -n "$work/run_paper.sh"
+bash -n "$work/install_owner_history_monitor.sh"
 grep -q 'TRADING_MODE: PAPER' "$work/paper-compose.yml"
+grep -q '/opt/aitradingsystem-paper/monitor:/run/minttick-owner-history:ro' "$work/paper-compose.yml"
+# Fail closed on missing existing private owner archive before any app rollout.
+stage=history_precheck
+bash "$work/install_owner_history_monitor.sh" prepare "$work"
 stage=image_load
 docker load --input "$work/images.tar.gz" >/dev/null
 
@@ -73,4 +78,6 @@ stage=host_activation
 install -o root -g root -m 0600 "$work/paper-compose.yml" "$root/paper-compose.yml"
 install -o root -g root -m 0700 "$work/run_paper.sh" "$root/run_paper.sh"
 bash "$root/run_paper.sh" "$sha"
-echo "SSM ARM64 PAPER application acceptance passed for exact release $sha"
+stage=history_activation
+bash "$work/install_owner_history_monitor.sh" activate "$work"
+echo "SSM ARM64 PAPER application + private owner history monitor acceptance passed for exact release $sha"
