@@ -211,9 +211,9 @@ CustomerCandle _bar(DateTime time, num close) => CustomerCandle(
       fetchedAt: DateTime.utc(2026, 11, 7, 10));
 
 Future<void> _openExplore(WidgetTester tester) async {
-  await tester.ensureVisible(find.text('Explore'));
+  await tester.ensureVisible(find.text('All Stocks'));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Explore'));
+  await tester.tap(find.text('All Stocks'));
   await tester.pumpAndSettle();
 }
 
@@ -486,7 +486,7 @@ void main() {
 
     for (final width in [320.0, 390.0]) {
     for (final brightness in [Brightness.dark, Brightness.light]) {
-      testWidgets('customer Markets shows closed row without price at ${width.toInt()}dp ${brightness.name}',
+      testWidgets('customer Markets shows unavailable price when no stored snapshot at ${width.toInt()}dp ${brightness.name}',
           (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = Size(width, 3200);
@@ -503,7 +503,7 @@ void main() {
         expect(find.descendant(
           of: find.byKey(const ValueKey('customer-market-stock-101')),
           matching: find.text('—')), findsOneWidget);
-        expect(find.textContaining('Market closed'), findsOneWidget);
+        expect(find.textContaining('No verified last price'), findsOneWidget);
         expect(fake.quoteRequests, 0);
         expect(fake.snapshotRequests, greaterThanOrEqualTo(1));
         expect(tester.takeException(), isNull);
@@ -538,7 +538,7 @@ void main() {
     await _openExplore(tester);
     expect(find.text('₹124.70'), findsOneWidget);
     expect(find.textContaining('LAST TRADED'), findsOneWidget);
-    expect(find.textContaining('Showing last verified saved prices'), findsOneWidget);
+    expect(find.textContaining('Showing the last verified price'), findsOneWidget);
     expect(find.textContaining('Market closed.'), findsNothing);
     expect(find.textContaining('LIVE ·'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -595,6 +595,8 @@ void main() {
     expect(find.text('Breakout'), findsOneWidget);
     expect(find.text('Not available yet'), findsNothing);
 
+    await tester.ensureVisible(find.text('Movers'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Movers'));
     await tester.pumpAndSettle();
     expect(find.text('Top gainers'), findsOneWidget);
@@ -604,6 +606,8 @@ void main() {
     expect(find.text('₹125.55'), findsNothing);
     expect(tester.takeException(), isNull);
 
+    await tester.ensureVisible(find.text('Sectors'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Sectors'));
     await tester.pumpAndSettle();
     expect(find.text('Banks'), findsOneWidget);
@@ -654,6 +658,8 @@ void main() {
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerMarketPage(repository: fake),
     ));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Movers'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Movers'));
     await tester.pumpAndSettle();
