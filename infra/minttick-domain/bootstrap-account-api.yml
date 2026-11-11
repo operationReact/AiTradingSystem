@@ -140,7 +140,8 @@ Resources:
           WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
           UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
           ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
-          PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(account|ledger)$")
+          PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
+          READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
           ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
           MAX_BODY = 65536
           
@@ -151,11 +152,20 @@ Resources:
                   "x-content-type-options": "nosniff",
               }, "body": json.dumps(obj, separators=(",", ":"))}
           
+          def paper_allowed(method, path):
+              if not PAPER.fullmatch(path):
+                  return False
+              action = path.rsplit("/", 1)[-1]
+              return ((method == "GET" and action in {"account", "ledger", "orders", "positions"})
+                      or (method == "POST" and action in {"activate", "resume", "pause", "orders"}))
+
           def allowed(method, path):
               return ((method, path) in EXACT
                       or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
                       or (method == "GET" and path == UPSTOX_CALLBACK)
-                      or (method == "GET" and (ROOM.fullmatch(path) or PAPER.fullmatch(path))))
+                      or (method == "GET" and ROOM.fullmatch(path))
+                      or (method == "GET" and READINESS.fullmatch(path))
+                      or paper_allowed(method, path))
           
           def callback_query_safe(query):
               # The public redirect's one-time state is independently consumed by Spring.
@@ -252,6 +262,28 @@ Resources:
                   "/api/customer/brokers/upstox/disconnect",
               } and body:
                   return reply(400, {"error": "INVALID_BODY"})
+              paper_order_key = None
+              if method == "POST" and PAPER.fullmatch(path):
+                  action = path.rsplit("/", 1)[-1]
+                  if action in {"activate", "resume", "pause"} and body:
+                      return reply(400, {"error": "INVALID_BODY"})
+                  if action == "orders":
+                      paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+                      if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+                          return reply(400, {"error": "INVALID_PAPER_ORDER_KEY"})
+                      try:
+                          order = json.loads(body)
+                          valid = (isinstance(order, dict)
+                              and set(order) == {"instrumentId", "side", "quantity", "limitPrice"}
+                              and type(order["instrumentId"]) is int and order["instrumentId"] > 0
+                              and order["side"] in ("BUY", "SELL")
+                              and type(order["quantity"]) is int and 1 <= order["quantity"] <= 10000
+                              and type(order["limitPrice"]) in (int, float)
+                              and 0.01 <= order["limitPrice"] <= 1000000)
+                      except (ValueError, TypeError, KeyError, OverflowError):
+                          valid = False
+                      if not valid:
+                          return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
               # Manual SmartAPI login is customer-scoped and authorized. Accept only the
               # four required short-lived input fields; never log, cache or echo them.
               if method == "POST" and path == "/api/customer/brokers/angel-one/connect":
@@ -276,6 +308,8 @@ Resources:
                   upstream_headers["Authorization"] = bearer
               if body:
                   upstream_headers["Content-Type"] = "application/json"
+              if paper_order_key is not None:
+                  upstream_headers["Idempotency-Key"] = paper_order_key
               request = urllib.request.Request(
                   BACKEND + internal_path,
                   data=body if method == "POST" else None,
