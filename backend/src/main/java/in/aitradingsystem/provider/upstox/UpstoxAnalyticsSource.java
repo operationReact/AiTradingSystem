@@ -152,7 +152,7 @@ public final class UpstoxAnalyticsSource {
                 throw unavailable("UPSTOX_INVALID_RESPONSE");
             }
             return body;
-        } catch (RuntimeException ex) {
+        } catch (Exception ex) {
             // Never expose upstream body, request headers, token, AWS errors or URL.
             throw unavailable("UPSTOX_READ_UNAVAILABLE");
         }
