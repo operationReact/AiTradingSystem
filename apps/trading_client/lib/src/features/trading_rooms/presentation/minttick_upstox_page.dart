@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../data/customer_upstox_repository.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_upstox_symbol.dart';
 
 /// Broker-hosted OAuth login: Upstox handles credentials, not MintTick.
 class MintTickUpstoxPage extends StatefulWidget {
@@ -125,8 +126,12 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
       const SizedBox(height: 18),
       const MintTickEyebrow('Connected brokers · Live'),
       const SizedBox(height: 8),
-      Text('Upstox', style: text.headlineSmall
-          ?.copyWith(fontWeight: FontWeight.w800)),
+      Row(children: [
+        const UpstoxSymbol(size: 46),
+        const SizedBox(width: 12),
+        Expanded(child: Text('Upstox', style: text.headlineSmall
+            ?.copyWith(fontWeight: FontWeight.w800))),
+      ]),
       const SizedBox(height: 7),
       Text('Secure login through Upstox. No brokerage PIN, password or OTP '
           'is entered into MintTick.',
@@ -136,7 +141,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
       MintTickSurface(accent: connected, child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(children: [
-            const MintTickIconTile(Icons.account_balance_outlined),
+            const UpstoxSymbol(size: 36),
             const SizedBox(width: 11),
             Expanded(child: Text('Upstox Account',
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800))),

@@ -131,3 +131,78 @@ until the authenticated status endpoint confirms it.
 
 The protected gateway already admits the exact Upstox OAuth and account
 routes. No live order placement is enabled.
+
+
+## 2026 developer-app setup checklist (no secrets in GitHub or Android)
+
+1. In `https://account.upstox.com/developer/apps`, create or select the
+   **trading/Algo** application for MintTick. Copy the API Key and API Secret
+   to the secure AWS console only. Do not use the separate Analytics/read-only
+   extended token as an order authorization.
+2. Register exactly
+   `https://api.minttick.com/api/customer/brokers/upstox/callback` as the
+   application's redirect URI. First check that this hostname's customer
+   callback is actually deployed: matching a string in the source code is
+   insufficient.
+3. In **AWS Console → Systems Manager → Parameter Store**, select region
+   **ap-south-1** and create:
+
+   | Parameter | Type | Value |
+   | --- | --- | --- |
+   | `/minttick/upstox/client-id` | `SecureString` | Developer API Key |
+   | `/minttick/upstox/client-secret` | `SecureString` | Developer API Secret |
+   | `/minttick/upstox/redirect-uri` | `String` | Exact HTTPS callback above |
+
+   The paths are **new proposed convention names**, not automatically
+   provisioned by existing code or an assertion that these parameters exist.
+   Use the designated KMS key and least-privilege instance/task role for
+   `ssm:GetParameter` with decryption. Do not use public app config,
+   Terraform state with literal secrets, or shell command arguments to
+   publish secret values.
+4. In the **protected runtime that actually serves the customer API**, use
+   its existing secret-loading mechanism to inject the three values as
+   `UPSTOX_CLIENT_ID`, `UPSTOX_CLIENT_SECRET`,
+   `UPSTOX_REDIRECT_URI` before Spring Boot starts. See
+   `backend/src/main/resources/application.yml`. **Simply creating SSM
+   parameters does not connect Upstox:** the source checkout has no automatic
+   mapping from these proposed paths into environment variables. The
+   deployment/IAM mapping must be reviewed for the exact runtime before
+   enabling it. Do not configure the owner-private Analytics probe as a
+   shortcut for a customer OAuth session.
+5. Verify as the authenticated MintTick customer:
+   `GET /api/customer/brokers/upstox/status` reports
+   `available=true`. Tap **Connect with Upstox** in the Android app,
+   complete browser-hosted login, return and tap **Refresh connection**.
+   Only claim success when `connected=true`, then check funds, holdings,
+   positions, orders and registered IP status on the same owner account.
+
+### Separate prerequisites before LIVE order execution
+
+- Upstox access tokens typically expire at **03:30 IST**, requiring a new
+  authorized session for a subsequent trading day.
+- Register the **actual fixed outbound egress IP** of MintTick's order
+  execution runtime in Upstox **My Apps → Static IPs**. An EC2 public address
+  is not necessarily the egress IP when NAT/proxy/networking is involved.
+  The IP is registered per Upstox user; changing it invalidates existing
+  access tokens. Read-only historical/Analytics access does not establish
+  order-placement IP compliance.
+- Place-order V3 uses
+  `POST https://api-hft.upstox.com/v3/order/place` with a short-lived
+  customer access token and a broker-defined instrument key. A market-data
+  token, analytics token, API key or API secret alone must never be sent as
+  an order authorization.
+- Order dispatch needs a separately reviewed customer-bound execution
+  runtime with explicit consent, broker permissions, accepted risk
+  controls, daily limits, unique idempotent order intents, reconciliation
+  after timeouts, and disable/kill-switch behavior. Do not open the write
+  route on the read-only account API or turn on LIVE by uploading secrets.
+- Upstox lists combined retail **regular algo** write limits of
+  **10 requests/second**, **500/minute**, and **2,000/30 minutes**.
+  Actual rules depend on the approved account/app; enforce limits lower
+  than or equal to current broker policy.
+
+References:
+- https://upstox.com/developer/api-documentation/v3/place-order/
+- https://upstox.com/developer/api-documentation/get-token/
+- https://upstox.com/developer/api-documentation/rate-limiting/
+- https://upstox.com/developer/api-documentation/appendix/my-apps-support-for-algo-trading-circular/

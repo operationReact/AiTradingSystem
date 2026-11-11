@@ -34,6 +34,27 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
         self.assertIn("    concurrency:", execute_job)
         self.assertIn("      group: aitrading-paper-ec2-manual-lifecycle", execute_job)
 
+    def test_failed_audit_emits_only_allowlisted_stage_and_error(self):
+        src = self.source
+        for stage in ("PRECHECK", "RELEASE_FETCH", "RELEASE_VERIFY",
+                      "COLLECTOR_INSTALL", "COLLECTOR_AUDIT", "RUNTIME_STATUS"):
+            self.assertIn(stage, src)
+        self.assertIn('OWNER_AUDIT_STAGE: %s', src)
+        self.assertIn("PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_]{3,64}", src)
+        self.assertIn("OWNER_SSM_RESPONSE_CODE: ", src)
+        self.assertIn("EXECUTION_FAILED", src)
+        self.assertIn("stages[-1:]+blocked[-1:]", src)
+
+    def test_live_collector_is_busy_not_false_integrity_success(self):
+        src = self.source
+        self.assertIn("'PERSONAL_DOWNLOAD_BLOCKED: ACTIVE_COLLECTOR'", src)
+        self.assertIn("PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR", src)
+        self.assertIn('if verified or busy:', src)
+        self.assertIn("print('SUCCESS' if verified or busy else 'FAILED')", src)
+        self.assertIn("if not verified and not busy:", src)
+        self.assertIn('not counts and {', src)
+        self.assertIn("if [ \"$audit_exit\" -eq 0 ]; then", src)
+
     def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
         src = self.source
         for marker in ("Delivery Timed Out", "Execution Timed Out",
