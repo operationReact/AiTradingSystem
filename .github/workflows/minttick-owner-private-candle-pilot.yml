@@ -266,9 +266,10 @@ jobs:
               with sqlite3.connect("file:"+str(ledger)+"?mode=ro",
                                    uri=True,timeout=3) as db:
                   db.execute("PRAGMA query_only=ON")
-                  rows=db.execute("""SELECT outcome, count(*) FROM
-                      (SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50)
-                      GROUP BY outcome""").fetchall()
+                  rows=db.execute(
+                      "SELECT outcome, count(*) FROM "
+                      "(SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50) "
+                      "GROUP BY outcome").fetchall()
               if not all(isinstance(outcome,str) and type(count) is int
                          and 0<=count<=50 for outcome,count in rows):
                   raise ValueError("invalid ledger summary")
