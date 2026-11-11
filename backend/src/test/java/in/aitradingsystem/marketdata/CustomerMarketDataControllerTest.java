@@ -167,6 +167,38 @@ class CustomerMarketDataControllerTest {
     }
 
     @Test
+    void verifiedNsePostAuctionBrokerFullQuoteIsSavedWithoutCallingItLiveOrOfficialClose() {
+        var customer = principal("independent-customer");
+        var instrument = equity();
+        var calendar = mock(MarketSessionCalendar.class);
+        var store = mock(MarketDetailSnapshotStore.class);
+        var postCas = java.time.LocalDate.of(2026, 11, 11);
+        var zone = java.time.ZoneId.of("Asia/Kolkata");
+        var exchangeAt = postCas.atTime(15, 34).atZone(zone).toInstant();
+        when(calendar.session(postCas)).thenReturn(new MarketSession(postCas,
+            postCas.atTime(9, 15).atZone(zone), postCas.atTime(15, 30).atZone(zone), true));
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(instrument);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.detail(instrument)).thenReturn(new AngelOneQuoteDetailParser.Detail(
+            new BigDecimal("1335.40"), new BigDecimal("1333.50"),
+            new BigDecimal("1349.40"), new BigDecimal("1327.00"),
+            new BigDecimal("1324.40"), 10000L, exchangeAt,
+            null, null, null, 0L, 0L, List.of(), List.of()));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, null, store, calendar);
+
+        var result = controller.quoteDetail(customer, 42L).getBody();
+        assertThat(result.ltp()).isEqualByComparingTo("1335.40");
+        assertThat(result.high()).isEqualByComparingTo("1349.40");
+        assertThat(result.exchangeAt()).isEqualTo(exchangeAt);
+        assertThat(result.source()).isEqualTo("ANGEL_ONE_SMARTAPI_FULL_APP");
+        assertThat(result.status()).isEqualTo("ON_DEMAND");
+        verify(store).save(argThat(d -> d.exchangeAt().equals(exchangeAt)));
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
     void detailQuoteIsUnavailableWithoutApplicationFeedAndNeverFallsBackToBroker() {
         var customer = principal("independent-customer");
         when(catalogue.requireActiveInstrument(42L)).thenReturn(equity());
