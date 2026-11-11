@@ -1,5 +1,6 @@
 package in.aitradingsystem.marketdata;
 
+import in.aitradingsystem.instrument.InstrumentMasterRepository;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -69,9 +70,7 @@ public final class CustomerMarketUniverseController {
               JOIN instrument_catalogue_state s
                 ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
              WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
-               AND i.exchange_segment IN ('NSE_CM','BSE_CM')
-               AND i.trading_symbol LIKE '%-EQ'
-               AND upper(i.trading_symbol) NOT LIKE '%NSETEST%'
+            """ + InstrumentMasterRepository.CASH_EQUITY_PREDICATE + """
              GROUP BY i.exchange ORDER BY i.exchange
             """, (rs, row) -> new ExchangeFacet(
                 rs.getString("exchange"), rs.getLong("listing_count")));
