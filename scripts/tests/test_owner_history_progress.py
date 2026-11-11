@@ -72,20 +72,20 @@ class ProgressSnapshotTests(unittest.TestCase):
             self.assertEqual(data["task"]["years"][2024-2006]["candles"], 2)
             self.assertEqual(data["task"]["years"][2024-2006]["completeness"], "UNVERIFIED")
             self.assertFalse(data["task"]["yearCoverageVerified"])
-            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_OFF_HOURS")
-            self.assertEqual(data["scheduler"]["weekdayHoursIST"], "16:00–20:58")
+            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_DAILY")
+            self.assertEqual(data["scheduler"]["weekdayHoursIST"], "00:00–20:58")
             self.assertEqual(data["recentRequests"][0]["fromDate"], "2024-01-01")
             serialized = json.dumps(data)
             self.assertNotIn("2885", serialized)
             self.assertNotIn("12345", serialized)
 
-    def test_two_minute_cadence_and_market_off_hours(self):
+    def test_two_minute_cadence_includes_market_hours(self):
         in_window = dt.datetime.fromisoformat("2026-11-11T16:00:15+05:30")
         self.assertEqual(progress._next_scheduled_at(in_window),
                          "2026-11-11T16:02:00+05:30")
         closed = dt.datetime.fromisoformat("2026-11-11T21:15:00+05:30")
         self.assertEqual(progress._next_scheduled_at(closed),
-                         "2026-11-12T16:00:00+05:30")
+                         "2026-11-12T00:00:00+05:30")
 
     def test_tampered_source_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
