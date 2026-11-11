@@ -29,12 +29,31 @@ class SchedulerTests(unittest.TestCase):
     def test_only_safe_counter_lines_pass(self):
         m = s.metrics_from_output("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 0\n"
             "SECRET: leave hidden\nPERSONAL_PAGES_DOWNLOADED_THIS_RUN: 12\n"
+            "PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: 17\n"
             "PERSONAL_REAL_EQUITY_ROWS_STORED_TOTAL: 56172\n")
         self.assertEqual(m["PERSONAL_PAGES_DOWNLOADED_THIS_RUN"], 12)
-        self.assertEqual(len(m), 3)
+        self.assertEqual(m["PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN"], 17)
+        self.assertEqual(len(m), 4)
         with self.assertRaises(s.SchedulerBlocked):
             s.metrics_from_output("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 2\n"
                                   "PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 3")
+
+    def test_failed_provider_requests_count_without_saved_pages(self):
+        now = self.stamp("2026-11-11", 18, 15)
+        prior = {"zero_streak": 0, "paused_until": None,
+                 "last_finished_at": None}
+        counters = {"PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN": 3,
+                    "PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 0,
+                    "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 0}
+        state = s.new_state(prior, counters, now)
+        self.assertEqual(state["zero_streak"], 1)
+        self.assertIsNotNone(state["last_finished_at"])
+        self.assertIsNone(state["paused_until"])
+        # No provider calls must not advance the streak even if planned
+        # or recoverable pages exist in the archive.
+        no_calls = {**counters, "PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN": 0,
+                    "PERSONAL_PAGES_REMAINING": 20}
+        self.assertEqual(s.new_state(prior, no_calls, now), prior)
 
     def test_two_empty_batches_do_not_pause_others(self):
         now = self.stamp("2026-11-11", 18, 15)

@@ -1,0 +1,83 @@
+name: MintTick - repair owner history timer on existing EC2 (no broker calls)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-owner-history-timer-enable.yml'
+      - 'infra/ec2-paper/enable_owner_history_timer.sh'
+      - 'infra/ec2-paper/run_history_timer_enable_ssm.py'
+      - 'scripts/tests/test_owner_history_timer_enable_contract.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/owner-history-enable-timer.json'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Validate timer-only host repair offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/enable_owner_history_timer.sh
+          python3 -m py_compile infra/ec2-paper/run_history_timer_enable_ssm.py
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_timer_enable_contract.py -v
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "$GITHUB_REF" = refs/heads/dev
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = infra/ec2-paper/requests/owner-history-enable-timer.json
+            python3 infra/ec2-paper/run_history_timer_enable_ssm.py validate infra/ec2-paper/requests/owner-history-enable-timer.json
+          fi
+
+  enable:
+    name: Enable reviewed 24-hour history timer on exact running EC2
+    needs: verify
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+      queue: max
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Verify exact one-file request and approved action
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = operationReact/AiTradingSystem
+          test "$GITHUB_REF" = refs/heads/dev
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = infra/ec2-paper/requests/owner-history-enable-timer.json
+          python3 infra/ec2-paper/run_history_timer_enable_ssm.py validate infra/ec2-paper/requests/owner-history-enable-timer.json
+      - name: Assume existing dev-only one-host SSM role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-owner-timer-enable
+          aws-region: ap-south-1
+          role-duration-seconds: 900
+      - name: Validate exact EC2 and enable only systemd history timer
+        shell: bash
+        env:
+          AWS_REGION: ap-south-1
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/run_history_timer_enable_ssm.py activate infra/ec2-paper/requests/owner-history-enable-timer.json
+
+# No AWS Scheduler UpdateSchedule, EC2 Start/Stop, IAM, broker calls,
+# LIVE trading, or timer disable operation. This is one existing-host action.

@@ -798,6 +798,11 @@ def audit_private_archive(root=ROOT, *, expected_owner=0):
     return pages, rows
 
 
+def request_attempt_count(conn):
+    """Number of persisted provider request attempts, not pages or returned bars."""
+    return int(conn.execute("SELECT count(*) FROM candle_request").fetchone()[0])
+
+
 def run():
     root = ensure_private_store()
     lockfile = root / ".exclusive.lock"
@@ -807,6 +812,7 @@ def run():
         conn = init_db(root)
         try:
             verified_pages, verified_rows = verify_archive_integrity(conn, root)
+            attempts_before = request_attempt_count(conn)
             print("PERSONAL_ARCHIVE_VERIFIED_PAGES: " + str(verified_pages),
                   flush=True)
             print("PERSONAL_ARCHIVE_VERIFIED_ROWS: " + str(verified_rows),
@@ -838,11 +844,13 @@ def run():
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
             if not remaining:
+                print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: 0", flush=True)
                 print_archive_progress(conn)
                 print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
                 return 0
             if provider_cooldown_active(conn):
+                print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: 0", flush=True)
                 print("PERSONAL_DOWNLOAD_PAUSED: PROVIDER_COOLDOWN", flush=True)
                 print_archive_progress(conn)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
@@ -902,6 +910,8 @@ def run():
             print("PERSONAL_SHORT_WINDOW_RESPONSES: " + str(short_responses), flush=True)
             print("PERSONAL_SHORT_WINDOW_CANDLES_RETURNED: " + str(short_rows), flush=True)
             print("PERSONAL_PAGES_DOWNLOADED_THIS_RUN: " + str(completed), flush=True)
+            print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: " +
+                  str(request_attempt_count(conn) - attempts_before), flush=True)
             print("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: " + str(new_bars), flush=True)
             print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
             record_collection_mode(conn, mode)
