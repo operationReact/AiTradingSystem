@@ -67,15 +67,16 @@ void main() {
       find.text('Coverage by year'), 160,
       scrollable: find.byType(Scrollable).first);
     expect(find.text('Coverage by year'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('history-year-2026')), 160,
-      scrollable: find.byType(Scrollable).first);
-    expect(find.byKey(const ValueKey('history-year-2026')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('history-year-2026')));
+    // The nested ExpansionTile is built even when beyond the viewport.
+    // ensureVisible moves the outer scrollable to its actual screen offset.
+    final lastYear = find.byKey(const ValueKey('history-year-2026'));
+    await tester.ensureVisible(lastYear);
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Partial / completeness unverified'), 120,
-      scrollable: find.byType(Scrollable).first);
+    expect(lastYear, findsOneWidget);
+    await tester.tap(lastYear);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Partial / completeness unverified'));
+    await tester.pumpAndSettle();
     expect(find.text('Partial / completeness unverified'), findsOneWidget);
   });
 
