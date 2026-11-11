@@ -42,6 +42,7 @@ def fixture(root: Path, tamper=False):
     digest = hashlib.sha256(payload).hexdigest()
     rel = f"pages/{digest}.json.gz"
     (root / rel).write_bytes(gzip.compress(payload if not tamper else b"tampered"))
+    (root / rel).chmod(0o600)
     conn.execute("INSERT INTO page VALUES(?,?,?,?,?,?,?,?,?)",
         ("NSE", "RELIANCE-EQ", "2885", digest, rel, 2,
          "2024-01-02", "2024-01-03", "2024-01-01"))
