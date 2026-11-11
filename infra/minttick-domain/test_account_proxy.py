@@ -52,7 +52,10 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/summary"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/activity"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/owner-history/v1/progress"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/activity"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/owner-history/v1/progress"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/owner-history/v1/progress/raw"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/summary"))
         self.assertFalse(proxy.allowed("POST","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
@@ -85,6 +88,45 @@ class AccountProxyTest(unittest.TestCase):
             ("GET","/api/health"),
         ]:
             self.assertFalse(proxy.allowed(method,path), f"accidentally allowed {path}")
+
+
+    def test_owner_history_progress_requires_jwt_and_backend_owner_gate(self):
+        # Only safe, read-only metadata may traverse the existing Cognito edge.
+        # Exact owner-sub authorization is enforced again by the private backend.
+        path = "/api/customer/owner-history/v1/progress"
+        for method, endpoint in (
+            ("POST", path), ("GET", path + "/raw"),
+            ("GET", "/api/customer/owner-history/v1/archive"),
+        ):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+                response = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(response["statusCode"], 404)
+            urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+            denied = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(denied["statusCode"], 401)
+        urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as urlopen:
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        req = urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, proxy.BACKEND + path)
+        self.assertEqual(req.get_method(), "GET")
+        self.assertEqual(req.headers.get("Authorization"), "Bearer public-test-token")
+        self.assertIsNone(req.data)
+
+        # Backend owner-sub denial must not be downgraded to a public success.
+        rejection = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen", side_effect=rejection):
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 403)
+        self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
 
     def test_rejects_missing_or_wrong_jwt_even_when_gateway_is_misconfigured(self):
         for claims in [
