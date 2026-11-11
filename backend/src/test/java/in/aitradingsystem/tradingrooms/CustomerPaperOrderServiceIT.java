@@ -159,6 +159,6 @@ class CustomerPaperOrderServiceIT extends AbstractPostgresIT {
                 ON CONFLICT (instrument_id) DO UPDATE SET
                     ltp=EXCLUDED.ltp,exchange_at=EXCLUDED.exchange_at,updated_at=NOW()
                 """).param("id",instrument)
-            .param("ltp",new BigDecimal(price)).param("time",when).update();
+            .param("ltp",new BigDecimal(price)).param("time",java.sql.Timestamp.from(when)).update();
     }
 }
