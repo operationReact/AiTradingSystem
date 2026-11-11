@@ -175,7 +175,55 @@ jobs:
           install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
           install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
           install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
-          "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@' """
+          "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@'
+          if test '@@OWNER_MODE@@' = audit-only; then
+            python3 - <<'PYOWNERSTATUS'
+          import json,re,subprocess
+          from pathlib import Path
+          def read(*args):
+              try:
+                  return subprocess.run(args, capture_output=True, text=True,
+                                        timeout=7, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+          for field,unit in (("TIMER_ACTIVE","is-active"),("TIMER_ENABLED","is-enabled")):
+              result=read("systemctl",unit,"--quiet","minttick-owner-history.timer")
+              print("OWNER_RUNTIME_"+field+": "+str(int(result is not None and result.returncode==0)))
+          path=Path("/opt/aitradingsystem-paper/monitor/progress.json")
+          progress=None
+          if path.is_file() and not path.is_symlink() and path.stat().st_size<=80000:
+              try:
+                  progress=json.loads(path.read_text(encoding="utf-8"))
+              except (ValueError,OSError):
+                  pass
+          valid=isinstance(progress,dict) and progress.get("schema")=="minttick.owner.history.progress.v1"
+          status=progress.get("status") if valid else None
+          print("OWNER_RUNTIME_PROGRESS_STATUS: "+(status if status in
+                {"RUNNING","IDLE","PAUSED","ERROR"} else "UNAVAILABLE"))
+          runs=progress.get("recentRuns",[]) if valid else []
+          latest=runs[0] if isinstance(runs,list) and runs and isinstance(runs[0],dict) else {}
+          print("OWNER_RUNTIME_LAST_RUN_STATE: "+(latest.get("state") if latest.get("state")
+                in ("COMPLETED","FAILED") else "NONE"))
+          for field,key in (("LAST_RUN_NEW_CANDLES","newCandles"),("LAST_RUN_WINDOWS","windowsQueried")):
+              value=latest.get(key)
+              print("OWNER_RUNTIME_"+field+": "+str(value if type(value) is int and
+                    0<=value<=999999999 else 0))
+          service=read("systemctl","show","--value","-p","Result","minttick-owner-history.service")
+          result=service.stdout.strip().upper().replace("-","_") if service and service.returncode==0 else ""
+          print("OWNER_RUNTIME_SERVICE_RESULT: "+(result if result in
+                {"SUCCESS","EXIT_CODE","TIMEOUT","SIGNAL","CORE_DUMP"} else "UNKNOWN"))
+          journal=read("journalctl","-u","minttick-owner-history.service",
+                       "--since=-40min","--no-pager","-o","cat","-n","150")
+          events=[]
+          if journal and journal.returncode==0:
+              for line in journal.stdout.splitlines():
+                  event=re.fullmatch(r"OWNER_SCHEDULER_(RUN|BLOCKED|PAUSED|WAIT): ([A-Z_]{2,60})",line.strip())
+                  if event:
+                      events.append(event.group(1)+"_"+event.group(2))
+          print("OWNER_RUNTIME_EVENTS_SAMPLED: "+str(min(len(events),999999)))
+          print("OWNER_RUNTIME_LAST_EVENT: "+(events[-1] if events else "NONE"))
+          PYOWNERSTATUS
+          fi          """
           mode=os.environ.get('OWNER_HISTORY_MODE')
           if mode not in ('download','audit-only'):
               raise SystemExit('Invalid fixed owner mode')
@@ -245,6 +293,13 @@ jobs:
                       r"PERSONAL_ENCRYPTED_REQUEST_REPORT: [A-Za-z0-9+/]{100,18000}={0,2}", line)]
                   if len(encrypted) == 1:
                       print(encrypted[0])
+                  # Root host only emits fixed enum and bounded integer categories.
+                  # Never print raw SSM stdout/stderr, candle pages, or bearer tokens.
+                  safe_runtime = [line for line in lines if (
+                      re.fullmatch(r'OWNER_RUNTIME_(?:TIMER_ACTIVE|TIMER_ENABLED|LAST_RUN_NEW_CANDLES|LAST_RUN_WINDOWS|EVENTS_SAMPLED): [0-9]{1,9}',line)
+                      or re.fullmatch(r'OWNER_RUNTIME_(?:PROGRESS_STATUS|LAST_RUN_STATE|SERVICE_RESULT|LAST_EVENT): [A-Z_]{2,95}',line))]
+                  for line in safe_runtime[:9]:
+                      print(line)
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
                   print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
               print('SUCCESS' if verified else 'FAILED')
