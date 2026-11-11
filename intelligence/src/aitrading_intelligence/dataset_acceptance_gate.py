@@ -71,10 +71,17 @@ def accept_dataset(
     if evidence.reference_source_id is None and evidence.reference_last_observation_at is not None:
         return abstain("MISSING_REFERENCE_SOURCE")
     if evidence.reference_source_id is not None:
-        if not evidence.reference_source_id.strip() or evidence.reference_source_id == evidence.source_id:
+        if (
+            not evidence.reference_source_id.strip()
+            or evidence.reference_source_id == evidence.source_id
+        ):
             return abstain("NON_INDEPENDENT_REFERENCE")
         reference_time = evidence.reference_last_observation_at
-        if reference_time is None or reference_time.tzinfo is None or reference_time.utcoffset() is None:
+        if (
+            reference_time is None
+            or reference_time.tzinfo is None
+            or reference_time.utcoffset() is None
+        ):
             return abstain("INVALID_REFERENCE_TIMESTAMP")
         if reference_time > evidence.decision_at:
             return abstain("FUTURE_REFERENCE")
