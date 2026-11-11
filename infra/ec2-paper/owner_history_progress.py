@@ -195,7 +195,7 @@ def build_snapshot(root: Path, now: dt.datetime, status: str,
             "years": years,
         },
         "scheduler": {
-            "cadence": "BOUNDED_CONTINUOUS_24H",
+            "cadence": "BOUNDED_CONTINUOUS_DAILY",
             "weekdayHoursIST": "00:00–23:58",
             "weekendHoursIST": "00:00–23:58",
             "nextScheduledAt": _next_scheduled_at(now),
