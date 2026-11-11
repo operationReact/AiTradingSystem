@@ -50,6 +50,38 @@ public class UpstoxApiClient {
         }
     }
 
+    /**
+     * Official individual-app PIN + TOTP login. Upstox revokes its previous
+     * access token on success. Never call while the customer's session is
+     * valid; never expose the request or provider response to the device.
+     */
+    public JsonNode ownerTokenFromTotp(String appKey, String pin, String totp) {
+        if (appKey == null || appKey.isBlank() || !pin.matches("[0-9]{6}")
+                || !totp.matches("[0-9]{6}")) {
+            throw new UpstoxProviderException("UPSTOX_TOTP_CONFIGURATION_INVALID");
+        }
+        try {
+            JsonNode result = http.post()
+                .uri("/v2/totp-login/authorization/token")
+                .header("x-api-key", appKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(java.util.Map.of("pin", pin, "totp", totp))
+                .retrieve().body(JsonNode.class);
+            if (result == null || result.path("access_token").asText("").isBlank()) {
+                throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
+            }
+            return result;
+        } catch (RestClientResponseException ex) {
+            // Never log PIN, TOTP, app key, provider response or token.
+            throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
+        } catch (UpstoxProviderException ex) {
+            throw ex;
+        } catch (RuntimeException ex) {
+            throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_UNAVAILABLE");
+        }
+    }
+
     public JsonNode profile(String token) {
         return get(token, "/v2/user/profile");
     }
