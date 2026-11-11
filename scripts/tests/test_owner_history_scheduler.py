@@ -18,17 +18,13 @@ class SchedulerTests(unittest.TestCase):
     def stamp(self, weekday_date, hour, minute):
         return dt.datetime.fromisoformat(f"{weekday_date}T{hour:02d}:{minute:02d}:00").replace(tzinfo=IST)
 
-    def test_weekday_market_and_shutdown_cutoff(self):
-        self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 15, 59)))
-        self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 16, 15)))
-        self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 20, 15)))
-        self.assertFalse(s.allowed_time(self.stamp("2026-11-11", 21, 0)))
-        self.assertFalse(s.allowed_time(self.stamp("2026-11-11", 22, 0)))
-
-    def test_weekend_hours(self):
-        self.assertTrue(s.allowed_time(self.stamp("2026-11-14", 8, 59)))
-        self.assertTrue(s.allowed_time(self.stamp("2026-11-14", 9, 15)))
-        self.assertFalse(s.allowed_time(self.stamp("2026-11-14", 21, 0)))
+    def test_overnight_checks_are_permitted_while_host_is_running(self):
+        for hour, minute in ((0, 0), (15, 59), (20, 58), (21, 0),
+                             (22, 0), (23, 58)):
+            self.assertTrue(s.allowed_time(self.stamp("2026-11-11", hour, minute)))
+        self.assertTrue(s.allowed_time(self.stamp("2026-11-14", 23, 58)))
+        with self.assertRaisesRegex(s.SchedulerBlocked, "INVALID_CLOCK"):
+            s.allowed_time(dt.datetime(2026, 11, 11, 21, 0))
 
     def test_only_safe_counter_lines_pass(self):
         m = s.metrics_from_output("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 0\n"

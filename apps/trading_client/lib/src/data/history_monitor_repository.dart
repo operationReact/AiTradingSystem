@@ -173,7 +173,7 @@ class HistoricalProgress {
     if (!{'RUNNING', 'IDLE', 'PAUSED', 'ERROR'}.contains(status) ||
         task['interval'] != 'ONE_DAY' ||
         !{'HOURLY_OFF_HOURS', 'BOUNDED_CONTINUOUS_OFF_HOURS',
-          'BOUNDED_CONTINUOUS_DAILY'}.contains(scheduler['cadence'])) {
+          'BOUNDED_CONTINUOUS_DAILY', 'BOUNDED_CONTINUOUS_24H'}.contains(scheduler['cadence'])) {
       throw const FormatException('Unsupported owner historical job');
     }
     final count = _number(task, 'candles');

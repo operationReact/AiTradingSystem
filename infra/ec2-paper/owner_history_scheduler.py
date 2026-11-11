@@ -48,9 +48,12 @@ class SchedulerBlocked(Exception):
 
 
 def allowed_time(now: dt.datetime) -> bool:
-    local = now.astimezone(TZ)
-    minute = local.hour * 60 + local.minute
-    return minute < 21 * 60  # Check throughout the day; preserve 22:00 EC2 stop.
+    # Owner disabled the independent AWS nightly stop temporarily. Permit
+    # bounded two-minute checks while the exact EC2 host is running, 24/7.
+    # This does NOT disable Angel One account cooldown, flock or request caps.
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise SchedulerBlocked("INVALID_CLOCK")
+    return True
 
 
 def metrics_from_output(stdout: str) -> dict[str, int]:

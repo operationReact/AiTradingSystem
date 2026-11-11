@@ -78,7 +78,7 @@ class SsmHistoryActivationContract(unittest.TestCase):
         timer = TIMER.read_text()
         service = SERVICE.read_text()
         self.assertIn("Persistent=false", timer)
-        self.assertIn("00..20:0/2:00 Asia/Kolkata", timer)
+        self.assertIn("*:0/2:00 Asia/Kolkata", timer)
         self.assertIn("Type=oneshot", service)
         self.assertNotIn("Restart=always", service)
         collector = (ROOT / "infra/ec2-paper/owner_history_scheduler.py").read_text()
