@@ -45,6 +45,16 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
         self.assertIn("EXECUTION_FAILED", src)
         self.assertIn("stages[-1:]+blocked[-1:]", src)
 
+    def test_live_collector_is_busy_not_false_integrity_success(self):
+        src = self.source
+        self.assertIn("'PERSONAL_DOWNLOAD_BLOCKED: ACTIVE_COLLECTOR'", src)
+        self.assertIn("PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR", src)
+        self.assertIn('if verified or busy:', src)
+        self.assertIn("print('SUCCESS' if verified or busy else 'FAILED')", src)
+        self.assertIn("if not verified and not busy:", src)
+        self.assertIn('not counts and {', src)
+        self.assertIn("if [ \"$audit_exit\" -eq 0 ]; then", src)
+
     def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
         src = self.source
         for marker in ("Delivery Timed Out", "Execution Timed Out",
