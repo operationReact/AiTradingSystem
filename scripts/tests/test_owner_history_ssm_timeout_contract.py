@@ -60,7 +60,7 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
         src = self.source
         for fragment in ("mode=ro", "PRAGMA query_only=ON",
                          "SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50",
-                         'print("OWNER_RUNTIME_REQUESTS_"+name:',
+                         'print("OWNER_RUNTIME_REQUESTS_"+name+',
                          "REQUESTS_RETURNED|REQUESTS_EMPTY|REQUESTS_RATE_LIMITED",
                          '("RETURNED","EMPTY","RATE_LIMITED","FAILED","PENDING")',
                          "OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE",
