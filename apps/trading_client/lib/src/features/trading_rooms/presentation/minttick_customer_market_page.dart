@@ -169,7 +169,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (repo is! CustomerUniverseFacetsRepository) return;
     setState(() { _facetsLoading = true; _facetsError = null; });
     try {
-      final result = await repo.universeFacets();
+      final result = await (repo as CustomerUniverseFacetsRepository).universeFacets();
       if (!mounted) return;
       setState(() => _facets = result);
     } catch (_) {
@@ -486,12 +486,12 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(data.totalListings.toString() + ' cash-equity listings',
+                  Text('${data.totalListings} cash-equity listings',
                     style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w800)),
-                  Text('NSE ' + (data.exchanges['NSE'] ?? 0).toString() +
-                       ' · BSE ' + (data.exchanges['BSE'] ?? 0).toString() +
-                       ' · exchange listings, not unique issuers',
+                  Text('NSE ${data.exchanges['NSE'] ?? 0} · '
+                       'BSE ${data.exchanges['BSE'] ?? 0} · '
+                       'exchange listings, not unique issuers',
                     style: theme.textTheme.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
                 ],
@@ -544,11 +544,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       const MintTickInfoText('Capitalization groups require a dated official '
           'company ranking; Nifty membership is not a market-cap category.'),
       const SizedBox(height: 9),
-      _compactCategory('Large cap', 'Top 100 · ' + label,
+      _compactCategory('Large cap', 'Top 100 · $label',
           Icons.account_balance_outlined),
-      _compactCategory('Mid cap', 'Ranks 101–250 · ' + label,
+      _compactCategory('Mid cap', 'Ranks 101–250 · $label',
           Icons.stacked_line_chart_rounded),
-      _compactCategory('Small cap', 'Ranks 251 onward · ' + label,
+      _compactCategory('Small cap', 'Ranks 251 onward · $label',
           Icons.show_chart_rounded),
       _compactCategory('Micro cap', 'Custom thresholds and market-cap data required',
           Icons.tune_rounded),
@@ -578,7 +578,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             color: scheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
-              key: ValueKey('market-index-' + index.code),
+              key: ValueKey('market-index-${index.code}'),
               onTap: () => showModalBottomSheet<void>(
                 context: context,
                 showDragHandle: true,
@@ -592,13 +592,11 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                         Text(index.code,
                             style: Theme.of(ctx).textTheme.titleLarge),
                         const SizedBox(height: 8),
-                        Text(index.matched.toString() + ' of ' +
-                            index.members.toString() +
-                            ' constituents matched to the active catalogue'),
-                        Text('Source: ' + index.source),
-                        Text('Membership as of ' +
-                            (index.sourceAsOf?.toIso8601String()
-                                .split('T').first ?? 'unverified')),
+                        Text('${index.matched} of ${index.members} constituents '
+                            'matched to the active catalogue'),
+                        Text('Source: ${index.source}'),
+                        Text('Membership as of '
+                            "${index.sourceAsOf?.toIso8601String().split('T').first ?? 'unverified'}"),
                         const SizedBox(height: 8),
                         const Text('Constituent drill-down requires a '
                             'verified member-listing API. All Stocks currently '
@@ -625,8 +623,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
                   Expanded(child: Text(index.code, style:
                       Theme.of(context).textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w800))),
-                  Text(index.matched.toString() + '/' +
-                      index.members.toString()),
+                  Text('${index.matched}/${index.members}'),
                   const SizedBox(width: 5),
                   const Icon(Icons.info_outline_rounded, size: 16),
                 ]),
