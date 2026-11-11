@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../../data/instrument_repository.dart';
+
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_room_repository.dart';
@@ -22,7 +24,7 @@ class MintTickManualPaperTradingPanel extends StatefulWidget {
   final String roomId;
   final CustomerPaperWallet wallet;
   final HttpCustomerPaperTradingRepository orders;
-  final CustomerPaginatedMarketRepository market;
+  final HttpCustomerMarketRepository market;
   final Future<void> Function() onWalletChanged;
 
   @override
