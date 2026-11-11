@@ -73,6 +73,7 @@ jobs:
           python3 - <<'PY'
           import base64
           import gzip
+          import hashlib
           import json
           import pathlib
           import re
@@ -92,9 +93,23 @@ jobs:
           assert gzip.decompress(compressed) == script
           payload = base64.b64encode(compressed).decode('ascii')
           assert len(payload) < 6000, 'SSM script transport exceeds safe bound'
+          digest = hashlib.sha256(script).hexdigest()
+          # Decode and checksum on the host before invoking bash. Mandatory
+          # transport markers distinguish a silent no-op from a real script run.
+          # Neither the script nor its transport contains customer credentials.
+          remote = (
+              'import base64,gzip,hashlib,subprocess,sys;'
+              'p=gzip.decompress(base64.b64decode(sys.argv[1],validate=True));'
+              'assert len(p)>1000 and hashlib.sha256(p).hexdigest()==sys.argv[2];'
+              'print("MINTTICK_UPSTOX_TRANSPORT:VERIFIED",flush=True);'
+              'result=subprocess.run(["bash","-s"],input=p,check=False);'
+              'sys.exit(result.returncode)'
+          )
           command = (
-              "bash -o pipefail -c \"printf '%s' '" + payload
-              + "' | base64 -d | gzip -dc | bash\""
+              "set -eu\n"
+              "printf 'MINTTICK_UPSTOX_TRANSPORT:START\\n'\n"
+              "python3 -c '" + remote + "' '" + payload + "' '" + digest + "'\n"
+              "printf 'MINTTICK_UPSTOX_TRANSPORT:FINISHED\\n'\n"
           )
           base = ['aws','ssm']
           common = ['--region','ap-south-1','--no-cli-pager']
@@ -135,8 +150,12 @@ jobs:
                     'PROBE_HTTP_UNAVAILABLE','PROVIDER_OR_RESPONSE_UNAVAILABLE',
                     'READS_VERIFIED','ACTIVATED_READ_ONLY'}
               if status == 'Success':
+                  if ('MINTTICK_UPSTOX_TRANSPORT:START' not in output or
+                      'MINTTICK_UPSTOX_TRANSPORT:VERIFIED' not in output or
+                      'MINTTICK_UPSTOX_TRANSPORT:FINISHED' not in output):
+                      raise RuntimeError('UPSTOX TRANSPORT NOT VERIFIED: no host execution evidence')
                   if not any(row[0]=='ACTIVATED_READ_ONLY' for row in approved):
-                      raise RuntimeError('Upstox approval evidence missing')
+                      raise RuntimeError('Upstox host script missing acceptance marker')
                   verified=[row for row in approved if row[0]=='READS_VERIFIED']
                   if len(verified)!=1:
                       raise RuntimeError('Upstox checked data counts absent')
