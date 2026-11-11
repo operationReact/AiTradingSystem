@@ -38,6 +38,7 @@ public class CustomerPaperOrderService {
     private final MarketSessionCalendar marketCalendar;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public CustomerPaperOrderService(JdbcClient jdbc, InstrumentMasterService instruments,
             MarketLastTickStore ticks, MarketSessionCalendar marketCalendar) {
         this(jdbc, instruments, ticks, marketCalendar, Clock.systemUTC());
