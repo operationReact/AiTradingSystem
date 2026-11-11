@@ -338,6 +338,34 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
                                    "COVERAGE_UNVERIFIED")
         self.assertEqual(selection(self.conn, catalogue), [])
 
+
+    def test_fresh_and_recovery_queues_alternate_without_starvation(self):
+        # Previous runs kept selecting 61 old recovery scans, preventing
+        # new equities from ever entering the verified archive.
+        first, through = list(f("windows")())[0]
+        f("persist_page")(self.conn, self.root, "RELIANCE-EQ", "2885",
+                          first, through, [], None, None)
+        catalogue = [("RELIANCE-EQ", "2885"), ("ABB-EQ", "601")]
+        recovery = f("select_recovery_windows")(self.conn, catalogue)
+        fresh = f("select_next_batch")(self.conn, catalogue)
+        self.assertTrue(recovery)
+        self.assertIn(("ABB-EQ", "601"), fresh)
+        choose = f("choose_collection_mode")
+        record = f("record_collection_mode")
+        self.assertEqual(choose(self.conn, fresh, recovery), "FRESH")
+        record(self.conn, "FRESH")
+        self.assertEqual(choose(self.conn, fresh, recovery), "RECOVERY")
+        record(self.conn, "RECOVERY")
+        self.assertEqual(choose(self.conn, fresh, recovery), "FRESH")
+        self.assertEqual(choose(self.conn, [], recovery), "RECOVERY")
+        self.assertEqual(choose(self.conn, fresh, []), "FRESH")
+        with self.assertRaisesRegex(f("PersonalHistoryBlocked"),
+                                    "INVALID_COLLECTION_QUEUE"):
+            record(self.conn, "OTHER")
+        # Read the persisted decision from a separate connection.
+        with sqlite3.connect(str(self.root / "manifest.sqlite3")) as reopened:
+            self.assertEqual(choose(reopened, fresh, recovery), "FRESH")
+
     def test_request_ledger_records_exact_window_and_empty_outcome(self):
         low, high = dt.date(2026, 1, 2), dt.date(2026, 1, 9)
         with patch.dict(NAMESPACE, {"fetch": lambda *args: ([], None, None)}):

@@ -31,7 +31,7 @@ def approved(op):
     }
 
 
-def valid_aws_inputs(state="running",ssm_status="Online"):
+def valid_aws_inputs(state="running",ssm_status="Online",schedule_state="ENABLED"):
     def fn(*args):
         if args[:2]==("sts","get-caller-identity"):
             return {"Account":gate.ACCOUNT,"Arn":
@@ -46,7 +46,7 @@ def valid_aws_inputs(state="running",ssm_status="Online"):
                 "Tags":[{"Key":k,"Value":v} for k,v in gate.TAGS.items()],
             }]}]}
         if args[:2]==("scheduler","get-schedule"):
-            return {"State":"ENABLED","ScheduleExpression":"cron(0 22 * * ? *)",
+            return {"State":schedule_state,"ScheduleExpression":"cron(0 22 * * ? *)",
                     "ScheduleExpressionTimezone":"Asia/Kolkata",
                     "Target":{"Arn":gate.STOP_TARGET,"RoleArn":gate.STOP_ROLE,
                               "Input":json.dumps({"InstanceIds":[gate.INSTANCE]})}}
@@ -148,6 +148,15 @@ class PaperSsmRelease(unittest.TestCase):
         with patch.dict(os.environ,{"AWS_REGION":gate.REGION}):
             with patch.object(gate,"aws_json",side_effect=valid_aws_inputs()):
                 gate.verify_aws()
+            # Explicitly disabled by the owner: safe to deploy to this
+            # exact host without quietly re-enabling the EC2 cost stop.
+            with patch.object(gate,"aws_json",side_effect=valid_aws_inputs(
+                    schedule_state="DISABLED")):
+                gate.verify_aws()
+            with patch.object(gate,"aws_json",side_effect=valid_aws_inputs(
+                    schedule_state="DELETING")):
+                with self.assertRaises(gate.Rejected):
+                    gate.verify_aws()
             for states in (("stopped","Online"),("running","ConnectionLost")):
                 with self.subTest(states=states):
                     with patch.object(gate,"aws_json",side_effect=valid_aws_inputs(*states)):

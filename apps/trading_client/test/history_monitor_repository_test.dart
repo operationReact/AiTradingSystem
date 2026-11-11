@@ -89,6 +89,20 @@ void main() {
     expect(() => HistoricalProgress.parse(forged), throwsFormatException);
   });
 
+  test('accepts the verified owner-approved overnight schedule', () {
+    final payload = historySnapshot();
+    (payload['scheduler'] as Map<String, dynamic>)['cadence'] =
+        'BOUNDED_CONTINUOUS_24H';
+    (payload['scheduler'] as Map<String, dynamic>)['weekdayHoursIST'] =
+        '00:00–23:58';
+    (payload['scheduler'] as Map<String, dynamic>)['weekendHoursIST'] =
+        '00:00–23:58';
+    final progress = HistoricalProgress.parse(payload);
+    expect(progress.schedulerCadence, 'BOUNDED_CONTINUOUS_24H');
+    expect(progress.weekdayHours, '00:00–23:58');
+    expect(progress.candles, 7);
+  });
+
   test('rejects unexpected scheduler cadence', () {
     final payload = historySnapshot();
     (payload['scheduler'] as Map<String, dynamic>)['cadence'] = 'UNRESTRICTED';
