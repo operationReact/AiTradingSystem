@@ -220,7 +220,7 @@ public class CustomerPaperOrderService {
             .param("side", side).param("qty", qty).param("limit", limit)
             .param("fill", tick.ltp()).param("notional", notional)
             .param("fees", fees).param("realized", realized).param("cash", newCash)
-            .param("exchangeAt", tick.exchangeAt())
+            .param("exchangeAt", java.sql.Timestamp.from(tick.exchangeAt()))
             .param("key", key).param("fingerprint", fingerprint).update();
         return getByKey(owner, roomId, key);
     }
