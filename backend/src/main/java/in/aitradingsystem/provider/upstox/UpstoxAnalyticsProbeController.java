@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Non-persisting, admin-only acceptance probe. Never exposes user secrets or model signals. */
+/** Non-persisting, internal operator acceptance probe. Never exposes user secrets or model signals. */
 @RestController
 @RequestMapping("/api/admin/market-data/upstox-analytics")
 @ConditionalOnProperty(prefix = "minttick.upstox-analytics", name = "probe-enabled", havingValue = "true")
@@ -41,7 +41,7 @@ public final class UpstoxAnalyticsProbeController {
     }
 
     @PostMapping("/probe")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public synchronized ResponseEntity<Probe> probe() {
         Instant now = clock.instant();
         if (!source.enabled()) return result("DISABLED", 0, 0);
