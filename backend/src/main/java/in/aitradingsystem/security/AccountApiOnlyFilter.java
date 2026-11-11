@@ -51,6 +51,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         java.util.regex.Pattern.compile("^/api/customer/watchlist/items/[0-9]{1,18}$");
     private static final Set<String> UPSTOX_READS = Set.of(
         "/api/customer/brokers/upstox/status",
+        "/api/customer/brokers/upstox/configured-login",
         "/api/customer/brokers/upstox/funds",
         "/api/customer/brokers/upstox/holdings",
         "/api/customer/brokers/upstox/positions",
@@ -58,6 +59,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/brokers/upstox/registered-ips");
     private static final Set<String> UPSTOX_WRITES = Set.of(
         "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/connect-configured",
         "/api/customer/brokers/upstox/disconnect");
     private static final String UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback";
     private static final Set<String> BROKER_WRITES = Set.of(

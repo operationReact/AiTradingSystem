@@ -258,3 +258,65 @@ parameters exactly):
 Never treat a successful CI job or three SSM parameter names as proof the
 live AWS role can decrypt them. The actual instance policy and host opt-in
 must be inspected and tested before announcing a connected account.
+
+
+## Optional personal-owner PIN + TOTP automatic session recovery
+
+Official Upstox docs provide an alternative individual-app token endpoint:
+`POST https://api.upstox.com/v2/totp-login/authorization/token`, using the
+app's `x-api-key` header and account's six-digit PIN plus current six-digit
+TOTP in JSON. Unlike regular OAuth, no browser redirect is required. **Upstox
+explicitly restricts this endpoint to individual apps**; it may reject Algo
+Trading / third-party app configurations. Its successful use revokes the
+app's previous token, so MintTick reuses unexpired sessions rather than
+repeatedly regenerating tokens. Access tokens still expire at 03:30 IST.
+Official docs:
+- https://upstox.com/developer/api-documentation/get-token/
+- https://upstox.com/developer/api-documentation/authentication/
+
+**One-time owner setup (not applied automatically):**
+1. Confirm the current Upstox developer app is type **individual**, and the
+   owner's trading account has TOTP enabled. For other app types, continue the
+   existing secure OAuth redirect or implement the Upstox approval-notifier
+   flow; do not impersonate a user.
+2. Create two **SecureString** parameters in AWS SSM `ap-south-1`:
+   `/minttick/upstox/login-pin` and
+   `/minttick/upstox/totp-secret` (the owner's own TOTP *seed*, Base32,
+   **never** the changing six-digit code). Do not send either to a chat,
+   Flutter, the repository, logs, screenshots, or any public webhook.
+3. After reviewing exact IAM resources, attach
+   `infra/ec2-paper/upstox-owner-totp-instance-role-policy.json` to the
+   existing EC2 instance role. If a customer KMS key was used, the key's
+   explicit restricted `kms:Decrypt` grant is still needed.
+4. Confirm existing protected settings identify the *same exact owner*
+   Cognito subject as for Angel One:
+   `MINTTICK_ANGEL_ONE_OWNER_SUB`. A missing or wrong subject makes
+   owner login unavailable. Other signed-in MintTick users cannot read or
+   invoke the owner's protected credential flow.
+5. Only after role permissions and provider eligibility have been verified,
+   turn on `MINTTICK_UPSTOX_OWNER_TOTP_ENABLED=true` in protected
+   `runtime.env` and deploy the reviewed backend. The existing
+   `MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true` must also be working.
+   Both switches default to **false**. Do not make a public API or
+   unsigned mobile-app flag for this.
+6. Verify an authenticated owner-only
+   `GET /api/customer/brokers/upstox/configured-login` returns available.
+   First visit/later expired session calls owner-only
+   `POST /api/customer/brokers/upstox/connect-configured` with **no
+   PIN, seed or TOTP fields**. The backend checks existing token, reads the
+   exact two SSM SecureStrings, generates TOTP, validates the provider's
+   verified profile and binds the token only to that owner's UUID.
+   At least 90 seconds between unsuccessful attempts; no automatic
+   retries in a tight loop.
+7. For individual-app restrictions, Upstox downtime, expired segments,
+   missing permissions, or invalid PIN/TOTP, MintTick fails closed and
+   still offers the original Upstox website login. No broker order endpoint
+   is accessed by this feature.
+
+**Important:** This only restores authenticated **read-only account access**.
+Upstox access does *not* enable real-money order execution. A LIVE room still
+requires its own explicit selected broker account, approved static egress IP
+matching `GET /v2/user/ip`, server-side account-wide risk/capital limits,
+quote freshness, reconciliation, order idempotency and a deliberate
+permission gate. Upstox's developer token and year-long analytics token
+must never be substituted for a customer's trading access token.

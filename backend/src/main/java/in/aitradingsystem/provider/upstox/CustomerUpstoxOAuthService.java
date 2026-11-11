@@ -106,6 +106,23 @@ public class CustomerUpstoxOAuthService {
             throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
         }
         JsonNode response = api.exchangeCode(props, code);
+        installVerifiedToken(flow.customerId(), response);
+    }
+
+    /**
+     * Owner-only optional direct Upstox token flow. The controller separately
+     * verifies the exact Cognito owner subject and ACTIVE user account before
+     * the caller can reach this method. No token is sent to a browser.
+     */
+    public Status connectOwnerTotp(UUID owner, JsonNode response) {
+        if (owner == null || response == null || !props.configured()) {
+            throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_UNAVAILABLE");
+        }
+        installVerifiedToken(owner, response);
+        return status(owner);
+    }
+
+    private void installVerifiedToken(UUID customerId, JsonNode response) {
         String token = response.path("access_token").asText("");
         if (token.isBlank() || token.length() > 16384) {
             throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
@@ -119,14 +136,14 @@ public class CustomerUpstoxOAuthService {
             throw new UpstoxProviderException("UPSTOX_PROFILE_REJECTED");
         }
         for (var existing : sessions.entrySet()) {
-            if (!existing.getKey().equals(flow.customerId())
+            if (!existing.getKey().equals(customerId)
                     && !clock.instant().isAfter(existing.getValue().expiresAt())
                     && existing.getValue().brokerUserId().equals(brokerUser)) {
                 throw new UpstoxProviderException("UPSTOX_ACCOUNT_ALREADY_CONNECTED");
             }
         }
         Instant expires = nextTokenExpiry(clock.instant());
-        sessions.put(flow.customerId(), new BrokerSession(token, brokerUser, expires));
+        sessions.put(customerId, new BrokerSession(token, brokerUser, expires));
     }
 
     public Status status(UUID customerId) {
