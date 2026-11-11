@@ -46,16 +46,20 @@ public final class UpstoxAnalyticsSource {
     public UpstoxAnalyticsSource(
             @Value("${MINTTICK_UPSTOX_ANALYTICS_ENABLED:false}") boolean enabled,
             RestClient.Builder builder) {
-        this(enabled, null, builder);
+        this(enabled, null, productionHttp(builder));
     }
 
-    UpstoxAnalyticsSource(boolean enabled, SsmClient suppliedSsm, RestClient.Builder builder) {
-        this.enabled = enabled;
-        this.suppliedSsm = suppliedSsm;
+    private static RestClient productionHttp(RestClient.Builder builder) {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5_000);
         factory.setReadTimeout(10_000);
-        this.client = builder.baseUrl(ORIGIN).requestFactory(factory).build();
+        return builder.baseUrl(ORIGIN).requestFactory(factory).build();
+    }
+
+    UpstoxAnalyticsSource(boolean enabled, SsmClient suppliedSsm, RestClient http) {
+        this.enabled = enabled;
+        this.suppliedSsm = suppliedSsm;
+        this.client = http;
     }
 
     public boolean enabled() {
