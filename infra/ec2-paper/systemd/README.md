@@ -23,6 +23,9 @@ The current Java backend runs in a memory-capped Docker container and cannot acc
 Review and securely copy these files onto the **existing** PAPER EC2 only:
 
 - Root-owned `infra/ec2-paper/owner_history_scheduler.py` to `/opt/aitradingsystem-paper/owner_history_scheduler.py` mode `0600`.
+- Root-owned `infra/ec2-paper/owner_history_progress.py` to `/opt/aitradingsystem-paper/owner_history_progress.py` mode `0600` (required alongside the scheduler; sanitizes and verifies year counts before every monitored run).
+- Create `/opt/aitradingsystem-paper/monitor` as root-owned, mode `0755`, before updating Compose; the exporter atomically writes only `progress.json`, mode `0644`.
+- Deploy the reviewed updated PAPER backend container and its **read-only summary mount**. Do not mount `/var/lib/minttick/owner-personal-angelone-history` in the API container.
 - `infra/ec2-paper/systemd/minttick-owner-history.service` and `.timer` to `/etc/systemd/system/`, owner root, mode `0644`.
 
 After exact SHA verification and `systemd-analyze verify`, explicitly enable the timer:
@@ -38,3 +41,7 @@ To pause safely: `sudo systemctl disable --now minttick-owner-history.timer`. Th
 Do **not** enable the legacy backend `OWNER_HISTORY_BACKFILL_ENABLED` simultaneously. Avoid `Restart=always`, duplicate market-data collectors, public ports, and any relaxation of broker limits.
 
 **Data quality is a separate blocker**: the two most recent Angel One short-window recovery runs both returned zero new rows. Scheduling does not fix invalid historical token mappings, unsupported date windows, or sparse history; examine the private exact token/date/outcome ledger before enabling automatic high-cadence retries.
+
+## Temporary owner app dashboard
+
+After separate backend deployment, sign in with the designated Cognito owner account and open **Settings → Historical Data Monitor**. Flutter retrieves only the sanitized summary from `GET /api/customer/owner-history/v1/progress` (no-store); an exact Cognito owner-subject match is required. Without the private monitor export, configured owner subject, or a fresh snapshot, the API fails closed instead of displaying test candles. The Flutter page never publishes exchange OHLCV or broker secrets. It refreshes while visible and supports manual retry; dashboard data is not proof of 20-year completeness. Remove the Settings route, API, read-only mount, and exporter after archive certification is finished.
