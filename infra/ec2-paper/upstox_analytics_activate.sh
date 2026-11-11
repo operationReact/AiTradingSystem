@@ -6,7 +6,29 @@
 set -Eeuo pipefail
 umask 077
 stage=precheck
-trap 'printf "MINTTICK_UPSTOX_STAGE:%s\n" "$stage" >&2' ERR
+accepted=0
+work=
+# Report unexpected early termination using fixed, non-sensitive markers.
+# Deliberate failures retain their more specific marker, emitted first.
+on_exit() {
+  code=$?
+  if [ -n "$work" ]; then
+    rm -rf -- "$work" || true
+  fi
+  if [ "$code" -ne 0 ] || [ "$accepted" -ne 1 ]; then
+    case "$stage" in
+      ssm_authorization) reason=SSM_UNAVAILABLE ;;
+      read_only_probe|result_validation) reason=PROVIDER_OR_RESPONSE_UNAVAILABLE ;;
+      *) reason=LOCAL_RELEASE_UNCLASSIFIED ;;
+    esac
+    printf 'MINTTICK_UPSTOX_RESULT:%s\n' "$reason"
+    printf 'MINTTICK_UPSTOX_STAGE:%s\n' "$stage" >&2
+    if [ "$code" -eq 0 ]; then
+      exit 9
+    fi
+  fi
+}
+trap on_exit EXIT
 
 root=/opt/aitradingsystem-paper
 parameter=/minttick/upstox/analytics-token
@@ -95,8 +117,6 @@ classify_failure() {
     echo 'LOCAL_RELEASE_UNCLASSIFIED'
   fi
 }
-cleanup() { rm -rf -- "$work"; }
-trap cleanup EXIT
 awk '!/^MINTTICK_UPSTOX_ANALYTICS_(ENABLED|PROBE_ENABLED)=/' \
   "$work/previous.env" > "$work/next.env"
 grep -Eq '^POSTGRES_PASSWORD=[0-9a-f]{64}$' "$work/next.env"
@@ -155,4 +175,5 @@ then
   exit 8
 fi
 
+accepted=1
 echo 'MINTTICK_UPSTOX_RESULT:ACTIVATED_READ_ONLY'
