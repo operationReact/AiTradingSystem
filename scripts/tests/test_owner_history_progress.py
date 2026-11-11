@@ -72,7 +72,7 @@ class ProgressSnapshotTests(unittest.TestCase):
             self.assertEqual(data["task"]["years"][2024-2006]["candles"], 2)
             self.assertEqual(data["task"]["years"][2024-2006]["completeness"], "UNVERIFIED")
             self.assertFalse(data["task"]["yearCoverageVerified"])
-            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_DAILY")
+            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_OFF_HOURS")
             self.assertEqual(data["scheduler"]["weekdayHoursIST"], "00:00–20:58")
             self.assertEqual(data["recentRequests"][0]["fromDate"], "2024-01-01")
             serialized = json.dumps(data)
