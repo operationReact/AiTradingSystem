@@ -71,7 +71,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
 
     private static final java.util.regex.Pattern PAPER_WALLET_RESOURCE =
         java.util.regex.Pattern.compile(
-            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger)$");
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$");
 
     private static final java.util.regex.Pattern CUSTOMER_EXECUTION_RESOURCE =
         java.util.regex.Pattern.compile(
@@ -119,8 +119,12 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (UPSTOX_CALLBACK.equals(path) && "GET".equals(method))
             || (PAPER_WALLET_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
-                    || (path.endsWith("/activate") && "POST".equals(method))
-                    || (!path.endsWith("/activate") && "GET".equals(method))))
+                    || ((path.endsWith("/activate") || path.endsWith("/resume")
+                        || path.endsWith("/pause")) && "POST".equals(method))
+                    || (path.endsWith("/orders")
+                        && ("GET".equals(method) || "POST".equals(method)))
+                    || ((path.endsWith("/account") || path.endsWith("/ledger")
+                        || path.endsWith("/positions")) && "GET".equals(method))))
             || (CUSTOMER_EXECUTION_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))
