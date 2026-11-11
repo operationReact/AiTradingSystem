@@ -6,11 +6,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "infra/ec2-paper/run_history_timer_enable_ssm.py"
+sys.path.insert(0, str(ROOT / "infra/ec2-paper"))
 spec = importlib.util.spec_from_file_location("timer_enable", SOURCE)
 assert spec and spec.loader
 gate = importlib.util.module_from_spec(spec)
