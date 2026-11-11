@@ -68,8 +68,8 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
                          "safe_runtime[:16]"):
             self.assertIn(fragment, src)
         self.assertIn("ledger.stat().st_mode & 0o077", src)
-        embedded = src.split("python3 - <<'PYOWNERSTATUS'\\n", 1)[1]
-        embedded = embedded.split("\\n          PYOWNERSTATUS", 1)[0]
+        embedded = src.split("python3 - <<'PYOWNERSTATUS'\n", 1)[1]
+        embedded = embedded.split("\n          PYOWNERSTATUS", 1)[0]
         compile(textwrap.dedent(embedded), "<safe-owner-ssm-audit>", "exec")
 
     def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
