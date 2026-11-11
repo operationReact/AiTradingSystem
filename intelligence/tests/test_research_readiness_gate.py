@@ -41,11 +41,15 @@ def test_timing_abstention_blocks_research():
 
 def test_unexpected_execution_authority_fails_closed():
     coverage, timing = evidence()
-    assert not assess_research_readiness(replace(coverage, can_authorize_capital=True), timing).eligible_for_research
-    assert not assess_research_readiness(coverage, replace(timing, execution_authorized=True)).eligible_for_research
+    decision = assess_research_readiness(replace(coverage, can_authorize_capital=True), timing)
+    assert not decision.eligible_for_research
+    decision = assess_research_readiness(coverage, replace(timing, execution_authorized=True))
+    assert not decision.eligible_for_research
 
 
 def test_unrecognized_success_reasons_fail_closed():
     coverage, timing = evidence()
-    assert not assess_research_readiness(replace(coverage, reason="UNKNOWN"), timing).eligible_for_research
-    assert not assess_research_readiness(coverage, replace(timing, reason="UNKNOWN")).eligible_for_research
+    decision = assess_research_readiness(replace(coverage, reason="UNKNOWN"), timing)
+    assert not decision.eligible_for_research
+    decision = assess_research_readiness(coverage, replace(timing, reason="UNKNOWN"))
+    assert not decision.eligible_for_research
