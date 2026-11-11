@@ -94,6 +94,34 @@ class CustomerPaperWalletServiceIT extends AbstractPostgresIT {
             .isInstanceOf(ResponseStatusException.class);
     }
 
+    @Test
+    void manualPaperResumeAndPauseAreOwnerScopedAndNeverTouchLiveRooms() {
+        UUID owner = customer();
+        UUID another = customer();
+        UUID room = room(owner, "PAPER", "DRAFT", 20000);
+        service.activate(owner,room);
+        assertThat(service.get(owner,room).halted()).isTrue();
+
+        var started = service.setPaused(owner,room,false);
+        assertThat(started.halted()).isFalse();
+        assertThat(started.executionEnabled()).isTrue();
+        var stopped = service.setPaused(owner,room,true);
+        assertThat(stopped.halted()).isTrue();
+        assertThat(stopped.executionEnabled()).isFalse();
+        assertThat(stopped.availableCashPaise()).isEqualTo(2_000_000L);
+
+        assertThatThrownBy(() -> service.setPaused(another,room,false))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException)ex).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND));
+
+        UUID live = room(owner,"LIVE","DRAFT",20000);
+        assertThatThrownBy(() -> service.setPaused(owner,live,false))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException)ex).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
     private UUID customer() {
         String subject = UUID.randomUUID().toString();
         var user = users.createUser("paper-" + subject,
