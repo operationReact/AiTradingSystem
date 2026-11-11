@@ -49,7 +49,7 @@ and Upstox/Angel One credentials are outside this service.
 
 ## Deployment prerequisites
 
-- New repeatable Flyway schema must be validated and deployed through
+- New versioned Flyway V83 migration must be validated and deployed through
   the existing exact-head private EC2 release.
 - Both the account-edge `infra/minttick-domain/account_proxy.py` and its
   CloudFormation mirror need a narrowly scoped allowlist for the six Paper
