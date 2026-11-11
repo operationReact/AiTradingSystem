@@ -70,6 +70,10 @@ void main() {
     // The nested ExpansionTile is built even when beyond the viewport.
     // ensureVisible moves the outer scrollable to its actual screen offset.
     final lastYear = find.byKey(const ValueKey('history-year-2026'));
+    // The parent ListView lazily creates this section. First build it by
+    // scrolling, then align the nested tile before sending pointer events.
+    await tester.scrollUntilVisible(lastYear, 160,
+      scrollable: find.byType(Scrollable).first);
     await tester.ensureVisible(lastYear);
     await tester.pumpAndSettle();
     expect(lastYear, findsOneWidget);
