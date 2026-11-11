@@ -45,7 +45,7 @@ class UpstoxAnalyticsSourceTest {
     @Test
     void readsAndValidatesV3DailyCandlesIncludingSeventhOiColumn() {
         token();
-        server.expect(requestTo(uri -> assertThat(uri.getPath()).contains("/v3/historical-candle/")))
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v3/historical-candle/")))
                 .andExpect(header("Authorization", "Bearer unit-test-only"))
                 .andRespond(withSuccess("""
                     {"status":"success","data":{"candles":[
@@ -90,7 +90,7 @@ class UpstoxAnalyticsSourceTest {
     @Test
     void invalidProviderPayloadIsRejectedWithoutCredentialsInErrors() {
         token();
-        server.expect(requestTo(uri -> assertThat(uri.getPath()).contains("historical-candle")))
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("historical-candle")))
                 .andRespond(withSuccess("""
                     {"status":"success","data":{"candles":[
                       ["2026-11-09T09:15:00+05:30",100,98,99,101,42,0]
@@ -105,7 +105,7 @@ class UpstoxAnalyticsSourceTest {
     @Test
     void providerUnauthorizedDoesNotLeakBearerOrResponse() {
         token();
-        server.expect(requestTo(uri -> assertThat(uri.getPath()).contains("key-ratios")))
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("key-ratios")))
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
                         .body("unit-test-only token must not appear"));
         assertThatThrownBy(() -> source.currentRatios("INE002A01018"))
