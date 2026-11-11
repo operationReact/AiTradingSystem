@@ -209,7 +209,7 @@ jobs:
           stage=RUNTIME_STATUS
           if test '@@OWNER_MODE@@' = audit-only; then
             python3 - <<'PYOWNERSTATUS'
-          import json,re,subprocess
+          import json,re,sqlite3,subprocess
           from pathlib import Path
           def read(*args):
               try:
@@ -253,6 +253,43 @@ jobs:
                       events.append(event.group(1)+"_"+event.group(2))
           print("OWNER_RUNTIME_EVENTS_SAMPLED: "+str(min(len(events),999999)))
           print("OWNER_RUNTIME_LAST_EVENT: "+(events[-1] if events else "NONE"))
+          # Read only recent *outcome categories* from the private request ledger.
+          # No symbols, tokens, precise dates or raw OHLCV leave this host.
+          # A separate SQLite read-only transaction can coexist with the writer;
+          # never touch the mutable archive pages while its lock is held.
+          ledger=Path("/var/lib/minttick/owner-personal-angelone-history/manifest.sqlite3")
+          try:
+              if (not ledger.is_file() or ledger.is_symlink()
+                      or ledger.stat().st_uid!=0
+                      or ledger.stat().st_mode & 0o077):
+                  raise OSError("untrusted ledger")
+              with sqlite3.connect("file:"+str(ledger)+"?mode=ro",
+                                   uri=True,timeout=3) as db:
+                  db.execute("PRAGMA query_only=ON")
+                  rows=db.execute("""SELECT outcome, count(*) FROM
+                      (SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50)
+                      GROUP BY outcome""").fetchall()
+              if not all(isinstance(outcome,str) and type(count) is int
+                         and 0<=count<=50 for outcome,count in rows):
+                  raise ValueError("invalid ledger summary")
+              counts=dict(rows)
+              total=sum(counts.values())
+              if total>50:
+                  raise ValueError("invalid ledger count")
+              bucket={
+                  "RETURNED": counts.get("CANDLES_RETURNED",0),
+                  "EMPTY": counts.get("EMPTY_CAUSE_UNKNOWN",0),
+                  "RATE_LIMITED": counts.get("PROVIDER_RATE_LIMITED",0),
+                  "PENDING": counts.get("OUTCOME_UNKNOWN",0)
+              }
+              bucket["FAILED"]=total-sum(bucket.values())
+              if bucket["FAILED"]<0:
+                  raise ValueError("invalid ledger categories")
+              print("OWNER_RUNTIME_REQUESTS_SAMPLED: "+str(total))
+              for name in ("RETURNED","EMPTY","RATE_LIMITED","FAILED","PENDING"):
+                  print("OWNER_RUNTIME_REQUESTS_"+name+": "+str(bucket[name]))
+          except (OSError,sqlite3.Error,ValueError):
+              print("OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE")
           PYOWNERSTATUS
           fi
           """
@@ -375,9 +412,10 @@ jobs:
                   # Root host only emits fixed enum and bounded integer categories.
                   # Never print raw SSM stdout/stderr, candle pages, or bearer tokens.
                   safe_runtime = [line for line in lines if (
-                      re.fullmatch(r'OWNER_RUNTIME_(?:TIMER_ACTIVE|TIMER_ENABLED|LAST_RUN_NEW_CANDLES|LAST_RUN_WINDOWS|EVENTS_SAMPLED): [0-9]{1,9}',line)
-                      or re.fullmatch(r'OWNER_RUNTIME_(?:PROGRESS_STATUS|LAST_RUN_STATE|SERVICE_RESULT|LAST_EVENT): [A-Z_]{2,95}',line))]
-                  for line in safe_runtime[:9]:
+                      re.fullmatch(r'OWNER_RUNTIME_(?:TIMER_ACTIVE|TIMER_ENABLED|LAST_RUN_NEW_CANDLES|LAST_RUN_WINDOWS|EVENTS_SAMPLED|REQUESTS_SAMPLED|REQUESTS_RETURNED|REQUESTS_EMPTY|REQUESTS_RATE_LIMITED|REQUESTS_FAILED|REQUESTS_PENDING): [0-9]{1,9}',line)
+                      or re.fullmatch(r'OWNER_RUNTIME_(?:PROGRESS_STATUS|LAST_RUN_STATE|SERVICE_RESULT|LAST_EVENT): [A-Z_]{2,95}',line)
+                      or line == 'OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE')]
+                  for line in safe_runtime[:16]:
                       print(line)
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
                   print('PERSONAL_ARCHIVE_AUDIT_STATUS: '+
