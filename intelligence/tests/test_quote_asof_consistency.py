@@ -1,6 +1,6 @@
 """Synthetic, deterministic quote-as-of cross-gate regression tests."""
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from aitrading_intelligence.cross_gate_asof import AsOfDecision
 from aitrading_intelligence.next_bar_timing_gate import TimingEvidence
@@ -8,7 +8,7 @@ from aitrading_intelligence.quote_asof_consistency import assess_quote_asof_cons
 
 
 def inputs():
-    t = datetime(2026, 2, 2, 9, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 2, 2, 9, 0, tzinfo=UTC)
     return dict(
         decision_at=t + timedelta(minutes=3),
         timing=TimingEvidence(
