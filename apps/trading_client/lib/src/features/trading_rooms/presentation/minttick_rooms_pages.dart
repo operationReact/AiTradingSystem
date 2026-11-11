@@ -490,10 +490,15 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
       MintTickSurface(child: _Pair('Example maximum position',
           formatPaperRupees(limits.position))),
       const SizedBox(height: 16),
-      const MintTickInfoText(
-        'These values are illustrative, not broker-verified, enforced, '
-        'or investment recommendations. Saving creates only a DRAFT '
-        'room in your account. No orders are placed.',
+      MintTickInfoText(
+        draft.mode == 'PAPER'
+          ? 'These risk examples are not enforced. Saving creates a '
+            'customer-owned Paper Room and credits its planned budget '
+            'in virtual cash. No real money or orders are used. '
+            'Paper order execution remains separately controlled.'
+          : 'These risk examples are not enforced. Saving creates a '
+            'Live Room plan, not authorization to access or trade '
+            'with any broker. Real-money orders remain disabled.',
         icon: Icons.shield_outlined,
       ),
       const SizedBox(height: 12),
