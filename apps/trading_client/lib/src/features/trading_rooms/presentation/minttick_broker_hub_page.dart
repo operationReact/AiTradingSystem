@@ -93,7 +93,9 @@ class _MintTickBrokerHubPageState extends State<MintTickBrokerHubPage> {
         connected: _upstox?.connected == true,
         detail: _upstox?.available == false
             ? 'Upstox setup required'
-            : 'Official Upstox authorization · Read-only',
+            : _upstox?.connected == true
+                ? 'Authorized session active · Read-only'
+                : 'Broker reauthorization required · Daily token expiry',
         onTap: widget.onUpstox,
         key: const ValueKey('broker-hub-upstox'),
       ),
