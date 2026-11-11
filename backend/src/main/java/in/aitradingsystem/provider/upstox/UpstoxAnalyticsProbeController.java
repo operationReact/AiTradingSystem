@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/admin/market-data/upstox-analytics")
 @ConditionalOnProperty(prefix = "minttick.upstox-analytics", name = "probe-enabled", havingValue = "true")
-public final class UpstoxAnalyticsProbeController {
+public class UpstoxAnalyticsProbeController {
     private static final ZoneId MARKET = ZoneId.of("Asia/Kolkata");
     private static final Duration COOLDOWN = Duration.ofMinutes(15);
 
