@@ -17,10 +17,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
-  cancel-in-progress: false
-
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -37,6 +33,10 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_timeout_contract.py -v
 
   execute:
+    # Only host mutations share the EC2 lane. Offline PR tests never block.
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
     name: One fixed-path private owner historical pilot on existing PAPER EC2
     needs: verify
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
