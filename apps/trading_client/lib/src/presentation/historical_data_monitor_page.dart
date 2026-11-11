@@ -72,6 +72,13 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
     }
   }
 
+  /// An old metadata snapshot is historical evidence, not a live timer heartbeat.
+  static bool _isStale(HistoricalProgress data) {
+    final age = DateTime.now().toUtc().difference(data.generatedAt.toUtc());
+    return age > const Duration(minutes: 10) ||
+        age < const Duration(minutes: -5);
+  }
+
   static String _count(int value) {
     final chars = value.toString();
     return chars.replaceAllMapped(
@@ -143,6 +150,7 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final data = _data;
+    final isStale = data != null && _isStale(data);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Historical Data Monitor'),
@@ -188,7 +196,19 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
               ),
             ] else if (data != null) ...[
               const SizedBox(height: 12),
-              _statusHeader(data),
+              _statusHeader(data, isStale: isStale),
+              if (isStale) ...[
+                const SizedBox(height: 10),
+                Text(
+                  'Snapshot is over 10 minutes old or has an invalid clock. '
+                  'The scheduler is not verified as active; counts below '
+                  'are last recorded archive totals.',
+                  key: const ValueKey('history-monitor-stale'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.error,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               Row(children: [
                 _metric('Verified stored candles', _count(data.candles)),
@@ -233,12 +253,12 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
     );
   }
 
-  Widget _statusHeader(HistoricalProgress data) {
+  Widget _statusHeader(HistoricalProgress data, {required bool isStale}) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final isRunning = data.status == 'RUNNING';
     final isPaused = data.status == 'PAUSED';
-    final caption = switch (data.status) {
+    final caption = isStale ? 'Snapshot outdated · scheduler status unknown' : switch (data.status) {
       'RUNNING' => 'Collector is processing a batch',
       'PAUSED' => 'Automatic requests temporarily suspended',
       'ERROR' => 'Collector needs attention',
@@ -252,15 +272,18 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(children: [
-        Icon(isRunning ? Icons.sync_rounded :
+        Icon(isStale ? Icons.warning_amber_rounded :
+             isRunning ? Icons.sync_rounded :
              isPaused ? Icons.pause_circle_outline_rounded :
              data.status == 'ERROR' ? Icons.warning_amber_rounded :
              Icons.check_circle_outline_rounded,
-          color: isRunning ? colors.primary : colors.onSurfaceVariant),
+          color: isStale ? colors.error :
+                 isRunning ? colors.primary : colors.onSurfaceVariant),
         const SizedBox(width: 10),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(data.status, key: const ValueKey('history-monitor-status'),
+            Text(isStale ? 'STALE' : data.status,
+              key: const ValueKey('history-monitor-status'),
               style: theme.textTheme.labelLarge?.copyWith(
                 fontWeight: FontWeight.w800)),
             Text(caption, style: theme.textTheme.bodySmall),

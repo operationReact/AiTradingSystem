@@ -4,8 +4,8 @@ import 'package:trading_client/src/data/history_monitor_repository.dart';
 import 'package:trading_client/src/presentation/historical_data_monitor_page.dart';
 import 'package:trading_client/src/presentation/settings_page.dart';
 
-HistoricalProgress fixture() => HistoricalProgress(
-  generatedAt: DateTime.utc(2026, 11, 11, 3, 30),
+HistoricalProgress fixture({DateTime? generatedAt}) => HistoricalProgress(
+  generatedAt: generatedAt ?? DateTime.now().toUtc(),
   status: 'IDLE',
   source: 'ANGEL_ONE',
   taskName: 'NSE cash equities · Historical candles',
@@ -43,12 +43,13 @@ HistoricalProgress fixture() => HistoricalProgress(
 );
 
 class _FakeMonitor implements HistoryMonitorRepository {
-  _FakeMonitor({this.unavailable = false});
+  _FakeMonitor({this.unavailable = false, this.generatedAt});
   final bool unavailable;
+  final DateTime? generatedAt;
   @override
   Future<HistoricalProgress> load() async {
     if (unavailable) throw const FormatException('No archive');
-    return fixture();
+    return fixture(generatedAt: generatedAt);
   }
 }
 
@@ -68,6 +69,18 @@ void main() {
       scrollable: find.byType(Scrollable).first);
     // Source evidence is checked in the repository contract tests.
     expect(find.text('Coverage by year'), findsOneWidget);
+  });
+
+  testWidgets('outdated snapshot never looks like a healthy idle scheduler',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(home:
+      HistoricalDataMonitorPage(repository: _FakeMonitor(
+        generatedAt: DateTime.utc(2026, 1, 1),
+      ))));
+    await tester.pumpAndSettle();
+    expect(find.text('STALE'), findsOneWidget);
+    expect(find.byKey(const ValueKey('history-monitor-stale')), findsOneWidget);
+    expect(find.text('56,172'), findsWidgets);
   });
 
   testWidgets('failure never displays stale or invented candle totals',
