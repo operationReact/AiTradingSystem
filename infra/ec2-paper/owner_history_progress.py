@@ -65,7 +65,7 @@ def _yearly(conn: sqlite3.Connection, root: Path):
                 or not isinstance(row_count, int) or row_count < 0 or row_count > 2000):
             raise ProgressUnavailable("INVALID_ARCHIVE_MANIFEST")
         file = root / rel
-        if (file.is_symlink() or not file.is_file() or file.stat().st_uid != 0
+        if (file.is_symlink() or not file.is_file() or file.stat().st_uid != os.geteuid()
                 or file.stat().st_mode & 0o077 or file.stat().st_size > 1024 * 1024):
             raise ProgressUnavailable("INVALID_ARCHIVE_FILE")
         try:
