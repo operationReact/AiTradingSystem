@@ -30,7 +30,7 @@ jobs:
           import base64
           from pathlib import Path
           raw=Path('infra/ec2-paper/read_instrument_import_probe.sh').read_bytes()
-          assert 100 < len(raw) < 5500 and len(base64.b64encode(raw)) < 8192
+          assert 100 < len(raw) < 6200 and len(base64.b64encode(raw)) < 8192
           PY
       - name: Compile embedded Python readiness parser
         run: |
@@ -96,7 +96,7 @@ jobs:
           import base64,json,os
           from pathlib import Path
           script=Path("infra/ec2-paper/read_instrument_import_probe.sh").read_bytes()
-          assert 100 < len(script) < 5500 and len(base64.b64encode(script)) < 8192
+          assert 100 < len(script) < 6200 and len(base64.b64encode(script)) < 8192
           command="printf '%s' '"+base64.b64encode(script).decode()+"' | base64 -d | bash"
           p=Path(os.environ["RUNNER_TEMP"])/"broker-readiness.json"
           p.write_text(json.dumps({"commands":[command]}))
@@ -120,6 +120,8 @@ jobs:
                 "MINTTICK_OWNER_ACCOUNT_LINKED": {"YES","NO","UNKNOWN"},
                 "MINTTICK_PRIVATE_FEED_MODE": {"ENABLED","NOT_ENABLED"},
                 "MINTTICK_UPSTOX_SERVER_CONFIG": {"PRESENT","NOT_CONFIGURED"},
+                "MINTTICK_UPSTOX_OAUTH_FLAG": {"ENABLED","DISABLED","NOT_CONFIRMED"},
+                "MINTTICK_UPSTOX_TOTP_FLAG": {"ENABLED","DISABLED","NOT_CONFIRMED"},
                 "MINTTICK_PRIVATE_FEED_LAMBDA": {"READY","NOT_CONFIRMED"},
                 "MINTTICK_MARKET_CATALOGUE": {"READY","EMPTY","UNAVAILABLE"},
                 "MINTTICK_HOST_FEED_PREREQUISITES": {"READY","COMPOSE_ENV_MISSING","COMPOSE_ENV_PERMISSIONS","COMPOSE_FILE_MISSING","INSTALLED_COMPOSE_OUTDATED","DOCKER_MISSING"},
@@ -149,7 +151,8 @@ jobs:
                           allowed={"api_key","client_code","pin","totp_secret"}
                           if fields and len(fields)<=4 and len(set(fields))==len(fields) and set(fields).issubset(allowed):
                               print(k+": "+",".join(fields))
-              needed={"MINTTICK_OPERATOR_KEY","MINTTICK_OPERATOR_ENV_KEYS",
+              needed={"MINTTICK_UPSTOX_OAUTH_FLAG","MINTTICK_UPSTOX_TOTP_FLAG",
+                      "MINTTICK_OPERATOR_KEY","MINTTICK_OPERATOR_ENV_KEYS",
                       "MINTTICK_OPERATOR_AUTH","MINTTICK_LOCAL_IMPORT_API",
                       "MINTTICK_LAST_IMPORT_STATUS","MINTTICK_LAST_IMPORT_ERROR",
                       "MINTTICK_CASH_EQUITY_INSTRUMENTS"}
