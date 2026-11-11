@@ -129,12 +129,12 @@ public class CustomerPaperOrderService {
         if (!crossesLimit(side, tick.ltp(), limit)) {
             throw reject(HttpStatus.CONFLICT, "Limit order is not marketable at verified LTP");
         }
-        long priceEachPaise = toPaise(tick.ltp());
         long notional = toPaise(tick.ltp().multiply(BigDecimal.valueOf(qty)));
         long fees = simulatedFees(notional);
         // Hard single-order exposure cap: 20% of the starting virtual wallet
         // (and no leverage). No client-provided limit can raise this cap.
-        if (notional > Math.max(100_000L, wallet.initialCash() / 5)) {
+        if ("BUY".equals(side) &&
+                notional > Math.max(100_000L, wallet.initialCash() / 5)) {
             throw reject(HttpStatus.CONFLICT, "Paper per-order exposure limit exceeded");
         }
         Position position = jdbc.sql("""
@@ -176,7 +176,7 @@ public class CustomerPaperOrderService {
         }
         long newCash = Math.addExact(wallet.cash(), deltaCash);
         if (newCash < 0) throw reject(HttpStatus.CONFLICT, "Insufficient virtual funds");
-        jdbc.sql("""
+        int positionUpdates = jdbc.sql("""
                 INSERT INTO customer_paper_manual_position
                     (room_id,user_id,instrument_id,quantity,avg_cost_paise)
                 VALUES (:room,:owner,:instrument,:qty,:avg)
@@ -189,7 +189,9 @@ public class CustomerPaperOrderService {
             .param("room", roomId).param("owner", owner)
             .param("instrument", instrumentId).param("qty", newQty)
             .param("avg", newAvg).update();
-        jdbc.sql("""
+        if (positionUpdates != 1) throw new IllegalStateException(
+            "Paper position ownership conflict");
+        int walletUpdates = jdbc.sql("""
                 UPDATE customer_paper_account SET
                     available_cash_paise=:cash,
                     realized_pnl_paise=realized_pnl_paise + :realized,
@@ -198,6 +200,8 @@ public class CustomerPaperOrderService {
                 """)
             .param("cash", newCash).param("realized", realized)
             .param("room", roomId).param("owner", owner).update();
+        if (walletUpdates != 1) throw new IllegalStateException(
+            "Paper wallet changed during order");
         UUID id = UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO customer_paper_manual_order
