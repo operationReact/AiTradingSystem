@@ -6,6 +6,9 @@ import '../domain/trading_workspace_mode.dart';
 import 'minttick_mode_switcher.dart';
 import '../data/customer_room_repository.dart';
 import '../data/customer_execution_repository.dart';
+import '../data/customer_paper_trading_repository.dart';
+import '../data/customer_market_repository.dart';
+import 'minttick_paper_order_panel.dart';
 import 'minttick_customer_widgets.dart';
 
 class MintTickTradingRoomsPage extends StatelessWidget {
@@ -634,6 +637,8 @@ class MintTickRoomDetailPage extends StatefulWidget {
     required this.room,
     this.repository,
     this.executionRepository,
+    this.paperTradingRepository,
+    this.marketRepository,
     this.onBroker,
     this.onRoomChanged,
     super.key,
@@ -642,6 +647,8 @@ class MintTickRoomDetailPage extends StatefulWidget {
   final TradingRoomDraft room;
   final HttpCustomerRoomRepository? repository;
   final HttpCustomerExecutionRepository? executionRepository;
+  final HttpCustomerPaperTradingRepository? paperTradingRepository;
+  final HttpCustomerMarketRepository? marketRepository;
   final VoidCallback? onBroker;
   final Future<void> Function()? onRoomChanged;
 
@@ -856,6 +863,20 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
             )),
           ],
         )),
+        const SizedBox(height: 17),
+      ],
+      if (room.mode == 'PAPER' && _wallet != null &&
+          widget.paperTradingRepository != null && widget.marketRepository != null) ...[
+        MintTickManualPaperTradingPanel(
+          roomId: room.id,
+          wallet: _wallet!,
+          orders: widget.paperTradingRepository!,
+          market: widget.marketRepository!,
+          onWalletChanged: () async {
+            await _loadWallet();
+            await _loadReadiness();
+          },
+        ),
         const SizedBox(height: 17),
       ],
       MintTickSurface(child: Column(
