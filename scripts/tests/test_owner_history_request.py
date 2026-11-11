@@ -44,6 +44,22 @@ class OwnerHistoryRequestTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 req.approved_mode(req.AUDIT, case)
 
+    def test_private_audit_runtime_diagnostics_are_sanitized(self):
+        workflow=(Path(__file__).resolve().parents[2] /
+                  ".github/workflows/minttick-owner-private-candle-pilot.yml").read_text()
+        for marker in ("OWNER_RUNTIME_TIMER_ACTIVE:", "OWNER_RUNTIME_TIMER_ENABLED:",
+                       "OWNER_RUNTIME_PROGRESS_STATUS:", "OWNER_RUNTIME_LAST_RUN_STATE:",
+                       "OWNER_RUNTIME_LAST_RUN_NEW_CANDLES:", "OWNER_RUNTIME_LAST_RUN_WINDOWS:",
+                       "OWNER_RUNTIME_SERVICE_RESULT:", "OWNER_RUNTIME_LAST_EVENT:",
+                       "OWNER_RUNTIME_EVENTS_SAMPLED:", "safe_runtime = [line for line in lines"):
+            with self.subTest(marker=marker):
+                self.assertIn(marker, workflow)
+        self.assertIn("if test '@@OWNER_MODE@@' = audit-only; then",workflow)
+        self.assertIn("PERSONAL_ARCHIVE_API_CALLS: 0",workflow)
+        self.assertIn("print(line)",workflow)
+        self.assertNotIn("print(journal.stdout)",workflow)
+        self.assertNotIn("print(output)",workflow)
+
     def test_duplicate_keys_rejected(self):
         with self.assertRaises(ValueError):
             req.json.loads('{"audit_only":true,"audit_only":false}',
