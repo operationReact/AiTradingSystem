@@ -82,9 +82,9 @@ checkpointing, exponential backoff, source-rights checks and expiry monitoring.
 After the first backend release passes connected EC2 health and the owner has
 stored a SecureString in the **same exact SSM parameter**, a separate
 single-file, dev-only activation request can be created:
-\`infra/ec2-paper/requests/upstox-analytics-activate.json\`.
+`infra/ec2-paper/requests/upstox-analytics-activate.json`.
 
-The workflow \`.github/workflows/ec2-paper-upstox-analytics-activate.yml\`
+The workflow `.github/workflows/ec2-paper-upstox-analytics-activate.yml`
 enforces the exact request payload, the existing AWS account/region/EC2 identity,
 the enabled 22:00 IST cost-stop schedule, SSM Online, and serializes alongside
 the normal EC2 deploy workflow. A fixed, reviewed script on the host:
@@ -97,11 +97,11 @@ the normal EC2 deploy workflow. A fixed, reviewed script on the host:
 - Calls the local POST-only operator/admin probe using the host's existing
   operator key, without logging or exporting that key.
 - Accepts only genuine nonzero validated daily candles and ratio counts with
-  both \`stored=false\` and \`liveTradingEnabled=false\`.
+  both `stored=false` and `liveTradingEnabled=false`.
 - Restores the old runtime.env and service if the private source probe fails.
 
 This is a **one-shot verified source read**, not background ingestion or
 permission to retain datasets/model-train. No public API Gateway route or new
 IAM permissions are created by this workflow. If the read fails with
-\`SSM_UNAVAILABLE\`, the EC2 role's \`ssm:GetParameter\` for the exact ARN
+`SSM_UNAVAILABLE`, the EC2 role's `ssm:GetParameter` for the exact ARN
 must be reviewed by the account owner. Never upload the credential to GitHub.
