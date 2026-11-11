@@ -55,6 +55,22 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
         self.assertIn('not counts and {', src)
         self.assertIn("if [ \"$audit_exit\" -eq 0 ]; then", src)
 
+    def test_readonly_recent_request_outcome_summary_stays_private(self):
+        import textwrap
+        src = self.source
+        for fragment in ("mode=ro", "PRAGMA query_only=ON",
+                         "SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50",
+                         'print("OWNER_RUNTIME_REQUESTS_"+name+',
+                         "REQUESTS_RETURNED|REQUESTS_EMPTY|REQUESTS_RATE_LIMITED",
+                         '("RETURNED","EMPTY","RATE_LIMITED","FAILED","PENDING")',
+                         "OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE",
+                         "safe_runtime[:16]"):
+            self.assertIn(fragment, src)
+        self.assertIn("ledger.stat().st_mode & 0o077", src)
+        embedded = src.split("python3 - <<'PYOWNERSTATUS'\n", 1)[1]
+        embedded = embedded.split("\n          PYOWNERSTATUS", 1)[0]
+        compile(textwrap.dedent(embedded), "<safe-owner-ssm-audit>", "exec")
+
     def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
         src = self.source
         for marker in ("Delivery Timed Out", "Execution Timed Out",
