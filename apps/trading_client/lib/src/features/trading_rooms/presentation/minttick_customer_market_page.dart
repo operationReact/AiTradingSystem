@@ -17,7 +17,10 @@ const _closedPoll = Duration(seconds: 30);
 const _failedPoll = Duration(seconds: 15);
 
 const _overviewPoll = Duration(seconds: 30);
-const _tabLabels = ['Overview', 'Movers', 'Sectors', 'Explore'];
+const _tabLabels = [
+  'Overview', 'All Stocks', 'Market Cap', 'Indices', 'Sectors',
+  'Industries', 'Movers',
+];
 
 /// Markets shell with four tabs. Only Overview and Explore show real data;
 /// Movers and Sectors state what is missing instead of inventing values.
@@ -58,6 +61,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   DateTime? _generatedAt;
   Timer? _pollTimer;
   int _version = 0;
+  CustomerUniverseFacets? _facets;
+  bool _facetsLoading = false;
+  String? _facetsError;
   CustomerMarketOverview? _overview;
   String? _overviewError;
   bool _overviewLoading = false;
@@ -131,6 +137,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     WidgetsBinding.instance.addObserver(this);
     _tabs.addListener(_onTabChanged);
     _load();
+    if (widget.repository is CustomerUniverseFacetsRepository) {
+      unawaited(_loadFacets());
+    }
     if (widget.repository is CustomerOverviewRepository) {
       unawaited(_loadOverview());
       _overviewTimer = Timer.periodic(_overviewPoll, (_) => unawaited(_loadOverview()));
@@ -152,6 +161,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
 
   void _onTabChanged() {
     if (!_tabs.indexIsChanging) setState(() {});
+  }
+
+  Future<void> _loadFacets() async {
+    if (_facetsLoading || !mounted) return;
+    final repo = widget.repository;
+    if (repo is! CustomerUniverseFacetsRepository) return;
+    setState(() { _facetsLoading = true; _facetsError = null; });
+    try {
+      final result = await repo.universeFacets();
+      if (!mounted) return;
+      setState(() => _facets = result);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _facetsError = 'Market coverage could not be verified.');
+    } finally {
+      if (mounted) setState(() => _facetsLoading = false);
+    }
   }
 
   @override
@@ -388,17 +414,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         if (!didPop && _tabs.index != 0) _tabs.animateTo(0);
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
-      const SizedBox(height: 18),
+      const SizedBox(height: 8),
       const MintTickEyebrow('MintTick / Markets'),
-      const SizedBox(height: 6),
-      Text('Markets', style: theme.textTheme.headlineSmall
-          ?.copyWith(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 6),
-      Text('NSE and BSE cash equities from MintTick’s app-managed feed. '
-          'No personal broker login is needed.',
-        style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant, height: 1.4)),
-      const SizedBox(height: 14),
+      const SizedBox(height: 4),
+      Row(children: [
+        Expanded(child: Text('Markets', style: theme.textTheme.headlineSmall
+            ?.copyWith(fontWeight: FontWeight.w800))),
+        IconButton(
+          key: const ValueKey('market-universe-refresh'),
+          tooltip: 'Refresh market coverage',
+          onPressed: _facetsLoading ? null : _loadFacets,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ]),
+      Text('All supported NSE & BSE cash equities · app-managed feed',
+        style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 8),
       TabBar(
         key: const ValueKey('customer-market-tabs'),
         controller: _tabs,
@@ -407,18 +439,22 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         dividerColor: scheme.outlineVariant,
         tabs: [for (final label in _tabLabels) Tab(text: label, height: 44)],
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       ...switch (_tabs.index) {
         0 => _overviewTab(),
-        1 => _moversTab(),
-        2 => _sectorsTab(),
-        _ => _exploreTab(context),
+        1 => _exploreTab(context),
+        2 => _marketCapTab(),
+        3 => _indicesTab(),
+        4 => _sectorsTab(),
+        5 => _industriesTab(),
+        _ => _moversTab(),
       },
     ]),
     );
   }
 
   List<Widget> _overviewTab() => [
+        ..._universeIntro(),
         _MarketStatusPill(overview: _overview, failed: _overviewError != null),
         const SizedBox(height: 12),
         TextField(
@@ -608,7 +644,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     return [
       _UniverseNote(universe: overview.universe),
-      const SizedBox(height: 14),
+      const MintTickInfoText('Movers below cover Nifty 50 only. '
+          'Whole-market rankings require verified full-universe price coverage.'),
+      const SizedBox(height: 12),
       _MoverSection(title: 'Top gainers', rows: overview.gainers,
           emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
@@ -640,7 +678,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     return [
       _UniverseNote(universe: overview.universe),
-      const SizedBox(height: 14),
+      const MintTickInfoText('Sector performance below covers Nifty 50 '
+          'only. The complete industry mapping is not yet ingested.'),
+      const SizedBox(height: 10),
       if (overview.sectors.isEmpty)
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
@@ -774,8 +814,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         icon: Icons.sensors_rounded);
     }
     if (statuses.every((s) => s == 'MARKET_CLOSED')) {
-      return (text: 'Market closed. No saved price is available for these stocks yet.',
-        icon: Icons.bedtime_outlined);
+      return (text: 'No verified last price has been saved for these stocks yet.',
+        icon: Icons.history_rounded);
     }
     if (statuses.every((s) => s == 'LAST_CLOSE')) {
       // The provider may also be down DURING an open session: saved ticks
@@ -784,8 +824,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         icon: Icons.history_rounded);
     }
     if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) {
-      return (text: 'Market closed. Showing last saved prices where available.',
-        icon: Icons.bedtime_outlined);
+      return (text: 'Showing the last verified price wherever available.',
+        icon: Icons.history_rounded);
     }
     if (statuses.contains('LAST_CLOSE')) {
       return (text: 'Some saved prices are available; others have no verified quote.',
@@ -905,7 +945,7 @@ class _NotAvailableBlock extends StatelessWidget {
       'STALE' => (label: 'STALE', icon: Icons.schedule_rounded, color: scheme.tertiary),
       'RECONNECTING' => (label: 'RECONNECTING', icon: Icons.sync_rounded, color: scheme.tertiary),
       'CONNECTING' => (label: 'CONNECTING', icon: Icons.sync_rounded, color: scheme.onSurfaceVariant),
-      'MARKET_CLOSED' => (label: 'CLOSED', icon: Icons.bedtime_outlined, color: scheme.onSurfaceVariant),
+      'MARKET_CLOSED' => (label: 'NO PRICE', icon: Icons.bedtime_outlined, color: scheme.onSurfaceVariant),
       'LAST_CLOSE' => (label: 'LAST TRADED', icon: Icons.history_rounded, color: scheme.onSurfaceVariant),
       'PENDING' => (label: 'LOADING', icon: Icons.hourglass_empty_rounded, color: scheme.onSurfaceVariant),
       _ => (label: 'NO FEED', icon: Icons.cloud_off_outlined, color: scheme.error),
@@ -953,7 +993,7 @@ class _StockRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-stock-${stock.id}'),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(14),
@@ -963,7 +1003,7 @@ class _StockRow extends StatelessWidget {
             MintTickEquityAvatar(
               tradingSymbol: stock.tradingSymbol,
               companyName: stock.name,
-              size: 42,
+              size: 35,
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(
