@@ -38,7 +38,7 @@ public final class OwnerUpstoxTotpService {
     private final Clock clock;
     private final SsmClient suppliedClient;
     private final Object loginLock = new Object();
-    private Instant lastAttempt = Instant.EPOCH;
+    private Instant lastAttempt;
 
     @Autowired
     public OwnerUpstoxTotpService(CustomerUpstoxOAuthService sessions,
@@ -72,7 +72,7 @@ public final class OwnerUpstoxTotpService {
             var current = sessions.status(owner);
             if (current.connected()) return current; // Do not revoke live token.
             Instant now = clock.instant();
-            if (now.isBefore(lastAttempt.plus(Duration.ofSeconds(90)))) {
+            if (lastAttempt != null && now.isBefore(lastAttempt.plus(Duration.ofSeconds(90)))) {
                 throw fail("UPSTOX_OWNER_LOGIN_COOLDOWN");
             }
             lastAttempt = now;
