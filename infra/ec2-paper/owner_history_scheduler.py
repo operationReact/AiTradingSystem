@@ -15,6 +15,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Asia/Kolkata")
@@ -22,6 +23,8 @@ ROOT = Path("/var/lib/minttick/owner-personal-angelone-history")
 STATE = ROOT / ".scheduler-state.json"
 DOWNLOADER = Path("/opt/aitradingsystem-paper/run_owner_personal_history.sh")
 MAX_RUN_SECONDS = 660  # Existing collector limits requests to 540 seconds.
+INSTANCE_ID = "i-09c01b470fb39b85a"
+IMDS = "http://169.254.169.254/latest"
 PAUSE_AFTER_ZERO_BATCHES = 2
 PAUSE_HOURS = 24
 METRIC_KEYS = frozenset({
@@ -96,11 +99,31 @@ def save_state(path: Path, state: dict) -> None:
             os.unlink(name)
 
 
+def verify_instance_identity() -> None:
+    # IMDSv2 required: never trust an arbitrary ARM64 host with this wrapper.
+    try:
+        request = Request(IMDS + "/api/token", data=b"", method="PUT", headers={
+            "X-aws-ec2-metadata-token-ttl-seconds": "60"})
+        with urlopen(request, timeout=3) as response:
+            token = response.read(512).decode("ascii")
+        if not token or len(token) > 512:
+            raise ValueError()
+        request = Request(IMDS + "/meta-data/instance-id", headers={
+            "X-aws-ec2-metadata-token": token})
+        with urlopen(request, timeout=3) as response:
+            instance = response.read(64).decode("ascii")
+    except (OSError, ValueError, UnicodeError):
+        raise SchedulerBlocked("INSTANCE_IDENTITY_UNAVAILABLE") from None
+    if instance != INSTANCE_ID:
+        raise SchedulerBlocked("WRONG_EC2_INSTANCE")
+
+
 def verify_host(now: dt.datetime) -> None:
     if os.geteuid() != 0 or platform.machine() != "aarch64":
         raise SchedulerBlocked("WRONG_HOST_IDENTITY")
     if not allowed_time(now):
         raise SchedulerBlocked("OUTSIDE_APPROVED_TIME")
+    verify_instance_identity()
     if not ROOT.is_dir() or ROOT.is_symlink() or ROOT.stat().st_uid != 0:
         raise SchedulerBlocked("PRIVATE_ARCHIVE_MISSING")
     if not DOWNLOADER.is_file() or DOWNLOADER.is_symlink():
