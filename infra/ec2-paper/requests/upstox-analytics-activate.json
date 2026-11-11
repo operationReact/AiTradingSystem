@@ -1,9 +1,9 @@
 {
-    "kind": "minttick-upstox-readonly-activation-v1",
-    "action": "activate-and-probe",
-    "account": "098859530205",
-    "region": "ap-south-1",
-    "instance_id": "i-09c01b470fb39b85a",
-    "trading_mode": "PAPER",
-    "confirmation": "AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE"
+  "kind": "minttick-upstox-readonly-activation-v1",
+  "action": "activate-and-probe",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "trading_mode": "PAPER",
+  "confirmation": "AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE"
 }
