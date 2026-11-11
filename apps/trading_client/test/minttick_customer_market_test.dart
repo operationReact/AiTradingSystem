@@ -538,7 +538,7 @@ void main() {
     await _openExplore(tester);
     expect(find.text('₹124.70'), findsOneWidget);
     expect(find.textContaining('LAST TRADED'), findsOneWidget);
-    expect(find.textContaining('Showing the last verified price'), findsOneWidget);
+    expect(find.textContaining('Showing last verified saved prices'), findsOneWidget);
     expect(find.textContaining('Market closed.'), findsNothing);
     expect(find.textContaining('LIVE ·'), findsNothing);
     expect(tester.takeException(), isNull);
