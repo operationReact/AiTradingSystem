@@ -47,6 +47,9 @@ jobs:
           bash -n infra/ec2-paper/ssm_apply_release.sh
           bash -n infra/ec2-paper/run_paper.sh
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_activation_contract.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_progress.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_scheduler.py -v
 
       - name: Install Flutter for real production Web build
         uses: subosito/flutter-action@v2
@@ -97,8 +100,17 @@ jobs:
           test -s "$work/images.tar.gz"
           cp infra/ec2-paper/paper-compose.yml "$work/paper-compose.yml"
           cp infra/ec2-paper/run_paper.sh "$work/run_paper.sh"
+          cp infra/ec2-paper/install_owner_history_monitor.sh "$work/install_owner_history_monitor.sh"
+          cp infra/ec2-paper/owner_history_scheduler.py "$work/owner_history_scheduler.py"
+          cp infra/ec2-paper/owner_history_progress.py "$work/owner_history_progress.py"
+          cp infra/ec2-paper/systemd/minttick-owner-history.service "$work/minttick-owner-history.service"
+          cp infra/ec2-paper/systemd/minttick-owner-history.timer "$work/minttick-owner-history.timer"
+          bash -n "$work/install_owner_history_monitor.sh"
+          python3 -m py_compile "$work/owner_history_scheduler.py" "$work/owner_history_progress.py"
           tar -cf "$RUNNER_TEMP/release.tar" -C "$work" \
-            images.tar.gz paper-compose.yml run_paper.sh
+            images.tar.gz paper-compose.yml run_paper.sh \
+            install_owner_history_monitor.sh owner_history_scheduler.py \
+            owner_history_progress.py minttick-owner-history.service minttick-owner-history.timer
           sha256sum "$RUNNER_TEMP/release.tar" | cut -d' ' -f1 > "$RUNNER_TEMP/release.sha256"
           test "$(wc -c < "$RUNNER_TEMP/release.sha256")" -eq 65
           export POSTGRES_PASSWORD="temporary-ci-only" APP_API_KEY="temporary-ci-only" RELEASE_SHA="$GITHUB_SHA"

@@ -190,6 +190,7 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
                     "host_precheck", "artifact_download",
                     "artifact_integrity", "archive_validation",
                     "image_load", "host_activation",
+                    "history_precheck", "history_activation",
                 }
                 combined = (str(result.get("StandardOutputContent") or "") +
                             "\n" + str(result.get("StandardErrorContent") or ""))
