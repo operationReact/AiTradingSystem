@@ -35,9 +35,9 @@ Map<String, dynamic> historySnapshot({
     ],
   },
   'scheduler': {
-    'cadence': 'HOURLY_OFF_HOURS',
-    'weekdayHoursIST': '16:15–20:15',
-    'weekendHoursIST': '09:15–20:15',
+    'cadence': 'BOUNDED_CONTINUOUS_OFF_HOURS',
+    'weekdayHoursIST': '16:00–20:58',
+    'weekendHoursIST': '09:00–20:58',
     'nextScheduledAt': '2026-11-11T16:15:00+05:30',
     'pausedUntil': null,
     'zeroCandleStreak': 1,
@@ -87,6 +87,19 @@ void main() {
     final forged = historySnapshot();
     (forged['task'] as Map<String, dynamic>)['yearCoverageVerified'] = true;
     expect(() => HistoricalProgress.parse(forged), throwsFormatException);
+  });
+
+  test('rejects unexpected scheduler cadence', () {
+    final payload = historySnapshot();
+    (payload['scheduler'] as Map<String, dynamic>)['cadence'] = 'UNRESTRICTED';
+    expect(() => HistoricalProgress.parse(payload), throwsFormatException);
+  });
+
+  test('continues reading earlier hourly dashboard metadata', () {
+    final payload = historySnapshot();
+    (payload['scheduler'] as Map<String, dynamic>)['cadence'] = 'HOURLY_OFF_HOURS';
+    expect(HistoricalProgress.parse(payload).schedulerCadence,
+        'HOURLY_OFF_HOURS');
   });
 
   test('rejects unsupported interval instead of showing hourly candles', () {
