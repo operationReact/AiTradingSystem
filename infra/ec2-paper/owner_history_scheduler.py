@@ -28,7 +28,7 @@ MIN_BETWEEN_BATCHES_SECONDS = 30  # Protect account-wide pacing across process r
 INSTANCE_ID = "i-09c01b470fb39b85a"
 IMDS = "http://169.254.169.254/latest"
 PAUSE_AFTER_ZERO_BATCHES = 2
-PAUSE_HOURS = 24
+# Empty windows are diagnostic, never a provider-wide shutdown.
 METRIC_KEYS = frozenset({
     "PERSONAL_REAL_EQUITY_ROWS_STORED_TOTAL",
     "PERSONAL_ROWS_STORED_TOTAL",
@@ -50,8 +50,7 @@ class SchedulerBlocked(Exception):
 def allowed_time(now: dt.datetime) -> bool:
     local = now.astimezone(TZ)
     minute = local.hour * 60 + local.minute
-    lower = 16 * 60 if local.weekday() < 5 else 9 * 60
-    return lower <= minute < 21 * 60  # 22:00 IST EC2 stop; no near-stop runs.
+    return minute < 21 * 60  # Check throughout the day; preserve 22:00 EC2 stop.
 
 
 def metrics_from_output(stdout: str) -> dict[str, int]:
@@ -188,8 +187,8 @@ def recently_finished(state: dict, now: dt.datetime) -> bool:
 
 def new_state(state: dict, metrics: dict[str, int], now: dt.datetime) -> dict:
     # Recorded response pages and recovery scans do not mean new candles were
-    # stored. Zero-row recovery windows must count toward the circuit breaker;
-    # otherwise an empty historical region can be retried every two minutes.
+    # stored. Empty windows remain visible in diagnostics, but other symbols
+    # are allowed to continue through the existing bounded collector.
     attempted = max(
         metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
         metrics.get("PERSONAL_RECOVERY_WINDOWS_SELECTED", 0),
@@ -198,14 +197,12 @@ def new_state(state: dict, metrics: dict[str, int], now: dt.datetime) -> dict:
     )
     rows = metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN")
     if attempted == 0 or rows is None:
-        return state  # Early provider cooldown or no attempted work; retain pause.
+        return state  # Early provider cooldown or no attempted work.
     if rows > 0:
         return {"zero_streak": 0, "paused_until": None,
                 "last_finished_at": now.isoformat()}
     streak = min(PAUSE_AFTER_ZERO_BATCHES, state["zero_streak"] + 1)
-    return {"zero_streak": streak,
-            "paused_until": (now + dt.timedelta(hours=PAUSE_HOURS)).isoformat()
-            if streak >= PAUSE_AFTER_ZERO_BATCHES else None,
+    return {"zero_streak": streak, "paused_until": None,
             "last_finished_at": now.isoformat()}
 
 
@@ -223,6 +220,11 @@ def execute(now: dt.datetime | None = None) -> int:
     now = now or dt.datetime.now(dt.timezone.utc)
     verify_host(now)
     state = load_state(STATE)
+    if state["paused_until"] is not None:
+        # Clear the legacy global zero-candle pause. The independent provider
+        # cooldown ledger still blocks all requests after Angel One 403/429.
+        state = {**state, "paused_until": None}
+        save_state(STATE, state)
     if recently_finished(state, now):
         print("OWNER_SCHEDULER_WAIT: INTER_BATCH_PACING", flush=True)
         return 0
@@ -231,20 +233,6 @@ def execute(now: dt.datetime | None = None) -> int:
         publish_progress("PAUSED", {**state, "paused_until": provider_until.isoformat()})
         print("OWNER_SCHEDULER_PAUSED: PROVIDER_COOLDOWN", flush=True)
         return 0
-    if state["paused_until"]:
-        try:
-            pause_end = dt.datetime.fromisoformat(state["paused_until"])
-            if pause_end.tzinfo is None:
-                raise ValueError()
-        except ValueError:
-            raise SchedulerBlocked("INVALID_PAUSE_TIMESTAMP") from None
-        if now < pause_end:
-            publish_progress("PAUSED", state)
-            print("OWNER_SCHEDULER_PAUSED: ZERO_CANDLE_COOLDOWN", flush=True)
-            return 0
-        # After the 24-hour pause permit ONE new batch before another pause.
-        state = {**state, "zero_streak": PAUSE_AFTER_ZERO_BATCHES - 1,
-                 "paused_until": None}
     publish_progress("RUNNING", state)
     started = dt.datetime.now(dt.timezone.utc)
     try:
@@ -280,14 +268,12 @@ def execute(now: dt.datetime | None = None) -> int:
         return 0
     updated = new_state(state, metrics, dt.datetime.now(dt.timezone.utc))
     save_state(STATE, updated)
-    publish_progress("PAUSED" if updated["paused_until"] else "IDLE", updated, {
+    publish_progress("IDLE", updated, {
         "startedAt": started.isoformat(),
         "finishedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
         "windowsQueried": metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
         "newCandles": metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN", 0),
         "state": "COMPLETED"})
-    if updated["paused_until"]:
-        print("OWNER_SCHEDULER_PAUSED: ZERO_CANDLE_COOLDOWN", flush=True)
     print("OWNER_SCHEDULER_RUN: COMPLETED", flush=True)
     return 0
 
