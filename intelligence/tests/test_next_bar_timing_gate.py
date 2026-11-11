@@ -67,3 +67,27 @@ def test_negative_delay_policy_abstains():
     )
     assert result.reason == "INVALID_DELAY"
     assert not result.execution_authorized
+
+
+def test_quote_freshness_boundary_is_inclusive():
+    result = assess_next_bar_timing(
+        sample(), maximum_quote_age=timedelta(seconds=5)
+    )
+    assert result.eligible_for_timing_research
+    assert not result.execution_authorized
+
+
+def test_stale_quote_abstains():
+    result = assess_next_bar_timing(
+        sample(), maximum_quote_age=timedelta(seconds=4)
+    )
+    assert result.reason == "STALE_AS_OF_QUOTE"
+    assert not result.execution_authorized
+
+
+def test_negative_quote_age_policy_abstains():
+    result = assess_next_bar_timing(
+        sample(), maximum_quote_age=timedelta(seconds=-1)
+    )
+    assert result.reason == "INVALID_DELAY"
+    assert not result.execution_authorized
