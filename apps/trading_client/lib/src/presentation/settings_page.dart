@@ -11,6 +11,7 @@ class SettingsPage extends StatelessWidget {
     required this.onThemeModeChanged,
     this.tradingControlRepository,
     this.onSignOut,
+    this.onHistoryMonitor,
     super.key,
   });
 
@@ -18,6 +19,7 @@ class SettingsPage extends StatelessWidget {
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final TradingControlRepository? tradingControlRepository;
   final Future<void> Function()? onSignOut;
+  final VoidCallback? onHistoryMonitor;
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +93,19 @@ class SettingsPage extends StatelessWidget {
                 onTap: () => Navigator.of(context).pushNamed('/welcome-replay'),
               ),
             ),
+            if (onHistoryMonitor != null) ...[
+              const SizedBox(height: 12),
+              Card(
+                child: ListTile(
+                  key: const ValueKey('settings-historical-monitor'),
+                  leading: const Icon(Icons.storage_outlined),
+                  title: const Text('Historical Data Monitor'),
+                  subtitle: const Text('Owner-only Angel One download and scheduler progress.'),
+                  trailing: const Icon(Icons.chevron_right_rounded),
+                  onTap: onHistoryMonitor,
+                ),
+              ),
+            ],
             if (onSignOut != null) ...[
               const SizedBox(height: 14),
               Card(

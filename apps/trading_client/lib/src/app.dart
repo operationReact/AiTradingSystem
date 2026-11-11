@@ -65,6 +65,8 @@ import 'presentation/research_experiment_jobs_page.dart';
 import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
+import 'presentation/historical_data_monitor_page.dart';
+import 'data/history_monitor_repository.dart';
 import 'presentation/create_account_page.dart';
 import 'presentation/cognito_test_page.dart';
 import 'presentation/customer_account_page.dart';
@@ -269,10 +271,17 @@ class _TradingAppState extends State<TradingApp> {
         '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
         '/notifications': (_) => widget.session.isCustomerAuthenticated ? _customerState('Notifications') : OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
+        '/history-monitor': (_) => widget.session.isCustomerAuthenticated
+            ? HistoricalDataMonitorPage(
+                repository: HttpHistoryMonitorRepository(_api),
+              )
+            : _overviewPage(),
         '/settings': (_) => SettingsPage(
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
               onSignOut: _signOut,
+              onHistoryMonitor: widget.session.isCustomerAuthenticated
+                  ? () => _navigate('/history-monitor') : null,
               tradingControlRepository: widget.session.isCustomerAuthenticated ? null : HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
