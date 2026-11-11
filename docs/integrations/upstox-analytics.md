@@ -42,7 +42,7 @@ Authoritative Upstox documentation:
    `MINTTICK_UPSTOX_ANALYTICS_ENABLED=true`
    `MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED=true`.
    Preserve the existing Angel One and PAPER settings.
-4. With a verified local ADMIN session, POST the probe endpoint against
+4. With a verified local ADMIN or OPERATOR session, POST the probe endpoint against
    `127.0.0.1:8080`. Do not route it through the public customer gateway.
    The response contains only counts and safe statuses: `READS_VERIFIED`,
    `PARTIAL_DATA`, `PROVIDER_UNAVAILABLE`, `DISABLED`, or `COOLDOWN`.
