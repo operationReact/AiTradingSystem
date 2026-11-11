@@ -45,3 +45,22 @@ Do **not** enable the legacy backend `OWNER_HISTORY_BACKFILL_ENABLED` simultaneo
 ## Temporary owner app dashboard
 
 After separate backend deployment, sign in with the designated Cognito owner account and open **Settings → Historical Data Monitor**. Flutter retrieves only the sanitized summary from `GET /api/customer/owner-history/v1/progress` (no-store); an exact Cognito owner-subject match is required. Without the private monitor export, configured owner subject, or a fresh snapshot, the API fails closed instead of displaying test candles. The Flutter page never publishes exchange OHLCV or broker secrets. It refreshes while visible and supports manual retry; dashboard data is not proof of 20-year completeness. Remove the Settings route, API, read-only mount, and exporter after archive certification is finished.
+
+## SSM-connected owner activation (reviewed release path)
+
+The `ec2-paper-ssm-app-deploy.yml` approved one-file request now carries the
+owner-history installer and source-verified metadata exporter inside the same
+SHA256-verified ARM64 release archive. The root installer refuses missing
+root-only Angel One scripts/private archive, validates EC2 IMDSv2 identity,
+atomically prepares a first year-by-year metadata snapshot, and checks its
+0644 permission **before** image deployment. After Java/PostgreSQL/Flutter
+health succeeds, it enables the oneshot systemd timer and checks it is active.
+This is **opt-in only**: a code merge alone does not trigger the SSM release;
+only the exact reviewed `infra/ec2-paper/requests/ssm-release.json` one-file
+push to `dev` can authorize this deployment. Manual Android release also
+requires its separate reviewed single-file request.
+
+The 22:00 IST nightly EC2 stop remains enabled, so this does not promise 24x7
+host uptime. The timer resumes scheduled slots only when EC2 is running,
+and may publish PAUSED after repeated zero-candle batches. The dashboard
+reports these outcomes rather than claiming continuous candle growth.
