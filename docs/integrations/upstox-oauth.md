@@ -320,3 +320,43 @@ matching `GET /v2/user/ip`, server-side account-wide risk/capital limits,
 quote freshness, reconciliation, order idempotency and a deliberate
 permission gate. Upstox's developer token and year-long analytics token
 must never be substituted for a customer's trading access token.
+
+## Protected one-shot owner TOTP activation
+
+After the owner has created `/minttick/upstox/login-pin` and
+`/minttick/upstox/totp-secret` as **SecureString** in `ap-south-1`, the
+credentials still are **not evidence of a configured instance role**. The
+existing `infra/ec2-paper/upstox-owner-totp-instance-role-policy.json` must
+be attached to the actual PAPER EC2 instance role, including scoped KMS
+decrypt if a customer-managed KMS key is used. Do not copy either secret to
+GitHub, a workflow, a mobile device, an EC2 environment file, or this chat.
+
+A new one-shot operation `ec2-paper-upstox-owner-totp-activate.yml` is
+restricted to an exact **single-file** request:
+`infra/ec2-paper/requests/upstox-owner-totp-activate.json`. It only runs
+on a merged `dev` push, checks expected installed immutable release SHA,
+verifies the existing EC2 host tags/SSM agent, owner Cognito binding, previously
+enabled OAuth SSM bridge, exact two new SSM SecureStrings, PIN/seed format,
+and protected PAPER Compose configuration. On success it enables only
+`MINTTICK_UPSTOX_OWNER_TOTP_ENABLED=true` in root-only runtime settings,
+restarts the existing PAPER service, verifies Compose state, and rolls back
+on failure. It does **not** request an Upstox token or enable broker order
+routes. Repeated identical requests are safe and avoid unnecessary restarts.
+
+The activation workflow must **not** be requested until the exact backend
+release SHA (including owner TOTP code) is actually installed and its EC2
+deployment workflow shows success. A new private EC2 release may supersede
+that SHA and make an old activation request fail closed. No EC2 instance is
+started/stopped and the paper history timer is not modified by this operation.
+
+Finally, a real authenticated owner session must prove
+`GET /api/customer/brokers/upstox/configured-login` returns
+`{"available":true}`, then attempt owner-only
+`POST /api/customer/brokers/upstox/connect-configured` with an empty
+body and inspect the verified `/status` response. Upstox's TOTP token
+endpoint supports **individual apps only** (provider error
+`UDAPI100101` if not eligible), and issuing a new token revokes the old
+token. The app reuses an unexpired session and applies its login cooldown.
+If the provider refuses the app type, use the existing official OAuth login
+instead. A successful login remains **read-only** in MintTick until separately
+approved LIVE order services and safety gates exist.
