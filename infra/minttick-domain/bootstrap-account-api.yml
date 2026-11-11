@@ -123,6 +123,7 @@ Resources:
               ("GET", "/api/customer/portfolio/records"),
               ("GET", "/api/customer/home/v1/summary"),
               ("GET", "/api/customer/home/v1/activity"),
+              ("GET", "/api/customer/owner-history/v1/progress"),
               ("GET", "/api/customer/market-data/instruments/status"),
               ("GET", "/api/customer/market-data/instruments"),
               ("GET", "/api/customer/market-data/quotes"),

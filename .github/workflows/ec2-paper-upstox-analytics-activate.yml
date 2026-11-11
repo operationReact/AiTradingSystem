@@ -5,6 +5,13 @@ on:
     branches: [dev]
     paths:
       - 'infra/ec2-paper/requests/upstox-analytics-activate.json'
+  # Explicit operator-driven retry without changing the approval file.
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +32,7 @@ jobs:
       AWS_ACCOUNT: "098859530205"
       INSTANCE_ID: i-09c01b470fb39b85a
       REQUEST: infra/ec2-paper/requests/upstox-analytics-activate.json
+      APPROVAL_INPUT: ${{ github.event.inputs.confirmation || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -38,7 +46,17 @@ jobs:
           test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
           test "$GITHUB_REF" = "refs/heads/dev"
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$REQUEST"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Historical exact one-file approval; never permit other push changes.
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$REQUEST"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # A real operator must enter the exact confirmation; no scheduled
+            # runs, hidden bypass or arbitrary run arguments are accepted.
+            test "${APPROVAL_INPUT:-}" = "AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE"
+          else
+            echo "Unsupported private activation event" >&2
+            exit 2
+          fi
           python3 - <<'PY'
           import json, pathlib
           expected = {
