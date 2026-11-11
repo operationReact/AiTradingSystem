@@ -34,6 +34,7 @@ METRIC_KEYS = frozenset({
     "PERSONAL_ROWS_STORED_TOTAL",
     "PERSONAL_PAGES_STORED_TOTAL",
     "PERSONAL_PAGES_DOWNLOADED_THIS_RUN",
+    "PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN",
     "PERSONAL_RECOVERY_WINDOWS_SELECTED",
     "PERSONAL_SHORT_WINDOW_RESPONSES",
     "PERSONAL_PAGES_REMAINING",
@@ -192,12 +193,16 @@ def new_state(state: dict, metrics: dict[str, int], now: dt.datetime) -> dict:
     # Recorded response pages and recovery scans do not mean new candles were
     # stored. Empty windows remain visible in diagnostics, but other symbols
     # are allowed to continue through the existing bounded collector.
-    attempted = max(
-        metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
-        metrics.get("PERSONAL_RECOVERY_WINDOWS_SELECTED", 0),
-        metrics.get("PERSONAL_SHORT_WINDOW_RESPONSES", 0),
-        metrics.get("PERSONAL_PAGES_REMAINING", 0),
-    )
+    attempted = metrics.get("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN")
+    if attempted is None:
+        # Older on-host collectors did not emit a request-attempt counter.
+        # Preserve prior pacing until the audited collector is installed.
+        attempted = max(
+            metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
+            metrics.get("PERSONAL_RECOVERY_WINDOWS_SELECTED", 0),
+            metrics.get("PERSONAL_SHORT_WINDOW_RESPONSES", 0),
+            metrics.get("PERSONAL_PAGES_REMAINING", 0),
+        )
     rows = metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN")
     if attempted == 0 or rows is None:
         return state  # Early provider cooldown or no attempted work.
@@ -274,7 +279,8 @@ def execute(now: dt.datetime | None = None) -> int:
     publish_progress("IDLE", updated, {
         "startedAt": started.isoformat(),
         "finishedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "windowsQueried": metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
+        "windowsQueried": metrics.get("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN",
+                                      metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0)),
         "newCandles": metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN", 0),
         "state": "COMPLETED"})
     print("OWNER_SCHEDULER_RUN: COMPLETED", flush=True)
