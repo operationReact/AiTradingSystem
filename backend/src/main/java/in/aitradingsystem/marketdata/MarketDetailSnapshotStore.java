@@ -27,6 +27,13 @@ public class MarketDetailSnapshotStore {
                     VALUES (?, ?, CAST(? AS jsonb))
                     ON CONFLICT (instrument_id) DO UPDATE SET
                         fetched_at = EXCLUDED.fetched_at, payload = EXCLUDED.payload
+                    WHERE (market_detail_snapshot.payload->>'exchangeAt')::timestamptz
+                              < (EXCLUDED.payload->>'exchangeAt')::timestamptz
+                       OR (
+                            (market_detail_snapshot.payload->>'exchangeAt')::timestamptz
+                              = (EXCLUDED.payload->>'exchangeAt')::timestamptz
+                            AND market_detail_snapshot.fetched_at <= EXCLUDED.fetched_at
+                       )
                     """, detail.instrumentId(), Timestamp.from(detail.fetchedAt()),
                     mapper.writeValueAsString(detail));
         } catch (JsonProcessingException ex) {
