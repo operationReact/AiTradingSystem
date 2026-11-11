@@ -1,0 +1,14 @@
+[Unit]
+Description=Schedule MintTick owner-private historical recovery, market off-hours
+
+[Timer]
+# IST; no history competition with the weekday NSE session.
+OnCalendar=Mon..Fri *-*-* 16..20:15:00 Asia/Kolkata
+OnCalendar=Sat,Sun *-*-* 09..20:15:00 Asia/Kolkata
+Persistent=false
+AccuracySec=1min
+RandomizedDelaySec=0
+Unit=minttick-owner-history.service
+
+[Install]
+WantedBy=timers.target
