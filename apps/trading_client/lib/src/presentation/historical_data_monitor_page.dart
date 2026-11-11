@@ -275,11 +275,14 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
         _kv('Task', data.taskName),
         _kv('Provider', data.source.replaceAll('_', ' ')),
         _kv('Candle interval', 'Daily · 1D (ONE_DAY)'),
-        _kv('Scheduler frequency', 'Hourly, off-hours only'),
+        _kv('Scheduler frequency',
+          data.schedulerCadence == 'BOUNDED_CONTINUOUS_OFF_HOURS'
+              ? 'Automatic · checks every 2 min (no overlap)'
+              : 'Hourly, off-hours only'),
         _kv('Weekdays (IST)', data.weekdayHours),
         _kv('Weekends (IST)', data.weekendHours),
         _kv('Requested period', '${data.requestedFrom} — ${data.requestedThrough}'),
-        _kv('Next planned start', _when(data.nextScheduledAt)),
+        _kv('Next timer check', _when(data.nextScheduledAt)),
         if (data.pausedUntil != null)
           _kv('Paused until', _when(data.pausedUntil)),
         _kv('Consecutive zero-candle batches', '${data.zeroCandleStreak}'),
