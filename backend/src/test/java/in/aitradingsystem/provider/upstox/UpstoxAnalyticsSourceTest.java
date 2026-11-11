@@ -78,7 +78,7 @@ class UpstoxAnalyticsSourceTest {
         UpstoxAnalyticsSource disabled =
                 new UpstoxAnalyticsSource(false, ssm, builder.build());
         assertThatThrownBy(() -> disabled.currentRatios("INE002A01018"))
-                .hasMessage("UPSTOX_SSM_UNAVAILABLE");
+                .hasMessage("UPSTOX_ANALYTICS_DISABLED");
         assertThatThrownBy(() -> source.currentRatios("../secret"))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> source.dailyEquityCandles("NSE_EQ|INE002A01018",
