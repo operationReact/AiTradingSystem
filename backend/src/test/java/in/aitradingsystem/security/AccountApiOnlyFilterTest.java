@@ -91,7 +91,13 @@ class AccountApiOnlyFilterTest {
         assertBlocked("GET", "/api/customer/brokers/upstox/connect");
         assertBlocked("GET", "/api/customer/brokers/upstox/execute");
         String roomId = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/";
-        assertBlocked("POST", roomId + "orders");
+        assertPasses("POST", roomId + "orders");
+        assertPasses("GET", roomId + "orders");
+        assertPasses("GET", roomId + "positions");
+        assertPasses("POST", roomId + "resume");
+        assertPasses("POST", roomId + "pause");
+        assertBlocked("GET", roomId + "resume");
+        assertBlocked("POST", roomId + "positions");
         String resource = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/";
         assertBlocked("POST", resource + "orders/place");
         assertBlocked("PUT", resource + "orders/intents");

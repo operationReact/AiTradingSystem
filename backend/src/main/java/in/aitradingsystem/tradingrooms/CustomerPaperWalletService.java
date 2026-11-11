@@ -95,6 +95,24 @@ public class CustomerPaperWalletService {
         return get(owner, roomId);
     }
 
+    /** Explicit manual Paper order control. Never changes a LIVE Room. */
+    @Transactional
+    public PaperWallet setPaused(UUID owner, UUID roomId, boolean paused) {
+        int updated = jdbc.sql("""
+                UPDATE customer_paper_account a
+                SET halted=:halted, ledger_version=ledger_version+1,updated_at=NOW()
+                WHERE a.room_id=:room AND a.user_id=:owner
+                  AND EXISTS(SELECT 1 FROM customer_trading_room r
+                        WHERE r.id=a.room_id AND r.user_id=a.user_id
+                          AND r.mode='PAPER' AND r.status='PAPER_FUNDED')
+                """)
+            .param("halted", paused).param("room", roomId)
+            .param("owner", owner).update();
+        if (updated != 1) throw new ResponseStatusException(
+            HttpStatus.NOT_FOUND,"Funded Paper Room not found");
+        return get(owner,roomId);
+    }
+
     @Transactional(readOnly = true)
     public PaperWallet get(UUID owner, UUID roomId) {
         return jdbc.sql("""
@@ -143,7 +161,7 @@ public class CustomerPaperWalletService {
             rs.getLong("realized_pnl_paise"), rs.getBoolean("halted"),
             rs.getLong("ledger_version"),
             rs.getTimestamp("updated_at").toInstant(),
-            false // No strategy or order-execution capability is enabled.
+            !rs.getBoolean("halted") // Manual Paper fills only; not automated trading.
         );
     }
 }

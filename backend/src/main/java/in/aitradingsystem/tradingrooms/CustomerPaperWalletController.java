@@ -36,6 +36,18 @@ public class CustomerPaperWalletController {
         return noStore(service.activate(customer(authentication), roomId));
     }
 
+    @PostMapping("/resume")
+    public ResponseEntity<CustomerPaperWalletService.PaperWallet> resume(
+            @PathVariable UUID roomId, Authentication authentication) {
+        return noStore(service.setPaused(customer(authentication), roomId, false));
+    }
+
+    @PostMapping("/pause")
+    public ResponseEntity<CustomerPaperWalletService.PaperWallet> pause(
+            @PathVariable UUID roomId, Authentication authentication) {
+        return noStore(service.setPaused(customer(authentication), roomId, true));
+    }
+
     @GetMapping("/account")
     public ResponseEntity<CustomerPaperWalletService.PaperWallet> account(
             @PathVariable UUID roomId, Authentication authentication) {

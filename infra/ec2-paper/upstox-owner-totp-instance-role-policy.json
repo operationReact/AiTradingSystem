@@ -1,0 +1,21 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyOwnerUpstoxIndividualTotpLogin",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameters"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/login-pin",
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/totp-secret"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-south-1"
+        }
+      }
+    }
+  ]
+}
