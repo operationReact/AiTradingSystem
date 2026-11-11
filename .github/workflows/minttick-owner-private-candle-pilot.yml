@@ -145,6 +145,10 @@ jobs:
           assert re.fullmatch('[a-f0-9]{40}',sha) and re.fullmatch('[a-f0-9]{64}',digest)
           script=r"""set -Eeuo pipefail
           umask 077
+          # On failure, expose only one fixed stage name. Never echo SSM
+          # stderr, request metadata, broker material, or archive contents.
+          stage=PRECHECK
+          trap 'printf "OWNER_AUDIT_STAGE: %s\n" "$stage"' ERR
           test "$(id -u)" -eq 0
           test "$(uname -m)" = aarch64
           root=/opt/aitradingsystem-paper
@@ -153,7 +157,9 @@ jobs:
           cleanup() { rm -rf -- "$work"; }
           trap cleanup EXIT
           chmod 0700 "$work"
+          stage=RELEASE_FETCH
           aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-personal/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
+          stage=RELEASE_VERIFY
           printf '%s  %s\n' '@@HASH@@' "$work/scripts.tar" | sha256sum -c - >/dev/null
           files="$(tar -tf "$work/scripts.tar" | LC_ALL=C sort)"
           expected="$(printf 'probe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh\n' | LC_ALL=C sort)"
@@ -173,10 +179,13 @@ jobs:
           merged=a.split('\nif __name__ == "__main__":',1)[0]+'\n'+b
           compile(merged,'<restricted-owner-review>','exec')
           PYCHECK
+          stage=COLLECTOR_INSTALL
           install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
           install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
           install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
+          stage=COLLECTOR_AUDIT
           "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@'
+          stage=RUNTIME_STATUS
           if test '@@OWNER_MODE@@' = audit-only; then
             python3 - <<'PYOWNERSTATUS'
           import json,re,subprocess
@@ -296,8 +305,21 @@ jobs:
           if status not in terminal and detail not in failed_details:
               print('PENDING');raise SystemExit
           if status != 'Success':
-              # Only fixed enum strings. Never print the raw SSM response.
-              code=failed_details.get(detail, 'FAILED_OR_CANCELLED')
+              # Print strictly preapproved host-stage and collector error
+              # categories. Never pass arbitrary host stdout/stderr.
+              output=z.get('StandardOutputContent','') or ''
+              stages=[line for line in output.splitlines() if re.fullmatch(
+                  r'OWNER_AUDIT_STAGE: (?:PRECHECK|RELEASE_FETCH|RELEASE_VERIFY|COLLECTOR_INSTALL|COLLECTOR_AUDIT|RUNTIME_STATUS)',
+                  line)]
+              blocked=[line for line in output.splitlines() if re.fullmatch(
+                  r'PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_]{3,64}',line)]
+              for line in stages[-1:]+blocked[-1:]:
+                  print(line)
+              response=z.get('ResponseCode')
+              if type(response) is int and -1<=response<=255:
+                  print('OWNER_SSM_RESPONSE_CODE: '+str(response))
+              code=failed_details.get(detail,
+                  'EXECUTION_FAILED' if status == 'Failed' else 'FAILED_OR_CANCELLED')
               print('OWNER_SSM_TERMINAL: '+code)
               print('FAILED')
               raise SystemExit
