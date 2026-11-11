@@ -3,6 +3,8 @@ package in.aitradingsystem.provider.upstox;
 import in.aitradingsystem.provider.upstox.UpstoxApiClient.UpstoxProviderException;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -31,11 +33,23 @@ import org.springframework.web.server.ResponseStatusException;
 public class CustomerUpstoxController {
     private final CustomerIdentityStore identities;
     private final CustomerUpstoxOAuthService broker;
+    private final OwnerUpstoxTotpService ownerTotp;
+    private final String ownerCognitoSubject;
 
+    // Legacy unit-test seam: never authorizes owner-only PIN+TOTP.
     public CustomerUpstoxController(CustomerIdentityStore identities,
                                     CustomerUpstoxOAuthService broker) {
+        this(identities, broker, null, "");
+    }
+
+    @Autowired
+    public CustomerUpstoxController(CustomerIdentityStore identities,
+            CustomerUpstoxOAuthService broker, OwnerUpstoxTotpService ownerTotp,
+            @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerCognitoSubject) {
         this.identities = identities;
         this.broker = broker;
+        this.ownerTotp = ownerTotp;
+        this.ownerCognitoSubject = ownerCognitoSubject == null ? "" : ownerCognitoSubject.trim();
     }
 
     @PostMapping("/start")
@@ -74,6 +88,34 @@ public class CustomerUpstoxController {
             .cacheControl(CacheControl.noStore())
             .header("Referrer-Policy", "no-referrer")
             .body(page);
+    }
+
+    public record OwnerLoginAvailability(boolean available) {}
+
+    /** Exact owner-only capability; response never includes broker credentials. */
+    @GetMapping("/configured-login")
+    public ResponseEntity<OwnerLoginAvailability> configuredLogin(Authentication authentication) {
+        customer(authentication);
+        return secure(new OwnerLoginAvailability(isOwner(authentication)
+                && ownerTotp != null && ownerTotp.available()));
+    }
+
+    /** Optional individual-app login: no PIN/TOTP provided by Flutter. */
+    @PostMapping("/connect-configured")
+    public ResponseEntity<CustomerUpstoxOAuthService.Status> connectConfigured(
+            Authentication authentication) {
+        UUID customer = customer(authentication);
+        if (!isOwner(authentication) || ownerTotp == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Owner-only broker login");
+        }
+        return secure(ownerTotp.connect(customer));
+    }
+
+    private boolean isOwner(Authentication authentication) {
+        return !ownerCognitoSubject.isBlank()
+                && authentication instanceof JwtAuthenticationToken token
+                && ownerCognitoSubject.equals(token.getToken().getSubject());
     }
 
     @GetMapping("/status")
@@ -117,7 +159,13 @@ public class CustomerUpstoxController {
     public ProblemDetail failClosed(UpstoxProviderException exception) {
         HttpStatus status = switch (exception.code()) {
             case "UPSTOX_APP_NOT_CONFIGURED", "UPSTOX_AUTH_UNAVAILABLE", "UPSTOX_READ_UNAVAILABLE",
-                 "UPSTOX_AUTH_CAPACITY_REACHED" -> HttpStatus.SERVICE_UNAVAILABLE;
+                 "UPSTOX_AUTH_CAPACITY_REACHED",
+                 "UPSTOX_OWNER_AUTO_LOGIN_DISABLED", "UPSTOX_OWNER_SSM_UNAVAILABLE",
+                 "UPSTOX_OWNER_SSM_INVALID", "UPSTOX_TOTP_AUTH_UNAVAILABLE" ->
+                    HttpStatus.SERVICE_UNAVAILABLE;
+            case "UPSTOX_OWNER_LOGIN_COOLDOWN" -> HttpStatus.TOO_MANY_REQUESTS;
+            case "UPSTOX_TOTP_AUTH_REJECTED", "UPSTOX_TOTP_CONFIGURATION_INVALID" ->
+                    HttpStatus.BAD_GATEWAY;
             case "UPSTOX_NOT_CONNECTED", "UPSTOX_ACCOUNT_ALREADY_CONNECTED" -> HttpStatus.CONFLICT;
             case "UPSTOX_OAUTH_STATE_INVALID", "UPSTOX_AUTH_FAILED",
                  "UPSTOX_PROFILE_REJECTED" -> HttpStatus.BAD_REQUEST;
