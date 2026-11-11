@@ -119,16 +119,18 @@ def _yearly(conn: sqlite3.Connection, root: Path):
 
 
 def _next_scheduled_at(now: dt.datetime) -> str:
+    """Next authorized two-minute timer check; never promises an API request."""
     here = now.astimezone(TZ)
     for step in range(8):
         day = (here + dt.timedelta(days=step)).date()
-        start_hour = 16 if day.weekday() < 5 else 9
-        for hour in range(start_hour, 21):
-            candidate = dt.datetime(day.year, day.month, day.day, hour, 15, tzinfo=TZ)
-            if candidate > here:
-                return candidate.isoformat()
+        first_hour = 16 if day.weekday() < 5 else 9
+        for hour in range(first_hour, 21):
+            for minute in range(0, 60, 2):
+                candidate = dt.datetime(
+                    day.year, day.month, day.day, hour, minute, tzinfo=TZ)
+                if candidate > here:
+                    return candidate.isoformat()
     raise ProgressUnavailable("SCHEDULER_CALENDAR_UNAVAILABLE")
-
 
 def _previous_runs(path: Path) -> list[dict]:
     if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_SNAPSHOT_BYTES:
@@ -199,9 +201,9 @@ def build_snapshot(root: Path, now: dt.datetime, status: str,
             "years": years,
         },
         "scheduler": {
-            "cadence": "HOURLY_OFF_HOURS",
-            "weekdayHoursIST": "16:15–20:15",
-            "weekendHoursIST": "09:15–20:15",
+            "cadence": "BOUNDED_CONTINUOUS_OFF_HOURS",
+            "weekdayHoursIST": "16:00–20:58",
+            "weekendHoursIST": "09:00–20:58",
             "nextScheduledAt": _next_scheduled_at(now),
             "zeroCandleStreak": int(scheduler_state.get("zero_streak", 0)),
             "pausedUntil": scheduler_state.get("paused_until"),
