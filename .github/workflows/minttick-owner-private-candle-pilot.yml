@@ -223,7 +223,8 @@ jobs:
           print("OWNER_RUNTIME_EVENTS_SAMPLED: "+str(min(len(events),999999)))
           print("OWNER_RUNTIME_LAST_EVENT: "+(events[-1] if events else "NONE"))
           PYOWNERSTATUS
-          fi          """
+          fi
+          """
           mode=os.environ.get('OWNER_HISTORY_MODE')
           if mode not in ('download','audit-only'):
               raise SystemExit('Invalid fixed owner mode')
