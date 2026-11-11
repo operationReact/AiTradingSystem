@@ -17,10 +17,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
-  cancel-in-progress: false
-
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -34,8 +30,13 @@ jobs:
           bash -n infra/ec2-paper/run_owner_personal_history.sh
           python3 -m unittest discover -s scripts/tests -p test_owner_personal_angelone_history.py -v
           python3 -m unittest discover -s scripts/tests -p test_owner_history_request.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_timeout_contract.py -v
 
   execute:
+    # Only host mutations share the EC2 lane. Offline PR tests never block.
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
     name: One fixed-path private owner historical pilot on existing PAPER EC2
     needs: verify
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
@@ -238,7 +239,11 @@ jobs:
               script = "export OWNER_REPORT_RECIPIENT='" + recipient + "'\n" + script
           script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest).replace('@@OWNER_MODE@@',mode)
           path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
-          path.write_text(json.dumps({'commands':[script]}))
+          # Cap SSM plugin execution independently of the delivery timeout.
+          # Audit is read-only and must not occupy the host queue for an hour.
+          execution_timeout = '180' if mode == 'audit-only' else '660'
+          path.write_text(json.dumps({'commands':[script],
+                                      'executionTimeout':[execution_timeout]}))
           path.chmod(0o600)
           PY
           rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
@@ -256,13 +261,20 @@ jobs:
           if mode == 'download' and local_time >= time(21, 20):
               raise SystemExit('PERSONAL_HISTORY_BLOCKED: NIGHTLY_STOP_CUTOFF')
           PY
+          # Bounded 120-second delivery + bounded execution for both modes.
+          # Total timeout remains shorter than the finite GitHub polling budget.
+          delivery_timeout=120
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
-            --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds "$delivery_timeout" \
             --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
             --comment 'MintTick private personal trading: max five equities, no redistribution' \
             --query Command.CommandId --output text)"
           rm -f "$RUNNER_TEMP/owner-personal-ssm.json"
-          for attempt in $(seq 1 165); do
+          # Audit: 120s delivery + 180s execution; download: 120s + 660s.
+          # Stop polling at 8 minutes for audit and 15 minutes for download.
+          poll_attempts=96
+          if [[ "$OWNER_HISTORY_MODE" == download ]]; then poll_attempts=180; fi
+          for attempt in $(seq 1 "$poll_attempts"); do
             aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
               --output json > "$RUNNER_TEMP/personal-history-status.json" 2>/dev/null || true
             status="$(python3 - <<'PY'
@@ -272,8 +284,23 @@ jobs:
               z=json.loads((Path(os.environ['RUNNER_TEMP'])/'personal-history-status.json').read_text())
           except (ValueError,OSError):
               print('PENDING');raise SystemExit
-          if z.get('Status') not in ('Success','Failed','TimedOut','Cancelled'):
+          terminal=('Success','Failed','TimedOut','Cancelled')
+          failed_details={
+              'Delivery Timed Out':'DELIVERY_TIMEOUT',
+              'Execution Timed Out':'EXECUTION_TIMEOUT',
+              'Undeliverable':'UNDELIVERABLE',
+              'Terminated':'TERMINATED',
+          }
+          status=z.get('Status')
+          detail=z.get('StatusDetails')
+          if status not in terminal and detail not in failed_details:
               print('PENDING');raise SystemExit
+          if status != 'Success':
+              # Only fixed enum strings. Never print the raw SSM response.
+              code=failed_details.get(detail, 'FAILED_OR_CANCELLED')
+              print('OWNER_SSM_TERMINAL: '+code)
+              print('FAILED')
+              raise SystemExit
           output=z.get('StandardOutputContent','') or ''
           mode=os.environ.get('OWNER_HISTORY_MODE')
           lines=output.splitlines()
@@ -303,6 +330,8 @@ jobs:
                       print(line)
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
                   print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
+              if not verified:
+                  print('OWNER_AUDIT_INCOMPLETE: MISSING_VERIFIED_MARKERS')
               print('SUCCESS' if verified else 'FAILED')
               raise SystemExit(0)
           if mode != 'download':
