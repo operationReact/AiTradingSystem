@@ -238,7 +238,11 @@ jobs:
               script = "export OWNER_REPORT_RECIPIENT='" + recipient + "'\n" + script
           script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest).replace('@@OWNER_MODE@@',mode)
           path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
-          path.write_text(json.dumps({'commands':[script]}))
+          # Cap SSM plugin execution independently of the delivery timeout.
+          # Audit is read-only and must not occupy the host queue for an hour.
+          execution_timeout = '180' if mode == 'audit-only' else '660'
+          path.write_text(json.dumps({'commands':[script],
+                                      'executionTimeout':[execution_timeout]}))
           path.chmod(0o600)
           PY
           rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
@@ -256,8 +260,10 @@ jobs:
           if mode == 'download' and local_time >= time(21, 20):
               raise SystemExit('PERSONAL_HISTORY_BLOCKED: NIGHTLY_STOP_CUTOFF')
           PY
+          delivery_timeout=180
+          if [[ "$OWNER_HISTORY_MODE" == download ]]; then delivery_timeout=720; fi
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
-            --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds "$delivery_timeout" \
             --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
             --comment 'MintTick private personal trading: max five equities, no redistribution' \
             --query Command.CommandId --output text)"
