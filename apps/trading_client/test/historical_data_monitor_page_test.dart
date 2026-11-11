@@ -66,9 +66,7 @@ void main() {
     await tester.scrollUntilVisible(
       find.text('Coverage by year'), 160,
       scrollable: find.byType(Scrollable).first);
-    expect(find.text('Coverage by year'), findsOneWidget);
-    // The archive/year parser is validated separately. Here verify that the
-    // responsive screen exposes the coverage section after scrolling.
+    // Source evidence is checked in the repository contract tests.
     expect(find.text('Coverage by year'), findsOneWidget);
   });
 
