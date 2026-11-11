@@ -44,6 +44,20 @@ try:
 except OSError:
     enabled=False
 print("MINTTICK_PRIVATE_FEED_MODE:", "ENABLED" if enabled else "NOT_ENABLED")
+# Bounded boolean-only owner Upstox state: compare runtime source and the
+# effective .env consumed by Compose, never emit either file or a secret.
+try:
+    effective=(root/".env").read_text().splitlines()
+except (OSError,ValueError):
+    effective=[]
+for key,label in (("MINTTICK_UPSTOX_OAUTH_SSM_ENABLED","MINTTICK_UPSTOX_OAUTH_FLAG"),
+                  ("MINTTICK_UPSTOX_OWNER_TOTP_ENABLED","MINTTICK_UPSTOX_TOTP_FLAG")):
+    a=[x.split("=",1)[1].strip() for x in lines if x.startswith(key+"=")]
+    b=[x.split("=",1)[1].strip() for x in effective if x.startswith(key+"=")]
+    state="ENABLED" if a==["true"] and b==["true"] else (
+          "DISABLED" if a==["false"] and b==["false"] else "NOT_CONFIRMED")
+    print(label+":",state)
+
 print("MINTTICK_OPERATOR_ENV_KEYS:",key_state)
 print("MINTTICK_OPERATOR_KEY:", "PRESENT" if key_ok else "MISSING_OR_INVALID")
 try:
