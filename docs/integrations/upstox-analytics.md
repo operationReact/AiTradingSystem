@@ -105,3 +105,24 @@ permission to retain datasets/model-train. No public API Gateway route or new
 IAM permissions are created by this workflow. If the read fails with
 `SSM_UNAVAILABLE`, the EC2 role's `ssm:GetParameter` for the exact ARN
 must be reviewed by the account owner. Never upload the credential to GitHub.
+
+
+## Manual one-shot verification (no token disclosure)
+A reviewed operator may open
+[the private Upstox activation workflow](https://github.com/operationReact/AiTradingSystem/actions/workflows/ec2-paper-upstox-analytics-activate.yml),
+choose **Run workflow**, select `dev`, and enter the exact confirmation
+`AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE`.
+
+This is an explicit human-triggered alternative to the historical single-file
+request mechanism. It invokes the **same** exact account/host, PAPER mode, 22:00
+IST stop-schedule check, existing GitHub OIDC role, SecureString-only SSM
+read, checked script transport, loopback-only probe, and rollback controls.
+The workflow refuses wrong branches, confirmations and unknown event types.
+No token value is supplied to the workflow.
+
+A passing run must show a fixed `UPSTOX PRIVATE ACCEPTANCE PASSED` line
+with positive **validated daily candle** and **current ratio** counts.
+An `ACTIVATED_READ_ONLY` marker alone is insufficient without those counts.
+A failed run means collection is **not verified**, even if CI passed.
+Do not claim permission to retain, train or distribute upstream datasets
+from an authentication smoke test.
