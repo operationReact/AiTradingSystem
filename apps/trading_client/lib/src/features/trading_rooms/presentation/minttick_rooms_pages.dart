@@ -9,6 +9,7 @@ import '../data/customer_execution_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_market_repository.dart';
 import 'minttick_paper_order_panel.dart';
+import 'minttick_paper_performance_panel.dart';
 import 'minttick_customer_widgets.dart';
 
 class MintTickTradingRoomsPage extends StatelessWidget {
@@ -885,17 +886,17 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           Row(children: [
             const MintTickIconTile(Icons.verified_user_outlined),
             const SizedBox(width: 11),
-            Expanded(child: Text('Trading readiness',
+            Expanded(child: Text('Automated / LIVE readiness',
               style: Theme.of(context).textTheme.titleMedium
                   ?.copyWith(fontWeight: FontWeight.w800))),
             const MintTickStatusLabel('NOT ACTIVE'),
           ]),
           const SizedBox(height: 11),
           Text(_readiness == null
-              ? 'Trading readiness has not been verified. '
-                'Order submission stays disabled.'
-              : 'Server-checked ${_readiness!.mode} readiness. '
-                'Orders remain disabled until every safety gate is satisfied.',
+              ? 'Automated / LIVE readiness has not been verified. '
+                'This does not determine manual Paper order status.'
+              : 'Server-checked ${_readiness!.mode} automated / LIVE readiness. '
+                'Manual virtual Paper fills are governed separately above.',
             style: Theme.of(context).textTheme.bodySmall
                 ?.copyWith(color: scheme.onSurfaceVariant)),
           if (_readiness != null) ...[
@@ -936,10 +937,13 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       SegmentedButton<String>(
         key: const ValueKey('room-detail-tabs'),
         showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(value: 'Overview', label: Text('Overview')),
-          ButtonSegment(value: 'Plan', label: Text('Plan')),
-          ButtonSegment(value: 'Activity', label: Text('Activity')),
+        segments: [
+          const ButtonSegment(value: 'Overview', label: Text('Overview')),
+          if (room.mode == 'PAPER' && _wallet != null &&
+              widget.paperTradingRepository != null)
+            const ButtonSegment(value: 'Performance', label: Text('Performance')),
+          const ButtonSegment(value: 'Plan', label: Text('Plan')),
+          const ButtonSegment(value: 'Activity', label: Text('Activity')),
         ],
         selected: {_tab},
         onSelectionChanged: (value) => setState(() => _tab = value.first),
@@ -971,9 +975,19 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           _Pair('Risk preference', room.riskPreference),
           _Pair('Execution', room.mode == 'LIVE'
               ? 'Live broker authorization required'
-              : 'Paused · No Paper order engine'),
-          const _Pair('Open positions', 'No customer execution service'),
+              : _wallet == null ? 'Unfunded' : _wallet!.halted
+                  ? 'Paused · Manual only' : 'Enabled · Manual only'),
+          _Pair('Open positions', room.mode == 'PAPER' && _wallet != null
+              ? 'See Performance and Paper positions above'
+              : 'Not available until broker authorization'),
         ])),
+      ] else if (_tab == 'Performance' && room.mode == 'PAPER' &&
+          _wallet != null && widget.paperTradingRepository != null) ...[
+        MintTickPaperPerformancePanel(
+          roomId: room.id,
+          wallet: _wallet!,
+          repository: widget.paperTradingRepository!,
+        ),
       ] else if (_tab == 'Plan') ...[
         const MintTickSectionHeading('Illustrative risk guardrails'),
         const SizedBox(height: 8),
@@ -1008,7 +1022,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           ]
         else
           const MintTickInfoText(
-            'No orders or fills. Your room does not execute trades yet.',
+            'Review the manual Paper trading panel for order receipts and positions.',
             icon: Icons.history_rounded,
           ),
       ],
