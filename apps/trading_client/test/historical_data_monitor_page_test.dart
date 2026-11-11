@@ -23,9 +23,9 @@ HistoricalProgress fixture() => HistoricalProgress(
     i == 20 ? '2026-11-10' : null,
     i == 20 ? 'UNVERIFIED' : 'NO_DATA',
   )),
-  schedulerCadence: 'BOUNDED_CONTINUOUS_OFF_HOURS',
-  weekdayHours: '16:15–20:15',
-  weekendHours: '09:15–20:15',
+  schedulerCadence: 'BOUNDED_CONTINUOUS_DAILY',
+  weekdayHours: '00:00–20:58',
+  weekendHours: '00:00–20:58',
   nextScheduledAt: DateTime.utc(2026, 11, 11, 10, 45),
   pausedUntil: null,
   zeroCandleStreak: 1,
@@ -61,7 +61,7 @@ void main() {
     expect(find.text('Historical Data Monitor'), findsOneWidget);
     expect(find.text('56,172'), findsWidgets);
     expect(find.text('Daily · 1D (ONE_DAY)'), findsOneWidget);
-    expect(find.text('Automatic · checks every 2 min (no overlap)'), findsOneWidget);
+    expect(find.text('Automatic · checks every 2 min while EC2 is on'), findsOneWidget);
     // ListView lazily builds the lower sections; scroll them into view first.
     await tester.scrollUntilVisible(
       find.text('Coverage by year'), 160,
