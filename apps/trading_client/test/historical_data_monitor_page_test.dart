@@ -73,7 +73,10 @@ void main() {
     expect(find.byKey(const ValueKey('history-year-2026')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('history-year-2026')));
     await tester.pumpAndSettle();
-    expect(find.text('Partial / completeness unverified'), findsWidgets);
+    await tester.scrollUntilVisible(
+      find.text('Partial / completeness unverified'), 120,
+      scrollable: find.byType(Scrollable).first);
+    expect(find.text('Partial / completeness unverified'), findsOneWidget);
   });
 
   testWidgets('failure never displays stale or invented candle totals',
