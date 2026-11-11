@@ -357,6 +357,49 @@ class CustomerMarketDataControllerTest {
     }
 
     @Test
+    void savedMarketPriceUsesNewestExchangeEventAcrossWebSocketAndFullQuote() {
+        var customer = principal("independent-customer");
+        var stock = equity();
+        var details = mock(MarketDetailSnapshotStore.class);
+        var ticks = mock(MarketLastTickStore.class);
+        when(catalogue.requireActiveInstrument(42L)).thenReturn(stock);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.snapshot(List.of(stock))).thenReturn(List.of(
+            new CustomerAngelOneLiveQuoteService.LiveQuote(42L, "NSE", "TEST-EQ",
+                null, null, null, "MARKET_CLOSED", null)));
+        when(details.load(42L)).thenReturn(Optional.of(verifiedSavedDetail("TEST-EQ")));
+        var controller = new CustomerMarketDataController(identities, catalogue, provider,
+            "", "ANGEL_ONE", customerBroker, personalSockets, applicationFeed,
+            null, ticks, details);
+
+        // A later FULL quote supersedes an earlier, disconnected WS tick.
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("123.20"), null,
+                Instant.parse("2026-11-09T09:30:00Z"))));
+        var newerFull = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(newerFull.ltp()).isEqualByComparingTo("126.20");
+        assertThat(newerFull.source()).isEqualTo("STORED_LAST_DETAIL");
+        assertThat(newerFull.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T09:58:00Z"));
+        assertThat(newerFull.status()).isEqualTo("LAST_CLOSE");
+
+        // If the WS tick really is newer, do not replace it with old FULL stats.
+        when(ticks.lastFor(List.of(42L))).thenReturn(Map.of(42L,
+            new MarketLastTickStore.LastTick(new BigDecimal("128.40"), null,
+                Instant.parse("2026-11-09T10:02:00Z"))));
+        var newerTick = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(newerTick.ltp()).isEqualByComparingTo("128.40");
+        assertThat(newerTick.source()).isEqualTo("STORED_LAST_LIVE_TICK");
+        assertThat(newerTick.exchangeAt()).isEqualTo(Instant.parse("2026-11-09T10:02:00Z"));
+
+        // The same ordering is required when the application feed is unavailable.
+        when(applicationFeed.available()).thenReturn(false);
+        var offline = controller.snapshot(customer, List.of(42L)).getBody().rows().get(0);
+        assertThat(offline.ltp()).isEqualByComparingTo("128.40");
+        assertThat(offline.status()).isEqualTo("LAST_CLOSE");
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
     void cachedDetailCannotCrossInstrumentIdentityOrRepairSpoofedProviderReply() {
         var customer = principal("independent-customer");
         var stock = equity();
