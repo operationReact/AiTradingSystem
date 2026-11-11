@@ -39,7 +39,10 @@ class _Angel extends Fake implements HttpCustomerAngelOneRepository {
 class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
   bool connected = false;
   bool available = true;
+  bool ownerAutoAvailable = false;
   int statusCalls = 0;
+  int ownerChecks = 0;
+  int ownerConnections = 0;
   int oauthStarts = 0;
 
   @override
@@ -50,6 +53,19 @@ class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
       accountMasked: connected ? '***123' : null,
       expiresAt: null, orderExecutionEnabled: false,
     );
+  }
+
+  @override
+  Future<bool> configuredLoginAvailable() async {
+    ownerChecks++;
+    return ownerAutoAvailable;
+  }
+
+  @override
+  Future<CustomerUpstoxStatus> connectConfigured() async {
+    ownerConnections++;
+    connected = true;
+    return status();
   }
 
   @override
@@ -105,6 +121,30 @@ void main() {
     expect(result.angelOneConnected, isFalse);
     expect(result.upstoxAuthorizationRequired, isFalse);
     expect(angel.connectCalls, 0);
+  });
+
+  test('individual Upstox owner auto-restores without browser OAuth', () async {
+    final upstox = _Upstox()..ownerAutoAvailable = true;
+    final result = await CustomerBrokerAutoRestore(
+      angelOne: _Angel(), upstox: upstox,
+    ).restore();
+    expect(result.upstoxConnected, isTrue);
+    expect(result.upstoxAuthorizationRequired, isFalse);
+    expect(upstox.ownerConnections, 1);
+    expect(upstox.oauthStarts, 0);
+  });
+
+  test('valid Upstox session never regenerates or revokes broker token', () async {
+    final upstox = _Upstox()
+      ..ownerAutoAvailable = true
+      ..connected = true;
+    final result = await CustomerBrokerAutoRestore(
+      angelOne: _Angel(), upstox: upstox,
+    ).restore();
+    expect(result.upstoxConnected, isTrue);
+    expect(upstox.ownerChecks, 0);
+    expect(upstox.ownerConnections, 0);
+    expect(upstox.oauthStarts, 0);
   });
 
   test('Upstox expired grant prompts user, never silently logs in', () async {
