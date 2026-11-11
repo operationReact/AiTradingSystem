@@ -21,12 +21,29 @@ test "$(stat -c %U "$root/runtime.env")" = root
 # Do not download, echo, save or parse the credential value. AWS returns only
 # the Parameter.Type field to this root-only local process; stderr discarded.
 stage=ssm_authorization
+# Capture *only* CLI error category, never the token or raw IAM/KMS message.
+diagnostic="$(mktemp "$root/.upstox-ssm-check.XXXXXXXX")"
 parameter_type="$(aws ssm get-parameter --region ap-south-1 --name "$parameter" \
-  --with-decryption --query 'Parameter.Type' --output text --no-cli-pager 2>/dev/null || true)"
+  --with-decryption --query 'Parameter.Type' --output text \
+  --no-cli-pager 2>"$diagnostic" || true)"
 if [ "$parameter_type" != SecureString ]; then
-  echo 'MINTTICK_UPSTOX_RESULT:SSM_UNAVAILABLE'
+  failure=SSM_UNAVAILABLE
+  if [ "$parameter_type" != "" ]; then
+    failure=SSM_NOT_SECURESTRING
+  elif grep -Eiq 'ParameterNotFound|parameter.*not.*found' "$diagnostic"; then
+    failure=SSM_PARAMETER_MISSING
+  elif grep -Eiq 'KMSAccessDenied|kms:Decrypt|KMS.*not authorized' "$diagnostic"; then
+    failure=SSM_KMS_DENIED
+  elif grep -Eiq 'AccessDenied|not authorized|explicit deny' "$diagnostic"; then
+    failure=SSM_ACCESS_DENIED
+  elif grep -Eiq 'EndpointConnectionError|Could not connect|timed out|Network' "$diagnostic"; then
+    failure=SSM_NETWORK_UNAVAILABLE
+  fi
+  rm -f -- "$diagnostic"
+  printf 'MINTTICK_UPSTOX_RESULT:%s\n' "$failure"
   exit 3
 fi
+rm -f -- "$diagnostic"
 
 # Read only the SHA currently installed on this host, never from user input.
 stage=release_identity

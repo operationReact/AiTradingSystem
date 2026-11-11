@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyOneUpstoxAnalyticsSecureParameter",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/analytics-token"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-south-1"
+        }
+      }
+    }
+  ]
+}

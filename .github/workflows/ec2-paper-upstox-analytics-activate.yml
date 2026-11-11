@@ -111,7 +111,9 @@ jobs:
               status=got.get('Status')
               output=str(got.get('StandardOutputContent') or '')+' '+str(got.get('StandardErrorContent') or '')
               approved=re.findall(r'MINTTICK_UPSTOX_RESULT:([A-Z_]+)(?: candles=(\d+) ratios=(\d+))?',output)
-              safe={'SSM_UNAVAILABLE','LOCAL_RELEASE_FAILED','OPERATOR_AUTH_UNAVAILABLE',
+              safe={'SSM_UNAVAILABLE','SSM_ACCESS_DENIED','SSM_PARAMETER_MISSING',
+                    'SSM_KMS_DENIED','SSM_NETWORK_UNAVAILABLE','SSM_NOT_SECURESTRING',
+                    'LOCAL_RELEASE_FAILED','OPERATOR_AUTH_UNAVAILABLE',
                     'PROBE_HTTP_UNAVAILABLE','PROVIDER_OR_RESPONSE_UNAVAILABLE',
                     'READS_VERIFIED','ACTIVATED_READ_ONLY'}
               if status == 'Success':
