@@ -36,6 +36,7 @@ METRIC_KEYS = frozenset({
     "PERSONAL_PAGES_DOWNLOADED_THIS_RUN",
     "PERSONAL_RECOVERY_WINDOWS_SELECTED",
     "PERSONAL_SHORT_WINDOW_RESPONSES",
+    "PERSONAL_PAGES_REMAINING",
     "PERSONAL_ROWS_DOWNLOADED_THIS_RUN",
     "PERSONAL_RECOVERY_SCANS_PENDING",
     "PERSONAL_FAILED_WINDOWS_TOTAL",
@@ -193,6 +194,7 @@ def new_state(state: dict, metrics: dict[str, int], now: dt.datetime) -> dict:
         metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
         metrics.get("PERSONAL_RECOVERY_WINDOWS_SELECTED", 0),
         metrics.get("PERSONAL_SHORT_WINDOW_RESPONSES", 0),
+        metrics.get("PERSONAL_PAGES_REMAINING", 0),
     )
     rows = metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN")
     if attempted == 0 or rows is None:
