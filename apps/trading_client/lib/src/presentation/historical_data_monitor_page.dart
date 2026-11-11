@@ -310,12 +310,15 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
     final colors = theme.colorScheme;
     final largest = data.years.fold<int>(1, (max, year) =>
       year.candles > max ? year.candles : max);
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLow,
+    // ExpansionTile uses a ListTile ink surface. A decorated Container behind
+    // it obscures the splash; Material owns both background and ripple.
+    return Material(
+      color: colors.surfaceContainerLow,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.outlineVariant),
+        side: BorderSide(color: colors.outlineVariant),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(children: [
         for (final year in data.years) ExpansionTile(
           key: ValueKey('history-year-${year.year}'),
