@@ -47,9 +47,9 @@ class OwnerHistoryRequestTest(unittest.TestCase):
     def test_private_audit_runtime_diagnostics_are_sanitized(self):
         workflow=(Path(__file__).resolve().parents[2] /
                   ".github/workflows/minttick-owner-private-candle-pilot.yml").read_text()
-        for marker in ("OWNER_RUNTIME_TIMER_ACTIVE:", "OWNER_RUNTIME_TIMER_ENABLED:",
+        for marker in ('("TIMER_ACTIVE","is-active")', '("TIMER_ENABLED","is-enabled")',
+                       '"LAST_RUN_NEW_CANDLES","newCandles"', '"LAST_RUN_WINDOWS","windowsQueried"',
                        "OWNER_RUNTIME_PROGRESS_STATUS:", "OWNER_RUNTIME_LAST_RUN_STATE:",
-                       "OWNER_RUNTIME_LAST_RUN_NEW_CANDLES:", "OWNER_RUNTIME_LAST_RUN_WINDOWS:",
                        "OWNER_RUNTIME_SERVICE_RESULT:", "OWNER_RUNTIME_LAST_EVENT:",
                        "OWNER_RUNTIME_EVENTS_SAMPLED:", "safe_runtime = [line for line in lines"):
             with self.subTest(marker=marker):
