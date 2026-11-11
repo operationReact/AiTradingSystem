@@ -1,6 +1,6 @@
 """Deterministic cross-gate as-of chronology checks."""
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from aitrading_intelligence.cross_gate_asof import assess_cross_gate_asof
 from aitrading_intelligence.next_bar_timing_gate import TimingEvidence
@@ -9,7 +9,7 @@ from aitrading_intelligence.source_coverage_gate import CoverageDecision, Covera
 
 
 def snapshot():
-    t = datetime(2026, 1, 5, 10, 0, tzinfo=timezone.utc)
+    t = datetime(2026, 1, 5, 10, 0, tzinfo=UTC)
     return dict(
         decision_at=t + timedelta(minutes=3),
         source_received_at=t + timedelta(minutes=1),
