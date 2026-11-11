@@ -24,7 +24,8 @@ class TimingDecision:
 
 
 def assess_next_bar_timing(
-    evidence: TimingEvidence, *, minimum_delay: timedelta = timedelta(0)
+    evidence: TimingEvidence, *, minimum_delay: timedelta = timedelta(0),
+    maximum_quote_age: timedelta | None = None,
 ) -> TimingDecision:
     """Reject ambiguous chronology and any hypothetical entry before receipt."""
     def abstain(reason: str) -> TimingDecision:
@@ -37,7 +38,9 @@ def assess_next_bar_timing(
     )
     if any(t.tzinfo is None or t.utcoffset() is None for t in times):
         return abstain("NAIVE_TIMESTAMP")
-    if minimum_delay < timedelta(0):
+    if minimum_delay < timedelta(0) or (
+        maximum_quote_age is not None and maximum_quote_age < timedelta(0)
+    ):
         return abstain("INVALID_DELAY")
     if evidence.research_received_at < evidence.signal_bar_closed_at:
         return abstain("RECEIPT_BEFORE_SIGNAL_CLOSE")
@@ -52,4 +55,8 @@ def assess_next_bar_timing(
         return abstain("NAIVE_QUOTE_TIMESTAMP")
     if quote_at > evidence.research_received_at:
         return abstain("FUTURE_QUOTE_INFORMATION")
+    if maximum_quote_age is not None and (
+        evidence.research_received_at - quote_at > maximum_quote_age
+    ):
+        return abstain("STALE_AS_OF_QUOTE")
     return TimingDecision(True, "TIMING_RESEARCH_ONLY_NOT_EXECUTABLE")
