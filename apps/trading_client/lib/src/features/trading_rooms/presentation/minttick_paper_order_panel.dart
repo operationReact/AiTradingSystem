@@ -65,7 +65,7 @@ class _MintTickManualPaperTradingPanelState
   String _newOrderKey() {
     final rand = Random.secure();
     final data = List<int>.generate(16, (_) => rand.nextInt(256));
-    return 'paper_' + data.map((n) => n.toRadixString(16).padLeft(2, '0')).join();
+    return 'paper_${data.map((n) => n.toRadixString(16).padLeft(2, '0')).join()}';
   }
 
   Future<void> _loadHistory() async {
@@ -80,8 +80,10 @@ class _MintTickManualPaperTradingPanelState
         _positions = all[1] as List<CustomerPaperPosition>;
       });
     } catch (_) {
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
           'Paper activity could not be verified; refresh when connected.');
+      }
     }
   }
 
@@ -117,8 +119,10 @@ class _MintTickManualPaperTradingPanelState
       await widget.onWalletChanged();
       if (mounted) setState(() => _pendingKey = null);
     } catch (_) {
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
           'Paper trading state was not verified. No order has been sent.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -146,8 +150,10 @@ class _MintTickManualPaperTradingPanelState
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
           'Unable to verify tradable instruments. Try again.');
+      }
     } finally {
       if (mounted) setState(() => _searching = false);
     }
@@ -168,8 +174,10 @@ class _MintTickManualPaperTradingPanelState
         if (_quote == null) _error = 'A verified LIVE quote is not available.';
       });
     } catch (_) {
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
           'A fresh verified broker quote is unavailable.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -228,13 +236,17 @@ class _MintTickManualPaperTradingPanelState
       _pendingKey = null;
       await _loadHistory();
       await widget.onWalletChanged();
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
         'Paper ${receipt.side} fill confirmed at ₹${receipt.fillPrice}. '
         'No broker order placed.');
+      }
     } catch (_) {
-      if (mounted) setState(() => _error =
+      if (mounted) {
+        setState(() => _error =
         'Paper order was not confirmed. Refresh the order history before '
         'retrying. A retry uses the same idempotency key.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
