@@ -88,6 +88,26 @@ void main() {
     });
   }
 
+  testWidgets('returning from broker OAuth refreshes account without another tap',
+      (tester) async {
+    final repo = _FakeUpstox();
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(
+        repository: repo,
+        launchAuthentication: (_) async => true,
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('upstox-start-oauth')));
+    await tester.pumpAndSettle();
+    repo.linked = true; // Represents successful server-side callback.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED'), findsOneWidget);
+    expect(repo.startCalls, 1); // Never launch OAuth a second time.
+  });
+
   testWidgets('connected Upstox account displays real provider read data',
       (tester) async {
     final repo = _FakeUpstox()..linked = true;
