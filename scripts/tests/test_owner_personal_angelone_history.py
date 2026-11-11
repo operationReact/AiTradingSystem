@@ -368,12 +368,15 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
 
     def test_request_ledger_records_exact_window_and_empty_outcome(self):
         low, high = dt.date(2026, 1, 2), dt.date(2026, 1, 9)
+        self.assertEqual(f("request_attempt_count")(self.conn), 0)
         with patch.dict(NAMESPACE, {"fetch": lambda *args: ([], None, None)}):
             self.assertEqual(f("tracked_fetch")(
                 self.conn, {}, "TCS-EQ", "11536", low, high), ([], None, None))
         self.assertEqual(self.conn.execute("""SELECT symbol,token,from_date,
             through_date,outcome,returned_rows FROM candle_request""").fetchone(),
             ("TCS-EQ", "11536", "2026-01-02", "2026-01-09", "EMPTY_CAUSE_UNKNOWN", 0))
+        # A real request with no saved candles still counts as an attempt.
+        self.assertEqual(f("request_attempt_count")(self.conn), 1)
 
     def test_short_recovery_scans_each_day_once_and_resumes_after_dense_response(self):
         first, through = list(f("windows")())[0]
