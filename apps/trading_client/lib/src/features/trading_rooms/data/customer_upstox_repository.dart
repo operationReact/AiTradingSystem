@@ -42,6 +42,23 @@ class HttpCustomerUpstoxRepository {
   Future<CustomerUpstoxStatus> status() async =>
       CustomerUpstoxStatus.fromJson(await api.getJson('$_root/status'));
 
+  /// Optional exact-Cognito-owner PIN+TOTP capability. The backend alone
+  /// authorizes access to SSM and verifies the provider account identity.
+  Future<bool> configuredLoginAvailable() async {
+    final data = await api.getJson('$_root/configured-login');
+    if (data is! Map<String, dynamic> || data['available'] is! bool) {
+      throw const FormatException('Invalid secure Upstox login availability');
+    }
+    return data['available'] as bool;
+  }
+
+  /// No PIN, TOTP seed, API key or one-time code ever crosses Flutter.
+  Future<CustomerUpstoxStatus> connectConfigured() async =>
+      CustomerUpstoxStatus.fromJson(
+        await api.postJson('$_root/connect-configured'));
+
+
+
   Future<Uri> startAuthorization() async {
     final raw = await api.postJson('$_root/start');
     if (raw is! Map<String, dynamic> ||
