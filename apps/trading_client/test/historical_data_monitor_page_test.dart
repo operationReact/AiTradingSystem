@@ -23,7 +23,7 @@ HistoricalProgress fixture() => HistoricalProgress(
     i == 20 ? '2026-11-10' : null,
     i == 20 ? 'UNVERIFIED' : 'NO_DATA',
   )),
-  schedulerCadence: 'BOUNDED_CONTINUOUS_DAILY',
+  schedulerCadence: 'BOUNDED_CONTINUOUS_OFF_HOURS',
   weekdayHours: '00:00–20:58',
   weekendHours: '00:00–20:58',
   nextScheduledAt: DateTime.utc(2026, 11, 11, 10, 45),
