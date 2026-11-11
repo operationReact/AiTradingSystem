@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import platform
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -145,6 +146,16 @@ def new_state(state: dict, metrics: dict[str, int], now: dt.datetime) -> dict:
             if streak >= PAUSE_AFTER_ZERO_BATCHES else None}
 
 
+def publish_progress(status: str, state: dict, last_run: dict | None = None) -> None:
+    # Imported at execution time; import and snapshot failures fail closed
+    # before issuing provider calls. No secrets are included in the summary.
+    from owner_history_progress import ProgressUnavailable, publish
+    try:
+        publish(status=status, scheduler_state=state, last_run=last_run)
+    except (OSError, ValueError, sqlite3.Error, ProgressUnavailable) as exc:
+        raise SchedulerBlocked("PROGRESS_PUBLICATION_UNAVAILABLE") from None
+
+
 def execute(now: dt.datetime | None = None) -> int:
     now = now or dt.datetime.now(dt.timezone.utc)
     verify_host(now)
@@ -157,14 +168,21 @@ def execute(now: dt.datetime | None = None) -> int:
         except ValueError:
             raise SchedulerBlocked("INVALID_PAUSE_TIMESTAMP") from None
         if now < pause_end:
+            publish_progress("PAUSED", state)
             print("OWNER_SCHEDULER_PAUSED: ZERO_CANDLE_COOLDOWN", flush=True)
             return 0
         # After the 24-hour pause permit ONE new batch before another pause.
         state = {"zero_streak": PAUSE_AFTER_ZERO_BATCHES - 1, "paused_until": None}
+    publish_progress("RUNNING", state)
+    started = dt.datetime.now(dt.timezone.utc)
     try:
         result = subprocess.run([str(DOWNLOADER), "download"], capture_output=True,
                                 text=True, timeout=MAX_RUN_SECONDS, check=False)
     except (OSError, subprocess.TimeoutExpired):
+        publish_progress("ERROR", state, {
+            "startedAt": started.isoformat(),
+            "finishedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "windowsQueried": 0, "newCandles": 0, "state": "FAILED"})
         raise SchedulerBlocked("COLLECTOR_UNAVAILABLE_OR_TIMEOUT") from None
     # Only allow numeric, pre-reviewed counters to reach journald. Never log
     # provider responses, authentication headers, stderr or raw OHLCV.
@@ -172,9 +190,21 @@ def execute(now: dt.datetime | None = None) -> int:
     for key in sorted(metrics):
         print(f"{key}: {metrics[key]}", flush=True)
     if result.returncode != 0 or "PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE" not in result.stdout:
+        publish_progress("ERROR", state, {
+            "startedAt": started.isoformat(),
+            "finishedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "windowsQueried": metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
+            "newCandles": metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN", 0),
+            "state": "FAILED"})
         raise SchedulerBlocked("COLLECTOR_FAILED_OR_UNVERIFIED")
-    updated = new_state(state, metrics, now)
+    updated = new_state(state, metrics, dt.datetime.now(dt.timezone.utc))
     save_state(STATE, updated)
+    publish_progress("PAUSED" if updated["paused_until"] else "IDLE", updated, {
+        "startedAt": started.isoformat(),
+        "finishedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "windowsQueried": metrics.get("PERSONAL_PAGES_DOWNLOADED_THIS_RUN", 0),
+        "newCandles": metrics.get("PERSONAL_ROWS_DOWNLOADED_THIS_RUN", 0),
+        "state": "COMPLETED"})
     if updated["paused_until"]:
         print("OWNER_SCHEDULER_PAUSED: ZERO_CANDLE_COOLDOWN", flush=True)
     print("OWNER_SCHEDULER_RUN: COMPLETED", flush=True)
