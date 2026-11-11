@@ -4,9 +4,8 @@ Description=Run MintTick owner-private Angel One backfill whenever the previous 
 # Two-minute scheduler CHECKS, not two-minute provider calls.
 # systemd never starts the same oneshot service twice concurrently.
 # The collector owns a private exclusive flock, 10-second API-call pacing and
-# per-provider rate-limit cooldown. Outside the authorized EC2 window no runs.
-OnCalendar=Mon..Fri *-*-* 16..20:0/2:00 Asia/Kolkata
-OnCalendar=Sat,Sun *-*-* 09..20:0/2:00 Asia/Kolkata
+# per-provider rate-limit cooldown. Preserve the 22:00 IST EC2 stop.
+OnCalendar=*-*-* 00..20:0/2:00 Asia/Kolkata
 Persistent=false
 AccuracySec=10s
 RandomizedDelaySec=0

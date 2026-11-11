@@ -41,4 +41,4 @@ jobs:
         run: |
           set -euo pipefail
           systemd-analyze verify             infra/ec2-paper/systemd/minttick-owner-history.service             infra/ec2-paper/systemd/minttick-owner-history.timer
-          systemd-analyze calendar 'Mon..Fri *-*-* 16..20:0/2:00 Asia/Kolkata'             'Sat,Sun *-*-* 09..20:0/2:00 Asia/Kolkata' >/dev/null
+          systemd-analyze calendar '*-*-* 00..20:0/2:00 Asia/Kolkata' >/dev/null

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/history_monitor_repository.dart';
+import '../data/authenticated_api_client.dart';
 
 /// Owner-private operational metadata, never raw Angel One candle payloads.
 ///
@@ -49,12 +50,22 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
       final data = await widget.repository.load();
       if (!mounted || id != _generation) return;
       setState(() => _data = data);
+    } on ApiHttpFailure catch (failure) {
+      if (!mounted || id != _generation) return;
+      setState(() {
+        _data = null;
+        _error = switch (failure.statusCode) {
+          401 => 'Sign in again to view historical download progress.',
+          403 => 'This account is not linked as the historical data owner.',
+          503 => 'The EC2 history snapshot is unavailable. Check the scheduler and backend.',
+          _ => 'Historical monitor request failed (HTTP ${failure.statusCode}).',
+        };
+      });
     } catch (_) {
       if (!mounted || id != _generation) return;
       setState(() {
         _data = null; // Never display stale numbers as a live download.
-        _error = 'Private scheduler progress could not be verified. '
-            'Check EC2, the owner account, and the monitor deployment.';
+        _error = 'Historical monitor could not connect. Check network or sign-in.';
       });
     } finally {
       if (mounted && id == _generation) setState(() => _loading = false);
@@ -276,9 +287,12 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
         _kv('Provider', data.source.replaceAll('_', ' ')),
         _kv('Candle interval', 'Daily · 1D (ONE_DAY)'),
         _kv('Scheduler frequency',
-          data.schedulerCadence == 'BOUNDED_CONTINUOUS_OFF_HOURS'
-              ? 'Automatic · checks every 2 min (no overlap)'
-              : 'Hourly, off-hours only'),
+          data.weekdayHours == '00:00–20:58' ||
+          data.schedulerCadence == 'BOUNDED_CONTINUOUS_DAILY'
+              ? 'Automatic · checks every 2 min while EC2 is on'
+              : data.schedulerCadence == 'BOUNDED_CONTINUOUS_OFF_HOURS'
+                  ? 'Automatic · checks every 2 min (off-hours)'
+                  : 'Hourly, off-hours only'),
         _kv('Weekdays (IST)', data.weekdayHours),
         _kv('Weekends (IST)', data.weekendHours),
         _kv('Requested period', '${data.requestedFrom} — ${data.requestedThrough}'),
