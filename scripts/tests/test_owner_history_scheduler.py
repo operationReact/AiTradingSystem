@@ -71,6 +71,21 @@ class SchedulerTests(unittest.TestCase):
             if path.stat().st_uid == 0:
                 self.assertEqual(s.load_state(path), initial)
 
+    def test_wrong_instance_rejected(self):
+        class FakeResponse:
+            def __init__(self, value):
+                self.value = value
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return None
+            def read(self, n):
+                return self.value
+        with patch.object(s, "urlopen", side_effect=[FakeResponse(b"token"),
+                                                       FakeResponse(b"i-other")]):
+            with self.assertRaisesRegex(s.SchedulerBlocked, "WRONG_EC2_INSTANCE"):
+                s.verify_instance_identity()
+
     def test_fail_closed_non_ec2_or_non_root(self):
         with patch.object(s.os, "geteuid", return_value=1000):
             with self.assertRaisesRegex(s.SchedulerBlocked, "WRONG_HOST_IDENTITY"):
