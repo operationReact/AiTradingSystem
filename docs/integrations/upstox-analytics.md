@@ -42,7 +42,7 @@ Authoritative Upstox documentation:
    `MINTTICK_UPSTOX_ANALYTICS_ENABLED=true`
    `MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED=true`.
    Preserve the existing Angel One and PAPER settings.
-4. With a verified local ADMIN session, POST the probe endpoint against
+4. With a verified local ADMIN or OPERATOR session, POST the probe endpoint against
    `127.0.0.1:8080`. Do not route it through the public customer gateway.
    The response contains only counts and safe statuses: `READS_VERIFIED`,
    `PARTIAL_DATA`, `PROVIDER_UNAVAILABLE`, `DISABLED`, or `COOLDOWN`.
@@ -76,3 +76,32 @@ checkpointing, exponential backoff, source-rights checks and expiry monitoring.
    genuinely verified missing windows (never overwrite conflicts silently).
 4. Publish datasets to Mintick Mind only after quality, provenance, licensing,
    point-in-time and backtesting gates pass.
+
+
+## One-shot activation through the restricted GitHub SSM role
+After the first backend release passes connected EC2 health and the owner has
+stored a SecureString in the **same exact SSM parameter**, a separate
+single-file, dev-only activation request can be created:
+`infra/ec2-paper/requests/upstox-analytics-activate.json`.
+
+The workflow `.github/workflows/ec2-paper-upstox-analytics-activate.yml`
+enforces the exact request payload, the existing AWS account/region/EC2 identity,
+the enabled 22:00 IST cost-stop schedule, SSM Online, and serializes alongside
+the normal EC2 deploy workflow. A fixed, reviewed script on the host:
+- Reads **only the type** of the designated SSM parameter, decrypted under
+  the existing EC2 instance profile. Nothing is logged from the token.
+- Fails without changing runtime settings when EC2 lacks permission to read it.
+- Keeps the original root-owned host runtime.env as a private rollback copy,
+  enabling **only** the two Upstox analytics flags, then invokes the existing
+  PAPER-only local deployment health gate.
+- Calls the local POST-only operator/admin probe using the host's existing
+  operator key, without logging or exporting that key.
+- Accepts only genuine nonzero validated daily candles and ratio counts with
+  both `stored=false` and `liveTradingEnabled=false`.
+- Restores the old runtime.env and service if the private source probe fails.
+
+This is a **one-shot verified source read**, not background ingestion or
+permission to retain datasets/model-train. No public API Gateway route or new
+IAM permissions are created by this workflow. If the read fails with
+`SSM_UNAVAILABLE`, the EC2 role's `ssm:GetParameter` for the exact ARN
+must be reviewed by the account owner. Never upload the credential to GitHub.
