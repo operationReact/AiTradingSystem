@@ -48,6 +48,10 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/configured-login"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/connect-configured"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/brokers/upstox/connect-configured"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/brokers/upstox/configured-login"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
         self.assertTrue(proxy.allowed("GET","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/summary"))
@@ -165,6 +169,25 @@ class AccountProxyTest(unittest.TestCase):
         forwarded = urlopen.call_args.args[0]
         self.assertEqual(forwarded.full_url, proxy.BACKEND + path)
         self.assertEqual(forwarded.headers.get("Authorization"), "Bearer public-test-token")
+
+    def test_upstox_owner_secure_login_never_accepts_client_credentials(self):
+        path = "/api/customer/brokers/upstox/connect-configured"
+        with mock.patch.object(proxy.urllib.request, "urlopen") as backend:
+            no_jwt = proxy.handler(event("POST", path, jwt={"claims":{}}), None)
+            with_pin = proxy.handler(event("POST", path,
+                body='{"pin":"123456","totp":"123456"}'), None)
+        self.assertEqual(no_jwt["statusCode"], 401)
+        self.assertEqual(with_pin["statusCode"], 400)
+        backend.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               return_value=Reply()) as backend:
+            ok = proxy.handler(event("POST", path), None)
+        self.assertEqual(ok["statusCode"], 200)
+        self.assertEqual(ok["headers"]["cache-control"], "no-store")
+        req=backend.call_args.args[0]
+        self.assertEqual(req.data, b"")  # POST with zero credential bytes
+        self.assertEqual(req.headers.get("Authorization"), "Bearer public-test-token")
 
     def test_owner_configured_broker_route_forwards_only_jwt_and_empty_post(self):
         # The backend independently checks exact Cognito owner-sub + CUSTOMER
