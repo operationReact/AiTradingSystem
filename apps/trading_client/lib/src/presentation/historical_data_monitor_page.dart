@@ -287,6 +287,7 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
         _kv('Provider', data.source.replaceAll('_', ' ')),
         _kv('Candle interval', 'Daily · 1D (ONE_DAY)'),
         _kv('Scheduler frequency',
+          data.weekdayHours == '00:00–20:58' ||
           data.schedulerCadence == 'BOUNDED_CONTINUOUS_DAILY'
               ? 'Automatic · checks every 2 min while EC2 is on'
               : data.schedulerCadence == 'BOUNDED_CONTINUOUS_OFF_HOURS'
