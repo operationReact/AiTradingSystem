@@ -34,7 +34,8 @@ def assess_source_coverage(
     missing_bars: int,
 ) -> CoverageResult:
     """Require timestamped, complete, licensed evidence known at decision time."""
-    abstain = lambda reason: CoverageResult(CoverageDecision.ABSTAIN, reason)
+    def abstain(reason: str) -> CoverageResult:
+        return CoverageResult(CoverageDecision.ABSTAIN, reason)
     times = (decision_at, first_observation_at, last_observation_at, source_received_at)
     if any(t is None or t.tzinfo is None or t.utcoffset() is None for t in times):
         return abstain("MISSING_OR_NAIVE_TIMESTAMP")
