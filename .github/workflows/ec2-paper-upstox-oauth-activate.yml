@@ -112,8 +112,13 @@ jobs:
                  'FLAG_NOT_ACTIVE_ROLLED_BACK','FLAG_NOT_ACTIVE_ROLLBACK_UNVERIFIED'}
           for i in range(245):
               time.sleep(8)
-              result=aws('ssm','get-command-invocation','--command-id',cid,
-                         '--instance-id','i-09c01b470fb39b85a')
+              try:
+                  result=aws('ssm','get-command-invocation','--command-id',cid,
+                             '--instance-id','i-09c01b470fb39b85a')
+              except RuntimeError:
+                  if i < 5:
+                      continue
+                  raise
               status=result.get('Status')
               output=str(result.get('StandardOutputContent') or '')+'\n'+str(result.get('StandardErrorContent') or '')
               markers=re.findall(r'MINTTICK_UPSTOX_OAUTH_RESULT:([A-Z_]+)',output)
