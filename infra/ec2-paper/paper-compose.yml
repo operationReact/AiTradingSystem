@@ -88,6 +88,10 @@ services:
       NEWS_INGESTION_ENABLED: "false"
       PAPER_INTRADAY_CLOSE_ENABLED: "false"
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx1024m -XX:ActiveProcessorCount=2 -Djava.security.egd=file:/dev/./urandom"
+    # Metadata-only, root-published sanitized counts. The raw root-only
+    # SQLite and gzip candle archive must NEVER be mounted in this container.
+    volumes:
+      - /opt/aitradingsystem-paper/monitor:/run/minttick-owner-history:ro
     ports:
       - "127.0.0.1:8080:8080"
     networks:
