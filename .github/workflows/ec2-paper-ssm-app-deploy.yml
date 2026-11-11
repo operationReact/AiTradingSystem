@@ -47,6 +47,9 @@ jobs:
           bash -n infra/ec2-paper/ssm_apply_release.sh
           bash -n infra/ec2-paper/run_paper.sh
           python3 -m unittest discover -s scripts/tests -p test_ec2_paper_application_runtime.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_activation_contract.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_progress.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_scheduler.py -v
 
       - name: Install Flutter for real production Web build
         uses: subosito/flutter-action@v2
