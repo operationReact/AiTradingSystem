@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_page.dart';
+import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_symbol.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
 class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
@@ -75,6 +76,8 @@ void main() {
         ),
       ));
       await tester.pumpAndSettle();
+      // A locally rendered mark remains sharp on different device densities.
+      expect(find.byType(UpstoxSymbol), findsWidgets);
       expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('upstox-start-oauth')));
       await tester.pumpAndSettle();
