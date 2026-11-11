@@ -34,6 +34,7 @@ jobs:
           bash -n infra/ec2-paper/run_owner_personal_history.sh
           python3 -m unittest discover -s scripts/tests -p test_owner_personal_angelone_history.py -v
           python3 -m unittest discover -s scripts/tests -p test_owner_history_request.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_timeout_contract.py -v
 
   execute:
     name: One fixed-path private owner historical pilot on existing PAPER EC2
