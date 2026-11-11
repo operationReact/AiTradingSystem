@@ -1,14 +1,15 @@
 [Unit]
-Description=Schedule MintTick owner-private historical recovery, market off-hours
-
+Description=Run MintTick owner-private Angel One backfill whenever the previous bounded job frees
 [Timer]
-# IST; no history competition with the weekday NSE session.
-OnCalendar=Mon..Fri *-*-* 16..20:15:00 Asia/Kolkata
-OnCalendar=Sat,Sun *-*-* 09..20:15:00 Asia/Kolkata
+# Two-minute scheduler CHECKS, not two-minute provider calls.
+# systemd never starts the same oneshot service twice concurrently.
+# The collector owns a private exclusive flock, 10-second API-call pacing and
+# per-provider rate-limit cooldown. Outside the authorized EC2 window no runs.
+OnCalendar=Mon..Fri *-*-* 16..20:0/2:00 Asia/Kolkata
+OnCalendar=Sat,Sun *-*-* 09..20:0/2:00 Asia/Kolkata
 Persistent=false
-AccuracySec=1min
+AccuracySec=10s
 RandomizedDelaySec=0
 Unit=minttick-owner-history.service
-
 [Install]
 WantedBy=timers.target

@@ -42,7 +42,8 @@ class SchedulerTests(unittest.TestCase):
 
     def test_two_empty_batches_pause_then_positive_resets(self):
         now = self.stamp("2026-11-11", 18, 15)
-        initial = {"zero_streak": 0, "paused_until": None}
+        initial = {"zero_streak": 0, "paused_until": None,
+                   "last_finished_at": None}
         zeros = {"PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 12,
                  "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 0}
         first = s.new_state(initial, zeros, now)
@@ -54,10 +55,13 @@ class SchedulerTests(unittest.TestCase):
                          now + dt.timedelta(hours=24))
         saved = s.new_state(second, {"PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 5,
                                      "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 345}, now)
-        self.assertEqual(saved, initial)
+        self.assertEqual(saved["zero_streak"], 0)
+        self.assertIsNone(saved["paused_until"])
+        self.assertIsNotNone(saved["last_finished_at"])
 
     def test_no_api_calls_does_not_reset_streak(self):
-        state = {"zero_streak": 1, "paused_until": None}
+        state = {"zero_streak": 1, "paused_until": None,
+                 "last_finished_at": None}
         self.assertEqual(s.new_state(state, {"PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 0,
                                              "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 0},
                                      self.stamp("2026-11-11", 17, 15)), state)
@@ -65,11 +69,61 @@ class SchedulerTests(unittest.TestCase):
     def test_root_private_state_roundtrip(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / ".scheduler-state.json"
-            initial = {"zero_streak": 1, "paused_until": None}
-            s.save_state(path, initial)
+            old = {"zero_streak": 1, "paused_until": None}
+            s.save_state(path, old)
             self.assertEqual(path.stat().st_mode & 0o077, 0)
             if path.stat().st_uid == 0:
-                self.assertEqual(s.load_state(path), initial)
+                expected = {**old, "last_finished_at": None}
+                self.assertEqual(s.load_state(path), expected)
+                s.save_state(path, expected)
+                self.assertEqual(s.load_state(path), expected)
+
+    def test_recovery_empty_windows_count_toward_circuit_breaker(self):
+        now = self.stamp("2026-11-11", 18, 2)
+        old = {"zero_streak": 0, "paused_until": None, "last_finished_at": None}
+        # The Angel One short-window recovery runs had zero *stored* pages,
+        # but did query windows. The original breaker missed these.
+        empty = {
+            "PERSONAL_RECOVERY_WINDOWS_SELECTED": 13,
+            "PERSONAL_SHORT_WINDOW_RESPONSES": 13,
+            "PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 0,
+            "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 0,
+        }
+        first = s.new_state(old, empty, now)
+        self.assertEqual(first["zero_streak"], 1)
+        self.assertIsNone(first["paused_until"])
+        second = s.new_state(first, empty, now + dt.timedelta(minutes=4))
+        self.assertEqual(second["zero_streak"], 2)
+        self.assertIsNotNone(second["paused_until"])
+
+    def test_cross_batch_spacing_and_clock_regression(self):
+        now = self.stamp("2026-11-11", 18, 2)
+        state = {"zero_streak": 0, "paused_until": None,
+                 "last_finished_at": now.isoformat()}
+        self.assertTrue(s.recently_finished(state, now + dt.timedelta(seconds=10)))
+        self.assertFalse(s.recently_finished(state, now + dt.timedelta(seconds=32)))
+        with self.assertRaisesRegex(s.SchedulerBlocked, "INVALID_LAST_RUN_CLOCK"):
+            s.recently_finished(state, now - dt.timedelta(seconds=2))
+
+    def test_provider_cooldown_file_absent_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(s, "ROOT", Path(tmp)):
+                with self.assertRaisesRegex(
+                        s.SchedulerBlocked, "UNTRUSTED_PROVIDER_COOLDOWN_LEDGER"):
+                    s.provider_cooldown_until(self.stamp("2026-11-11", 18, 0))
+
+    def test_new_state_preserves_legacy_no_work_and_positive_progress(self):
+        now = self.stamp("2026-11-11", 17, 30)
+        prior = {"zero_streak": 1, "paused_until": None,
+                 "last_finished_at": None}
+        no_work = {"PERSONAL_RECOVERY_WINDOWS_SELECTED": 0,
+                   "PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 0,
+                   "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 0}
+        self.assertEqual(s.new_state(prior, no_work, now), prior)
+        positive = {**no_work,
+                    "PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 2,
+                    "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 350}
+        self.assertEqual(s.new_state(prior, positive, now)["zero_streak"], 0)
 
     def test_wrong_instance_rejected(self):
         class FakeResponse:

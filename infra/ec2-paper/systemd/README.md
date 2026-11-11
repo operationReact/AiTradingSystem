@@ -8,11 +8,11 @@ The current Java backend runs in a memory-capped Docker container and cannot acc
 
 ## Policy
 
-- Market **off-hours**: weekdays at 16:15, 17:15, 18:15, 19:15, 20:15 IST; weekends hourly from 09:15 through 20:15 IST.
+- Market **off-hours**: weekdays every two minutes from 16:00 through 20:58 IST; weekends every two minutes from 09:00 through 20:58 IST. These are **scheduler checks**: when the oneshot collector is already running, systemd never launches an overlapping invocation. The next eligible tick starts another bounded batch.
 - No missed-job catch-up after EC2 restarts; `Persistent=false`.
 - Independent 22:00 IST EC2 stop remains in place; scheduler refuses starts at or after 21:00 IST.
-- Existing collector's exclusive `flock`, private SQLite checkpoints, archive integrity checks, 403/429 global provider cooldown, five-equity/20-call caps and ten-second spacing remain authoritative.
-- After **two zero-candle batches**, pause another 24 hours rather than repeatedly requesting unproductive recovery windows. After a pause, allow one batch; positive progress clears the streak.
+- Existing collector's exclusive `flock`, private SQLite checkpoints, archive integrity checks, 403/429 global provider cooldown, five-equity/20-call caps and ten-second spacing remain authoritative. A new root-only 30-second inter-batch checkpoint prevents restarting at an even-minute timer boundary immediately after a prior batch finishes.
+- After **two batches that attempted work but produced zero candles**, pause another 24 hours rather than repeatedly requesting unproductive recovery windows. Count empty recovery windows even when no page was saved. After a pause, allow one batch; positive progress clears the streak.
 - Only sanitized counters go to the journal; no broker tokens, OHLCV, credentials, stderr or raw broker responses.
 - No LIVE order routing, public endpoint, customer data publication, or new data provider.
 
@@ -60,7 +60,24 @@ only the exact reviewed `infra/ec2-paper/requests/ssm-release.json` one-file
 push to `dev` can authorize this deployment. Manual Android release also
 requires its separate reviewed single-file request.
 
-The 22:00 IST nightly EC2 stop remains enabled, so this does not promise 24x7
+The 22:00 IST nightly EC2 stop remains enabled; the timer runs automatic bounded batches every two minutes while EC2 is up and within the allowed window, so this does not promise 24x7
 host uptime. The timer resumes scheduled slots only when EC2 is running,
 and may publish PAUSED after repeated zero-candle batches. The dashboard
 reports these outcomes rather than claiming continuous candle growth.
+
+## Adaptive collection: no hourly backlog idle time
+
+The two-minute calendar fires only during eligible hours, and a running
+`Type=oneshot` service cannot overlap itself. Each invocation runs up to one
+existing 20-call bounded Angel One batch. On success it commits archive and
+scheduler checkpoints; the next eligible two-minute tick continues from the
+next window. No rate-limit increases are granted. Provider 403/429 uses the
+collector's account-wide persisted 60-minute cooldown, honored before next
+provider request. After two attempted zero-candle batches, persist a 24-hour
+pause and report PAUSED in the owner UI. No-work checks do not pretend to
+retrieve candles. A separate persisted 30-second minimum gap protects the
+boundary between short successive batches. The `ONE_DAY` candle interval
+is unchanged and independent of the polling cadence.
+
+**Do not modify EC2 night stop for this change.** If EC2 is stopped, no
+scheduled collection occurs until it starts again.
