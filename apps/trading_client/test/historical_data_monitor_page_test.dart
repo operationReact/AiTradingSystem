@@ -62,11 +62,15 @@ void main() {
     expect(find.text('56,172'), findsWidgets);
     expect(find.text('Daily · 1D (ONE_DAY)'), findsOneWidget);
     expect(find.text('Hourly, off-hours only'), findsOneWidget);
-    expect(find.text('Coverage by year'), findsOneWidget);
-    expect(find.byKey(const ValueKey('history-year-2026')), findsOneWidget);
+    // ListView lazily builds the lower sections; scroll them into view first.
     await tester.scrollUntilVisible(
-      find.byKey(const ValueKey('history-year-2026')), 180,
+      find.text('Coverage by year'), 160,
       scrollable: find.byType(Scrollable).first);
+    expect(find.text('Coverage by year'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('history-year-2026')), 160,
+      scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const ValueKey('history-year-2026')), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('history-year-2026')));
     await tester.pumpAndSettle();
     expect(find.text('Partial / completeness unverified'), findsWidgets);
