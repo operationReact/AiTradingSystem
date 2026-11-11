@@ -41,7 +41,8 @@ def test_future_source_is_rejected():
 def test_timing_receipt_before_source_is_rejected():
     args = snapshot()
     args["timing"] = replace(
-        args["timing"], research_received_at=args["source_received_at"] - timedelta(seconds=1)
+        args["timing"],
+        research_received_at=args["source_received_at"] - timedelta(seconds=1),
     )
     assert not assess_cross_gate_asof(**args).eligible_for_research
 
