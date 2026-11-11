@@ -1,6 +1,6 @@
 """Deterministic tests for Phase 4D5 research-only acceptance."""
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -9,7 +9,7 @@ from aitrading_intelligence.dataset_acceptance_gate import (
     accept_dataset,
 )
 
-NOW = datetime(2026, 11, 11, 3, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 11, 3, 0, tzinfo=UTC)
 
 
 def sample() -> DatasetEvidence:
