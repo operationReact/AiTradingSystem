@@ -49,11 +49,11 @@ void main() {
 
   test('missing as-of date and exact classification state stay explicit', () {
     final data = fixture();
-    final original = (data['verifiedMemberships'] as List).first as Map<String, dynamic>;
-    (data['verifiedMemberships'] as List)[0] = {
-      ...original,
-      'sourceAsOf': null,
-    };
+    final original = (data['verifiedMemberships'] as List).first
+        as Map<String, dynamic>;
+    data['verifiedMemberships'] = [
+      <String, dynamic>{...original, 'sourceAsOf': null},
+    ];
     final parsed = CustomerUniverseFacets.fromJson(data);
     expect(parsed.indices.single.sourceAsOf, isNull);
     expect(parsed.classifications['NSE_SECTOR_INDUSTRY'],
