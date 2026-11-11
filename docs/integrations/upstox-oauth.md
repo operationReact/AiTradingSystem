@@ -206,3 +206,55 @@ References:
 - https://upstox.com/developer/api-documentation/get-token/
 - https://upstox.com/developer/api-documentation/rate-limiting/
 - https://upstox.com/developer/api-documentation/appendix/my-apps-support-for-algo-trading-circular/
+
+
+## Secure direct SSM configuration (development runtime)
+
+A dedicated, **disabled-by-default** backend flag allows MintTick to load the
+platform's Upstox OAuth developer credentials directly from AWS Systems Manager
+Parameter Store on **EC2 startup**, without copying the secret into
+`/opt/aitradingsystem-paper/runtime.env` or a Docker Compose file.
+
+**Credential paths consumed by this code** (must match the three user-created
+parameters exactly):
+
+- `/minttick/upstox/client-id` — `SecureString`
+- `/minttick/upstox/client-secret` — `SecureString`
+- `/minttick/upstox/redirect-uri` — `String` or `SecureString`, value
+  `https://api.minttick.com/api/customer/brokers/upstox/callback`
+
+**Operator-owned, separately reviewed activation checklist:**
+
+1. Confirm all three parameters exist in account `098859530205`, region
+   `ap-south-1`, with the expected types and the exact redirect URI.
+   No command or screenshot should print or display the secret value.
+2. Attach the least-privilege example policy
+   `infra/ec2-paper/upstox-oauth-instance-role-policy.json` to the
+   **existing EC2 instance role** actually used by the PAPER backend.
+   This policy is source documentation, not an automatically applied IAM
+   change. A customer-managed KMS key also needs a separately scoped
+   `kms:Decrypt` grant for the actual key.
+3. On the protected PAPER EC2 host, configure only
+   `MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true` in root-owned `runtime.env`
+   (mode 0600), without API keys, OAuth secrets or tokens. Do not change
+   Angel One settings, read-only Analytics token setup, or PAPER trading mode.
+4. Deploy reviewed application code via the existing SSM deployment procedure
+   and validate that the backend, Web reverse proxy, and API Gateway are
+   healthy. A new backend process reads the three parameters with
+   `GetParameters(WithDecryption=true)` using the role's normal SDK
+   credential chain. It never falls back to environment credentials when the
+   SSM flag is enabled, and any read/type/format error leaves
+   `available=false` without exposing values.
+5. Authenticate as the linked Cognito customer. Confirm
+   `GET /api/customer/brokers/upstox/status` returns `available=true`
+   (only a configuration check). Complete a browser redirect from **Connect
+   with Upstox**, return to MintTick and verify `connected=true` plus
+   actual read-only holdings/funds/positions/orders. The OAuth state and
+   bearer token remain process-local and expire on restart / session expiry.
+6. **LIVE is not enabled** by steps 1–5. Customer-bound order routing, broker
+   permission/static egress IP verification, consent, risk limits, order
+   preflight and reconciliation are separate later changes.
+
+Never treat a successful CI job or three SSM parameter names as proof the
+live AWS role can decrypt them. The actual instance policy and host opt-in
+must be inspected and tested before announcing a connected account.
