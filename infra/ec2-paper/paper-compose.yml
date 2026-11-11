@@ -64,6 +64,8 @@ services:
       # the backend ignores the legacy environment credentials entirely.
       # No broker secret is written to runtime.env, GitHub or Flutter.
       MINTTICK_UPSTOX_OAUTH_SSM_ENABLED: ${MINTTICK_UPSTOX_OAUTH_SSM_ENABLED:-false}
+      # Owner-only individual-app TOTP login. No secrets in Compose.
+      MINTTICK_UPSTOX_OWNER_TOTP_ENABLED: ${MINTTICK_UPSTOX_OWNER_TOTP_ENABLED:-false}
       UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
       UPSTOX_CLIENT_SECRET: ${UPSTOX_CLIENT_SECRET:-}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-}
