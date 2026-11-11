@@ -186,7 +186,7 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(ok["statusCode"], 200)
         self.assertEqual(ok["headers"]["cache-control"], "no-store")
         req=backend.call_args.args[0]
-        self.assertIsNone(req.data)
+        self.assertEqual(req.data, b"")  # POST with zero credential bytes
         self.assertEqual(req.headers.get("Authorization"), "Bearer public-test-token")
 
     def test_owner_configured_broker_route_forwards_only_jwt_and_empty_post(self):
