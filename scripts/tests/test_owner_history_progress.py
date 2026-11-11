@@ -72,8 +72,8 @@ class ProgressSnapshotTests(unittest.TestCase):
             self.assertEqual(data["task"]["years"][2024-2006]["candles"], 2)
             self.assertEqual(data["task"]["years"][2024-2006]["completeness"], "UNVERIFIED")
             self.assertFalse(data["task"]["yearCoverageVerified"])
-            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_OFF_HOURS")
-            self.assertEqual(data["scheduler"]["weekdayHoursIST"], "00:00–20:58")
+            self.assertEqual(data["scheduler"]["cadence"], "BOUNDED_CONTINUOUS_24H")
+            self.assertEqual(data["scheduler"]["weekdayHoursIST"], "00:00–23:58")
             self.assertEqual(data["recentRequests"][0]["fromDate"], "2024-01-01")
             serialized = json.dumps(data)
             self.assertNotIn("2885", serialized)
@@ -85,7 +85,14 @@ class ProgressSnapshotTests(unittest.TestCase):
                          "2026-11-11T16:02:00+05:30")
         closed = dt.datetime.fromisoformat("2026-11-11T21:15:00+05:30")
         self.assertEqual(progress._next_scheduled_at(closed),
+                         "2026-11-11T21:16:00+05:30")
+
+    def test_overnight_tick_wraps_to_next_day(self):
+        late = dt.datetime.fromisoformat("2026-11-11T23:59:59+05:30")
+        self.assertEqual(progress._next_scheduled_at(late),
                          "2026-11-12T00:00:00+05:30")
+        with self.assertRaises(progress.ProgressUnavailable):
+            progress._next_scheduled_at(dt.datetime(2026, 11, 11, 21, 0))
 
     def test_tampered_source_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
