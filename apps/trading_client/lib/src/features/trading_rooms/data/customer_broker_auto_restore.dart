@@ -5,8 +5,9 @@ import 'customer_upstox_repository.dart';
 /// CUSTOMER login. The backend is the sole authority for the configured owner
 /// identity and for reading Angel One SSM credentials.
 ///
-/// Upstox never receives an automatic OAuth start: its developer-app key and
-/// secret cannot impersonate the trading-account owner after token expiry.
+/// Upstox never receives an automatic OAuth browser start. For an eligible
+/// individual owner app, the backend may securely generate a new session
+/// from exact-owner SSM PIN + TOTP. Developer keys alone never grant access.
 class CustomerBrokerAutoRestore {
   const CustomerBrokerAutoRestore({
     required this.angelOne,
@@ -21,12 +22,25 @@ class CustomerBrokerAutoRestore {
     bool upstoxConnected = false;
     bool upstoxNeedsAuthorization = false;
 
-    // Upstox status reads only the currently bound, unexpired broker session.
-    // Never silently open the login browser or trade on behalf of the user.
+    // Reuse valid broker sessions to avoid revoking Upstox's previous token.
+    // Only the explicitly bound Cognito owner can use an optional approved
+    // individual-app PIN + TOTP flow; backend verifies the owner again.
+    // Other customers stay on the normal Upstox-hosted OAuth login.
     try {
-      final status = await upstox.status();
+      var status = await upstox.status();
       upstoxConnected = status.connected;
-      upstoxNeedsAuthorization = status.available && !status.connected;
+      if (!upstoxConnected && status.available) {
+        try {
+          if (await upstox.configuredLoginAvailable()) {
+            status = await upstox.connectConfigured();
+            upstoxConnected = status.connected;
+          }
+        } catch (_) {
+          // Unsupported app type, unavailable secrets, broker denial or 404
+          // from an older backend: keep normal Upstox OAuth available.
+        }
+      }
+      upstoxNeedsAuthorization = status.available && !upstoxConnected;
     } catch (_) {
       // A network failure is not evidence of an expired broker grant.
     }
