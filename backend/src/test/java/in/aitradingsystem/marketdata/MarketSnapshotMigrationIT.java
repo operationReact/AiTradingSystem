@@ -49,6 +49,34 @@ class MarketSnapshotMigrationIT extends AbstractPostgresIT {
     }
 
     @Test
+    void fullQuoteCacheNeverOverwritesNewerExchangeEventWithOlderData() {
+        detailStore.save(new CustomerMarketDataController.DetailQuote(
+            TEST_INSTRUMENT, "NSE", "RELIANCE-EQ", new BigDecimal("1335.40"),
+            new BigDecimal("1333.50"), new BigDecimal("1349.40"), new BigDecimal("1327.00"),
+            new BigDecimal("1324.40"), 1000L, TICK, TICK,
+            "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND",
+            null, null, null, 0L, 0L, List.of(), List.of()));
+        detailStore.save(new CustomerMarketDataController.DetailQuote(
+            TEST_INSTRUMENT, "NSE", "RELIANCE-EQ", new BigDecimal("1329.20"),
+            new BigDecimal("1333.50"), new BigDecimal("1336.90"), new BigDecimal("1327.00"),
+            new BigDecimal("1324.40"), 1000L, TICK.minusSeconds(60), TICK.plusSeconds(60),
+            "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND",
+            null, null, null, 0L, 0L, List.of(), List.of()));
+        assertThat(detailStore.load(TEST_INSTRUMENT).orElseThrow().ltp())
+            .isEqualByComparingTo("1335.40");
+        assertThat(detailStore.load(TEST_INSTRUMENT).orElseThrow().high())
+            .isEqualByComparingTo("1349.40");
+        detailStore.save(new CustomerMarketDataController.DetailQuote(
+            TEST_INSTRUMENT, "NSE", "RELIANCE-EQ", new BigDecimal("1336.20"),
+            new BigDecimal("1333.50"), new BigDecimal("1350.00"), new BigDecimal("1327.00"),
+            new BigDecimal("1324.40"), 1000L, TICK.plusSeconds(30), TICK.plusSeconds(35),
+            "ANGEL_ONE_SMARTAPI_FULL_APP", "ON_DEMAND",
+            null, null, null, 0L, 0L, List.of(), List.of()));
+        assertThat(detailStore.load(TEST_INSTRUMENT).orElseThrow().ltp())
+            .isEqualByComparingTo("1336.20");
+    }
+
+    @Test
     void flywayAppliesBothMigrationsAndRepositoriesRoundTripActualJsonb() {
         Integer installed = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM flyway_schema_history
