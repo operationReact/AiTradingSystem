@@ -55,6 +55,14 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
         self.assertIn('not counts and {', src)
         self.assertIn("if [ \"$audit_exit\" -eq 0 ]; then", src)
 
+    def test_entire_owner_ssm_release_python_generator_compiles(self):
+        import textwrap
+        src = self.source
+        anchor = 'python3 - "$GITHUB_SHA" "$digest" '
+        builder = src.split(anchor, 1)[1].split("\n          PY\n", 1)[0]
+        builder = builder.split("\n", 1)[1]
+        compile(textwrap.dedent(builder), "<owner-ssm-release-builder>", "exec")
+
     def test_readonly_recent_request_outcome_summary_stays_private(self):
         import textwrap
         src = self.source

@@ -1,12 +1,12 @@
 {
-  "application": "MintTick",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
-  "private_ec2_only": true,
-  "no_redistribution": true,
-  "enable_trading": false,
-  "operation": "owner-personal-angelone-daily-history-audit",
-  "audit_only": true,
-  "max_provider_calls": 0
+    "application": "MintTick",
+    "account": "098859530205",
+    "region": "ap-south-1",
+    "instance_id": "i-09c01b470fb39b85a",
+    "private_ec2_only": true,
+    "no_redistribution": true,
+    "enable_trading": false,
+    "operation": "owner-personal-angelone-daily-history-audit",
+    "audit_only": true,
+    "max_provider_calls": 0
 }
