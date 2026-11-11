@@ -82,7 +82,7 @@ def build_command() -> str:
         encoded = base64.b64encode(body).decode("ascii")
         lines.append(f"printf '%s' '{encoded}' | base64 -d > \"$work/{name}\"")
     lines.append('bash "$work/enable_owner_history_timer.sh" "$work"')
-    source = ("\\n".join(lines) + "\\n").encode()
+    source = ("\n".join(lines) + "\n").encode()
     if not (1500 <= len(source) < 12000):
         raise ValueError("invalid reviewed timer payload size")
     checksum = hashlib.sha256(source).hexdigest()
@@ -98,7 +98,7 @@ def build_command() -> str:
         'r=subprocess.run(["bash","-s"],input=p,check=False);'
         'sys.exit(r.returncode)'
     )
-    return "set -eu\\npython3 -c '" + python + "' '" + encoded + "' '" + checksum + "'\\n"
+    return "set -eu\npython3 -c '" + python + "' '" + encoded + "' '" + checksum + "'\n"
 
 
 def activate() -> None:
