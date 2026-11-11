@@ -934,8 +934,10 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
         ],
       )),
       const SizedBox(height: 18),
-      SegmentedButton<String>(
-        key: const ValueKey('room-detail-tabs'),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: SegmentedButton<String>(
+          key: const ValueKey('room-detail-tabs'),
         showSelectedIcon: false,
         segments: [
           const ButtonSegment(value: 'Overview', label: Text('Overview')),
@@ -946,7 +948,8 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           const ButtonSegment(value: 'Activity', label: Text('Activity')),
         ],
         selected: {_tab},
-        onSelectionChanged: (value) => setState(() => _tab = value.first),
+          onSelectionChanged: (value) => setState(() => _tab = value.first),
+        ),
       ),
       const SizedBox(height: 18),
       if (_tab == 'Overview') ...[
