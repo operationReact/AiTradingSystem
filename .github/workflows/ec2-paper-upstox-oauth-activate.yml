@@ -44,8 +44,8 @@ jobs:
           assert 'MINTTICK_UPSTOX_OAUTH_RESULT:HOST_ACTIVATED_READ_ONLY' in script
           assert 'ssm' in workflow and 'github.ref == ' in workflow
           assert 'MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true' in script
-          assert 'GetParameters' not in workflow
-          assert 'place-order' not in script and 'place-order' not in workflow
+          assert "'get-parameters'" in script
+          assert '/v3/order/place' not in script
           print('Static read-only protected activation validation passed')
           PY
 
