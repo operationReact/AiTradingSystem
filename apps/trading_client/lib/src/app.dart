@@ -562,6 +562,30 @@ class _TradingAppState extends State<TradingApp> {
     if (!mounted || room == null) return;
     try {
       await _roomDrafts.create(room);
+      // A Paper room's planned budget is already confirmed in the creation
+      // wizard. Allocate virtual cash only, exactly once per saved Paper room.
+      // This does NOT unlock paper order execution or any LIVE money.
+      if (room.mode == TradingWorkspaceMode.paper) {
+        try {
+          final saved = _roomDrafts.drafts.first;
+          if (saved.mode != TradingWorkspaceMode.paper) {
+            throw const FormatException('Created Paper room mismatch');
+          }
+          await HttpCustomerRoomRepository(_api).activatePaper(saved.id);
+          await _roomDrafts.load();
+        } catch (_) {
+          // Preserve the saved room; the user can retry funding in Details.
+          final current = _navigatorKey.currentContext;
+          if (mounted && current != null && current.mounted) {
+            ScaffoldMessenger.of(current).showSnackBar(
+              const SnackBar(content: Text(
+                'Paper Room saved, but virtual funding could not be verified. '
+                'Open the room to retry. No real money was used.',
+              )),
+            );
+          }
+        }
+      }
       if (mounted) _navigate('/rooms');
     } catch (_) {
       // Never add a phantom room when the server write failed.
