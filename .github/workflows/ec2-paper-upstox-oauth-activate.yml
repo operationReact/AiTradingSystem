@@ -156,6 +156,17 @@ jobs:
               status=result.get('Status')
               output=str(result.get('StandardOutputContent') or '')+'\n'+str(result.get('StandardErrorContent') or '')
               markers=re.findall(r'MINTTICK_UPSTOX_OAUTH_RESULT:([A-Z_]+)',output)
+              if status in ('Success','Failed','Cancelled','TimedOut'):
+                  # Redacted structural diagnostics only: no raw stdout, stderr,
+                  # token, PIN, TOTP, owner subject, parameter value or account data.
+                  accepted={'HOST_ACTIVATED_READ_ONLY','HOST_ALREADY_ACTIVE_READ_ONLY'}
+                  labels=[x if x in known or x in accepted else 'OTHER'
+                          for x in markers[:4]]
+                  transport=''.join('1' if 'MINTTICK_UPSTOX_OAUTH_TRANSPORT:'+x in output
+                                    else '0' for x in ('START','VERIFIED','FINISHED'))
+                  print('UPSTOX_OAUTH_PROOF:status='+status+
+                        ';transport='+transport+';markers='+str(min(len(markers),5))+
+                        ';classes='+','.join(labels),flush=True)
               if status == 'Success':
                   if not all('MINTTICK_UPSTOX_OAUTH_TRANSPORT:'+s in output
                              for s in ('START','VERIFIED','FINISHED')):
