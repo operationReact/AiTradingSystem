@@ -59,8 +59,11 @@ services:
       ANGELONE_CLIENT_MAC_ADDRESS: ${ANGELONE_CLIENT_MAC_ADDRESS:-}
       # Exact Cognito owner-subject binding; not an API key or broker credential.
       MINTTICK_ANGEL_ONE_OWNER_SUB: ${MINTTICK_ANGEL_ONE_OWNER_SUB:-}
-      # Upstox app-owned OAuth credentials are injected only from protected host runtime.env.
-      # These are never compiled into the Flutter client or CI release artifacts.
+      # Upstox OAuth can read only three allowlisted SSM credentials via the
+      # EC2 instance role after IAM review. Off by default. When enabled,
+      # the backend ignores the legacy environment credentials entirely.
+      # No broker secret is written to runtime.env, GitHub or Flutter.
+      MINTTICK_UPSTOX_OAUTH_SSM_ENABLED: ${MINTTICK_UPSTOX_OAUTH_SSM_ENABLED:-false}
       UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
       UPSTOX_CLIENT_SECRET: ${UPSTOX_CLIENT_SECRET:-}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-}
