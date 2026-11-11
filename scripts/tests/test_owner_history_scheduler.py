@@ -19,14 +19,14 @@ class SchedulerTests(unittest.TestCase):
         return dt.datetime.fromisoformat(f"{weekday_date}T{hour:02d}:{minute:02d}:00").replace(tzinfo=IST)
 
     def test_weekday_market_and_shutdown_cutoff(self):
-        self.assertFalse(s.allowed_time(self.stamp("2026-11-11", 15, 59)))
+        self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 15, 59)))
         self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 16, 15)))
         self.assertTrue(s.allowed_time(self.stamp("2026-11-11", 20, 15)))
         self.assertFalse(s.allowed_time(self.stamp("2026-11-11", 21, 0)))
         self.assertFalse(s.allowed_time(self.stamp("2026-11-11", 22, 0)))
 
     def test_weekend_hours(self):
-        self.assertFalse(s.allowed_time(self.stamp("2026-11-14", 8, 59)))
+        self.assertTrue(s.allowed_time(self.stamp("2026-11-14", 8, 59)))
         self.assertTrue(s.allowed_time(self.stamp("2026-11-14", 9, 15)))
         self.assertFalse(s.allowed_time(self.stamp("2026-11-14", 21, 0)))
 
@@ -40,7 +40,7 @@ class SchedulerTests(unittest.TestCase):
             s.metrics_from_output("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 2\n"
                                   "PERSONAL_ROWS_DOWNLOADED_THIS_RUN: 3")
 
-    def test_two_empty_batches_pause_then_positive_resets(self):
+    def test_two_empty_batches_do_not_pause_others(self):
         now = self.stamp("2026-11-11", 18, 15)
         initial = {"zero_streak": 0, "paused_until": None,
                    "last_finished_at": None}
@@ -51,8 +51,8 @@ class SchedulerTests(unittest.TestCase):
         self.assertIsNone(first["paused_until"])
         second = s.new_state(first, zeros, now)
         self.assertEqual(second["zero_streak"], 2)
-        self.assertEqual(dt.datetime.fromisoformat(second["paused_until"]),
-                         now + dt.timedelta(hours=24))
+        self.assertIsNone(second["paused_until"])
+        self.assertIsNotNone(second["last_finished_at"])
         saved = s.new_state(second, {"PERSONAL_PAGES_DOWNLOADED_THIS_RUN": 5,
                                      "PERSONAL_ROWS_DOWNLOADED_THIS_RUN": 345}, now)
         self.assertEqual(saved["zero_streak"], 0)
@@ -78,7 +78,7 @@ class SchedulerTests(unittest.TestCase):
                 s.save_state(path, expected)
                 self.assertEqual(s.load_state(path), expected)
 
-    def test_recovery_empty_windows_count_toward_circuit_breaker(self):
+    def test_recovery_empty_windows_are_recorded_without_global_pause(self):
         now = self.stamp("2026-11-11", 18, 2)
         old = {"zero_streak": 0, "paused_until": None, "last_finished_at": None}
         # The Angel One short-window recovery runs had zero *stored* pages,
@@ -94,7 +94,7 @@ class SchedulerTests(unittest.TestCase):
         self.assertIsNone(first["paused_until"])
         second = s.new_state(first, empty, now + dt.timedelta(minutes=4))
         self.assertEqual(second["zero_streak"], 2)
-        self.assertIsNotNone(second["paused_until"])
+        self.assertIsNone(second["paused_until"])
 
     def test_cross_batch_spacing_and_clock_regression(self):
         now = self.stamp("2026-11-11", 18, 2)
