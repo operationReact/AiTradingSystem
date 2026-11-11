@@ -19,7 +19,8 @@ class MintTickUpstoxPage extends StatefulWidget {
   State<MintTickUpstoxPage> createState() => _MintTickUpstoxPageState();
 }
 
-class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
+class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
+    with WidgetsBindingObserver {
   CustomerUpstoxStatus? _status;
   bool _loading = false;
   bool _awaitingReturn = false;
@@ -30,7 +31,23 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refresh();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // On returning from the official broker-hosted OAuth page, re-read the
+    // one-time server-side result. Never start a new OAuth flow silently.
+    if (state == AppLifecycleState.resumed && _awaitingReturn) {
+      _refresh();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -186,8 +203,9 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage> {
         if (_awaitingReturn) ...[
           const SizedBox(height: 14),
           const MintTickInfoText(
-            'Complete authentication on Upstox, return to MintTick, '
-            'then tap Refresh connection. Your credentials stay on Upstox.',
+            'Complete authentication on Upstox and return to MintTick. '
+            'The connection refreshes when you return. '
+            'Your credentials stay on Upstox.',
             icon: Icons.verified_user_outlined,
           ),
         ],
