@@ -29,9 +29,10 @@ class OwnerHistorySsmTimeoutContract(unittest.TestCase):
 
     def test_offline_pull_request_tests_do_not_wait_for_ec2_host_lock(self):
         src = self.source
-        self.assertNotIn("\\nconcurrency:\\n  group: aitrading-paper-ec2-manual-lifecycle", src)
-        self.assertIn("  execute:\\n    # Only host mutations share the EC2 lane.", src)
-        self.assertIn("      group: aitrading-paper-ec2-manual-lifecycle", src)
+        before_jobs, execute_job = src.split("  execute:", 1)
+        self.assertNotIn("concurrency:", before_jobs.split("jobs:", 1)[0])
+        self.assertIn("    concurrency:", execute_job)
+        self.assertIn("      group: aitrading-paper-ec2-manual-lifecycle", execute_job)
 
     def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
         src = self.source
