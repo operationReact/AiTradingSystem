@@ -76,7 +76,9 @@ void main() {
     expect(orders.submits, 0);
 
     await tester.tap(find.byKey(const ValueKey('paper-resume-manual')));
-    await tester.pumpAndSettle();
+    // An indeterminate progress bar remains behind this confirmation modal:
+    // pumpAndSettle cannot finish until the user closes the dialog.
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.textContaining('virtual funds'), findsWidgets);
     await tester.tap(find.byKey(const ValueKey('paper-resume-confirm')));
     await tester.pumpAndSettle();
