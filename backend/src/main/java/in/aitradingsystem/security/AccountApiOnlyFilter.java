@@ -40,7 +40,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/market-data/snapshot",
         "/api/customer/market-data/candles",
         "/api/customer/market-data/quotes/detail",
-        "/api/customer/market-data/overview");
+        "/api/customer/market-data/overview",
+        "/api/customer/market-data/universe-facets");
     private static final Set<String> PORTFOLIO_READS = Set.of(
         "/api/customer/portfolio/records",
         "/api/customer/home/v1/summary",
