@@ -45,7 +45,7 @@ class HistoryTimerEnableContract(unittest.TestCase):
 
     def test_immutable_nonsecret_timer_bundle_and_shell(self):
         remote = gate.build_command()
-        self.assertTrue(remote.startswith("set -eu\\npython3 -c '"), remote[:100])
+        self.assertTrue(remote.startswith("set -eu\npython3 -c '"), remote[:100])
         self.assertLess(len(remote), 6500)
         self.assertIn("OWNER_TIMER_TRANSPORT: VERIFIED",remote)
         self.assertNotIn("AWS_SECRET_ACCESS_KEY",remote)
