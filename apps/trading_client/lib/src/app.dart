@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +39,7 @@ import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
+import 'features/trading_rooms/data/customer_broker_auto_restore.dart';
 import 'features/trading_rooms/data/customer_portfolio_repository.dart';
 import 'features/trading_rooms/data/customer_market_repository.dart';
 import 'features/trading_rooms/data/customer_upstox_repository.dart';
@@ -98,6 +101,7 @@ class _TradingAppState extends State<TradingApp> {
   });
   late final TradingRoomDraftStore _roomDrafts;
   late final TradingWorkspaceMode _workspaceMode;
+  String? _brokerRestoreCustomerId;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
   bool _exitDialogOpen = false;
@@ -301,6 +305,8 @@ class _TradingAppState extends State<TradingApp> {
   }
 
   Future<void> _signOut() async {
+    // A new Cognito sign-in can attempt owner-only broker restoration again.
+    _brokerRestoreCustomerId = null;
     // Best-effort server-side disconnect while the customer JWT is still
     // available. A network failure must never block local sign-out; the
     // server also expires all broker sessions automatically.
@@ -314,7 +320,20 @@ class _TradingAppState extends State<TradingApp> {
         // Bounded session expiry still applies when offline.
       }
     }
+    // An owner session stays bound to the same verified Cognito customer and
+    // can be resumed on their next login until Upstox's daily token expiry.
+    // Other customers continue to revoke their broker session at sign-out.
+    bool verifiedOwner = false;
     if (widget.session.isCustomerAuthenticated) {
+      try {
+        verifiedOwner = await HttpCustomerAngelOneRepository(_api)
+            .configuredLoginAvailable()
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // Fail closed; sign-out must never assume the user is the owner.
+      }
+    }
+    if (widget.session.isCustomerAuthenticated && !verifiedOwner) {
       try {
         await _api.postJson(
           '/api/customer/brokers/upstox/disconnect',
@@ -475,7 +494,29 @@ class _TradingAppState extends State<TradingApp> {
     if (result is! Map<String, dynamic>) {
       throw const FormatException('Invalid customer profile');
     }
+    // Run only after a real authenticated backend identity has been verified,
+    // once per customer login. Never block Home on a third-party broker.
+    final userId = result['userId'];
+    if (widget.session.isCustomerAuthenticated &&
+        result['role'] == 'CUSTOMER' && userId is String &&
+        userId.isNotEmpty && result['email'] is String &&
+        (result['email'] as String).isNotEmpty &&
+        _brokerRestoreCustomerId != userId) {
+      _brokerRestoreCustomerId = userId;
+      unawaited(_restoreBrokerSessions());
+    }
     return result;
+  }
+
+  Future<void> _restoreBrokerSessions() async {
+    try {
+      await CustomerBrokerAutoRestore(
+        angelOne: HttpCustomerAngelOneRepository(_api),
+        upstox: HttpCustomerUpstoxRepository(_api),
+      ).restore();
+    } catch (_) {
+      // Broker outage never blocks Cognito sign-in, Home or Paper Rooms.
+    }
   }
 
   Widget _customerState(String section) => MintTickCustomerUnavailablePage(
