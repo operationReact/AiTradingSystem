@@ -58,6 +58,8 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments/status"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/market-data/universe-facets"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/market-data/universe-facets"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/quotes"))
         for path in ("/api/customer/market-data/quotes/detail", "/api/customer/market-data/overview", "/api/customer/market-data/snapshot", "/api/customer/market-data/candles", "/api/customer/watchlist"):
             self.assertTrue(proxy.allowed("GET", path), path)
