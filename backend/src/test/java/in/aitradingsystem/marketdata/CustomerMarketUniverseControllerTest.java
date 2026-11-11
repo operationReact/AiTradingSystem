@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import in.aitradingsystem.instrument.InstrumentMasterRepository;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.time.Instant;
 import java.util.List;
@@ -31,6 +32,18 @@ class CustomerMarketUniverseControllerTest {
             .isEqualTo(6009);
         assertThat(CustomerMarketUniverseController.countActiveListings(List.of()))
             .isZero();
+    }
+
+    @Test
+    void cashEligibilityIncludesBseEquitiesWithoutNseSuffix() {
+        // Angel One parser tests document BSE RELIANCE with instrumentType EQ
+        // and no -EQ suffix. Counts and search must use this shared predicate.
+        String rule = InstrumentMasterRepository.CASH_EQUITY_PREDICATE;
+        assertThat(rule).contains("i.exchange_segment = 'BSE_CM'");
+        assertThat(rule).contains("upper(coalesce(i.instrument_type, '')) = 'EQ'");
+        assertThat(rule).contains("i.exchange_segment = 'NSE_CM'");
+        assertThat(rule).contains("i.trading_symbol LIKE '%-EQ'");
+        assertThat(rule).doesNotContain("LIMIT 500", "LIMIT 750");
     }
 
     @Test
