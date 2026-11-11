@@ -1,10 +1,10 @@
 {
+  "region": "ap-south-1",
+  "account": "098859530205",
+  "confirmation": "AUTHORIZE_OWNER_UPSTOX_TOTP_READONLY",
   "kind": "minttick-upstox-owner-totp-activation-v1",
   "action": "enable-owner-totp-login",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
   "trading_mode": "PAPER",
-  "confirmation": "AUTHORIZE_OWNER_UPSTOX_TOTP_READONLY",
+  "instance_id": "i-09c01b470fb39b85a",
   "expected_release_sha": "28380b8e1b24d0283eb23ce40ea50adf15514ccf"
 }
