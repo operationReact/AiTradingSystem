@@ -1,6 +1,7 @@
 package in.aitradingsystem.provider.upstox;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -35,6 +36,8 @@ import software.amazon.awssdk.services.ssm.model.ParameterType;
 public final class UpstoxAnalyticsSource {
     static final String PARAMETER_NAME = "/minttick/upstox/analytics-token";
     private static final String ORIGIN = "https://api.upstox.com";
+    private static final int MAX_RESPONSE_CHARS = 256 * 1024;
+    private static final ObjectMapper JSON = new ObjectMapper();
     private static final String EQUITY_KEY = "(NSE_EQ|BSE_EQ)\\|[A-Z0-9]{12}";
     private static final String ISIN = "[A-Z]{2}[A-Z0-9]{10}";
     private static final int MAX_CANDLES = 40;
@@ -43,10 +46,8 @@ public final class UpstoxAnalyticsSource {
     private final RestClient client;
 
     @Autowired
-    public UpstoxAnalyticsSource(
-            @Value("${MINTTICK_UPSTOX_ANALYTICS_ENABLED:false}") boolean enabled,
-            RestClient.Builder builder) {
-        this(enabled, null, productionHttp(builder));
+    public UpstoxAnalyticsSource(@Value("${MINTTICK_UPSTOX_ANALYTICS_ENABLED:false}") boolean enabled) {
+        this(enabled, null, productionHttp(RestClient.builder()));
     }
 
     private static RestClient productionHttp(RestClient.Builder builder) {
@@ -136,10 +137,16 @@ public final class UpstoxAnalyticsSource {
     private JsonNode get(String path, Object... pathVariables) {
         String token = token();
         try {
-            JsonNode body = client.get().uri(path, pathVariables)
+            // RestClient constructed without Boot auto-configured Jackson-2
+            // converters: read bounded UTF-8 text, then explicitly use Jackson 2.
+            String payload = client.get().uri(path, pathVariables)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .accept(MediaType.APPLICATION_JSON)
-                    .retrieve().body(JsonNode.class);
+                    .retrieve().body(String.class);
+            if (payload == null || payload.length() > MAX_RESPONSE_CHARS) {
+                throw unavailable("UPSTOX_INVALID_RESPONSE");
+            }
+            JsonNode body = JSON.readTree(payload);
             if (body == null || !"success".equals(body.path("status").asText())
                     || body.path("data").isMissingNode()) {
                 throw unavailable("UPSTOX_INVALID_RESPONSE");
