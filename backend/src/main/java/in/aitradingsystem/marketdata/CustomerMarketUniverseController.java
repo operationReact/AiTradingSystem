@@ -75,7 +75,7 @@ public final class CustomerMarketUniverseController {
              GROUP BY i.exchange ORDER BY i.exchange
             """, (rs, row) -> new ExchangeFacet(
                 rs.getString("exchange"), rs.getLong("listing_count")));
-        long total = exchanges.stream().mapToLong(ExchangeFacet::activeListings).sum();
+        long total = countActiveListings(exchanges);
 
         // Only constituents with sourced reference rows appear. A zero or
         // missing view is not treated as proof that the index has no stocks.
@@ -115,6 +115,10 @@ public final class CustomerMarketUniverseController {
             .body(new Facets("customer.market.universe.v1", Instant.now(),
                 catalogue.version(), catalogue.activatedAt(), total,
                 List.copyOf(exchanges), List.copyOf(indices), state));
+    }
+
+    static long countActiveListings(List<ExchangeFacet> exchanges) {
+        return exchanges.stream().mapToLong(ExchangeFacet::activeListings).sum();
     }
 
     private void requireCustomer(Authentication authentication) {
