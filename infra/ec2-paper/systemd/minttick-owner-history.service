@@ -1,0 +1,22 @@
+[Unit]
+Description=MintTick private owner Angel One historical archive batch
+After=network-online.target docker.service amazon-ssm-agent.service
+Wants=network-online.target
+ConditionPathExists=/opt/aitradingsystem-paper/run_owner_personal_history.sh
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+WorkingDirectory=/opt/aitradingsystem-paper
+ExecStart=/usr/bin/python3 /opt/aitradingsystem-paper/owner_history_scheduler.py
+TimeoutStartSec=12min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# The existing collector owns private EBS/SQLite lock and provider cooldown.
+# Do not add Restart= or independent provider request retries.
