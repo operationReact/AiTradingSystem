@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOnlyUpstoxDeveloperOAuthParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameters"
+      ],
+      "Resource": [
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/client-id",
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/client-secret",
+        "arn:aws:ssm:ap-south-1:098859530205:parameter/minttick/upstox/redirect-uri"
+      ],
+      "Condition": {
+        "StringEquals": {
+          "aws:RequestedRegion": "ap-south-1"
+        }
+      }
+    }
+  ]
+}
