@@ -67,7 +67,7 @@ class CustomerPaperOrderServiceIT extends AbstractPostgresIT {
             "SELL",1,new BigDecimal("100.00"));
         assertThat(sold.notionalPaise()).isEqualTo(10_100L);
         assertThat(sold.realizedPnlDeltaPaise()).isEqualTo(-100L);
-        assertThat(wallets.get(owner,room).availableCashPaise()).isEqualTo(2_000_000L);
+        assertThat(wallets.get(owner,room).availableCashPaise()).isEqualTo(1_999_900L);
         assertThat(engine.positions(owner,room)).isEmpty();
         assertThat(engine.orders(owner,room)).hasSize(2);
 
@@ -138,6 +138,9 @@ class CustomerPaperOrderServiceIT extends AbstractPostgresIT {
                    "expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ",
                    "exch_seg":"nse_cm","tick_size":"5"},
                   {"token":"3045","symbol":"SBIN-EQ","name":"SBIN",
+                   "expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ",
+                   "exch_seg":"nse_cm","tick_size":"5"},
+                  {"token":"11128","symbol":"SBIN-AF","name":"SBIN",
                    "expiry":"","strike":"-1","lotsize":"1","instrumenttype":"EQ",
                    "exch_seg":"nse_cm","tick_size":"5"}
                 ]
