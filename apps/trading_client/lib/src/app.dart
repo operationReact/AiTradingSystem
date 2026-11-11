@@ -327,7 +327,8 @@ class _TradingAppState extends State<TradingApp> {
     if (widget.session.isCustomerAuthenticated) {
       try {
         verifiedOwner = await HttpCustomerAngelOneRepository(_api)
-            .configuredLoginAvailable();
+            .configuredLoginAvailable()
+            .timeout(const Duration(seconds: 2));
       } catch (_) {
         // Fail closed; sign-out must never assume the user is the owner.
       }
