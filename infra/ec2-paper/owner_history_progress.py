@@ -123,7 +123,7 @@ def _next_scheduled_at(now: dt.datetime) -> str:
     here = now.astimezone(TZ)
     for step in range(8):
         day = (here + dt.timedelta(days=step)).date()
-        first_hour = 16 if day.weekday() < 5 else 9
+        first_hour = 0
         for hour in range(first_hour, 21):
             for minute in range(0, 60, 2):
                 candidate = dt.datetime(
@@ -201,9 +201,9 @@ def build_snapshot(root: Path, now: dt.datetime, status: str,
             "years": years,
         },
         "scheduler": {
-            "cadence": "BOUNDED_CONTINUOUS_OFF_HOURS",
-            "weekdayHoursIST": "16:00–20:58",
-            "weekendHoursIST": "09:00–20:58",
+            "cadence": "BOUNDED_CONTINUOUS_DAILY",
+            "weekdayHoursIST": "00:00–20:58",
+            "weekendHoursIST": "00:00–20:58",
             "nextScheduledAt": _next_scheduled_at(now),
             "zeroCandleStreak": int(scheduler_state.get("zero_streak", 0)),
             "pausedUntil": scheduler_state.get("paused_until"),
