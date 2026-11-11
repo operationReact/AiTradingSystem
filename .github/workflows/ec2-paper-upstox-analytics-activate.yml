@@ -113,7 +113,13 @@ jobs:
               approved=re.findall(r'MINTTICK_UPSTOX_RESULT:([A-Z_]+)(?: candles=(\d+) ratios=(\d+))?',output)
               safe={'SSM_UNAVAILABLE','SSM_ACCESS_DENIED','SSM_PARAMETER_MISSING',
                     'SSM_KMS_DENIED','SSM_NETWORK_UNAVAILABLE','SSM_NOT_SECURESTRING',
-                    'LOCAL_RELEASE_FAILED','OPERATOR_AUTH_UNAVAILABLE',
+                    'LOCAL_RELEASE_FAILED','LOCAL_RELEASE_EGRESS_IP_DRIFT',
+                    'LOCAL_RELEASE_BACKEND_HEALTH','LOCAL_RELEASE_WEB_HEALTH',
+                    'LOCAL_RELEASE_PROXY_HEALTH','LOCAL_RELEASE_LAMBDA_BRIDGE',
+                    'LOCAL_RELEASE_DB_BACKUP','LOCAL_RELEASE_DISK_FULL',
+                    'LOCAL_RELEASE_MISSING_IMAGE','LOCAL_RELEASE_DOCKER_ERROR',
+                    'LOCAL_RELEASE_UNCLASSIFIED','ROLLBACK_UNVERIFIED',
+                    'OPERATOR_AUTH_UNAVAILABLE',
                     'PROBE_HTTP_UNAVAILABLE','PROVIDER_OR_RESPONSE_UNAVAILABLE',
                     'READS_VERIFIED','ACTIVATED_READ_ONLY'}
               if status == 'Success':
