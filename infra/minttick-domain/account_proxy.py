@@ -34,6 +34,8 @@ EXACT = {
     ("POST", "/api/customer/brokers/upstox/start"),
     ("POST", "/api/customer/brokers/upstox/disconnect"),
     ("GET", "/api/customer/brokers/upstox/status"),
+    ("GET", "/api/customer/brokers/upstox/configured-login"),
+    ("POST", "/api/customer/brokers/upstox/connect-configured"),
     ("GET", "/api/customer/brokers/upstox/funds"),
     ("GET", "/api/customer/brokers/upstox/holdings"),
     ("GET", "/api/customer/brokers/upstox/positions"),
@@ -165,6 +167,7 @@ def handler(event, context):
         "/api/customer/brokers/angel-one/connect-configured",
         "/api/customer/brokers/angel-one/disconnect",
         "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/connect-configured",
         "/api/customer/brokers/upstox/disconnect",
     } and body:
         return reply(400, {"error": "INVALID_BODY"})
