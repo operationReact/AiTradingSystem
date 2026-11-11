@@ -72,6 +72,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import base64
+          import gzip
           import json
           import pathlib
           import re
@@ -83,7 +84,18 @@ jobs:
           verify_ssm_release.verify_aws()  # existing host, agent, schedule, IAM and region
           script = pathlib.Path('infra/ec2-paper/upstox_analytics_activate.sh').read_bytes()
           assert len(script) < 9000
-          command = "printf '%s' '" + base64.b64encode(script).decode('ascii') + "' | base64 -d | bash"
+          # The previous uncompressed Base64 script was ~8.7 KB; one SSM
+          # invocation reported Success with no mandatory completion marker.
+          # Compress and checksum before transport, and fail if any pipeline
+          # stage is truncated or rejected. Never send credentials in payload.
+          compressed = gzip.compress(script, compresslevel=9, mtime=0)
+          assert gzip.decompress(compressed) == script
+          payload = base64.b64encode(compressed).decode('ascii')
+          assert len(payload) < 6000, 'SSM script transport exceeds safe bound'
+          command = (
+              "bash -o pipefail -c \"printf '%s' '" + payload
+              + "' | base64 -d | gzip -dc | bash\""
+          )
           base = ['aws','ssm']
           common = ['--region','ap-south-1','--no-cli-pager']
           def aws(*args):
