@@ -176,6 +176,9 @@ app:
       instrument-master-max-rejected-percent: 5
       instrument-master-min-retained-percent: 80
 minttick:
+  upstox-analytics:
+    # Admin probe is independent of normal customer broker login and disabled by default.
+    probe-enabled: ${MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED:false}
   golden-source:
     s3:
       # D20-04B is storage-only and remains fully inert unless explicitly enabled.

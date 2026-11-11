@@ -64,6 +64,10 @@ services:
       UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
       UPSTOX_CLIENT_SECRET: ${UPSTOX_CLIENT_SECRET:-}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-}
+      # Independent one-year read-only Analytics Token: fetched directly from SSM by
+      # the backend instance role; no token is injected into Compose or Flutter.
+      MINTTICK_UPSTOX_ANALYTICS_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_ENABLED:-false}
+      MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED:-false}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aitrading
       SPRING_DATASOURCE_USERNAME: aitrading
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?required}
