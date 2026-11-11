@@ -278,7 +278,7 @@ public class CustomerMarketDataController {
             try {
                 var detail = applicationFeed.detail(instrument);
                 // Off-hours FULL quotes can carry a holiday fetch date, not an exchange trade.
-                if (!validStoredExchangeTime(detail.exchangeAt())) {
+                if (!VerifiedFullQuoteSession.accepts(instrument.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar)) {
                     return noStore(storedDetail(instrument.id()).orElseThrow(() ->
                         new MarketDataException("QUOTE_DETAIL_OUTSIDE_SESSION",
                             "No verified trading-session detail is available")));
@@ -306,7 +306,7 @@ public class CustomerMarketDataController {
                 .filter(detail -> ("ANGEL_ONE_SMARTAPI_FULL_APP".equals(detail.source())
                         || "STORED_LAST_DETAIL".equals(detail.source()))
                     && detail.ltp() != null && detail.ltp().signum() > 0
-                    && validStoredExchangeTime(detail.exchangeAt()))
+                    && VerifiedFullQuoteSession.accepts(detail.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar))
                 .map(DetailQuote::asStored);
         } catch (DataAccessException | IllegalStateException ex) {
             return Optional.empty();
@@ -487,7 +487,7 @@ public class CustomerMarketDataController {
                 && stock.tradingSymbol().equals(detail.tradingSymbol());
             if (sameInstrument && "STORED_LAST_DETAIL".equals(detail.source())
                     && detail.ltp() != null && detail.ltp().signum() > 0
-                    && validStoredExchangeTime(detail.exchangeAt())
+                    && VerifiedFullQuoteSession.accepts(detail.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar)
                     && (savedTick == null || detail.exchangeAt().isAfter(savedTick.exchangeAt()))) {
                 BigDecimal change = detail.previousClose() == null
                         || detail.previousClose().signum() <= 0 ? null
