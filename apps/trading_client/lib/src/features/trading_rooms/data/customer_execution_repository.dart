@@ -7,7 +7,7 @@ class CustomerExecutionReadiness {
     required this.roomId,
     required this.mode,
     required this.roomStatus,
-    required this.selectedBroker,
+    this.selectedBroker,
     required this.brokerConnected,
     required this.virtualCashReady,
     required this.executionEnabled,
