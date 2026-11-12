@@ -199,7 +199,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
             showCheckmark: false,
             onSelected: (_) => setState(() => interval = v)))])),
     const SizedBox(height: 10),
-    note('${interval} coverage has no verified per-instrument/year receipt yet. '
+    note('$interval coverage has no verified per-instrument/year receipt yet. '
       'Unavailable is not equivalent to zero records.'),
     const SizedBox(height: 10),
     taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
