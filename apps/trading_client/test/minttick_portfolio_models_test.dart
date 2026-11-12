@@ -25,6 +25,15 @@ void main() {
     expect(portfolioHoldingValue(null), isNull);
     expect(portfolioHoldingValue([]), 0);
     expect(portfolioRupees(null), '—');
+    expect(PortfolioInstrument.decode([
+      {'non_symbol_field': 'abc'},
+    ], broker: 'UPSTOX'), isNull);
+    expect(PortfolioInstrument.decode([
+      {'trading_symbol': 'SBIN'}, {'other': 1},
+    ], broker: 'UPSTOX'), isNull);
+    expect(PortfolioInstrument.decode({
+      'positions': [{'trading_symbol': 'NIFTY'}]
+    }, broker: 'UPSTOX'), isNull);
   });
 
   test('invalid metrics and incomplete valuations fail closed', () {
@@ -37,6 +46,15 @@ void main() {
     expect(portfolioHoldingValue(holding), isNull);
     expect(portfolioAmount({'equity': {'available_margin': '12345.67'}},
       broker: 'UPSTOX'), 12345.67);
+    expect(portfolioAmount({'data': {'available_to_trade': {
+      'total': 9000, 'cash_available_to_trade': {'total': 7000},
+      'pledge_available_to_trade': {'total': 2000},
+    }}}, broker: 'UPSTOX'), 7000);
+    expect(portfolioAmount({'data': {'equity': {'available_margin': 0},
+      'commodity': {'available_margin': 2000}}},
+      broker: 'UPSTOX'), 0);
+    expect(portfolioAmount({'available_to_trade': {'total': 9000}},
+      broker: 'UPSTOX'), isNull);
     expect(portfolioAmount({'availablecash': '1,234.50'},
       broker: 'ANGEL_ONE'), 1234.50);
   });
