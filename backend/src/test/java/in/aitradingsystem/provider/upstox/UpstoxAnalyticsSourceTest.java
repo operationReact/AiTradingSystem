@@ -117,6 +117,8 @@ class UpstoxAnalyticsSourceTest {
     @Test
     void minuteAndHourWindowsUseV3IntervalsAndStillReadOnly() {
         token();
+        // Spring's MockRestServiceServer requires all expectations before the
+        // first actual request; these verify sequential read-only GETs.
         server.expect(requestTo(org.hamcrest.Matchers.containsString(
                 "/minutes/1/2026-10-20/2026-10-20")))
                 .andExpect(header("Authorization", "Bearer unit-test-only"))
@@ -125,12 +127,6 @@ class UpstoxAnalyticsSourceTest {
                       ["2026-10-20T09:15:00+05:30",100,102,99,101,375,0]
                     ]}}
                     """, MediaType.APPLICATION_JSON));
-        var minutes = source.historicalEquityCandles("NSE_EQ|INE002A01018",
-                "minutes", 1, java.time.LocalDate.parse("2026-10-20"),
-                java.time.LocalDate.parse("2026-10-20"));
-        assertThat(minutes).hasSize(1);
-        assertThat(minutes.getFirst().volume()).isEqualTo(375);
-
         server.expect(requestTo(org.hamcrest.Matchers.containsString(
                 "/hours/1/2026-10-20/2026-10-20")))
                 .andRespond(withSuccess("""
@@ -138,9 +134,13 @@ class UpstoxAnalyticsSourceTest {
                       ["2026-10-20T09:15:00+05:30",100,102,99,101,5000,0]
                     ]}}
                     """, MediaType.APPLICATION_JSON));
+        var on = java.time.LocalDate.parse("2026-10-20");
+        var minutes = source.historicalEquityCandles("NSE_EQ|INE002A01018",
+                "minutes", 1, on, on);
+        assertThat(minutes).hasSize(1);
+        assertThat(minutes.getFirst().volume()).isEqualTo(375);
         var hours = source.historicalEquityCandles("NSE_EQ|INE002A01018",
-                "hours", 1, java.time.LocalDate.parse("2026-10-20"),
-                java.time.LocalDate.parse("2026-10-20"));
+                "hours", 1, on, on);
         assertThat(hours).hasSize(1);
         server.verify();
     }
@@ -155,10 +155,6 @@ class UpstoxAnalyticsSourceTest {
                       ["2026-10-20T09:15:00+05:30",100,102,99,101,42,0]
                     ]}}
                     """, MediaType.APPLICATION_JSON));
-        assertThat(source.historicalEquityCandles("NSE_EQ|INE002A01018",
-                "days", 1, java.time.LocalDate.parse("2026-01-01"),
-                java.time.LocalDate.parse("2026-10-20"))).hasSize(1);
-
         server.expect(requestTo(org.hamcrest.Matchers.containsString(
                 "/weeks/1/2026-10-20/2025-01-01")))
                 .andRespond(withSuccess("""
@@ -166,6 +162,9 @@ class UpstoxAnalyticsSourceTest {
                       ["2026-10-19T09:15:00+05:30",100,102,99,101,420,0]
                     ]}}
                     """, MediaType.APPLICATION_JSON));
+        assertThat(source.historicalEquityCandles("NSE_EQ|INE002A01018",
+                "days", 1, java.time.LocalDate.parse("2026-01-01"),
+                java.time.LocalDate.parse("2026-10-20"))).hasSize(1);
         assertThat(source.historicalEquityCandles("NSE_EQ|INE002A01018",
                 "weeks", 1, java.time.LocalDate.parse("2025-01-01"),
                 java.time.LocalDate.parse("2026-10-20"))).hasSize(1);
