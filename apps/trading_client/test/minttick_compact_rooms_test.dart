@@ -10,7 +10,7 @@ import 'package:trading_client/src/theme/app_theme.dart';
 
 void main() {
   test('dashboard rejects LIVE data masquerading as virtual PAPER cash', () {
-    final raw = {
+    final raw = <String, Object?>{
       'roomId': 'live-1', 'mode': 'LIVE', 'status': 'DRAFT',
       'plannedBudgetInr': 50000, 'availableCashPaise': 24000,
       'paperHalted': true, 'positionCount': 1,
