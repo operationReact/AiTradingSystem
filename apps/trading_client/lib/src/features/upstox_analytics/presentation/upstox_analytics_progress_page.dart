@@ -444,6 +444,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     'GITHUB_ACCESS_DENIED' => 'GitHub access forbidden',
     'GITHUB_ENDPOINT_NOT_FOUND' => 'GitHub API route not found',
     'GITHUB_INVALID_DATA' => 'GitHub response failed validation',
+    'GITHUB_RESPONSE_TOO_LARGE' => 'GitHub result exceeded its safe response-size limit',
     'GITHUB_SERVER_UNAVAILABLE' => 'GitHub service error',
     'GITHUB_HTTP_FAILURE' => 'GitHub returned an unexpected HTTP status',
     'GITHUB_READ_UNAVAILABLE' || 'GITHUB_API_UNAVAILABLE' =>
