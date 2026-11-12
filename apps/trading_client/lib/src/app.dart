@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -109,6 +110,7 @@ class _TradingAppState extends State<TradingApp> {
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
   bool _exitDialogOpen = false;
+  bool _moreSheetOpen = false;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
@@ -168,6 +170,31 @@ class _TradingAppState extends State<TradingApp> {
                   isCustomer: widget.session.isCustomerAuthenticated,
                 ),
               ),
+              // The product navigation sits outside the Navigator overlay.
+              // Blur and block it separately while More is open, so every
+              // visible element behind the sheet is treated consistently.
+              if (_moreSheetOpen)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      key: const ValueKey('more-navigation-blur'),
+                      filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _navigatorKey.currentState?.maybePop(),
+                        child: ColoredBox(
+                          color: Colors.black54,
+                          child: SizedBox(
+                            height: 64 + MediaQuery.paddingOf(context).bottom,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -478,23 +505,33 @@ class _TradingAppState extends State<TradingApp> {
 
   Future<void> _openMoreNavigation() async {
     final navContext = _navigatorKey.currentContext;
-    if (navContext == null) return;
+    if (navContext == null || _moreSheetOpen) return;
     final previousRoute = _selectedRoute;
-    setState(() => _selectedRoute = '/more');
-    final route = await showModalBottomSheet<String>(
-      context: navContext,
-      showDragHandle: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
-      builder: (context) => _MoreProductSheet(isCustomer: widget.session.isCustomerAuthenticated),
+    setState(() {
+      _selectedRoute = '/more';
+      _moreSheetOpen = true;
+    });
+    // showModalBottomSheet only dims the page. A dedicated route supplies a
+    // blurred modal barrier without filtering the More menu itself.
+    final route = await Navigator.of(navContext).push<String>(
+      _BlurredMoreBottomSheetRoute<String>(
+        showDragHandle: true,
+        isScrollControlled: true,
+        useSafeArea: true,
+        modalBarrierColor:
+            Theme.of(navContext).bottomSheetTheme.modalBarrierColor ??
+            Colors.black54,
+        backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
+        builder: (context) =>
+            _MoreProductSheet(isCustomer: widget.session.isCustomerAuthenticated),
+      ),
     );
     if (!mounted) return;
-    if (route != null) {
-      _navigate(route);
-    } else {
-      setState(() => _selectedRoute = previousRoute);
-    }
+    setState(() {
+      _moreSheetOpen = false;
+      if (route == null) _selectedRoute = previousRoute;
+    });
+    if (route != null) _navigate(route);
   }
 
   void _setThemeMode(ThemeMode value) {
@@ -834,6 +871,28 @@ class _RailAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Keeps Flutter's native modal-sheet interactions (drag, scrim and Back)
+/// while blurring only the screen behind its barrier.
+class _BlurredMoreBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  _BlurredMoreBottomSheetRoute({
+    required super.builder,
+    required super.isScrollControlled,
+    super.backgroundColor,
+    super.modalBarrierColor,
+    super.showDragHandle,
+    super.useSafeArea,
+  });
+
+  @override
+  Widget buildModalBarrier() => ClipRect(
+    child: BackdropFilter(
+      key: const ValueKey('more-background-blur'),
+      filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+      child: super.buildModalBarrier(),
+    ),
+  );
 }
 
 class _MoreProductSheet extends StatelessWidget {
