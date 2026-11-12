@@ -124,14 +124,20 @@ public class UpstoxApiClient {
             throw new UpstoxProviderException("UPSTOX_TOTP_CONFIGURATION_INVALID");
         }
         try {
-            JsonNode result = http.post()
+            String payload = http.post()
                 .uri("/v2/totp-login/authorization/token")
                 .header("x-api-key", appKey)
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.APPLICATION_JSON)
                 .body(java.util.Map.of("pin", pin, "totp", totp))
-                .retrieve().body(JsonNode.class);
-            if (result == null || result.path("access_token").asText("").isBlank()) {
+                .retrieve().body(String.class);
+            if (payload == null || payload.isBlank()
+                    || payload.length() > MAX_TOKEN_RESPONSE_CHARS) {
+                throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
+            }
+            JsonNode result = JSON.readTree(payload);
+            if (result == null || !result.isObject()
+                    || result.path("access_token").asText("").isBlank()) {
                 throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
             }
             return result;
@@ -142,6 +148,8 @@ public class UpstoxApiClient {
                 classifyTotpErrorResponse(ex.getResponseBodyAsString()));
         } catch (UpstoxProviderException ex) {
             throw ex;
+        } catch (JsonProcessingException ex) {
+            throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
         } catch (RuntimeException ex) {
             throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_UNAVAILABLE");
         }
@@ -203,11 +211,15 @@ public class UpstoxApiClient {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
         }
         try {
-            JsonNode result = http.get()
+            String payload = http.get()
                 .uri(fixedPath)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                 .accept(MediaType.APPLICATION_JSON)
-                .retrieve().body(JsonNode.class);
+                .retrieve().body(String.class);
+            if (payload == null || payload.length() > 256 * 1024) {
+                throw new UpstoxProviderException("UPSTOX_INVALID_RESPONSE");
+            }
+            JsonNode result = JSON.readTree(payload);
             if (result == null || !"success".equals(result.path("status").asText())
                     || result.get("data") == null) {
                 throw new UpstoxProviderException("UPSTOX_INVALID_RESPONSE");
@@ -223,6 +235,8 @@ public class UpstoxApiClient {
             throw new UpstoxProviderException("UPSTOX_READ_UNAVAILABLE");
         } catch (UpstoxProviderException ex) {
             throw ex;
+        } catch (JsonProcessingException ex) {
+            throw new UpstoxProviderException("UPSTOX_INVALID_RESPONSE");
         } catch (RuntimeException ex) {
             throw new UpstoxProviderException("UPSTOX_READ_UNAVAILABLE");
         }
