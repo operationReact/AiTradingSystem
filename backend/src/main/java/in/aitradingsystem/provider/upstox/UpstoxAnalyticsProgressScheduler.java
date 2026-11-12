@@ -57,9 +57,13 @@ public class UpstoxAnalyticsProgressScheduler {
             progress.finish(GITHUB, lease, "VERIFIED",
                     result.checked(), result.verified(), result.issues(),
                     null, result.details(), clock.instant());
+        } catch (UpstoxGitHubProgressReader.GitHubReadFailure failure) {
+            progress.finish(GITHUB, lease, "BLOCKED", null, null, null,
+                    failure.reasonCode(), Map.of("retryable", true),
+                    clock.instant());
         } catch (RuntimeException ignored) {
             progress.finish(GITHUB, lease, "BLOCKED", null, null, null,
-                    "GITHUB_API_UNAVAILABLE", Map.of("retryable", true),
+                    "GITHUB_READ_UNAVAILABLE", Map.of("retryable", true),
                     clock.instant());
         }
     }

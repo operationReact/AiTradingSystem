@@ -69,3 +69,31 @@
 
 Related: #924 (unified Mind source contract), #918 (Upstox roadmap),
 #917 (multi-timeframe V3 adapter), #922 (research scanner bridge).
+
+## GitHub BLOCKED diagnostics (13 November 2026)
+An owner screenshot showed `GITHUB_API_UNAVAILABLE` for GitHub development
+and `DISABLED` for Analytics source verification. The public GitHub API
+successfully served `/repos/operationReact/AiTradingSystem/pulls` and
+`/actions/runs` when checked externally; the app/backend status is genuine,
+but the old all-purpose error code did not distinguish container DNS/egress,
+TLS, HTTP authorization, API rate limiting or invalid response data.
+
+The GitHub reader now requests fixed **absolute** URLs, categorizes these
+failures into bounded status codes, and avoids storing HTTP response bodies or
+credentials. The owner Flutter task details translate diagnostic codes into
+plain-language explanations. This change makes failures **diagnosable**, but
+must not be reported as proof that EC2 container egress has already recovered.
+
+The backend Compose now forwards
+`MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED` from secure host runtime env,
+default `false`. To begin bounded source verification, operator must approve
+and configure **both** `MINTTICK_UPSTOX_ANALYTICS_ENABLED=true` and
+`MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true` after confirming the
+read-only SSM token rights and API quotas. The probe stores just safe counts;
+it does not grant retention, training, full backfill or trading authority.
+
+After deployment, check owner-only progress endpoint, inspect the new
+`GITHUB_*` reason code, address a confirmed network/credential/rate-limit
+blocker, then verify `GITHUB_DEVELOPMENT=VERIFIED` with nonempty recent PR
+and CI snapshots. Never mark unrelated Analytics tasks complete merely because
+GitHub polling succeeded.
