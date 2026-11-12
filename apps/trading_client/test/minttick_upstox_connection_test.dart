@@ -264,7 +264,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('₹180.00'), findsWidgets);
     expect(find.text('₹200.00'), findsOneWidget);
-    expect(find.text('-₹21.50'), findsWidgets);
+    expect(find.text('-₹21.50'), findsOneWidget);
     expect(find.textContaining('Total return: -10.75%'), findsOneWidget);
   });
 
