@@ -63,6 +63,37 @@ if ! bash "$root/run_paper.sh" "$sha" > "$work/activation.log" 2>&1; then
   fi
   fail RESTART_FAILED_ROLLBACK_UNVERIFIED
 fi
+# Compose up -d does NOT restart an unchanged container just because an
+# AWS SSM SecureString changed. UpstoxProperties is read only at Spring startup.
+# Force a backend process restart after the validated host release has started,
+# then confirm the read-only API is healthy. Never log any secret or URL.
+if ! docker compose --env-file "$root/.env" -f "$root/paper-compose.yml" \
+    restart backend > "$work/backend-restart.log" 2>&1; then
+  install -o root -g root -m 0600 "$work/previous.env" "$root/runtime.env"
+  if bash "$root/run_paper.sh" "$sha" > "$work/rollback.log" 2>&1; then
+    fail RESTART_FAILED_ROLLED_BACK
+  fi
+  fail RESTART_FAILED_ROLLBACK_UNVERIFIED
+fi
+healthy=false
+for attempt in $(seq 1 40); do
+  if curl --fail --silent --connect-timeout 2 --max-time 4 \
+      --output /dev/null http://127.0.0.1:8080/api/health 2>/dev/null; then
+    healthy=true
+    break
+  fi
+  sleep 2
+done
+if [ "$healthy" != true ]; then
+  install -o root -g root -m 0600 "$work/previous.env" "$root/runtime.env"
+  if bash "$root/run_paper.sh" "$sha" > "$work/rollback.log" 2>&1; then
+    fail RESTART_FAILED_ROLLED_BACK
+  fi
+  fail RESTART_FAILED_ROLLBACK_UNVERIFIED
+fi
+# The process has reloaded SSM. A successful broker OAuth response must still
+# be independently verified; health alone cannot confirm the app key.
+
 # Do not expose compose config: it may contain other runtime credentials.
 if ! docker compose --env-file "$root/.env" -f "$root/paper-compose.yml" config --format json 2>/dev/null |
   python3 -c 'import json,sys; env=json.load(sys.stdin)["services"]["backend"]["environment"]; assert env["TRADING_MODE"]=="PAPER" and env["MINTTICK_UPSTOX_OAUTH_SSM_ENABLED"]=="true"'; then
