@@ -219,7 +219,8 @@ public class CustomerUpstoxOAuthService {
             case "UPSTOX_AUTH_DECLINED", "UPSTOX_AUTH_CODE_INVALID",
                  "UPSTOX_OAUTH_APP_CREDENTIALS_INVALID",
                  "UPSTOX_OAUTH_REDIRECT_REJECTED",
-                 "UPSTOX_PROFILE_REJECTED", "UPSTOX_ACCOUNT_ALREADY_CONNECTED",
+                 "UPSTOX_PROFILE_REJECTED", "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE",
+                 "UPSTOX_ACCOUNT_ALREADY_CONNECTED",
                  "UPSTOX_AUTH_UNAVAILABLE" -> code;
             default -> "UPSTOX_AUTH_FAILED";
         };
