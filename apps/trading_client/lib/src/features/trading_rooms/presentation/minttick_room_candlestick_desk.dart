@@ -11,10 +11,12 @@ class MintTickRoomCandlestickDesk extends StatefulWidget {
   const MintTickRoomCandlestickDesk({
     required this.market,
     required this.onInstrument,
+    this.initialInstrument,
     super.key,
   });
   final HttpCustomerMarketRepository market;
   final ValueChanged<InstrumentRecord?> onInstrument;
+  final InstrumentRecord? initialInstrument;
 
   @override
   State<MintTickRoomCandlestickDesk> createState() =>
@@ -40,7 +42,14 @@ class _MintTickRoomCandlestickDeskState
   @override
   void initState() {
     super.initState();
-    _selectInitialStock();
+    if (widget.initialInstrument != null) {
+      _instrument = widget.initialInstrument;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _refresh();
+      });
+    } else {
+      _selectInitialStock();
+    }
   }
 
   @override
