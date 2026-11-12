@@ -8,6 +8,7 @@ import '../../../data/authenticated_api_client.dart';
 import '../data/customer_upstox_repository.dart';
 import '../data/customer_portfolio_models.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_broker_compact_widgets.dart';
 import 'minttick_upstox_symbol.dart';
 
 /// Broker-hosted OAuth login: Upstox handles credentials, not MintTick.
@@ -380,23 +381,6 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     );
   }
 
-  Widget _metric(
-      String label, num? amount, TextTheme text, ColorScheme scheme,
-      {Color? valueColor}) {
-    return Expanded(child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: text.labelSmall?.copyWith(
-          color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 4),
-        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-          child: Text(portfolioRupees(amount),
-            style: text.titleMedium?.copyWith(
-              color: valueColor, fontWeight: FontWeight.w800))),
-      ],
-    ));
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -425,47 +409,24 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
         pnl = null;
       }
     }
-    final percent = invested != null && invested > 0 && pnl != null
-        ? pnl / invested * 100 : null;
-    final pnlColor = pnl == null ? colors.onSurface
-        : pnl < 0 ? colors.error : colors.primary;
 
     return MintTickCustomerScaffold(showHeader: false, children: [
       const SizedBox(height: 8),
-      Row(children: [
-        const UpstoxSymbol(size: 38),
-        const SizedBox(width: 10),
-        Expanded(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Upstox', style: text.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800)),
-            Text(connected
-                ? 'Account ${_status?.accountMasked ?? 'linked'}'
-                : 'Broker account',
-              style: text.labelSmall?.copyWith(
-                color: colors.onSurfaceVariant)),
-          ],
-        )),
-        MintTickStatusLabel(connected ? 'CONNECTED' : 'NOT CONNECTED',
-          warning: !connected),
-        IconButton(
-          key: const ValueKey('upstox-refresh-status'),
-          tooltip: 'Refresh broker data',
-          onPressed: _loading ? null : _refresh,
-          visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.refresh_rounded, size: 21),
-        ),
-        if (connected) PopupMenuButton<String>(
+      MintTickBrokerHeader(
+        logo: const UpstoxSymbol(size: 38),
+        broker: 'Upstox',
+        account: connected ? _status?.accountMasked : null,
+        connected: connected,
+        refreshKey: const ValueKey('upstox-refresh-status'),
+        onRefresh: _loading ? null : _refresh,
+        menu: connected ? PopupMenuButton<String>(
           key: const ValueKey('upstox-account-menu'),
           tooltip: 'Broker settings',
           icon: const Icon(Icons.more_vert_rounded, size: 21),
           onSelected: (option) {
             if (option == 'ip') {
               _load('IP status', widget.repository.registeredIps);
-            } else if (option == 'details') {
-              _showAccountDetails(context);
-            } else if (option == 'disconnect') {
+            } else {
               _showAccountDetails(context);
             }
           },
@@ -474,8 +435,8 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             PopupMenuItem(value: 'details', child: Text('Account details')),
             PopupMenuItem(value: 'disconnect', child: Text('Disconnect…')),
           ],
-        ),
-      ]),
+        ) : null,
+      ),
       const SizedBox(height: 9),
       if (_loading) const LinearProgressIndicator(minHeight: 2),
       if (_error != null) ...[
@@ -533,80 +494,30 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
         )),
       ] else ...[
         const SizedBox(height: 4),
-        MintTickSurface(accent: true,
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: Text('Current value',
-                  style: text.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant))),
-                Text('LIVE · BROKER REPORTED',
-                  style: text.labelSmall?.copyWith(
-                    color: colors.primary, fontWeight: FontWeight.w700)),
-              ]),
-              const SizedBox(height: 5),
-              Text(portfolioRupees(marketValue),
-                key: const ValueKey('upstox-portfolio-value'),
-                style: text.headlineMedium?.copyWith(
-                  fontWeight: FontWeight.w900)),
-              const SizedBox(height: 2),
-              Text(holdings == null
-                  ? (_reading.contains('holdings')
-                      ? 'Loading verified holdings…'
-                      : 'Holdings data unavailable — not ₹0')
-                  : holdings.isEmpty
-                      ? 'No holdings reported by Upstox'
-                      : '${holdings.length} broker holdings',
-                style: text.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant)),
-              const SizedBox(height: 10),
-              Divider(height: 1, color: colors.outlineVariant),
-              const SizedBox(height: 10),
-              Row(children: [
-                _metric('Invested', invested, text, colors),
-                const SizedBox(width: 12),
-                _metric('Total P&L', pnl, text, colors,
-                    valueColor: pnlColor),
-              ]),
-              if (percent != null) ...[
-                const SizedBox(height: 5),
-                Text('Total return: ${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(2)}%',
-                  style: text.labelSmall?.copyWith(color: pnlColor)),
-              ],
-              const SizedBox(height: 7),
-              Text('Read-only link · Real-money order execution disabled',
-                style: text.labelSmall?.copyWith(
-                  color: colors.onSurfaceVariant)),
-            ],
-          ),
+        MintTickBrokerPortfolioHero(
+          broker: 'Upstox',
+          value: marketValue,
+          invested: invested,
+          pnl: pnl,
+          holdingsCount: holdings?.length,
+          isLoading: _reading.contains('holdings'),
+          orderExecutionEnabled: _status?.orderExecutionEnabled == true,
+          valueKey: const ValueKey('upstox-portfolio-value'),
         ),
         const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final option in [
-              ('holdings', 'Holdings', widget.repository.holdings),
-              ('positions', 'Positions', widget.repository.positions),
-              ('funds', 'Funds', widget.repository.funds),
-              ('orders', 'Orders', widget.repository.orders),
-            ]) ...[
-              ChoiceChip(
-                key: ValueKey('upstox-tab-${option.$1}'),
-                label: Text(option.$2),
-                selected: _section == option.$1,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                selectedColor: colors.primaryContainer,
-                side: BorderSide(color: _section == option.$1
-                    ? colors.primary : colors.outlineVariant),
-                onSelected: _loading ? null :
-                    (_) => _load(option.$1, option.$3),
-              ),
-              const SizedBox(width: 7),
-            ],
-          ]),
+        MintTickBrokerTabs(
+          selected: _section ?? 'holdings',
+          keyPrefix: 'upstox-tab-',
+          onSelected: (section) {
+            final fetch = switch (section) {
+              'holdings' => widget.repository.holdings,
+              'positions' => widget.repository.positions,
+              'funds' => widget.repository.funds,
+              'orders' => widget.repository.orders,
+              _ => widget.repository.holdings,
+            };
+            _load(section, fetch);
+          },
         ),
         if (_readErrors['funds'] != null) ...[
           const SizedBox(height: 10),
@@ -638,42 +549,16 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
         ],
         const SizedBox(height: 9),
         if (_section != null)
-          MintTickSurface(
-            padding: const EdgeInsets.all(12),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Expanded(child: Text(
-                    _section == 'holdings' ? 'My holdings'
-                        : _section![0].toUpperCase() + _section!.substring(1),
-                    style: text.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800))),
-                  if (_reading.contains(_section))
-                    const SizedBox(height: 15, width: 15,
-                      child: CircularProgressIndicator(strokeWidth: 2)),
-                  IconButton(
-                    key: const ValueKey('upstox-retry-section'),
-                    tooltip: 'Reload section',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: _reading.contains(_section) ? null
-                        : () => _reloadSelected(),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                  ),
-                ]),
-                const SizedBox(height: 5),
-                if (_readErrors[_section] != null)
-                  Text(_readErrors[_section]!,
-                    style: text.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant))
-                else if (_reading.contains(_section) &&
-                    !_brokerData.containsKey(_section))
-                  Text('Loading broker data…',
-                    style: text.bodySmall?.copyWith(
-                      color: colors.onSurfaceVariant))
-                else
-                  ..._brokerSummary(text, colors),
-              ],
-            ),
+          MintTickBrokerSection(
+            title: _section == 'holdings'
+                ? 'My holdings' : '${_section![0].toUpperCase()}${_section!.substring(1)}',
+            loading: _reading.contains(_section),
+            error: _readErrors[_section],
+            refreshKey: const ValueKey('upstox-retry-section'),
+            onRefresh: _reloadSelected,
+            children: _readErrors[_section] != null ||
+                (_reading.contains(_section) && !_brokerData.containsKey(_section))
+                ? const [] : _brokerSummary(text, colors),
           ),
       ],
     ]);
@@ -707,50 +592,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       return [const Text('No holdings reported by Upstox.')];
     }
 
-    final marketValue = portfolioHoldingValue(holdings);
-    return [
-      for (final holding in holdings.take(50)) ...[
-        Padding(padding: const EdgeInsets.symmetric(vertical: 7),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Expanded(child: Text(holding.symbol,
-                  style: text.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700),
-                  overflow: TextOverflow.ellipsis, maxLines: 1)),
-                const SizedBox(width: 8),
-                Text(portfolioRupees(holding.marketValue),
-                  style: text.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w800)),
-              ]),
-              const SizedBox(height: 3),
-              Text('Qty ${holding.quantity ?? '—'} · '
-                  'Last ${portfolioRupees(holding.lastPrice)} · '
-                  'Avg ${portfolioRupees(holding.averagePrice)}',
-                style: text.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant)),
-              if (holding.pnl != null)
-                Text('Broker P&L ${portfolioRupees(holding.pnl)}',
-                  style: text.labelSmall?.copyWith(
-                    color: holding.pnl! < 0 ? scheme.error : scheme.primary)),
-            ],
-          ),
-        ),
-        Divider(height: 1, color: scheme.outlineVariant),
-      ],
-      if (raw.length > 50)
-        Text('Showing first 50 of ${raw.length} holdings',
-          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-      if (marketValue == null) ...[
-        const SizedBox(height: 7),
-        Text('Some broker holding prices or quantities are unavailable; '
-            'missing totals are shown as —, not ₹0.',
-          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-      ],
-      const SizedBox(height: 6),
-      Text('Prices are reported by Upstox and may lag its app.',
-        style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-    ];
+    return [MintTickBrokerHoldingsList(rows: holdings)];
   }
 
   List<Widget> _brokerSummary(TextTheme text, ColorScheme scheme) {
