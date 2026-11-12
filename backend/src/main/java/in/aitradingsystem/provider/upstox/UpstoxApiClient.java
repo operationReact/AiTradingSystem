@@ -3,7 +3,6 @@ package in.aitradingsystem.provider.upstox;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -17,16 +16,33 @@ import org.springframework.web.client.RestClientResponseException;
 @Component
 public class UpstoxApiClient {
     private static final ObjectMapper JSON = new ObjectMapper();
+    private static final int MAX_TOKEN_RESPONSE_CHARS = 16384;
     private final RestClient http;
+    private final RestClient tokenHttp;
 
     public UpstoxApiClient() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-        factory.setConnectTimeout(5_000);
-        factory.setReadTimeout(10_000);
+        SimpleClientHttpRequestFactory standardFactory = new SimpleClientHttpRequestFactory();
+        standardFactory.setConnectTimeout(5_000);
+        standardFactory.setReadTimeout(10_000);
+        SimpleClientHttpRequestFactory exchangeFactory = new SimpleClientHttpRequestFactory();
+        // The API Gateway Lambda calling us has a seven-second upstream limit.
+        // Give the backend time to return a safe failure before that limit.
+        exchangeFactory.setConnectTimeout(2_000);
+        exchangeFactory.setReadTimeout(4_000);
         this.http = RestClient.builder()
                 .baseUrl("https://api.upstox.com")
-                .requestFactory(factory)
+                .requestFactory(standardFactory)
                 .build();
+        this.tokenHttp = RestClient.builder()
+                .baseUrl("https://api.upstox.com")
+                .requestFactory(exchangeFactory)
+                .build();
+    }
+
+    /** Allows a response-shaped HTTP contract test without actual broker access. */
+    UpstoxApiClient(RestClient.Builder builder) {
+        this.http = builder.baseUrl("https://api.upstox.com").build();
+        this.tokenHttp = this.http;
     }
 
     public JsonNode exchangeCode(UpstoxProperties config, String oneTimeCode) {
@@ -40,18 +56,36 @@ public class UpstoxApiClient {
         body.add("redirect_uri", config.redirectUri());
         body.add("grant_type", "authorization_code");
         try {
-            return Objects.requireNonNull(
-                http.post().uri("/v2/login/authorization/token")
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(body).retrieve().body(JsonNode.class));
+            // Spring Boot 4's default RestClient converters may use Jackson 3,
+            // whereas the broker model deliberately uses Jackson 2 JsonNode.
+            // Read bounded text and parse explicitly with the Jackson 2 mapper.
+            String payload = tokenHttp.post().uri("/v2/login/authorization/token")
+                .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .accept(MediaType.APPLICATION_JSON)
+                .body(body).retrieve().body(String.class);
+            if (payload == null || payload.isBlank()
+                    || payload.length() > MAX_TOKEN_RESPONSE_CHARS) {
+                throw new UpstoxProviderException("UPSTOX_AUTH_INVALID_RESPONSE");
+            }
+            JsonNode result = JSON.readTree(payload);
+            if (result == null || !result.isObject()) {
+                throw new UpstoxProviderException("UPSTOX_AUTH_INVALID_RESPONSE");
+            }
+            return result;
         } catch (RestClientResponseException ex) {
             // Report only predefined provider error classes. Raw body, OAuth code,
             // client secret and token are never logged, returned or persisted.
             throw new UpstoxProviderException(
                 classifyOAuthExchangeFailure(ex.getResponseBodyAsString()));
+        } catch (org.springframework.web.client.ResourceAccessException ex) {
+            throw new UpstoxProviderException("UPSTOX_AUTH_TRANSPORT_UNAVAILABLE");
+        } catch (JsonProcessingException ex) {
+            throw new UpstoxProviderException("UPSTOX_AUTH_INVALID_RESPONSE");
+        } catch (UpstoxProviderException ex) {
+            throw ex;
         } catch (RuntimeException ex) {
-            throw new UpstoxProviderException("UPSTOX_AUTH_UNAVAILABLE");
+            // Unknown client failure is not evidence that Upstox is offline.
+            throw new UpstoxProviderException("UPSTOX_AUTH_CLIENT_FAILURE");
         }
     }
 
