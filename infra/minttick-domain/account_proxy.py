@@ -61,6 +61,7 @@ UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
+LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
 ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
 MAX_BODY = 65536
 
@@ -84,6 +85,7 @@ def allowed(method, path):
             or (method == "GET" and path == UPSTOX_CALLBACK)
             or (method == "GET" and ROOM.fullmatch(path))
             or (method == "GET" and READINESS.fullmatch(path))
+            or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
             or paper_allowed(method, path))
 
 def callback_query_safe(query):
@@ -181,6 +183,16 @@ def handler(event, context):
         "/api/customer/brokers/upstox/disconnect",
     } and body:
         return reply(400, {"error": "INVALID_BODY"})
+    if method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path):
+        try:
+            selected = json.loads(body)
+            valid = (type(selected) is dict
+                     and set(selected) == {"broker"}
+                     and selected["broker"] in {"ANGEL_ONE", "UPSTOX"})
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_LIVE_BROKER_SELECTION"})
     paper_order_key = None
     if method == "POST" and PAPER.fullmatch(path):
         action = path.rsplit("/", 1)[-1]
