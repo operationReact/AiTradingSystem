@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import '../../../brand/minttick_brand.dart';
 import '../data/customer_angel_one_repository.dart';
 import '../data/customer_portfolio_models.dart';
 import 'minttick_customer_widgets.dart';
