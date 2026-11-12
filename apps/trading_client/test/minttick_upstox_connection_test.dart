@@ -13,6 +13,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   int ownerConnectCalls = 0;
   bool ownerConfigured = false;
   bool ownerRejects = false;
+  bool statusFails = false;
 
   @override
   Future<bool> configuredLoginAvailable() async => ownerConfigured;
@@ -29,13 +30,16 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
 
 
   @override
-  Future<CustomerUpstoxStatus> status() async => CustomerUpstoxStatus(
+  Future<CustomerUpstoxStatus> status() async {
+    if (statusFails) throw StateError('unavailable backend');
+    return CustomerUpstoxStatus(
     available: enabled,
     connected: linked,
     accountMasked: linked ? '***456' : null,
     expiresAt: linked ? DateTime.utc(2026, 11, 8, 3, 30) : null,
     orderExecutionEnabled: false,
-  );
+    );
+  }
 
   @override
   Future<Uri> startAuthorization() async {
@@ -198,6 +202,28 @@ void main() {
     expect(find.textContaining('individual-app PIN + TOTP'), findsOneWidget);
     expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
     expect(repo.startCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed refresh removes stale connected state and owner access',
+      (tester) async {
+    final repo = _FakeUpstox()..linked = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED'), findsOneWidget);
+    repo.statusFails = true;
+    await tester.tap(find.byKey(const ValueKey('upstox-refresh-status')));
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED'), findsNothing);
+    expect(find.textContaining('Unable to verify Upstox connection'),
+      findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-connect-saved-owner')),
+      findsNothing);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const ValueKey('upstox-start-oauth'))).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
 
