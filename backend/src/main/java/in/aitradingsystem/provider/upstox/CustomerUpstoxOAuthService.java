@@ -34,7 +34,9 @@ import org.springframework.stereotype.Service;
 public class CustomerUpstoxOAuthService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final LocalTime EXPIRES = LocalTime.of(3, 30);
-    private static final long STATE_TTL_SECONDS = 300;
+    // Allow time for the official Upstox login and two-factor challenge.
+    // State remains one-use and customer-bound; 15 minutes is a strict upper bound.
+    private static final long STATE_TTL_SECONDS = 900;
     private static final long FAILURE_TTL_SECONDS = 600;
     private static final int MAX_PENDING = 10_000;
     private final SecureRandom secureRandom = new SecureRandom();
