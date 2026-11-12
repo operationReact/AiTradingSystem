@@ -171,8 +171,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       heading('Analytics pipeline', 'Every stage feeds the canonical MintTick Mind architecture'),
       ...taskList(data, specs.take(7)),
       const SizedBox(height: 8),
-      note('Progress snapshot: ' + when(data.generatedAt) +
-        '. A connected trading account does not establish Analytics source readiness.'),
+      note('Progress snapshot: ${when(data.generatedAt)}. A connected trading account '
+        'does not establish Analytics source readiness.'),
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: OutlinedButton(
@@ -199,7 +199,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
             showCheckmark: false,
             onSelected: (_) => setState(() => interval = v)))])),
     const SizedBox(height: 10),
-    note(interval + ' coverage has no verified per-instrument/year receipt yet. '
+    note('${interval} coverage has no verified per-instrument/year receipt yet. '
       'Unavailable is not equivalent to zero records.'),
     const SizedBox(height: 10),
     taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
@@ -282,7 +282,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               const SizedBox(width: 10),
               Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('#' + value['number'].toString() + ' · ' + value['title'].toString(),
+                  Text('#${value['number']} · ${value['title']}',
                     maxLines: 2, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
                   Text(str(value['state']), style: const TextStyle(
@@ -323,7 +323,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                   Text(spec.$3, maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
                   if (task?.checked != null)
-                    Text('Verified ' + str(task?.verified) + ' / ' + str(task?.checked) + ' checks',
+                    Text('Verified ${str(task?.verified)} / ${str(task?.checked)} checks',
                       style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
                 ])),
               status(task),
@@ -433,9 +433,22 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
   static String when(DateTime? at) {
     if (at == null) return 'Not available';
     final date = at.toLocal();
-    return date.day.toString().padLeft(2, '0') + '/' +
-      date.month.toString().padLeft(2, '0') + ' ' +
-      date.hour.toString().padLeft(2, '0') + ':' +
-      date.minute.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+    return '
+  }
+}
++'day/
+  }
+}
++'month 
+  }
+}
++'hour:
+  }
+}
++'minute';
   }
 }
