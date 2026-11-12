@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../data/authenticated_api_client.dart';
 import '../data/customer_angel_one_repository.dart';
 import '../data/customer_portfolio_models.dart';
 import '../data/customer_portfolio_repository.dart';
@@ -15,15 +16,22 @@ import 'minttick_mode_switcher.dart';
 class _BrokerPortfolio {
   const _BrokerPortfolio({
     required this.name, required this.connected, required this.statusKnown,
-    this.account, this.cash, this.holdings, this.positions,
+    this.account, this.cash, this.fundsIssue, this.holdings, this.positions,
   });
   final String name;
   final bool connected;
   final bool statusKnown;
   final String? account;
   final num? cash;
+  final String? fundsIssue;
   final List<PortfolioInstrument>? holdings;
   final List<PortfolioInstrument>? positions;
+}
+
+class _FundsSnapshot {
+  const _FundsSnapshot(this.amount, this.issue);
+  final num? amount;
+  final String? issue;
 }
 
 class _PaperAccount {
@@ -111,6 +119,21 @@ class _MintTickCustomerPortfolioPageState
     }
   }
 
+  Future<_FundsSnapshot> _fundsRead(
+      String broker, Future<Object?> Function() reader) async {
+    try {
+      final value = portfolioAmount(await reader(), broker: broker);
+      return _FundsSnapshot(value,
+          value == null ? 'BROKER_FUNDS_UNRECOGNIZED' : null);
+    } on ApiFailure catch (failure) {
+      return _FundsSnapshot(null,
+          failure.code == 'UPSTOX_FUNDS_MAINTENANCE'
+              ? failure.code : 'BROKER_FUNDS_UNAVAILABLE');
+    } catch (_) {
+      return const _FundsSnapshot(null, 'BROKER_FUNDS_UNAVAILABLE');
+    }
+  }
+
   Future<Object?> _recordsRead(
       String broker, bool positions, Future<Object?> Function() legacy) async {
     final normalized = widget.portfolioRepository;
@@ -139,14 +162,15 @@ class _MintTickCustomerPortfolioPageState
       );
     }
     final values = await Future.wait<Object?>([
-      _read(widget.brokerRepository.funds),
+      _fundsRead('ANGEL_ONE', widget.brokerRepository.funds),
       _recordsRead('ANGEL_ONE', false, widget.brokerRepository.holdings),
       _recordsRead('ANGEL_ONE', true, widget.brokerRepository.positions),
     ]);
     return _BrokerPortfolio(
       name: 'ANGEL_ONE', connected: true, statusKnown: true,
       account: status.clientCodeMasked,
-      cash: portfolioAmount(values[0], broker: 'ANGEL_ONE'),
+      cash: (values[0] as _FundsSnapshot).amount,
+      fundsIssue: (values[0] as _FundsSnapshot).issue,
       holdings: PortfolioInstrument.decode(values[1], broker: 'ANGEL_ONE'),
       positions: PortfolioInstrument.decode(
         values[2], broker: 'ANGEL_ONE', position: true,
@@ -169,14 +193,15 @@ class _MintTickCustomerPortfolioPageState
       );
     }
     final values = await Future.wait<Object?>([
-      _read(widget.upstoxRepository.funds),
+      _fundsRead('UPSTOX', widget.upstoxRepository.funds),
       _recordsRead('UPSTOX', false, widget.upstoxRepository.holdings),
       _recordsRead('UPSTOX', true, widget.upstoxRepository.positions),
     ]);
     return _BrokerPortfolio(
       name: 'UPSTOX', connected: true, statusKnown: true,
       account: status.accountMasked,
-      cash: portfolioAmount(values[0], broker: 'UPSTOX'),
+      cash: (values[0] as _FundsSnapshot).amount,
+      fundsIssue: (values[0] as _FundsSnapshot).issue,
       holdings: PortfolioInstrument.decode(values[1], broker: 'UPSTOX'),
       positions: PortfolioInstrument.decode(
         values[2], broker: 'UPSTOX', position: true,
@@ -479,7 +504,10 @@ class _MintTickCustomerPortfolioPageState
         for (final broker in _brokers)
           _row(_name(broker.name),
             !broker.statusKnown ? 'Status unavailable'
-              : broker.connected ? 'Connected' : 'Not connected',
+              : broker.connected
+                ? (broker.holdings == null || broker.positions == null
+                    ? 'Connected · data pending' : 'Connected')
+                : 'Not connected',
             Icons.link_rounded,
             () => setState(() { _tab = 'Broker accounts'; _selectedBroker = broker.name; })),
       ], icon: Icons.link_rounded, action: widget.onBroker,
@@ -585,9 +613,16 @@ class _MintTickCustomerPortfolioPageState
               () => _openInstruments(false, brokerName: broker.name)),
           _row('View broker positions', 'Read-only', Icons.candlestick_chart_rounded,
               () => _openInstruments(true, brokerName: broker.name)),
+          if (broker.fundsIssue == 'UPSTOX_FUNDS_MAINTENANCE')
+            const MintTickInfoText(
+              'Upstox funds are unavailable during the daily '
+              '12:00 AM–5:30 AM IST maintenance window. This is not a '
+              'zero balance; refresh after the window.',
+              icon: Icons.info_outline_rounded),
           if (broker.cash == null || broker.holdings == null || broker.positions == null)
             const MintTickInfoText('Some broker responses are unavailable. '
-                'Missing account data is not a zero balance.',
+                'Missing account data is not a zero balance. '
+                'Holdings, positions and funds are checked independently.',
                 icon: Icons.info_outline_rounded),
         ] else ...[
           const SizedBox(height: 8),
