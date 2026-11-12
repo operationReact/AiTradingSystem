@@ -177,7 +177,7 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
 }
 
 class _RoomStat extends StatelessWidget {
-  const _RoomStat({required this.label, required this.value});
+  const _RoomStat({required this.label, required this.value, super.key});
   final String label, value;
   @override
   Widget build(BuildContext context) {
@@ -900,6 +900,8 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           borderRadius: BorderRadius.circular(10)),
         child: Row(children: [
           Expanded(child: _RoomStat(
+            key: room.mode == 'PAPER' && _wallet != null
+              ? const ValueKey('paper-wallet-cash') : null,
             label: room.mode == 'PAPER' ? 'Virtual cash' : 'Planned capital',
             value: room.mode == 'PAPER'
               ? _wallet == null ? '—' : _formatPaise(_wallet!.availableCashPaise)
@@ -971,6 +973,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
               _formatPaise(_wallet!.reservedCashPaise)),
           _CompactDetailLine('Realized Paper P&L',
               _formatPaise(_wallet!.realizedPnlPaise)),
+          const _CompactDetailLine('Automated execution', 'Disabled'),
           const SizedBox(height: 9),
           Text('Use Order to place a simulated order; Positions and Activity '
             'show this room’s actual Paper records.',
@@ -978,7 +981,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           const SizedBox(height: 12),
         ],
         if (room.mode == 'LIVE') ...[
-          Text('Broker assigned to this Live room',
+          Text('Select Live broker account',
             style: styles.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: 6),
           Wrap(spacing: 6, runSpacing: 6, children: [
@@ -996,9 +999,11 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           const SizedBox(height: 6),
           Text(_readiness == null
               ? 'Broker status not verified.'
-              : _readiness!.brokerConnected
-                  ? 'Broker connected. Live orders remain blocked by policy.'
-                  : 'Selected broker not connected or authenticated.',
+              : _readiness!.selectedBroker == null
+                  ? 'No broker assigned to this Live room.'
+                  : _readiness!.brokerConnected
+                    ? 'Broker connected. Live order execution is still locked.'
+                    : 'Selected broker is not authenticated. Connect or restore it from Brokers.',
             style: styles.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
           if (widget.onBroker != null) TextButton.icon(
             onPressed: widget.onBroker,
