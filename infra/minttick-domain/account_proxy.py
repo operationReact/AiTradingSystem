@@ -116,7 +116,8 @@ def callback_html(ok):
     # Fixed HTML prevents any broker-supplied state, code, or error reflecting
     # into rendered content, cache, redirects or referrer headers.
     message = ("Upstox connected to MintTick. Return to MintTick and refresh."
-               if ok else "Upstox connection was not completed. Try again in MintTick.")
+               if ok else "Upstox connection was not completed. Return to MintTick, "
+                          "tap Refresh connection for the reason, then retry.")
     html = ("<!doctype html><html><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>MintTick broker connection</title></head><body>"
