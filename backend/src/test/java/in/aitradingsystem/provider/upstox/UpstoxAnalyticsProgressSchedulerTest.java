@@ -34,6 +34,23 @@ class UpstoxAnalyticsProgressSchedulerTest {
     }
 
     @Test
+    void githubDnsFailureIsPersistedAsSafeDiagnosticWithoutProviderCall() {
+        UUID lease = UUID.randomUUID();
+        when(progress.claim("GITHUB_DEVELOPMENT", clock.instant())).thenReturn(lease);
+        when(github.inspect(clock.instant())).thenThrow(
+                new UpstoxGitHubProgressReader.GitHubReadFailure(
+                        "GITHUB_DNS_UNAVAILABLE"));
+        var scheduler = new UpstoxAnalyticsProgressScheduler(
+                progress, github, source, clock, true, false);
+        scheduler.pollGithub();
+        verify(progress).finish(eq("GITHUB_DEVELOPMENT"), eq(lease), eq("BLOCKED"),
+                isNull(), isNull(), isNull(),
+                eq("GITHUB_DNS_UNAVAILABLE"), eq(Map.of("retryable", true)),
+                eq(clock.instant()));
+        verifyNoInteractions(source);
+    }
+
+    @Test
     void disabledSourceNeverReadsTokenOrUpstox() {
         var scheduler = new UpstoxAnalyticsProgressScheduler(
                 progress, github, source, clock, false, false);
