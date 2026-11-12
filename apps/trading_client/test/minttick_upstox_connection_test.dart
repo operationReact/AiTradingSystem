@@ -13,6 +13,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   int ownerConnectCalls = 0;
   bool ownerConfigured = false;
   bool ownerRejects = false;
+  String ownerRejectCode = 'UPSTOX_TOTP_AUTH_REJECTED';
   bool statusFails = false;
 
   @override
