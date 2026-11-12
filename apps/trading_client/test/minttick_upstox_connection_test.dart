@@ -15,6 +15,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   bool ownerRejects = false;
   String ownerRejectCode = 'UPSTOX_TOTP_AUTH_REJECTED';
   bool statusFails = false;
+  String? lastAuthError;
 
   @override
   Future<bool> configuredLoginAvailable() async => ownerConfigured;
@@ -39,6 +40,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
     accountMasked: linked ? '***456' : null,
     expiresAt: linked ? DateTime.utc(2026, 11, 8, 3, 30) : null,
     orderExecutionEnabled: false,
+    lastAuthError: lastAuthError,
     );
   }
 
@@ -130,6 +132,42 @@ void main() {
     expect(find.text('CONNECTED'), findsOneWidget);
     expect(repo.startCalls, 1); // Never launch OAuth a second time.
   });
+
+  test('safe OAuth callback status decodes without broker credentials', () {
+    final status = CustomerUpstoxStatus.fromJson({
+      'broker': 'UPSTOX', 'available': true, 'connected': false,
+      'accountMasked': null, 'expiresAt': null, 'orderExecutionEnabled': false,
+      'lastAuthError': 'UPSTOX_OAUTH_APP_CREDENTIALS_INVALID',
+    });
+    expect(status.connected, isFalse);
+    expect(status.lastAuthError, 'UPSTOX_OAUTH_APP_CREDENTIALS_INVALID');
+    expect(CustomerUpstoxStatus.fromJson({
+      'broker': 'UPSTOX', 'available': true, 'connected': false,
+      'orderExecutionEnabled': false,
+    }).lastAuthError, isNull);
+  });
+
+  for (final (code, explanation) in [
+    ('UPSTOX_AUTH_CODE_INVALID', 'authorization code expired'),
+    ('UPSTOX_OAUTH_APP_CREDENTIALS_INVALID', 'API key or API secret'),
+    ('UPSTOX_OAUTH_REDIRECT_REJECTED', 'rejected the callback URL'),
+    ('UPSTOX_PROFILE_REJECTED', 'active account profile'),
+    ('UPSTOX_ACCOUNT_SEGMENTS_INACTIVE', 'no active trading segments'),
+    ('UPSTOX_AUTH_DECLINED', 'cancelled or declined'),
+  ]) {
+    testWidgets('failed OAuth callback $code has a next step', (tester) async {
+      final repo = _FakeUpstox()..lastAuthError = code;
+      await tester.pumpWidget(MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        home: MintTickUpstoxPage(repository: repo),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(explanation), findsOneWidget);
+      expect(find.text('NOT CONNECTED'), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('connected Upstox account displays real provider read data',
       (tester) async {
