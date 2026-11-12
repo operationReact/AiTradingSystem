@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../domain/trading_room_draft.dart';
 
@@ -31,7 +32,7 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence {
   /// Read-only aggregate for compact tiles. Never treats planned LIVE capital
   /// as available brokerage cash. Server scopes every metric by customer.
   Future<List<CustomerRoomMetric>> dashboard() async {
-    final raw = await api.getJson('\$_path/dashboard');
+    final raw = await api.getJson('$_path/dashboard');
     if (raw is! List) throw const FormatException('Invalid room dashboard');
     return raw.map(CustomerRoomMetric.decode).toList(growable: false);
   }
