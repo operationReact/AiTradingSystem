@@ -112,12 +112,33 @@ def callback_query_safe(query):
             and len(error) <= 200)
 
 
-def callback_html(ok):
+# These statuses are hard-coded constants from MintTick's own backend only.
+# Never render arbitrary provider query parameters or upstream response bodies.
+CALLBACK_OUTCOMES = {
+    "STATE_INVALID": "The secure login session expired or was replaced. "
+                     "Close this browser tab and start a new Upstox login inside MintTick.",
+    "CALLBACK_PARAMETERS": "Upstox returned an unexpected authorization response. "
+                           "Close this tab and start a fresh login inside MintTick.",
+    "DECLINED": "The Upstox authorization was cancelled or declined. Start a fresh login.",
+    "CODE_INVALID": "The one-time Upstox authorization code is invalid or has been used. "
+                    "Start a fresh login; do not reopen the old callback.",
+    "APP_CREDENTIALS": "Upstox rejected the developer application's credentials. "
+                       "The protected server configuration needs attention.",
+    "REDIRECT_REJECTED": "Upstox rejected the application's registered callback URL.",
+    "SEGMENTS_INACTIVE": "Upstox reports inactive trading segments for this account.",
+    "PROFILE_REJECTED": "Upstox could not verify an active account profile.",
+    "ALREADY_CONNECTED": "This Upstox account is connected to another MintTick user.",
+    "BROKER_UNAVAILABLE": "Upstox was unavailable during the token exchange. Retry later.",
+    "BACKEND_UNAVAILABLE": "MintTick could not reach its private broker backend. Retry later.",
+    "UNVERIFIED": "Return to MintTick and tap Refresh connection to inspect the result.",
+}
+
+def callback_html(ok, reason="UNVERIFIED"):
     # Fixed HTML prevents any broker-supplied state, code, or error reflecting
     # into rendered content, cache, redirects or referrer headers.
     message = ("Upstox connected to MintTick. Return to MintTick and refresh."
-               if ok else "Upstox connection was not completed. Return to MintTick, "
-                          "tap Refresh connection for the reason, then retry.")
+               if ok else "Upstox connection was not completed. "
+                          + CALLBACK_OUTCOMES.get(reason, CALLBACK_OUTCOMES["UNVERIFIED"]))
     html = ("<!doctype html><html><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>MintTick broker connection</title></head><body>"
@@ -155,7 +176,7 @@ def handler(event, context):
     if not isinstance(query, str) or len(query) > (4096 if is_callback else 300):
         return reply(400, {"error": "INVALID_QUERY"})
     if is_callback and not callback_query_safe(query):
-        return callback_html(False)
+        return callback_html(False, "CALLBACK_PARAMETERS")
     if query and is_health:
         return reply(400, {"error": "INVALID_QUERY"})
     headers = event.get("headers", {})
@@ -247,6 +268,7 @@ def handler(event, context):
         data=body if method == "POST" else None,
         headers=upstream_headers,
         method=method)
+    callback_outcome = "UNVERIFIED"
     try:
         with urllib.request.urlopen(request, timeout=7) as upstream:
             status = upstream.status
@@ -254,7 +276,14 @@ def handler(event, context):
     except urllib.error.HTTPError as exc:
         status = exc.code
         payload = exc.read(131073)
+        if is_callback:
+            # Never reflect arbitrary headers: only internally-defined enum.
+            candidate = exc.headers.get("X-MintTick-Upstox-Outcome", "")
+            if candidate in CALLBACK_OUTCOMES:
+                callback_outcome = candidate
     except (urllib.error.URLError, TimeoutError, OSError):
+        if is_callback:
+            return callback_html(False, "BACKEND_UNAVAILABLE")
         return reply(503, {"error": "PRIVATE_BACKEND_UNAVAILABLE"})
     if len(payload) > 131072 or status not in ALLOWED_RESPONSES:
         return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
@@ -262,7 +291,7 @@ def handler(event, context):
         return reply(200 if status == 200 else 503,
                      {"status": "UP" if status == 200 else "DOWN"})
     if is_callback:
-        return callback_html(status == 200)
+        return callback_html(status == 200, callback_outcome)
     try:
         decoded = json.loads(payload) if payload else {}
         if not isinstance(decoded, (dict, list)):

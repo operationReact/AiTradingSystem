@@ -349,6 +349,9 @@ class AccountProxyTest(unittest.TestCase):
             with mock.patch.object(proxy.urllib.request,"urlopen") as urlopen:
                 result=proxy.handler(data,None)
             self.assertEqual(result["statusCode"],400,query[:40])
+            self.assertIn("unexpected authorization response", result["body"])
+            if query:
+                self.assertNotIn(query, result["body"])
             urlopen.assert_not_called()
 
     def test_upstox_callback_returns_constant_failure_on_backend_rejection(self):
@@ -364,6 +367,48 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(result["statusCode"],400)
         self.assertIn("Refresh connection",result["body"])
         self.assertNotIn("secret",result["body"])
+
+    def test_callback_displays_only_allowlisted_internal_failure_categories(self):
+        query="state="+"A"*43+"&code=one-use-value"
+        event_data=event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        event_data["rawQueryString"]=query
+        cases=(
+            ("STATE_INVALID", "secure login session expired"),
+            ("CODE_INVALID", "authorization code is invalid"),
+            ("APP_CREDENTIALS", "developer application's credentials"),
+            ("REDIRECT_REJECTED", "registered callback URL"),
+            ("SEGMENTS_INACTIVE", "inactive trading segments"),
+            ("PROFILE_REJECTED", "active account profile"),
+            ("ALREADY_CONNECTED", "another MintTick user"),
+            ("UNVERIFIED", "Refresh connection"),
+        )
+        for outcome,expected in cases:
+            error=proxy.urllib.error.HTTPError(
+                "http://private-backend",400,"Bad Request",
+                {"X-MintTick-Upstox-Outcome":outcome},
+                io.BytesIO(b"<html>authorization-code=secret-do-not-reflect</html>"))
+            with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=error):
+                result=proxy.handler(event_data,None)
+            self.assertEqual(result["statusCode"],400,outcome)
+            self.assertIn(expected,result["body"])
+            self.assertNotIn(query,result["body"])
+            self.assertNotIn("secret-do-not-reflect",result["body"])
+            self.assertEqual(result["headers"]["cache-control"],"no-store")
+
+    def test_callback_rejects_forged_broker_response_header(self):
+        event_data=event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        event_data["rawQueryString"]="state="+"A"*43+"&code=one-use"
+        invalid_header="STATE_INVALID <img src=https://example.com>"
+        error=proxy.urllib.error.HTTPError(
+            "http://private-backend",400,"Bad Request",
+            {"X-MintTick-Upstox-Outcome":invalid_header},
+            io.BytesIO(b"token=private-secret"))
+        with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=error):
+            result=proxy.handler(event_data,None)
+        self.assertEqual(result["statusCode"],400)
+        self.assertIn("Refresh connection",result["body"])
+        self.assertNotIn("<img",result["body"])
+        self.assertNotIn("private-secret",result["body"])
 
     def test_readiness_is_through_existing_private_backend(self):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
