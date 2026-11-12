@@ -7,6 +7,9 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import java.time.Instant;
+import java.util.Map;
+import java.util.List;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -39,19 +42,21 @@ class UpstoxGitHubProgressReaderHttpTest {
     }
 
     @Test
-    void acceptsValidGithubPagesLargerThanPrevious256KbLimit() {
+    void acceptsValidGithubPagesLargerThanPrevious256KbLimit() throws Exception {
         var builder = RestClient.builder();
         var mock = MockRestServiceServer.bindTo(builder).build();
-        // Real 40-PR GitHub pages are over 700 KB. A bounded 12-PR page
-        // can also exceed 256 KB when descriptions are long.
-        String longDescription = "x".repeat(280_000);
-        String body = "[{\\"number\\":940,\\"title\\":\\"fix(upstox): safe progress\\","
-                + "\\"state\\":\\"closed\\",\\"merged_at\\":\\"2026-11-13T00:00:00Z\\","
-                + "\\"body\\":\\"" + longDescription + "\\"}]";
+        // Real 40-PR GitHub pages exceed 700 KB. Keep a safe upper bound,
+        // while accepting a smaller valid page with a long description.
+        var json = new ObjectMapper();
+        String body = json.writeValueAsString(List.of(Map.of(
+                "number", 940, "title", "fix(upstox): safe progress",
+                "state", "closed", "merged_at", "2026-11-13T00:00:00Z",
+                "body", "x".repeat(280_000))));
         mock.expect(requestTo(PULLS))
                 .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
         mock.expect(requestTo(ROOT + "/actions/runs?per_page=15"))
-                .andRespond(withSuccess("{\\"workflow_runs\\":[]}", MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess(json.writeValueAsString(
+                        Map.of("workflow_runs", List.of())), MediaType.APPLICATION_JSON));
         var result = new UpstoxGitHubProgressReader("", builder.build()).inspect(NOW);
         mock.verify();
         assertThat(result.verified()).isEqualTo(1);
