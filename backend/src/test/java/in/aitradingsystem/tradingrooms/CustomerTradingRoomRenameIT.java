@@ -52,9 +52,9 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
         assertThat(wallets.get(owner, id).initialCashPaise()).isEqualTo(2_000_000L);
         assertThat(wallets.get(owner, id).availableCashPaise()).isEqualTo(2_000_000L);
         assertThat(wallets.ledger(owner, id)).hasSize(1);
-        assertThat(controller.list(auth)).anySatisfy(r -> {
-            if (r.id().equals(id)) assertThat(r.name()).isEqualTo("My Swing Room");
-        });
+        assertThat(controller.list(auth))
+            .extracting(CustomerTradingRoomController.RoomView::name)
+            .contains("My Swing Room");
     }
 
     @Test
