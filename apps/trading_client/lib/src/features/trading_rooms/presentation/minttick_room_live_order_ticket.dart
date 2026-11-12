@@ -63,8 +63,8 @@ class _MintTickRoomLiveOrderTicketState extends State<MintTickRoomLiveOrderTicke
       final rows = await widget.intents.list(widget.roomId);
       if (mounted) setState(() => _history = rows);
     } catch (_) {
-      if (mounted) setState(() => _message =
-          'Saved intent history cannot be verified. No LIVE order was placed.');
+      if (mounted) { setState(() => _message =
+          'Saved intent history cannot be verified. No LIVE order was placed.'); }
     }
   }
 
@@ -83,10 +83,10 @@ class _MintTickRoomLiveOrderTicketState extends State<MintTickRoomLiveOrderTicke
         const {'EQ', 'EQUITY', 'STOCK'}.contains(stock.instrumentType.toUpperCase())
       ).toList(growable: false));
     } catch (_) {
-      if (mounted) setState(() => _message =
-          'Instrument catalogue unavailable. Order preparation stopped.');
+      if (mounted) { setState(() => _message =
+          'Instrument catalogue unavailable. Order preparation stopped.'); }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) { setState(() => _busy = false); }
     }
   }
 
@@ -117,14 +117,14 @@ class _MintTickRoomLiveOrderTicketState extends State<MintTickRoomLiveOrderTicke
           raw['blockers'] is! List || (raw['blockers'] as List).isEmpty) {
         throw const FormatException('Unverified order preflight');
       }
-      if (mounted) setState(() {
+      if (mounted) { setState(() {
         _preflightPassed = true;
         _message = 'Preflight confirmed: LIVE execution blocked by server. '
           'You may save this as a non-executing intent.';
-      });
+      }); }
     } catch (_) {
-      if (mounted) setState(() => _message =
-          'Order preflight could not be verified. No LIVE order was sent.');
+      if (mounted) { setState(() => _message =
+          'Order preflight could not be verified. No LIVE order was sent.'); }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
