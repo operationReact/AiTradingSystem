@@ -582,6 +582,32 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             ],
           ),
         ),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final option in [
+              ('holdings', 'Holdings', widget.repository.holdings),
+              ('positions', 'Positions', widget.repository.positions),
+              ('funds', 'Funds', widget.repository.funds),
+              ('orders', 'Orders', widget.repository.orders),
+            ]) ...[
+              ChoiceChip(
+                key: ValueKey('upstox-tab-${option.$1}'),
+                label: Text(option.$2),
+                selected: _section == option.$1,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                selectedColor: colors.primaryContainer,
+                side: BorderSide(color: _section == option.$1
+                    ? colors.primary : colors.outlineVariant),
+                onSelected: _loading ? null :
+                    (_) => _load(option.$1, option.$3),
+              ),
+              const SizedBox(width: 7),
+            ],
+          ]),
+        ),
         if (_readErrors['funds'] != null) ...[
           const SizedBox(height: 10),
           Container(
@@ -610,32 +636,6 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             ]),
           ),
         ],
-        const SizedBox(height: 12),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(children: [
-            for (final option in [
-              ('holdings', 'Holdings', widget.repository.holdings),
-              ('positions', 'Positions', widget.repository.positions),
-              ('funds', 'Funds', widget.repository.funds),
-              ('orders', 'Orders', widget.repository.orders),
-            ]) ...[
-              ChoiceChip(
-                key: ValueKey('upstox-tab-${option.$1}'),
-                label: Text(option.$2),
-                selected: _section == option.$1,
-                visualDensity: VisualDensity.compact,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                selectedColor: colors.primaryContainer,
-                side: BorderSide(color: _section == option.$1
-                    ? colors.primary : colors.outlineVariant),
-                onSelected: _loading ? null :
-                    (_) => _load(option.$1, option.$3),
-              ),
-              const SizedBox(width: 7),
-            ],
-          ]),
-        ),
         const SizedBox(height: 9),
         if (_section != null)
           MintTickSurface(
