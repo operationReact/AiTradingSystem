@@ -6,7 +6,6 @@ import pytest
 
 from aitrading_intelligence.bar_continuity_gate import evaluate_bar_continuity
 
-
 START = datetime(2026, 1, 5, 9, 15, tzinfo=UTC)
 STEP = timedelta(minutes=5)
 
