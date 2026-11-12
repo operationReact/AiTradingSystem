@@ -26,6 +26,7 @@ public class UpstoxGitHubProgressReader {
     private final RestClient http;
     private final String token;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public UpstoxGitHubProgressReader(@Value("${MINTTICK_GITHUB_READ_TOKEN:}") String token) {
         this(token, http());
     }
