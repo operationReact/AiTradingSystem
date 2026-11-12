@@ -31,7 +31,9 @@ import org.springframework.web.client.RestClient;
 public class UpstoxGitHubProgressReader {
     private static final String ROOT = "https://api.github.com/repos/operationReact/AiTradingSystem";
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final int MAX_RESPONSE = 256 * 1024;
+    // A 40-PR GitHub REST page has exceeded 700 KB in production.
+    // Keep the poll small, with bounded headroom for varying PR body lengths.
+    private static final int MAX_RESPONSE = 384 * 1024;
     private final RestClient http;
     private final String token;
 
@@ -71,7 +73,7 @@ public class UpstoxGitHubProgressReader {
 
     public Result inspect(Instant now) {
         try {
-            JsonNode prs = get("/pulls?state=all&sort=updated&direction=desc&per_page=40");
+            JsonNode prs = get("/pulls?state=all&sort=updated&direction=desc&per_page=12");
             JsonNode runs = get("/actions/runs?per_page=15");
             return summarize(prs, runs, now);
         } catch (GitHubReadFailure failure) {
@@ -94,8 +96,11 @@ public class UpstoxGitHubProgressReader {
                 request = request.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
             }
             String value = request.retrieve().body(String.class);
-            if (value == null || value.length() > MAX_RESPONSE) {
+            if (value == null) {
                 throw new GitHubReadFailure("GITHUB_INVALID_DATA");
+            }
+            if (value.length() > MAX_RESPONSE) {
+                throw new GitHubReadFailure("GITHUB_RESPONSE_TOO_LARGE");
             }
             return JSON.readTree(value);
         } catch (GitHubReadFailure failure) {
@@ -140,7 +145,7 @@ public class UpstoxGitHubProgressReader {
 
     /** Pure parser with bounded, recent-only samples; does not claim all-time PR totals. */
     static Result summarize(JsonNode prs, JsonNode runs, Instant now) {
-        if (now == null || prs == null || !prs.isArray() || prs.size() > 40
+        if (now == null || prs == null || !prs.isArray() || prs.size() > 12
                 || runs == null || !runs.isObject()
                 || !runs.path("workflow_runs").isArray()
                 || runs.path("workflow_runs").size() > 15) {
