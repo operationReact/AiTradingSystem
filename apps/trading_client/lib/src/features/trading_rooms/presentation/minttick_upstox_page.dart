@@ -679,17 +679,16 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
   }
 
   void _reloadSelected() {
-    switch (_section) {
-      case 'holdings':
-        _readBroker('holdings', widget.repository.holdings);
-      case 'positions':
-        _readBroker('positions', widget.repository.positions);
-      case 'funds':
-        _readBroker('funds', widget.repository.funds);
-      case 'orders':
-        _readBroker('orders', widget.repository.orders);
-      case 'IP status':
-        _readBroker('IP status', widget.repository.registeredIps);
+    final Future<Object?> Function()? fetch = switch (_section) {
+      'holdings' => widget.repository.holdings,
+      'positions' => widget.repository.positions,
+      'funds' => widget.repository.funds,
+      'orders' => widget.repository.orders,
+      'IP status' => widget.repository.registeredIps,
+      _ => null,
+    };
+    if (_section != null && fetch != null) {
+      unawaited(_readBroker(_section!, fetch));
     }
   }
 
@@ -707,113 +706,54 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       return [const Text('No holdings reported by Upstox.')];
     }
 
-    final complete = holdings.length == raw.length;
-    final marketValue = complete ? portfolioHoldingValue(holdings) : null;
-    num? invested = complete ? 0 : null;
-    num? totalPnl = complete ? 0 : null;
-    for (final holding in holdings) {
-      final qty = holding.quantity;
-      final avg = holding.averagePrice;
-      final cost = qty != null && qty >= 0 && avg != null && avg >= 0
-          ? qty * avg : null;
-      if (invested != null && cost != null) {
-        invested += cost;
-      } else {
-        invested = null;
-      }
-      // Prefer Upstox's own P&L; estimate only when both prices exist.
-      final holdingPnl = holding.pnl ??
-          (cost != null && holding.marketValue != null
-              ? holding.marketValue! - cost : null);
-      if (totalPnl != null && holdingPnl != null) {
-        totalPnl += holdingPnl;
-      } else {
-        totalPnl = null;
-      }
-    }
-
-    final changePercent = invested != null && invested > 0 && totalPnl != null
-        ? totalPnl / invested * 100 : null;
-    final gainColor = totalPnl == null ? scheme.onSurface
-        : totalPnl < 0 ? scheme.error : scheme.primary;
-
+    final marketValue = portfolioHoldingValue(holdings);
     return [
-      Text('${raw.length} holdings · Upstox broker reported',
-        style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 12),
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _holdingStat('Current value', marketValue, text, scheme),
-        const SizedBox(width: 8),
-        _holdingStat('Invested', invested, text, scheme),
-        const SizedBox(width: 8),
-        _holdingStat('Total P&L', totalPnl, text, scheme,
-            amountColor: gainColor),
-      ]),
-      if (changePercent != null) ...[
-        const SizedBox(height: 4),
-        Text('Total return: ${changePercent >= 0 ? '+' : ''}'
-            '${changePercent.toStringAsFixed(2)}%',
-          style: text.labelSmall?.copyWith(color: gainColor)),
-      ],
-      const SizedBox(height: 10),
-      Divider(color: scheme.outlineVariant),
       for (final holding in holdings.take(50)) ...[
-        const SizedBox(height: 7),
-        Row(children: [
-          Expanded(child: Text(holding.symbol,
-            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-            overflow: TextOverflow.ellipsis, maxLines: 1)),
-          const SizedBox(width: 10),
-          Text(portfolioRupees(holding.marketValue),
-            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w800)),
-        ]),
-        const SizedBox(height: 3),
-        Text('Qty ${holding.quantity ?? '—'}  ·  '
-            'Last ${portfolioRupees(holding.lastPrice)}  ·  '
-            'Avg ${portfolioRupees(holding.averagePrice)}',
-          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 3),
-        if (holding.pnl != null)
-          Text('Broker P&L ${portfolioRupees(holding.pnl)}',
-            style: text.labelSmall?.copyWith(
-              color: holding.pnl! < 0 ? scheme.error : scheme.primary)),
-        const SizedBox(height: 7),
+        Padding(padding: const EdgeInsets.symmetric(vertical: 7),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text(holding.symbol,
+                  style: text.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis, maxLines: 1)),
+                const SizedBox(width: 8),
+                Text(portfolioRupees(holding.marketValue),
+                  style: text.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 3),
+              Text('Qty ${holding.quantity ?? '—'} · '
+                  'Last ${portfolioRupees(holding.lastPrice)} · '
+                  'Avg ${portfolioRupees(holding.averagePrice)}',
+                style: text.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant)),
+              if (holding.pnl != null)
+                Text('Broker P&L ${portfolioRupees(holding.pnl)}',
+                  style: text.labelSmall?.copyWith(
+                    color: holding.pnl! < 0 ? scheme.error : scheme.primary)),
+            ],
+          ),
+        ),
+        Divider(height: 1, color: scheme.outlineVariant),
       ],
       if (raw.length > 50)
         Text('Showing first 50 of ${raw.length} holdings',
           style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-      if (!complete || marketValue == null || invested == null) ...[
-        const SizedBox(height: 6),
+      if (marketValue == null) ...[
+        const SizedBox(height: 7),
         Text('Some broker holding prices or quantities are unavailable; '
             'missing totals are shown as —, not ₹0.',
           style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
       ],
-      const SizedBox(height: 5),
-      Text('Valuation uses the last prices supplied by Upstox. '
-          'Prices may differ from its app as market data updates.',
+      const SizedBox(height: 6),
+      Text('Prices are reported by Upstox and may lag its app.',
         style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
     ];
   }
 
-  Widget _holdingStat(
-      String label, num? amount, TextTheme text, ColorScheme scheme,
-      {Color? amountColor}) {
-    return Expanded(child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-        const SizedBox(height: 3),
-        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
-          child: Text(portfolioRupees(amount),
-            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w800,
-                color: amountColor))),
-      ],
-    ));
-  }
-
   List<Widget> _brokerSummary(TextTheme text, ColorScheme scheme) {
-    final value = _data;
+    final value = _brokerData[_section];
     if (value == null) {
       return [const Text('No verified broker data loaded.')];
     }
@@ -847,32 +787,37 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       if (_section == 'IP status') {
         final primary = value['primary_ip'];
         return [Text(primary is String && primary.isNotEmpty
-            ? 'Primary static IP registered'
-            : 'No primary static IP reported by broker')];
+            ? 'Primary static IP registered with Upstox'
+            : 'No primary static IP reported by broker',
+          style: text.bodySmall)];
       }
-      final equity = value['equity'];
-      final data = equity is Map ? equity : value;
-      const fields = [
-        ('available_margin', 'Available margin'),
-        ('used_margin', 'Margin used'),
-        ('payin_amount', 'Pay-in'),
-        ('notional_cash', 'Notional cash'),
-      ];
-      final available = fields.where((field) => data[field.$1] is num).toList();
-      if (available.isEmpty) {
-        return [const Text('The broker returned no supported summary fields.')];
-      }
-      return [
-        for (final (field, name) in available)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(children: [
-              Expanded(child: Text(name, style: text.bodySmall)),
-              Text('₹${data[field]}',
+      if (_section == 'funds') {
+        final amount = portfolioAmount(value, broker: 'UPSTOX');
+        final v3 = value['available_to_trade'] is Map;
+        final equity = value['equity'];
+        final breakdown = equity is Map ? equity : value;
+        final secondary = breakdown['used_margin'];
+        return [
+          Row(children: [
+            Expanded(child: Text(v3 ? 'Available cash' : 'Available margin',
+              style: text.bodySmall)),
+            Text(portfolioRupees(amount),
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+          ]),
+          if (secondary is num && secondary.toDouble().isFinite) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: Text('Margin used', style: text.bodySmall)),
+              Text(portfolioRupees(secondary),
                 style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
             ]),
-          ),
-      ];
+          ],
+          const SizedBox(height: 8),
+          Text('Funds exclude unverified balances. Pledged collateral is '
+              'not counted as cash.',
+            style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ];
+      }
     }
     return [const Text('No supported broker details to show.')];
   }
