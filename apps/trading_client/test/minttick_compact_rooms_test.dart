@@ -92,6 +92,8 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('room-tab-order')));
     await tester.pumpAndSettle();
     expect(find.text('Fund and verify the virtual Paper wallet first.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('room-tab-risk')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-tab-risk')));
     await tester.pumpAndSettle();
     expect(find.text('Illustrative daily loss'), findsOneWidget);
