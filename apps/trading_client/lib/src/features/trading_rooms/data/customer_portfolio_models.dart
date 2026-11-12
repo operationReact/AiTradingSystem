@@ -73,7 +73,7 @@ class PortfolioInstrument {
           'pnl', 'unrealised', 'unrealised_pnl', 'unrealized_pnl', 'profit_and_loss',
         ])),
       ));
-     }
+    }
     return List.unmodifiable(decoded);
   }
 
