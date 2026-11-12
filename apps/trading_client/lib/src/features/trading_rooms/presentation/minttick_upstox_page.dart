@@ -257,10 +257,17 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     try {
       final result = await fetch();
       if (mounted) setState(() => _data = result);
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
-        setState(() => _error = 'Upstox $section could not be loaded. '
-            'Re-authentication may be required.');
+        final maintenance = section == 'funds' &&
+            error is ApiHttpFailure &&
+            error.code == 'UPSTOX_FUNDS_MAINTENANCE';
+        setState(() => _error = maintenance
+            ? 'Upstox funds are unavailable from 12:00 AM to 5:30 AM IST '
+              'for scheduled daily maintenance. This does not mean zero '
+              'balance or a disconnected account. Refresh later.'
+            : 'Upstox $section could not be loaded. '
+              'Verify broker connectivity and retry.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);

@@ -34,15 +34,17 @@ class PortfolioInstrument {
     bool position = false,
   }) {
     final rows = portfolioRecords(response, position ? 'positions' : 'holdings');
-    if (rows == null) return null;
+    if (rows == null || rows.length > 500) return null;
     final decoded = <PortfolioInstrument>[];
     for (final value in rows) {
-      if (value is! Map) continue;
+      // A non-empty but unrecognizable response must not become a verified
+      // empty portfolio. Only an actual [] is a broker-confirmed zero.
+      if (value is! Map) return null;
       final symbol = _string(_first(value, [
         'tradingsymbol', 'trading_symbol', 'tradingSymbol',
         'symbol', 'symbol_name', 'instrument_key',
       ]));
-      if (symbol == null) continue;
+      if (symbol == null) return null;
       final quantity = _number(_first(value, [
         'quantity', 'netqty', 'net_qty', 'net_quantity', 'holding_quantity',
       ]));
@@ -71,7 +73,6 @@ class PortfolioInstrument {
           'pnl', 'unrealised', 'unrealised_pnl', 'unrealized_pnl', 'profit_and_loss',
         ])),
       ));
-      if (decoded.length == 500) break;
     }
     return List.unmodifiable(decoded);
   }
@@ -105,7 +106,8 @@ class PortfolioInstrument {
 List<dynamic>? portfolioRecords(Object? raw, String section) {
   if (raw is List) return raw;
   if (raw is! Map) return null;
-  for (final name in [section, 'rows', 'data', 'holdings', 'positions', 'orderBook', 'orders']) {
+  // Never substitute orders or positions for missing holdings (or vice versa).
+  for (final name in [section, 'rows', 'data']) {
     final nested = raw[name];
     if (nested is List) return nested;
     if (nested is Map && !identical(nested, raw)) {
@@ -141,14 +143,24 @@ String portfolioRupees(num? value) {
 
 num? portfolioAmount(Object? raw, {required String broker}) {
   if (raw is! Map) return null;
+  final data = raw['data'] is Map ? raw['data'] as Map : raw;
   Object? value;
   if (broker == 'UPSTOX') {
-    final equity = raw['equity'];
-    if (equity is Map) {
-      value = equity['available_margin'] ?? equity['available_cash'];
+    // Upstox V3 splits spendable cash from pledged margin. Never add pledge
+    // collateral to cash or holdings value. V2 provides combined margin in
+    // equity (commodity is a deprecated duplicate/zero segment).
+    final trade = data['available_to_trade'];
+    if (trade is Map) {
+      final cash = trade['cash_available_to_trade'];
+      if (cash is Map) value = cash['total'];
+    } else {
+      final equity = data['equity'];
+      if (equity is Map) {
+        value = equity['available_margin'] ?? equity['available_cash'];
+      }
     }
-  } else {
-    value = raw['availablecash'] ?? raw['availableCash'];
+  } else if (broker == 'ANGEL_ONE') {
+    value = data['availablecash'] ?? data['availableCash'];
   }
   if (value is num && value.toDouble().isFinite) return value;
   if (value is String) {
