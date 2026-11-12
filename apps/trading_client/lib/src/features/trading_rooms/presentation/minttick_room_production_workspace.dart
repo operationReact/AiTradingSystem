@@ -5,6 +5,7 @@ import '../../../data/instrument_repository.dart';
 import '../data/customer_execution_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
+import '../data/customer_portfolio_models.dart';
 import '../data/customer_room_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
 import '../domain/trading_room_draft.dart';
@@ -63,6 +64,8 @@ class _MintTickRoomProductionWorkspaceState
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
   List<CustomerPaperPosition> _positions = const [];
+  Map<int, CustomerLiveQuote> _positionQuotes = const {};
+  int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
   bool _historyLoading = false;
   String? _historyError;
@@ -73,20 +76,71 @@ class _MintTickRoomProductionWorkspaceState
     _loadHistory();
   }
 
+  @override
+  void dispose() {
+    ++_historyGeneration;
+    super.dispose();
+  }
+
+  Future<void> _readPaperQuotes(List<CustomerPaperPosition> rows, int request) async {
+    final market = widget.market;
+    if (market == null || rows.isEmpty) {
+      if (mounted && request == _historyGeneration) {
+        setState(() => _positionQuotes = const {});
+      }
+      return;
+    }
+    final ids = rows.where((row) => row.quantity > 0)
+        .map((row) => row.instrumentId).toSet().toList();
+    final quotes = <int, CustomerLiveQuote>{};
+    // The backend accepts at most 30 IDs per authenticated snapshot request.
+    // Process all holdings in bounded batches so no instrument is skipped.
+    for (var index = 0; index < ids.length; index += 30) {
+      if (!mounted || request != _historyGeneration) return;
+      final end = (index + 30).clamp(0, ids.length);
+      try {
+        final page = await market.snapshot(ids.sublist(index, end));
+        for (final quote in page.rows) {
+          if (quote.ltp != null &&
+              const {'LIVE', 'LAST_CLOSE'}.contains(quote.status)) {
+            quotes[quote.instrumentId] = quote;
+          }
+        }
+      } catch (_) {
+        // Unknown prices must remain unavailable, never estimated from cost.
+      }
+    }
+    if (mounted && request == _historyGeneration) {
+      setState(() => _positionQuotes = quotes);
+    }
+  }
+
+  String _positionSymbol(int instrumentId) {
+    for (final order in _paperOrders) {
+      if (order.instrumentId == instrumentId) return order.tradingSymbol;
+    }
+    return _positionQuotes[instrumentId]?.tradingSymbol ??
+        'Instrument #$instrumentId';
+  }
+
   Future<void> _loadHistory() async {
+    final request = ++_historyGeneration;
     if (widget.room.mode == 'PAPER' && widget.paper != null &&
         (widget.room.status == 'PAPER_FUNDED' || widget.wallet != null)) {
-      setState(() { _historyLoading = true; _historyError = null; });
+      setState(() { _historyLoading = true; _historyError = null;
+        _positionQuotes = const {}; });
       try {
         final rows = await Future.wait<Object>([
           widget.paper!.orders(widget.room.id),
           widget.paper!.positions(widget.room.id),
         ]);
         if (!mounted) return;
+        if (request != _historyGeneration) return;
         setState(() {
           _paperOrders = rows[0] as List<CustomerPaperOrder>;
           _positions = rows[1] as List<CustomerPaperPosition>;
         });
+        await _readPaperQuotes(_positions, request);
       } catch (_) {
         if (mounted) { setState(() {
           _paperOrders = const [];
@@ -94,7 +148,9 @@ class _MintTickRoomProductionWorkspaceState
           _historyError = 'Room activity could not be verified.';
         }); }
       } finally {
-        if (mounted) setState(() => _historyLoading = false);
+        if (mounted && request == _historyGeneration) {
+          setState(() => _historyLoading = false);
+        }
       }
     } else if (widget.room.mode == 'LIVE' && widget.intents != null) {
       setState(() { _historyLoading = true; _historyError = null; });
@@ -384,29 +440,88 @@ class _MintTickRoomProductionWorkspaceState
 
   Widget _positionsPage(BuildContext context) {
     final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
     final live = widget.room.mode == 'LIVE';
     final rows = _positions.where((item) => item.quantity > 0).toList();
+    final investedPaise = rows.fold<int>(0,
+        (sum, row) => sum + row.avgCostPaise * row.quantity);
+    num? marketValue = 0;
+    for (final row in rows) {
+      final quote = _positionQuotes[row.instrumentId];
+      if (quote == null || quote.ltp == null) {
+        marketValue = null;
+        break;
+      }
+      marketValue = marketValue! + quote.ltp! * row.quantity;
+    }
+    final unrealized = marketValue == null
+        ? null : marketValue - investedPaise / 100;
     return Column(children: [
-      _PageTitle('Open positions', trailing: live ? '—' : '${rows.length} holdings',
+      _PageTitle(live ? 'Live positions' : 'Paper portfolio',
+        trailing: live ? '—' : '${rows.length} holdings',
         onRefresh: _loadHistory),
-      const _RowColumns(),
+      if (!live) Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: scheme.outlineVariant)),
+        child: Row(children: [
+          Expanded(child: _PortfolioMetric(
+            label: 'COST BASIS', value: portfolioRupees(investedPaise / 100))),
+          Expanded(child: _PortfolioMetric(
+            label: 'MARKED VALUE', value:
+              _historyLoading || _historyError != null ? '—'
+                : portfolioRupees(marketValue))),
+          Expanded(child: _PortfolioMetric(
+            label: 'UNREALIZED', value:
+              _historyLoading || _historyError != null ? '—'
+                : portfolioRupees(unrealized))),
+        ]),
+      ),
+      const SizedBox(height: 8),
       if (_historyLoading) const LinearProgressIndicator(minHeight: 2),
+      if (!live)
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+          child: Row(children: [
+            Expanded(flex: 11, child: Text('SYMBOL / AVG',
+              style: TextStyle(fontSize: 10))),
+            Expanded(flex: 4, child: Text('QTY', style: TextStyle(fontSize: 10))),
+            Expanded(flex: 9, child: Text('UNREALIZED',
+              textAlign: TextAlign.right, style: TextStyle(fontSize: 10))),
+          ]),
+        ),
       Expanded(child: live
         ? const Center(child: Text('No broker-authorized Live position feed.'))
         : _historyError != null
           ? Center(child: Text(_historyError!))
-          : rows.isEmpty ? const Center(child: Text('No open Paper positions.'))
-          : ListView.builder(itemCount: rows.length, itemBuilder: (context, index) {
-              final row = rows[index];
-              return _DataLine(
-                primary: 'Instrument #${row.instrumentId}',
-                secondary: 'PAPER · server position',
-                middle: '${row.quantity}',
-                right: '₹${(row.avgCostPaise / 100).toStringAsFixed(2)}');
-            })),
-      Padding(padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text('Only verified positions for this room are shown.',
-          style: type.labelSmall)),
+          : rows.isEmpty
+            ? const Center(child: Text('No open Paper positions.'))
+            : ListView.builder(
+                itemCount: rows.length,
+                itemBuilder: (context, index) {
+                  final row = rows[index];
+                  final quote = _positionQuotes[row.instrumentId];
+                  final result = quote?.ltp == null ? null
+                    : (quote!.ltp! - row.avgCostPaise / 100) * row.quantity;
+                  return _DataLine(
+                    primary: _positionSymbol(row.instrumentId),
+                    secondary: 'Avg ${portfolioRupees(row.avgCostPaise / 100)}'
+                      '${quote == null ? ' · price unavailable'
+                        : quote.status == 'LIVE' ? ' · LIVE'
+                          : ' · LAST RECORDED'}',
+                    middle: '${row.quantity}',
+                    right: portfolioRupees(result),
+                  );
+                },
+              )),
+      Padding(padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Text(
+          'Paper cash is separate. Marked value and unrealized P&L '
+          'use only verified Live / last-recorded prices; missing prices show —.',
+          maxLines: 2, overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
       _actions(),
     ]);
   }
@@ -698,5 +813,22 @@ class _FlatNotice extends StatelessWidget {
       child: Text(message, style: Theme.of(context).textTheme.bodySmall
         ?.copyWith(color: scheme.onSurfaceVariant)),
     );
+  }
+}
+
+class _PortfolioMetric extends StatelessWidget {
+  const _PortfolioMetric({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) {
+    final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label, style: type.labelSmall?.copyWith(
+        color: scheme.onSurfaceVariant, fontSize: 9)),
+      const SizedBox(height: 4),
+      Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+        style: type.bodySmall?.copyWith(fontWeight: FontWeight.w800)),
+    ]);
   }
 }
