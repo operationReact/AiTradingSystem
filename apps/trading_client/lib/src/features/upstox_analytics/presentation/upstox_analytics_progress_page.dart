@@ -100,7 +100,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 Text('Upstox → Canonical Data → MintTick Mind',
                   style: TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
               ])),
-            status(data?.find('SOURCE_VERIFICATION')),
+            status(data?.find('SOURCE_VERIFICATION'),
+              labelOverride: data?.find('SOURCE_VERIFICATION')?.state == 'DISABLED'
+                ? 'SOURCE OFF' : null),
           ])),
         SizedBox(height: 45,
           child: ListView(scrollDirection: Axis.horizontal,
@@ -371,7 +373,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       Expanded(child: Text(value, style: const TextStyle(fontSize: 12))),
     ]));
 
-  Widget status(UpstoxAnalyticsTask? task) {
+  Widget status(UpstoxAnalyticsTask? task, {String? labelOverride}) {
     final state = task == null ? 'UNKNOWN' : task.stale ? 'STALE' : task.state;
     final color = switch (state) {
       'VERIFIED' => MintTickPalette.mint,
@@ -385,7 +387,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(15),
         border: Border.all(color: color.withValues(alpha: .45)),
         color: color.withValues(alpha: .08)),
-      child: Text(state.replaceAll('_', ' '), style: TextStyle(
+      child: Text(labelOverride ?? state.replaceAll('_', ' '), style: TextStyle(
         fontSize: 9.5, color: color, fontWeight: FontWeight.w800)),
     );
   }
