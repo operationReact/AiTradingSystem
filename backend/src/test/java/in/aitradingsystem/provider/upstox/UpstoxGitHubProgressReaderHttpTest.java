@@ -39,6 +39,37 @@ class UpstoxGitHubProgressReaderHttpTest {
     }
 
     @Test
+    void acceptsValidGithubPagesLargerThanPrevious256KbLimit() {
+        var builder = RestClient.builder();
+        var mock = MockRestServiceServer.bindTo(builder).build();
+        // Real 40-PR GitHub pages are over 700 KB. A bounded 12-PR page
+        // can also exceed 256 KB when descriptions are long.
+        String longDescription = "x".repeat(280_000);
+        String body = "[{\\"number\\":940,\\"title\\":\\"fix(upstox): safe progress\\","
+                + "\\"state\\":\\"closed\\",\\"merged_at\\":\\"2026-11-13T00:00:00Z\\","
+                + "\\"body\\":\\"" + longDescription + "\\"}]";
+        mock.expect(requestTo(PULLS))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+        mock.expect(requestTo(ROOT + "/actions/runs?per_page=15"))
+                .andRespond(withSuccess("{\\"workflow_runs\\":[]}", MediaType.APPLICATION_JSON));
+        var result = new UpstoxGitHubProgressReader("", builder.build()).inspect(NOW);
+        mock.verify();
+        assertThat(result.verified()).isEqualTo(1);
+    }
+
+    @Test
+    void reportsExcessivelyLargePagesWithSpecificSafeCode() {
+        var builder = RestClient.builder();
+        var mock = MockRestServiceServer.bindTo(builder).build();
+        mock.expect(requestTo(PULLS))
+                .andRespond(withSuccess("x".repeat(400_000), MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> new UpstoxGitHubProgressReader("", builder.build()).inspect(NOW))
+                .isInstanceOf(UpstoxGitHubProgressReader.GitHubReadFailure.class)
+                .hasMessage("GITHUB_RESPONSE_TOO_LARGE");
+        mock.verify();
+    }
+
+    @Test
     void classifiesHttpRateLimitWithoutExposingProviderText() {
         var builder = RestClient.builder();
         var mock = MockRestServiceServer.bindTo(builder).build();
