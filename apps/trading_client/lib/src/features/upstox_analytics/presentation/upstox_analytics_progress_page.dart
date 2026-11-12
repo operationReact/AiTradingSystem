@@ -437,18 +437,6 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final month = date.month.toString().padLeft(2, '0');
     final hour = date.hour.toString().padLeft(2, '0');
     final minute = date.minute.toString().padLeft(2, '0');
-    return '
-  }
-}
-+'day/
-  }
-}
-+'month 
-  }
-}
-+'hour:
-  }
-}
-+'minute';
+    return '$day/$month $hour:$minute';
   }
 }
