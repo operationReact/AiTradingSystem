@@ -48,6 +48,55 @@ class CustomerExecutionReadinessServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void liveRoomSelectsExactlyOneOwnerBrokerButCannotSubmitRealOrders() {
+        UUID owner = customer();
+        UUID live = room(owner, "LIVE", 25000);
+        var before = service.readiness(owner, live);
+        assertThat(before.selectedBroker()).isNull();
+        assertThat(before.blockers()).contains("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
+        var upstox = service.selectLiveBroker(owner, live, "UPSTOX");
+        assertThat(upstox.selectedBroker()).isEqualTo("UPSTOX");
+        assertThat(upstox.brokerConnected()).isFalse();
+        assertThat(upstox.blockers()).doesNotContain("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
+        assertThat(upstox.blockers()).contains("BROKER_NOT_CONNECTED",
+            "REGISTERED_STATIC_IP_NOT_VERIFIED",
+            "ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED",
+            "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED", "EXECUTION_DISABLED");
+        assertThat(upstox.executionEnabled()).isFalse();
+        var angel = service.selectLiveBroker(owner, live, "ANGEL_ONE");
+        assertThat(angel.selectedBroker()).isEqualTo("ANGEL_ONE");
+        Long selections = jdbc.sql("""
+                SELECT COUNT(*) FROM customer_live_room_broker WHERE room_id=:room
+                """).param("room", live).query(Long.class).single();
+        assertThat(selections).isEqualTo(1L);
+        assertThat(service.readiness(owner, live).selectedBroker())
+            .isEqualTo("ANGEL_ONE");
+    }
+
+    @Test
+    void neverAssignsLiveBrokerToPaperOrDifferentCustomer() {
+        UUID alice = customer();
+        UUID bob = customer();
+        UUID paper = room(alice, "PAPER", 25000);
+        UUID live = room(alice, "LIVE", 30000);
+        assertThatThrownBy(() -> service.selectLiveBroker(alice, paper, "UPSTOX"))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.CONFLICT));
+        assertThatThrownBy(() -> service.selectLiveBroker(bob, live, "UPSTOX"))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND));
+        assertThatThrownBy(() -> service.selectLiveBroker(alice, live, "OTHER"))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST));
+        Long count = jdbc.sql("SELECT COUNT(*) FROM customer_live_room_broker")
+            .query(Long.class).single();
+        assertThat(count).isZero();
+    }
+
+    @Test
     void cannotReadAnotherCustomersReadinessOrInventExecutionPermission() {
         UUID alice = customer();
         UUID bob = customer();
