@@ -23,7 +23,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   Future<CustomerUpstoxStatus> connectConfigured() async {
     ownerConnectCalls++;
     if (ownerRejects) {
-      throw const ApiHttpFailure('UPSTOX_TOTP_AUTH_REJECTED', null, 502);
+      throw ApiHttpFailure(ownerRejectCode, null, 502);
     }
     linked = true;
     return status();
