@@ -240,7 +240,7 @@ class CustomerRoomMetric {
 ).hasMatch(roomId)) {
       throw const FormatException('Invalid room identifier');
     }
-    final normalized = name.trim().replaceAll(RegExp(r'\\s+'), ' ');
+    final normalized = name.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (normalized.isEmpty || normalized.length > 80 ||
         normalized.runes.any((point) => point < 32 || point == 127)) {
       throw const FormatException('Room name must be 1–80 printable characters');
