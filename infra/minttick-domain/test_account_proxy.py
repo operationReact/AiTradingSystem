@@ -362,6 +362,7 @@ class AccountProxyTest(unittest.TestCase):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Declined()):
             result=proxy.handler(data,None)
         self.assertEqual(result["statusCode"],400)
+        self.assertIn("Refresh connection",result["body"])
         self.assertNotIn("secret",result["body"])
 
     def test_readiness_is_through_existing_private_backend(self):

@@ -35,11 +35,13 @@ public class CustomerUpstoxOAuthService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final LocalTime EXPIRES = LocalTime.of(3, 30);
     private static final long STATE_TTL_SECONDS = 300;
+    private static final long FAILURE_TTL_SECONDS = 600;
     private static final int MAX_PENDING = 10_000;
     private final SecureRandom secureRandom = new SecureRandom();
     private final ConcurrentHashMap<String, Pending> pending = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, String> mostRecent = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<UUID, BrokerSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, AuthFailure> failures = new ConcurrentHashMap<>();
     private final UpstoxProperties props;
     private final UpstoxApiClient api;
     private final Clock clock;
@@ -56,12 +58,21 @@ public class CustomerUpstoxOAuthService {
     }
 
     private record Pending(UUID customerId, Instant expiresAt) {}
+    private record AuthFailure(String code, Instant expiresAt) {}
     private record BrokerSession(String accessToken, String brokerUserId, Instant expiresAt) {
         @Override public String toString() { return "BrokerSession[redacted]"; }
     }
     public record StartResponse(String authorizationUrl) {}
     public record Status(boolean available, boolean connected, String broker,
-                         String accountMasked, Instant expiresAt, boolean orderExecutionEnabled) {}
+                         String accountMasked, Instant expiresAt, boolean orderExecutionEnabled,
+                         String lastAuthError) {
+        /** Preserve existing account-status callers and owner TOTP fixtures. */
+        public Status(boolean available, boolean connected, String broker,
+                      String accountMasked, Instant expiresAt, boolean orderExecutionEnabled) {
+            this(available, connected, broker, accountMasked, expiresAt,
+                 orderExecutionEnabled, null);
+        }
+    }
     public record AccountData(String provider, Instant fetchedAt, JsonNode data) {}
 
     public StartResponse start(UUID customerId) {
@@ -69,6 +80,7 @@ public class CustomerUpstoxOAuthService {
             throw new UpstoxProviderException("UPSTOX_APP_NOT_CONFIGURED");
         }
         Instant now = clock.instant();
+        failures.remove(customerId);
         pending.entrySet().removeIf(entry -> now.isAfter(entry.getValue().expiresAt()));
         if (pending.size() >= MAX_PENDING) {
             throw new UpstoxProviderException("UPSTOX_AUTH_CAPACITY_REACHED");
@@ -102,11 +114,24 @@ public class CustomerUpstoxOAuthService {
                 || !clock.instant().isBefore(flow.expiresAt())) {
             throw new UpstoxProviderException("UPSTOX_OAUTH_STATE_INVALID");
         }
-        if (code == null || code.isBlank() || code.length() > 2048) {
-            throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
+        try {
+            if (code == null || code.isBlank() || code.length() > 2048) {
+                throw new UpstoxProviderException("UPSTOX_AUTH_DECLINED");
+            }
+            JsonNode response = api.exchangeCode(props, code);
+            installVerifiedToken(flow.customerId(), response);
+            failures.remove(flow.customerId());
+        } catch (UpstoxProviderException rejected) {
+            // Only fixed internal codes are stored. Never retain the OAuth state,
+            // authorization code, provider response, access token, or API secret.
+            failures.entrySet().removeIf(entry -> !clock.instant().isBefore(entry.getValue().expiresAt()));
+            if (failures.size() < MAX_PENDING) {
+                failures.put(flow.customerId(),
+                    new AuthFailure(publicFailureCode(rejected.code()),
+                        clock.instant().plusSeconds(FAILURE_TTL_SECONDS)));
+            }
+            throw rejected;
         }
-        JsonNode response = api.exchangeCode(props, code);
-        installVerifiedToken(flow.customerId(), response);
     }
 
     /**
@@ -144,17 +169,25 @@ public class CustomerUpstoxOAuthService {
         }
         Instant expires = nextTokenExpiry(clock.instant());
         sessions.put(customerId, new BrokerSession(token, brokerUser, expires));
+        failures.remove(customerId);
     }
 
     public Status status(UUID customerId) {
         BrokerSession session = validSession(customerId);
+        AuthFailure failure = failures.get(customerId);
+        if (failure != null && !clock.instant().isBefore(failure.expiresAt())) {
+            failures.remove(customerId, failure);
+            failure = null;
+        }
         return new Status(props.configured(), session != null, "UPSTOX",
             session == null ? null : mask(session.brokerUserId()),
-            session == null ? null : session.expiresAt(), false);
+            session == null ? null : session.expiresAt(), false,
+            session != null || failure == null ? null : failure.code());
     }
 
     public void disconnect(UUID customerId) {
         sessions.remove(customerId);
+        failures.remove(customerId);
         String hashed = mostRecent.remove(customerId);
         if (hashed != null) pending.remove(hashed);
     }
@@ -186,6 +219,18 @@ public class CustomerUpstoxOAuthService {
             return null;
         }
         return existing;
+    }
+
+    private static String publicFailureCode(String code) {
+        return switch (code) {
+            case "UPSTOX_AUTH_DECLINED", "UPSTOX_AUTH_CODE_INVALID",
+                 "UPSTOX_OAUTH_APP_CREDENTIALS_INVALID",
+                 "UPSTOX_OAUTH_REDIRECT_REJECTED",
+                 "UPSTOX_PROFILE_REJECTED", "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE",
+                 "UPSTOX_ACCOUNT_ALREADY_CONNECTED",
+                 "UPSTOX_AUTH_UNAVAILABLE" -> code;
+            default -> "UPSTOX_AUTH_FAILED";
+        };
     }
 
     private static Instant nextTokenExpiry(Instant from) {

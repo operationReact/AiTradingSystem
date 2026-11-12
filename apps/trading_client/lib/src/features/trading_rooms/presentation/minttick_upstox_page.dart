@@ -53,6 +53,37 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     super.dispose();
   }
 
+  // Only fixed server-defined codes are rendered. Never show a provider URL,
+  // one-time authorization code, state, raw upstream error or broker token.
+  String? _explainOAuthFailure(String? code) => switch (code) {
+    'UPSTOX_AUTH_DECLINED' =>
+      'Upstox login was cancelled or declined. Start a fresh connection.',
+    'UPSTOX_AUTH_CODE_INVALID' =>
+      'The Upstox authorization code expired or was already used. '
+      'Start a fresh login and finish it without reopening an old browser tab.',
+    'UPSTOX_OAUTH_APP_CREDENTIALS_INVALID' =>
+      'Upstox rejected the developer API key or API secret during token exchange. '
+      'Verify the protected server credentials belong to the same Upstox app.',
+    'UPSTOX_OAUTH_REDIRECT_REJECTED' =>
+      'Upstox rejected the callback URL during token exchange. '
+      'Verify the registered redirect URI is an exact match.',
+    'UPSTOX_ACCOUNT_SEGMENTS_INACTIVE' =>
+      'Upstox reports no active trading segments for this account. '
+      'Reactivate them with Upstox before connecting.',
+    'UPSTOX_PROFILE_REJECTED' =>
+      'Upstox did not verify an active account profile. '
+      'Check your account status with Upstox.',
+    'UPSTOX_ACCOUNT_ALREADY_CONNECTED' =>
+      'This Upstox account is already connected to another MintTick user.',
+    'UPSTOX_AUTH_UNAVAILABLE' =>
+      'MintTick could not reach Upstox to finish authorization. '
+      'Start a fresh connection when the service is available.',
+    'UPSTOX_AUTH_FAILED' =>
+      'Upstox rejected the authorization exchange. '
+      'Start a fresh login; check the developer app credentials if it repeats.',
+    _ => null,
+  };
+
   Future<void> _refresh() async {
     if (_loading) return;
     setState(() { _loading = true; _error = null; });
@@ -73,6 +104,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       setState(() {
         _ownerLoginAvailable = ownerLoginAvailable;
         _status = status;
+        _error = status.connected ? null : _explainOAuthFailure(status.lastAuthError);
         _awaitingReturn = false;
         _data = null;
         _section = null;
