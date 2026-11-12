@@ -37,7 +37,7 @@ jobs:
               compile(code,'upstox-verified-reload', 'exec')
           for required in ('TRADING_MODE=PAPER','MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true',
               'hmac.compare_digest','capture_output=True','restart backend',
-              'BACKEND_RESTARTED_HEALTHY','http://127.0.0.1:8080/api/health'):
+              'BACKEND_RESTARTED_HEALTHY','State.Running','http://127.0.0.1:8080/api/health'):
               assert required in src
           assert 'docker compose down' not in src
           PY
@@ -118,7 +118,7 @@ jobs:
               print('PENDING');raise SystemExit
           allowed={'HOST_MISMATCH','RUNTIME_ENV_UNSAFE','DEPLOYED_SHA_CHANGED',
               'IMAGE_MISSING','NOT_PAPER','PRECHECK_FAILED','RESTART_FAILED',
-              'HEALTH_FAILED','START_TIME_NOT_VERIFIED','BACKEND_RESTARTED_HEALTHY'}
+              'HEALTH_FAILED','PROCESS_NOT_RUNNING','BACKEND_RESTARTED_HEALTHY'}
           markers=re.findall(r'^MINTTICK_UPSTOX_RELOAD_RESULT:([A-Z_]+)$',
               result.get('StandardOutputContent',''),re.M)
           markers=[x for x in markers if x in allowed]
