@@ -3,7 +3,7 @@
 These tests exercise research eligibility only; they never authorize orders.
 """
 
-from datetime import datetime, timedelta, timezone, UTC
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
