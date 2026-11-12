@@ -29,10 +29,11 @@
   Provision securely via AWS SSM/host runtime; never commit or place in Flutter,
   mobile packages, query strings, logs or Github Actions outputs.
   On inaccessible GitHub, UI shows BLOCKED/STALE, never fake zero PR counts.
-- `MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=false` (default). Operator may
-  enable only after reviewing Upstox Analytics SSM parameter permission, API
-  scope and rate limits. Also requires existing
-  `MINTTICK_UPSTOX_ANALYTICS_ENABLED=true`.
+- `MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true` (default). This schedules
+  only a bounded, non-persisting smoke read (two API requests at most every 30
+  minutes) **after** `MINTTICK_UPSTOX_ANALYTICS_ENABLED=true` has been explicitly
+  enabled on the protected host. Explicit `...SOURCE_PROBE_ENABLED=false` stops
+  monitoring. Source authorization, SSM access and rate limits must still pass.
   The probe is **not** a full-universe downloader and grants no data rights.
 - Spring scheduler fixed-delay properties (milliseconds):
   `minttick.upstox-analytics.progress.github-poll-ms` (default 300000),
@@ -97,3 +98,22 @@ After deployment, check owner-only progress endpoint, inspect the new
 blocker, then verify `GITHUB_DEVELOPMENT=VERIFIED` with nonempty recent PR
 and CI snapshots. Never mark unrelated Analytics tasks complete merely because
 GitHub polling succeeded.
+
+## Activation and UI correction (13 November 2026)
+- The private acceptance script now persists the **third** required switch
+  `MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true` alongside the source
+  and private acceptance-probe flags. Previously it omitted this setting and
+  the Flutter page could remain `SOURCE OFF` after an accepted source read.
+- The Docker Compose default now enables only **progress probing**; the
+  independent `MINTTICK_UPSTOX_ANALYTICS_ENABLED=false` source gate stays off
+  until operator activation. No historical ingestion, retention or model
+  training is activated by this change.
+- SOURCE_VERIFICATION now distinguishes `ANALYTICS_SOURCE_DISABLED` from
+  `SOURCE_PROBE_DISABLED`. Disabled rows update their reason even when already
+  disabled, avoiding stale `OPERATOR_OPT_IN_REQUIRED` messages.
+- Flutter Overview is a compact, tappable single pipeline instead of a
+  duplicate of Tasks. The status tag is `PROBE OFF`, not a claim that a
+  separate Upstox trading-account OAuth session is disconnected.
+- Deploying the code does **not** establish that the host is online, the
+  analytics token works, or that dataset rights exist. Verify with the
+  owner-only progress endpoint and acceptance workflow after deployment.

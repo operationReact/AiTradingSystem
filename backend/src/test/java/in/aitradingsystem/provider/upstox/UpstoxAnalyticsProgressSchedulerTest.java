@@ -59,7 +59,7 @@ class UpstoxAnalyticsProgressSchedulerTest {
         verify(progress).disabled("GITHUB_DEVELOPMENT",
                 "GITHUB_MONITOR_DISABLED", clock.instant());
         verify(progress).disabled("SOURCE_VERIFICATION",
-                "OPERATOR_OPT_IN_REQUIRED", clock.instant());
+                "SOURCE_PROBE_DISABLED", clock.instant());
         verifyNoInteractions(github, source);
     }
 
@@ -77,4 +77,36 @@ class UpstoxAnalyticsProgressSchedulerTest {
                 eq(5L), eq(2L), eq(1L), isNull(), anyMap(), eq(clock.instant()));
         verifyNoInteractions(source);
     }
+    @Test
+    void enabledAnalyticsWithProgressProbeRecordsRealSourceReads() {
+        UUID lease = UUID.randomUUID();
+        when(source.enabled()).thenReturn(true);
+        when(progress.claim("SOURCE_VERIFICATION", clock.instant())).thenReturn(lease);
+        when(source.dailyEquityCandles(anyString(), any(), any()))
+                .thenReturn(java.util.List.of(new UpstoxAnalyticsSource.Candle(
+                        clock.instant(), java.math.BigDecimal.ONE,
+                        java.math.BigDecimal.ONE, java.math.BigDecimal.ONE,
+                        java.math.BigDecimal.ONE, 1L, 0L)));
+        when(source.currentRatios("INE002A01018"))
+                .thenReturn(java.util.List.of(new UpstoxAnalyticsSource.Ratio(
+                        "PE", "20", "18")));
+        var scheduler = new UpstoxAnalyticsProgressScheduler(
+                progress, github, source, clock, true, true);
+        scheduler.verifySource();
+        verify(progress).finish(eq("SOURCE_VERIFICATION"), eq(lease), eq("VERIFIED"),
+                eq(2L), eq(2L), eq(0L), isNull(), anyMap(), eq(clock.instant()));
+        verifyNoInteractions(github);
+    }
+
+    @Test
+    void analyticsSourceOffHasDistinctReasonEvenIfProbeEnabled() {
+        var scheduler = new UpstoxAnalyticsProgressScheduler(
+                progress, github, source, clock, true, true);
+        scheduler.verifySource();
+        verify(progress).disabled("SOURCE_VERIFICATION",
+                "ANALYTICS_SOURCE_DISABLED", clock.instant());
+        verify(source).enabled();
+        verifyNoInteractions(github);
+    }
+
 }
