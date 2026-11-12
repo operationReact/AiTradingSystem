@@ -170,6 +170,37 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(forwarded.full_url, proxy.BACKEND + path)
         self.assertEqual(forwarded.headers.get("Authorization"), "Bearer public-test-token")
 
+    def test_live_broker_selection_is_only_an_owner_preference_not_order_route(self):
+        room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
+        endpoint = room + "/execution/broker-selection"
+        self.assertTrue(proxy.allowed("POST", endpoint))
+        self.assertFalse(proxy.allowed("GET", endpoint))
+        self.assertFalse(proxy.allowed("DELETE", endpoint))
+        self.assertFalse(proxy.allowed("POST", room + "/orders/execute"))
+        for payload in (
+                "", "{}", '{"broker":"ZERODHA"}',
+                '{"broker":"UPSTOX","token":"secret"}',
+                '{"broker":null}', '{"broker":["UPSTOX"]}'):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                result = proxy.handler(event("POST", endpoint, body=payload), None)
+                self.assertEqual(result["statusCode"], 400, payload)
+                send.assert_not_called()
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            result = proxy.handler(event("POST", endpoint,
+                jwt={"claims":{}}, body='{"broker":"UPSTOX"}'), None)
+            self.assertEqual(result["statusCode"], 401)
+            send.assert_not_called()
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+            return_value=Reply()) as send:
+            result = proxy.handler(event("POST", endpoint,
+                body='{"broker":"UPSTOX"}'), None)
+            self.assertEqual(result["statusCode"], 200)
+            request = send.call_args.args[0]
+            self.assertEqual(request.get_method(), "POST")
+            self.assertEqual(request.get_header("Authorization"),
+                             "Bearer public-test-token")
+            self.assertEqual(json.loads(request.data), {"broker": "UPSTOX"})
+
     def test_paper_manual_order_requires_jwt_and_idempotency_no_live_routes(self):
         room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
         paper = room + "/paper"

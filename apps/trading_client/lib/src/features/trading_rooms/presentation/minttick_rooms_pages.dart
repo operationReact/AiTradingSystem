@@ -686,6 +686,37 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
     }
   }
 
+  Future<void> _selectLiveBroker(String broker) async {
+    if (_busy || widget.room.mode != 'LIVE' ||
+        widget.executionRepository == null ||
+        (broker != 'ANGEL_ONE' && broker != 'UPSTOX')) {
+      return;
+    }
+    setState(() { _busy = true; _error = null; });
+    try {
+      // The backend validates Cognito ownership and LIVE-only room mode.
+      // This changes a broker preference, never an order or consent.
+      final readiness = await widget.executionRepository!
+          .selectLiveBroker(widget.room.id, broker);
+      if (!mounted) return;
+      if (readiness.mode != 'LIVE' || readiness.selectedBroker != broker ||
+          readiness.executionEnabled) {
+        throw const FormatException('Unexpected broker assignment readiness');
+      }
+      setState(() => _readiness = readiness);
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _readiness = null;
+          _error = 'Live broker selection could not be verified. '
+              'Refresh readiness before trying again.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _loadWallet() async {
     if (widget.repository == null || _busy) return;
     setState(() {
@@ -879,6 +910,44 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
           },
         ),
         const SizedBox(height: 17),
+      ],
+      if (room.mode == 'LIVE') ...[
+        MintTickSurface(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const MintTickSectionHeading('Select Live broker account'),
+            const SizedBox(height: 8),
+            Text('Choose which connected broker this room will use. '
+                'Your broker sessions remain separate from Paper funds. '
+                'This choice does not permit real-money orders.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              for (final choice in const [('ANGEL_ONE', 'Angel One'),
+                                           ('UPSTOX', 'Upstox')])
+                ChoiceChip(
+                  key: ValueKey('live-room-broker-${choice.$1.toLowerCase()}'),
+                  label: Text(choice.$2),
+                  selected: _readiness?.selectedBroker == choice.$1,
+                  onSelected: _busy || widget.executionRepository == null
+                      ? null : (_) => _selectLiveBroker(choice.$1),
+                ),
+            ]),
+            const SizedBox(height: 9),
+            Text(_readiness == null
+                  ? 'Broker assignment has not been verified.'
+                  : _readiness!.selectedBroker == null
+                    ? 'No broker assigned to this Live Room.'
+                    : _readiness!.brokerConnected
+                      ? 'Selected broker session is connected. '
+                        'Live order execution is still locked.'
+                      : 'Selected broker is not authenticated. '
+                        'Connect or restore it from Brokers.',
+              style: Theme.of(context).textTheme.bodySmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+          ],
+        )),
+        const SizedBox(height: 15),
       ],
       MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
