@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' show FontFeature;
 import 'package:flutter/services.dart';
 
 import '../domain/trading_room_draft.dart';
@@ -12,144 +13,181 @@ import 'minttick_paper_order_panel.dart';
 import 'minttick_paper_performance_panel.dart';
 import 'minttick_customer_widgets.dart';
 
-class MintTickTradingRoomsPage extends StatelessWidget {
+
+class MintTickTradingRoomsPage extends StatefulWidget {
   const MintTickTradingRoomsPage({
-    required this.store,
-    required this.mode,
-    required this.onCreate,
-    required this.onOpen,
-    super.key,
+    required this.store, required this.mode, required this.onCreate,
+    required this.onOpen, this.metricsRepository, super.key,
   });
 
   final TradingRoomDraftStore store;
   final TradingWorkspaceMode mode;
   final VoidCallback onCreate;
   final ValueChanged<TradingRoomDraft> onOpen;
+  final HttpCustomerRoomRepository? metricsRepository;
+
+  @override
+  State<MintTickTradingRoomsPage> createState() => _MintTickTradingRoomsPageState();
+}
+
+class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
+  Future<List<CustomerRoomMetric>>? _dashboard;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshMetrics();
+  }
+
+  void _refreshMetrics() {
+    _dashboard = widget.metricsRepository?.dashboard();
+  }
+
+  Future<void> _refresh() async {
+    await widget.store.load();
+    if (mounted) setState(_refreshMetrics);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final styles = Theme.of(context).textTheme;
+    final type = Theme.of(context).textTheme;
     return AnimatedBuilder(
-      animation: Listenable.merge([store, mode]),
-      builder: (context, _) {
-        final rooms = store.drafts
-          .where((room) => room.mode == mode.selected)
-          .toList(growable: false);
-        return MintTickCustomerScaffold(
-          showHeader: false,
-          children: [
-            const SizedBox(height: 12),
-            Text('Trading Rooms',
-              style: styles.headlineSmall?.copyWith(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 5),
-            Text('Keep Paper and Live allocations, holdings and risk controls separate.',
-              style: styles.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-            const SizedBox(height: 16),
-            MintTickModeSwitcher(mode: mode),
-            const SizedBox(height: 19),
-            MintTickSectionHeading(
-              mode.isPaper ? 'Paper Trading Rooms' : 'Live Trading Rooms'),
-            const SizedBox(height: 8),
-            if (store.isLoading)
-              const Center(child: CircularProgressIndicator())
-            else if (store.lastError != null) ...[
-              MintTickInfoText(store.lastError!,
+      animation: Listenable.merge([widget.store, widget.mode]),
+      builder: (context, _) => FutureBuilder<List<CustomerRoomMetric>>(
+        future: _dashboard,
+        builder: (context, snapshot) {
+          final metrics = {
+            for (final item in snapshot.data ?? <CustomerRoomMetric>[])
+              item.roomId: item,
+          };
+          final rooms = widget.store.drafts
+              .where((room) => room.mode == widget.mode.selected)
+              .toList(growable: false);
+          final planned = rooms.fold<int>(0, (sum, room) => sum + room.paperBudget);
+          return MintTickCustomerScaffold(showHeader: false, children: [
+            const SizedBox(height: 6),
+            Row(children: [
+              Expanded(child: Text('Trading Rooms',
+                style: type.titleLarge?.copyWith(fontWeight: FontWeight.w800))),
+              OutlinedButton.icon(
+                key: const ValueKey('trading-rooms-create'),
+                onPressed: widget.onCreate,
+                icon: const Icon(Icons.add_rounded, size: 17),
+                label: const Text('New room'),
+              ),
+            ]),
+            const SizedBox(height: 7),
+            MintTickModeSwitcher(mode: widget.mode),
+            const SizedBox(height: 9),
+            Container(
+              decoration: BoxDecoration(color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: scheme.outlineVariant)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              child: Row(children: [
+                _RoomStat(label: 'Rooms', value: '${rooms.length}'),
+                const SizedBox(width: 16),
+                _RoomStat(label: 'Planned', value: formatPaperRupees(planned)),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Refresh rooms and activity',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh_rounded, size: 18),
+                  visualDensity: VisualDensity.compact,
+                ),
+              ]),
+            ),
+            const SizedBox(height: 10),
+            if (widget.store.isLoading)
+              const LinearProgressIndicator(minHeight: 2)
+            else if (widget.store.lastError != null) ...[
+              MintTickInfoText(widget.store.lastError!,
                 icon: Icons.error_outline_rounded),
-              const SizedBox(height: 9),
-              OutlinedButton.icon(onPressed: store.load,
-                icon: const Icon(Icons.refresh_rounded),
-                label: const Text('Retry loading rooms')),
-            ] else if (rooms.isEmpty) ...[
-              MintTickSurface(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    const MintTickIconTile(Icons.layers_outlined),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(mode.isPaper ? 'No Paper Rooms yet'
-                            : 'No Live Rooms yet',
-                          style: styles.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 3),
-                        Text(mode.isPaper
-                          ? 'Create a room to plan and test simulated trades.'
-                          : 'Plan your Live room; broker connection and approval are separate.',
-                          style: styles.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant)),
-                      ],
-                    )),
-                  ]),
-                  const SizedBox(height: 15),
-                  SizedBox(width: double.infinity,
-                    child: FilledButton.icon(
-                      key: const ValueKey('trading-rooms-create'),
-                      onPressed: onCreate,
-                      icon: const Icon(Icons.add_rounded),
-                      label: Text(mode.isPaper
-                        ? 'Create Paper Room' : 'Plan a Live Room'))),
-                ],
-              )),
-            ] else ...[
+              TextButton(onPressed: _refresh, child: const Text('Retry')),
+            ] else if (rooms.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  widget.mode.isPaper
+                    ? 'No Paper rooms. Create one to simulate orders.'
+                    : 'No Live rooms. Create one to prepare a broker workspace.',
+                  textAlign: TextAlign.center,
+                  style: type.bodyMedium?.copyWith(color: scheme.onSurfaceVariant)),
+              )
+            else ...[
               for (final room in rooms) ...[
                 Material(
                   color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(10),
                   child: InkWell(
                     key: ValueKey('draft-room-${room.id}'),
-                    borderRadius: BorderRadius.circular(16),
-                    onTap: () => onOpen(room),
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () => widget.onOpen(room),
                     child: Container(
-                      padding: const EdgeInsets.all(14),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                       decoration: BoxDecoration(
-                        border: Border.all(color: scheme.outlineVariant),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: scheme.outlineVariant)),
                       child: Row(children: [
-                        const MintTickIconTile(Icons.layers_outlined),
-                        const SizedBox(width: 11),
-                        Expanded(child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        Icon(Icons.layers_outlined, size: 18, color: scheme.primary),
+                        const SizedBox(width: 10),
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(room.name, maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: styles.titleSmall?.copyWith(
-                                fontWeight: FontWeight.w700)),
-                            const SizedBox(height: 4),
-                            Text('${room.mode} · ${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
-                              style: styles.bodySmall?.copyWith(
-                                color: scheme.onSurfaceVariant)),
-                          ],
-                        )),
+                            Text(room.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 3),
+                            Text(
+                              room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
+                                ? 'Virtual cash ${_formatPaise(metrics[room.id]!.availableCashPaise!)} · ${metrics[room.id]!.positionCount} positions'
+                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+                          ])),
                         const SizedBox(width: 6),
-                        MintTickStatusLabel(room.status == 'PAPER_FUNDED'
-                          ? 'PAPER FUNDED' : 'DRAFT'),
-                        const Icon(Icons.chevron_right_rounded, size: 18),
+                        Text(room.status == 'PAPER_FUNDED' ? 'FUNDED' : 'DRAFT',
+                          style: type.labelSmall?.copyWith(
+                            color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
+                        const SizedBox(width: 2),
+                        const Icon(Icons.chevron_right_rounded, size: 19),
                       ]),
                     ),
                   ),
                 ),
-                const SizedBox(height: 9),
+                const SizedBox(height: 6),
               ],
-              const SizedBox(height: 7),
-              OutlinedButton.icon(
-                key: const ValueKey('trading-rooms-create'),
-                onPressed: onCreate,
-                icon: const Icon(Icons.add_rounded),
-                label: Text(mode.isPaper ? 'Create Paper Room' : 'Plan a Live Room')),
             ],
-            const SizedBox(height: 16),
-            const MintTickInfoText(
-              'Planned capital is not a broker balance. Each room requires '
-              'its own risk and execution readiness checks.',
-              icon: Icons.shield_outlined),
-          ],
-        );
-      },
+            if (snapshot.hasError) Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: Text('Activity metrics unavailable. Room plans remain accessible.',
+                style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+            ),
+            const SizedBox(height: 8),
+            Text(widget.mode.isPaper
+              ? 'PAPER uses virtual cash only. Open a funded room to place a simulated order.'
+              : 'LIVE planned capital is not a broker balance. Real execution requires server authorization.',
+              style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ]);
+        },
+      ),
     );
+  }
+}
+
+class _RoomStat extends StatelessWidget {
+  const _RoomStat({required this.label, required this.value});
+  final String label, value;
+  @override
+  Widget build(BuildContext context) {
+    final type = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(label.toUpperCase(), style: type.labelSmall?.copyWith(
+        color: scheme.onSurfaceVariant, fontSize: 10)),
+      const SizedBox(height: 2),
+      Text(value, style: type.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w800, fontFeatures: const [FontFeature.tabularFigures()])),
+    ]);
   }
 }
 
