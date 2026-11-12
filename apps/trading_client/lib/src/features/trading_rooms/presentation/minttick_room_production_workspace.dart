@@ -20,6 +20,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
   const MintTickRoomProductionWorkspace({
     required this.room,
     required this.onBack,
+    this.onRename,
     required this.onRefresh,
     required this.onFundPaper,
     required this.onSelectBroker,
@@ -45,6 +46,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
   final HttpCustomerExecutionRepository? execution;
   final HttpCustomerTradeIntentRepository? intents;
   final VoidCallback onBack;
+  final VoidCallback? onRename;
   final Future<void> Function() onRefresh;
   final Future<void> Function() onFundPaper;
   final Future<void> Function(String) onSelectBroker;
@@ -241,11 +243,33 @@ class _MintTickRoomProductionWorkspaceState
               Text('ROOMS', style: type.labelSmall?.copyWith(
                 color: colors.onSurfaceVariant, fontSize: 10)),
               const SizedBox(width: 7),
-              IconButton(
-                tooltip: 'Return to Trading Rooms',
-                onPressed: widget.onBack,
+              PopupMenuButton<String>(
+                key: const ValueKey('room-action-menu'),
+                tooltip: 'Room actions',
                 icon: const Icon(Icons.more_vert_rounded, size: 19),
-                visualDensity: VisualDensity.compact),
+                onSelected: (action) {
+                  if (action == 'rename') {
+                    widget.onRename?.call();
+                  } else if (action == 'rooms') {
+                    widget.onBack();
+                  }
+                },
+                itemBuilder: (_) => [
+                  if (widget.onRename != null)
+                    const PopupMenuItem(
+                      value: 'rename',
+                      child: Row(children: [
+                        Icon(Icons.edit_outlined, size: 18),
+                        SizedBox(width: 9),
+                        Text('Rename room'),
+                      ]),
+                    ),
+                  const PopupMenuItem(
+                    value: 'rooms',
+                    child: Text('Back to Trading Rooms'),
+                  ),
+                ],
+              ),
             ]),
           )),
           Divider(color: colors.outlineVariant, height: 1),
@@ -260,7 +284,7 @@ class _MintTickRoomProductionWorkspaceState
                 icon: const Icon(Icons.chevron_left_rounded, size: 24)),
               const SizedBox(width: 4),
               Expanded(child: InkWell(
-                onTap: widget.onBack,
+                onTap: widget.onRename,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -270,9 +294,11 @@ class _MintTickRoomProductionWorkspaceState
                         overflow: TextOverflow.ellipsis,
                         style: type.titleMedium?.copyWith(
                           fontSize: 17, fontWeight: FontWeight.w800))),
-                      const SizedBox(width: 3),
-                      Icon(Icons.keyboard_arrow_down_rounded,
-                        color: colors.primary, size: 16),
+                      if (widget.onRename != null) ...[
+                        const SizedBox(width: 5),
+                        Icon(Icons.edit_outlined,
+                          color: colors.primary, size: 15),
+                      ],
                     ]),
                     Text(
                       '${widget.room.focus} · NSE/BSE equities · MY ROOM',
