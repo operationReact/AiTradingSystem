@@ -3,8 +3,8 @@
   "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY",
   "account": "098859530205",
   "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
   "instance_type": "t4g.medium",
+  "instance_id": "i-09c01b470fb39b85a",
   "environment": "PAPER",
   "operation": "deploy"
 }
