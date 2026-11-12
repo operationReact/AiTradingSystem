@@ -4,10 +4,10 @@ A finite scalar is necessary, not sufficient, for valid research. Provenance,
 as-of chronology and coverage must be verified by separate upstream gates.
 """
 
-from dataclasses import dataclass
 import math
+from collections.abc import Mapping
+from dataclasses import dataclass
 from numbers import Real
-from typing import Mapping
 
 
 @dataclass(frozen=True)
