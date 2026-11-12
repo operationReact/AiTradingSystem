@@ -7,6 +7,7 @@ class CustomerExecutionReadiness {
     required this.roomId,
     required this.mode,
     required this.roomStatus,
+    required this.selectedBroker,
     required this.brokerConnected,
     required this.virtualCashReady,
     required this.executionEnabled,
@@ -16,6 +17,7 @@ class CustomerExecutionReadiness {
   final String roomId;
   final String mode;
   final String roomStatus;
+  final String? selectedBroker;
   final bool brokerConnected;
   final bool virtualCashReady;
   final bool executionEnabled;
@@ -40,6 +42,8 @@ class CustomerExecutionReadiness {
       roomId: raw['roomId'] as String,
       mode: raw['mode'] as String,
       roomStatus: raw['roomStatus'] as String,
+      selectedBroker: raw['selectedBroker'] == 'ANGEL_ONE' || raw['selectedBroker'] == 'UPSTOX'
+          ? raw['selectedBroker'] as String : null,
       brokerConnected: raw['brokerConnected'] as bool,
       virtualCashReady: raw['virtualCashReady'] as bool,
       executionEnabled: raw['executionEnabled'] as bool,
@@ -55,6 +59,19 @@ class HttpCustomerExecutionRepository {
   Future<CustomerExecutionReadiness> readiness(String roomId) async {
     return CustomerExecutionReadiness.decode(await api.getJson(
       '/api/customer/trading-rooms/$roomId/execution/readiness',
+    ));
+  }
+
+  /// Saves an explicitly chosen broker for one owner's LIVE Room only.
+  /// This does not authenticate a broker or authorize real-money orders.
+  Future<CustomerExecutionReadiness> selectLiveBroker(
+      String roomId, String broker) async {
+    if (broker != 'ANGEL_ONE' && broker != 'UPSTOX') {
+      throw ArgumentError.value(broker, 'broker', 'Unsupported LIVE broker');
+    }
+    return CustomerExecutionReadiness.decode(await api.postJson(
+      '/api/customer/trading-rooms/$roomId/execution/broker-selection',
+      body: {'broker': broker},
     ));
   }
 
