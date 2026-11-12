@@ -382,21 +382,33 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 const SizedBox(width: 8),
                 Expanded(child: _TicketField(
                   label: 'Product',
-                  child: DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: _product,
-                    items: const [
-                      DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery')),
-                      DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        setState(() {
-                          _product = value;
-                          _invalidate();
-                        });
-                      }
-                    }),
+                  child: isPaper
+                    // Manual Paper fills are cash-equity positions; the
+                    // backend does not accept productType or manage an
+                    // intraday lifecycle for this order endpoint.
+                    ? const SizedBox(
+                        height: 48,
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Cash equity'),
+                        ),
+                      )
+                    : DropdownButtonFormField<String>(
+                        isExpanded: true,
+                        initialValue: _product,
+                        items: const [
+                          DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery')),
+                          DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _product = value;
+                              _invalidate();
+                            });
+                          }
+                        },
+                      ),
                 )),
               ]),
               Row(children: [
