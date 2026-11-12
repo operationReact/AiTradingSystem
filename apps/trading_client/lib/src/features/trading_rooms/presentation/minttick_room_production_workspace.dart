@@ -87,11 +87,11 @@ class _MintTickRoomProductionWorkspaceState
           _positions = rows[1] as List<CustomerPaperPosition>;
         });
       } catch (_) {
-        if (mounted) setState(() {
+        if (mounted) { setState(() {
           _paperOrders = const [];
           _positions = const [];
           _historyError = 'Room activity could not be verified.';
-        });
+        }); }
       } finally {
         if (mounted) setState(() => _historyLoading = false);
       }
@@ -99,14 +99,14 @@ class _MintTickRoomProductionWorkspaceState
       setState(() { _historyLoading = true; _historyError = null; });
       try {
         final intents = await widget.intents!.list(widget.room.id);
-        if (mounted) setState(() => _liveIntents = intents.where(
+        if (mounted) { setState(() => _liveIntents = intents.where(
           (item) => item.mode == 'LIVE' && item.state == 'PRECHECK_BLOCKED')
-          .toList());
+          .toList()); }
       } catch (_) {
-        if (mounted) setState(() {
+        if (mounted) { setState(() {
           _liveIntents = const [];
           _historyError = 'LIVE intent history could not be verified.';
-        });
+        }); }
       } finally {
         if (mounted) setState(() => _historyLoading = false);
       }
