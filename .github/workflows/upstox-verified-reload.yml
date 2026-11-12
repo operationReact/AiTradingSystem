@@ -1,0 +1,142 @@
+name: MintTick PAPER - reload verified Upstox SSM credentials
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/upstox-verified-reload.yml'
+      - 'infra/ec2-paper/reload_upstox_verified.sh'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/reload_upstox_verified.sh'
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate private PAPER-only restart script and embedded Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/reload_upstox_verified.sh
+          python3 - <<'PY'
+          import pathlib,re
+          src=pathlib.Path('infra/ec2-paper/reload_upstox_verified.sh').read_text()
+          assert len(src)<5700
+          assert src.count("<<'PY'")==2
+          for code in re.findall(r"<<'PY'.*?\n(.*?)\nPY",src,re.S):
+              compile(code,'upstox-verified-reload', 'exec')
+          for required in ('TRADING_MODE=PAPER','MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true',
+              'hmac.compare_digest','capture_output=True','restart backend',
+              'BACKEND_RESTARTED_HEALTHY','http://127.0.0.1:8080/api/health'):
+              assert required in src
+          assert 'docker compose down' not in src
+          PY
+  reload:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Require two reviewed files in single-parent squash commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-list --parents -n 1 HEAD | wc -w)" -eq 2
+          actual="$(git diff-tree --no-commit-id --name-only -r HEAD | LC_ALL=C sort)"
+          expected="$(printf '.github/workflows/upstox-verified-reload.yml\ninfra/ec2-paper/reload_upstox_verified.sh' | LC_ALL=C sort)"
+          test "$actual" = "$expected"
+          bash -n infra/ec2-paper/reload_upstox_verified.sh
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-verified-reload
+      - name: Verify exact PAPER EC2 and cost/host guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: SSM restart the single existing backend and verify health
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload=Path('infra/ec2-paper/reload_upstox_verified.sh').read_bytes()
+          assert 100<len(payload)<5700
+          command="printf '%s' '"+base64.b64encode(payload).decode()+"' | base64 -d | bash"
+          p=Path(os.environ['RUNNER_TEMP'])/'upstox-reload-command.json'
+          p.write_text(json.dumps({'commands':[command]}))
+          p.chmod(0o600)
+          PY
+          cmd_id="$(aws ssm send-command \
+            --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID" \
+            --parameters "file://$RUNNER_TEMP/upstox-reload-command.json" \
+            --comment 'Verified PAPER backend restart for corrected Upstox credentials' \
+            --region "$AWS_REGION" --query 'Command.CommandId' --output text)"
+          rm -f "$RUNNER_TEMP/upstox-reload-command.json"
+          for attempt in $(seq 1 90); do
+            aws ssm get-command-invocation --region "$AWS_REGION" \
+              --command-id "$cmd_id" --instance-id "$INSTANCE_ID" \
+              --output json >"$RUNNER_TEMP/upstox-reload-result.json" 2>/dev/null || true
+            state="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              result=json.loads((Path(os.environ['RUNNER_TEMP'])/'upstox-reload-result.json').read_text())
+          except (OSError,ValueError):
+              print('PENDING');raise SystemExit
+          status=result.get('Status')
+          if status not in ('Success','Failed','TimedOut','Cancelled'):
+              print('PENDING');raise SystemExit
+          allowed={'HOST_MISMATCH','RUNTIME_ENV_UNSAFE','DEPLOYED_SHA_CHANGED',
+              'IMAGE_MISSING','NOT_PAPER','PRECHECK_FAILED','RESTART_FAILED',
+              'HEALTH_FAILED','START_TIME_NOT_VERIFIED','BACKEND_RESTARTED_HEALTHY'}
+          markers=re.findall(r'^MINTTICK_UPSTOX_RELOAD_RESULT:([A-Z_]+)$',
+              result.get('StandardOutputContent',''),re.M)
+          markers=[x for x in markers if x in allowed]
+          if status=='Success' and markers==['BACKEND_RESTARTED_HEALTHY']:
+              print('VERIFIED_BACKEND_RESTART_AND_HEALTH')
+          else:
+              print('FAILED_'+(markers[0] if markers else 'NO_TERMINAL_PROOF'))
+          PY
+          )"
+            case "$state" in
+              VERIFIED_BACKEND_RESTART_AND_HEALTH)
+                echo 'Verified backend process restarted after SSM validation; owner OAuth is separate'
+                exit 0;;
+              FAILED_*)
+                printf '%s\n' "$state"
+                exit 1;;
+            esac
+            sleep 5
+          done
+          echo 'SSM Upstox backend restart completion not verified' >&2
+          exit 1
