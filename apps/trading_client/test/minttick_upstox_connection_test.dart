@@ -17,6 +17,10 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   bool statusFails = false;
   String? lastAuthError;
   Object? holdingsResponse;
+  bool fundsMaintenance = false;
+  bool holdingsUnavailable = false;
+  int fundsCalls = 0;
+  int holdingsCalls = 0;
 
   @override
   Future<bool> configuredLoginAvailable() async => ownerConfigured;
@@ -62,14 +66,24 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   }
 
   @override
-  Future<Object?> funds() async => {
-    'equity': {'available_margin': 1250.50, 'used_margin': 0},
-  };
+  Future<Object?> funds() async {
+    fundsCalls++;
+    if (fundsMaintenance) {
+      throw ApiHttpFailure('UPSTOX_FUNDS_MAINTENANCE', null, 503);
+    }
+    return {
+      'equity': {'available_margin': 1250.50, 'used_margin': 0},
+    };
+  }
 
   @override
-  Future<Object?> holdings() async => holdingsResponse ?? [
-    {'trading_symbol': 'SBIN', 'quantity': 2},
-  ];
+  Future<Object?> holdings() async {
+    holdingsCalls++;
+    if (holdingsUnavailable) throw StateError('broker timeout');
+    return holdingsResponse ?? [
+      {'trading_symbol': 'SBIN', 'quantity': 2},
+    ];
+  }
 
   @override
   Future<Object?> positions() async => [];
@@ -183,7 +197,7 @@ void main() {
     await tester.tap(find.text('Funds'));
     await tester.pumpAndSettle();
     expect(find.text('Available margin'), findsOneWidget);
-    expect(find.text('₹1250.5'), findsOneWidget);
+    expect(find.text('₹1,250.50'), findsOneWidget);
     expect(find.textContaining('Real-money order execution disabled'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -266,6 +280,106 @@ void main() {
     expect(find.text('₹200.00'), findsOneWidget);
     expect(find.text('-₹21.50'), findsOneWidget);
     expect(find.textContaining('Total return: -10.75%'), findsOneWidget);
+  });
+
+  for (final width in [320.0, 390.0]) {
+    testWidgets('compact connected dashboard at ${width.toInt()}dp '
+        'keeps holdings visible during Upstox funds maintenance', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = Size(width, 844);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final repo = _FakeUpstox()
+        ..linked = true
+        ..fundsMaintenance = true
+        ..holdingsResponse = [
+          {'trading_symbol': 'SBIN', 'quantity': 3,
+           'last_price': 100, 'average_price': 90, 'pnl': 30},
+        ];
+      await tester.pumpWidget(MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        home: MintTickUpstoxPage(repository: repo),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('upstox-portfolio-value')),
+        findsOneWidget);
+      expect(find.text('₹300.00'), findsWidgets);
+      expect(find.text('₹270.00'), findsOneWidget);
+      expect(find.text('₹30.00'), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-funds-alert')), findsOneWidget);
+      expect(find.textContaining('12:00–5:30 AM IST'), findsOneWidget);
+      expect(find.textContaining('Re-authentication may be required'),
+        findsNothing);
+      expect(find.byKey(const ValueKey('upstox-tab-holdings')), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-tab-positions')), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-tab-funds')), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-tab-orders')), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-account-menu')), findsOneWidget);
+      expect(repo.holdingsCalls, 1);
+      expect(repo.fundsCalls, 1);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('broker verified empty holdings shows actual zero without '
+      'making funds outage look like cash zero', (tester) async {
+    final repo = _FakeUpstox()
+      ..linked = true
+      ..fundsMaintenance = true
+      ..holdingsResponse = <Object?>[];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('₹0.00'), findsWidgets);
+    expect(find.text('No holdings reported by Upstox'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('upstox-tab-funds')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('12:00–5:30 AM IST'), findsWidgets);
+    expect(find.text('Available margin'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('unrecognized holdings does not invent zero or hide valid funds',
+      (tester) async {
+    final repo = _FakeUpstox()
+      ..linked = true
+      ..holdingsUnavailable = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-portfolio-value')), findsOneWidget);
+    expect(find.text('—'), findsWidgets);
+    expect(find.textContaining('Holdings data unavailable'), findsOneWidget);
+    expect(find.text('₹0.00'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('upstox-tab-funds')));
+    await tester.pumpAndSettle();
+    expect(find.text('₹1,250.50'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('connected account actions are in menu, not large vertical cards',
+      (tester) async {
+    final repo = _FakeUpstox()..linked = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-disconnect')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('upstox-account-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('Account details'), findsOneWidget);
+    expect(find.text('Registered IP'), findsOneWidget);
+    await tester.tap(find.text('Account details'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-disconnect')), findsOneWidget);
+    expect(find.textContaining('Paper and Live portfolios are separate'),
+      findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('bound owner can connect using protected TOTP without any credential field',

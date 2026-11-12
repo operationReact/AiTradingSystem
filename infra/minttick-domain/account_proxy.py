@@ -45,6 +45,7 @@ EXACT = {
     ("GET", "/api/customer/home/v1/summary"),
     ("GET", "/api/customer/home/v1/activity"),
     ("GET", "/api/customer/owner-history/v1/progress"),
+    ("GET", "/api/customer/owner-upstox-analytics/v1/progress"),
     ("GET", "/api/customer/market-data/instruments/status"),
     ("GET", "/api/customer/market-data/instruments"),
     ("GET", "/api/customer/market-data/quotes"),
@@ -59,6 +60,7 @@ EXACT = {
 WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
+ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
 LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
@@ -84,6 +86,7 @@ def allowed(method, path):
             or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
             or (method == "GET" and path == UPSTOX_CALLBACK)
             or (method == "GET" and ROOM.fullmatch(path))
+            or (method == "PUT" and ROOM_RENAME.fullmatch(path))
             or (method == "GET" and READINESS.fullmatch(path))
             or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
             or paper_allowed(method, path))
@@ -201,6 +204,20 @@ def handler(event, context):
         return reply(413, {"error": "BODY_TOO_LARGE"})
     if method == "GET" and body:
         return reply(400, {"error": "INVALID_BODY"})
+    if method == "PUT" and ROOM_RENAME.fullmatch(path):
+        # A display-only rename is the sole exposed PUT route. Validate the
+        # exact payload before forwarding to the customer-scoped Java backend.
+        try:
+            rename = json.loads(body)
+            name = rename.get("name") if type(rename) is dict else None
+            normalized = re.sub(r"\s+", " ", name.strip()) if isinstance(name, str) else ""
+            valid = (type(rename) is dict and set(rename) == {"name"}
+                     and 1 <= len(normalized) <= 80
+                     and not any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_ROOM_NAME"})
     if method == "POST" and path in {
         "/api/auth/cognito/provision",
         "/api/customer/brokers/angel-one/connect-configured",
@@ -270,7 +287,7 @@ def handler(event, context):
         upstream_headers["Idempotency-Key"] = paper_order_key
     request = urllib.request.Request(
         BACKEND + internal_path,
-        data=body if method == "POST" else None,
+        data=body if method in {"POST", "PUT"} else None,
         headers=upstream_headers,
         method=method)
     callback_outcome = "UNVERIFIED"

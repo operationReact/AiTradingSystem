@@ -226,6 +226,13 @@ public class UpstoxApiClient {
             }
             return result.get("data");
         } catch (RestClientResponseException ex) {
+            // Upstox explicitly closes the funds endpoint 00:00–05:30 IST
+            // with HTTP 423. Do not misclassify the closed funds service as
+            // empty holdings, zero cash, or an expired customer connection.
+            if ("/v2/user/get-funds-and-margin".equals(fixedPath)
+                    && ex.getStatusCode().value() == 423) {
+                throw new UpstoxProviderException("UPSTOX_FUNDS_MAINTENANCE");
+            }
             // Do not log provider responses. Token errors invalidate the session upstream.
             if (ex.getStatusCode().value() == 401) {
                 throw new UpstoxProviderException("UPSTOX_SESSION_EXPIRED");
