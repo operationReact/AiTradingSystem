@@ -18,6 +18,8 @@ class MintTickManualPaperTradingPanel extends StatefulWidget {
     required this.orders,
     required this.market,
     required this.onWalletChanged,
+    this.compact = false,
+    this.showHistory = true,
     super.key,
   });
 
@@ -26,6 +28,8 @@ class MintTickManualPaperTradingPanel extends StatefulWidget {
   final HttpCustomerPaperTradingRepository orders;
   final HttpCustomerMarketRepository market;
   final Future<void> Function() onWalletChanged;
+  final bool compact;
+  final bool showHistory;
 
   @override
   State<MintTickManualPaperTradingPanel> createState() =>
@@ -47,6 +51,7 @@ class _MintTickManualPaperTradingPanelState
   List<CustomerPaperOrder> _fills = const [];
   List<CustomerPaperPosition> _positions = const [];
   String? _pendingKey;
+  bool _outcomeUnknown = false;
 
   @override
   void initState() {
@@ -188,6 +193,7 @@ class _MintTickManualPaperTradingPanelState
     final quantity = int.tryParse(_quantity.text.trim());
     final price = num.tryParse(_limit.text.trim());
     final quote = _quote;
+    if (_outcomeUnknown) return;
     if (_busy || widget.wallet.halted || instrument == null || quote == null ||
         quote.status != 'LIVE' || quantity == null || quantity < 1 ||
         quantity > 10000 || price == null || !price.isFinite || price <= 0) {
@@ -243,9 +249,9 @@ class _MintTickManualPaperTradingPanelState
       }
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
+        setState(() { _outcomeUnknown = true; _error =
         'Paper order was not confirmed. Refresh the order history before '
-        'retrying. A retry uses the same idempotency key.');
+        'retrying. Exit the ticket after reconciling its history.'; });
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -257,6 +263,7 @@ class _MintTickManualPaperTradingPanelState
     final styles = Theme.of(context).textTheme;
     final running = !widget.wallet.halted;
     return MintTickSurface(
+      padding: EdgeInsets.all(widget.compact ? 10 : 16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         const MintTickSectionHeading('Manual Paper trading'),
         const SizedBox(height: 5),
@@ -279,7 +286,7 @@ class _MintTickManualPaperTradingPanelState
           MintTickInfoText(_error!, icon: Icons.info_outline),
         ],
         if (running) ...[
-          const SizedBox(height: 17),
+          const SizedBox(height: 10),
           TextField(
             controller: _search,
             key: const ValueKey('paper-search-instrument'),
@@ -366,12 +373,13 @@ class _MintTickManualPaperTradingPanelState
             const SizedBox(height: 13),
             FilledButton.icon(
               key: const ValueKey('paper-open-confirmation'),
-              onPressed: _busy || _quote == null ? null : _submit,
+              onPressed: _busy || _outcomeUnknown || _quote == null ? null : _submit,
               icon: const Icon(Icons.receipt_long_outlined),
               label: Text('Review virtual $_side order'),
             ),
           ],
         ],
+        if (widget.showHistory) ...[
         const SizedBox(height: 16),
         Row(children: [
           Expanded(child: Text('Paper positions', style: styles.titleSmall)),
@@ -398,6 +406,11 @@ class _MintTickManualPaperTradingPanelState
           'tick; unmarketable orders, stale prices and off-hours orders are '
           'rejected. Estimated fees are not a full tax/slippage simulation.',
           icon: Icons.shield_outlined),
+        ] else Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text('Virtual fills only. Server checks real broker ticks, market hours and cash.',
+            style: styles.labelSmall),
+        ),
       ]),
     );
   }
