@@ -63,16 +63,20 @@ public class CustomerUpstoxController {
             @RequestParam(required = false) String code,
             @RequestParam(required = false) String error) {
         boolean successful = false;
+        String outcome = "UNVERIFIED";
         try {
             if (error == null || error.isBlank()) {
                 broker.complete(state, code);
                 successful = true;
+                outcome = "CONNECTED";
             } else {
                 // Consume a valid pending state even when Upstox declines login.
                 broker.complete(state, null);
             }
         } catch (UpstoxProviderException rejected) {
-            // No raw broker error, OAuth code or state is ever rendered.
+            // Internal callback diagnostics contain only fixed categories.
+            // Never reflect provider data, the OAuth code, or state into HTML.
+            outcome = callbackOutcome(rejected.code());
         }
         String page = successful
             ? "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
@@ -87,7 +91,25 @@ public class CustomerUpstoxController {
             .contentType(MediaType.TEXT_HTML)
             .cacheControl(CacheControl.noStore())
             .header("Referrer-Policy", "no-referrer")
+            // Only this fixed enum is consumed by the private API Gateway.
+            .header("X-MintTick-Upstox-Outcome", outcome)
             .body(page);
+    }
+
+    /** Fixed, non-sensitive broker callback categories for the trusted edge. */
+    private static String callbackOutcome(String internalCode) {
+        return switch (internalCode) {
+            case "UPSTOX_OAUTH_STATE_INVALID" -> "STATE_INVALID";
+            case "UPSTOX_AUTH_DECLINED" -> "DECLINED";
+            case "UPSTOX_AUTH_CODE_INVALID" -> "CODE_INVALID";
+            case "UPSTOX_OAUTH_APP_CREDENTIALS_INVALID" -> "APP_CREDENTIALS";
+            case "UPSTOX_OAUTH_REDIRECT_REJECTED" -> "REDIRECT_REJECTED";
+            case "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE" -> "SEGMENTS_INACTIVE";
+            case "UPSTOX_PROFILE_REJECTED" -> "PROFILE_REJECTED";
+            case "UPSTOX_ACCOUNT_ALREADY_CONNECTED" -> "ALREADY_CONNECTED";
+            case "UPSTOX_AUTH_UNAVAILABLE" -> "BROKER_UNAVAILABLE";
+            default -> "UNVERIFIED";
+        };
     }
 
     public record OwnerLoginAvailability(boolean available) {}

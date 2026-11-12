@@ -11,7 +11,9 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,37 @@ class CustomerUpstoxOAuthServiceTest {
             .filter(parts -> "state".equals(parts[0]))
             .map(parts -> URLDecoder.decode(parts[1], StandardCharsets.UTF_8))
             .findFirst().orElseThrow();
+    }
+
+    @Test
+    void oauthStateSurvivesFourteenMinutesButExpiresAfterFifteen() throws Exception {
+        AtomicReference<Instant> now = new AtomicReference<>(
+            Instant.parse("2026-11-07T08:00:00Z"));
+        Clock clock = new Clock() {
+            @Override public ZoneId getZone() { return ZoneOffset.UTC; }
+            @Override public Clock withZone(ZoneId zone) {
+                if (zone.equals(ZoneOffset.UTC)) return this;
+                throw new UnsupportedOperationException();
+            }
+            @Override public Instant instant() { return now.get(); }
+        };
+        var service = new CustomerUpstoxOAuthService(properties, api, clock);
+        UUID alice = UUID.randomUUID();
+        String first = state(service.start(alice).authorizationUrl());
+        when(api.exchangeCode(properties, "fresh-code"))
+            .thenReturn(mapper.readTree(
+                "{\"access_token\":\"opaque\",\"broker\":\"UPSTOX\","
+                + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        now.set(now.get().plusSeconds(14 * 60));
+        service.complete(first, "fresh-code");
+        assertThat(service.status(alice).connected()).isTrue();
+
+        String expired = state(service.start(alice).authorizationUrl());
+        now.set(now.get().plusSeconds(16 * 60));
+        assertThatThrownBy(() -> service.complete(expired, "stale-code"))
+            .isInstanceOf(UpstoxProviderException.class)
+            .hasMessageContaining("UPSTOX_OAUTH_STATE_INVALID");
+        verify(api, never()).exchangeCode(properties, "stale-code");
     }
 
     @Test
