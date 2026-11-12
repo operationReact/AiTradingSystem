@@ -490,9 +490,10 @@ class _MintTickCustomerPortfolioPageState
       MintTickSurface(
         accent: true, padding: const EdgeInsets.all(14),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const MintTickEyebrow('Total holdings value'),
+          MintTickEyebrow(value == null && verifiedSubtotal != null
+              ? 'Verified holdings subtotal' : 'Total holdings value'),
           const SizedBox(height: 6),
-          Text(portfolioRupees(value),
+          Text(portfolioRupees(value ?? verifiedSubtotal),
             key: const ValueKey('portfolio-total-holdings'),
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w800,
@@ -502,8 +503,7 @@ class _MintTickCustomerPortfolioPageState
             ? 'Connect a broker to verify live investments'
             : partial || value == null
               ? (verifiedSubtotal != null
-                  ? 'Verified subtotal ${portfolioRupees(verifiedSubtotal)} '
-                    '· complete total unavailable'
+                  ? 'Partial broker valuation · complete total unavailable'
                   : 'Valuation incomplete · no estimated total')
               : 'Broker-reported holdings · read-only',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
