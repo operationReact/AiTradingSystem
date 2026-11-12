@@ -71,7 +71,7 @@ public class UpstoxApiClient {
                 case "UDAPI100069" -> "UPSTOX_OAUTH_APP_CREDENTIALS_INVALID";
                 case "UDAPI100070" -> "UPSTOX_OAUTH_REDIRECT_REJECTED";
                 case "UDAPI100057" -> "UPSTOX_AUTH_CODE_INVALID";
-                case "UDAPI100058" -> "UPSTOX_PROFILE_REJECTED";
+                case "UDAPI100058" -> "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE";
                 default -> fallback;
             };
         } catch (JsonProcessingException | IllegalArgumentException ex) {
