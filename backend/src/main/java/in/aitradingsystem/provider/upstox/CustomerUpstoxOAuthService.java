@@ -152,8 +152,16 @@ public class CustomerUpstoxOAuthService {
         if (token.isBlank() || token.length() > 16384) {
             throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
         }
-        // Always verify the account identity with the provider before binding.
-        JsonNode profile = api.profile(token);
+        // Upstox's token endpoint already supplies the verified account
+        // profile alongside access_token. Avoid a second HTTPS round trip on
+        // the time-limited public OAuth callback. For older/incomplete token
+        // responses, Get Profile supplies these fields under "data".
+        JsonNode profile = response;
+        if (!hasProfileIdentity(response)) {
+            JsonNode profileResult = api.profile(token);
+            profile = profileResult.path("data").isObject()
+                    ? profileResult.path("data") : profileResult;
+        }
         String broker = profile.path("broker").asText("");
         String brokerUser = profile.path("user_id").asText("");
         if (!"UPSTOX".equalsIgnoreCase(broker) || brokerUser.isBlank()
@@ -170,6 +178,14 @@ public class CustomerUpstoxOAuthService {
         Instant expires = nextTokenExpiry(clock.instant());
         sessions.put(customerId, new BrokerSession(token, brokerUser, expires));
         failures.remove(customerId);
+    }
+
+    /** All three fields must be present before trusting the token profile. */
+    private static boolean hasProfileIdentity(JsonNode profile) {
+        return profile != null && profile.isObject()
+            && profile.path("broker").isTextual()
+            && profile.path("user_id").isTextual()
+            && profile.path("is_active").isBoolean();
     }
 
     public Status status(UUID customerId) {
