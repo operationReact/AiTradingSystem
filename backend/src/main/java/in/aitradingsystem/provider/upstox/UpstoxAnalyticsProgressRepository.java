@@ -44,8 +44,13 @@ public class UpstoxAnalyticsProgressRepository {
         String state = rs.getString("state");
         Instant updated = at(rs, "updated_at");
         Instant lastSuccess = at(rs, "last_success_at");
+        // The source verification cadence is 30 minutes, GitHub 5 minutes.
+        // A new PARTIAL result is not stale merely because it never fully passed.
+        Instant freshness = "VERIFIED".equals(state) ? lastSuccess : updated;
+        long freshnessSeconds = "SOURCE_VERIFICATION".equals(rs.getString("task_code"))
+                ? 45 * 60 : 20 * 60;
         boolean stale = ("VERIFIED".equals(state) || "PARTIAL".equals(state))
-                && (lastSuccess == null || lastSuccess.isBefore(now.minusSeconds(20 * 60)));
+                && (freshness == null || freshness.isBefore(now.minusSeconds(freshnessSeconds)));
         return new Task(rs.getString("task_code"), state,
                 number(rs, "checked_count"), number(rs, "verified_count"),
                 number(rs, "issue_count"), rs.getString("reason_code"),
