@@ -29,7 +29,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Both modes can inspect execution readiness and validate order intent.
- * No order submission route exists; preflight never writes or trades.
+ * No LIVE order submission route exists; preflight never trades. An explicit
+ * broker-selection POST writes a room preference, not an order or grant.
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}")
@@ -43,6 +44,9 @@ public class CustomerExecutionReadinessController {
         this.identities = identities;
     }
 
+    public record LiveBrokerSelectionRequest(
+        @NotNull @Pattern(regexp = "ANGEL_ONE|UPSTOX") String broker) {}
+
     public record OrderPreflightRequest(
         @NotNull @Min(1) Long instrumentId,
         @NotNull @Pattern(regexp = "BUY|SELL") String side,
@@ -54,6 +58,15 @@ public class CustomerExecutionReadinessController {
     public ResponseEntity<CustomerExecutionReadinessService.Readiness> readiness(
             @PathVariable UUID roomId, Authentication authentication) {
         return noStore(service.readiness(customer(authentication), roomId));
+    }
+
+    @PostMapping("/execution/broker-selection")
+    public ResponseEntity<CustomerExecutionReadinessService.Readiness> chooseBroker(
+            @PathVariable UUID roomId,
+            @Valid @RequestBody LiveBrokerSelectionRequest input,
+            Authentication authentication) {
+        return noStore(service.selectLiveBroker(
+            customer(authentication), roomId, input.broker()));
     }
 
     @PostMapping("/orders/preflight")
