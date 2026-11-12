@@ -28,6 +28,44 @@ Authoritative Upstox documentation:
   publishing, broker-session changes, or API Gateway public route are introduced.
   Both switches default OFF.
 
+## Phase 2A — bounded multi-timeframe history adapter (no downloader)
+
+The read-only `UpstoxAnalyticsSource.historicalEquityCandles` API supports
+validated V3 equity candles with the following deliberately conservative
+**MintTick per-call limits** (the vendor may allow more):
+
+| Unit | Intervals | Maximum date span per call |
+| --- | --- | --- |
+| minutes | 1–15 | 2 calendar dates (difference <= 1 day) |
+| minutes | 16–300 | 31 calendar dates (difference <= 30 days) |
+| hours | 1–5 | 31 calendar dates |
+| days | 1 | 366 calendar dates |
+| weeks | 1 | 3651 calendar dates |
+| months | 1 | 3651 calendar dates |
+
+- The existing private acceptance probe still calls `dailyEquityCandles`, a
+  maximum 31-calendar-date compatibility wrapper.
+- No requests are issued for unsupported intervals, invalid equity instrument
+  keys, future dates, or out-of-bounds windows. Successful responses must pass
+  timestamp, duplicate, OHLC, volume and open-interest validation.
+- Maximum 1024 candles and 256 KiB of upstream response text are accepted per
+  request. Large responses fail closed rather than silently truncating data.
+- This phase **does not** run a full-universe scheduler, persist or publish
+  vendor data, grant historical training rights, alter user OAuth connections,
+  or enable paper or real orders.
+
+**Why:** Upstox V3 documents minute/hour history since January 2022 and
+daily/weekly/monthly history since January 2000, subject to each instrument's
+actual history and the provider's documented interval limits:
+https://upstox.com/developer/api-documentation/v3/get-historical-candle-data/
+
+Next: reconcile Upstox instrument keys to episode-aware MintTick listings,
+verify actual provider reads using the private probe, document applicable source
+retention/training rights, and implement checkpointed rate-limited ingestion
+behind the existing Golden Source rights gate. Preserve Angel One as a separate
+historical source. Never silently substitute one broker's candles for another's
+without lineage and quality evidence.
+
 ## Exact activation prerequisites
 1. The parameter exists as `SecureString` in AWS SSM in `ap-south-1`.
    The human operator creates/rotates its value in AWS, **never GitHub/chat**.
