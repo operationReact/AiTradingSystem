@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
+import 'minttick_room_stock_picker.dart';
 
 /// Trading Rooms chart: the same compact geometry as the approved HTML mock.
 /// No simulated market candles or prices are used by the Flutter client.
@@ -52,8 +53,11 @@ class _MintTickRoomCandlestickDeskState
     try {
       final rows = await widget.market.searchPage(query: 'RELIANCE', page: 0);
       if (!mounted || _instrument != null) return;
-      final matches = rows.content.where(_equity).toList();
-      if (matches.isEmpty) return;
+      final matches = rows.content.where(MintTickRoomStockPicker.cashEquity).toList();
+      if (matches.isEmpty) {
+        setState(() => _error = 'No matching NSE/BSE equities in the active catalogue. Tap Choose stock to search.');
+        return;
+      }
       final symbol = matches.where((item) =>
           item.tradingSymbol.toUpperCase().startsWith('RELIANCE')).firstOrNull
           ?? matches.first;
@@ -63,11 +67,6 @@ class _MintTickRoomCandlestickDeskState
         _error = 'Search and select an equity to see historical candles.'); }
     }
   }
-
-  static bool _equity(InstrumentRecord item) =>
-      (item.exchange == 'NSE' || item.exchange == 'BSE') &&
-      const {'EQ', 'EQUITY', 'STOCK'}
-          .contains(item.instrumentType.toUpperCase());
 
   void _select(InstrumentRecord selected) {
     setState(() {
@@ -98,6 +97,9 @@ class _MintTickRoomCandlestickDeskState
       _candles = null;
       _quote = null;
     });
+    // Quote and candles load independently: historical backfill must not
+    // prevent a valid last-recorded / live price from appearing promptly.
+    _loadQuote(instrument, generation);
     try {
       final page = await widget.market.candles(
         instrumentId: instrument.id,
@@ -120,88 +122,36 @@ class _MintTickRoomCandlestickDeskState
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _loadQuote(InstrumentRecord instrument, int generation) async {
     try {
       final quote = await widget.market.liveQuote(instrument.id);
       if (!mounted || generation != _generation) return;
-      if (quote.status == 'LIVE' && quote.instrumentId == instrument.id &&
+      if (quote.instrumentId == instrument.id &&
+          (quote.status == 'LIVE' || quote.status == 'LAST_CLOSE') &&
           quote.ltp != null) {
         setState(() => _quote = quote);
       }
     } catch (_) {
-      // History is valid independently of a missing LIVE broker tick.
+      // Never invent a current market price when broker ticks are unavailable.
+      // Stored historical data still loads and remains labelled as historical.
     }
   }
 
   Future<void> _choose() async {
-    final query = TextEditingController(text: _instrument?.tradingSymbol ?? '');
-    var results = <InstrumentRecord>[];
-    var searching = false;
-    String? error;
     final chosen = await showModalBottomSheet<InstrumentRecord>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
       backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-      builder: (context) => StatefulBuilder(builder: (context, update) {
-        Future<void> search() async {
-          if (query.text.trim().length < 2) return;
-          update(() { searching = true; error = null; });
-          try {
-            final page = await widget.market.searchPage(
-                query: query.text.trim(), page: 0);
-            if (!context.mounted) return;
-            update(() => results = page.content.where(_equity).toList());
-          } catch (_) {
-            if (context.mounted) { update(() =>
-              error = 'Instrument lookup unavailable.'); }
-          } finally {
-            if (context.mounted) update(() => searching = false);
-          }
-        }
-
-        return Padding(
-          padding: EdgeInsets.fromLTRB(18, 16, 18,
-              MediaQuery.viewInsetsOf(context).bottom + 20),
-          child: SizedBox(
-            height: 330,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Select NSE / BSE equity',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-              const SizedBox(height: 12),
-              TextField(
-                key: const ValueKey('room-symbol-search'),
-                controller: query,
-                autofocus: true,
-                onSubmitted: (_) => search(),
-                decoration: InputDecoration(
-                  hintText: 'RELIANCE, SBIN, ICICI...',
-                  suffixIcon: IconButton(
-                    onPressed: searching ? null : search,
-                    icon: const Icon(Icons.search_rounded),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (searching) const LinearProgressIndicator(minHeight: 2),
-              if (error != null) Text(error!),
-              Expanded(child: ListView.builder(
-                itemCount: results.length,
-                itemBuilder: (context, index) {
-                  final item = results[index];
-                  return ListTile(
-                    dense: true,
-                    title: Text(item.tradingSymbol),
-                    subtitle: Text(item.exchange),
-                    onTap: () => Navigator.of(context).pop(item),
-                  );
-                },
-              )),
-            ]),
-          ),
-        );
-      }),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) => MintTickRoomStockPicker(
+        market: widget.market,
+        initialQuery: _instrument?.tradingSymbol ?? '',
+      ),
     );
-    query.dispose();
     if (chosen != null && mounted) _select(chosen);
   }
 
@@ -240,9 +190,10 @@ class _MintTickRoomCandlestickDeskState
           crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(_quote?.ltp == null ? '—' : '₹${_quote!.ltp!.toStringAsFixed(2)}',
               style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            Text(_quote == null ? 'QUOTE UNAVAILABLE' : 'VERIFIED LIVE',
-              style: text.labelSmall?.copyWith(color: _quote == null
-                ? scheme.onSurfaceVariant : scheme.primary)),
+            Text(_quote == null ? 'PRICE UNAVAILABLE' :
+              _quote!.status == 'LIVE' ? 'VERIFIED LIVE' : 'LAST RECORDED',
+              style: text.labelSmall?.copyWith(color: _quote?.status == 'LIVE'
+                ? scheme.primary : scheme.onSurfaceVariant)),
           ]),
       ])),
       SizedBox(height: 34, child: Row(children: [
