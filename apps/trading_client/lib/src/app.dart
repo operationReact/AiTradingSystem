@@ -190,6 +190,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintTickTradingRoomsPage(
                 store: _roomDrafts,
                 mode: _workspaceMode,
+                metricsRepository: HttpCustomerRoomRepository(_api),
                 onCreate: _openCreateRoom,
                 onOpen: _openRoom,
               )
