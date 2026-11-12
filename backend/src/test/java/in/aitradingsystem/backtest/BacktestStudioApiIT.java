@@ -1,5 +1,6 @@
 package in.aitradingsystem.backtest;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -74,6 +75,7 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
                 WHERE market = 'NSE_CASH'
                   AND trade_date BETWEEN DATE '2026-01-01' AND DATE '2026-02-25'
                 """, LocalDate.class));
+        assertThat(holidays).contains(LocalDate.of(2026, 1, 15), LocalDate.of(2026, 1, 26));
         int candleNumber = 0;
         for (LocalDate date = LocalDate.parse("2026-01-01"); !date.isAfter(LocalDate.parse("2026-02-25")); date = date.plusDays(1)) {
             if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY
