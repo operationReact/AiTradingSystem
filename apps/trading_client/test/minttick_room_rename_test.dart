@@ -70,6 +70,7 @@ void main() {
 
     await tester.enterText(find.byKey(const ValueKey('room-rename-input')),
         '  Swing   Alpha   ');
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-rename-confirm')));
     await tester.pumpAndSettle();
 
@@ -103,6 +104,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('room-rename-input')),
       'Duplicate');
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-rename-confirm')));
     await tester.pumpAndSettle();
     expect(find.textContaining('already uses this name'), findsOneWidget);
@@ -111,6 +113,7 @@ void main() {
     persistence.conflict = false;
     await tester.enterText(find.byKey(const ValueKey('room-rename-input')),
       'Unique Swing');
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-rename-confirm')));
     await tester.pumpAndSettle();
     expect(store.drafts.single.name, 'Unique Swing');
@@ -165,6 +168,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('room-rename-input')),
       'Live New');
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-rename-confirm')));
     await tester.pumpAndSettle();
     expect(renameCount, 1);
