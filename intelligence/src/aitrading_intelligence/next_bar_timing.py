@@ -28,7 +28,10 @@ def assess_next_bar_timing(
 
     if quote_window.execution_authorized:
         return abstain("UNEXPECTED_EXECUTION_AUTHORITY")
-    if not quote_window.eligible_for_research or quote_window.reason != "QUOTE_WINDOW_RESEARCH_ONLY":
+    if (
+        not quote_window.eligible_for_research
+        or quote_window.reason != "QUOTE_WINDOW_RESEARCH_ONLY"
+    ):
         return abstain("UPSTREAM_QUOTE_WINDOW_NOT_READY")
     if next_bar_open_at is None or next_bar_close_at is None:
         return abstain("MISSING_NEXT_BAR")
