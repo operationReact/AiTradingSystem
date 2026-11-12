@@ -3,24 +3,24 @@
 These tests exercise research eligibility only; they never authorize orders.
 """
 
-from datetime import UTC, datetime, timedelta, timezone
+import datetime as dt
 
 import pytest
 
 from aitrading_intelligence.research_asof_gate import evaluate_asof_features
 
 
-DECISION = datetime(2026, 1, 5, 9, 20, tzinfo=UTC)
-IST = timezone(timedelta(hours=5, minutes=30))
+DECISION = dt.datetime(2026, 1, 5, 9, 20, tzinfo=dt.UTC)
+IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
 
 @pytest.mark.parametrize(
     ("available", "expected_reason"),
     [
-        (datetime(2026, 1, 5, 14, 50, tzinfo=IST), "research_eligible_only"),
-        (datetime(2026, 1, 5, 14, 49, 59, tzinfo=IST), "research_eligible_only"),
-        (datetime(2026, 1, 5, 14, 50, 1, tzinfo=IST), "lookahead_feature"),
-        (datetime(2026, 1, 5, 9, 20, 1, tzinfo=UTC), "lookahead_feature"),
+        (dt.datetime(2026, 1, 5, 14, 50, tzinfo=IST), "research_eligible_only"),
+        (dt.datetime(2026, 1, 5, 14, 49, 59, tzinfo=IST), "research_eligible_only"),
+        (dt.datetime(2026, 1, 5, 14, 50, 1, tzinfo=IST), "lookahead_feature"),
+        (dt.datetime(2026, 1, 5, 9, 20, 1, tzinfo=dt.UTC), "lookahead_feature"),
     ],
 )
 def test_asof_compares_absolute_instants_across_offsets(available, expected_reason):
@@ -39,8 +39,8 @@ def test_asof_rejects_any_future_feature_in_mixed_offset_batch():
     result = evaluate_asof_features(
         decision_at=DECISION,
         feature_available_at=(
-            DECISION - timedelta(minutes=5),
-            datetime(2026, 1, 5, 14, 50, 1, tzinfo=IST),
+            DECISION - dt.timedelta(minutes=5),
+            dt.datetime(2026, 1, 5, 14, 50, 1, tzinfo=IST),
         ),
         source_verified=True,
         coverage_verified=True,
