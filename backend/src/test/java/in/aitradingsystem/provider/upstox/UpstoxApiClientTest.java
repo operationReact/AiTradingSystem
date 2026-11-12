@@ -83,14 +83,15 @@ class UpstoxApiClientTest {
             .andRespond(withSuccess(
                 "{\"access_token\":\"upstox-test-token\",\"broker\":\"UPSTOX\"}",
                 MediaType.APPLICATION_JSON));
-        assertThat(api.ownerTokenFromTotp("test-app-key","123456","654321")
-            .path("access_token").asText()).isEqualTo("upstox-test-token");
-
+        // MockRestServiceServer requires every expectation to be registered
+        // before the first request, even when subsequent requests are ordered.
         server.expect(requestTo("https://api.upstox.com/v2/user/profile"))
             .andExpect(header("Authorization", "Bearer upstox-test-token"))
             .andRespond(withSuccess(
                 "{\"status\":\"success\",\"data\":{\"broker\":\"UPSTOX\",\"user_id\":\"UP12345\"}}",
                 MediaType.APPLICATION_JSON));
+        assertThat(api.ownerTokenFromTotp("test-app-key","123456","654321")
+            .path("access_token").asText()).isEqualTo("upstox-test-token");
         assertThat(api.profile("upstox-test-token").path("broker").asText())
             .isEqualTo("UPSTOX");
         server.verify();
