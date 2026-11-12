@@ -201,6 +201,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     final limitPrice = _limit.text.trim();
     final price = num.parse(limitPrice);
     setState(() { _busy = true; _error = null; });
+    var requestSent = false;
     try {
       if (widget.mode == 'PAPER') {
         if (!_paperEnabled || widget.paper == null || widget.wallet == null) {
@@ -227,6 +228,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         );
         if (!approved) return;
         final key = _pendingKey ??= _key();
+        requestSent = true;
         final receipt = await widget.paper!.submit(
           roomId: widget.roomId,
           idempotencyKey: key,
@@ -269,6 +271,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         if (!approved) return;
         final key = _pendingKey ??=
             HttpCustomerTradeIntentRepository.newKey();
+        requestSent = true;
         final saved = await widget.intents!.create(
           roomId: widget.roomId, idempotencyKey: key,
           instrumentId: stock.id, side: _side,
@@ -285,18 +288,21 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       _pendingKey = null;
       await widget.onChanged();
       if (!mounted) return;
-      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(widget.mode == 'PAPER'
           ? 'Virtual Paper fill confirmed. No brokerage order placed.'
           : 'LIVE intent saved as blocked. No brokerage order placed.'),
       ));
+      Navigator.of(context).pop();
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _unknown = true;
-        _error = 'Result could not be verified. Reconcile room order history '
-            'before placing another order. Automatic resubmission is disabled.';
+        _unknown = requestSent;
+        _error = requestSent
+          ? 'Order outcome UNKNOWN. Reconcile room order history '
+            'before placing another order. Automatic resubmission is disabled.'
+          : 'Order could not be verified. Check stock, quote, price and '
+            'trading availability before retrying.';
       });
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -389,7 +395,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                   child: TextField(
                     key: const ValueKey('room-ticket-quantity'),
                     controller: _qty, keyboardType: TextInputType.number,
-                    onChanged: (_) => _invalidate()),
+                    onChanged: (_) => setState(_invalidate)),
                 )),
                 const SizedBox(width: 8),
                 Expanded(child: _TicketField(
