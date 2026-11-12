@@ -1,6 +1,8 @@
 package in.aitradingsystem.provider.upstox;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Objects;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -14,6 +16,7 @@ import org.springframework.web.client.RestClientResponseException;
 /** Fixed official Upstox HTTPS origin; no caller-supplied paths or redirect URLs. */
 @Component
 public class UpstoxApiClient {
+    private static final ObjectMapper JSON = new ObjectMapper();
     private final RestClient http;
 
     public UpstoxApiClient() {
@@ -73,12 +76,41 @@ public class UpstoxApiClient {
             }
             return result;
         } catch (RestClientResponseException ex) {
-            // Never log PIN, TOTP, app key, provider response or token.
-            throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_REJECTED");
+            // Parse only an allowlisted provider error identifier. Never log or
+            // return the raw broker response, PIN, TOTP, app key, or token.
+            throw new UpstoxProviderException(
+                classifyTotpErrorResponse(ex.getResponseBodyAsString()));
         } catch (UpstoxProviderException ex) {
             throw ex;
         } catch (RuntimeException ex) {
             throw new UpstoxProviderException("UPSTOX_TOTP_AUTH_UNAVAILABLE");
+        }
+    }
+
+    /**
+     * Convert broker error identifiers into non-secret, actionable diagnostics.
+     * Unknown/malformed or oversized upstream bodies always fail closed.
+     */
+    static String classifyTotpErrorResponse(String responseBody) {
+        final String fallback = "UPSTOX_TOTP_AUTH_REJECTED";
+        if (responseBody == null || responseBody.length() > 4096) return fallback;
+        try {
+            JsonNode errors = JSON.readTree(responseBody).path("errors");
+            if (!errors.isArray() || errors.isEmpty()) return fallback;
+            JsonNode first = errors.get(0);
+            String code = first.path("errorCode").asText("");
+            if (code.isBlank()) code = first.path("error_code").asText("");
+            return switch (code) {
+                case "UDAPI100101" -> "UPSTOX_TOTP_APP_NOT_ELIGIBLE";
+                case "UDAPI100096" -> "UPSTOX_TOTP_APP_KEY_INVALID";
+                case "UDAPI100097" -> "UPSTOX_TOTP_CREDENTIALS_INVALID";
+                case "UDAPI100098" -> "UPSTOX_TOTP_NOT_ENABLED";
+                case "UDAPI100099" -> "UPSTOX_TOTP_RATE_LIMITED";
+                case "UDAPI1241", "UDAPI1242" -> "UPSTOX_TOTP_CONFIGURATION_INVALID";
+                default -> fallback;
+            };
+        } catch (JsonProcessingException | IllegalArgumentException ex) {
+            return fallback;
         }
     }
 
