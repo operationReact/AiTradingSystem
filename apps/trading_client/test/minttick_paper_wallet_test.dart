@@ -114,6 +114,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('activate-paper-wallet')), findsNothing);
-    expect(find.text('Live broker authorization required'), findsOneWidget);
+    expect(find.byKey(const ValueKey('live-room-broker-upstox')), findsOneWidget);
+    expect(find.text('Select Live broker account'), findsOneWidget);
   });
 }
