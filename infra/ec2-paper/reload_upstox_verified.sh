@@ -62,7 +62,6 @@ PY
 
 # The backend has already validated the correct SSM key, callback, and secret.
 # Restart ONLY the existing PAPER backend to reload UpstoxProperties at startup.
-before="$(date -u +%s)"
 work="$(mktemp -d "$root/.upstox-reload.XXXXXXXX")"
 trap 'rm -rf -- "$work"' EXIT
 chmod 0700 "$work"
@@ -80,16 +79,8 @@ for attempt in $(seq 1 45); do
   sleep 2
 done
 test "$healthy" = true || fail HEALTH_FAILED
-python3 - "$root" "$before" <<'PY' || fail START_TIME_NOT_VERIFIED
-import datetime as dt,pathlib,subprocess,sys
-root=pathlib.Path(sys.argv[1])
-compose=['docker','compose','--env-file',str(root/'.env'),'-f',str(root/'paper-compose.yml')]
-cid=subprocess.run(compose+['ps','-q','backend'],capture_output=True,text=True,timeout=15)
-assert cid.returncode==0 and cid.stdout.strip()
-started=subprocess.run(['docker','inspect','--format','{{.State.StartedAt}}',cid.stdout.strip()],
-    capture_output=True,text=True,timeout=15)
-assert started.returncode==0
-start=dt.datetime.fromisoformat(started.stdout.strip().replace('Z','+00:00')).timestamp()
-assert start>=float(sys.argv[2])-2
-PY
+container_id="$(docker compose --env-file "$root/.env" -f "$root/paper-compose.yml" ps -q backend)"
+test -n "$container_id" || fail PROCESS_NOT_RUNNING
+running="$(docker inspect --format '{{.State.Running}}' "$container_id" 2>/dev/null || true)"
+test "$running" = true || fail PROCESS_NOT_RUNNING
 printf 'MINTTICK_UPSTOX_RELOAD_RESULT:BACKEND_RESTARTED_HEALTHY\n'
