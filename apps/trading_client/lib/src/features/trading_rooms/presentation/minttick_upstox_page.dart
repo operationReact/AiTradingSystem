@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -30,7 +32,81 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
   bool _ownerLoginAvailable = false;
   String? _error;
   String? _section;
-  Object? _data;
+  final Map<String, Object?> _brokerData = {};
+  final Map<String, String> _readErrors = {};
+  final Set<String> _reading = {};
+  int _readEpoch = 0;
+
+  void _resetBrokerReads({required bool connected}) {
+    ++_readEpoch;
+    _brokerData.clear();
+    _readErrors.clear();
+    _reading.clear();
+    _section = connected ? 'holdings' : null;
+  }
+
+  void _beginBrokerReads() {
+    if (_status?.connected != true) return;
+    unawaited(_readBroker('holdings', widget.repository.holdings));
+    unawaited(_readBroker('funds', widget.repository.funds));
+    unawaited(_readBroker('positions', widget.repository.positions));
+  }
+
+  String _readFailure(String section, Object failure) {
+    if (failure is ApiHttpFailure) {
+      if (section == 'funds' &&
+          failure.code == 'UPSTOX_FUNDS_MAINTENANCE') {
+        return 'Funds service is paused daily 12:00–5:30 AM IST. '
+            'Holdings remain accessible; retry after 5:30 AM.';
+      }
+      if (failure.code == 'UPSTOX_SESSION_EXPIRED' ||
+          failure.code == 'UPSTOX_NOT_CONNECTED') {
+        return 'Broker session expired. Refresh your connection or '
+            'sign in to Upstox again.';
+      }
+    }
+    return '${section[0].toUpperCase()}${section.substring(1)} '
+        'temporarily unavailable. Other broker data remains accessible.';
+  }
+
+  Future<void> _readBroker(
+      String section, Future<Object?> Function() fetch) async {
+    if (_reading.contains(section) || _status?.connected != true) return;
+    final epoch = _readEpoch;
+    setState(() {
+      _reading.add(section);
+      _readErrors.remove(section);
+    });
+    try {
+      final data = await fetch();
+      if (!mounted || epoch != _readEpoch) return;
+      final valid = switch (section) {
+        'holdings' => PortfolioInstrument.decode(data, broker: 'UPSTOX') != null,
+        'positions' => PortfolioInstrument.decode(
+            data, broker: 'UPSTOX', position: true) != null,
+        'funds' => portfolioAmount(data, broker: 'UPSTOX') != null,
+        'orders' => data is List || portfolioRecords(data, 'data') != null,
+        'IP status' => data is Map,
+        _ => false,
+      };
+      setState(() {
+        if (valid) {
+          _brokerData[section] = data;
+        } else {
+          _readErrors[section] = '${section[0].toUpperCase()}${section.substring(1)} '
+              'response could not be verified. No zero balance was assumed.';
+        }
+      });
+    } catch (error) {
+      if (mounted && epoch == _readEpoch) {
+        setState(() => _readErrors[section] = _readFailure(section, error));
+      }
+    } finally {
+      if (mounted && epoch == _readEpoch) {
+        setState(() => _reading.remove(section));
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -116,9 +192,9 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
         _status = status;
         _error = status.connected ? null : _explainOAuthFailure(status.lastAuthError);
         _awaitingReturn = false;
-        _data = null;
-        _section = null;
+        _resetBrokerReads(connected: status.connected);
       });
+      if (status.connected) _beginBrokerReads();
     } catch (_) {
       if (mounted) {
         setState(() {
@@ -126,8 +202,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
           // owner-login capability is not evidence of current broker state.
           _status = null;
           _ownerLoginAvailable = false;
-          _section = null;
-          _data = null;
+          _resetBrokerReads(connected: false);
           _error =
               'Unable to verify Upstox connection. Check your network and retry.';
         });
@@ -191,10 +266,10 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       setState(() {
         _status = status;
         _ownerLoginAvailable = false;
-        _section = null;
-        _data = null;
+        _resetBrokerReads(connected: true);
         _awaitingReturn = false;
       });
+      _beginBrokerReads();
     } catch (error) {
       if (mounted) {
         setState(() => _error = _explainOwnerLoginFailure(error));
@@ -233,8 +308,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       if (mounted) {
         setState(() {
           _status = status;
-          _section = null;
-          _data = null;
+          _resetBrokerReads(connected: false);
           _awaitingReturn = false;
           _ownerLoginAvailable = false;
         });
@@ -247,30 +321,12 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
   }
 
   Future<void> _load(String section, Future<Object?> Function() fetch) async {
-    if (_loading) return;
-    setState(() {
-      _loading = true;
-      _error = null;
-      _data = null;
-      _section = section;
-    });
-    try {
-      final result = await fetch();
-      if (mounted) setState(() => _data = result);
-    } catch (error) {
-      if (mounted) {
-        final maintenance = section == 'funds' &&
-            error is ApiHttpFailure &&
-            error.code == 'UPSTOX_FUNDS_MAINTENANCE';
-        setState(() => _error = maintenance
-            ? 'Upstox funds are unavailable from 12:00 AM to 5:30 AM IST '
-              'for scheduled daily maintenance. This does not mean zero '
-              'balance or a disconnected account. Refresh later.'
-            : 'Upstox $section could not be loaded. '
-              'Verify broker connectivity and retry.');
-      }
-    } finally {
-      if (mounted) setState(() => _loading = false);
+    if (_status?.connected != true) return;
+    setState(() => _section = section);
+    // A selected tab may retry a previously failed request, but switching
+    // between already verified snapshots must not cause needless API calls.
+    if (!_brokerData.containsKey(section)) {
+      await _readBroker(section, fetch);
     }
   }
 
