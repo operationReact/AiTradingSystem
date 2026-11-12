@@ -57,6 +57,10 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/summary"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/activity"))
         self.assertTrue(proxy.allowed("GET","/api/customer/owner-history/v1/progress"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/owner-upstox-analytics/v1/progress"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress/raw"))
+        self.assertFalse(proxy.allowed("GET","/api/admin/market-data/upstox-analytics/probe"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/activity"))
         self.assertFalse(proxy.allowed("POST","/api/customer/owner-history/v1/progress"))
         self.assertFalse(proxy.allowed("GET","/api/customer/owner-history/v1/progress/raw"))
@@ -133,6 +137,49 @@ class AccountProxyTest(unittest.TestCase):
             proxy.BACKEND + path, 403, "Forbidden", {},
             io.BytesIO(b'{"error":"OWNER_ONLY"}'))
         with mock.patch.object(proxy.urllib.request, "urlopen", side_effect=rejection):
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 403)
+        self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+
+    def test_upstox_analytics_monitor_accepts_only_owner_checked_get(self):
+        # Route is HTTPS Cognito-authorized and the Spring backend validates
+        # exact JWT subject against MINTTICK_ANGEL_ONE_OWNER_SUB.
+        # The proxy must never expose analytics probe/admin endpoints.
+        path = "/api/customer/owner-upstox-analytics/v1/progress"
+        forbidden = (
+            ("POST", path),
+            ("PUT", path),
+            ("DELETE", path),
+            ("GET", path + "/raw"),
+            ("GET", "/api/admin/market-data/upstox-analytics/probe"),
+        )
+        for method, endpoint in forbidden:
+            with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+                response = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(response["statusCode"], 404, endpoint)
+            urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+            response = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(response["statusCode"], 401)
+        urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as urlopen:
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, proxy.BACKEND + path)
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer public-test-token")
+        self.assertIsNone(request.data)
+
+        backend_owner_denial = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               side_effect=backend_owner_denial):
             response = proxy.handler(event("GET", path), None)
         self.assertEqual(response["statusCode"], 403)
         self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
