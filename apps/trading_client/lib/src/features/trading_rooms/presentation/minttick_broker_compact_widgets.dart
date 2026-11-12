@@ -52,7 +52,7 @@ class MintTickBrokerHeader extends StatelessWidget {
         visualDensity: VisualDensity.compact,
         onPressed: onRefresh,
       ),
-      if (menu != null) menu!,
+      ?menu,
     ]);
   }
 }
