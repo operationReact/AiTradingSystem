@@ -295,6 +295,20 @@ class _MintTickCustomerPortfolioPageState
     return total;
   }
 
+  /// Partial subtotal is never a claim about the entire broker portfolio.
+  num? _verifiedHoldingSubtotal() {
+    num total = 0;
+    var verified = 0;
+    for (final broker in _brokers.where((b) => b.connected)) {
+      final amount = portfolioHoldingValue(broker.holdings);
+      if (amount != null) {
+        total += amount;
+        verified++;
+      }
+    }
+    return verified > 0 ? total : null;
+  }
+
   int? _totalCount(bool positions) {
     if (_brokers.any((b) => !b.statusKnown)) return null;
     var count = 0;
@@ -469,6 +483,7 @@ class _MintTickCustomerPortfolioPageState
     final count = _totalCount(false);
     final positions = _totalCount(true);
     final value = _totalHoldingValue();
+    final verifiedSubtotal = value == null ? _verifiedHoldingSubtotal() : null;
     final partial = _brokers.any((b) => !b.statusKnown ||
         (b.connected && (b.holdings == null || b.positions == null)));
     return Column(children: [
@@ -486,7 +501,10 @@ class _MintTickCustomerPortfolioPageState
           Text(connected == 0
             ? 'Connect a broker to verify live investments'
             : partial || value == null
-              ? 'Valuation incomplete · no estimated total'
+              ? (verifiedSubtotal != null
+                  ? 'Verified subtotal ${portfolioRupees(verifiedSubtotal)} '
+                    '· complete total unavailable'
+                  : 'Valuation incomplete · no estimated total')
               : 'Broker-reported holdings · read-only',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: scheme.onSurfaceVariant,
