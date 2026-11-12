@@ -75,6 +75,15 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       'Check your account status with Upstox.',
     'UPSTOX_ACCOUNT_ALREADY_CONNECTED' =>
       'This Upstox account is already connected to another MintTick user.',
+    'UPSTOX_AUTH_TRANSPORT_UNAVAILABLE' =>
+      'MintTick could not complete the Upstox token exchange due to a '
+      'connection or timeout issue. Check backend connectivity.',
+    'UPSTOX_AUTH_INVALID_RESPONSE' =>
+      'The Upstox token response could not be decoded safely. '
+      'Check MintTick backend integration.',
+    'UPSTOX_AUTH_CLIENT_FAILURE' =>
+      'MintTick encountered an unexpected token-exchange client failure. '
+      'This does not establish an Upstox outage.',
     'UPSTOX_AUTH_UNAVAILABLE' =>
       'MintTick could not reach Upstox to finish authorization. '
       'Start a fresh connection when the service is available.',

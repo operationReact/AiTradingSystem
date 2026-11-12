@@ -246,7 +246,8 @@ public class CustomerUpstoxOAuthService {
                  "UPSTOX_OAUTH_REDIRECT_REJECTED",
                  "UPSTOX_PROFILE_REJECTED", "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE",
                  "UPSTOX_ACCOUNT_ALREADY_CONNECTED",
-                 "UPSTOX_AUTH_UNAVAILABLE" -> code;
+                 "UPSTOX_AUTH_UNAVAILABLE", "UPSTOX_AUTH_TRANSPORT_UNAVAILABLE",
+                 "UPSTOX_AUTH_INVALID_RESPONSE", "UPSTOX_AUTH_CLIENT_FAILURE" -> code;
             default -> "UPSTOX_AUTH_FAILED";
         };
     }

@@ -107,7 +107,10 @@ public class CustomerUpstoxController {
             case "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE" -> "SEGMENTS_INACTIVE";
             case "UPSTOX_PROFILE_REJECTED" -> "PROFILE_REJECTED";
             case "UPSTOX_ACCOUNT_ALREADY_CONNECTED" -> "ALREADY_CONNECTED";
-            case "UPSTOX_AUTH_UNAVAILABLE" -> "BROKER_UNAVAILABLE";
+            case "UPSTOX_AUTH_UNAVAILABLE", "UPSTOX_AUTH_TRANSPORT_UNAVAILABLE" ->
+                    "BROKER_UNAVAILABLE";
+            case "UPSTOX_AUTH_INVALID_RESPONSE" -> "INVALID_TOKEN_RESPONSE";
+            case "UPSTOX_AUTH_CLIENT_FAILURE" -> "TOKEN_CLIENT_FAILURE";
             default -> "UNVERIFIED";
         };
     }

@@ -128,7 +128,12 @@ CALLBACK_OUTCOMES = {
     "SEGMENTS_INACTIVE": "Upstox reports inactive trading segments for this account.",
     "PROFILE_REJECTED": "Upstox could not verify an active account profile.",
     "ALREADY_CONNECTED": "This Upstox account is connected to another MintTick user.",
-    "BROKER_UNAVAILABLE": "Upstox was unavailable during the token exchange. Retry later.",
+    "BROKER_UNAVAILABLE": "MintTick could not establish the Upstox token exchange connection. "
+                          "Retry a new login, and check protected backend network access.",
+    "INVALID_TOKEN_RESPONSE": "Upstox returned an unexpected token response. "
+                              "MintTick needs its response parser checked.",
+    "TOKEN_CLIENT_FAILURE": "MintTick encountered a token-exchange client error. "
+                            "This does not establish an Upstox outage.",
     "BACKEND_UNAVAILABLE": "MintTick could not reach its private broker backend. Retry later.",
     "UNVERIFIED": "Return to MintTick and tap Refresh connection to inspect the result.",
 }

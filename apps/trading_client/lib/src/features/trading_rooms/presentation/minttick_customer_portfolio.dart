@@ -4,6 +4,7 @@ import '../data/customer_angel_one_repository.dart';
 import '../data/customer_portfolio_models.dart';
 import '../data/customer_portfolio_repository.dart';
 import '../data/customer_room_repository.dart';
+import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_upstox_repository.dart';
 import '../domain/trading_room_draft.dart';
 import '../domain/trading_workspace_mode.dart';
@@ -26,9 +27,17 @@ class _BrokerPortfolio {
 }
 
 class _PaperAccount {
-  const _PaperAccount(this.room, this.wallet);
+  const _PaperAccount(this.room, this.wallet, {this.orders, this.positions});
   final TradingRoomDraft room;
   final CustomerPaperWallet wallet;
+  final List<CustomerPaperOrder>? orders;
+  final List<CustomerPaperPosition>? positions;
+  String symbol(int id) {
+    for (final order in orders ?? const <CustomerPaperOrder>[]) {
+      if (order.instrumentId == id) return order.tradingSymbol;
+    }
+    return 'Instrument #$id';
+  }
 }
 
 /// Customer Portfolio: independent LIVE broker accounts and virtual PAPER rooms.
@@ -41,6 +50,7 @@ class MintTickCustomerPortfolioPage extends StatefulWidget {
     required this.brokerRepository,
     required this.upstoxRepository,
     this.portfolioRepository,
+    this.paperTradingRepository,
     required this.onRooms,
     required this.onBroker,
     super.key,
@@ -52,6 +62,7 @@ class MintTickCustomerPortfolioPage extends StatefulWidget {
   final HttpCustomerAngelOneRepository brokerRepository;
   final HttpCustomerUpstoxRepository upstoxRepository;
   final HttpCustomerPortfolioRepository? portfolioRepository;
+  final HttpCustomerPaperTradingRepository? paperTradingRepository;
   final VoidCallback onRooms;
   final VoidCallback onBroker;
 
@@ -189,9 +200,23 @@ class _MintTickCustomerPortfolioPageState
           (room) => room.mode == 'PAPER' && room.status == 'PAPER_FUNDED',
         );
         final wallets = await Future.wait(
-          funded.map((room) async => _PaperAccount(
-            room, await widget.paperRepository.paperAccount(room.id),
-          )),
+          funded.map((room) async {
+            final wallet = await widget.paperRepository.paperAccount(room.id);
+            final paper = widget.paperTradingRepository;
+            if (paper == null) return _PaperAccount(room, wallet);
+            // Preserve verified cash even when position or fill reads fail.
+            List<CustomerPaperPosition>? positions;
+            List<CustomerPaperOrder>? orders;
+            try {
+              positions = await paper.positions(room.id);
+              orders = await paper.orders(room.id);
+            } catch (_) {
+              positions = null;
+              orders = null;
+            }
+            return _PaperAccount(room, wallet,
+              positions: positions, orders: orders);
+          }),
         );
         if (!mounted || generation != _generation) return;
         setState(() => _paperAccounts = wallets);
@@ -631,8 +656,45 @@ class _MintTickCustomerPortfolioPageState
           Icons.receipt_long_outlined, () => _openPaperBalances()),
       ], icon: Icons.pie_chart_outline_rounded),
       const SizedBox(height: 10),
-      const MintTickInfoText('No customer Paper orders or strategy execution '
-          'are enabled yet. Virtual cash must never be displayed as real funds.'),
+      _section('Paper holdings', [
+        for (final account in _paperAccounts) ...[
+          if (account.positions == null)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text('${account.room.name}: Holdings unavailable. '
+                'Refresh to retry.')),
+          if (account.positions != null && account.positions!.isEmpty)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Text('${account.room.name}: No open positions.')),
+          for (final position in account.positions ?? const <CustomerPaperPosition>[])
+            _row(
+              '${account.symbol(position.instrumentId)} · ${account.room.name}',
+              '${position.quantity} shares · avg '
+                '${_formatPaise(position.avgCostPaise)}',
+              Icons.candlestick_chart_rounded,
+              () => _openPaperRoom(account)),
+        ],
+        if (_paperAccounts.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text('No funded Paper rooms.')),
+      ], icon: Icons.list_alt_rounded),
+      const SizedBox(height: 10),
+      _section('Recent Paper orders', [
+        for (final account in _paperAccounts) ...[
+          if (account.orders == null)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Text('${account.room.name}: Order history unavailable.')),
+          for (final order in (account.orders ?? const <CustomerPaperOrder>[]).take(10))
+            _row('${order.side} ${order.tradingSymbol} · ${account.room.name}',
+              '${order.quantity} × ${portfolioRupees(order.fillPrice)}',
+              Icons.receipt_long_outlined, () => _openPaperRoom(account)),
+        ],
+        if (_paperAccounts.isEmpty)
+          const Padding(padding: EdgeInsets.symmetric(vertical: 6),
+            child: Text('No virtual fills recorded.')),
+      ], icon: Icons.history_rounded),
+      const SizedBox(height: 10),
+      const MintTickInfoText('Paper cash, fills and positions are simulated. '
+        'They are isolated from connected broker holdings and orders.'),
       const SizedBox(height: 10),
       SizedBox(width: double.infinity, child: FilledButton.icon(
         onPressed: widget.onRooms,
@@ -777,6 +839,26 @@ class _MintTickCustomerPortfolioPageState
           Text('Realized P&L: ${_formatPaise(account.wallet.realizedPnlPaise)}'),
         ],
       )),
+      const SizedBox(height: 12),
+      const Text('Paper positions', style: TextStyle(fontWeight: FontWeight.w800)),
+      if (account.positions == null)
+        const MintTickInfoText('Position read unavailable. Refresh Portfolio.'),
+      if (account.positions != null && account.positions!.isEmpty)
+        const Text('No Paper holdings in this room.'),
+      for (final position in account.positions ?? const <CustomerPaperPosition>[])
+        _row(account.symbol(position.instrumentId),
+          '${position.quantity} shares · avg ${_formatPaise(position.avgCostPaise)}',
+          Icons.candlestick_chart_outlined, () {}),
+      const SizedBox(height: 12),
+      const Text('Recent Paper fills', style: TextStyle(fontWeight: FontWeight.w800)),
+      if (account.orders == null)
+        const MintTickInfoText('Order history unavailable. Refresh Portfolio.'),
+      if (account.orders != null && account.orders!.isEmpty)
+        const Text('No confirmed virtual fills.'),
+      for (final order in (account.orders ?? const <CustomerPaperOrder>[]).take(20))
+        _row('${order.side} ${order.tradingSymbol}',
+          '${order.quantity} × ${portfolioRupees(order.fillPrice)}',
+          Icons.receipt_long_outlined, () {}),
       const SizedBox(height: 12),
       const Text('Cash history', style: TextStyle(fontWeight: FontWeight.w800)),
       FutureBuilder<List<CustomerPaperCashEvent>>(
