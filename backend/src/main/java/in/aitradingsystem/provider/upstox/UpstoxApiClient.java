@@ -93,7 +93,7 @@ public class UpstoxApiClient {
      */
     static String classifyTotpErrorResponse(String responseBody) {
         final String fallback = "UPSTOX_TOTP_AUTH_REJECTED";
-        if (responseBody == null || responseBody.length() > 4096) return fallback;
+        if (responseBody == null || responseBody.isBlank() || responseBody.length() > 4096) return fallback;
         try {
             JsonNode errors = JSON.readTree(responseBody).path("errors");
             if (!errors.isArray() || errors.isEmpty()) return fallback;
