@@ -351,7 +351,8 @@ void main() {
       home: MintTickUpstoxPage(repository: repo),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('—'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-portfolio-value')), findsOneWidget);
+    expect(find.text('—'), findsWidgets);
     expect(find.textContaining('Holdings data unavailable'), findsOneWidget);
     expect(find.text('₹0.00'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('upstox-tab-funds')));
