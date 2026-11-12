@@ -1,8 +1,8 @@
 {
-  "region": "ap-south-1",
-  "environment": "dev",
-  "authorization": "USER_APPROVED_MINTTICK_ACCOUNT_API_2026-11-07",
+  "application": "MintTick",
   "operation": "publish-private-account-api-lambda",
+  "environment": "dev",
+  "region": "ap-south-1",
   "aws_account": "098859530205",
-  "application": "MintTick"
+  "authorization": "USER_APPROVED_MINTTICK_ACCOUNT_API_2026-11-07"
 }

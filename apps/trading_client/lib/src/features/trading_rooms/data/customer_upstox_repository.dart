@@ -8,6 +8,7 @@ class CustomerUpstoxStatus {
     required this.accountMasked,
     required this.expiresAt,
     required this.orderExecutionEnabled,
+    this.lastAuthError,
   });
 
   final bool available;
@@ -15,6 +16,8 @@ class CustomerUpstoxStatus {
   final String? accountMasked;
   final DateTime? expiresAt;
   final bool orderExecutionEnabled;
+  /// Fixed non-secret reason for the most recent failed OAuth callback.
+  final String? lastAuthError;
 
   factory CustomerUpstoxStatus.fromJson(Object? raw) {
     if (raw is! Map<String, dynamic> || raw['broker'] != 'UPSTOX' ||
@@ -29,6 +32,8 @@ class CustomerUpstoxStatus {
       expiresAt: raw['expiresAt'] is String
           ? DateTime.tryParse(raw['expiresAt'] as String) : null,
       orderExecutionEnabled: raw['orderExecutionEnabled'] as bool,
+      lastAuthError: raw['lastAuthError'] is String
+          ? raw['lastAuthError'] as String : null,
     );
   }
 }

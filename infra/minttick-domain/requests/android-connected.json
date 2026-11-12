@@ -1,9 +1,9 @@
 {
-  "environment": "dev",
   "application": "MintTick",
-  "public_api_ready": true,
   "operation": "build-connected-android",
   "authorization": "USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
+  "environment": "dev",
   "api_base_url": "https://api.minttick.com",
+  "public_api_ready": true,
   "cognito_pool": "ap-south-1_jz2T8qbiY"
 }

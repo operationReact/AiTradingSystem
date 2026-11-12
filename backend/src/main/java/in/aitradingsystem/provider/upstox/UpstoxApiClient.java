@@ -46,10 +46,36 @@ public class UpstoxApiClient {
                     .accept(MediaType.APPLICATION_JSON)
                     .body(body).retrieve().body(JsonNode.class));
         } catch (RestClientResponseException ex) {
-            // Do not expose the upstream request, code, secrets or raw body.
-            throw new UpstoxProviderException("UPSTOX_AUTH_FAILED");
+            // Report only predefined provider error classes. Raw body, OAuth code,
+            // client secret and token are never logged, returned or persisted.
+            throw new UpstoxProviderException(
+                classifyOAuthExchangeFailure(ex.getResponseBodyAsString()));
         } catch (RuntimeException ex) {
             throw new UpstoxProviderException("UPSTOX_AUTH_UNAVAILABLE");
+        }
+    }
+
+    /** Allowlisted OAuth token-exchange diagnostics; no broker response reflection. */
+    static String classifyOAuthExchangeFailure(String responseBody) {
+        final String fallback = "UPSTOX_AUTH_FAILED";
+        if (responseBody == null || responseBody.isBlank() || responseBody.length() > 4096) {
+            return fallback;
+        }
+        try {
+            JsonNode errors = JSON.readTree(responseBody).path("errors");
+            if (!errors.isArray() || errors.isEmpty()) return fallback;
+            JsonNode first = errors.get(0);
+            String code = first.path("errorCode").asText("");
+            if (code.isBlank()) code = first.path("error_code").asText("");
+            return switch (code) {
+                case "UDAPI100069" -> "UPSTOX_OAUTH_APP_CREDENTIALS_INVALID";
+                case "UDAPI100070" -> "UPSTOX_OAUTH_REDIRECT_REJECTED";
+                case "UDAPI100057" -> "UPSTOX_AUTH_CODE_INVALID";
+                case "UDAPI100058" -> "UPSTOX_ACCOUNT_SEGMENTS_INACTIVE";
+                default -> fallback;
+            };
+        } catch (JsonProcessingException | IllegalArgumentException ex) {
+            return fallback;
         }
     }
 
