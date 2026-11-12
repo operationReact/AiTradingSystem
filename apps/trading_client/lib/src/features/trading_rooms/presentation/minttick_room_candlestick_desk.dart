@@ -59,8 +59,8 @@ class _MintTickRoomCandlestickDeskState
           ?? matches.first;
       _select(symbol);
     } catch (_) {
-      if (mounted) setState(() =>
-        _error = 'Search and select an equity to see historical candles.');
+      if (mounted) { setState(() =>
+        _error = 'Search and select an equity to see historical candles.'); }
     }
   }
 
@@ -152,8 +152,8 @@ class _MintTickRoomCandlestickDeskState
             if (!context.mounted) return;
             update(() => results = page.content.where(_equity).toList());
           } catch (_) {
-            if (context.mounted) update(() =>
-              error = 'Instrument lookup unavailable.');
+            if (context.mounted) { update(() =>
+              error = 'Instrument lookup unavailable.'); }
           } finally {
             if (context.mounted) update(() => searching = false);
           }
@@ -307,7 +307,7 @@ class _MintTickRoomCandlestickDeskState
           last == null ? 'Verified stored candles only · no estimates'
             : 'Stored ${last.source} · ${last.fetchedAt.toLocal()}',
           maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+          style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant))),
         Text(_frames[_frame].$1,
           style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
       ])),
