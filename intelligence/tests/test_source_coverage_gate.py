@@ -1,49 +1,49 @@
-from datetime import UTC, datetime, timedelta
+"""Synthetic coverage safety tests; no broker data or profitability claims."""
 
-from aitrading_intelligence.source_coverage_gate import (
-    CoverageDecision,
-    assess_source_coverage,
-)
+from datetime import datetime, timedelta, timezone
 
-T = datetime(2026, 11, 10, 9, 20, tzinfo=UTC)
+import pytest
+
+from aitrading_intelligence.source_coverage_gate import evaluate_source_coverage
+
+
+BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+TIMES = tuple(BASE + timedelta(minutes=i) for i in range(3))
 
 
 def check(**changes):
     values = dict(
-        decision_at=T,
-        first_observation_at=T - timedelta(days=5),
-        last_observation_at=T - timedelta(minutes=1),
-        source_received_at=T,
-        source_licensed=True,
-        instrument_identified=True,
-        expected_bars=5,
-        observed_bars=5,
-        missing_bars=0,
+        expected_bars=3,
+        observed_bars=3,
+        min_coverage=1.0,
+        source_verified=True,
+        timestamps=TIMES,
     )
     values.update(changes)
-    return assess_source_coverage(**values)
+    return evaluate_source_coverage(**values)
 
 
-def test_complete_evidence_is_research_only():
-    result = check()
-    assert result.decision == CoverageDecision.RESEARCH_ONLY
-    assert result.can_authorize_capital is False
+def test_complete_verified_source_is_research_only():
+    decision = check()
+    assert decision.eligible
+    assert decision.reason == "research_eligible_only"
 
 
-def test_rejects_future_or_naive_timestamps():
-    assert check(source_received_at=T + timedelta(seconds=1)).reason == "FUTURE_INFORMATION"
-    assert check(last_observation_at=T + timedelta(seconds=1)).decision == CoverageDecision.ABSTAIN
-    assert check(decision_at=T.replace(tzinfo=None)).reason == "MISSING_OR_NAIVE_TIMESTAMP"
-    assert check(first_observation_at=T + timedelta(days=1)).decision == CoverageDecision.ABSTAIN
-
-
-def test_rejects_unlicensed_or_unknown_source():
-    assert check(source_licensed=False).reason == "UNLICENSED_SOURCE"
-    assert check(instrument_identified=False).reason == "UNKNOWN_INSTRUMENT"
-
-
-def test_rejects_missing_inconsistent_or_invalid_coverage():
-    assert check(missing_bars=1, observed_bars=4).reason == "INCOMPLETE_COVERAGE"
-    assert check(observed_bars=4).reason == "INCONSISTENT_COVERAGE_COUNTS"
-    assert check(expected_bars=0).reason == "INVALID_COVERAGE_COUNTS"
-    assert check(missing_bars=-1).decision == CoverageDecision.ABSTAIN
+@pytest.mark.parametrize(
+    ("changes", "reason"),
+    [
+        ({"source_verified": False}, "source_unverified"),
+        ({"expected_bars": 0}, "invalid_counts"),
+        ({"observed_bars": 4}, "invalid_counts"),
+        ({"min_coverage": float("nan")}, "invalid_threshold"),
+        ({"min_coverage": 1.1}, "invalid_threshold"),
+        ({"timestamps": TIMES[:2]}, "timestamp_count_mismatch"),
+        ({"timestamps": tuple(t.replace(tzinfo=None) for t in TIMES)}, "naive_timestamp"),
+        ({"timestamps": (TIMES[0], TIMES[0], TIMES[2])}, "non_monotonic_timestamps"),
+        ({"observed_bars": 2, "timestamps": TIMES[:2]}, "insufficient_coverage"),
+    ],
+)
+def test_fail_closed(changes, reason):
+    result = check(**changes)
+    assert not result.eligible
+    assert result.reason == reason
