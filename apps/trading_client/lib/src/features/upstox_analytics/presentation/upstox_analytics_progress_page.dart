@@ -164,7 +164,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       Row(children: [
         const Expanded(child: Text('Analytics health',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-        Text('Updated ' + when(data.generatedAt),
+        Text('Updated ${when(data.generatedAt)}',
           style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
       ]),
       const SizedBox(height: 10),
@@ -335,11 +335,11 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         ? 'No backend telemetry available'
         : task.stale ? 'Last verification is stale'
         : task.state == 'VERIFIED'
-          ? 'Verified ' + when(task.lastSuccessAt)
+          ? 'Verified ${when(task.lastSuccessAt)}'
           : task.reasonCode == null ? spec.$3 : reasonDescription(task.reasonCode);
     return Material(color: Colors.transparent,
       child: InkWell(
-        key: ValueKey('upstox-stage-' + spec.$1),
+        key: ValueKey('upstox-stage-${spec.$1}'),
         onTap: () => showDetails(spec, task),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
