@@ -644,7 +644,8 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
               children: [
                 Row(children: [
                   Expanded(child: Text(
-                    _section![0].toUpperCase() + _section!.substring(1),
+                    _section == 'holdings' ? 'My holdings'
+                        : _section![0].toUpperCase() + _section!.substring(1),
                     style: text.titleMedium?.copyWith(
                       fontWeight: FontWeight.w800))),
                   if (_reading.contains(_section))
