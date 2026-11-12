@@ -1,9 +1,1 @@
-{
-  "kind": "minttick-owner-history-timer-enable-v1",
-  "action": "enable-existing-history-timer",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
-  "enable_trading": false,
-  "confirmation": "ENABLE_OWNER_HISTORY_TIMER_ONLY"
-}
+{"kind":"minttick-owner-history-timer-enable-v1","action":"enable-existing-history-timer","account":"098859530205","region":"ap-south-1","instance_id":"i-09c01b470fb39b85a","enable_trading":false,"confirmation":"ENABLE_OWNER_HISTORY_TIMER_ONLY"}
