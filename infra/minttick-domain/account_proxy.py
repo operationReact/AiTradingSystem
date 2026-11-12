@@ -209,7 +209,7 @@ def handler(event, context):
         try:
             rename = json.loads(body)
             name = rename.get("name") if type(rename) is dict else None
-            normalized = re.sub(r"\\s+", " ", name.strip()) if isinstance(name, str) else ""
+            normalized = re.sub(r"\s+", " ", name.strip()) if isinstance(name, str) else ""
             valid = (type(rename) is dict and set(rename) == {"name"}
                      and 1 <= len(normalized) <= 80
                      and not any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized))
