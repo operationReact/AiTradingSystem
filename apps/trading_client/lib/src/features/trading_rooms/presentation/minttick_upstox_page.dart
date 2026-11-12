@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../data/authenticated_api_client.dart';
+
 import '../data/customer_upstox_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_upstox_symbol.dart';
@@ -24,6 +26,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
   CustomerUpstoxStatus? _status;
   bool _loading = false;
   bool _awaitingReturn = false;
+  bool _ownerLoginAvailable = false;
   String? _error;
   String? _section;
   Object? _data;
@@ -55,8 +58,20 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     setState(() { _loading = true; _error = null; });
     try {
       final status = await widget.repository.status();
+      bool ownerLoginAvailable = false;
+      if (status.available && !status.connected) {
+        try {
+          // This endpoint returns true only for the exact Cognito-bound owner.
+          // Never fetch broker PIN, TOTP seed or any developer credentials.
+          ownerLoginAvailable =
+              await widget.repository.configuredLoginAvailable();
+        } catch (_) {
+          // Older backend, unavailable role or transport: retain official OAuth.
+        }
+      }
       if (!mounted) return;
       setState(() {
+        _ownerLoginAvailable = ownerLoginAvailable;
         _status = status;
         _awaitingReturn = false;
         _data = null;
@@ -64,8 +79,68 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
-            'Unable to verify Upstox connection. Check your network and retry.');
+        setState(() {
+          // Fail closed on refresh errors: a cached CONNECTED label or
+          // owner-login capability is not evidence of current broker state.
+          _status = null;
+          _ownerLoginAvailable = false;
+          _section = null;
+          _data = null;
+          _error =
+              'Unable to verify Upstox connection. Check your network and retry.';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _explainOwnerLoginFailure(Object error) {
+    if (error is ApiHttpFailure) {
+      return switch (error.code) {
+        'UPSTOX_OWNER_LOGIN_COOLDOWN' =>
+          'Please refresh your Upstox connection status before trying again. '
+          'The broker login cooldown is active.',
+        'UPSTOX_OWNER_SSM_INVALID' || 'UPSTOX_OWNER_SSM_UNAVAILABLE' =>
+          'Saved Upstox login configuration could not be verified on the server. '
+          'Check the protected AWS settings; no credentials are needed here.',
+        'UPSTOX_TOTP_AUTH_REJECTED' ||
+        'UPSTOX_TOTP_CONFIGURATION_INVALID' =>
+          'Upstox rejected the saved login. Confirm the developer app supports '
+          'individual-app PIN + TOTP, and check your TOTP setup. '
+          'Official Upstox login remains available.',
+        _ => 'Automatic Upstox connection was not verified. Refresh the '
+             'connection before trying again or use official Upstox login.',
+      };
+    }
+    return 'Automatic Upstox connection was not verified. Refresh the '
+        'connection before retrying; the request may have completed.';
+  }
+
+  Future<void> _connectOwner() async {
+    if (_loading || !_ownerLoginAvailable ||
+        _status?.connected == true || _status?.available != true) {
+      return;
+    }
+    setState(() { _loading = true; _error = null; });
+    try {
+      // Owner authorization is checked again by the backend; never send a
+      // credential or a user-selected account in this request.
+      final status = await widget.repository.connectConfigured();
+      if (!mounted) return;
+      if (!status.available || !status.connected) {
+        throw const FormatException('No verified Upstox account');
+      }
+      setState(() {
+        _status = status;
+        _ownerLoginAvailable = false;
+        _section = null;
+        _data = null;
+        _awaitingReturn = false;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() => _error = _explainOwnerLoginFailure(error));
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -104,6 +179,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
           _section = null;
           _data = null;
           _awaitingReturn = false;
+          _ownerLoginAvailable = false;
         });
       }
     } catch (_) {
@@ -194,11 +270,26 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       ],
       const SizedBox(height: 16),
       if (!connected) ...[
+        if (_ownerLoginAvailable) ...[
+          SizedBox(width: double.infinity, child: FilledButton.icon(
+            key: const ValueKey('upstox-connect-saved-owner'),
+            onPressed: _loading ? null : _connectOwner,
+            icon: const Icon(Icons.verified_user_outlined),
+            label: const Text('Connect using saved Upstox login'),
+          )),
+          const SizedBox(height: 9),
+          Text('Only your verified MintTick owner account can use the '
+              'server-protected PIN + TOTP login. No codes are entered here.',
+            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+          const SizedBox(height: 12),
+        ],
         SizedBox(width: double.infinity, child: FilledButton.icon(
           key: const ValueKey('upstox-start-oauth'),
           onPressed: _loading || _status?.available != true ? null : _start,
           icon: const Icon(Icons.open_in_new_rounded),
-          label: const Text('Connect with Upstox'),
+          label: Text(_ownerLoginAvailable
+              ? 'Use official Upstox login instead'
+              : 'Connect with Upstox'),
         )),
         if (_awaitingReturn) ...[
           const SizedBox(height: 14),

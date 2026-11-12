@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_repository.dart';
+import 'package:trading_client/src/data/authenticated_api_client.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_page.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_symbol.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
@@ -9,15 +10,36 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   bool linked = false;
   bool enabled = true;
   int startCalls = 0;
+  int ownerConnectCalls = 0;
+  bool ownerConfigured = false;
+  bool ownerRejects = false;
+  bool statusFails = false;
 
   @override
-  Future<CustomerUpstoxStatus> status() async => CustomerUpstoxStatus(
+  Future<bool> configuredLoginAvailable() async => ownerConfigured;
+
+  @override
+  Future<CustomerUpstoxStatus> connectConfigured() async {
+    ownerConnectCalls++;
+    if (ownerRejects) {
+      throw const ApiHttpFailure('UPSTOX_TOTP_AUTH_REJECTED', null, 502);
+    }
+    linked = true;
+    return status();
+  }
+
+
+  @override
+  Future<CustomerUpstoxStatus> status() async {
+    if (statusFails) throw StateError('unavailable backend');
+    return CustomerUpstoxStatus(
     available: enabled,
     connected: linked,
     accountMasked: linked ? '***456' : null,
     expiresAt: linked ? DateTime.utc(2026, 11, 8, 3, 30) : null,
     orderExecutionEnabled: false,
-  );
+    );
+  }
 
   @override
   Future<Uri> startAuthorization() async {
@@ -123,6 +145,85 @@ void main() {
     expect(find.text('Available margin'), findsOneWidget);
     expect(find.text('₹1250.5'), findsOneWidget);
     expect(find.textContaining('Real-money order execution disabled'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('bound owner can connect using protected TOTP without any credential field',
+      (tester) async {
+    final repo = _FakeUpstox()..ownerConfigured = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-connect-saved-owner')),
+      findsOneWidget);
+    expect(find.text('Use official Upstox login instead'), findsOneWidget);
+    expect(find.textContaining('TOTP seed'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('upstox-connect-saved-owner')));
+    await tester.pumpAndSettle();
+    expect(repo.ownerConnectCalls, 1);
+    expect(repo.startCalls, 0);
+    expect(find.text('CONNECTED'), findsOneWidget);
+    expect(find.textContaining('Real-money order execution disabled'),
+      findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('nonowner does not see protected automatic login action',
+      (tester) async {
+    final repo = _FakeUpstox()..ownerConfigured = false;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-connect-saved-owner')),
+      findsNothing);
+    expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
+    expect(repo.ownerConnectCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('rejected owner TOTP login explains eligibility and retains OAuth',
+      (tester) async {
+    final repo = _FakeUpstox()
+      ..ownerConfigured = true
+      ..ownerRejects = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('upstox-connect-saved-owner')));
+    await tester.pumpAndSettle();
+    expect(repo.ownerConnectCalls, 1);
+    expect(find.text('NOT CONNECTED'), findsOneWidget);
+    expect(find.textContaining('individual-app PIN + TOTP'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
+    expect(repo.startCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('failed refresh removes stale connected state and owner access',
+      (tester) async {
+    final repo = _FakeUpstox()..linked = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED'), findsOneWidget);
+    repo.statusFails = true;
+    await tester.tap(find.byKey(const ValueKey('upstox-refresh-status')));
+    await tester.pumpAndSettle();
+    expect(find.text('CONNECTED'), findsNothing);
+    expect(find.textContaining('Unable to verify Upstox connection'),
+      findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-connect-saved-owner')),
+      findsNothing);
+    expect(tester.widget<FilledButton>(
+        find.byKey(const ValueKey('upstox-start-oauth'))).onPressed, isNull);
     expect(tester.takeException(), isNull);
   });
 
