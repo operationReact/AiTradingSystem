@@ -119,30 +119,15 @@ class _MintTickRoomProductionWorkspaceState
   }
 
   Future<void> _order(String side) async {
+    // Funding is an explicit virtual-wallet action, never dependent on
+    // market data. Do not show a separate, duplicate confirmation dialog.
+    if (widget.room.mode == 'PAPER' && widget.wallet == null) {
+      await widget.onFundPaper();
+      return;
+    }
     if (widget.market == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Market data is unavailable.')));
-      return;
-    }
-    if (widget.room.mode == 'PAPER' && widget.wallet == null) {
-      final fund = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Fund virtual Paper wallet?'),
-          content: const Text(
-            'This room must have a verified virtual wallet before '
-            'simulated orders can be reviewed. No real funds are used.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-            FilledButton(
-              key: const ValueKey('activate-paper-wallet'),
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Fund virtual wallet')),
-          ],
-        ),
-      );
-      if (fund == true && mounted) await widget.onFundPaper();
       return;
     }
     await showModalBottomSheet<void>(
@@ -363,17 +348,26 @@ class _MintTickRoomProductionWorkspaceState
               color: colors.primary, fontWeight: FontWeight.w700))),
         ]),
       ),
-      SizedBox(height: 57, child: Row(children: [
-        Expanded(child: _TradeAction(
-          label: 'BUY',
-          filled: true,
-          onPressed: () => _order('BUY'))),
-        const SizedBox(width: 9),
-        Expanded(child: _TradeAction(
-          label: 'SELL',
-          filled: false,
-          onPressed: () => _order('SELL'))),
-      ])),
+      if (widget.room.mode == 'PAPER' && widget.wallet == null)
+        SizedBox(height: 57, width: double.infinity,
+          child: Padding(padding: const EdgeInsets.symmetric(vertical: 6),
+            child: FilledButton.icon(
+              key: const ValueKey('activate-paper-wallet'),
+              onPressed: widget.busy ? null : widget.onFundPaper,
+              icon: const Icon(Icons.account_balance_wallet_outlined, size: 17),
+              label: const Text('Fund virtual Paper wallet'))))
+      else
+        SizedBox(height: 57, child: Row(children: [
+          Expanded(child: _TradeAction(
+            label: 'BUY',
+            filled: true,
+            onPressed: () => _order('BUY'))),
+          const SizedBox(width: 9),
+          Expanded(child: _TradeAction(
+            label: 'SELL',
+            filled: false,
+            onPressed: () => _order('SELL'))),
+        ])),
     ]);
   }
 
@@ -459,6 +453,13 @@ class _MintTickRoomProductionWorkspaceState
         secondary: 'Authoritative MintTick Mind / server',
         middle: '', right: 'AUTOMATIC'),
       if (live) ...[
+        _DataLine(
+          primary: 'Broker session',
+          secondary: read?.selectedBroker == null
+            ? 'No assigned broker account'
+            : read!.selectedBroker == 'UPSTOX' ? 'Upstox' : 'Angel One',
+          middle: '',
+          right: read?.brokerConnected == true ? 'CONNECTED' : 'OFFLINE'),
         Padding(padding: const EdgeInsets.symmetric(vertical: 10),
           child: Wrap(spacing: 7, runSpacing: 6, children: [
             for (final broker in const [
