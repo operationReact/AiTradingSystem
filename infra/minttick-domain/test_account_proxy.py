@@ -380,6 +380,9 @@ class AccountProxyTest(unittest.TestCase):
             ("SEGMENTS_INACTIVE", "inactive trading segments"),
             ("PROFILE_REJECTED", "active account profile"),
             ("ALREADY_CONNECTED", "another MintTick user"),
+            ("INVALID_TOKEN_RESPONSE", "unexpected token response"),
+            ("TOKEN_CLIENT_FAILURE", "token-exchange client error"),
+            ("BROKER_UNAVAILABLE", "token exchange connection"),
             ("UNVERIFIED", "Refresh connection"),
         )
         for outcome,expected in cases:
