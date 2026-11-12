@@ -101,6 +101,8 @@ void main() {
         }
         expect(tester.takeException(), isNull);
 
+        await tester.ensureVisible(find.byKey(const ValueKey('angel-tab-funds')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('angel-tab-funds')));
         await tester.pumpAndSettle();
         expect(find.text('Available cash'), findsOneWidget);
@@ -108,10 +110,14 @@ void main() {
         expect(find.text('₹5,000.00'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
+        await tester.ensureVisible(find.byKey(const ValueKey('angel-tab-positions')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('angel-tab-positions')));
         await tester.pumpAndSettle();
         expect(find.text('INFY-EQ'), findsOneWidget);
 
+        await tester.ensureVisible(find.byKey(const ValueKey('angel-tab-orders')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('angel-tab-orders')));
         await tester.pumpAndSettle();
         expect(find.text('TCS-EQ'), findsOneWidget);
