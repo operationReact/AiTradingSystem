@@ -174,7 +174,7 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
 }
 
 class _RoomStat extends StatelessWidget {
-  const _RoomStat({required this.label, required this.value, super.key});
+  const _RoomStat({required this.label, required this.value});
   final String label, value;
   @override
   Widget build(BuildContext context) {
