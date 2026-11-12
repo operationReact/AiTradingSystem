@@ -1,10 +1,10 @@
 {
   "kind": "minttick-upstox-customer-oauth-activation-v1",
-  "action": "enable-readonly-oauth-ssm",
   "confirmation": "AUTHORIZE_PRIVATE_UPSTOX_OAUTH_READONLY",
-  "account": "098859530205",
-  "region": "ap-south-1",
+  "action": "enable-readonly-oauth-ssm",
   "instance_id": "i-09c01b470fb39b85a",
-  "trading_mode": "PAPER",
-  "expected_release_sha": "567db8beeefe02fd24852462c320fc1c667cc775"
+  "region": "ap-south-1",
+  "account": "098859530205",
+  "expected_release_sha": "567db8beeefe02fd24852462c320fc1c667cc775",
+  "trading_mode": "PAPER"
 }
