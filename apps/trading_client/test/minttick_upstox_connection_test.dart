@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_repository.dart';
 import 'package:trading_client/src/data/authenticated_api_client.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_page.dart';
+import 'package:trading_client/src/features/trading_rooms/presentation/minttick_broker_compact_widgets.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_upstox_symbol.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
 
@@ -301,6 +302,10 @@ void main() {
         home: MintTickUpstoxPage(repository: repo),
       ));
       await tester.pumpAndSettle();
+      expect(find.byType(MintTickBrokerHeader), findsOneWidget);
+      expect(find.byType(MintTickBrokerPortfolioHero), findsOneWidget);
+      expect(find.byType(MintTickBrokerTabs), findsOneWidget);
+      expect(find.byType(MintTickBrokerSection), findsOneWidget);
       expect(find.byKey(const ValueKey('upstox-portfolio-value')),
         findsOneWidget);
       expect(find.text('₹300.00'), findsWidgets);
