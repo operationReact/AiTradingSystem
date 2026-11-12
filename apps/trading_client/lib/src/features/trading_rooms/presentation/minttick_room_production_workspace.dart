@@ -439,7 +439,8 @@ class _MintTickRoomProductionWorkspaceState
     final type = Theme.of(context).textTheme;
     final read = widget.readiness;
     final live = widget.room.mode == 'LIVE';
-    return Column(children: [
+    return SingleChildScrollView(child: Column(
+      mainAxisSize: MainAxisSize.min, children: [
       _PageTitle('MintTick Mind', trailing: 'READ ONLY',
         onRefresh: widget.onRefresh),
       const _DataLine(primary: 'Room engine',
@@ -476,7 +477,7 @@ class _MintTickRoomProductionWorkspaceState
             onPressed: widget.onBrokers,
             child: const Text('Manage broker connection'))),
       ],
-      const Spacer(),
+      const SizedBox(height: 16),
       const _FlatNotice(
         'No manual risk configuration. Signals, sizes and limits must '
         'come from authorized server decisions; nothing is inferred here.'),
@@ -486,7 +487,7 @@ class _MintTickRoomProductionWorkspaceState
       OutlinedButton(
         onPressed: widget.onRefresh,
         child: const Text('Refresh readiness')),
-    ]);
+    ]));
   }
 
   Widget _activityPage(BuildContext context) {
