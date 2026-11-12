@@ -16,6 +16,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   String ownerRejectCode = 'UPSTOX_TOTP_AUTH_REJECTED';
   bool statusFails = false;
   String? lastAuthError;
+  Object? holdingsResponse;
 
   @override
   Future<bool> configuredLoginAvailable() async => ownerConfigured;
@@ -66,7 +67,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   };
 
   @override
-  Future<Object?> holdings() async => [
+  Future<Object?> holdings() async => holdingsResponse ?? [
     {'trading_symbol': 'SBIN', 'quantity': 2},
   ];
 
@@ -185,6 +186,86 @@ void main() {
     expect(find.text('₹1250.5'), findsOneWidget);
     expect(find.textContaining('Real-money order execution disabled'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('broker holdings show current value, invested capital and P&L '
+      'on a narrow device', (tester) async {
+    tester.view.physicalSize = const Size(320, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = _FakeUpstox()
+      ..linked = true
+      ..holdingsResponse = [
+        {
+          'trading_symbol': 'SKPSEC',
+          'quantity': 3,
+          'last_price': 120.0,
+          'average_price': 100.0,
+          'pnl': 60.0,
+        },
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Holdings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Current value'), findsOneWidget);
+    expect(find.text('Invested'), findsOneWidget);
+    expect(find.text('Total P&L'), findsOneWidget);
+    expect(find.text('₹360.00'), findsWidgets);
+    expect(find.text('₹300.00'), findsOneWidget);
+    expect(find.text('₹60.00'), findsOneWidget);
+    expect(find.textContaining('Total return: +20.00%'), findsOneWidget);
+    expect(find.text('SKPSEC'), findsOneWidget);
+    expect(find.textContaining('Qty 3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('holdings with missing last price never invent rupee value',
+      (tester) async {
+    final repo = _FakeUpstox()
+      ..linked = true
+      ..holdingsResponse = [
+        {'trading_symbol': 'SKPSEC', 'quantity': 17,
+         'average_price': 270.0},
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Holdings'));
+    await tester.pumpAndSettle();
+    expect(find.text('Current value'), findsOneWidget);
+    expect(find.text('₹4,590.00'), findsOneWidget);
+    expect(find.text('SKPSEC'), findsOneWidget);
+    expect(find.textContaining('missing totals are shown as —'), findsOneWidget);
+    expect(find.text('₹0.00'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Upstox totals use broker P&L even if price-change arithmetic '
+      'would be different', (tester) async {
+    final repo = _FakeUpstox()
+      ..linked = true
+      ..holdingsResponse = [
+        {'trading_symbol': 'SKPSEC', 'quantity': 2,
+         'average_price': 100.0, 'last_price': 90.0, 'pnl': -21.5},
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Holdings'));
+    await tester.pumpAndSettle();
+    expect(find.text('₹180.00'), findsWidgets);
+    expect(find.text('₹200.00'), findsOneWidget);
+    expect(find.text('-₹21.50'), findsOneWidget);
+    expect(find.textContaining('Total return: -10.75%'), findsOneWidget);
   });
 
   testWidgets('bound owner can connect using protected TOTP without any credential field',

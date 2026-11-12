@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../data/authenticated_api_client.dart';
 
 import '../data/customer_upstox_repository.dart';
+import '../data/customer_portfolio_models.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_upstox_symbol.dart';
 
@@ -413,10 +414,132 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     ]);
   }
 
+  /// The official Upstox holding payload contains quantity, last_price,
+  /// average_price and pnl. Do not present broker funds or paper cash as
+  /// holdings, and never replace missing source prices with a guessed zero.
+  List<Widget> _holdingSummary(
+      Object? source, TextTheme text, ColorScheme scheme) {
+    final raw = portfolioRecords(source, 'holdings');
+    final holdings = PortfolioInstrument.decode(source, broker: 'UPSTOX');
+    if (raw == null || holdings == null) {
+      return [const Text('Upstox holdings are unavailable. Refresh to retry.')];
+    }
+    if (raw.isEmpty) {
+      return [const Text('No holdings reported by Upstox.')];
+    }
+
+    final complete = holdings.length == raw.length;
+    final marketValue = complete ? portfolioHoldingValue(holdings) : null;
+    num? invested = complete ? 0 : null;
+    num? totalPnl = complete ? 0 : null;
+    for (final holding in holdings) {
+      final qty = holding.quantity;
+      final avg = holding.averagePrice;
+      final cost = qty != null && qty >= 0 && avg != null && avg >= 0
+          ? qty * avg : null;
+      if (invested != null && cost != null) {
+        invested += cost;
+      } else {
+        invested = null;
+      }
+      // Prefer Upstox's own P&L; estimate only when both prices exist.
+      final holdingPnl = holding.pnl ??
+          (cost != null && holding.marketValue != null
+              ? holding.marketValue! - cost : null);
+      if (totalPnl != null && holdingPnl != null) {
+        totalPnl += holdingPnl;
+      } else {
+        totalPnl = null;
+      }
+    }
+
+    final changePercent = invested != null && invested > 0 && totalPnl != null
+        ? totalPnl / invested * 100 : null;
+    final gainColor = totalPnl == null ? scheme.onSurface
+        : totalPnl < 0 ? scheme.error : scheme.primary;
+
+    return [
+      Text('${raw.length} holdings · Upstox broker reported',
+        style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 12),
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _holdingStat('Current value', marketValue, text, scheme),
+        const SizedBox(width: 8),
+        _holdingStat('Invested', invested, text, scheme),
+        const SizedBox(width: 8),
+        _holdingStat('Total P&L', totalPnl, text, scheme,
+            amountColor: gainColor),
+      ]),
+      if (changePercent != null) ...[
+        const SizedBox(height: 4),
+        Text('Total return: ${changePercent >= 0 ? '+' : ''}'
+            '${changePercent.toStringAsFixed(2)}%',
+          style: text.labelSmall?.copyWith(color: gainColor)),
+      ],
+      const SizedBox(height: 10),
+      Divider(color: scheme.outlineVariant),
+      for (final holding in holdings.take(50)) ...[
+        const SizedBox(height: 7),
+        Row(children: [
+          Expanded(child: Text(holding.symbol,
+            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+            overflow: TextOverflow.ellipsis, maxLines: 1)),
+          const SizedBox(width: 10),
+          Text(portfolioRupees(holding.marketValue),
+            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 3),
+        Text('Qty ${holding.quantity ?? '—'}  ·  '
+            'Last ${portfolioRupees(holding.lastPrice)}  ·  '
+            'Avg ${portfolioRupees(holding.averagePrice)}',
+          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 3),
+        if (holding.pnl != null)
+          Text('Broker P&L ${portfolioRupees(holding.pnl)}',
+            style: text.labelSmall?.copyWith(
+              color: holding.pnl! < 0 ? scheme.error : scheme.primary)),
+        const SizedBox(height: 7),
+      ],
+      if (raw.length > 50)
+        Text('Showing first 50 of ${raw.length} holdings',
+          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+      if (!complete || marketValue == null || invested == null) ...[
+        const SizedBox(height: 6),
+        Text('Some broker holding prices or quantities are unavailable; '
+            'missing totals are shown as —, not ₹0.',
+          style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+      ],
+      const SizedBox(height: 5),
+      Text('Valuation uses the last prices supplied by Upstox. '
+          'Prices may differ from its app as market data updates.',
+        style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+    ];
+  }
+
+  Widget _holdingStat(
+      String label, num? amount, TextTheme text, ColorScheme scheme,
+      {Color? amountColor}) {
+    return Expanded(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 3),
+        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+          child: Text(portfolioRupees(amount),
+            style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w800,
+                color: amountColor))),
+      ],
+    ));
+  }
+
   List<Widget> _brokerSummary(TextTheme text, ColorScheme scheme) {
     final value = _data;
     if (value == null) {
       return [const Text('No verified broker data loaded.')];
+    }
+    if (_section == 'holdings') {
+      return _holdingSummary(value, text, scheme);
     }
     if (value is List) {
       return [

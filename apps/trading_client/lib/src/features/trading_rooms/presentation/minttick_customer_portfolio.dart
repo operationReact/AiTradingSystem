@@ -575,10 +575,13 @@ class _MintTickCustomerPortfolioPageState
           Row(children: [
             _metric('Available funds', portfolioRupees(broker.cash)),
             const SizedBox(width: 9),
-            _metric('Holdings', broker.holdings?.length.toString() ?? '—'),
+            _metric('Holdings value',
+              portfolioRupees(portfolioHoldingValue(broker.holdings))),
           ]),
           const SizedBox(height: 10),
-          _row('View broker holdings', 'Read-only', Icons.inventory_2_outlined,
+          _row('View broker holdings',
+              '${broker.holdings?.length.toString() ?? '—'} assets · Read-only',
+              Icons.inventory_2_outlined,
               () => _openInstruments(false, brokerName: broker.name)),
           _row('View broker positions', 'Read-only', Icons.candlestick_chart_rounded,
               () => _openInstruments(true, brokerName: broker.name)),
@@ -775,6 +778,11 @@ class _MintTickCustomerPortfolioPageState
           MintTickEyebrow('${_name(item.broker)} · Broker reported'),
           const SizedBox(height: 10),
           Text('Market value: ${portfolioRupees(item.marketValue)}'),
+          const SizedBox(height: 7),
+          Text('Invested amount: ${portfolioRupees(
+            item.quantity != null && item.quantity! >= 0 &&
+                    item.averagePrice != null && item.averagePrice! >= 0
+                ? item.quantity! * item.averagePrice! : null)}'),
           const SizedBox(height: 9),
           Text('Quantity: ${item.quantity?.toString() ?? '—'}'),
           const SizedBox(height: 7),
