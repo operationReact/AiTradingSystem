@@ -4,7 +4,7 @@ import '../domain/trading_room_draft.dart';
 
 /// Authenticated, customer-owned Trading Room plans.
 /// No order-placement, broker authorization, or account balances are implied.
-class HttpCustomerRoomRepository implements RoomDraftPersistence {
+class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenaming {
   HttpCustomerRoomRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -27,6 +27,26 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence {
       'mode': draft.mode,
     });
     return _decode(data);
+  }
+
+  @override
+  Future<TradingRoomDraft> rename(String roomId, String name) async {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(roomId)) {
+      throw const FormatException('Invalid room identifier');
+    }
+    final normalized = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty || normalized.length > 80 ||
+        normalized.runes.any((point) => point < 32 || point == 127)) {
+      throw const FormatException('Room name must be 1–80 printable characters');
+    }
+    final stored = _decode(await api.putJson(
+      '$_path/$roomId/name',
+      body: {'name': normalized},
+    ));
+    if (stored.id != roomId || stored.name != normalized) {
+      throw const FormatException('Unverified room rename result');
+    }
+    return stored;
   }
 
   /// Read-only aggregate for compact tiles. Never treats planned LIVE capital
