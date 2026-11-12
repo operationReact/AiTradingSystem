@@ -41,7 +41,11 @@ class MarketSnapshotMigrationIT extends AbstractPostgresIT {
             WHERE trade_date = DATE '2026-11-10'
                 AND market = 'NSE_CASH'
                 AND source = 'NSE_TRADING_HOLIDAYS_2026'
-            """, Integer.class)).isEqualTo(1);
+            """, Integer.class)).as("Expected 2026-11-10 in holiday table; actual: %s",
+            jdbc.queryForList("""
+                SELECT trade_date, market, source FROM market_holiday
+                ORDER BY trade_date
+                """)).isEqualTo(1);
         assertThat(jdbc.queryForObject("""
             SELECT COUNT(*) FROM market_holiday
             WHERE trade_date = DATE '2026-11-24' AND market = 'NSE_CASH'
