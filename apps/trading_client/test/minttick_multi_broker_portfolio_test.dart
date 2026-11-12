@@ -20,6 +20,23 @@ class _Angel extends Fake implements HttpCustomerAngelOneRepository {
         expiresAt: null, orderExecutionEnabled: false);
 }
 
+class _AngelLinkedUnreadable extends _Angel {
+  @override
+  Future<CustomerAngelOneConnection> status() async =>
+      const CustomerAngelOneConnection(
+        connected: true, clientCodeMasked: '***001',
+        expiresAt: null, orderExecutionEnabled: false);
+
+  @override
+  Future<Object?> funds() async => throw StateError('broker not reachable');
+
+  @override
+  Future<Object?> holdings() async => throw StateError('broker not reachable');
+
+  @override
+  Future<Object?> positions() async => throw StateError('broker not reachable');
+}
+
 class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
   bool fundsMaintenance = false;
   Object? holdingsResponse;
@@ -48,6 +65,30 @@ class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
 }
 
 void main() {
+  testWidgets('missing Angel One data exposes Upstox verified subtotal, not total',
+      (tester) async {
+    final mode = TradingWorkspaceMode()..select('LIVE');
+    final store = TradingRoomDraftStore();
+    addTearDown(mode.dispose);
+    addTearDown(store.dispose);
+    final upstox = _Upstox()..holdingsResponse = [
+      {'trading_symbol': 'SBIN', 'quantity': 2, 'last_price': 120},
+    ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerPortfolioPage(
+        mode: mode, rooms: store, paperRepository: _Rooms(),
+        brokerRepository: _AngelLinkedUnreadable(), upstoxRepository: upstox,
+        onRooms: () {}, onBroker: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('—'), findsWidgets);
+    expect(find.textContaining('Verified subtotal ₹240.00'), findsOneWidget);
+    expect(find.textContaining('complete total unavailable'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Upstox funds maintenance cannot blank valid holdings value',
       (tester) async {
     final mode = TradingWorkspaceMode()..select('LIVE');
