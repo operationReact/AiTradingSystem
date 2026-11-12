@@ -350,7 +350,8 @@ class AccountProxyTest(unittest.TestCase):
                 result=proxy.handler(data,None)
             self.assertEqual(result["statusCode"],400,query[:40])
             self.assertIn("unexpected authorization response", result["body"])
-            self.assertNotIn(query, result["body"])
+            if query:
+                self.assertNotIn(query, result["body"])
             urlopen.assert_not_called()
 
     def test_upstox_callback_returns_constant_failure_on_backend_rejection(self):
