@@ -90,6 +90,8 @@ void main() {
       home: MintTickRoomDetailPage(room: _live, executionRepository: repo),
     ));
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('room-tab-mind')));
+    await tester.pumpAndSettle();
     final choice = find.byKey(const ValueKey('live-room-broker-upstox'));
     expect(choice, findsOneWidget);
     await tester.ensureVisible(choice);
@@ -101,8 +103,9 @@ void main() {
     expect(tester.widget<ChoiceChip>(choice).selected, isTrue);
     expect(find.textContaining('Live order execution is still locked'),
       findsNothing); // no authenticated broker token
-    expect(find.textContaining('Selected broker is not authenticated'),
-      findsOneWidget);
+    expect(find.text('OFFLINE'), findsOneWidget);
+    expect(find.text('BLOCKED'), findsOneWidget);
+    expect(repo.state.executionEnabled, isFalse);
     expect(tester.takeException(), isNull);
   });
 

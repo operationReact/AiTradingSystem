@@ -70,12 +70,14 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('compact room details navigate chart, order, positions and risk',
+
+  testWidgets('production Rooms workspace shows original MintTick brand and five tabs',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: const MintTickRoomDetailPage(
@@ -85,18 +87,30 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('room-tab-overview')), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('room-tab-chart')));
+    expect(find.byKey(const ValueKey('minttick-mark')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-tab-trade')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-tab-positions')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-tab-orders')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-tab-mind')), findsOneWidget);
+    expect(find.byKey(const ValueKey('room-tab-activity')), findsOneWidget);
+    expect(find.text('Market data unavailable.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('room-tab-positions')));
     await tester.pumpAndSettle();
-    expect(find.text('Market data is unavailable.'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('room-tab-order')));
+    expect(find.text('No open Paper positions.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('room-tab-orders')));
     await tester.pumpAndSettle();
-    expect(find.text('Fund and verify the virtual Paper wallet first.'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const ValueKey('room-tab-risk')));
+    expect(find.text('No confirmed Paper fills.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('room-tab-mind')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('room-tab-risk')));
+    expect(find.text('MintTick Mind'), findsOneWidget);
+    expect(find.text('AUTOMATIC'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('room-tab-activity')));
     await tester.pumpAndSettle();
-    expect(find.text('Illustrative daily loss'), findsOneWidget);
+    expect(find.text('Room activity'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
