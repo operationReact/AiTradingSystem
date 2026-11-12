@@ -17,7 +17,7 @@ class UpstoxGitHubProgressReaderHttpTest {
     private static final String ROOT =
             "https://api.github.com/repos/operationReact/AiTradingSystem";
     private static final String PULLS =
-            ROOT + "/pulls?state=all&sort=updated&direction=desc&per_page=40";
+            ROOT + "/pulls?state=all&sort=updated&direction=desc&per_page=12";
     private static final Instant NOW = Instant.parse("2026-11-13T00:30:00Z");
 
     @Test
