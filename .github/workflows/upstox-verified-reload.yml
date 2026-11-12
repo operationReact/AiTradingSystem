@@ -32,7 +32,7 @@ jobs:
           import pathlib,re
           src=pathlib.Path('infra/ec2-paper/reload_upstox_verified.sh').read_text()
           assert len(src)<5700
-          assert src.count("<<'PY'")==2
+          assert src.count("<<'PY'")==1
           for code in re.findall(r"<<'PY'.*?\n(.*?)\nPY",src,re.S):
               compile(code,'upstox-verified-reload', 'exec')
           for required in ('TRADING_MODE=PAPER','MINTTICK_UPSTOX_OAUTH_SSM_ENABLED=true',
