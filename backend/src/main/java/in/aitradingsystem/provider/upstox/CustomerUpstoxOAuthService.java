@@ -65,7 +65,14 @@ public class CustomerUpstoxOAuthService {
     public record StartResponse(String authorizationUrl) {}
     public record Status(boolean available, boolean connected, String broker,
                          String accountMasked, Instant expiresAt, boolean orderExecutionEnabled,
-                         String lastAuthError) {}
+                         String lastAuthError) {
+        /** Preserve existing account-status callers and owner TOTP fixtures. */
+        public Status(boolean available, boolean connected, String broker,
+                      String accountMasked, Instant expiresAt, boolean orderExecutionEnabled) {
+            this(available, connected, broker, accountMasked, expiresAt,
+                 orderExecutionEnabled, null);
+        }
+    }
     public record AccountData(String provider, Instant fetchedAt, JsonNode data) {}
 
     public StartResponse start(UUID customerId) {
