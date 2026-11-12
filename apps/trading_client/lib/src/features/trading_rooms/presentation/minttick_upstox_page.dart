@@ -79,8 +79,16 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       });
     } catch (_) {
       if (mounted) {
-        setState(() => _error =
-            'Unable to verify Upstox connection. Check your network and retry.');
+        setState(() {
+          // Fail closed on refresh errors: a cached CONNECTED label or
+          // owner-login capability is not evidence of current broker state.
+          _status = null;
+          _ownerLoginAvailable = false;
+          _section = null;
+          _data = null;
+          _error =
+              'Unable to verify Upstox connection. Check your network and retry.';
+        });
       }
     } finally {
       if (mounted) setState(() => _loading = false);
