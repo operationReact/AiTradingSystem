@@ -345,7 +345,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             children: [
               Text('Upstox connection', style: theme.textTheme.titleLarge),
               const SizedBox(height: 10),
-              Text('Account ' + (status?.accountMasked ?? '—')),
+              Text('Account ${status?.accountMasked ?? '—'}'),
               const SizedBox(height: 7),
               Text(status?.orderExecutionEnabled == true
                   ? 'Broker-authorized order execution'
@@ -354,7 +354,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
                   color: scheme.onSurfaceVariant)),
               if (status?.expiresAt != null) ...[
                 const SizedBox(height: 7),
-                Text('Session expires ' + status!.expiresAt!.toLocal().toString(),
+                Text('Session expires ${status!.expiresAt!.toLocal()}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant)),
               ],
@@ -441,7 +441,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             Text('Upstox', style: text.titleLarge?.copyWith(
               fontWeight: FontWeight.w800)),
             Text(connected
-                ? 'Account ' + (_status?.accountMasked ?? 'linked')
+                ? 'Account ${_status?.accountMasked ?? 'linked'}'
                 : 'Broker account',
               style: text.labelSmall?.copyWith(
                 color: colors.onSurfaceVariant)),
@@ -621,7 +621,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
               ('orders', 'Orders', widget.repository.orders),
             ]) ...[
               ChoiceChip(
-                key: ValueKey('upstox-tab-' + option.$1),
+                key: ValueKey('upstox-tab-${option.$1}'),
                 label: Text(option.$2),
                 selected: _section == option.$1,
                 visualDensity: VisualDensity.compact,
