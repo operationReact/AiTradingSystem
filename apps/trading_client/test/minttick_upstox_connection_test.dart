@@ -13,6 +13,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   int ownerConnectCalls = 0;
   bool ownerConfigured = false;
   bool ownerRejects = false;
+  String ownerRejectCode = 'UPSTOX_TOTP_AUTH_REJECTED';
   bool statusFails = false;
 
   @override
@@ -22,7 +23,7 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
   Future<CustomerUpstoxStatus> connectConfigured() async {
     ownerConnectCalls++;
     if (ownerRejects) {
-      throw const ApiHttpFailure('UPSTOX_TOTP_AUTH_REJECTED', null, 502);
+      throw ApiHttpFailure(ownerRejectCode, null, 502);
     }
     linked = true;
     return status();
@@ -169,6 +170,31 @@ void main() {
       findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  for (final (code, expected) in [
+    ('UPSTOX_TOTP_APP_NOT_ELIGIBLE', 'not eligible for PIN + TOTP'),
+    ('UPSTOX_TOTP_APP_KEY_INVALID', 'developer API key was rejected'),
+    ('UPSTOX_TOTP_CREDENTIALS_INVALID', 'saved PIN or TOTP'),
+    ('UPSTOX_TOTP_NOT_ENABLED', 'TOTP is not enabled'),
+    ('UPSTOX_TOTP_RATE_LIMITED', 'rate limiting saved login'),
+  ]) {
+    testWidgets('saved Upstox failure $code is actionable', (tester) async {
+      final repo = _FakeUpstox()
+        ..ownerConfigured = true
+        ..ownerRejects = true
+        ..ownerRejectCode = code;
+      await tester.pumpWidget(MaterialApp(
+        theme: buildTheme(Brightness.dark),
+        home: MintTickUpstoxPage(repository: repo),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('upstox-connect-saved-owner')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining(expected), findsOneWidget);
+      expect(find.text('NOT CONNECTED'), findsOneWidget);
+      expect(find.byKey(const ValueKey('upstox-start-oauth')), findsOneWidget);
+    });
+  }
 
   testWidgets('nonowner does not see protected automatic login action',
       (tester) async {

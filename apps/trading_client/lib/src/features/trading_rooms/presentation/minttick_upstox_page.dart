@@ -104,6 +104,21 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
         'UPSTOX_OWNER_SSM_INVALID' || 'UPSTOX_OWNER_SSM_UNAVAILABLE' =>
           'Saved Upstox login configuration could not be verified on the server. '
           'Check the protected AWS settings; no credentials are needed here.',
+        'UPSTOX_TOTP_APP_NOT_ELIGIBLE' =>
+          'This Upstox developer app is not eligible for PIN + TOTP login. '
+          'Use an eligible individual app or official Upstox login.',
+        'UPSTOX_TOTP_APP_KEY_INVALID' =>
+          'The configured Upstox developer API key was rejected. '
+          'Check the app key in secure AWS settings against Upstox Developer Apps.',
+        'UPSTOX_TOTP_CREDENTIALS_INVALID' =>
+          'Upstox rejected the saved PIN or TOTP. Verify the account PIN '
+          'and authenticator setup in the protected server configuration.',
+        'UPSTOX_TOTP_NOT_ENABLED' =>
+          'TOTP is not enabled for this Upstox account. '
+          'Enable it in Upstox before using saved login.',
+        'UPSTOX_TOTP_RATE_LIMITED' =>
+          'Upstox is rate limiting saved login. Do not retry immediately; '
+          'refresh your status before another attempt.',
         'UPSTOX_TOTP_AUTH_REJECTED' ||
         'UPSTOX_TOTP_CONFIGURATION_INVALID' =>
           'Upstox rejected the saved login. Confirm the developer app supports '
