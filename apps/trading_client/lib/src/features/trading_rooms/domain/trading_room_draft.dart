@@ -92,7 +92,7 @@ class TradingRoomDraftStore extends ChangeNotifier {
       throw StateError('Authenticated room renaming is unavailable');
     }
     final old = _drafts[index];
-    final renamed = await remote.rename(roomId, name);
+    final renamed = await (remote as RoomDraftRenaming).rename(roomId, name);
     if (renamed.id != old.id || renamed.mode != old.mode ||
         renamed.status != old.status ||
         renamed.focus != old.focus ||
