@@ -76,6 +76,60 @@ class CustomerUpstoxOAuthServiceTest {
     }
 
     @Test
+    void documentedUpstoxTokenResponseCompletesWithoutExtraProfileCall() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code"))
+            .thenReturn(mapper.readTree(
+                "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+                + "\"is_active\":true,\"access_token\":\"upstox-private-token\"}"));
+
+        service.complete(challenge, "one-use-code");
+        var status = service.status(customer);
+        assertThat(status.connected()).isTrue();
+        assertThat(status.accountMasked()).isEqualTo("***456");
+        assertThat(status.orderExecutionEnabled()).isFalse();
+        assertThat(status.lastAuthError()).isNull();
+        verify(api, never()).profile(anyString());
+        assertThat(status.toString()).doesNotContain("upstox-private-token");
+    }
+
+    @Test
+    void tokenOnlyResponseReadsNestedUpstoxProfileData() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code"))
+            .thenReturn(mapper.readTree("{\"access_token\":\"session-secret\"}"));
+        when(api.profile("session-secret")).thenReturn(mapper.readTree(
+            "{\"status\":\"success\",\"data\":{\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}}"));
+
+        service.complete(challenge, "one-use-code");
+        assertThat(service.status(customer).connected()).isTrue();
+        assertThat(service.status(customer).accountMasked()).isEqualTo("***456");
+        verify(api, times(1)).profile("session-secret");
+    }
+
+    @Test
+    void inactiveTokenProfileIsRejectedWithoutUnnecessaryProviderRequest() throws Exception {
+        UUID customer = UUID.randomUUID();
+        var service = service();
+        String challenge = state(service.start(customer).authorizationUrl());
+        when(api.exchangeCode(properties, "one-use-code")).thenReturn(mapper.readTree(
+            "{\"access_token\":\"session-secret\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":false}"));
+
+        assertThatThrownBy(() -> service.complete(challenge, "one-use-code"))
+            .isInstanceOf(UpstoxProviderException.class);
+        assertThat(service.status(customer).connected()).isFalse();
+        assertThat(service.status(customer).lastAuthError())
+            .isEqualTo("UPSTOX_PROFILE_REJECTED");
+        verify(api, never()).profile(anyString());
+    }
+
+    @Test
     void invalidStateCannotExchangeTokenAndDeclinedProfileCannotConnect() throws Exception {
         var service = service();
         UUID customer = UUID.randomUUID();
