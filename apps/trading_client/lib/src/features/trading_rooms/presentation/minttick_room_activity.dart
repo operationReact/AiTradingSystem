@@ -42,10 +42,10 @@ class _MintTickRoomActivityState extends State<MintTickRoomActivity> {
         _positions = all[1] as List<CustomerPaperPosition>;
       });
     } catch (_) {
-      if (mounted) setState(() {
+      if (mounted) { setState(() {
         _orders = const []; _positions = const [];
         _error = 'Unable to verify this room activity. Retry when connected.';
-      });
+      }); }
     } finally {
       if (mounted) { setState(() => _loading = false); }
     }
