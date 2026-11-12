@@ -30,6 +30,12 @@ abstract class RoomDraftPersistence {
   Future<TradingRoomDraft> create(TradingRoomDraft draft);
 }
 
+/// Optional authenticated display-name mutation. Existing persistence
+/// fixtures remain read-only unless they explicitly support room renaming.
+abstract class RoomDraftRenaming {
+  Future<TradingRoomDraft> rename(String roomId, String name);
+}
+
 /// Store backed by the customer API in production. The optional in-memory
 /// mode is reserved for pure widget tests and must never be used for a real
 /// customer account without an authenticated repository.
@@ -74,6 +80,33 @@ class TradingRoomDraftStore extends ChangeNotifier {
     _loaded = true;
     _lastError = null;
     notifyListeners();
+  }
+
+  /// Renames the same persisted room, preserving its stable ID and
+  /// downstream Paper/LIVE state. No optimistic change if the request fails.
+  Future<TradingRoomDraft> rename(String roomId, String name) async {
+    final index = _drafts.indexWhere((room) => room.id == roomId);
+    if (index < 0) throw StateError('Trading Room not found');
+    final remote = repository;
+    if (remote is! RoomDraftRenaming) {
+      throw StateError('Authenticated room renaming is unavailable');
+    }
+    final old = _drafts[index];
+    final renamed = await remote.rename(roomId, name);
+    if (renamed.id != old.id || renamed.mode != old.mode ||
+        renamed.status != old.status ||
+        renamed.focus != old.focus ||
+        renamed.riskPreference != old.riskPreference ||
+        renamed.paperBudget != old.paperBudget) {
+      throw const FormatException('Unexpected room rename response');
+    }
+    // Concurrent list refreshes may replace the collection during the write.
+    final current = _drafts.indexWhere((room) => room.id == roomId);
+    if (current >= 0) {
+      _drafts[current] = renamed;
+    }
+    notifyListeners();
+    return renamed;
   }
 
   /// Widget test utility only. Production MUST use create().
