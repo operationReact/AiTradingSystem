@@ -47,7 +47,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
   CustomerLiveQuote? _quote;
-  bool _busy = false, _unknown = false;
+  bool _busy = false, _unknown = false, _awaitingConfirmation = false;
   late bool _paperEnabled;
   String? _error;
   String? _pendingKey;
@@ -181,22 +181,30 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   }
 
   Future<bool> _confirm(String message, String action) async {
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Confirm order review'),
-        content: Text(message),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel')),
-          FilledButton(
-            key: const ValueKey('room-order-final-confirm'),
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(action)),
-        ],
-      ),
-    );
-    return result == true && mounted;
+    // Keep duplicate submission disabled while allowing the confirmation
+    // sheet to settle; an infinite spinner behind a dialog would prevent
+    // deterministic widget validation and wastes rendering resources.
+    setState(() => _awaitingConfirmation = true);
+    try {
+      final result = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Confirm order review'),
+          content: Text(message),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+            FilledButton(
+              key: const ValueKey('room-order-final-confirm'),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(action)),
+          ],
+        ),
+      );
+      return result == true && mounted;
+    } finally {
+      if (mounted) setState(() => _awaitingConfirmation = false);
+    }
   }
 
   Future<void> _place() async {
@@ -375,6 +383,7 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                 Expanded(child: _TicketField(
                   label: 'Product',
                   child: DropdownButtonFormField<String>(
+                    isExpanded: true,
                     initialValue: _product,
                     items: const [
                       DropdownMenuItem(value: 'DELIVERY', child: Text('Delivery')),
@@ -432,7 +441,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                   onPressed: _busy ? null : _resume,
                   child: const Text('Enable manual Paper orders')),
               ],
-              if (_busy) const LinearProgressIndicator(minHeight: 2),
+              if (_busy && !_awaitingConfirmation)
+                const LinearProgressIndicator(minHeight: 2),
               if (_error != null) Padding(padding: const EdgeInsets.only(top: 7),
                 child: Text(_error!, style: type.bodySmall?.copyWith(
                   color: colors.error))),
