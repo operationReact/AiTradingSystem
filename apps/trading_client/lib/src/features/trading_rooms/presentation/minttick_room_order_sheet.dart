@@ -7,6 +7,7 @@ import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_room_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
+import 'minttick_room_stock_picker.dart';
 
 /// The Buy/Sell bottom sheet matches the interactive MintTick HTML blueprint.
 /// PAPER submits only virtual fills. LIVE stores PRECHECK_BLOCKED intents only.
@@ -17,6 +18,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
     required this.side,
     required this.market,
     required this.onChanged,
+    this.onInstrumentSelected,
     this.initialInstrument,
     this.wallet,
     this.paper,
@@ -32,6 +34,7 @@ class MintTickRoomOrderSheet extends StatefulWidget {
   final HttpCustomerExecutionRepository? execution;
   final HttpCustomerTradeIntentRepository? intents;
   final Future<void> Function() onChanged;
+  final ValueChanged<InstrumentRecord>? onInstrumentSelected;
 
   @override
   State<MintTickRoomOrderSheet> createState() => _MintTickRoomOrderSheetState();
@@ -43,8 +46,6 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   late InstrumentRecord? _stock;
   final _qty = TextEditingController(text: '1');
   final _limit = TextEditingController();
-  final _search = TextEditingController();
-  List<InstrumentRecord> _matches = const [];
   CustomerLiveQuote? _quote;
   bool _busy = false, _unknown = false;
   late bool _paperEnabled;
@@ -58,7 +59,6 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     _stock = widget.initialInstrument;
     _paperEnabled = widget.wallet?.halted == false;
     if (_stock != null) {
-      _search.text = _stock!.tradingSymbol;
       _verifyQuote();
     }
   }
@@ -67,7 +67,6 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
   void dispose() {
     _qty.dispose();
     _limit.dispose();
-    _search.dispose();
     super.dispose();
   }
 
@@ -82,22 +81,29 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     _error = null;
   }
 
-  Future<void> _findStock() async {
-    if (_search.text.trim().length < 2 || _busy) return;
-    setState(() { _busy = true; _error = null; });
-    try {
-      final page = await widget.market.searchPage(
-          query: _search.text.trim(), page: 0);
-      if (!mounted) return;
-      setState(() => _matches = page.content.where((stock) =>
-        (stock.exchange == 'NSE' || stock.exchange == 'BSE') &&
-        const {'EQ', 'EQUITY', 'STOCK'}
-            .contains(stock.instrumentType.toUpperCase())).toList());
-    } catch (_) {
-      if (mounted) setState(() => _error = 'Unable to verify the instrument.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+  Future<void> _chooseStock() async {
+    if (_busy) return;
+    final chosen = await showModalBottomSheet<InstrumentRecord>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (_) => MintTickRoomStockPicker(
+        market: widget.market,
+        initialQuery: _stock?.tradingSymbol ?? '',
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    setState(() {
+      _stock = chosen;
+      _quote = null;
+      _limit.clear();
+      _invalidate();
+    });
+    widget.onInstrumentSelected?.call(chosen);
+    await _verifyQuote();
   }
 
   Future<void> _verifyQuote() async {
@@ -107,13 +113,15 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
     try {
       final value = await widget.market.liveQuote(stock.id);
       if (!mounted || _stock?.id != stock.id) return;
-      if (value.status != 'LIVE' || value.ltp == null ||
-          value.exchangeAt == null) {
-        throw const FormatException('Broker tick not verified');
+      if (!const {'LIVE', 'LAST_CLOSE'}.contains(value.status) ||
+          value.ltp == null || value.exchangeAt == null) {
+        throw const FormatException('Broker price not verified');
       }
       setState(() {
         _quote = value;
-        if (_limit.text.trim().isEmpty) {
+        // Auto-populate a limit from verified LIVE quotes only, never
+        // an off-hours last-recorded price.
+        if (value.status == 'LIVE' && _limit.text.trim().isEmpty) {
           _limit.text = value.ltp!.toStringAsFixed(2);
         }
       });
@@ -339,18 +347,27 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
               Row(children: [
                 Expanded(child: _TicketField(
                   label: 'Instrument',
-                  child: TextField(
+                  child: InkWell(
                     key: const ValueKey('room-ticket-stock'),
-                    controller: _search,
-                    onChanged: (_) => setState(() {
-                      _stock = null; _quote = null; _invalidate();
-                    }),
-                    onSubmitted: (_) => _findStock(),
-                    decoration: InputDecoration(
-                      hintText: 'Search stock',
-                      suffixIcon: IconButton(
-                        onPressed: _busy ? null : _findStock,
-                        icon: const Icon(Icons.search, size: 18)),
+                    onTap: _busy ? null : _chooseStock,
+                    borderRadius: BorderRadius.circular(11),
+                    child: Container(
+                      height: 48,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: colors.surfaceContainerLow,
+                        border: Border.all(color: colors.outlineVariant),
+                        borderRadius: BorderRadius.circular(11)),
+                      child: Row(children: [
+                        Expanded(child: Text(
+                          _stock?.tradingSymbol ?? 'Search & select stock',
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: type.bodySmall?.copyWith(
+                            color: _stock == null ? colors.onSurfaceVariant
+                                : colors.onSurface,
+                            fontWeight: FontWeight.w700))),
+                        Icon(Icons.search_rounded, size: 19, color: colors.primary),
+                      ]),
                     ),
                   ),
                 )),
@@ -364,31 +381,12 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                       DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
                     ],
                     onChanged: (value) {
-                      if (value != null) setState(() { _product = value; _invalidate(); });
+                      if (value != null) setState(() {
+                        _product = value; _invalidate();
+                      });
                     }),
                 )),
               ]),
-              if (_matches.isNotEmpty)
-                SizedBox(height: 100, child: ListView(
-                  children: [
-                    for (final item in _matches.take(5))
-                      ListTile(
-                        dense: true,
-                        title: Text(item.tradingSymbol),
-                        subtitle: Text(item.exchange),
-                        onTap: () {
-                          setState(() {
-                            _stock = item; _quote = null;
-                            _search.text = item.tradingSymbol;
-                            _matches = const [];
-                            _limit.clear();
-                            _invalidate();
-                          });
-                          _verifyQuote();
-                        },
-                      ),
-                  ],
-                )),
               Row(children: [
                 Expanded(child: _TicketField(
                   label: 'Quantity',
@@ -404,11 +402,13 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                     key: const ValueKey('room-ticket-limit'),
                     controller: _limit,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    onChanged: (_) => _invalidate()),
+                    onChanged: (_) => setState(_invalidate)),
                 )),
               ]),
               _TicketValue('Price source', _quote == null
-                ? 'Not verified' : '${_quote!.source ?? 'Broker'} · ${_quote!.ltp}'),
+                ? 'Unavailable' : _quote!.status == 'LIVE'
+                  ? 'LIVE · ₹${_quote!.ltp}'
+                  : 'LAST RECORDED · ₹${_quote!.ltp}'),
               const SizedBox(height: 9),
               Container(
                 decoration: BoxDecoration(
