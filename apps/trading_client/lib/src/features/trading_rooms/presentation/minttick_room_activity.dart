@@ -47,7 +47,7 @@ class _MintTickRoomActivityState extends State<MintTickRoomActivity> {
         _error = 'Unable to verify this room activity. Retry when connected.';
       });
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) { setState(() => _loading = false); }
     }
   }
 
