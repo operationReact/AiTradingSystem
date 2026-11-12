@@ -9,7 +9,6 @@ import pytest
 
 from aitrading_intelligence.research_asof_gate import evaluate_asof_features
 
-
 DECISION = dt.datetime(2026, 1, 5, 9, 20, tzinfo=dt.UTC)
 IST = dt.timezone(dt.timedelta(hours=5, minutes=30))
 
