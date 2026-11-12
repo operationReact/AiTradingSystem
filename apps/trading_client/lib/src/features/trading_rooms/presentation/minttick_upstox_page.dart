@@ -506,7 +506,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
               )),
               const SizedBox(height: 4),
               Text('Only your verified MintTick owner account can use '
-                  'the protected login. No TOTP seed is entered here.',
+                  'the protected login. No sensitive codes are entered here.',
                 style: text.labelSmall?.copyWith(
                   color: colors.onSurfaceVariant)),
             ],
