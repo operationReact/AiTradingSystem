@@ -118,8 +118,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
         }
       });
     } catch (_) {
-      if (mounted) setState(() =>
-        _error = 'Verified live quote unavailable. Order cannot be submitted.');
+      if (mounted) { setState(() =>
+        _error = 'Verified live quote unavailable. Order cannot be submitted.'); }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -151,8 +151,8 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
       setState(() => _paperEnabled = !updated.halted);
       await widget.onChanged();
     } catch (_) {
-      if (mounted) setState(() =>
-          _error = 'Paper order state could not be verified.');
+      if (mounted) { setState(() =>
+          _error = 'Paper order state could not be verified.'); }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
