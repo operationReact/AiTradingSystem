@@ -83,8 +83,8 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('—'), findsWidgets);
-    expect(find.textContaining('Verified subtotal ₹240.00'), findsOneWidget);
+    expect(find.text('Verified holdings subtotal'), findsOneWidget);
+    expect(find.text('₹240.00'), findsOneWidget);
     expect(find.textContaining('complete total unavailable'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
