@@ -381,9 +381,12 @@ class _MintTickRoomOrderSheetState extends State<MintTickRoomOrderSheet> {
                       DropdownMenuItem(value: 'INTRADAY', child: Text('Intraday')),
                     ],
                     onChanged: (value) {
-                      if (value != null) setState(() {
-                        _product = value; _invalidate();
-                      });
+                      if (value != null) {
+                        setState(() {
+                          _product = value;
+                          _invalidate();
+                        });
+                      }
                     }),
                 )),
               ]),
