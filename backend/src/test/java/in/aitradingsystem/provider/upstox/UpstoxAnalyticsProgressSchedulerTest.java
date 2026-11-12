@@ -28,7 +28,7 @@ class UpstoxAnalyticsProgressSchedulerTest {
                 progress, github, source, clock, true, false);
         scheduler.pollGithub();
         verify(progress).finish(eq("GITHUB_DEVELOPMENT"), eq(lease), eq("BLOCKED"),
-                isNull(), isNull(), isNull(), eq("GITHUB_API_UNAVAILABLE"), anyMap(),
+                isNull(), isNull(), isNull(), eq("GITHUB_READ_UNAVAILABLE"), anyMap(),
                 eq(clock.instant()));
         verifyNoInteractions(source);
     }
