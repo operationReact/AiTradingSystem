@@ -346,7 +346,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
             const SizedBox(height: 12),
             status(task),
             const SizedBox(height: 11),
-            detail('Reason', task?.reasonCode ?? '—'),
+            detail('Reason', reasonDescription(task?.reasonCode)),
+            if (task?.reasonCode != null)
+              detail('Code', task!.reasonCode!),
             detail('Last attempt', when(task?.lastAttemptAt)),
             detail('Last success', when(task?.lastSuccessAt)),
             detail('Checks', str(task?.checked)),
@@ -428,6 +430,30 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       border: Border.all(color: MintTickPalette.darkBorder)),
     child: Text(content, style: const TextStyle(
       fontSize: 11, color: MintTickPalette.mutedSilver, height: 1.45)));
+
+  static String reasonDescription(String? code) => switch (code) {
+    'GITHUB_DNS_UNAVAILABLE' => 'Backend DNS cannot resolve GitHub',
+    'GITHUB_CONNECT_FAILURE' => 'Backend cannot connect to GitHub',
+    'GITHUB_NETWORK_UNAVAILABLE' => 'Backend network route unavailable',
+    'GITHUB_TIMEOUT' => 'GitHub request timed out',
+    'GITHUB_TLS_FAILURE' => 'HTTPS TLS verification failed',
+    'GITHUB_RATE_LIMITED' => 'GitHub API request quota reached',
+    'GITHUB_AUTH_REJECTED' => 'GitHub rejected the configured credential',
+    'GITHUB_ACCESS_DENIED' => 'GitHub access forbidden',
+    'GITHUB_ENDPOINT_NOT_FOUND' => 'GitHub API route not found',
+    'GITHUB_INVALID_DATA' => 'GitHub response failed validation',
+    'GITHUB_SERVER_UNAVAILABLE' => 'GitHub service error',
+    'GITHUB_HTTP_FAILURE' => 'GitHub returned an unexpected HTTP status',
+    'GITHUB_READ_UNAVAILABLE' || 'GITHUB_API_UNAVAILABLE' =>
+      'GitHub request failed; detailed diagnostics unavailable',
+    'OPERATOR_OPT_IN_REQUIRED' => 'Read-only source verification is switched off',
+    'NO_VERIFIED_COVERAGE' => 'No verified instrument coverage yet',
+    'NO_VERIFIED_RIGHTS_RECEIPT' => 'Data usage rights not verified',
+    'NO_VERIFIED_MIND_FEED' => 'No verified MintTick Mind feature feed yet',
+    'NO_EXECUTION_EVIDENCE' => 'Paper readiness not yet verified',
+    null => 'No failure reported',
+    _ => code,
+  };
 
   static String str(Object? value) => value == null ? '—' : value.toString();
   static String when(DateTime? at) {
