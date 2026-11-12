@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:trading_client/src/data/authenticated_api_client.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_angel_one_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_room_repository.dart';
@@ -20,6 +21,9 @@ class _Angel extends Fake implements HttpCustomerAngelOneRepository {
 }
 
 class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
+  bool fundsMaintenance = false;
+  Object? holdingsResponse;
+
   @override
   Future<CustomerUpstoxStatus> status() async =>
       const CustomerUpstoxStatus(
@@ -27,12 +31,15 @@ class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
         expiresAt: null, orderExecutionEnabled: false);
 
   @override
-  Future<Object?> funds() async => {
-    'equity': {'available_margin': 1250.5},
-  };
+  Future<Object?> funds() async {
+    if (fundsMaintenance) {
+      throw const ApiHttpFailure('UPSTOX_FUNDS_MAINTENANCE', null, 503);
+    }
+    return {'equity': {'available_margin': 1250.5}};
+  }
 
   @override
-  Future<Object?> holdings() async => [
+  Future<Object?> holdings() async => holdingsResponse ?? [
     {'trading_symbol': 'SBIN', 'quantity': 2},
   ];
 
@@ -41,6 +48,35 @@ class _Upstox extends Fake implements HttpCustomerUpstoxRepository {
 }
 
 void main() {
+  testWidgets('Upstox funds maintenance cannot blank valid holdings value',
+      (tester) async {
+    final mode = TradingWorkspaceMode()..select('LIVE');
+    final store = TradingRoomDraftStore();
+    addTearDown(mode.dispose);
+    addTearDown(store.dispose);
+    final upstox = _Upstox()
+      ..fundsMaintenance = true
+      ..holdingsResponse = [
+        {'trading_symbol': 'SBIN', 'quantity': 2, 'last_price': 120},
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerPortfolioPage(
+        mode: mode, rooms: store, paperRepository: _Rooms(),
+        brokerRepository: _Angel(), upstoxRepository: upstox,
+        onRooms: () {}, onBroker: () {},
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('₹240.00'), findsOneWidget);
+    expect(find.textContaining('Valuation incomplete'), findsNothing);
+    await tester.tap(find.text('Broker accounts').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('12:00 AM'), findsWidgets);
+    expect(find.textContaining('Missing account data is not a zero'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('broker hub lists Upstox and Angel One on narrow phones',
       (tester) async {
     tester.view.physicalSize = const Size(320, 740);
