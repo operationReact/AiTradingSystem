@@ -60,6 +60,7 @@ class _MintTickRoomProductionWorkspaceState
     extends State<MintTickRoomProductionWorkspace> {
   String _tab = 'Trade';
   InstrumentRecord? _selected;
+  int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
   List<CustomerPaperPosition> _positions = const [];
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
@@ -148,6 +149,14 @@ class _MintTickRoomProductionWorkspaceState
         execution: widget.execution,
         intents: widget.intents,
         onChanged: _refresh,
+        onInstrumentSelected: (item) {
+          if (mounted) {
+            setState(() {
+              _selected = item;
+              ++_chartVersion;
+            });
+          }
+        },
       ),
     );
   }
@@ -318,7 +327,9 @@ class _MintTickRoomProductionWorkspaceState
     return Column(children: [
       if (widget.market != null)
         Expanded(child: MintTickRoomCandlestickDesk(
+          key: ValueKey('room-chart-$_chartVersion'),
           market: widget.market!,
+          initialInstrument: _selected,
           onInstrument: (selected) => _selected = selected))
       else
         Expanded(child: Center(child: Text('Market data unavailable.',
