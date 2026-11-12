@@ -330,151 +330,367 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     }
   }
 
+  void _showAccountDetails(BuildContext context) {
+    final status = _status;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final scheme = theme.colorScheme;
+        return SafeArea(child: Padding(
+          padding: const EdgeInsets.fromLTRB(22, 6, 22, 24),
+          child: Column(mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Upstox connection', style: theme.textTheme.titleLarge),
+              const SizedBox(height: 10),
+              Text('Account ' + (status?.accountMasked ?? '—')),
+              const SizedBox(height: 7),
+              Text(status?.orderExecutionEnabled == true
+                  ? 'Broker-authorized order execution'
+                  : 'Read-only link · Real-money order execution disabled',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant)),
+              if (status?.expiresAt != null) ...[
+                const SizedBox(height: 7),
+                Text('Session expires ' + status!.expiresAt!.toLocal().toString(),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant)),
+              ],
+              const SizedBox(height: 14),
+              Text('Paper and Live portfolios are separate. Broker access '
+                   'does not automatically authorize orders.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant)),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                key: const ValueKey('upstox-disconnect'),
+                icon: const Icon(Icons.link_off_rounded),
+                label: const Text('Disconnect Upstox'),
+                onPressed: _loading ? null : () {
+                  Navigator.pop(context);
+                  _disconnect();
+                },
+              ),
+            ],
+          ),
+        ));
+      },
+    );
+  }
+
+  Widget _metric(
+      String label, num? amount, TextTheme text, ColorScheme scheme,
+      {Color? valueColor}) {
+    return Expanded(child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: text.labelSmall?.copyWith(
+          color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+        FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+          child: Text(portfolioRupees(amount),
+            style: text.titleMedium?.copyWith(
+              color: valueColor, fontWeight: FontWeight.w800))),
+      ],
+    ));
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final connected = _status?.connected == true;
+    final holdings = PortfolioInstrument.decode(
+        _brokerData['holdings'], broker: 'UPSTOX');
+    final marketValue = portfolioHoldingValue(holdings);
+    num? invested = holdings == null ? null : 0;
+    num? pnl = holdings == null ? null : 0;
+    for (final holding in holdings ?? const <PortfolioInstrument>[]) {
+      final quantity = holding.quantity;
+      final average = holding.averagePrice;
+      final cost = quantity != null && quantity >= 0 &&
+          average != null && average >= 0 ? quantity * average : null;
+      if (invested != null && cost != null) {
+        invested += cost;
+      } else {
+        invested = null;
+      }
+      final linePnl = holding.pnl ?? (cost != null &&
+          holding.marketValue != null ? holding.marketValue! - cost : null);
+      if (pnl != null && linePnl != null) {
+        pnl += linePnl;
+      } else {
+        pnl = null;
+      }
+    }
+    final percent = invested != null && invested > 0 && pnl != null
+        ? pnl / invested * 100 : null;
+    final pnlColor = pnl == null ? colors.onSurface
+        : pnl < 0 ? colors.error : colors.primary;
+
     return MintTickCustomerScaffold(showHeader: false, children: [
-      const SizedBox(height: 18),
-      const MintTickEyebrow('Connected brokers · Live'),
       const SizedBox(height: 8),
       Row(children: [
-        const UpstoxSymbol(size: 46),
-        const SizedBox(width: 12),
-        Expanded(child: Text('Upstox', style: text.headlineSmall
-            ?.copyWith(fontWeight: FontWeight.w800))),
+        const UpstoxSymbol(size: 38),
+        const SizedBox(width: 10),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Upstox', style: text.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800)),
+            Text(connected
+                ? 'Account ' + (_status?.accountMasked ?? 'linked')
+                : 'Broker account',
+              style: text.labelSmall?.copyWith(
+                color: colors.onSurfaceVariant)),
+          ],
+        )),
+        MintTickStatusLabel(connected ? 'CONNECTED' : 'NOT CONNECTED',
+          warning: !connected),
+        IconButton(
+          key: const ValueKey('upstox-refresh-status'),
+          tooltip: 'Refresh broker data',
+          onPressed: _loading ? null : _refresh,
+          visualDensity: VisualDensity.compact,
+          icon: const Icon(Icons.refresh_rounded, size: 21),
+        ),
+        if (connected) PopupMenuButton<String>(
+          key: const ValueKey('upstox-account-menu'),
+          tooltip: 'Broker settings',
+          icon: const Icon(Icons.more_vert_rounded, size: 21),
+          onSelected: (option) {
+            if (option == 'ip') {
+              _load('IP status', widget.repository.registeredIps);
+            } else if (option == 'details') {
+              _showAccountDetails(context);
+            } else if (option == 'disconnect') {
+              _showAccountDetails(context);
+            }
+          },
+          itemBuilder: (context) => const [
+            PopupMenuItem(value: 'ip', child: Text('Registered IP')),
+            PopupMenuItem(value: 'details', child: Text('Account details')),
+            PopupMenuItem(value: 'disconnect', child: Text('Disconnect…')),
+          ],
+        ),
       ]),
-      const SizedBox(height: 7),
-      Text('Secure login through Upstox. No brokerage PIN, password or OTP '
-          'is entered into MintTick.',
-        style: text.bodyMedium?.copyWith(
-          color: colors.onSurfaceVariant, height: 1.5)),
-      const SizedBox(height: 18),
-      MintTickSurface(accent: connected, child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            const UpstoxSymbol(size: 36),
-            const SizedBox(width: 11),
-            Expanded(child: Text('Upstox Account',
-              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-            MintTickStatusLabel(connected ? 'CONNECTED' : 'NOT CONNECTED'),
-          ]),
-          const SizedBox(height: 11),
-          if (connected) ...[
-            Text('Verified broker account: ${_status?.accountMasked ?? 'connected'}'),
+      const SizedBox(height: 9),
+      if (_loading) const LinearProgressIndicator(minHeight: 2),
+      if (_error != null) ...[
+        const SizedBox(height: 9),
+        MintTickInfoText(_error!, icon: Icons.error_outline_rounded),
+      ],
+      if (!connected) ...[
+        const SizedBox(height: 10),
+        MintTickSurface(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Connect Upstox', style: text.titleMedium?.copyWith(
+              fontWeight: FontWeight.w800)),
             const SizedBox(height: 5),
-            Text('Read-only link · Real-money order execution disabled',
-              style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-            if (_status?.expiresAt != null) ...[
-              const SizedBox(height: 6),
-              Text('Session expires ${_status!.expiresAt!.toLocal()}',
-                style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-            ],
-          ] else
             Text(_status?.available == false
                 ? 'MintTick needs its Upstox developer app configured '
                   'before you can connect.'
-                : 'Sign in on the official Upstox page to authorize '
-                  'access to this brokerage account.',
-              style: text.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
-        ],
-      )),
-      if (_loading) ...[
-        const SizedBox(height: 15),
-        const LinearProgressIndicator(),
-      ],
-      if (_error != null) ...[
-        const SizedBox(height: 12),
-        MintTickInfoText(_error!, icon: Icons.error_outline_rounded),
-      ],
-      const SizedBox(height: 16),
-      if (!connected) ...[
-        if (_ownerLoginAvailable) ...[
-          SizedBox(width: double.infinity, child: FilledButton.icon(
-            key: const ValueKey('upstox-connect-saved-owner'),
-            onPressed: _loading ? null : _connectOwner,
-            icon: const Icon(Icons.verified_user_outlined),
-            label: const Text('Connect using saved Upstox login'),
-          )),
-          const SizedBox(height: 9),
-          Text('Only your verified MintTick owner account can use the '
-              'server-protected PIN + TOTP login. No codes are entered here.',
-            style: text.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
-          const SizedBox(height: 12),
-        ],
-        SizedBox(width: double.infinity, child: FilledButton.icon(
-          key: const ValueKey('upstox-start-oauth'),
-          onPressed: _loading || _status?.available != true ? null : _start,
-          icon: const Icon(Icons.open_in_new_rounded),
-          label: Text(_ownerLoginAvailable
-              ? 'Use official Upstox login instead'
-              : 'Connect with Upstox'),
+                : 'Authorize your account using the official Upstox login.',
+              style: text.bodySmall?.copyWith(
+                color: colors.onSurfaceVariant)),
+            if (_ownerLoginAvailable) ...[
+              const SizedBox(height: 12),
+              SizedBox(width: double.infinity, child: FilledButton.icon(
+                key: const ValueKey('upstox-connect-saved-owner'),
+                onPressed: _loading ? null : _connectOwner,
+                icon: const Icon(Icons.verified_user_outlined),
+                label: const Text('Connect using saved Upstox login'),
+              )),
+              const SizedBox(height: 4),
+              Text('Only your verified MintTick owner account can use '
+                  'the protected login. No TOTP seed is entered here.',
+                style: text.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant)),
+            ],
+            const SizedBox(height: 9),
+            SizedBox(width: double.infinity, child: FilledButton.icon(
+              key: const ValueKey('upstox-start-oauth'),
+              onPressed: _loading || _status?.available != true
+                  ? null : _start,
+              icon: const Icon(Icons.open_in_new_rounded, size: 18),
+              label: Text(_ownerLoginAvailable
+                  ? 'Use official Upstox login instead'
+                  : 'Connect with Upstox'),
+            )),
+            if (_awaitingReturn) ...[
+              const SizedBox(height: 10),
+              const MintTickInfoText(
+                'Complete authentication on Upstox and return to MintTick. '
+                'The connection refreshes when you return. '
+                'Your credentials stay on Upstox.',
+                icon: Icons.verified_user_outlined,
+              ),
+            ],
+          ],
         )),
-        if (_awaitingReturn) ...[
-          const SizedBox(height: 14),
-          const MintTickInfoText(
-            'Complete authentication on Upstox and return to MintTick. '
-            'The connection refreshes when you return. '
-            'Your credentials stay on Upstox.',
-            icon: Icons.verified_user_outlined,
+      ] else ...[
+        const SizedBox(height: 4),
+        MintTickSurface(accent: true,
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(children: [
+                Expanded(child: Text('Current value',
+                  style: text.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant))),
+                Text('LIVE · BROKER REPORTED',
+                  style: text.labelSmall?.copyWith(
+                    color: colors.primary, fontWeight: FontWeight.w700)),
+              ]),
+              const SizedBox(height: 5),
+              Text(portfolioRupees(marketValue),
+                key: const ValueKey('upstox-portfolio-value'),
+                style: text.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.w900)),
+              const SizedBox(height: 2),
+              Text(holdings == null
+                  ? (_reading.contains('holdings')
+                      ? 'Loading verified holdings…'
+                      : 'Holdings data unavailable — not ₹0')
+                  : holdings.isEmpty
+                      ? 'No holdings reported by Upstox'
+                      : '${holdings.length} broker holdings',
+                style: text.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant)),
+              const SizedBox(height: 10),
+              Divider(height: 1, color: colors.outlineVariant),
+              const SizedBox(height: 10),
+              Row(children: [
+                _metric('Invested', invested, text, colors),
+                const SizedBox(width: 12),
+                _metric('Total P&L', pnl, text, colors,
+                    valueColor: pnlColor),
+              ]),
+              if (percent != null) ...[
+                const SizedBox(height: 5),
+                Text('Total return: ${percent >= 0 ? '+' : ''}${percent.toStringAsFixed(2)}%',
+                  style: text.labelSmall?.copyWith(color: pnlColor)),
+              ],
+              const SizedBox(height: 7),
+              Text('Read-only link · Real-money order execution disabled',
+                style: text.labelSmall?.copyWith(
+                  color: colors.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        if (_readErrors['funds'] != null) ...[
+          const SizedBox(height: 10),
+          Container(
+            key: const ValueKey('upstox-funds-alert'),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              color: colors.secondaryContainer.withValues(alpha: 0.25),
+              border: Border.all(color: colors.outlineVariant),
+            ),
+            child: Row(children: [
+              Icon(Icons.info_outline_rounded, size: 18,
+                color: colors.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Expanded(child: Text(_readErrors['funds']!,
+                style: text.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant))),
+              IconButton(
+                key: const ValueKey('upstox-retry-funds'),
+                tooltip: 'Retry funds',
+                visualDensity: VisualDensity.compact,
+                onPressed: _reading.contains('funds')
+                    ? null : () => _readBroker('funds', widget.repository.funds),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+              ),
+            ]),
           ),
         ],
-      ] else ...[
-        const MintTickSectionHeading('Live broker information'),
-        const SizedBox(height: 9),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          OutlinedButton(onPressed: _loading ? null
-              : () => _load('funds', widget.repository.funds),
-            child: const Text('Funds')),
-          OutlinedButton(onPressed: _loading ? null
-              : () => _load('holdings', widget.repository.holdings),
-            child: const Text('Holdings')),
-          OutlinedButton(onPressed: _loading ? null
-              : () => _load('positions', widget.repository.positions),
-            child: const Text('Positions')),
-          OutlinedButton(onPressed: _loading ? null
-              : () => _load('orders', widget.repository.orders),
-            child: const Text('Orders')),
-          OutlinedButton(onPressed: _loading ? null
-              : () => _load('IP status', widget.repository.registeredIps),
-            child: const Text('IP status')),
-        ]),
-        if (_section != null) ...[
-          const SizedBox(height: 12),
-          MintTickSurface(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('${_section![0].toUpperCase()}${_section!.substring(1)}',
-                style: text.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-              const SizedBox(height: 9),
-              ..._brokerSummary(text, colors),
+        const SizedBox(height: 12),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(children: [
+            for (final option in [
+              ('holdings', 'Holdings', widget.repository.holdings),
+              ('positions', 'Positions', widget.repository.positions),
+              ('funds', 'Funds', widget.repository.funds),
+              ('orders', 'Orders', widget.repository.orders),
+            ]) ...[
+              ChoiceChip(
+                key: ValueKey('upstox-tab-' + option.$1),
+                label: Text(option.$2),
+                selected: _section == option.$1,
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                selectedColor: colors.primaryContainer,
+                side: BorderSide(color: _section == option.$1
+                    ? colors.primary : colors.outlineVariant),
+                onSelected: _loading ? null :
+                    (_) => _load(option.$1, option.$3),
+              ),
+              const SizedBox(width: 7),
             ],
-          )),
-        ],
-        const SizedBox(height: 11),
-        OutlinedButton.icon(
-          key: const ValueKey('upstox-disconnect'),
-          onPressed: _loading ? null : _disconnect,
-          icon: const Icon(Icons.link_off_rounded),
-          label: const Text('Disconnect Upstox'),
+          ]),
         ),
+        const SizedBox(height: 9),
+        if (_section != null)
+          MintTickSurface(
+            padding: const EdgeInsets.all(12),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Expanded(child: Text(
+                    _section![0].toUpperCase() + _section!.substring(1),
+                    style: text.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800))),
+                  if (_reading.contains(_section))
+                    const SizedBox(height: 15, width: 15,
+                      child: CircularProgressIndicator(strokeWidth: 2)),
+                  IconButton(
+                    key: const ValueKey('upstox-retry-section'),
+                    tooltip: 'Reload section',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: _reading.contains(_section) ? null
+                        : () => _reloadSelected(),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                  ),
+                ]),
+                const SizedBox(height: 5),
+                if (_readErrors[_section] != null)
+                  Text(_readErrors[_section]!,
+                    style: text.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant))
+                else if (_reading.contains(_section) &&
+                    !_brokerData.containsKey(_section))
+                  Text('Loading broker data…',
+                    style: text.bodySmall?.copyWith(
+                      color: colors.onSurfaceVariant))
+                else
+                  ..._brokerSummary(text, colors),
+              ],
+            ),
+          ),
       ],
-      const SizedBox(height: 13),
-      OutlinedButton.icon(
-        key: const ValueKey('upstox-refresh-status'),
-        onPressed: _loading ? null : _refresh,
-        icon: const Icon(Icons.refresh_rounded),
-        label: const Text('Refresh connection'),
-      ),
-      const SizedBox(height: 16),
-      const MintTickInfoText(
-        'Paper and Live portfolios are separate. Connecting a broker '
-        'enables account reads, not automatic orders. Live trading '
-        'requires additional consent, broker eligibility, registered '
-        'IP verification and server-enforced risk controls.',
-        icon: Icons.shield_outlined,
-      ),
     ]);
+  }
+
+  void _reloadSelected() {
+    switch (_section) {
+      case 'holdings':
+        _readBroker('holdings', widget.repository.holdings);
+      case 'positions':
+        _readBroker('positions', widget.repository.positions);
+      case 'funds':
+        _readBroker('funds', widget.repository.funds);
+      case 'orders':
+        _readBroker('orders', widget.repository.orders);
+      case 'IP status':
+        _readBroker('IP status', widget.repository.registeredIps);
+    }
   }
 
   /// The official Upstox holding payload contains quantity, last_price,
