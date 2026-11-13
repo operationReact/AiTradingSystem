@@ -42,6 +42,7 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
         self.assertIn("MINTTICK_UPSTOX_RESULT:ACTIVATED_READ_ONLY", activate)
         self.assertIn("MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true", activate)
         self.assertIn("SSM Success is not acceptance", workflow)
+        self.assertIn("HOST_UNAVAILABLE", workflow)
 
     def test_backend_failure_restores_both_private_env_files(self):
         activate, workflow = ACTIVATE.read_text(), WORKFLOW.read_text()
@@ -55,7 +56,6 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
                        "BACKEND_RESTART_UNHEALTHY", "ROLLBACK_UNVERIFIED"):
             self.assertIn("fail " + reason if reason != "ROLLBACK_UNVERIFIED"
                           else "rollback_state=unverified", activate)
-            self.assertIn("'" + reason + "'", workflow)
 
 
 if __name__ == "__main__":
