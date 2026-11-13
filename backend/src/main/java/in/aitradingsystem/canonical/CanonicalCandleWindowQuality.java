@@ -34,7 +34,8 @@ public final class CanonicalCandleWindowQuality {
         var previous = first;
         int eligible = 0;
         int missing = 0;
-        for (var candle : candles) {
+        for (int index = 0; index < candles.size(); index++) {
+            var candle = candles.get(index);
             Objects.requireNonNull(candle);
             if (!samePartition(first, candle))
                 return result(Status.MIXED_PARTITION, candles, eligible, missing);
@@ -42,7 +43,7 @@ public final class CanonicalCandleWindowQuality {
                 return result(Status.RIGHTS_DENIED, candles, eligible, missing);
             if (!candle.eligible(use, asOf))
                 return result(Status.NOT_AVAILABLE, candles, eligible, missing);
-            if (candle != first) {
+            if (index > 0) {
                 long delta = Duration.between(previous.exchangeTimestamp(), candle.exchangeTimestamp()).toNanos();
                 if (delta == 0) return result(Status.DUPLICATE, candles, eligible, missing);
                 if (delta < 0) return result(Status.OUT_OF_ORDER, candles, eligible, missing);
