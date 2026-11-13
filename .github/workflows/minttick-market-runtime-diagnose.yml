@@ -32,11 +32,13 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/probe_market_runtime.py').read_text()
-          assert len(s) < 12500
+          assert len(s) < 14000
           assert 'market_overview_snapshot' in s
           assert 'market_last_tick' in s
           assert 'market_candle' in s
           assert 'OWNER_HISTORY_BACKFILL_ENABLED' in s
+          assert "def exchange_coverage(postgres):" in s
+          assert "def bse_source_access():" in s
           assert s.count('def history_coverage(postgres):') == 1
           assert 'MARKET_CONTAINER_IMDS:' in s
           assert 'MARKET_NETWORK_HEADERS:' in s
@@ -146,6 +148,11 @@ jobs:
             'MARKET_HISTORY_COLLECTOR':{'ENABLED','DISABLED','UNKNOWN'},
             'MARKET_NETWORK_HEADERS':{'CONFIGURED','MISSING','UNKNOWN'},
             'MARKET_PROVIDER_MODE':{'ANGEL_ONE','ANGEL_ONE_LAMBDA','OTHER','UNKNOWN'},
+            'MARKET_NSE_EQ':{'UNAVAILABLE'},
+            'MARKET_BSE_EQ':{'UNAVAILABLE'},
+            'MARKET_BSE_CM_RAW':{'UNAVAILABLE'},
+            'MARKET_BSE_REFERENCE_TABLE':{'PRESENT','MISSING','UNAVAILABLE'},
+            'MARKET_BSE_SOURCE_HTTP':{'REACHABLE','FORBIDDEN','UNAVAILABLE'},
             'MARKET_LAST_TICKS':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
             'MARKET_OVERVIEW_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
             'MARKET_DETAIL_CACHE':{'EMPTY','NONEMPTY','MISSING_OR_UNAVAILABLE','UNAVAILABLE'},
@@ -175,7 +182,8 @@ jobs:
               elif key in ('MARKET_EQUITY_CATALOGUE_COUNT','MARKET_EQUITY_SAVED_TICK_COUNT',
                            'MARKET_EQUITY_SAVED_DETAIL_COUNT',
                            'MARKET_HISTORY_COVERED_64','MARKET_HISTORY_INCOMPLETE',
-                           'MARKET_HISTORY_EMPTY') and re.fullmatch(r'[0-9]{1,6}', value):
+                           'MARKET_HISTORY_EMPTY','MARKET_NSE_EQ','MARKET_BSE_EQ',
+                           'MARKET_BSE_CM_RAW') and re.fullmatch(r'[0-9]{1,6}', value):
                   hits[key]=value
           for key in sorted(hits): print(key+': '+hits[key])
           status=data.get('Status')

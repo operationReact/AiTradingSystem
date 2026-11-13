@@ -134,6 +134,49 @@ def equity_coverage(postgres):
     return tuple(fields)
 
 
+
+def exchange_coverage(postgres):
+    """Count active cash listings by exchange and raw BSE_CM; no symbols or prices."""
+    unavailable = ("UNAVAILABLE",) * 4
+    if postgres is None:
+        return unavailable
+    sql = """
+    SELECT COUNT(*) FILTER (WHERE i.exchange_segment='NSE_CM'
+            AND i.trading_symbol LIKE '%-EQ'),
+           COUNT(*) FILTER (WHERE i.exchange_segment='BSE_CM'
+            AND (upper(coalesce(i.instrument_type,''))='EQ'
+              OR i.trading_symbol LIKE '%-EQ')),
+           COUNT(*) FILTER (WHERE i.exchange_segment='BSE_CM'),
+           CASE WHEN to_regclass('public.bse_security_master_active') IS NULL
+             THEN 'MISSING' ELSE 'PRESENT' END
+      FROM instrument_master i JOIN instrument_catalogue_state s
+        ON s.active_version=i.catalogue_version AND s.singleton_id=1
+     WHERE i.active AND i.exchange IN ('NSE','BSE')
+    """
+    p = run(["docker","exec",postgres,"psql","-U","aitrading","-d",
+             "aitrading","-tA","-F","|","-c",sql], 12)
+    if p is None or p.returncode:
+        return unavailable
+    v = p.stdout.strip().split("|")
+    if len(v)!=4 or v[3] not in ("PRESENT","MISSING") or any(
+            not re.fullmatch(r"[0-9]{1,6}", x) for x in v[:3]):
+        return unavailable
+    return tuple(v)
+
+
+def bse_source_access():
+    """Probe ONLY the pinned public BSE source status; do not read its response."""
+    import urllib.error
+    import urllib.request
+    url = "https://www.bseindia.com/downloads/Help/file/scrip.zip"
+    try:
+        with urllib.request.urlopen(url, timeout=8) as response:
+            return "REACHABLE" if response.status == 200 else "UNAVAILABLE"
+    except urllib.error.HTTPError as error:
+        return "FORBIDDEN" if error.code in (401, 403) else "UNAVAILABLE"
+    except (OSError, ValueError):
+        return "UNAVAILABLE"
+
 def history_coverage(postgres):
     """64-bar historical coverage in last 14 completed IST calendar days; counts only."""
     if postgres is None:
@@ -238,6 +281,12 @@ def main():
     print("MARKET_EQUITY_CATALOGUE_COUNT: " + catalogue)
     print("MARKET_EQUITY_SAVED_TICK_COUNT: " + ticks)
     print("MARKET_EQUITY_SAVED_DETAIL_COUNT: " + details)
+    nse, bse, raw_bse, reference = exchange_coverage(postgres)
+    print("MARKET_NSE_EQ: " + nse)
+    print("MARKET_BSE_EQ: " + bse)
+    print("MARKET_BSE_CM_RAW: " + raw_bse)
+    print("MARKET_BSE_REFERENCE_TABLE: " + reference)
+    print("MARKET_BSE_SOURCE_HTTP: " + bse_source_access())
     covered, incomplete, empty = history_coverage(postgres)
     print("MARKET_HISTORY_COVERED_64: " + covered)
     print("MARKET_HISTORY_INCOMPLETE: " + incomplete)
