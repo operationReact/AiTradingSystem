@@ -12,6 +12,7 @@ grep -Fq 'TRADING_MODE: PAPER' "$root/paper-compose.yml"
 python3 - "$root" <<'PY'
 import hmac,json,pathlib,re,stat,subprocess,sys
 from urllib.request import Request,urlopen
+from urllib.error import HTTPError,URLError
 root=pathlib.Path(sys.argv[1])
 def block(reason):
     print("MINTTICK_BSE_BLOCKER:"+reason,flush=True)
@@ -48,6 +49,18 @@ try:
     with urlopen(req,timeout=200) as response:
         if response.status!=200:block("REFRESH_HTTP")
         data=response.read(200001)
+except HTTPError as exc:
+    if exc.code in (401,403):
+        block("REFRESH_AUTH_DENIED")
+    if exc.code == 404:
+        block("REFRESH_ROUTE_MISSING")
+    if exc.code in (408,429,502,503,504):
+        block("REFRESH_BACKEND_UNAVAILABLE")
+    if exc.code == 500:
+        block("REFRESH_BACKEND_ERROR")
+    block("REFRESH_HTTP")
+except (URLError,TimeoutError):
+    block("REFRESH_NETWORK_UNAVAILABLE")
 except Exception:
     block("REFRESH_HTTP")
 if len(data)>200000:block("REFRESH_RESPONSE")
