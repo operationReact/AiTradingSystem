@@ -35,6 +35,8 @@ services:
       - no-new-privileges:true
     environment:
       TRADING_MODE: PAPER
+      # Exact deployed commit; Mind progress evidence is only RUNTIME_VERIFIED on a known revision.
+      APP_BUILD_REVISION: ${RELEASE_SHA:?required}
       # Preserve legacy owner Lambda reads, but authenticate live streams on
       # the registered EC2 Elastic IP using the four pre-existing allowlisted SSM String/SecureString parameters.
       # AWS role credentials come from the instance profile; no static AWS key

@@ -61,7 +61,39 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ]),
   ]);
 
-  Widget roomsScreen()=>_surface('Trading Rooms',
+  Widget _realRoomsScreen() {
+    _ensurePortfolio();
+    final p=_portfolio;
+    if(p==null) return _portfolioPending('Trading Rooms');
+    final paused=p.rooms.where((r)=>r.paused).length;
+    return _surface('Trading Rooms','Your funded PAPER rooms · virtual money only',[
+      _metricGrid([
+        ('PAPER rooms',p.fundedRooms.toString(),'Funded virtual wallets'),
+        ('Paused',paused.toString(),'New fills rejected'),
+        ('Virtual cash',formatPaise(p.availableCashPaise),'Across rooms'),
+        ('Open positions',p.positions.length.toString(),'Marked with verified ticks'),
+      ]),
+      const SizedBox(height:13),
+      _section('Your Trading Rooms',Icons.meeting_room_outlined,[
+        if(p.rooms.isEmpty) _empty('No funded PAPER room yet. Create and activate one in Trading Rooms.'),
+        for(final r in p.rooms)
+          Padding(padding:const EdgeInsets.only(bottom:9),child:_tile(r.name,
+            formatPaise(r.availableCashPaise)+' cash · '+r.openPositions.toString()+' position(s) · realized '+
+              formatPaise(r.realizedPnlPaise),
+            Icons.meeting_room_outlined,trailing:r.paused?'PAUSED':'PAPER',
+            color:r.paused?MindPalette.yellow:MindPalette.mint,
+            tap:()=>_go('room-detail'))),
+      ]),
+      _section('Trading Room Safety',Icons.shield_outlined,[
+        _value('Mode','PAPER virtual only'),
+        _value('Live broker execution','Not authorized',color:MindPalette.red),
+        _value('Risk authority','Server-enforced, automatic'),
+        _tile('Pause or resume a room','Risk Center',Icons.pan_tool_outlined,route:'risk'),
+      ]),
+    ]);
+  }
+
+  Widget roomsScreen()=>widget.paperPortfolioRepository!=null ? _realRoomsScreen() : _surface('Trading Rooms',
     'A separate strategy and risk context for each trading horizon',[
     _metricGrid([
       ('Rooms','4','Mock configuration'),
@@ -93,6 +125,17 @@ extension _MindSystemScreens on _MindWorkspaceState {
   Widget roomDetailScreen() {
     final room=_rooms.firstWhere((r)=>r.$1==_selectedRoom,orElse:()=>_rooms.first);
     return _surface(room.$1,room.$4,[
+      if (widget.paperCycleRepository != null) ...[
+        MindPaperCyclePanel(repository: widget.paperCycleRepository!),
+        const SizedBox(height:12),
+      ] else ...[
+        const MindPanel(key:ValueKey('mind-paper-cycle-unavailable'),
+          child:Text('Mind PAPER strategy cycle requires a signed-in customer session.',
+            style:TextStyle(color:MindPalette.muted,fontSize:12))),
+        const SizedBox(height:12),
+      ],
+      const MindTag('ROOM CARDS BELOW: MOCK FIXTURES',color:MindPalette.yellow),
+      const SizedBox(height:10),
       MindPanel(highlight:true,child:Column(children:[
         _value('Lifecycle',room.$2),
         _value('Trading horizon',room.$3),
@@ -126,7 +169,68 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ],backTo:'trading-rooms');
   }
 
-  Widget controlScreen()=>_surface('Engine Control',
+  Widget _registryPending(String title) => _surface(title,'Audited engine registry · server data',[
+    MindPanel(key:const ValueKey('mind-registry-pending'),child:Row(children:[
+      if(!_registryFailed) const SizedBox(width:14,height:14,child:CircularProgressIndicator(strokeWidth:2)),
+      const SizedBox(width:9),
+      Expanded(child:Text(_registryFailed?'Engine registry unavailable. Nothing is shown as running.'
+        :'Loading engine registry…',
+        style:TextStyle(color:_registryFailed?MindPalette.red:MindPalette.muted,fontSize:12))),
+    ])),
+  ]);
+
+  Widget _capabilityRow(MindProgressItem item) => Padding(
+    padding:const EdgeInsets.only(bottom:7),
+    child:MindPanel(key:ValueKey('mind-engine-'+item.id),onTap:()=>_go('coverage'),
+      padding:const EdgeInsets.symmetric(horizontal:12,vertical:10),
+      child:Row(children:[
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(item.name,maxLines:1,overflow:TextOverflow.ellipsis,
+            style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700,fontSize:13)),
+          Text([item.id,if(item.blockerCode!=null) item.blockerCode!,
+              if(item.runtime.lastVerifiedAt!=null)
+                'verified '+item.runtime.lastVerifiedAt!.toUtc().toIso8601String().substring(0,16)+'Z'].join(' · '),
+            maxLines:2,overflow:TextOverflow.ellipsis,
+            style:const TextStyle(color:MindPalette.muted,fontSize:10.5)),
+        ])),
+        const SizedBox(width:8),
+        MindStatusPill(item.status),
+      ])));
+
+  Widget _realControlScreen() {
+    _ensureRegistry();
+    final snap=_registrySnapshot;
+    if(snap==null) return _registryPending('Engine Control');
+    List<MindProgressItem> of(String kind)=>snap.items.where((i)=>i.kind==kind).toList();
+    return _surface('Engine Control','Real engine pipeline state from the audited server registry',[
+      MindPanel(key:const ValueKey('mind-engine-status'),highlight:true,child:Column(children:[
+        const MindSectionTitle(title:'Engine Status',icon:Icons.settings_outlined),
+        _value('Backend revision',snap.revisionKnown?snap.backendRevision:'Unknown · nothing can be verified',
+          color:snap.revisionKnown?MindPalette.mint:MindPalette.yellow),
+        _value('PAPER stage',snap.paperStage.name+' · '+snap.paperStage.status.label,
+          color:MindStatusPill.colorFor(snap.paperStage.status)),
+        _value('Execution mode','PAPER virtual only'),
+        _value('LIVE broker execution','Not authorized',color:MindPalette.red),
+        _value('Automation','Owner-initiated cycles only · no scheduler'),
+        _value('Registry','Manifest '+snap.manifestVersion),
+      ])),
+      const SizedBox(height:12),
+      _section('Engine Pipeline',Icons.account_tree_outlined,[
+        for(final i in [...of('ENGINE'),...of('PAPER'),...of('LIVE')]) _capabilityRow(i),
+      ]),
+      _section('Data Dependencies',Icons.storage_outlined,[
+        for(final i in of('DATA')) _capabilityRow(i),
+      ]),
+      _section('Safety & Interlocks',Icons.shield_outlined,[
+        _tile('Pause a PAPER room','Real emergency stop for virtual fills (Risk Center)',
+          Icons.pan_tool_outlined,route:'risk'),
+        const SizedBox(height:7),
+        _tile('Enforced risk policy','Automatic limits applied to every cycle',Icons.shield_outlined,route:'risk'),
+      ]),
+    ]);
+  }
+
+  Widget controlScreen()=>widget.progressRepository!=null ? _realControlScreen() : _surface('Engine Control',
     'Personal model participation and emergency controls · local UI state only',[
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'Engine Status',icon:Icons.settings_outlined),
@@ -370,36 +474,32 @@ extension _MindSystemScreens on _MindWorkspaceState {
       child:Text(label,style:const TextStyle(color:MindPalette.mint)));
 
   Widget coverageScreen() {
+    final repository = widget.progressRepository;
+    if (repository != null) {
+      return _surface('Screen & Strategy Coverage',
+        'Audited inventory with server-side evidence. DONE only after runtime verification.',[
+        MindProgressCoverageView(
+          key: const ValueKey('mind-progress-coverage'),
+          repository: repository,
+          onOpenRoute: _go,
+        ),
+      ]);
+    }
     final groups=['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM'];
     return _surface('Screen & Strategy Coverage',
-      'All source prototype routes available inside one mock workspace',[
-      _metricGrid([
-        ('Connected screens','43','42 original + 1 research-planning route'),
-        ('Strategies','232','20 families'),
-        ('Models','18','Research fixtures'),
-        ('Original UI refs','9','Preview records'),
-      ]),
+      'Progress registry not connected · nothing on this page is verified',[
+      MindPanel(key:const ValueKey('mind-progress-not-connected'),
+        child:const Text('Progress not verified: sign in to load the audited server registry. '
+          'Screens below are listed for navigation only.',
+          style:TextStyle(color:MindPalette.text,fontSize:12))),
       const SizedBox(height:13),
       for(final group in groups)
         _section(group,Icons.fact_check_outlined,[
           for(final screen in MintickMindScreens.all.where((s)=>s.group==group))
             Padding(padding:const EdgeInsets.only(bottom:7),
-              child:_tile(screen.label,'Route: '+screen.id+
-                ' · Mock frontend only',screen.icon,
-                trailing:'Open',tap:()=>_go(screen.id))),
+              child:_tile(screen.label,'Route: '+screen.id+' · Not verified',
+                screen.icon,trailing:'Open',tap:()=>_go(screen.id))),
         ]),
-      _section('External research integration status',Icons.extension_outlined,[
-        _tile('Research Engines Lab',
-          '5 assessed · 0 connected · all research-only placeholders',
-          Icons.construction_outlined,route:'research-engines',
-          trailing:'PLANNED',color:MindPalette.yellow),
-      ]),
-      _section('Safety & Verification',Icons.shield_outlined,[
-        _value('Backend API calls','None in Mind UI'),
-        _value('Futures/options execution','Disabled'),
-        _value('Pixel parity','Not certified'),
-        _value('Flutter native tests','Requires CI / toolchain'),
-      ]),
     ]);
   }
 

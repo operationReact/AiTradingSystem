@@ -43,7 +43,8 @@ public class CustomerPaperOrderService {
             MarketLastTickStore ticks, MarketSessionCalendar marketCalendar) {
         this(jdbc, instruments, ticks, marketCalendar, Clock.systemUTC());
     }
-    CustomerPaperOrderService(JdbcClient jdbc, InstrumentMasterService instruments,
+    /** Deterministic-clock constructor (integration tests and replay); production uses the system clock. */
+    public CustomerPaperOrderService(JdbcClient jdbc, InstrumentMasterService instruments,
             MarketLastTickStore ticks, MarketSessionCalendar marketCalendar, Clock clock) {
         this.jdbc = jdbc;
         this.instruments = instruments;

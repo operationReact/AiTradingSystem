@@ -35,6 +35,10 @@ import 'features/mintick_mind/data/mind_prospective_cohort_repository.dart';
 import 'features/mintick_mind/data/mind_prospective_signals_repository.dart';
 import 'features/mintick_mind/data/mind_prospective_outcomes_repository.dart';
 import 'features/mintick_mind/data/mind_prospective_evidence_completeness_repository.dart';
+import 'features/mintick_mind/data/mind_progress_repository.dart';
+import 'features/mintick_mind/data/mind_paper_cycle_repository.dart';
+import 'features/mintick_mind/data/mind_paper_portfolio_repository.dart';
+import 'features/mintick_mind/data/mind_paper_journal_repository.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -214,6 +218,11 @@ class _TradingAppState extends State<TradingApp> {
                     HttpMindProspectiveOutcomesRepository(_api),
                 prospectiveEvidenceCompletenessRepository:
                     HttpMindProspectiveEvidenceCompletenessRepository(_api),
+                progressRepository: HttpMindProgressRepository(_api),
+                paperCycleRepository: HttpMindPaperCycleRepository(_api),
+                paperPortfolioRepository: HttpMindPaperPortfolioRepository(_api),
+                paperJournalRepository: HttpMindPaperJournalRepository(_api),
+                candleRepository: HttpCustomerMarketRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated

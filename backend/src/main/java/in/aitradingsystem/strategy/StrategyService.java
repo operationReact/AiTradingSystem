@@ -93,6 +93,20 @@ public class StrategyService {
     }
 
     public StrategyEvaluation evaluate(long instrumentId, HistoricalCandleInterval interval) {
+        return evaluate(instrumentId, interval, true);
+    }
+
+    /**
+     * Same deterministic evaluation without writing to {@code strategy_signal}. Callers that keep
+     * their own decision trail (Mintick Mind PAPER cycles) must use this so their candidates are
+     * never picked up by the separate legacy automated PAPER engine, which consumes persisted BUY
+     * signals.
+     */
+    public StrategyEvaluation evaluateWithoutPersisting(long instrumentId, HistoricalCandleInterval interval) {
+        return evaluate(instrumentId, interval, false);
+    }
+
+    private StrategyEvaluation evaluate(long instrumentId, HistoricalCandleInterval interval, boolean persist) {
         if (interval == null) throw new IllegalArgumentException("A supported interval is required");
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         int required = slowPeriod + 1;
@@ -158,7 +172,7 @@ public class StrategyService {
                         instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(), action, STRATEGY,
                         close, stop, target, fast, slow, volumeAvg, latestVolume, confidence, List.copyOf(reasons),
                         last.source(), now, last.candleTime(), "CANDIDATE_NOT_EXECUTABLE");
-                signalRepository.save(signal, instrument.symbolToken());
+                if (persist) signalRepository.save(signal, instrument.symbolToken());
             }
         }
         return new StrategyEvaluation(instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
