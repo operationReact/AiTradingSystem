@@ -7,6 +7,7 @@ import '../../../brand/minttick_brand.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../data/upstox_analytics_progress_repository.dart';
 import '../data/upstox_delivery_workstreams.dart';
+import '../data/upstox_readiness_progress.dart';
 
 /// Backend-evidence-only owner monitor. Never places PAPER/LIVE orders.
 class UpstoxAnalyticsProgressPage extends StatefulWidget {
@@ -139,9 +140,11 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
               children: [
                 if (activeTab == 'Overview') ...overview(data),
+                if (activeTab == 'Coverage') ...acceptanceProgress(data),
                 if (activeTab == 'Coverage') ...history(data), 
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
+                if (activeTab == 'Operations') ...acceptanceProgress(data),
                 if (activeTab == 'Operations') ...taskList(data, specs),
                 if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') ...github(data),
@@ -167,6 +170,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
+      ...acceptanceProgress(data),
+      const SizedBox(height: 14),
       Row(children: [
         const Expanded(child: Text('Analytics health',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
@@ -224,6 +229,98 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       Iterable<(String, String, String, IconData)> source) =>
     [for (final spec in source) taskTile(spec, data.find(spec.$1))];
 
+  List<Widget> acceptanceProgress(UpstoxAnalyticsProgress data) {
+    final score = UpstoxReadinessProgress.calculate(data);
+    return [
+      panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Verified project completion',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800))),
+          Text(score.percent == null ? '—' : '${score.percent}%',
+            key: const ValueKey('upstox-verified-completion-percent'),
+            style: const TextStyle(color: MintTickPalette.mint,
+              fontWeight: FontWeight.w800, fontSize: 20)),
+        ]),
+        const SizedBox(height: 8),
+        LinearProgressIndicator(
+          key: const ValueKey('upstox-verified-completion-bar'),
+          minHeight: 5,
+          value: score.fraction,
+          backgroundColor: MintTickPalette.darkBorder,
+          valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
+        ),
+        const SizedBox(height: 8),
+        Row(children: [
+          const Expanded(child: Text('Weighted milestones · fresh backend proof only',
+              maxLines: 2, style: TextStyle(color: MintTickPalette.mutedSilver,
+                  fontSize: 10))),
+          TextButton(
+            onPressed: () => showProgressFormula(score),
+            child: const Text('Calculation', style: TextStyle(fontSize: 11))),
+        ]),
+        if (!score.observed)
+          const Text('No verified milestone telemetry yet',
+            style: TextStyle(color: MintTickPalette.mutedSilver, fontSize: 11)),
+      ]), padding: const EdgeInsets.fromLTRB(11, 10, 11, 8)),
+    ];
+  }
+
+  void showProgressFormula(UpstoxReadinessProgress score) {
+    final labels = <String, String>{
+      'SOURCE_VERIFICATION': 'Source access',
+      'INSTRUMENT_MAPPING': 'Instrument mapping',
+      'HISTORICAL_INGESTION': 'Persistent historical data',
+      'QUALITY_RIGHTS': 'Quality and usage rights',
+      'FUNDAMENTALS': 'Fundamentals',
+      'MIND_DATASETS': 'MintTick Mind feature feed',
+      'PAPER_READINESS': 'PAPER end-to-end readiness',
+    };
+    showModalBottomSheet<void>(
+      context: context, showDragHandle: true, isScrollControlled: true,
+      backgroundColor: MintTickPalette.darkCard,
+      builder: (_) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Percentage calculation',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 5),
+            const Text('Each weight is earned only when that backend milestone '
+              'is VERIFIED and fresh. Draft/merged PRs, UI mocks and API samples '
+              'do not earn unrelated progress.',
+              style: TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver, height: 1.4)),
+            const SizedBox(height: 12),
+            for (final gate in score.gates)
+              Padding(padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(labels[gate.code] ?? gate.code,
+                        style: const TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                      Text(gate.evidenceState, style: const TextStyle(
+                        fontSize: 10, color: MintTickPalette.mutedSilver)),
+                    ])),
+                  Text('${gate.earned}/${gate.weight}%',
+                    style: TextStyle(fontSize: 12,
+                      color: gate.earned == gate.weight
+                        ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
+                ])),
+            const SizedBox(height: 8),
+            Text('Formula: ${UpstoxReadinessProgress.formulaVersion}',
+              style: const TextStyle(fontSize: 10,
+                color: MintTickPalette.mutedSilver)),
+            const SizedBox(height: 5),
+            const Text('This is verified acceptance, not developer effort. '
+              'PAPER trading and persisted ingestion remain separate runtime gates.',
+              style: TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver)),
+          ]),
+      )),
+    );
+  }
+
   List<Widget> workerDelivery(UpstoxAnalyticsProgress data) {
     final githubTask = data.find('GITHUB_DEVELOPMENT');
     final observed = githubTask != null &&
@@ -237,7 +334,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
             child: Row(children: [
-              SizedBox(width: 20, child: Text('${workstreams[i].number}',
+              SizedBox(width: 25, child: Text('W${workstreams[i].number}',
                   style: const TextStyle(fontSize: 11,
                       color: MintTickPalette.mint,
                       fontWeight: FontWeight.w800))),
