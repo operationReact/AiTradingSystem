@@ -79,3 +79,88 @@ class UpstoxDeliveryWorkstreams {
     return null;
   }
 }
+
+
+/// Bounded developer reports fetched by the owner-only backend from issue
+/// #1012. A report confirms a GitHub note, NOT scheduled execution, ingestion
+/// or PAPER readiness.
+class UpstoxWorkerObservation {
+  const UpstoxWorkerObservation({
+    required this.worker,
+    required this.label,
+    required this.state,
+    this.result,
+    this.pr,
+    this.ci,
+    this.blocker,
+    this.next,
+    this.reportedAt,
+    this.url,
+  });
+
+  final int worker;
+  final String label;
+  final String state;
+  final String? result;
+  final int? pr;
+  final String? ci;
+  final String? blocker;
+  final String? next;
+  final DateTime? reportedAt;
+  final String? url;
+
+  static const scopes = [
+    'SOURCE_INGESTION',
+    'CANONICAL_DATA',
+    'COVERAGE_GAPS',
+    'FUNDAMENTALS_EVENTS',
+    'OPERATIONS_UI',
+  ];
+
+  static List<UpstoxWorkerObservation> fromBackend(
+      Object? raw, {bool staleSnapshot = false}) {
+    final parsed = <int, UpstoxWorkerObservation>{};
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is! Map) continue;
+        final number = item['worker'];
+        final scope = item['scope'];
+        final state = item['state'];
+        if (number is! int || number < 1 || number > 5 ||
+            scope != scopes[number - 1] ||
+            state is! String ||
+            !const {'FRESH', 'STALE', 'NO_REPORT'}.contains(state)) {
+          continue;
+        }
+        String? bounded(Object? value, int max) =>
+            value is String && value.length <= max ? value : null;
+        final prText = bounded(item['pr'], 8);
+        final pr = prText == null ? null : int.tryParse(prText);
+        final url = pr != null && pr > 0 && pr < 1000000 &&
+            item['url'] == 'https://github.com/operationReact/AiTradingSystem/pull/$pr'
+            ? item['url'] as String : null;
+        final observedAt = DateTime.tryParse(
+            (item['reportedAt'] ?? '').toString());
+        parsed[number] = UpstoxWorkerObservation(
+          worker: number,
+          label: UpstoxDeliveryWorkstreams.names[number - 1],
+          state: staleSnapshot && state == 'FRESH' ? 'STALE' : state,
+          result: bounded(item['result'], 24),
+          pr: url == null ? null : pr,
+          url: url,
+          ci: bounded(item['ci'], 16),
+          blocker: bounded(item['blocker'], 96),
+          next: bounded(item['next'], 160),
+          reportedAt: observedAt,
+        );
+      }
+    }
+    return List.unmodifiable([
+      for (var i = 1; i <= 5; i++)
+        parsed[i] ?? UpstoxWorkerObservation(
+            worker: i,
+            label: UpstoxDeliveryWorkstreams.names[i - 1],
+            state: 'NO_REPORT'),
+    ]);
+  }
+}
