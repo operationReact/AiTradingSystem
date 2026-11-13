@@ -193,37 +193,52 @@ public class AngelOneApiClient {
         return fullMarketQuote(null, jwtToken, symbolTokens);
     }
 
-    /** Broker-customer-scoped FULL quote for one NSE token; do not substitute the platform API key. */
+    /** Legacy NSE-only method retained for existing callers and research-depth endpoints. */
     public JsonNode customerFullQuote(String apiKey, String jwtToken, String symbolToken) {
-        if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
-                || jwtToken == null || jwtToken.isBlank()) {
-            throw new IllegalArgumentException("Valid customer broker session required");
-        }
-        return fullMarketQuote(apiKey, jwtToken, List.of(symbolToken));
+        return customerFullQuote(apiKey, jwtToken, "NSE", symbolToken);
     }
 
-    /** Broker-customer-scoped FULL quote for a bounded NSE token batch (at most 50 per request). */
+    /** Source-verified FULL quote for an explicit cash exchange (no broker credentials in mobile). */
+    public JsonNode customerFullQuote(String apiKey, String jwtToken, String exchange, String symbolToken) {
+        return customerFullQuotes(apiKey, jwtToken, exchange, List.of(symbolToken));
+    }
+
+    /** Legacy NSE-only batch retained for existing callers. */
     public JsonNode customerFullQuotes(String apiKey, String jwtToken, List<String> symbolTokens) {
+        return customerFullQuotes(apiKey, jwtToken, "NSE", symbolTokens);
+    }
+
+    /** Cash-exchange-scoped FULL batch; tokens are deliberately never mixed across exchanges. */
+    public JsonNode customerFullQuotes(String apiKey, String jwtToken, String exchange,
+            List<String> symbolTokens) {
         if (apiKey == null || apiKey.isBlank() || apiKey.length() > 256
                 || jwtToken == null || jwtToken.isBlank()) {
             throw new IllegalArgumentException("Valid customer broker session required");
         }
-        return fullMarketQuote(apiKey, jwtToken, symbolTokens);
+        return fullMarketQuote(apiKey, jwtToken, exchange, symbolTokens);
     }
 
     private JsonNode fullMarketQuote(String apiKey, String jwtToken, List<String> symbolTokens) {
+        return fullMarketQuote(apiKey, jwtToken, "NSE", symbolTokens);
+    }
+
+    private JsonNode fullMarketQuote(String apiKey, String jwtToken, String exchange,
+            List<String> symbolTokens) {
+        if (!"NSE".equals(exchange) && !"BSE".equals(exchange)) {
+            throw new IllegalArgumentException("FULL cash quote exchange must be NSE or BSE");
+        }
         if (symbolTokens == null || symbolTokens.isEmpty() || symbolTokens.size() > 50) {
             throw new IllegalArgumentException("FULL market quote requires between 1 and 50 symbol tokens");
         }
         ObjectNode exchangeTokens = mapper.createObjectNode();
-        var nseTokens = mapper.createArrayNode();
+        var exchangeTokenArray = mapper.createArrayNode();
         for (String token : symbolTokens) {
-            if (token == null || token.isBlank() || token.length() > 64) {
-                throw new IllegalArgumentException("FULL market quote symbol tokens must be non-blank and bounded");
+            if (token == null || !token.matches("[0-9]{1,32}")) {
+                throw new IllegalArgumentException("FULL cash quote tokens must be numeric and bounded");
             }
-            nseTokens.add(token.trim());
+            exchangeTokenArray.add(token);
         }
-        exchangeTokens.set("NSE", nseTokens);
+        exchangeTokens.set(exchange, exchangeTokenArray);
         ObjectNode body = mapper.createObjectNode()
                 .put("mode", "FULL")
                 .set("exchangeTokens", exchangeTokens);
