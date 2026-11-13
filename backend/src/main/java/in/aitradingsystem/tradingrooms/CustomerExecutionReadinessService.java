@@ -57,7 +57,7 @@ public class CustomerExecutionReadinessService {
                     SELECT EXISTS (
                       SELECT 1 FROM customer_paper_account a
                       WHERE a.room_id = :id AND a.user_id = :user
-                      AND a.halted = TRUE AND a.available_cash_paise >= 0
+                      AND a.initial_cash_paise > 0
                     )
                     """)
                 .param("id", roomId).param("user", owner)
@@ -73,8 +73,19 @@ public class CustomerExecutionReadinessService {
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
                 blockers.add("PAPER_WALLET_NOT_FUNDED");
+            } else {
+                boolean paused = jdbc.sql("""
+                        SELECT halted FROM customer_paper_account
+                        WHERE room_id=:room AND user_id=:owner
+                        """)
+                    .param("room", roomId).param("owner", owner)
+                    .query(Boolean.class).single();
+                if (paused) blockers.add("PAPER_WALLET_PAUSED");
             }
-            blockers.add("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
+            // Manual PAPER fills still require per-order authoritative quotes,
+            // session, idempotency and risk checks in CustomerPaperOrderService.
+            blockers.add("AUTHORITATIVE_QUOTE_NOT_VERIFIED");
+            blockers.add("SERVER_SIDE_ORDER_RISK_NOT_EVALUATED");
         } else {
             if (selected == null) {
                 blockers.add("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
@@ -87,10 +98,8 @@ public class CustomerExecutionReadinessService {
             blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
             blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
         }
-        // The customer trading execution engine is unavailable in this stage.
-        // All mode-specific order submissions fail closed, regardless of
-        // application flags, UI state, or client-supplied claims.
-        blockers.add("EXECUTION_DISABLED");
+        // LIVE remains disabled. Room-level PAPER readiness does not authorize fills.
+        if ("LIVE".equals(room.mode())) blockers.add("EXECUTION_DISABLED");
         return new Readiness(roomId, room.mode(), room.status(), selected, connected, paperFunded,
                 false, false, false, false, List.copyOf(blockers));
     }
