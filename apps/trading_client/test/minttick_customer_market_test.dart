@@ -210,6 +210,44 @@ CustomerCandle _bar(DateTime time, num close) => CustomerCandle(
       close: close, volume: 1000, source: 'ANGEL_ONE_SMARTAPI',
       fetchedAt: DateTime.utc(2026, 11, 7, 10));
 
+class _CoverageMarketFake extends _CustomerMarketFake
+    implements CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository {
+  @override
+  Future<CustomerUniverseFacets> universeFacets() async => CustomerUniverseFacets.fromJson({
+    'contractVersion': 'customer.market.universe.v1',
+    'generatedAt': '2026-11-13T05:00:00Z',
+    'totalActiveCashEquityListings': 2756,
+    'exchanges': [
+      {'exchange': 'NSE', 'activeListings': 2756},
+      {'exchange': 'BSE', 'activeListings': 0},
+    ],
+    'verifiedMemberships': <dynamic>[],
+    'classificationStates': <dynamic>[],
+  });
+
+  @override
+  Future<CustomerFullQuoteCoverage> fullQuoteCoverage() async =>
+      CustomerFullQuoteCoverage.fromJson({
+    'contractVersion': 'customer.market.full-quote-coverage.v1',
+    'generatedAt': '2026-11-13T05:00:00Z',
+    'totalActiveListings': 2756,
+    'storedFullQuotes': 620,
+    'withProviderPreviousClose': 600,
+    'activeBseCmRecords': 175,
+    'exchanges': [
+      {
+        'exchange': 'NSE', 'activeListings': 2756, 'storedFullQuotes': 620,
+        'withProviderPreviousClose': 600,
+        'newestExchangeAt': '2026-11-12T09:59:00Z',
+      },
+      {
+        'exchange': 'BSE', 'activeListings': 0, 'storedFullQuotes': 0,
+        'withProviderPreviousClose': 0, 'newestExchangeAt': null,
+      },
+    ],
+  });
+}
+
 Future<void> _openExplore(WidgetTester tester) async {
   await tester.ensureVisible(find.text('All Stocks'));
   await tester.pumpAndSettle();
@@ -581,6 +619,21 @@ void main() {
     await _openExplore(tester);
     expect(find.text('₹125.55'), findsNothing);
     expect(find.byKey(const ValueKey('customer-market-stock-101')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('Markets reports stored full catalogue coverage and BSE classification gaps',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: _CoverageMarketFake()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('market-full-quote-coverage')), findsOneWidget);
+    expect(find.text('Stored FULL quotes 620/2756 · not live'), findsOneWidget);
+    expect(find.textContaining('BSE: 175 cash-segment records need verified EQ classification'),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
