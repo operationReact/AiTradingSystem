@@ -35,6 +35,7 @@ on_exit() {
     printf 'MINTTICK_UPSTOX_STAGE:%s\n' "$stage" >&2
   fi
   if [ -n "$work" ]; then rm -rf -- "$work" || true; fi
+  if [ "$code" -eq 0 ] && [ "$accepted" -ne 1 ]; then exit 9; fi
 }
 trap on_exit EXIT
 
