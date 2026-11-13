@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta, timezone
 from aitrading_intelligence.quote_age_boundary import assess_quote_age_boundary
 from aitrading_intelligence.quote_asof_consistency import QuoteAsOfResult
 
-
 RESEARCH_ONLY = QuoteAsOfResult(True, "QUOTE_ASOF_RESEARCH_ONLY_NOT_A_FILL")
 IST = timezone(timedelta(hours=5, minutes=30))
 
