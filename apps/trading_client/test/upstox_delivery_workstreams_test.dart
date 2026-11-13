@@ -49,6 +49,49 @@ void main() {
     expect(rows[0].pr, isNull);
   });
 
+  test('five backend worker reports are distinct from production readiness', () {
+    final result = UpstoxWorkerObservation.fromBackend([
+      {
+        'worker': 2,
+        'scope': 'CANONICAL_DATA',
+        'state': 'FRESH',
+        'result': 'MERGED',
+        'pr': '1010',
+        'ci': 'PASS',
+        'blocker': 'RIGHTS_UNVERIFIED',
+        'next': 'QUERY_REAL_DB',
+        'reportedAt': '2026-11-14T01:00:00Z',
+        'url': 'https://github.com/operationReact/AiTradingSystem/pull/1010',
+      },
+    ]);
+    expect(result, hasLength(5));
+    expect(result[0].state, 'NO_REPORT');
+    expect(result[1].result, 'MERGED');
+    expect(result[1].ci, 'PASS');
+    expect(result[1].pr, 1010);
+    expect(result[1].state, 'FRESH');
+  });
+
+  test('outdated backend observation is not presented as fresh', () {
+    final rows = UpstoxWorkerObservation.fromBackend([
+      {'worker': 5, 'scope': 'OPERATIONS_UI', 'state': 'FRESH'},
+    ], staleSnapshot: true);
+    expect(rows.last.state, 'STALE');
+  });
+
+  test('rejects spoofed worker scope and untrusted PR urls', () {
+    final rows = UpstoxWorkerObservation.fromBackend([
+      {'worker': 1, 'scope': 'OPERATIONS_UI', 'state': 'FRESH'},
+      {
+        'worker': 2, 'scope': 'CANONICAL_DATA', 'state': 'FRESH',
+        'pr': '1010', 'url': 'https://example.com/forged',
+      }
+    ]);
+    expect(rows.first.state, 'NO_REPORT');
+    expect(rows[1].pr, isNull);
+    expect(rows[1].url, isNull);
+  });
+
   test('only first match in recent sample is used', () {
     final work = UpstoxDeliveryWorkstreams.fromRecentPrs([
       pr(1009, 'feat(upstox): source failure', 'OPEN'),
