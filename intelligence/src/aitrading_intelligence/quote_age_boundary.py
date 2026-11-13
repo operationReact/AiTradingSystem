@@ -1,4 +1,5 @@
 """Bound quote age at decision time for research, never for order authorization."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -15,10 +16,14 @@ class QuoteAgeDecision:
 
 
 def assess_quote_age_boundary(
-    *, quote_observed_at: datetime | None, decision_at: datetime,
-    maximum_age: timedelta, quote_consistency: QuoteAsOfResult,
+    *,
+    quote_observed_at: datetime | None,
+    decision_at: datetime,
+    maximum_age: timedelta,
+    quote_consistency: QuoteAsOfResult,
 ) -> QuoteAgeDecision:
     """Require explicit nonnegative freshness bound and prior consistency."""
+
     def abstain(reason: str) -> QuoteAgeDecision:
         return QuoteAgeDecision(False, reason)
 
@@ -32,8 +37,10 @@ def assess_quote_age_boundary(
         return abstain("NEGATIVE_MAXIMUM_AGE")
     if quote_observed_at is None:
         return abstain("MISSING_QUOTE")
-    if any(t.tzinfo is None or t.utcoffset() is None
-           for t in (quote_observed_at, decision_at)):
+    if any(
+        t.tzinfo is None or t.utcoffset() is None
+        for t in (quote_observed_at, decision_at)
+    ):
         return abstain("NAIVE_TIMESTAMP")
     if quote_observed_at > decision_at:
         return abstain("FUTURE_QUOTE")
