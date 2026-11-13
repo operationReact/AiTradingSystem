@@ -558,8 +558,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final label = ready ? 'verified ranking available' : 'ranking not imported';
     return [
       ..._universeIntro(),
-      const MintTickInfoText('Capitalization groups require a dated official '
-          'company ranking; Nifty membership is not a market-cap category.'),
+      Text('Dated official rankings required · not inferred from Nifty membership',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 9),
       _compactCategory('Large cap', 'Top 100 · $label',
           Icons.account_balance_outlined),
@@ -581,8 +582,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final scheme = Theme.of(context).colorScheme;
     return [
       ..._universeIntro(),
-      const MintTickInfoText('Index membership is overlapping, versioned '
-          'reference data. It does not limit the complete stock universe.'),
+      Text('Verified index membership · indices overlap',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 9),
       if (data == null)
         const MintTickInfoText('Index reference data unavailable.')
@@ -649,9 +651,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
           const SizedBox(height: 7),
         ],
-      const MintTickInfoText('Nifty broad, mid, small, micro, sectoral, '
-          'thematic and BSE indices will appear as their official '
-          'constituents are imported and verified.'),
+      Text('Other index lists appear after official constituents are verified.',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
     ];
   }
 
@@ -1371,7 +1373,6 @@ class _BreadthCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final b = overview.breadth;
-    final muted = theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Container(
       key: const ValueKey('customer-market-breadth'),
       padding: const EdgeInsets.all(10),
@@ -1613,10 +1614,10 @@ class _IdeasSection extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         if (!enabled)
-          const MintTickInfoText(
-            'Current market ideas paused. Fresh exchange ticks and a live verified '
-            'index quote are required. Stored or stale screening results are hidden.',
-            icon: Icons.schedule_rounded,
+          Text(
+            'Current market ideas paused · verified live ticks required.',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant),
           )
         else if (ideas.isEmpty)
           const MintTickInfoText('No Nifty 50 stock meets a screen rule in this snapshot. '
