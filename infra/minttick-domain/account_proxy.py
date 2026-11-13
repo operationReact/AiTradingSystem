@@ -54,6 +54,9 @@ EXACT = {
     ("GET", "/api/customer/market-data/universe-facets"),
     ("GET", "/api/customer/market-data/snapshot"),
     ("GET", "/api/customer/market-data/candles"),
+    ("GET", "/api/customer/market-data/full-quote-coverage"),
+    ("GET", "/api/customer/market-data/board"),
+    ("GET", "/api/customer/market-data/board/summary"),
     ("GET", "/api/customer/watchlist"),
     ("POST", "/api/customer/watchlist"),
 }
