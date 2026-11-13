@@ -4,9 +4,14 @@
 - Flutter **Settings → Upstox Analytics** opens a native, authenticated, owner-only
   read-only progress dashboard matching the single MintTick design system:
   near-black `#090B0A`, flat panel `#151916`, matte emerald `#3D9567`.
-- Seven interactive tabs: Overview, Tasks, History, Quality, Mind, GitHub and
-  Paper. Timeframe chips, job detail sheets, refresh, and copyable PR URLs.
-  **No fake historical coverage or backfill percentages.**
+- Three compact tabs: Overview, Coverage and Operations (no horizontally
+  scrolling navigation or placeholder timeframe chips). Verified source
+  samples appear as bounded daily-candle and current-ratio counts only when
+  fresh `SOURCE_VERIFICATION` telemetry exists. Stale/disabled telemetry
+  displays unavailable counts rather than reusing prior successful samples.
+  Stage detail sheets, owner refresh, GitHub PR details, and PAPER/Mind
+  explanatory views remain accessible. **No fake historical coverage or
+  backfill percentages.**
 - Owner-only `GET /api/customer/owner-upstox-analytics/v1/progress`
   (Cognito JWT subject must match the existing owner-subject configuration).
   No credentials, holdings, account funds, raw candles or trading authority.
@@ -193,3 +198,21 @@ A new host-only error code may appear there as `HOST_UNAVAILABLE`, but it
 cannot be interpreted as successful activation. Provider success still
 requires positive validated daily-candle and fundamentals ratios counts.
 No data retention, model training rights, or broker orders are enabled.
+
+## 13 November 2026 — compact proof-first mobile progress
+
+Following [successful read-only Upstox acceptance 43408504214](https://github.com/operationReact/AiTradingSystem/actions/runs/43408504214)
+with 5 daily candles and 7 ratios, the Flutter dashboard has been simplified
+from seven horizontally scrolling navigation chips to three fixed compact
+sections. The overview shows only **current scheduler-verified sample counts**;
+it never derives historical coverage, licensed retention, trade readiness or
+model-training rights from the successful one-shot acceptance. If the regular
+30-minute Spring Boot progress probe has not yet emitted a successful fresh
+`SOURCE_VERIFICATION` row, the mobile counters remain unavailable (—).
+
+Coverage clearly reports missing per-instrument/year/timeframe receipts and
+keeps quality and MintTick Mind dependencies visible. Operations retains all
+existing stage details, recent GitHub CI sample, and PAPER readiness notes.
+The change does **not** turn on historical ingestion, place orders, change
+backend credentials or create an AWS service. Owner-authenticated runtime UI
+verification is still required after the next APK build/deployment.
