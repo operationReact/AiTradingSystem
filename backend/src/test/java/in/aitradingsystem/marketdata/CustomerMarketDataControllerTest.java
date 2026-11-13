@@ -133,6 +133,46 @@ class CustomerMarketDataControllerTest {
     }
 
     @Test
+    void explicitlyTypedUnsuffixedBseEquityCanReceiveAnApplicationQuote() {
+        var customer = principal("verified-bse-customer");
+        var bse = new Instrument(62L, "BSE_CM", "BSE", "500325", "RELIANCE",
+            "Reliance", "EQ", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(62L)).thenReturn(bse);
+        when(applicationFeed.available()).thenReturn(true);
+        when(applicationFeed.quote(bse)).thenReturn(new BigDecimal("1500.55"));
+
+        var response = controller().quote(customer, 62L).getBody();
+        assertThat(response).isNotNull();
+        assertThat(response.exchange()).isEqualTo("BSE");
+        assertThat(response.tradingSymbol()).isEqualTo("RELIANCE");
+        assertThat(response.ltp()).isEqualByComparingTo("1500.55");
+        verify(applicationFeed).quote(bse);
+        verifyNoInteractions(customerBroker, personalSockets, provider);
+    }
+
+    @Test
+    void rejectsUnverifiedBseRowsAndExplicitDerivativesDespiteEquityLookingSymbol() {
+        var customer = principal("verified-bse-customer");
+        var untyped = new Instrument(63L, "BSE_CM", "BSE", "500325", "RELIANCE",
+            "Reliance", null, null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var derivative = new Instrument(64L, "NSE_CM", "NSE", "99999", "FAKE-EQ",
+            "Fake", "FUTSTK", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        var bseFund = new Instrument(65L, "BSE_CM", "BSE", "500326", "FUND-EQ",
+            "Fund", "MF", null, null, 1, new BigDecimal("0.05"), UUID.randomUUID());
+        when(catalogue.requireActiveInstrument(63L)).thenReturn(untyped);
+        when(catalogue.requireActiveInstrument(64L)).thenReturn(derivative);
+        when(catalogue.requireActiveInstrument(65L)).thenReturn(bseFund);
+        var api = controller();
+        assertThatThrownBy(() -> api.quote(customer, 63L))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> api.quote(customer, 64L))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThatThrownBy(() -> api.quote(customer, 65L))
+            .isInstanceOf(ResponseStatusException.class);
+        verifyNoInteractions(applicationFeed);
+    }
+
+    @Test
     void detailQuoteUsesOnlyTheApplicationFeedAndReturnsOhlcWithProvenance() {
         var customer = principal("independent-customer");
         var instrument = equity();
