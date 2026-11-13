@@ -59,6 +59,10 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
         self.assertIn('failure_code="$(classify_failure)"', activate)
         self.assertIn("rollback_state=unverified", activate)
         self.assertIn("reason=ROLLBACK_UNVERIFIED", activate)
+        self.assertIn('if [ "$code" -eq 0 ] && [ "$accepted" -ne 1 ]; then exit 9; fi', activate)
+        self.assertIn("'HOST_ACCEPTANCE_PROOF_MISSING'", workflow)
+        self.assertNotIn("Upstox host script missing acceptance marker", workflow)
+        self.assertIn("SSM Success is not acceptance", workflow)
         self.assertNotIn("echo 'MINTTICK_UPSTOX_RESULT:ROLLBACK_UNVERIFIED'", activate)
         for reason in ("HOST_RUNTIME_PREP_FAILED", "HOST_RUNTIME_PASSWORD_INVALID",
                        "HOST_RUNTIME_OPERATOR_KEY_INVALID", "HOST_RUNTIME_INSTALL_FAILED",
