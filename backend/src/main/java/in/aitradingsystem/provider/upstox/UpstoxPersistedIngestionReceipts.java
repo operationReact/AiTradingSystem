@@ -31,7 +31,7 @@ public class UpstoxPersistedIngestionReceipts {
      * historical ingestion run. Verified records count only verified chunks.
      */
     public Snapshot snapshot() {
-        return jdbc.queryForObject("""
+        return jdbc.query("""
             SELECT p.provider_id,
                    (SELECT count(*) FROM golden_dataset_backfill_job j
                      WHERE j.provider_id = p.provider_id) AS jobs,
