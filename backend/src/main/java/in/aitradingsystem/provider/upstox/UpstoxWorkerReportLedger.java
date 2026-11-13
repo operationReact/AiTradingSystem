@@ -51,7 +51,7 @@ public final class UpstoxWorkerReportLedger {
                 now == null || maxAge == null || maxAge.isNegative() || maxAge.isZero() ||
                 comment.createdAt().isAfter(now)) return Optional.empty();
         String[] lines = comment.body().split("\\R");
-        if (lines.length != 11 || !MARKER.equals(lines[0].trim())) return Optional.empty();
+        if (lines.length != 10 || !MARKER.equals(lines[0].trim())) return Optional.empty();
         Map<String, String> fields = new java.util.HashMap<>();
         for (int i = 1; i < lines.length; i++) {
             int split = lines[i].indexOf('=');
@@ -61,7 +61,7 @@ public final class UpstoxWorkerReportLedger {
             if (value.length() > 160 || fields.putIfAbsent(key, value) != null) return Optional.empty();
         }
         if (!fields.keySet().equals(java.util.Set.of("worker", "scope", "result", "pr",
-                "head", "ci", "runtime", "blocker", "next", "note"))) return Optional.empty();
+                "head", "ci", "runtime", "blocker", "next"))) return Optional.empty();
         int worker;
         try { worker = Integer.parseInt(fields.get("worker")); }
         catch (NumberFormatException ex) { return Optional.empty(); }
