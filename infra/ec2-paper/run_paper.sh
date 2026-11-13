@@ -9,6 +9,8 @@ umask 077
 stage=HOST_PRECHECK
 paper_exit() {
   local rc=$?
+  # Keep the single EXIT trap active even after temporary runtime.env creation.
+  if [ -n "${temp:-}" ]; then rm -f -- "$temp" || true; fi
   if [ "$rc" -ne 0 ]; then
     printf 'MINTTICK_PAPER_FAILED_STAGE:%s\n' "$stage" >&2
   fi
@@ -66,7 +68,7 @@ client_mac="$(tr '[:upper:]' '[:lower:]' < "/sys/class/net/$client_iface/address
 # and with 0600 permissions.
 stage=COMPOSE_CONFIG
 temp="$(mktemp "$root/.env.XXXXXXXX")"
-trap 'rm -f -- "$temp"' EXIT
+# Cleanup is handled by paper_exit without replacing the stage-reporting trap.
 cat runtime.env > "$temp"
 printf 'RELEASE_SHA=%s\n' "$sha" >> "$temp"
 printf 'ANGELONE_CLIENT_MAC_ADDRESS=%s\n' "$client_mac" >> "$temp"
@@ -88,7 +90,7 @@ fi
 
 stage=COMPOSE_START
 mv -f -- "$temp" .env
-trap - EXIT
+temp=
 docker compose --env-file .env -f paper-compose.yml up -d --no-build --remove-orphans
 
 # Actual connected Postgres-backed backend and Flutter reverse-proxy readiness.
