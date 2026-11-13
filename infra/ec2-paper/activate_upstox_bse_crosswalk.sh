@@ -83,7 +83,12 @@ try:
     overlap_sql=("""
     SELECT count(*),
       count(*) FILTER(WHERE upper(i.trading_symbol)=upper(u.trading_symbol)),
-      count(*) FILTER(WHERE upper(regexp_replace(i.trading_symbol,'-(EQ|A)
+      count(*) FILTER(WHERE upper(regexp_replace(i.trading_symbol,'-(EQ|A)$',''))
+        =upper(u.trading_symbol)),
+      count(*) FILTER(WHERE coalesce(i.instrument_type,'')=''),
+      count(*) FILTER(WHERE upper(i.instrument_type)='A'),
+      count(*) FILTER(WHERE i.expiry IS NULL),
+      count(*) FILTER(WHERE i.strike IS NULL OR i.strike=0)
     FROM instrument_master i JOIN instrument_catalogue_state c
       ON c.active_version=i.catalogue_version AND c.singleton_id=1
     JOIN upstox_bse_reference_active a ON a.singleton_id=1
@@ -110,43 +115,6 @@ try:
     print("MINTTICK_BSE_TYPE_A:"+parts[4],flush=True)
     print("MINTTICK_BSE_NULL_EXPIRY:"+parts[5],flush=True)
     print("MINTTICK_BSE_ZERO_STRIKE:"+parts[6],flush=True)
-    if eligible<100 or raw<100 or matched<1:
-        block("NO_VALID_MATCHES")
-except (TypeError,ValueError,KeyError,IndexError):
-    block("REFRESH_RESPONSE")
-after=count()
-if after<1 or after<=before:block("NO_BSE_COVERAGE_GAIN")
-print("MINTTICK_BSE_EQ_AFTER:"+str(after),flush=True)
-print("MINTTICK_BSE_RESULT:VERIFIED",flush=True)
-PY
-,''))
-        =upper(u.trading_symbol)),
-      count(*) FILTER(WHERE coalesce(i.instrument_type,'')=''),
-      count(*) FILTER(WHERE upper(i.instrument_type)='A'),
-      count(*) FILTER(WHERE i.expiry IS NULL),
-      count(*) FILTER(WHERE i.strike IS NULL OR i.strike=0)
-    FROM instrument_master i JOIN instrument_catalogue_state c
-      ON c.active_version=i.catalogue_version AND c.singleton_id=1
-    JOIN upstox_bse_reference_active a ON a.singleton_id=1
-    JOIN upstox_bse_reference_equity u
-      ON u.import_id=a.active_import AND u.exchange_token=i.symbol_token
-    WHERE i.active AND i.exchange='BSE' AND i.exchange_segment='BSE_CM';
-    """)
-    try:
-        probe=subprocess.run(base+[overlap_sql],capture_output=True,text=True,timeout=18)
-        parts=probe.stdout.strip().split("|")
-        if probe.returncode or len(parts)!=3 or any(
-           not re.fullmatch(r"[0-9]{1,6}",v) for v in parts):
-            block("SOURCE_OVERLAP_AUDIT")
-    except (OSError,subprocess.TimeoutExpired):
-        block("SOURCE_OVERLAP_AUDIT")
-    print("MINTTICK_BSE_SOURCE_EQUITIES:"+str(eligible),flush=True)
-    print("MINTTICK_BSE_RAW:"+str(raw),flush=True)
-    print("MINTTICK_BSE_MATCHED:"+str(matched),flush=True)
-    print("MINTTICK_BSE_SYMBOL_MISMATCH:"+str(ambiguous),flush=True)
-    print("MINTTICK_BSE_TOKEN_OVERLAP:"+parts[0],flush=True)
-    print("MINTTICK_BSE_EXACT_OVERLAP:"+parts[1],flush=True)
-    print("MINTTICK_BSE_SUFFIX_OVERLAP:"+parts[2],flush=True)
     if eligible<100 or raw<100 or matched<1:
         block("NO_VALID_MATCHES")
 except (TypeError,ValueError,KeyError,IndexError):
