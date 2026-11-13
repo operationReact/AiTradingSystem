@@ -217,6 +217,15 @@ Future<void> _openExplore(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _openMarketCategory(WidgetTester tester, String category) async {
+  await tester.tap(find.text('Explore'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('market-explore-menu')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(category).last);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() {
     final view = TestWidgetsFlutterBinding.ensureInitialized().platformDispatcher.views.first;
@@ -576,6 +585,22 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('compact Markets keeps three fixed tabs and category dropdown', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: _CustomerMarketFake()),
+    ));
+    await tester.pumpAndSettle();
+    final tabs = tester.widget<TabBar>(find.byKey(const ValueKey('customer-market-tabs')));
+    expect(tabs.isScrollable, isFalse);
+    expect(tabs.tabs, hasLength(3));
+    await _openMarketCategory(tester, 'Market Cap');
+    expect(find.text('Large cap'), findsOneWidget);
+    expect(find.text('Mid cap'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Overview, Movers and Sectors show verified Nifty 50 data with text direction labels',
       (tester) async {
     final fake = _CustomerMarketFake()..status = 'LIVE'..indexFreshness = 'LIVE';
@@ -595,10 +620,7 @@ void main() {
     expect(find.text('Breakout'), findsOneWidget);
     expect(find.text('Not available yet'), findsNothing);
 
-    await tester.ensureVisible(find.text('Movers'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Movers'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Movers');
     expect(find.text('Top gainers'), findsOneWidget);
     expect(find.text('Alpha Ltd'), findsWidgets);
     expect(find.text('Change +10.00%'), findsOneWidget);
@@ -606,10 +628,7 @@ void main() {
     expect(find.text('₹125.55'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.ensureVisible(find.text('Sectors'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sectors'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Sectors');
     expect(find.text('Banks'), findsOneWidget);
     expect(find.text('Avg +1.50%'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -659,10 +678,7 @@ void main() {
       home: MintTickCustomerMarketPage(repository: fake),
     ));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Movers'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Movers'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Movers');
     await tester.tap(find.text('Alpha Ltd').first);
     await tester.pumpAndSettle();
     expect(find.byType(MintTickStockDetailPage), findsOneWidget);
