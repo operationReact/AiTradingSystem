@@ -1,5 +1,5 @@
 {
- "manifestVersion": "mind.capability-manifest.v1+2026-11-13.9",
+ "manifestVersion": "mind.capability-manifest.v1+2026-11-13.10",
  "auditedAt": "2026-11-13",
  "sourceIssues": [
   "#997",
@@ -24,19 +24,20 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/home/v1/summary"
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Navigation / design reference screen; values are fixtures.",
+   "note": "Customer Home summary from /api/customer/home/v1/summary: PAPER rooms, broker connection state, Mind evidence status and next action; live execution shown as not authorized.",
    "id": "screen.app-home",
    "kind": "SCREEN",
    "name": "MintTick Home",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,
@@ -86,7 +87,7 @@
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -97,22 +98,20 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.intelligence-hub",
    "kind": "SCREEN",
    "name": "Decision Intelligence",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -123,16 +122,14 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.agent-council",
    "kind": "SCREEN",
    "name": "Agent Council & Debate",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -165,7 +162,7 @@
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -176,16 +173,14 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.regime-weights",
    "kind": "SCREEN",
    "name": "Regime Weight Studio",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -219,7 +214,7 @@
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -230,16 +225,14 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.confidence-lab",
    "kind": "SCREEN",
    "name": "Confidence Calibration",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -277,7 +270,7 @@
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -288,22 +281,20 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.institutional-flow",
    "kind": "SCREEN",
    "name": "FII / DII Flow",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
    "group": "AGENTS",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -314,16 +305,14 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.daily-verdict",
    "kind": "SCREEN",
    "name": "Daily Market Verdict",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -782,7 +771,7 @@
    "parentId": null,
    "group": "RESEARCH",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -793,22 +782,20 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.multibagger",
    "kind": "SCREEN",
    "name": "Multibagger Discovery",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
    "group": "RESEARCH",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -819,22 +806,20 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.thesis-detail",
    "kind": "SCREEN",
    "name": "Investment Thesis",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
    "group": "RESEARCH",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -845,22 +830,20 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.regimes",
    "kind": "SCREEN",
    "name": "Market Regimes",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
    "group": "RESEARCH",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "NO_BACKEND_SOURCE",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -871,16 +854,14 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Backend data source and deterministic evaluator for this screen",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
    "id": "screen.events",
    "kind": "SCREEN",
    "name": "Events & Knowledge Graph",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
