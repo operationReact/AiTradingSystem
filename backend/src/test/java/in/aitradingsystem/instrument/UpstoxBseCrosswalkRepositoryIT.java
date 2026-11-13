@@ -48,7 +48,7 @@ class UpstoxBseCrosswalkRepositoryIT extends AbstractPostgresIT {
 
     private static Map<String,UpstoxBseCrosswalkParser.Equity> verified(int count) {
         var found=new java.util.HashMap<String,UpstoxBseCrosswalkParser.Equity>();
-        for (int i=0;i<count;i++) {
+        for (int i=0;i<count-1;i++) {
             String code=Integer.toString(510000+i);
             String isin="INE000A01" + String.format("%03d",i);
             found.put(code,new UpstoxBseCrosswalkParser.Equity(
@@ -56,7 +56,6 @@ class UpstoxBseCrosswalkRepositoryIT extends AbstractPostgresIT {
         }
         found.put("500325",new UpstoxBseCrosswalkParser.Equity(
             "500325","RELIANCE","INE002A01018","BSE_EQ|INE002A01018"));
-        if (count==99) found.remove("510000");
         return Map.copyOf(found);
     }
 
