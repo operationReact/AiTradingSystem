@@ -36,9 +36,9 @@ def instance(state: str, *, wrong_tags: bool = False) -> dict:
     }
 
 
-def schedule() -> dict:
+def schedule(state: str = "ENABLED") -> dict:
     return {
-        "State": "ENABLED",
+        "State": state,
         "ScheduleExpression": "cron(0 22 * * ? *)",
         "ScheduleExpressionTimezone": "Asia/Kolkata",
         "Target": {
@@ -51,9 +51,11 @@ def schedule() -> dict:
 
 class FakeAws:
     def __init__(self, states: list[str], *, valid_schedule: bool = True,
-                 wrong_tags: bool = False, race: bool = False):
+                 wrong_tags: bool = False, race: bool = False,
+                 schedule_state: str = "ENABLED"):
         self.states = iter(states)
         self.schedule_ok = valid_schedule
+        self.schedule_state = schedule_state
         self.wrong_tags = wrong_tags
         self.race = race
         self.commands: list[tuple[str, ...]] = []
@@ -67,7 +69,7 @@ class FakeAws:
         if args[:2] == ("scheduler", "get-schedule"):
             if not self.schedule_ok:
                 raise ctrl.AwsError("ResourceNotFoundException")
-            return schedule()
+            return schedule(self.schedule_state)
         if args[:2] in (("ec2", "start-instances"), ("ec2", "stop-instances")):
             if self.race:
                 self.race = False
@@ -93,6 +95,23 @@ class ManualPaperControlTests(unittest.TestCase):
         self.assertEqual(sum(c[:2] == ("ec2", "start-instances") for c in commands), 1)
         self.assertEqual(sum(c[:2] == ("scheduler", "get-schedule") for c in commands), 1)
         self.assertFalse(any(c[:2] == ("ec2", "stop-instances") for c in commands))
+
+    def test_disabled_nightly_stop_allows_start_for_24x7_history(self):
+        (state, detail), commands = evaluate(
+            "start", ["stopped", "pending", "running"], schedule_state="DISABLED")
+        self.assertEqual(state, "running")
+        self.assertEqual(detail, "Transition complete")
+        self.assertEqual(sum(c[:2] == ("ec2", "start-instances") for c in commands), 1)
+        self.assertEqual(sum(c[:2] == ("scheduler", "get-schedule") for c in commands), 1)
+
+    def test_unknown_schedule_state_blocks_start(self):
+        fake = FakeAws(["stopped"], schedule_state="UNKNOWN")
+        with patch.dict(os.environ, {"AWS_REGION": "ap-south-1"}), (
+            patch.object(ctrl, "aws_json", side_effect=fake)
+        ):
+            with self.assertRaises(ctrl.ControlError):
+                ctrl.apply("start")
+        self.assertFalse(any(c[:2] == ("ec2", "start-instances") for c in fake.commands))
 
     def test_repeated_start_running_is_noop(self):
         (state, detail), commands = evaluate("start", ["running"])

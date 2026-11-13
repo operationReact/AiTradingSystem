@@ -40,7 +40,7 @@ public final class UpstoxAnalyticsSource {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final String EQUITY_KEY = "(NSE_EQ|BSE_EQ)\\|[A-Z0-9]{12}";
     private static final String ISIN = "[A-Z]{2}[A-Z0-9]{10}";
-    private static final int MAX_CANDLES = 40;
+    private static final int MAX_CANDLES = 1024;
     private final boolean enabled;
     private final SsmClient suppliedSsm;
     private final RestClient client;
@@ -71,16 +71,35 @@ public final class UpstoxAnalyticsSource {
                          BigDecimal low, BigDecimal close, long volume, long openInterest) {}
     public record Ratio(String name, String companyValue, String sectorValue) {}
 
-    /** At most one 31-day cash-equity daily window, with full source identity. */
+    /** Preserve the conservative existing operator probe's 31-day daily window. */
     public List<Candle> dailyEquityCandles(String instrumentKey, LocalDate from, LocalDate through) {
-        if (instrumentKey == null || !instrumentKey.matches(EQUITY_KEY)
-                || from == null || through == null || from.isAfter(through)
-                || ChronoUnit.DAYS.between(from, through) > 30
-                || through.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
+        if (from == null || through == null || from.isAfter(through)
+                || ChronoUnit.DAYS.between(from, through) > 30) {
             throw new IllegalArgumentException("Invalid bounded Upstox daily-candle request");
         }
-        JsonNode root = get("/v3/historical-candle/{key}/days/1/{to}/{from}",
-                instrumentKey, through.toString(), from.toString());
+        return historicalEquityCandles(instrumentKey, "days", 1, from, through);
+    }
+
+    /**
+     * Read one bounded V3 equity history window. No persistence, scheduling, order
+     * actions or broker OAuth session access. Callers must checkpoint separately,
+     * honor the published API quotas, and verify dataset usage rights.
+     *
+     * Deliberately tighter windows than Upstox's documented maxima keep a
+     * single response inside our size and candle-count bounds.
+     */
+    public List<Candle> historicalEquityCandles(String instrumentKey, String unit,
+                                                int interval, LocalDate from, LocalDate through) {
+        long maxDays = allowedWindowDays(unit, interval);
+        if (instrumentKey == null || !instrumentKey.matches(EQUITY_KEY)
+                || maxDays < 0 || from == null || through == null
+                || from.isAfter(through)
+                || ChronoUnit.DAYS.between(from, through) > maxDays
+                || through.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
+            throw new IllegalArgumentException("Invalid bounded Upstox historical-candle request");
+        }
+        JsonNode root = get("/v3/historical-candle/{key}/{unit}/{interval}/{to}/{from}",
+                instrumentKey, unit, interval, through.toString(), from.toString());
         JsonNode data = root.path("data").path("candles");
         if (!data.isArray() || data.size() > MAX_CANDLES) {
             throw unavailable("UPSTOX_INVALID_CANDLES");
@@ -111,6 +130,24 @@ public final class UpstoxAnalyticsSource {
         }
         candles.sort(Comparator.comparing(Candle::time));
         return List.copyOf(candles);
+    }
+
+
+    /**
+     * Inclusive windows: one or two calendar days for fast minute bars, a
+     * month for slower intraday bars, one year for daily and ten years for
+     * weekly/monthly. These are application ceilings, not provider guarantees.
+     */
+    static long allowedWindowDays(String unit, int interval) {
+        if (unit == null) return -1;
+        return switch (unit) {
+            case "minutes" -> interval >= 1 && interval <= 300
+                    ? (interval <= 15 ? 1L : 30L) : -1L;
+            case "hours" -> interval >= 1 && interval <= 5 ? 30L : -1L;
+            case "days" -> interval == 1 ? 365L : -1L;
+            case "weeks", "months" -> interval == 1 ? 3650L : -1L;
+            default -> -1L;
+        };
     }
 
     /** Current ratios only. Never use as historical point-in-time features. */
