@@ -236,7 +236,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     return [
       panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Expanded(child: Text('Verified project completion',
+          const Expanded(child: Text('Data & PAPER acceptance',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800))),
           Text(score.percent == null ? '—' : '${score.percent}%',
             key: const ValueKey('upstox-verified-completion-percent'),
