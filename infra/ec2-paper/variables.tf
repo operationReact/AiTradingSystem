@@ -50,7 +50,7 @@ variable "daily_stop_hour_ist" {
 }
 
 variable "daily_stop_enabled" {
-  description = "Enable low-cost stop on the provisioned instance every day. Only disable intentionally."
+  description = "Opt-in nightly stop only; disabled by default for unattended 24/7 owner history collection."
   type        = bool
-  default     = true
+  default     = false
 }

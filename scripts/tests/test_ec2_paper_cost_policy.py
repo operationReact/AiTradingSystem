@@ -74,11 +74,12 @@ class CheapPaperEC2Policy(unittest.TestCase):
         self.assertNotIn('TRADING_MODE=LIVE', bootstrap)
         self.assertNotIn('ANGELONE_API_KEY', bootstrap)
 
-    def test_auto_stop_2200_ist_no_auto_start_cross_project_permission(self):
+    def test_opt_in_stop_2200_ist_no_auto_start_cross_project_permission(self):
         main = (TF / "main.tf").read_text()
         variables = (TF / "variables.tf").read_text()
         self.assertIn('default     = 22', variables)
-        self.assertIn('default     = true', variables)
+        self.assertIn('variable "daily_stop_enabled" {', variables)
+        self.assertIn('default     = false', variables.split('variable "daily_stop_enabled" {', 1)[1])
         self.assertIn('schedule_expression_timezone = "Asia/Kolkata"', main)
         self.assertIn('schedule_expression          = "cron(0 ${var.daily_stop_hour_ist} * * ? *)"', main)
         self.assertIn('state                        = var.daily_stop_enabled ? "ENABLED" : "DISABLED"', main)
