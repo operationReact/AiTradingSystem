@@ -49,6 +49,37 @@ class OwnerUpstoxTotpServiceTest {
     }
 
     @Test
+    void distinguishesOnlyKnownUpstoxTotpErrorsWithoutLeakingBrokerResponses() {
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100101\",\"message\":\"secret\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_APP_NOT_ELIGIBLE");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"error_code\":\"UDAPI100096\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_APP_KEY_INVALID");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100097\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_CREDENTIALS_INVALID");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100098\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_NOT_ENABLED");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UDAPI100099\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_RATE_LIMITED");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UDAPI1242\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_CONFIGURATION_INVALID");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(
+            "{\"errors\":[{\"errorCode\":\"UNKNOWN\",\"message\":\"pin=123456\"}]}"))
+            .isEqualTo("UPSTOX_TOTP_AUTH_REJECTED");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse("not json"))
+            .isEqualTo("UPSTOX_TOTP_AUTH_REJECTED");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse(" "))
+            .isEqualTo("UPSTOX_TOTP_AUTH_REJECTED");
+        assertThat(UpstoxApiClient.classifyTotpErrorResponse("x".repeat(4097)))
+            .isEqualTo("UPSTOX_TOTP_AUTH_REJECTED");
+    }
+
+    @Test
     void generatesStandardRfcTotpWithoutExposingSecret() {
         assertThat(UpstoxTotp.generate("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
             Instant.ofEpochSecond(59))).isEqualTo("287082");
