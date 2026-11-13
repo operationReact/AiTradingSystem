@@ -50,6 +50,22 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
         self.assertIn("row[0]=='ROLLBACK_UNVERIFIED' for row in approved", workflow)
         self.assertIn("MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true", activate)
         self.assertIn("MINTTICK_UPSTOX_RESULT:ACTIVATED_READ_ONLY", activate)
+        self.assertIn("stage=runtime_prepare", activate)
+        self.assertIn("stage=runtime_publish", activate)
+        self.assertIn("stage=release_restart", activate)
+        self.assertIn("fail HOST_RUNTIME_PASSWORD_INVALID", activate)
+        self.assertIn("fail HOST_RUNTIME_OPERATOR_KEY_INVALID", activate)
+        self.assertIn("fail HOST_RUNTIME_INSTALL_FAILED", activate)
+        self.assertIn('failure_code="$(classify_failure)"', activate)
+        self.assertIn("rollback_state=unverified", activate)
+        self.assertIn("reason=ROLLBACK_UNVERIFIED", activate)
+        self.assertNotIn("echo 'MINTTICK_UPSTOX_RESULT:ROLLBACK_UNVERIFIED'", activate)
+        for reason in ("HOST_RUNTIME_PREP_FAILED", "HOST_RUNTIME_PASSWORD_INVALID",
+                       "HOST_RUNTIME_OPERATOR_KEY_INVALID", "HOST_RUNTIME_INSTALL_FAILED",
+                       "LOCAL_RELEASE_RESTART_UNCLASSIFIED",
+                       "HOST_ACTIVATION_UNEXPECTED"):
+            with self.subTest(reason=reason):
+                self.assertIn("'" + reason + "'", workflow)
         self.assertNotIn("getParameterByPath", activate)
         self.assertNotIn("/v3/order/place", activate)
 

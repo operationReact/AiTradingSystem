@@ -8,27 +8,33 @@ umask 077
 stage=precheck
 accepted=0
 work=
+failure_code=
+rollback_state=not_needed
+fail() { failure_code="$1"; exit 5; }
 # Report unexpected early termination using fixed, non-sensitive markers.
 # Deliberate failures retain their more specific marker, emitted first.
 on_exit() {
-  code=$?
-  if [ -n "$work" ]; then
-    rm -rf -- "$work" || true
-  fi
+  local code=$? reason
   if [ "$code" -ne 0 ] || [ "$accepted" -ne 1 ]; then
-    case "$stage" in
-      ssm_authorization) reason=SSM_UNAVAILABLE ;;
-      read_only_probe|result_validation) reason=PROVIDER_OR_RESPONSE_UNAVAILABLE ;;
-      precheck) reason=HOST_PRECHECK_FAILED ;;
-      release_identity) reason=HOST_RELEASE_IDENTITY_INVALID ;;
-      *) reason=LOCAL_RELEASE_UNCLASSIFIED ;;
-    esac
+    reason="$failure_code"
+    if [ "$rollback_state" = unverified ]; then reason=ROLLBACK_UNVERIFIED; fi
+    if [ -z "$reason" ]; then
+      case "$stage" in
+        ssm_authorization) reason=SSM_UNAVAILABLE ;;
+        precheck) reason=HOST_PRECHECK_FAILED ;;
+        release_identity) reason=HOST_RELEASE_IDENTITY_INVALID ;;
+        runtime_prepare) reason=HOST_RUNTIME_PREP_FAILED ;;
+        runtime_publish) reason=HOST_RUNTIME_INSTALL_FAILED ;;
+        release_restart) reason=LOCAL_RELEASE_RESTART_UNCLASSIFIED ;;
+        read_only_probe) reason=PROBE_HTTP_UNAVAILABLE ;;
+        result_validation) reason=PROVIDER_OR_RESPONSE_UNAVAILABLE ;;
+        *) reason=HOST_ACTIVATION_UNEXPECTED ;;
+      esac
+    fi
     printf 'MINTTICK_UPSTOX_RESULT:%s\n' "$reason"
     printf 'MINTTICK_UPSTOX_STAGE:%s\n' "$stage" >&2
-    if [ "$code" -eq 0 ]; then
-      exit 9
-    fi
   fi
+  if [ -n "$work" ]; then rm -rf -- "$work" || true; fi
 }
 trap on_exit EXIT
 
@@ -78,7 +84,7 @@ test "$(docker image inspect "aitradingsystem-paper-backend-arm64:$sha" \
 
 # The caller intentionally accepts one controlled backend recreation, as for
 # a normal PAPER release. Preserve the original root-only credential file.
-stage=activation
+stage=runtime_prepare
 work="$(mktemp -d "$root/.upstox-analytics.XXXXXXXX")"
 chmod 0700 "$work"
 cp -p "$root/runtime.env" "$work/previous.env"
@@ -89,9 +95,9 @@ restore() {
 rollback() {
   if restore && curl --fail --silent --max-time 8 \
       --output /dev/null 'http://127.0.0.1:8080/api/health'; then
-    echo 'MINTTICK_UPSTOX_RESULT:ROLLBACK_HEALTHY'
+    rollback_state=healthy
   else
-    echo 'MINTTICK_UPSTOX_RESULT:ROLLBACK_UNVERIFIED'
+    rollback_state=unverified
   fi
 }
 classify_failure() {
@@ -134,21 +140,24 @@ classify_failure() {
   elif grep -Eiq 'docker.*error|error response from daemon' "$logfile"; then
     echo 'LOCAL_RELEASE_DOCKER_ERROR'
   else
-    echo 'LOCAL_RELEASE_UNCLASSIFIED'
+    echo 'LOCAL_RELEASE_RESTART_UNCLASSIFIED'
   fi
 }
 awk '!/^(MINTTICK_UPSTOX_ANALYTICS_(ENABLED|PROBE_ENABLED)|MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED)=/' \
   "$work/previous.env" > "$work/next.env"
-grep -Eq '^POSTGRES_PASSWORD=[0-9a-f]{64}$' "$work/next.env"
-grep -Eq '^APP_API_KEY=[0-9a-f]{64}$' "$work/next.env"
+grep -Eq '^POSTGRES_PASSWORD=[0-9a-f]{64}$' "$work/next.env" || fail HOST_RUNTIME_PASSWORD_INVALID
+grep -Eq '^APP_API_KEY=[0-9a-f]{64}$' "$work/next.env" || fail HOST_RUNTIME_OPERATOR_KEY_INVALID
 printf 'MINTTICK_UPSTOX_ANALYTICS_ENABLED=true\n' >> "$work/next.env"
 printf 'MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED=true\n' >> "$work/next.env"
 printf 'MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true\n' >> "$work/next.env"
-install -o root -g root -m 0600 "$work/next.env" "$root/runtime.env"
+stage=runtime_publish
+if ! install -o root -g root -m 0600 "$work/next.env" "$root/runtime.env"; then
+  fail HOST_RUNTIME_INSTALL_FAILED
+fi
+stage=release_restart
 if ! bash "$root/run_paper.sh" "$sha" > "$work/release.log" 2>&1; then
-  code="$(classify_failure)"
+  failure_code="$(classify_failure)"
   rollback
-  printf 'MINTTICK_UPSTOX_RESULT:%s\n' "$code"
   exit 5
 fi
 
@@ -156,8 +165,7 @@ stage=read_only_probe
 operator_key="$(sed -n 's/^APP_API_KEY=//p' "$root/runtime.env" | head -n 1)"
 if [[ ! "$operator_key" =~ ^[0-9a-f]{64}$ ]]; then
   rollback
-  echo 'MINTTICK_UPSTOX_RESULT:OPERATOR_AUTH_UNAVAILABLE'
-  exit 6
+  fail OPERATOR_AUTH_UNAVAILABLE
 fi
 
 http_code="$(curl --silent --show-error --connect-timeout 3 --max-time 35 \
@@ -168,8 +176,7 @@ http_code="$(curl --silent --show-error --connect-timeout 3 --max-time 35 \
 unset operator_key
 if [ "$http_code" != 200 ]; then
   rollback
-  echo 'MINTTICK_UPSTOX_RESULT:PROBE_HTTP_UNAVAILABLE'
-  exit 7
+  fail PROBE_HTTP_UNAVAILABLE
 fi
 
 # Only boolean security guarantees, status and validated counts leave the
@@ -192,8 +199,7 @@ except (KeyError, AssertionError, TypeError, ValueError, OSError):
 PY
 then
   rollback
-  echo 'MINTTICK_UPSTOX_RESULT:PROVIDER_OR_RESPONSE_UNAVAILABLE'
-  exit 8
+  fail PROVIDER_OR_RESPONSE_UNAVAILABLE
 fi
 
 accepted=1
