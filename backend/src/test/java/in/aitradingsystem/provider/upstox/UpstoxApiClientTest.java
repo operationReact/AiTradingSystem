@@ -77,6 +77,16 @@ class UpstoxApiClientTest {
     }
 
     @Test
+    void unavailableOvernightFundsDoNotRepresentZeroBalance() {
+        server.expect(requestTo("https://api.upstox.com/v2/user/get-funds-and-margin"))
+            .andRespond(withStatus(HttpStatus.LOCKED));
+        assertThatThrownBy(() -> api.funds("synthetic-session"))
+            .isInstanceOf(UpstoxApiClient.UpstoxProviderException.class)
+            .hasMessage("UPSTOX_FUNDS_MAINTENANCE");
+        server.verify();
+    }
+
+    @Test
     void savedLoginAndAccountReadsUseExplicitJsonParsingToo() {
         server.expect(requestTo("https://api.upstox.com/v2/totp-login/authorization/token"))
             .andExpect(method(HttpMethod.POST))
