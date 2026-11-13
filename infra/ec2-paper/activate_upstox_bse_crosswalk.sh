@@ -81,32 +81,16 @@ try:
         block("REFRESH_RESPONSE")
     # Capture only aggregate cross-broker identity overlap, not identifiers.
     overlap_sql=("""
-      WITH raw AS (
-        SELECT i.symbol_token, i.trading_symbol FROM instrument_master i
-        JOIN instrument_catalogue_state c ON c.active_version=i.catalogue_version
-          AND c.singleton_id=1
-        WHERE i.active AND i.exchange='BSE' AND i.exchange_segment='BSE_CM'
-      ), src AS (
-        SELECT u.exchange_token, u.trading_symbol
-        FROM upstox_bse_reference_equity u
-        JOIN upstox_bse_reference_active a ON a.active_import=u.import_id
-      )
-      SELECT count(*),
-        count(*) FILTER (WHERE upper(r.trading_symbol)=upper(u.trading_symbol)),
-        count(*) FILTER (WHERE upper(regexp_replace(r.trading_symbol,'-(EQ|A)
-except (TypeError,ValueError,KeyError,IndexError):
-    block("REFRESH_RESPONSE")
-after=count()
-if after<1 or after<=before:block("NO_BSE_COVERAGE_GAIN")
-print("MINTTICK_BSE_SOURCE_EQUITIES:"+str(eligible),flush=True)
-print("MINTTICK_BSE_MATCHED:"+str(matched),flush=True)
-print("MINTTICK_BSE_RAW:"+str(raw),flush=True)
-print("MINTTICK_BSE_EQ_AFTER:"+str(after),flush=True)
-print("MINTTICK_BSE_RESULT:VERIFIED",flush=True)
-PY
-,''))
-          =upper(u.trading_symbol))
-      FROM raw r JOIN src u ON r.symbol_token=u.exchange_token;
+    SELECT count(*),
+      count(*) FILTER(WHERE upper(i.trading_symbol)=upper(u.trading_symbol)),
+      count(*) FILTER(WHERE upper(regexp_replace(i.trading_symbol,'-(EQ|A)$',''))
+        =upper(u.trading_symbol))
+    FROM instrument_master i JOIN instrument_catalogue_state c
+      ON c.active_version=i.catalogue_version AND c.singleton_id=1
+    JOIN upstox_bse_reference_active a ON a.singleton_id=1
+    JOIN upstox_bse_reference_equity u
+      ON u.import_id=a.active_import AND u.exchange_token=i.symbol_token
+    WHERE i.active AND i.exchange='BSE' AND i.exchange_segment='BSE_CM';
     """)
     try:
         probe=subprocess.run(base+[overlap_sql],capture_output=True,text=True,timeout=18)
@@ -129,9 +113,6 @@ except (TypeError,ValueError,KeyError,IndexError):
     block("REFRESH_RESPONSE")
 after=count()
 if after<1 or after<=before:block("NO_BSE_COVERAGE_GAIN")
-print("MINTTICK_BSE_SOURCE_EQUITIES:"+str(eligible),flush=True)
-print("MINTTICK_BSE_MATCHED:"+str(matched),flush=True)
-print("MINTTICK_BSE_RAW:"+str(raw),flush=True)
 print("MINTTICK_BSE_EQ_AFTER:"+str(after),flush=True)
 print("MINTTICK_BSE_RESULT:VERIFIED",flush=True)
 PY
