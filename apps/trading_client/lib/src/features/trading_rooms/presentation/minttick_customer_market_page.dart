@@ -788,55 +788,52 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const SizedBox(height: 12),
       ],
       if (overview.source == 'STORED_LAST_OVERVIEW') ...[
-        MintTickInfoText(
-          'Last verified snapshot · exchange ${(overview.exchangeAsOf ?? overview.generatedAt).toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
-          'Historical prices only, not a live market view.',
-          icon: Icons.history_rounded,
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (overview.source != 'STORED_LAST_OVERVIEW' &&
-          !overview.indices.any((index) => index.freshness == 'LIVE')) ...[
-        const MintTickInfoText(
-          'No verified live index quote. Market breadth, movers and sectors '
-          'reflect last recorded provider data, not an active trading signal.',
-          icon: Icons.schedule_rounded,
-        ),
-        const SizedBox(height: 12),
+        Text('Last verified snapshot · historical, not live',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+      ] else if (!overview.indices.any((index) => index.freshness == 'LIVE')) ...[
+        Text('Last recorded quotes · not a live trading signal',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
       ],
       Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.indices.isEmpty)
-        const MintTickInfoText('Index quotes are not in this snapshot. None are shown.')
+        Text('No verified index quote in this snapshot',
+            style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant))
       else
         for (final index in overview.indices) ...[
           _IndexCard(index: index, stored: overview.source == 'STORED_LAST_OVERVIEW'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
         ],
-      const MintTickInfoText('SENSEX and intraday sparklines are not available yet: '
-          'no verified SENSEX token and no stored intraday history. None are estimated.',
-          icon: Icons.hourglass_empty_rounded),
-      const SizedBox(height: 16),
+      if (!overview.indices.any((i) => i.indexCode.toUpperCase().contains('SENSEX')))
+        Text('SENSEX and intraday charts: verified source pending',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 9),
       _BreadthCard(overview: overview),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       _MoverSection(title: 'Top gainers', rows: overview.gainers.take(3).toList(),
           emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       _MoverSection(title: 'Top losers', rows: overview.losers.take(3).toList(),
           emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       Text('Sector performance', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.sectors.isEmpty)
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
-        for (final sector in overview.sectors.take(5)) ...[
-          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(5))),
-          const SizedBox(height: 8),
+        for (final sector in overview.sectors.take(3)) ...[
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(3))),
+          const SizedBox(height: 3),
         ],
       const SizedBox(height: 8),
       _IdeasSection(
@@ -1377,14 +1374,12 @@ class _BreadthCard extends StatelessWidget {
     final muted = theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Container(
       key: const ValueKey('customer-market-breadth'),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(10),
       decoration: _cardDecoration(scheme),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Market breadth', style: theme.textTheme.titleSmall
+        Text('Market breadth · Nifty 50 only', style: theme.textTheme.titleSmall
             ?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
-        Text('Nifty 50 constituents only', style: muted),
-        const SizedBox(height: 10),
+        const SizedBox(height: 7),
         if (b.total == 0)
           const MintTickInfoText('No Nifty 50 stock has a verified quote in this snapshot.')
         else ...[
@@ -1490,9 +1485,8 @@ class _MoverSection extends StatelessWidget {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(16),
                     onTap: () => onOpen(mover),
-                    child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: _cardDecoration(scheme),
+                    child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
                   child: Row(children: [
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1545,9 +1539,8 @@ class _SectorCard extends StatelessWidget {
       label: '${sector.sector}, ${sector.members} stocks, ${sector.advancers} up, '
           '${sector.decliners} down, average change ${_signedPct(sector.avgChangePct)}.',
       child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: _cardDecoration(scheme),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1568,12 +1561,12 @@ class _SectorCard extends StatelessWidget {
                 )),
                 _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 5),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: fraction,
-                  minHeight: 4,
+                  minHeight: 2,
                   color: color,
                   backgroundColor: scheme.outlineVariant,
                 ),
