@@ -64,7 +64,7 @@ void main() {
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Coverage'), findsOneWidget);
     expect(find.text('Operations'), findsOneWidget);
-    expect(find.text('Verified project completion'), findsOneWidget);
+    expect(find.text('Data & PAPER acceptance'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
     expect(find.text('Remaining: 95%'), findsOneWidget);
     expect(find.byKey(const ValueKey('upstox-verified-completion-bar')), findsOneWidget);
@@ -80,6 +80,10 @@ void main() {
     expect(find.textContaining('No verified timeframe'), findsOneWidget);
 
     await tester.tap(find.text('Operations'));
+    await tester.pumpAndSettle();
+    expect(find.text('Five data workstreams'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Source verification'), 280,
+      scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('Source verification'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());

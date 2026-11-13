@@ -145,8 +145,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
                 if (activeTab == 'Operations') ...acceptanceProgress(data),
-                if (activeTab == 'Operations') ...taskList(data, specs),
                 if (activeTab == 'Operations') ...workerDelivery(data),
+                if (activeTab == 'Operations') ...taskList(data, specs),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
               ],
@@ -171,6 +171,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
       ...acceptanceProgress(data),
+      const SizedBox(height: 10),
+      workerActivitySummary(data),
       const SizedBox(height: 14),
       Row(children: [
         const Expanded(child: Text('Analytics health',
@@ -184,7 +186,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         const SizedBox(width: 6),
         metric('Ratios', ratios, Icons.analytics_outlined),
         const SizedBox(width: 6),
-        metric('Verified jobs', verified.toString(), Icons.check_circle_outline),
+        metric('Passing checks', verified.toString(), Icons.check_circle_outline),
       ]),
       const SizedBox(height: 6),
       Text('Read-only sample · $active active · $blocked blocked · '
@@ -234,7 +236,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     return [
       panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
-          const Expanded(child: Text('Verified project completion',
+          const Expanded(child: Text('Data & PAPER acceptance',
             style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800))),
           Text(score.percent == null ? '—' : '${score.percent}%',
             key: const ValueKey('upstox-verified-completion-percent'),
@@ -350,46 +352,103 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     );
   }
 
+  List<UpstoxWorkerObservation> workerObservations(UpstoxAnalyticsProgress data) {
+    final task = data.find('WORKER_REPORTS');
+    if (task == null || task.state == 'BLOCKED' || task.state == 'DISABLED') {
+      return UpstoxWorkerObservation.fromBackend(null);
+    }
+    return UpstoxWorkerObservation.fromBackend(
+      task.details['workerReports'], staleSnapshot: task.stale);
+  }
+
+  Widget workerActivitySummary(UpstoxAnalyticsProgress data) {
+    final reports = workerObservations(data);
+    final fresh = reports.where((x) => x.state == 'FRESH').length;
+    final stale = reports.where((x) => x.state == 'STALE').length;
+    return panel(Row(children: [
+      const Icon(Icons.work_history_outlined,
+        size: 19, color: MintTickPalette.mint),
+      const SizedBox(width: 9),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Development activity', style: TextStyle(
+            fontWeight: FontWeight.w800, fontSize: 12)),
+          Text('$fresh/5 fresh worker reports · $stale stale',
+            style: const TextStyle(fontSize: 10,
+              color: MintTickPalette.mutedSilver)),
+          const Text('GitHub evidence, not operational readiness',
+            style: TextStyle(fontSize: 10,
+              color: MintTickPalette.mutedSilver)),
+        ])),
+      TextButton(onPressed: () => setState(() => activeTab = 'Operations'),
+        child: const Text('Work details', style: TextStyle(fontSize: 11))),
+    ]), padding: const EdgeInsets.all(10));
+  }
+
   List<Widget> workerDelivery(UpstoxAnalyticsProgress data) {
     final githubTask = data.find('GITHUB_DEVELOPMENT');
-    final observed = githubTask != null &&
-        githubTask.state == 'VERIFIED' && !githubTask.stale;
-    final workstreams = UpstoxDeliveryWorkstreams.fromRecentPrs(
-        observed ? githubTask.details['trackedPrs'] : null);
+    final observedPrSample = githubTask?.state == 'VERIFIED' && githubTask?.stale == false;
+    final prSample = UpstoxDeliveryWorkstreams.fromRecentPrs(
+        observedPrSample ? githubTask?.details['trackedPrs'] : null);
+    final reports = workerObservations(data);
+    final fresh = reports.where((x) => x.state == 'FRESH').length;
+    final missing = reports.where((x) => x.state == 'NO_REPORT').length;
     return [
-      heading('Five data workstreams', 'Recent GitHub PR evidence · not scheduler/runtime health'),
-      panel(Column(children: [
-        for (var i = 0; i < workstreams.length; i++)
+      heading('Five data workstreams',
+        'Reported GitHub delivery · separate from backend ingestion'),
+      panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Fresh reports $fresh/5 · No report $missing/5',
+          style: const TextStyle(color: MintTickPalette.mutedSilver,
+            fontSize: 11, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        for (var i = 0; i < reports.length; i++)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-            child: Row(children: [
-              SizedBox(width: 25, child: Text('W${workstreams[i].number}',
-                  style: const TextStyle(fontSize: 11,
-                      color: MintTickPalette.mint,
-                      fontWeight: FontWeight.w800))),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 26, child: Text('W${i + 1}',
+                style: const TextStyle(fontSize: 11,
+                  color: MintTickPalette.mint, fontWeight: FontWeight.w800))),
               const SizedBox(width: 5),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(workstreams[i].label, maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11,
-                          fontWeight: FontWeight.w700)),
-                  Text(workstreams[i].pr == null
-                      ? 'No PR observed in recent sample'
-                      : '#${workstreams[i].pr!.number} · ${workstreams[i].pr!.state}',
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(reports[i].label, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  Text(reports[i].state == 'NO_REPORT'
+                    ? 'No recent worker report · ${prSample[i].pr == null ? 'No PR in sample' : 'PR #${prSample[i].pr!.number} ${prSample[i].pr!.state}'}'
+                    : '${reports[i].result ?? 'UNKNOWN'} · PR ${reports[i].pr?.toString() ?? '—'} · CI ${reports[i].ci ?? 'UNKNOWN'}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mutedSilver)),
+                  if (reports[i].state != 'NO_REPORT')
+                    Text('Last reported ${when(reports[i].reportedAt)} · ${reports[i].state}',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10,
-                          color: MintTickPalette.mutedSilver)),
-                ],
-              )),
-              if (workstreams[i].pr != null)
+                        color: MintTickPalette.mutedSilver)),
+                  if (reports[i].blocker != null && reports[i].blocker != 'NONE')
+                    Text('Blocked: ${reports[i].blocker}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: Color(0xFFE6BD73))),
+                  if (reports[i].next != null)
+                    Text('Next: ${reports[i].next}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mutedSilver)),
+                ])),
+              const SizedBox(width: 4),
+              Text(reports[i].state == 'NO_REPORT' ? 'UNKNOWN'
+                    : reports[i].state,
+                style: TextStyle(fontSize: 9,
+                  color: reports[i].state == 'FRESH'
+                    ? MintTickPalette.mint : const Color(0xFFE6BD73))),
+              if (reports[i].url != null)
                 IconButton(
-                  tooltip: 'Copy workstream PR link',
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  tooltip: 'Copy worker PR link',
+                  constraints: const BoxConstraints(minWidth: 31, minHeight: 31),
                   icon: const Icon(Icons.copy_outlined, size: 16),
                   onPressed: () async {
-                    await Clipboard.setData(ClipboardData(
-                        text: workstreams[i].pr!.url));
+                    await Clipboard.setData(ClipboardData(text: reports[i].url!));
                     if (mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('PR link copied')));
@@ -398,11 +457,12 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 ),
             ]),
           ),
-      ]), padding: const EdgeInsets.all(5)),
+      ]), padding: const EdgeInsets.all(10)),
       const SizedBox(height: 8),
-      note('PRs indicate code delivery, not a running downloader. '
-        'Worker run timestamps and persisted candle counts need separate '
-        'backend evidence. A missing recent PR does not mean the worker stopped.'),
+      note('Last-reported times come from GitHub issue #1012. '
+        'A recent worker report or merged PR does not prove that a '
+        'Spring Boot downloader, MintTick Mind feed, or PAPER execution is running. '
+        'Without a deployed report collector, worker activity remains unknown.'),
     ];
   }
 
@@ -511,6 +571,21 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     ];
   }
 
+  String? relatedDevelopment(String code, UpstoxAnalyticsTask? task) {
+    // This line deliberately never changes an operational readiness state.
+    if (task == null || task.state == 'VERIFIED') return null;
+    final worker = switch (code) {
+      'INSTRUMENT_MAPPING' || 'HISTORICAL_INGESTION' => 1,
+      'QUALITY_RIGHTS' || 'MIND_DATASETS' => 2,
+      'FUNDAMENTALS' => 4,
+      _ => null,
+    };
+    if (worker == null || snapshot == null) return null;
+    final report = workerObservations(snapshot!)[worker - 1];
+    if (report.state == 'NO_REPORT' || report.pr == null) return null;
+    return 'Developer W$worker · PR #${report.pr} · ${report.ci ?? 'CI unknown'}';
+  }
+
   Widget pipelineRow(
       (String, String, String, IconData) spec,
       UpstoxAnalyticsTask? task, {bool last = false}) {
@@ -539,6 +614,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10,
                     color: MintTickPalette.mutedSilver)),
+                if (relatedDevelopment(spec.$1, task) case final work?)
+                  Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mint)),
               ])),
             const SizedBox(width: 5),
             status(task),
@@ -567,6 +646,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                   Text(task?.reasonCode == null ? spec.$3 : reasonDescription(task!.reasonCode),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
+                  if (relatedDevelopment(spec.$1, task) case final work?)
+                    Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mint)),
                   if (task?.checked != null)
                     Text('Verified ${str(task?.verified)} / ${str(task?.checked)} checks',
                       style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
