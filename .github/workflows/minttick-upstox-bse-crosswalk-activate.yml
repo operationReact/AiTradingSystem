@@ -29,7 +29,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('infra/ec2-paper/activate_upstox_bse_crosswalk.sh').read_text()
-          assert len(s)<4500
+          assert len(s)<6000
           assert "TRADING_MODE: PAPER" in s
           assert "127.0.0.1:8080/api/instruments/upstox-bse-crosswalk/refresh" in s
           assert "MINTTICK_BSE_RESULT:VERIFIED" in s
@@ -92,7 +92,8 @@ jobs:
           import base64,json,os
           from pathlib import Path
           code=Path('infra/ec2-paper/activate_upstox_bse_crosswalk.sh').read_bytes()
-          assert 1000<len(code)<4500
+          assert 1000<len(code)<6000
+          assert len(base64.b64encode(code))<8192
           command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
           f=Path(os.environ['RUNNER_TEMP'])/'bse-source-command.json'
           f.write_text(json.dumps({'commands':[command]}))
@@ -134,6 +135,10 @@ jobs:
               if http: label+='_HTTP_'+http.group(1)
               if code: label+='_'+code.group(1)
               print(label)
+              for category in ('SOURCE_EQUITIES','RAW','MATCHED','SYMBOL_MISMATCH',
+                               'TOKEN_OVERLAP','EXACT_OVERLAP','SUFFIX_OVERLAP'):
+                  value=read_num('MINTTICK_BSE_'+category)
+                  if value is not None: print('BSE_'+category+':'+str(value))
           else:
               print('PENDING')
           PY

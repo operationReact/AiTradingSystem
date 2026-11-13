@@ -21,7 +21,7 @@ class UpstoxBseCrosswalkParserTest {
               "instrument_key":"BSE_EQ|INE002A01018","exchange_token":"500325",
               "trading_symbol":"RELIANCE"},
             {"segment":"BSE_EQ","exchange":"BSE","instrument_type":"EQ",
-              "security_type":"NORMAL","isin":"INE467B01029",
+              "isin":"INE467B01029",
               "instrument_key":"BSE_EQ|INE467B01029","exchange_token":"532540",
               "trading_symbol":"TCS"},
             {"segment":"BSE_EQ","exchange":"BSE","instrument_type":"DB",
@@ -42,6 +42,17 @@ class UpstoxBseCrosswalkParserTest {
         assertThat(parsed.excludedRows()).isEqualTo(3);
         assertThat(parsed.verifiedEquities()).containsOnlyKeys("500325","532540");
         assertThat(parsed.verifiedEquities().get("500325").symbol()).isEqualTo("RELIANCE");
+    }
+
+    @Test
+    void missingOptionalBseSecurityTypeDoesNotRejectExplicitAEquity() throws Exception {
+        var parsed=parser.parseGzip(gzip("""
+          [{"segment":"BSE_EQ","exchange":"BSE","instrument_type":"A",
+            "isin":"INE002A01018","instrument_key":"BSE_EQ|INE002A01018",
+            "exchange_token":"500325","trading_symbol":"RELIANCE"}]
+          """));
+        assertThat(parsed.eligibleRows()).isEqualTo(1);
+        assertThat(parsed.verifiedEquities()).containsOnlyKeys("500325");
     }
 
     @Test
