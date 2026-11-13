@@ -36,6 +36,7 @@ public class BseSecurityMasterService {
     public record Refresh(BseSecurityMasterRepository.State verifiedReference,
                           InstrumentImportSummary brokerCatalogueImport) {}
 
+    @org.springframework.beans.factory.annotation.Autowired
     public BseSecurityMasterService(BseSecurityMasterParser parser,
             BseSecurityMasterRepository repository, InstrumentMasterService instruments) {
         this(parser, repository, instruments, HttpClient.newBuilder()
