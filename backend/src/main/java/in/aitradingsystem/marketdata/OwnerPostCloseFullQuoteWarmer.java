@@ -22,9 +22,10 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Owner-private, read-only NSE cash post-close FULL quote/High/Low refresher.
+ * Owner-private, read-only NSE/BSE cash post-close FULL quote/High/Low refresher.
  * The 15:40-16:00 IST window starts after NSE's Closing Auction Session.
- * One batch of <=50 tokens per 10 seconds; no client broker connections.
+ * BSE rows must carry an exchange timestamp from the ordinary cash session.
+ * Bounded 50-token batches at a conservative 5-second interval; no customer broker connection.
  * These are verified broker observations, never official exchange close claims.
  */
 @Component
@@ -53,7 +54,7 @@ public final class OwnerPostCloseFullQuoteWarmer {
     public OwnerPostCloseFullQuoteWarmer(AppAngelOneMarketFeedService feed,
             MarketSessionCalendar calendar, ResearchScanRepository scans,
             MarketDetailSnapshotStore store,
-            @Value("${minttick.owner-feed.universe-limit:3000}") int universeLimit) {
+            @Value("${minttick.owner-feed.universe-limit:6000}") int universeLimit) {
         this(feed, calendar, scans, store, Clock.systemUTC(), universeLimit);
     }
 
@@ -66,10 +67,35 @@ public final class OwnerPostCloseFullQuoteWarmer {
         this.scans = scans;
         this.store = store;
         this.clock = clock;
-        this.universeLimit = Math.min(universeLimit, 3000);
+        this.universeLimit = Math.min(universeLimit, 10000);
     }
 
-    @Scheduled(fixedDelayString = "${minttick.owner-feed.postclose-poll-ms:10000}")
+    static boolean eligibleCashEquity(Instrument i) {
+        if (i == null) return false;
+        if ("NSE".equals(i.exchange())) {
+            return "NSE_CM".equals(i.exchangeSegment()) && i.tradingSymbol().endsWith("-EQ");
+        }
+        if ("BSE".equals(i.exchange())) {
+            return "BSE_CM".equals(i.exchangeSegment())
+                && ("EQ".equalsIgnoreCase(i.instrumentType()) || i.tradingSymbol().endsWith("-EQ"));
+        }
+        return false;
+    }
+
+    /** Alternating 50-token blocks keep NSE and BSE independently verifiable and paced. */
+    static List<Instrument> exchangeBatches(List<Instrument> eligible) {
+        List<Instrument> nse = eligible.stream().filter(i -> "NSE".equals(i.exchange())).toList();
+        List<Instrument> bse = eligible.stream().filter(i -> "BSE".equals(i.exchange())).toList();
+        List<Instrument> ordered = new ArrayList<>(eligible.size());
+        int length = Math.max(nse.size(), bse.size());
+        for (int from = 0; from < length; from += BATCH) {
+            if (from < nse.size()) ordered.addAll(nse.subList(from, Math.min(from + BATCH, nse.size())));
+            if (from < bse.size()) ordered.addAll(bse.subList(from, Math.min(from + BATCH, bse.size())));
+        }
+        return ordered;
+    }
+
+    @Scheduled(fixedDelayString = "${minttick.owner-feed.postclose-poll-ms:5000}")
     public synchronized void reconcile() {
         Instant now = clock.instant();
         var local = now.atZone(IST);
@@ -80,24 +106,27 @@ public final class OwnerPostCloseFullQuoteWarmer {
             if (!session.tradingDay() || !session.close().toLocalTime().equals(LocalTime.of(15, 30))
                     || !feed.available()) return;
             if (!local.toLocalDate().equals(sessionDate)) {
-                // Priority order includes visible equities; only NSE is permitted
-                // because Angel One's current FULL batch transport is NSE-scoped.
-                queue = new ArrayList<>(scans.marketFeedPriorityUniverse(universeLimit).stream()
-                    .filter(i -> "NSE_CM".equals(i.exchangeSegment())
-                        && "NSE".equals(i.exchange()) && i.tradingSymbol().endsWith("-EQ"))
-                    .toList());
+                // The REST FULL transport supports both cash exchanges. Never
+                // assign BSE's untyped symbol codes to EQ without explicit evidence.
+                // Alternate exchange batches so neither market is completely starved.
+                queue = exchangeBatches(scans.postCloseFullQuoteUniverse(universeLimit).stream()
+                    .filter(OwnerPostCloseFullQuoteWarmer::eligibleCashEquity).toList());
                 sessionDate = local.toLocalDate();
                 cursor = 0;
                 attempts.clear();
             }
             if (cursor >= queue.size()) return;
-            int end = Math.min(cursor + BATCH, queue.size());
+            String exchange = queue.get(cursor).exchange();
+            int end = cursor;
+            while (end < queue.size() && end - cursor < BATCH
+                    && exchange.equals(queue.get(end).exchange())) end++;
             List<Instrument> batch = List.copyOf(queue.subList(cursor, end));
             var expected = batch.stream().map(i ->
                 new AngelOneQuoteDetailParser.Expected(i.symbolToken(), i.tradingSymbol())).toList();
             Map<String, AngelOneQuoteDetailParser.Detail> fetched;
             try {
-                fetched = feed.details(expected);
+                fetched = "NSE".equals(exchange)
+                    ? feed.details(expected) : feed.details(exchange, expected);
             } catch (RuntimeException ex) {
                 fetched = Map.of();
                 // No provider response bodies, credentials or tokens in logs.
