@@ -152,7 +152,8 @@ public class CustomerAngelOneSessionService {
         if (session == null) throw new BrokerConnectionRequiredException();
         limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
         try {
-            JsonNode data = api.customerFullQuote(session.apiKey(), session.jwt(), instrument.symbolToken());
+            JsonNode data = api.customerFullQuote(session.apiKey(), session.jwt(),
+                instrument.exchange(), instrument.symbolToken());
             return AngelOneQuoteDetailParser.parse(data, instrument, clock.instant());
         } catch (AngelOneException ex) {
             if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
@@ -162,16 +163,25 @@ public class CustomerAngelOneSessionService {
         }
     }
 
-    /** One FULL bulk quote (at most 50 NSE tokens) for this user's verified session; invalid rows are omitted. */
+    /** Backward-compatible NSE-only batch for verified index and market overview reads. */
     public Map<String, AngelOneQuoteDetailParser.Detail> quoteDetailsBatch(UUID userId,
             List<AngelOneQuoteDetailParser.Expected> expected) {
+        return quoteDetailsBatch(userId, "NSE", expected);
+    }
+
+    /** Explicit exchange-scoped FULL batch; responses are matched to exchange, token and symbol. */
+    public Map<String, AngelOneQuoteDetailParser.Detail> quoteDetailsBatch(UUID userId, String exchange,
+            List<AngelOneQuoteDetailParser.Expected> expected) {
+        if (!"NSE".equals(exchange) && !"BSE".equals(exchange)) {
+            throw new IllegalArgumentException("FULL batch exchange must be NSE or BSE");
+        }
         BrokerSession session = current(userId);
         if (session == null) throw new BrokerConnectionRequiredException();
         limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
         try {
             List<String> tokens = expected.stream().map(AngelOneQuoteDetailParser.Expected::symbolToken).toList();
-            JsonNode data = api.customerFullQuotes(session.apiKey(), session.jwt(), tokens);
-            return AngelOneQuoteDetailParser.parseBatch(data, expected, clock.instant());
+            JsonNode data = api.customerFullQuotes(session.apiKey(), session.jwt(), exchange, tokens);
+            return AngelOneQuoteDetailParser.parseBatch(exchange, data, expected, clock.instant());
         } catch (AngelOneException ex) {
             if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
                 sessions.remove(userId, session);
