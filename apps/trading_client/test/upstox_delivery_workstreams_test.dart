@@ -41,6 +41,14 @@ void main() {
     expect(work[1].pr?.state, 'MERGED');
   });
 
+  test('PR implementing this dashboard is attributed to operations, not source', () {
+    final rows = UpstoxDeliveryWorkstreams.fromRecentPrs([
+      pr(1013, 'feat(upstox analytics): visible five data workstreams', 'OPEN'),
+    ]);
+    expect(rows[4].pr?.number, 1013);
+    expect(rows[0].pr, isNull);
+  });
+
   test('only first match in recent sample is used', () {
     final work = UpstoxDeliveryWorkstreams.fromRecentPrs([
       pr(1009, 'feat(upstox): source failure', 'OPEN'),
