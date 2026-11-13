@@ -17,7 +17,7 @@ class UpstoxPersistedIngestionReceiptsTest {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         ResultSet rows = mock(ResultSet.class);
         when(rows.next()).thenReturn(false);
-        when(jdbc.queryForObject(anyString(), any(ResultSetExtractor.class)))
+        when(jdbc.query(anyString(), any(ResultSetExtractor.class)))
                 .thenAnswer(call -> ((ResultSetExtractor<?>) call.getArgument(1)).extractData(rows));
         var result = new UpstoxPersistedIngestionReceipts(jdbc).snapshot();
         assertEquals("NO_PROVIDER_RECEIPT", result.evidenceState());
@@ -32,7 +32,7 @@ class UpstoxPersistedIngestionReceiptsTest {
         ResultSet rows = mock(ResultSet.class);
         when(rows.next()).thenReturn(true);
         when(rows.getLong(anyString())).thenReturn(0L);
-        when(jdbc.queryForObject(anyString(), any(ResultSetExtractor.class)))
+        when(jdbc.query(anyString(), any(ResultSetExtractor.class)))
                 .thenAnswer(call -> ((ResultSetExtractor<?>) call.getArgument(1)).extractData(rows));
         var result = new UpstoxPersistedIngestionReceipts(jdbc).snapshot();
         assertEquals("PERSISTED_CHECKPOINTS_ONLY", result.evidenceState());
@@ -55,7 +55,7 @@ class UpstoxPersistedIngestionReceiptsTest {
         when(rows.getLong("retry_chunks")).thenReturn(2L);
         var cooldown = OffsetDateTime.of(2026, 11, 14, 1, 0, 0, 0, ZoneOffset.UTC);
         when(rows.getObject("cooldown_until", OffsetDateTime.class)).thenReturn(cooldown);
-        when(jdbc.queryForObject(anyString(), any(ResultSetExtractor.class)))
+        when(jdbc.query(anyString(), any(ResultSetExtractor.class)))
                 .thenAnswer(call -> {
                     String sql = call.getArgument(0);
                     assertTrue(sql.contains("provider_code = 'UPSTOX'"));
