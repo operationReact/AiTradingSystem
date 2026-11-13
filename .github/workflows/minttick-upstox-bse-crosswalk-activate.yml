@@ -92,7 +92,8 @@ jobs:
           import base64,json,os
           from pathlib import Path
           code=Path('infra/ec2-paper/activate_upstox_bse_crosswalk.sh').read_bytes()
-          assert 1000<len(code)<4500
+          assert 1000<len(code)<6000
+          assert len(base64.b64encode(code))<8192
           command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
           f=Path(os.environ['RUNNER_TEMP'])/'bse-source-command.json'
           f.write_text(json.dumps({'commands':[command]}))
