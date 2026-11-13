@@ -51,6 +51,8 @@ public class UpstoxBseCrosswalkRepository {
 
     public Status publish(UpstoxBseCrosswalkParser.Parsed source, String sha, Instant fetchedAt) {
         if (source == null || source.eligibleRows() < 100 || source.totalRows() < source.eligibleRows()
+                || source.eligibleRows() != source.verifiedEquities().size()
+                || source.excludedRows() != source.totalRows() - source.eligibleRows()
                 || sha == null || !sha.matches("[0-9a-f]{64}") || fetchedAt == null) {
             throw invalid("Upstox secondary BSE reference failed minimum source coverage");
         }
@@ -68,10 +70,8 @@ public class UpstoxBseCrosswalkRepository {
                     || source.totalRows() * 100L < active.totalRows() * 90L)) {
                 throw invalid("BSE secondary crosswalk has unexpectedly lost coverage");
             }
-            if (active.version() != null && sha.equals(active.sha256())) {
-                // No new version required for a source with identical contents.
-                return active;
-            }
+            // Record each verified daily download as its own immutable observation,
+            // even when the provider publishes identical bytes on consecutive days.
             UUID id = UUID.randomUUID();
             jdbc.update("""
                 INSERT INTO upstox_bse_reference_import
