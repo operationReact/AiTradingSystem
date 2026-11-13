@@ -186,7 +186,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         const SizedBox(width: 6),
         metric('Ratios', ratios, Icons.analytics_outlined),
         const SizedBox(width: 6),
-        metric('Verified jobs', verified.toString(), Icons.check_circle_outline),
+        metric('Passing checks', verified.toString(), Icons.check_circle_outline),
       ]),
       const SizedBox(height: 6),
       Text('Read-only sample · $active active · $blocked blocked · '
