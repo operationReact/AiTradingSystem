@@ -130,6 +130,33 @@ class AngelOneQuoteDetailParserTest {
     }
 
     @Test
+    void bseBatchAcceptsVerifiedBseButNotNseWithIdenticalToken() throws Exception {
+        String bse = row("BSE", "500112", "1594", "02-Nov-2026 15:29:59",
+                "1500", "1480", "1510", "1475", "1490", 33);
+        String nse = row("NSE", "INFY-EQ", "1594", "02-Nov-2026 15:29:59",
+                "1500", "1480", "1510", "1475", "1490", 33);
+        var expected = java.util.List.of(new AngelOneQuoteDetailParser.Expected("1594", "500112"));
+        var rows = mapper.readTree("{\"fetched\":[" + nse + "," + bse + "],\"unfetched\":[]}");
+        var verified = AngelOneQuoteDetailParser.parseBatch("BSE", rows, expected, AVAILABLE_AT);
+        assertThat(verified).containsOnlyKeys("1594");
+        assertThat(verified.get("1594").volume()).isEqualTo(33);
+        assertThat(AngelOneQuoteDetailParser.parseBatch("NSE", rows, expected, AVAILABLE_AT))
+            .isEmpty();
+    }
+
+    @Test
+    void bseBatchNeverAcceptsWrongCompanyOrUnsupportedExchange() throws Exception {
+        String mismatched = row("BSE", "WRONG", "1594", "02-Nov-2026 15:29:59",
+                "1500", "1480", "1510", "1475", "1490", 1);
+        var expected = java.util.List.of(new AngelOneQuoteDetailParser.Expected("1594", "500112"));
+        assertThat(AngelOneQuoteDetailParser.parseBatch("BSE", data(mismatched), expected,
+            AVAILABLE_AT)).isEmpty();
+        assertThatThrownBy(() -> AngelOneQuoteDetailParser.parseBatch(
+            "NFO", data(mismatched), expected, AVAILABLE_AT))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void indexFullQuoteCanOmitShareVolumeWithoutBeingDropped() throws Exception {
         // Real index FULL replies are published without a traded-share volume.
         // They must still carry a true, nonfuture exchange timestamp and OHLC.
