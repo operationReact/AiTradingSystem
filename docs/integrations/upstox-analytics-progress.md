@@ -132,3 +132,23 @@ GitHub polling succeeded.
 - Do not retry activation until an exact-host PAPER deployment containing
   the new stage markers has passed and the operator can verify the current
   server state. Automatic PAPER/LIVE orders remain outside this workflow.
+
+## Explicit source activation failure codes (13 November 2026)
+
+After verified EC2 and SSM prechecks, activation attempts 43386821320 and
+43387320262 failed with the generic `LOCAL_RELEASE_UNCLASSIFIED` error.
+The actual upstream/host cause was not visible. Early `runtime.env` checks
+could previously exit under a generic `activation` stage before invoking
+the PAPER release script.
+
+The guarded read-only activator now reports a **single** sanitized
+failure reason. Failures in staging, validating the two existing host secret
+formats, installing protected runtime configuration and re-running the existing
+PAPER health checks are distinguished. A failed rollback always reports
+`ROLLBACK_UNVERIFIED` over the original error. No secret values, Compose
+configuration, provider payloads, or actual authorization tokens are printed.
+
+This correction does not itself authorize Upstox data retention or establish
+that source verification succeeds. Use the next owner-approved activation run
+to determine which exact stage still fails. Do not assume a passing GitHub CI
+build proves the live provider is functioning.
