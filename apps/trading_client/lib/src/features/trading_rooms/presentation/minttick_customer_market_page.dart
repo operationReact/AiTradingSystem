@@ -191,7 +191,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         _fullCoverageLoading || !mounted) return;
     _fullCoverageLoading = true;
     try {
-      final latest = await repo.fullQuoteCoverage();
+      final latest = await (repo as CustomerFullQuoteCoverageRepository).fullQuoteCoverage();
       if (!mounted) return;
       setState(() {
         _fullQuoteCoverage = latest;
