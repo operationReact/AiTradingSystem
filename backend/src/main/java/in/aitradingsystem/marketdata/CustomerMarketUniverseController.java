@@ -50,6 +50,93 @@ public final class CustomerMarketUniverseController {
                          List<IndexFacet> verifiedMemberships,
                          List<ClassificationState> classificationStates) {}
 
+    public record ExchangeQuoteCoverage(String exchange, long activeListings,
+                                        long storedFullQuotes, long withProviderPreviousClose,
+                                        Instant newestExchangeAt) {}
+    public record FullQuoteCoverage(String contractVersion, Instant generatedAt,
+                                    long totalActiveListings, long storedFullQuotes,
+                                    long withProviderPreviousClose, long activeBseCmRecords,
+                                    List<ExchangeQuoteCoverage> exchanges) {}
+
+    /**
+     * All active NSE/BSE cash equities, NOT an index-selected subset.
+     * Only source-verified, persisted FULL quote snapshots are counted.
+     * These are last recorded broker observations, never marketed as live.
+     */
+    @GetMapping("/full-quote-coverage")
+    public ResponseEntity<FullQuoteCoverage> fullQuoteCoverage(Authentication authentication) {
+        requireCustomer(authentication);
+        List<ExchangeQuoteCoverage> actual = jdbc.query("""
+            WITH eligible AS (
+                SELECT i.instrument_id, i.exchange, i.trading_symbol
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
+            """ + InstrumentMasterRepository.CASH_EQUITY_PREDICATE + """
+            ), verified AS (
+                SELECT i.exchange,
+                       CASE WHEN d.payload->>'source' = 'ANGEL_ONE_SMARTAPI_FULL_APP'
+                            AND d.payload->>'exchange' = i.exchange
+                            AND d.payload->>'tradingSymbol' = i.trading_symbol
+                            AND (d.payload->>'instrumentId')::bigint = i.instrument_id
+                            AND (d.payload->>'ltp')::numeric > 0
+                            AND (d.payload->>'exchangeAt')::timestamptz <= now()
+                         THEN (d.payload->>'exchangeAt')::timestamptz END AS exchange_at,
+                       CASE WHEN d.payload->>'source' = 'ANGEL_ONE_SMARTAPI_FULL_APP'
+                            AND d.payload->>'exchange' = i.exchange
+                            AND d.payload->>'tradingSymbol' = i.trading_symbol
+                            AND (d.payload->>'instrumentId')::bigint = i.instrument_id
+                            AND (d.payload->>'ltp')::numeric > 0
+                            AND (d.payload->>'exchangeAt')::timestamptz <= now()
+                         THEN (d.payload->>'previousClose')::numeric END AS previous_close
+                  FROM eligible i
+                  LEFT JOIN market_detail_snapshot d ON d.instrument_id = i.instrument_id
+            )
+            SELECT exchange, COUNT(*) AS listed, COUNT(exchange_at) AS stored_quotes,
+                   COUNT(*) FILTER (WHERE exchange_at IS NOT NULL
+                           AND previous_close > 0) AS comparable,
+                   MAX(exchange_at) AS latest_exchange
+              FROM verified GROUP BY exchange ORDER BY exchange
+            """, (rs, row) -> new ExchangeQuoteCoverage(
+                rs.getString("exchange"), rs.getLong("listed"),
+                rs.getLong("stored_quotes"), rs.getLong("comparable"),
+                rs.getTimestamp("latest_exchange") == null ? null
+                    : rs.getTimestamp("latest_exchange").toInstant()));
+
+        Long bseMaster = jdbc.queryForObject("""
+            SELECT COUNT(*) FROM instrument_master i
+              JOIN instrument_catalogue_state s
+                ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+             WHERE i.active = TRUE AND i.exchange_segment = 'BSE_CM'
+            """, Long.class);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(summarizeFullQuotes(actual, bseMaster == null ? 0 : bseMaster));
+    }
+
+    static FullQuoteCoverage summarizeFullQuotes(List<ExchangeQuoteCoverage> found, long bseMaster) {
+        if (bseMaster < 0) throw new IllegalArgumentException("Invalid BSE catalogue count");
+        java.util.Map<String, ExchangeQuoteCoverage> byExchange = new java.util.HashMap<>();
+        for (ExchangeQuoteCoverage row : found) {
+            if (!"NSE".equals(row.exchange()) && !"BSE".equals(row.exchange())
+                    || byExchange.putIfAbsent(row.exchange(), row) != null
+                    || row.activeListings() < 0 || row.storedFullQuotes() < 0
+                    || row.withProviderPreviousClose() < 0
+                    || row.storedFullQuotes() > row.activeListings()
+                    || row.withProviderPreviousClose() > row.storedFullQuotes()) {
+                throw new IllegalArgumentException("Invalid verified full quote coverage");
+            }
+        }
+        List<ExchangeQuoteCoverage> ordered = List.of(
+            byExchange.getOrDefault("NSE", new ExchangeQuoteCoverage("NSE", 0, 0, 0, null)),
+            byExchange.getOrDefault("BSE", new ExchangeQuoteCoverage("BSE", 0, 0, 0, null)));
+        return new FullQuoteCoverage("customer.market.full-quote-coverage.v1", Instant.now(),
+            ordered.stream().mapToLong(ExchangeQuoteCoverage::activeListings).sum(),
+            ordered.stream().mapToLong(ExchangeQuoteCoverage::storedFullQuotes).sum(),
+            ordered.stream().mapToLong(ExchangeQuoteCoverage::withProviderPreviousClose).sum(),
+            bseMaster, ordered);
+    }
+
     @GetMapping("/universe-facets")
     public ResponseEntity<Facets> universeFacets(Authentication authentication) {
         requireCustomer(authentication);

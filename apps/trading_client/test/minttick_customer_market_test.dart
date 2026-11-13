@@ -210,10 +210,57 @@ CustomerCandle _bar(DateTime time, num close) => CustomerCandle(
       close: close, volume: 1000, source: 'ANGEL_ONE_SMARTAPI',
       fetchedAt: DateTime.utc(2026, 11, 7, 10));
 
+class _CoverageMarketFake extends _CustomerMarketFake
+    implements CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository {
+  @override
+  Future<CustomerUniverseFacets> universeFacets() async => CustomerUniverseFacets.fromJson({
+    'contractVersion': 'customer.market.universe.v1',
+    'generatedAt': '2026-11-13T05:00:00Z',
+    'totalActiveCashEquityListings': 2756,
+    'exchanges': [
+      {'exchange': 'NSE', 'activeListings': 2756},
+      {'exchange': 'BSE', 'activeListings': 0},
+    ],
+    'verifiedMemberships': <dynamic>[],
+    'classificationStates': <dynamic>[],
+  });
+
+  @override
+  Future<CustomerFullQuoteCoverage> fullQuoteCoverage() async =>
+      CustomerFullQuoteCoverage.fromJson({
+    'contractVersion': 'customer.market.full-quote-coverage.v1',
+    'generatedAt': '2026-11-13T05:00:00Z',
+    'totalActiveListings': 2756,
+    'storedFullQuotes': 620,
+    'withProviderPreviousClose': 600,
+    'activeBseCmRecords': 175,
+    'exchanges': [
+      {
+        'exchange': 'NSE', 'activeListings': 2756, 'storedFullQuotes': 620,
+        'withProviderPreviousClose': 600,
+        'newestExchangeAt': '2026-11-12T09:59:00Z',
+      },
+      {
+        'exchange': 'BSE', 'activeListings': 0, 'storedFullQuotes': 0,
+        'withProviderPreviousClose': 0, 'newestExchangeAt': null,
+      },
+    ],
+  });
+}
+
 Future<void> _openExplore(WidgetTester tester) async {
   await tester.ensureVisible(find.text('All Stocks'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('All Stocks'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openMarketCategory(WidgetTester tester, String category) async {
+  await tester.tap(find.text('Explore'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('market-explore-menu')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(category).last);
   await tester.pumpAndSettle();
 }
 
@@ -576,6 +623,37 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('Markets reports stored full catalogue coverage and BSE classification gaps',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: _CoverageMarketFake()),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('market-full-quote-coverage')), findsOneWidget);
+    expect(find.text('Stored FULL quotes 620/2756 · not live'), findsOneWidget);
+    expect(find.textContaining('BSE: 175 BSE_CM records; 0 verified EQ listings'),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('compact Markets keeps three fixed tabs and category dropdown', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: _CustomerMarketFake()),
+    ));
+    await tester.pumpAndSettle();
+    final tabs = tester.widget<TabBar>(find.byKey(const ValueKey('customer-market-tabs')));
+    expect(tabs.isScrollable, isFalse);
+    expect(tabs.tabs, hasLength(3));
+    await _openMarketCategory(tester, 'Market Cap');
+    expect(find.text('Large cap'), findsOneWidget);
+    expect(find.text('Mid cap'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Overview, Movers and Sectors show verified Nifty 50 data with text direction labels',
       (tester) async {
     final fake = _CustomerMarketFake()..status = 'LIVE'..indexFreshness = 'LIVE';
@@ -595,10 +673,7 @@ void main() {
     expect(find.text('Breakout'), findsOneWidget);
     expect(find.text('Not available yet'), findsNothing);
 
-    await tester.ensureVisible(find.text('Movers'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Movers'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Movers');
     expect(find.text('Top gainers'), findsOneWidget);
     expect(find.text('Alpha Ltd'), findsWidgets);
     expect(find.text('Change +10.00%'), findsOneWidget);
@@ -606,10 +681,7 @@ void main() {
     expect(find.text('₹125.55'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    await tester.ensureVisible(find.text('Sectors'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Sectors'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Sectors');
     expect(find.text('Banks'), findsOneWidget);
     expect(find.text('Avg +1.50%'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -659,10 +731,7 @@ void main() {
       home: MintTickCustomerMarketPage(repository: fake),
     ));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Movers'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Movers'));
-    await tester.pumpAndSettle();
+    await _openMarketCategory(tester, 'Movers');
     await tester.tap(find.text('Alpha Ltd').first);
     await tester.pumpAndSettle();
     expect(find.byType(MintTickStockDetailPage), findsOneWidget);

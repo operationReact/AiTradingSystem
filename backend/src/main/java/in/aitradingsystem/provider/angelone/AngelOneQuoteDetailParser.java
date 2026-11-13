@@ -73,6 +73,15 @@ public final class AngelOneQuoteDetailParser {
      * omitted so the caller can show them as unavailable rather than failing the whole batch.
      */
     public static Map<String, Detail> parseBatch(JsonNode data, List<Expected> expected, Instant availableAt) {
+        return parseBatch("NSE", data, expected, availableAt);
+    }
+
+    /** Parse one exchange at a time; token strings are not unique across NSE and BSE. */
+    public static Map<String, Detail> parseBatch(String exchange, JsonNode data,
+            List<Expected> expected, Instant availableAt) {
+        if (!"NSE".equals(exchange) && !"BSE".equals(exchange)) {
+            throw new IllegalArgumentException("FULL batch cash exchange must be NSE or BSE");
+        }
         JsonNode fetched = data == null ? null : data.get("fetched");
         if (fetched == null || !fetched.isArray()) throw invalid("QUOTE_BATCH_SHAPE");
         Map<String, Expected> byToken = new HashMap<>();
@@ -83,7 +92,7 @@ public final class AngelOneQuoteDetailParser {
             JsonNode token = row.get("symbolToken");
             if (token == null || !token.isTextual()) continue;
             Expected match = byToken.get(token.asText());
-            if (match == null || !"NSE".equals(optionalText(row, "exchange"))) continue;
+            if (match == null || !exchange.equals(optionalText(row, "exchange"))) continue;
             if (match.tradingSymbol() != null && !match.tradingSymbol().equals(optionalText(row, "tradingSymbol"))) {
                 continue;
             }

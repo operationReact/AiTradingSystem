@@ -35,6 +35,52 @@ class CustomerMarketUniverseControllerTest {
     }
 
     @Test
+    void fullMarketCoverageCountsSourceBackedQuotesAcrossBothExchanges() {
+        var coverage = CustomerMarketUniverseController.summarizeFullQuotes(List.of(
+            new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 2801, 875, 800, Instant.parse("2026-11-12T09:59:00Z")),
+            new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "BSE", 3208, 50, 25, Instant.parse("2026-11-12T09:58:00Z"))
+        ), 3500);
+        assertThat(coverage.totalActiveListings()).isEqualTo(6009);
+        assertThat(coverage.storedFullQuotes()).isEqualTo(925);
+        assertThat(coverage.withProviderPreviousClose()).isEqualTo(825);
+        assertThat(coverage.activeBseCmRecords()).isEqualTo(3500);
+        assertThat(coverage.exchanges()).extracting("exchange")
+            .containsExactly("NSE", "BSE");
+        assertThat(coverage.contractVersion()).isEqualTo("customer.market.full-quote-coverage.v1");
+    }
+
+    @Test
+    void absentBseDataIsZeroCoverageAndNeverMadeUp() {
+        var coverage = CustomerMarketUniverseController.summarizeFullQuotes(List.of(
+            new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 2756, 50, 48, Instant.parse("2026-11-12T09:59:00Z"))
+        ), 0);
+        assertThat(coverage.totalActiveListings()).isEqualTo(2756);
+        assertThat(coverage.exchanges().get(1).activeListings()).isZero();
+        assertThat(coverage.exchanges().get(1).storedFullQuotes()).isZero();
+        assertThat(coverage.storedFullQuotes()).isEqualTo(50);
+    }
+
+    @Test
+    void invalidOrOvercountedFullQuoteCoverageIsRejected() {
+        assertThatThrownBy(() -> CustomerMarketUniverseController.summarizeFullQuotes(
+            List.of(new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 50, 51, 30, Instant.now())), 0))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CustomerMarketUniverseController.summarizeFullQuotes(
+            List.of(new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 50, 40, 41, Instant.now())), 0))
+            .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CustomerMarketUniverseController.summarizeFullQuotes(
+            List.of(new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 50, 40, 30, Instant.now()), new CustomerMarketUniverseController.ExchangeQuoteCoverage(
+                "NSE", 50, 40, 30, Instant.now())), 0))
+            .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void cashEligibilityIncludesBseEquitiesWithoutNseSuffix() {
         // Angel One parser tests document BSE RELIANCE with instrumentType EQ
         // and no -EQ suffix. Counts and search must use this shared predicate.
@@ -51,6 +97,16 @@ class CustomerMarketUniverseControllerTest {
         assertThatThrownBy(() -> controller.universeFacets(null))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("Customer authentication required");
+        verifyNoInteractions(jdbc);
+    }
+
+    @Test
+    void fullQuoteCoverageRejectsUnauthenticatedRequestsBeforeDatabaseAccess() {
+        assertThatThrownBy(() -> controller.fullQuoteCoverage(null))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Customer authentication required");
+        assertThatThrownBy(() -> controller.fullQuoteCoverage(principal("ROLE_OPERATOR")))
+            .isInstanceOf(ResponseStatusException.class);
         verifyNoInteractions(jdbc);
     }
 
