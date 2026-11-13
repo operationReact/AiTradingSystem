@@ -152,8 +152,10 @@ public class CustomerAngelOneSessionService {
         if (session == null) throw new BrokerConnectionRequiredException();
         limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
         try {
-            JsonNode data = api.customerFullQuote(session.apiKey(), session.jwt(),
-                instrument.exchange(), instrument.symbolToken());
+            JsonNode data = "NSE".equals(instrument.exchange())
+                ? api.customerFullQuote(session.apiKey(), session.jwt(), instrument.symbolToken())
+                : api.customerFullQuote(session.apiKey(), session.jwt(),
+                    instrument.exchange(), instrument.symbolToken());
             return AngelOneQuoteDetailParser.parse(data, instrument, clock.instant());
         } catch (AngelOneException ex) {
             if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
@@ -180,7 +182,9 @@ public class CustomerAngelOneSessionService {
         limiter.acquire(AngelOneRateLimiter.Category.MARKET_QUOTE);
         try {
             List<String> tokens = expected.stream().map(AngelOneQuoteDetailParser.Expected::symbolToken).toList();
-            JsonNode data = api.customerFullQuotes(session.apiKey(), session.jwt(), exchange, tokens);
+            JsonNode data = "NSE".equals(exchange)
+                ? api.customerFullQuotes(session.apiKey(), session.jwt(), tokens)
+                : api.customerFullQuotes(session.apiKey(), session.jwt(), exchange, tokens);
             return AngelOneQuoteDetailParser.parseBatch(exchange, data, expected, clock.instant());
         } catch (AngelOneException ex) {
             if (ex.kind() == AngelOneException.Kind.SESSION_EXPIRED) {
