@@ -61,7 +61,39 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ]),
   ]);
 
-  Widget roomsScreen()=>_surface('Trading Rooms',
+  Widget _realRoomsScreen() {
+    _ensurePortfolio();
+    final p=_portfolio;
+    if(p==null) return _portfolioPending('Trading Rooms');
+    final paused=p.rooms.where((r)=>r.paused).length;
+    return _surface('Trading Rooms','Your funded PAPER rooms · virtual money only',[
+      _metricGrid([
+        ('PAPER rooms',p.fundedRooms.toString(),'Funded virtual wallets'),
+        ('Paused',paused.toString(),'New fills rejected'),
+        ('Virtual cash',formatPaise(p.availableCashPaise),'Across rooms'),
+        ('Open positions',p.positions.length.toString(),'Marked with verified ticks'),
+      ]),
+      const SizedBox(height:13),
+      _section('Your Trading Rooms',Icons.meeting_room_outlined,[
+        if(p.rooms.isEmpty) _empty('No funded PAPER room yet. Create and activate one in Trading Rooms.'),
+        for(final r in p.rooms)
+          Padding(padding:const EdgeInsets.only(bottom:9),child:_tile(r.name,
+            formatPaise(r.availableCashPaise)+' cash · '+r.openPositions.toString()+' position(s) · realized '+
+              formatPaise(r.realizedPnlPaise),
+            Icons.meeting_room_outlined,trailing:r.paused?'PAUSED':'PAPER',
+            color:r.paused?MindPalette.yellow:MindPalette.mint,
+            tap:()=>_go('room-detail'))),
+      ]),
+      _section('Trading Room Safety',Icons.shield_outlined,[
+        _value('Mode','PAPER virtual only'),
+        _value('Live broker execution','Not authorized',color:MindPalette.red),
+        _value('Risk authority','Server-enforced, automatic'),
+        _tile('Pause or resume a room','Risk Center',Icons.pan_tool_outlined,route:'risk'),
+      ]),
+    ]);
+  }
+
+  Widget roomsScreen()=>widget.paperPortfolioRepository!=null ? _realRoomsScreen() : _surface('Trading Rooms',
     'A separate strategy and risk context for each trading horizon',[
     _metricGrid([
       ('Rooms','4','Mock configuration'),

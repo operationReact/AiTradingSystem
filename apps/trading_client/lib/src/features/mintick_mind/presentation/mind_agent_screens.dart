@@ -259,7 +259,79 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     ]);
   }
 
+  Widget _realSignalScorecardScreen(){
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Signal Performance Scorecard');
+    final evaluated=j.cycles.where((c)=>c.signalAction!=null).toList();
+    final buys=evaluated.where((c)=>c.signalAction=='BUY').length;
+    final entries=j.cycles.where((c)=>c.outcome==MindPaperOutcome.filled&&c.side=='BUY').length;
+    final p=j.performance;
+    return _surface('Signal Performance Scorecard','SMA_TREND_VOLUME_V1 · last '+j.cycles.length.toString()+' recorded cycles',[
+      _metricGrid([
+        ('Signals evaluated',evaluated.length.toString(),'Cycles with a candidate'),
+        ('BUY candidates',buys.toString(),'Before gates'),
+        ('PAPER entries',entries.toString(),'Passed every gate'),
+        ('Closed trades',p.closedTrades.toString(),p.sampleTooSmall?'Sample too small':'Closed round trips'),
+      ]),
+      const SizedBox(height:12),
+      MindPanel(key:const ValueKey('mind-scorecard-funnel'),child:Column(children:[
+        _value('Signal → entry conversion',buys==0?'No BUY candidates':
+          (entries*100/buys).toStringAsFixed(0)+'% ('+entries.toString()+'/'+buys.toString()+')'),
+        _value('Win rate',p.winRatePercent==null?'No closed trades':p.winRatePercent!.toStringAsFixed(1)+'%'),
+        _value('Realized P&L',formatPaise(p.realizedPnlPaise)),
+        if(p.sampleTooSmall) Text('Fewer than '+p.minimumMeaningfulSample.toString()+
+          ' closed trades: no score is statistically meaningful yet.',
+          style:const TextStyle(color:MindPalette.yellow,fontSize:11)),
+      ])),
+      const SizedBox(height:12),
+      _section('Other strategies',Icons.layers_outlined,[
+        _value('Wired to PAPER','SMA_TREND_VOLUME_V1 only'),
+        _action('See implementation status','strategies'),
+      ]),
+    ]);
+  }
+
+  Widget _realCulpritCatcherScreen(){
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Culprit Catcher · Root Cause');
+    const gateCodes={'ORDER_OUTCOME_UNKNOWN','PAPER_ENGINE_REJECTED','FRESH_QUOTE_UNAVAILABLE','MARKET_SESSION_CLOSED',
+      'QUOTE_DIVERGED_FROM_SIGNAL','QUOTE_BELOW_STOP','SIZE_BELOW_ONE_SHARE','CANDLE_SOURCE_NOT_PERMITTED',
+      'SIGNAL_CANDLE_STALE','INSUFFICIENT_HISTORY','DATA_QUALITY_NOT_ELIGIBLE','POSITION_ALREADY_OPEN'};
+    final groups=<String,List<MindPaperCycle>>{};
+    for(final c in j.cycles.where((c)=>c.outcome!=MindPaperOutcome.filled)){
+      final cause=c.reasons.lastWhere(gateCodes.contains,
+        orElse:()=>c.outcome==MindPaperOutcome.noEntry?'STRATEGY_NO_ENTRY':c.outcome.code);
+      groups.putIfAbsent(cause,()=>[]).add(c);
+    }
+    final ordered=groups.entries.toList()..sort((a,b){
+      if(a.key=='ORDER_OUTCOME_UNKNOWN') return -1;
+      if(b.key=='ORDER_OUTCOME_UNKNOWN') return 1;
+      return b.value.length.compareTo(a.value.length);
+    });
+    return _surface('Culprit Catcher · Root Cause','Why recorded PAPER cycles did not fill, grouped by decisive gate',[
+      _metricGrid([
+        ('Cycles reviewed',j.cycles.length.toString(),'Most recent'),
+        ('Not filled',j.cycles.where((c)=>c.outcome!=MindPaperOutcome.filled).length.toString(),'Blocked or no entry'),
+        ('Distinct causes',groups.length.toString(),'Gate reason codes'),
+        ('Unknown outcomes',(groups['ORDER_OUTCOME_UNKNOWN']?.length??0).toString(),'Never auto-retried'),
+      ]),
+      const SizedBox(height:12),
+      _section('Root causes',Icons.bug_report_outlined,[
+        if(ordered.isEmpty) _empty('No blocked or failed cycles recorded.'),
+        for(final e in ordered)
+          Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(e.key,
+            e.value.length.toString()+' cycle(s) · latest '+e.value.first.tradingSymbol+' '+_cycleTime(e.value.first),
+            Icons.report_gmailerrorred_outlined,trailing:e.value.length.toString(),
+            color:e.key=='ORDER_OUTCOME_UNKNOWN'?MindPalette.red:MindPalette.yellow,
+            tap:(){ _updateMind(()=>_selectedCycleId=e.value.first.id); _go('decision-detail'); })),
+      ]),
+    ]);
+  }
+
   Widget signalScorecardScreen(){
+    if(widget.paperJournalRepository!=null) return _realSignalScorecardScreen();
     final gated=['Futures','Options','Cash Short'].contains(_agentSignalHorizon);
     final seed=MindAgentFixtures.horizons.indexOf(_agentSignalHorizon)+1;
     const names=['Momentum Breakout','VWAP Recovery','Earnings Catalyst',
@@ -437,6 +509,7 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
     ]);
 
   Widget culpritCatcherScreen(){
+    if(widget.paperJournalRepository!=null) return _realCulpritCatcherScreen();
     final incident=MindAgentFixtures.incidents.firstWhere(
       (e)=>e.id==_agentIncident,
       orElse:()=>MindAgentFixtures.incidents.first);

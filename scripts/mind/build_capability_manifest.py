@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.6"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.7"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -127,6 +127,24 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Real dependsOn chains from the registry with the status of each prerequisite; fixture graph removed.",
         "endpoints": ["/api/customer/mind/v1/progress"],
         "missing": ["Visual graph layout", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "trading-rooms": {
+        "status": "IMPLEMENTING",
+        "note": "Funded PAPER rooms with virtual cash, positions, realized P&L and paused state; fixture rooms removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-portfolio"],
+        "missing": ["Per-room strategy stack", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "culprit-catcher": {
+        "status": "IMPLEMENTING",
+        "note": "Non-filled recorded cycles grouped by decisive gate reason; unknown outcomes listed first.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Regime-mistake analysis once regimes are verified", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "signal-scorecard": {
+        "status": "IMPLEMENTING",
+        "note": "Real SMA_TREND_VOLUME_V1 funnel: evaluated -> BUY -> entries -> closed trades, with sample warning.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Scorecards for further strategies", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",
