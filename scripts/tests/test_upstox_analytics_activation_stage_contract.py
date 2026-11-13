@@ -47,7 +47,7 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
                 self.assertIn("stage=" + stage, paper)
                 self.assertIn(stage + ") echo '" + reason + "'; return ;;", activate)
                 self.assertIn("'" + reason + "'", workflow)
-        self.assertIn("'ROLLBACK_UNVERIFIED' for row in approved", workflow)
+        self.assertIn("row[0]=='ROLLBACK_UNVERIFIED' for row in approved", workflow)
         self.assertIn("MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true", activate)
         self.assertIn("MINTTICK_UPSTOX_RESULT:ACTIVATED_READ_ONLY", activate)
         self.assertNotIn("getParameterByPath", activate)
