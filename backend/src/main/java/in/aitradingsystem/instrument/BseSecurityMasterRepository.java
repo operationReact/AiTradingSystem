@@ -74,6 +74,15 @@ public class BseSecurityMasterRepository {
                 throw new InstrumentMasterException("BSE_SOURCE_STALE",
                     "An older BSE source cannot replace the current verified security master");
             }
+            // Official source publications should never silently replace an intact
+            // active reference with a severely truncated file. A valid checksum,
+            // matching filename and >100 rows are NOT completeness evidence.
+            if (active.version() != null
+                    && (parsed.verified().size() * 100L < active.verifiedEquities() * 90L
+                     || parsed.sourceRecords() * 100L < active.sourceRecords() * 90L)) {
+                throw new InstrumentMasterException("BSE_SOURCE_INCOMPLETE",
+                    "BSE security-master reference shrank unexpectedly; active source retained");
+            }
             UUID version = UUID.randomUUID();
             jdbc.update("""
                 INSERT INTO bse_security_master_import
@@ -106,17 +115,25 @@ public class BseSecurityMasterRepository {
         });
     }
 
-    /** Eligible codes ONLY while the reference is fresh. Unknown codes fail closed. */
-    public Set<String> recentVerifiedEquityCodes() {
-        return new HashSet<>(jdbc.query("""
-            SELECT r.scrip_code
+    /**
+     * Return dated official (BSE code -> instrument code) identities. Exact
+     * token-only matching is insufficient because securities can be renamed
+     * or codes re-used; both exchange identities must agree before promotion.
+     */
+    public java.util.Map<String, String> recentVerifiedEquityIdentities() {
+        return jdbc.query("""
+            SELECT r.scrip_code, r.security_id
               FROM bse_verified_cash_equity r
               JOIN bse_security_master_active a ON a.active_import = r.import_id
               JOIN bse_security_master_import src ON src.id = a.active_import
              WHERE a.singleton_id = 1
                AND src.source_as_of <= (now() AT TIME ZONE 'Asia/Kolkata')::date
                AND src.source_as_of >= (now() AT TIME ZONE 'Asia/Kolkata')::date - 10
-            """, (rs, row) -> rs.getString(1)));
+            """, rs -> {
+                java.util.Map<String, String> matched = new java.util.HashMap<>();
+                while (rs.next()) matched.put(rs.getString(1), rs.getString(2));
+                return java.util.Map.copyOf(matched);
+            });
     }
 
     /**
@@ -126,15 +143,17 @@ public class BseSecurityMasterRepository {
      */
     public List<InstrumentMasterParser.InstrumentDraft> enrichForNewCatalogue(
             List<InstrumentMasterParser.InstrumentDraft> drafts) {
-        Set<String> verifiedCodes = recentVerifiedEquityCodes();
-        if (verifiedCodes.isEmpty()) return drafts;
+        java.util.Map<String, String> verifiedIdentities = recentVerifiedEquityIdentities();
+        if (verifiedIdentities.isEmpty()) return drafts;
         List<InstrumentMasterParser.InstrumentDraft> enriched = new ArrayList<>(drafts.size());
         for (var d : drafts) {
             boolean canPromote = "BSE".equals(d.exchange())
                 && "BSE_CM".equals(d.exchangeSegment())
                 && (d.instrumentType() == null || d.instrumentType().isBlank())
                 && d.symbolToken().matches("[0-9]{1,15}")
-                && verifiedCodes.contains(d.symbolToken())
+                && d.tradingSymbol() != null
+                && d.tradingSymbol().toUpperCase(java.util.Locale.ROOT)
+                    .equals(verifiedIdentities.get(d.symbolToken()))
                 && d.expiry() == null
                 && (d.strike() == null || d.strike().signum() == 0)
                 && d.tradingSymbol() != null
