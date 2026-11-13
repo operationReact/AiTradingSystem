@@ -167,6 +167,9 @@ jobs:
                     'LOCAL_RELEASE_NETWORK_IDENTITY','LOCAL_RELEASE_COMPOSE_CONFIG',
                     'LOCAL_RELEASE_COMPOSE_START','LOCAL_RELEASE_PORT_CONTRACT',
                     'HOST_PRECHECK_FAILED','HOST_RELEASE_IDENTITY_INVALID',
+                    'HOST_RUNTIME_PREP_FAILED','HOST_RUNTIME_PASSWORD_INVALID',
+                    'HOST_RUNTIME_OPERATOR_KEY_INVALID','HOST_RUNTIME_INSTALL_FAILED',
+                    'LOCAL_RELEASE_RESTART_UNCLASSIFIED','HOST_ACTIVATION_UNEXPECTED',
                     'ROLLBACK_UNVERIFIED',
                     'OPERATOR_AUTH_UNAVAILABLE',
                     'PROBE_HTTP_UNAVAILABLE','PROVIDER_OR_RESPONSE_UNAVAILABLE',
@@ -177,7 +180,16 @@ jobs:
                       'MINTTICK_UPSTOX_TRANSPORT:FINISHED' not in output):
                       raise RuntimeError('UPSTOX TRANSPORT NOT VERIFIED: no host execution evidence')
                   if not any(row[0]=='ACTIVATED_READ_ONLY' for row in approved):
-                      raise RuntimeError('Upstox host script missing acceptance marker')
+                      # SSM Success is not acceptance. Surface only a known
+                      # safe failure marker; never print raw host stdout.
+                      failure=(
+                          'ROLLBACK_UNVERIFIED'
+                          if any(row[0]=='ROLLBACK_UNVERIFIED' for row in approved)
+                          else next((row[0] for row in approved if row[0] in safe
+                                     and row[0] not in {'READS_VERIFIED',
+                                                        'ACTIVATED_READ_ONLY'}),
+                                    'HOST_ACCEPTANCE_PROOF_MISSING'))
+                      raise RuntimeError('UPSTOX ACTIVATION BLOCKED: '+failure)
                   verified=[row for row in approved if row[0]=='READS_VERIFIED']
                   if len(verified)!=1:
                       raise RuntimeError('Upstox checked data counts absent')

@@ -132,3 +132,64 @@ GitHub polling succeeded.
 - Do not retry activation until an exact-host PAPER deployment containing
   the new stage markers has passed and the operator can verify the current
   server state. Automatic PAPER/LIVE orders remain outside this workflow.
+
+## Explicit source activation failure codes (13 November 2026)
+
+After verified EC2 and SSM prechecks, activation attempts 43386821320 and
+43387320262 failed with the generic `LOCAL_RELEASE_UNCLASSIFIED` error.
+The actual upstream/host cause was not visible. Early `runtime.env` checks
+could previously exit under a generic `activation` stage before invoking
+the PAPER release script.
+
+The guarded read-only activator now reports a **single** sanitized
+failure reason. Failures in staging, validating the two existing host secret
+formats, installing protected runtime configuration and re-running the existing
+PAPER health checks are distinguished. A failed rollback always reports
+`ROLLBACK_UNVERIFIED` over the original error. No secret values, Compose
+configuration, provider payloads, or actual authorization tokens are printed.
+
+This correction does not itself authorize Upstox data retention or establish
+that source verification succeeds. Use the next owner-approved activation run
+to determine which exact stage still fails. Do not assume a passing GitHub CI
+build proves the live provider is functioning.
+
+## SSM success without source acceptance proof (13 November 2026)
+The user-triggered dev acceptance run [43391186744](https://github.com/operationReact/AiTradingSystem/actions/runs/43391186744)
+failed after a successful SSM precheck, reporting `Upstox host script missing acceptance marker`.
+This means a successful SSM command status did **not** carry the required
+`ACTIVATED_READ_ONLY` terminal proof. It does not prove that Upstox data was
+read successfully, and the cause of the missing marker remains unresolved.
+
+The guarded host script now fails closed if it exits normally without setting
+its verified-acceptance flag. The GitHub verifier reports a bounded, known
+`MINTTICK_UPSTOX_RESULT` reason if present even on SSM Success; if absent,
+it emits `HOST_ACCEPTANCE_PROOF_MISSING`, never raw SSM stdout or secrets.
+The fixed `ROLLBACK_UNVERIFIED` marker takes priority. Nothing bypasses the
+positive candle/ratio-count checks or activates LIVE orders.
+
+## Backend-only activation correction — 13 November 2026
+
+The approved source acceptance run 43396030458 failed with
+`LOCAL_RELEASE_RESTART_UNCLASSIFIED`. The prior activation script called the
+full PAPER deployment for an Analytics flag change, unnecessarily repeating
+a database dump, full-stack Compose orchestration and web/bridge checks.
+That failure code alone does not prove which of those release steps failed.
+
+The replacement activator checks the exact installed release SHA and ARM64
+non-root image, registered egress IP, live API health, running PostgreSQL,
+root-only runtime files and SSM SecureString access. It validates the
+resulting configuration with strict `TRADING_MODE=PAPER` and loopback-only
+backend binding before changing anything. It updates only three read-only
+Upstox Analytics switches in both protected environment files and recreates
+only the existing backend using `--no-deps --no-build --force-recreate`.
+
+If backend recreation or the bounded Upstox smoke read fails, it restores
+both protected environment files and re-creates the previous backend.
+Unverified rollback is always a hard failure. No credentials, expanded
+Compose configuration, provider payloads, or raw host logs are emitted.
+
+The protected GitHub workflow keeps its original fixed-error whitelist.
+A new host-only error code may appear there as `HOST_UNAVAILABLE`, but it
+cannot be interpreted as successful activation. Provider success still
+requires positive validated daily-candle and fundamentals ratios counts.
+No data retention, model training rights, or broker orders are enabled.
