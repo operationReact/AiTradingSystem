@@ -256,12 +256,29 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
             borderRadius: BorderRadius.circular(3))),
         const SizedBox(height: 8),
         Row(children: [
+          Expanded(child: Text(
+            score.percent == null ? 'Completed: —'
+              : 'Completed: ${score.percent}%',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
+          Expanded(child: Text(
+            score.remainingPercent == null ? 'Remaining: —'
+              : 'Remaining: ${score.remainingPercent}%',
+            textAlign: TextAlign.right,
+            key: const ValueKey('upstox-remaining-completion-percent'),
+            style: const TextStyle(fontWeight: FontWeight.w700,
+              color: MintTickPalette.mutedSilver, fontSize: 11))),
+        ]),
+        const SizedBox(height: 5),
+        Text('${score.verifiedStages} of ${score.gates.length} milestones verified · '
+          '${score.outstandingStages} outstanding',
+          style: const TextStyle(color: MintTickPalette.mutedSilver, fontSize: 10)),
+        Row(children: [
           const Expanded(child: Text('Weighted milestones · fresh backend proof only',
               maxLines: 2, style: TextStyle(color: MintTickPalette.mutedSilver,
                   fontSize: 10))),
           TextButton(
             onPressed: () => showProgressFormula(score),
-            child: const Text('Calculation', style: TextStyle(fontSize: 11))),
+            child: const Text('Pending details', style: TextStyle(fontSize: 11))),
         ]),
         if (!score.observed)
           const Text('No verified milestone telemetry yet',
@@ -295,6 +312,11 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               'do not earn unrelated progress.',
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver, height: 1.4)),
+            const SizedBox(height: 8),
+            Text(score.remainingPercent == null
+                ? 'Remaining: not verified'
+                : 'Completed ${score.percent}% · Remaining ${score.remainingPercent}%',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
             const SizedBox(height: 12),
             for (final gate in score.gates)
               Padding(padding: const EdgeInsets.symmetric(vertical: 5),
@@ -307,7 +329,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                       Text(gate.evidenceState, style: const TextStyle(
                         fontSize: 10, color: MintTickPalette.mutedSilver)),
                     ])),
-                  Text('${gate.earned}/${gate.weight}%',
+                  Text(gate.earned == gate.weight
+                      ? '${gate.weight}% done'
+                      : '${gate.weight - gate.earned}% left',
                     style: TextStyle(fontSize: 12,
                       color: gate.earned == gate.weight
                         ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
