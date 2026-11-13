@@ -16,13 +16,23 @@ public class InstrumentMasterService {
     private final InstrumentMasterDownloader downloader;
     private final InstrumentMasterParser parser;
     private final InstrumentMasterRepository repository;
+    private final BseSecurityMasterRepository bseSecurityMaster;
 
+    /** Existing constructor retained for isolated importer unit tests. */
     public InstrumentMasterService(AngelOneProperties properties, InstrumentMasterDownloader downloader,
                                    InstrumentMasterParser parser, InstrumentMasterRepository repository) {
+        this(properties, downloader, parser, repository, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InstrumentMasterService(AngelOneProperties properties, InstrumentMasterDownloader downloader,
+                                   InstrumentMasterParser parser, InstrumentMasterRepository repository,
+                                   BseSecurityMasterRepository bseSecurityMaster) {
         this.properties = properties;
         this.downloader = downloader;
         this.parser = parser;
         this.repository = repository;
+        this.bseSecurityMaster = bseSecurityMaster;
     }
 
     public InstrumentImportSummary importLatest() {
@@ -44,6 +54,11 @@ public class InstrumentMasterService {
             parsed = parser.parse(bytes, properties.instrumentMasterMaxRows());
             List<InstrumentMasterParser.InstrumentDraft> unique = deduplicate(parsed.accepted());
             duplicateCount = parsed.accepted().size() - unique.size();
+            // Proven EQ enrichment is applied only while publishing a NEW
+            // source-versioned broker catalogue; never revise old research rows.
+            if (bseSecurityMaster != null) {
+                unique = bseSecurityMaster.enrichForNewCatalogue(unique);
+            }
 
             // The official master contains NCO/NCDEX, but MintTick does not ingest those venues.
             // Keep strict rejection limits for all supported rows; ignored venues are not invalid data.
