@@ -30,7 +30,7 @@ class OfficialMarketSourceIngestionServiceTest {
 
         List<OfficialMarketSourceIngestionService.SourceRequest> requests = service.scheduledRequests();
 
-        assertThat(requests).hasSize(6);
+        assertThat(requests).hasSize(10);
         assertThat(requests.get(0).family()).isEqualTo(OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS);
         assertThat(requests.get(0).sourceUri().toString())
                 .isEqualTo("https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv");
@@ -41,7 +41,17 @@ class OfficialMarketSourceIngestionServiceTest {
                 .isEqualTo("https://www.niftyindices.com/IndexConstituent/ind_nifty500list.csv");
         assertThat(requests.get(1).bootstrapUri()).isNull();
 
-        OfficialMarketSourceIngestionService.SourceRequest nifty = requests.get(2);
+        assertThat(requests.subList(2, 6))
+                .extracting(OfficialMarketSourceIngestionService.SourceRequest::family)
+                .containsExactly(
+                        OfficialMarketSourceFamily.NIFTY100_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_MIDCAP150_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_SMALLCAP250_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_MICROCAP250_CONSTITUENTS);
+        assertThat(requests.get(5).sourceUri().toString())
+                .isEqualTo("https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv");
+
+        OfficialMarketSourceIngestionService.SourceRequest nifty = requests.get(6);
         assertThat(nifty.family()).isEqualTo(OfficialMarketSourceFamily.NIFTY50_HISTORY);
         assertThat(nifty.sourceUri().getRawQuery())
                 .contains("indexType=NIFTY+50", "from=26-10-2026", "to=02-11-2026", "csv=true");
@@ -51,7 +61,7 @@ class OfficialMarketSourceIngestionServiceTest {
                 .filter(request -> request.family() == OfficialMarketSourceFamily.SECTOR_INDEX_HISTORY)
                 .map(OfficialMarketSourceIngestionService.SourceRequest::variant))
                 .containsExactly("NIFTY_BANK", "NIFTY_IT");
-        assertThat(requests.get(5).family()).isEqualTo(OfficialMarketSourceFamily.INDIA_VIX_HISTORY);
+        assertThat(requests.get(9).family()).isEqualTo(OfficialMarketSourceFamily.INDIA_VIX_HISTORY);
     }
 
     @Test
@@ -64,7 +74,11 @@ class OfficialMarketSourceIngestionServiceTest {
                 .extracting(OfficialMarketSourceIngestionService.SourceRequest::family)
                 .containsExactly(
                         OfficialMarketSourceFamily.NIFTY50_CONSTITUENTS,
-                        OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS);
+                        OfficialMarketSourceFamily.NIFTY500_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY100_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_MIDCAP150_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_SMALLCAP250_CONSTITUENTS,
+                        OfficialMarketSourceFamily.NIFTY_MICROCAP250_CONSTITUENTS);
     }
 
     @Test
