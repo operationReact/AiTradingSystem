@@ -449,8 +449,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                   icon: const Icon(Icons.copy_outlined, size: 16),
                   onPressed: () async {
                     await Clipboard.setData(ClipboardData(text: reports[i].url!));
-                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('PR link copied')));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('PR link copied')));
+                    }
                   },
                 ),
             ]),
