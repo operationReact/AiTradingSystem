@@ -1,9 +1,10 @@
 """Boundary and fail-closed quote freshness tests."""
+
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
-from aitrading_intelligence.quote_asof_consistency import QuoteAsOfResult
 from aitrading_intelligence.quote_age_boundary import assess_quote_age_boundary
+from aitrading_intelligence.quote_asof_consistency import QuoteAsOfResult
 
 
 def inputs():
@@ -53,8 +54,12 @@ def test_invalid_bound_abstains():
 
 def test_upstream_not_ready_or_authority_abstains():
     args = inputs()
-    args["quote_consistency"] = replace(args["quote_consistency"], eligible_for_research=False)
+    args["quote_consistency"] = replace(
+        args["quote_consistency"], eligible_for_research=False
+    )
     assert not assess_quote_age_boundary(**args).eligible_for_research
     args = inputs()
-    args["quote_consistency"] = replace(args["quote_consistency"], execution_authorized=True)
+    args["quote_consistency"] = replace(
+        args["quote_consistency"], execution_authorized=True
+    )
     assert assess_quote_age_boundary(**args).reason == "UNEXPECTED_EXECUTION_AUTHORITY"
