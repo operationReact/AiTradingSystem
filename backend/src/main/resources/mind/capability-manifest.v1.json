@@ -1,5 +1,5 @@
 {
- "manifestVersion": "mind.capability-manifest.v1+2026-11-13.1",
+ "manifestVersion": "mind.capability-manifest.v1+2026-11-13.2",
  "auditedAt": "2026-11-13",
  "sourceIssues": [
   "#997",
@@ -1031,18 +1031,21 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/trading-rooms/{roomId}/mind/paper-cycles"
     }
    ],
    "missing": [
-    "Real room selection",
-    "PAPER strategy cycle action",
-    "Orders/positions/P&L from server"
+    "Replace remaining fixture room cards",
+    "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Planned host for the first PAPER strategy cycle (PR C).",
+   "note": "Hosts the real Mind PAPER strategy cycle panel (funded room, watchlist instrument, server outcome, orders/positions/P&L). Remaining room cards are fixtures.",
    "id": "screen.room-detail",
    "kind": "SCREEN",
    "name": "Trading Room Detail",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,
@@ -7577,13 +7580,26 @@
     "engine.paper-submit"
    ],
    "implementation": null,
-   "evidence": [],
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceTest.java"
+    }
+   ],
    "missing": [],
-   "note": "No path from a strategy candidate to a PAPER order exists yet (PR C).",
+   "note": "MindPaperCycleService: permitted-source + freshness gates, verified LTP, automatic 1% risk sizing, deterministic order key, existing CustomerPaperOrderService; owner-initiated, no auto-retry.",
    "id": "engine.strategy-to-paper",
    "kind": "ENGINE",
    "name": "Strategy candidate -> PAPER orchestration",
-   "status": "NOT_STARTED"
+   "status": "TESTED"
   },
   {
    "parentId": null,
@@ -7830,13 +7846,26 @@
     "engine.accounting"
    ],
    "implementation": null,
-   "evidence": [],
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/mind/MindPaperCycleService.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/mind/MindPaperCycleServiceIT.java"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/trading-rooms/{roomId}/mind/paper-cycles"
+    }
+   ],
    "missing": [],
    "note": "DONE only after a real fill on the deployed backend is recorded as runtime evidence.",
    "id": "paper.vertical-slice",
    "kind": "PAPER",
    "name": "PAPER vertical slice: strategy -> gates -> virtual fill -> P&L",
-   "status": "NOT_STARTED"
+   "status": "TESTED"
   },
   {
    "parentId": null,

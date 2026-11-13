@@ -131,6 +131,13 @@ class AccountApiOnlyFilterTest {
         assertBlocked("GET", progress + "/items/screen.coverage/notes");
         assertBlocked("POST", progress + "/items/screen.coverage/status");
         assertBlocked("GET", progress + "/items/../../admin");
+        String cycles = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/paper-cycles";
+        assertPasses("POST", cycles);
+        assertPasses("GET", cycles);
+        assertBlocked("PUT", cycles);
+        assertBlocked("DELETE", cycles);
+        assertBlocked("POST", cycles + "/live");
+        assertBlocked("POST", "/api/customer/trading-rooms/not-a-room/mind/paper-cycles");
     }
 
     private void assertPasses(String method, String path) throws Exception {

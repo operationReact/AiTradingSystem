@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.1"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.2"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -52,9 +52,11 @@ SCREEN_AUDIT: dict[str, dict] = {
         "missing": ["Flutter web/Android/iOS runtime evidence of the progress screen"],
     },
     "room-detail": {
-        "status": "MOCK",
-        "note": "Planned host for the first PAPER strategy cycle (PR C).",
-        "missing": ["Real room selection", "PAPER strategy cycle action", "Orders/positions/P&L from server"],
+        "status": "IMPLEMENTING",
+        "note": "Hosts the real Mind PAPER strategy cycle panel (funded room, watchlist instrument, server outcome, "
+                "orders/positions/P&L). Remaining room cards are fixtures.",
+        "endpoints": ["/api/customer/trading-rooms/{roomId}/mind/paper-cycles"],
+        "missing": ["Replace remaining fixture room cards", "Flutter web/Android/iOS runtime evidence"],
     },
 }
 DEFAULT_SCREEN_MISSING = ["Audit each control and value", "Server API for every displayed value",
@@ -211,8 +213,12 @@ ENGINE_ITEMS = [
      [JAVA_MAIN + "tradingrooms/CustomerPaperOrderService.java"], [JAVA_TEST + "tradingrooms/CustomerPaperOrderServiceIT.java"], ["engine.risk-gates"]),
     ("engine.accounting", "Positions, cash & realized P&L", "TESTED", "Average-cost positions and realized P&L in paise.",
      [JAVA_MAIN + "tradingrooms/CustomerPaperOrderService.java"], [JAVA_TEST + "tradingrooms/CustomerPaperOrderServiceIT.java"], ["engine.paper-submit"]),
-    ("engine.strategy-to-paper", "Strategy candidate -> PAPER orchestration", "NOT_STARTED", "No path from a strategy candidate to a PAPER order exists yet (PR C).",
-     [], [], ["engine.strategy-eval", "engine.paper-submit"]),
+    ("engine.strategy-to-paper", "Strategy candidate -> PAPER orchestration", "TESTED",
+     "MindPaperCycleService: permitted-source + freshness gates, verified LTP, automatic 1% risk sizing, "
+     "deterministic order key, existing CustomerPaperOrderService; owner-initiated, no auto-retry.",
+     [JAVA_MAIN + "mind/MindPaperCycleService.java"],
+     [JAVA_TEST + "mind/MindPaperCycleServiceIT.java", JAVA_TEST + "mind/MindPaperCycleServiceTest.java"],
+     ["engine.strategy-eval", "engine.paper-submit"]),
     ("engine.backtest", "Backtest engine", "TESTED", "SMA backtest with fees; not yet generalized across registry.",
      [JAVA_MAIN + "backtest/SmaBacktestEngine.java"],
      [JAVA_TEST + "backtest/SmaBacktestEngineTest.java", JAVA_TEST + "backtest/LookAheadBiasRegressionTest.java"], []),
@@ -237,7 +243,7 @@ DATA_ITEMS = [
 ]
 
 PAPER_ITEMS = [
-    ("paper.vertical-slice", "PAPER vertical slice: strategy -> gates -> virtual fill -> P&L", "NOT_STARTED",
+    ("paper.vertical-slice", "PAPER vertical slice: strategy -> gates -> virtual fill -> P&L", "TESTED",
      ["engine.strategy-to-paper", "engine.accounting"]),
     ("live.broker-gated", "LIVE broker-gated workflow", "NOT_STARTED", []),
 ]
@@ -353,6 +359,9 @@ def build() -> dict:
         live = iid.startswith("live.")
         items.append(item(id=iid, kind="PAPER" if not live else "LIVE", name=name, group="PAPER readiness" if not live else "LIVE",
                           status=status, dependsOn=deps, blockerCode="LIVE_NOT_AUTHORIZED" if live else None,
+                          evidence=[] if live else [{"kind": "SOURCE", "path": JAVA_MAIN + "mind/MindPaperCycleService.java"},
+                                                    {"kind": "TEST", "path": JAVA_TEST + "mind/MindPaperCycleServiceIT.java"},
+                                                    {"kind": "API", "ref": "/api/customer/trading-rooms/{roomId}/mind/paper-cycles"}],
                           note="LIVE activation is separately gated and not authorized by #998." if live else
                           "DONE only after a real fill on the deployed backend is recorded as runtime evidence."))
     ids = [i["id"] for i in items]

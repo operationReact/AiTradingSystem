@@ -93,6 +93,17 @@ extension _MindSystemScreens on _MindWorkspaceState {
   Widget roomDetailScreen() {
     final room=_rooms.firstWhere((r)=>r.$1==_selectedRoom,orElse:()=>_rooms.first);
     return _surface(room.$1,room.$4,[
+      if (widget.paperCycleRepository != null) ...[
+        MindPaperCyclePanel(repository: widget.paperCycleRepository!),
+        const SizedBox(height:12),
+      ] else ...[
+        const MindPanel(key:ValueKey('mind-paper-cycle-unavailable'),
+          child:Text('Mind PAPER strategy cycle requires a signed-in customer session.',
+            style:TextStyle(color:MindPalette.muted,fontSize:12))),
+        const SizedBox(height:12),
+      ],
+      const MindTag('ROOM CARDS BELOW: MOCK FIXTURES',color:MindPalette.yellow),
+      const SizedBox(height:10),
       MindPanel(highlight:true,child:Column(children:[
         _value('Lifecycle',room.$2),
         _value('Trading horizon',room.$3),

@@ -13,6 +13,8 @@ import '../data/mind_prospective_outcomes_repository.dart';
 import '../data/mind_prospective_evidence_completeness_repository.dart';
 import '../data/mind_progress_repository.dart';
 import 'mind_progress_panel.dart';
+import '../data/mind_paper_cycle_repository.dart';
+import 'mind_paper_cycle_panel.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -97,6 +99,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.prospectiveOutcomesRepository,
     this.prospectiveEvidenceCompletenessRepository,
     this.progressRepository,
+    this.paperCycleRepository,
     super.key,
   });
 
@@ -118,6 +121,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Server progress registry (#998). Null renders an explicit "Not verified" state.
   final MindProgressRepository? progressRepository;
+
+  /// Real owner-initiated PAPER strategy cycle (#998 PR C). Null in prototype tests.
+  final MindPaperCycleRepository? paperCycleRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }

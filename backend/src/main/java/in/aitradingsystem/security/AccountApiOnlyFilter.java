@@ -87,6 +87,11 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         java.util.regex.Pattern.compile(
             "^/api/customer/mind/v1/progress/items/[a-z]+\\.[A-Za-z0-9._-]{1,90}(/notes)?$");
 
+    /** Owner-initiated Mind strategy cycle in a funded PAPER room (POST run, GET history). */
+    private static final java.util.regex.Pattern MIND_PAPER_CYCLES =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/paper-cycles$");
+
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
         "/actuator/health/readiness",
@@ -136,6 +141,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))
                     || (path.endsWith("/orders/preflight") && "POST".equals(method))))
             || (CUSTOMER_INTENT_RESOURCE.matcher(path).matches()
+                && Set.of("GET", "POST", "OPTIONS").contains(method))
+            || (MIND_PAPER_CYCLES.matcher(path).matches()
                 && Set.of("GET", "POST", "OPTIONS").contains(method))
             || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_ITEM.matcher(path).matches()

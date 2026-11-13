@@ -1,0 +1,48 @@
+package in.aitradingsystem.mind;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import in.aitradingsystem.marketdata.HistoricalCandleInterval;
+import java.math.BigDecimal;
+import java.time.Duration;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+
+class MindPaperCycleServiceTest {
+
+    @Test
+    void automaticSizingTakesTheTightestOfRiskExposureAndCash() {
+        // Rs 20,000 wallet: 1% risk = Rs 200, 20% exposure = Rs 4,000.
+        assertThat(MindPaperCycleService.size(2_000_000, 2_000_000, new BigDecimal("100.00"), new BigDecimal("99.50")))
+            .isEqualTo(40); // exposure-bound (risk would allow 400)
+        assertThat(MindPaperCycleService.size(2_000_000, 2_000_000, new BigDecimal("100.00"), new BigDecimal("90.00")))
+            .isEqualTo(20); // risk-bound: 200 / 10
+        assertThat(MindPaperCycleService.size(2_000_000, 50_000, new BigDecimal("100.00"), new BigDecimal("99.50")))
+            .isEqualTo(4); // cash-bound incl. fee reserve
+        assertThat(MindPaperCycleService.size(2_000_000, 2_000_000, new BigDecimal("100.00"), new BigDecimal("100.00")))
+            .isZero(); // no positive per-share risk => no entry
+        assertThat(MindPaperCycleService.size(2_000_000, 2_000_000, new BigDecimal("5000.00"), new BigDecimal("4990")))
+            .isZero(); // one share would exceed the 20% exposure cap
+        assertThat(MindPaperCycleService.size(2_000_000, 2_000_000, new BigDecimal("100.00"), null)).isZero();
+    }
+
+    @Test
+    void limitsAreMarketableTickMultiplesAndCandlesMustBeRecent() {
+        BigDecimal tick = new BigDecimal("0.05");
+        assertThat(MindPaperCycleService.roundUp(new BigDecimal("105.81"), tick)).isEqualByComparingTo("105.85");
+        assertThat(MindPaperCycleService.roundDown(new BigDecimal("105.81"), tick)).isEqualByComparingTo("105.80");
+        assertThat(MindPaperCycleService.roundUp(new BigDecimal("105.85"), tick)).isEqualByComparingTo("105.85");
+        assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.FIFTEEN_MINUTE)).isEqualTo(Duration.ofHours(1));
+        assertThat(MindPaperCycleService.maxCandleAge(HistoricalCandleInterval.ONE_MINUTE)).isEqualTo(Duration.ZERO);
+        assertThat(MindPaperCycleService.INTERVALS).doesNotContain(HistoricalCandleInterval.ONE_MINUTE);
+    }
+
+    @Test
+    void decisionTrailRoundTripsWithoutInjection() {
+        var stages = List.of(new MindPaperCycleService.Stage("QUOTE", "PASSED", "LTP 1|2\nx"),
+            new MindPaperCycleService.Stage("SIZING", "BLOCKED", null));
+        var decoded = MindPaperCycleService.decodeStages(MindPaperCycleService.encodeStages(stages));
+        assertThat(decoded).extracting(MindPaperCycleService.Stage::code).containsExactly("QUOTE", "SIZING");
+        assertThat(decoded.getFirst().detail()).isEqualTo("LTP 1/2 x");
+    }
+}
