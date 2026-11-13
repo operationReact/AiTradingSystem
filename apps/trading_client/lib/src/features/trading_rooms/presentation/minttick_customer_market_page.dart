@@ -61,6 +61,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   Timer? _pollTimer;
   int _version = 0;
   CustomerUniverseFacets? _facets;
+  CustomerFullQuoteCoverage? _fullQuoteCoverage;
+  bool _fullCoverageLoading = false;
+  bool _fullCoverageFailed = false;
   bool _facetsLoading = false;
   String? _facetsError;
   CustomerMarketOverview? _overview;
@@ -139,6 +142,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (widget.repository is CustomerUniverseFacetsRepository) {
       unawaited(_loadFacets());
     }
+    if (widget.repository is CustomerFullQuoteCoverageRepository) {
+      unawaited(_loadFullQuoteCoverage());
+    }
     if (widget.repository is CustomerOverviewRepository) {
       unawaited(_loadOverview());
       _overviewTimer = Timer.periodic(_overviewPoll, (_) => unawaited(_loadOverview()));
@@ -179,6 +185,28 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
   }
 
+  Future<void> _loadFullQuoteCoverage() async {
+    final repo = widget.repository;
+    if (repo is! CustomerFullQuoteCoverageRepository ||
+        _fullCoverageLoading || !mounted) {
+      return;
+    }
+    _fullCoverageLoading = true;
+    try {
+      final latest = await (repo as CustomerFullQuoteCoverageRepository).fullQuoteCoverage();
+      if (!mounted) return;
+      setState(() {
+        _fullQuoteCoverage = latest;
+        _fullCoverageFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _fullCoverageFailed = true);
+    } finally {
+      _fullCoverageLoading = false;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final active = state == AppLifecycleState.resumed;
@@ -200,6 +228,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     } else {
       _schedulePoll(Duration.zero);
       unawaited(_loadOverview());
+      unawaited(_loadFullQuoteCoverage());
     }
   }
 
@@ -422,6 +451,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           tooltip: 'Refresh market coverage and quotes',
           onPressed: () {
             unawaited(_loadFacets());
+            unawaited(_loadFullQuoteCoverage());
             unawaited(_loadOverview());
             unawaited(_load());
           },
@@ -518,6 +548,28 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ]),
         ),
       ),
+      if (_fullQuoteCoverage case final coverage?) ...[
+        if (coverage.totalActiveListings == data.totalListings)
+          Text('Stored FULL quotes ${coverage.storedFullQuotes}/'
+              '${coverage.totalActiveListings} · not live',
+            key: const ValueKey('market-full-quote-coverage'),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant))
+        else
+          Text('Quote coverage catalogue changed · refresh',
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+        if ((data.exchanges['BSE'] ?? 0) == 0)
+          Text(coverage.activeBseCmRecords == 0
+                  ? 'BSE: no active cash-segment records imported'
+                  : 'BSE: ${coverage.activeBseCmRecords} BSE_CM records; 0 verified EQ listings',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+      ] else if (_fullCoverageFailed)
+        Text('Full-market quote audit unavailable',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 7),
     ];
   }
