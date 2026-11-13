@@ -56,4 +56,19 @@ class UpstoxCoverageRetryCandidatesTest {
         assertEquals(0, UpstoxCoverageRetryCandidates.select(List.of(future), NOW, 0, 20).total());
     }
 
+    @Test void paginationStableAcrossDatasetVersionsRegardlessOfInputOrder() {
+        var oldVersion = new UpstoxCoverageRetryCandidates.Observation("same", "episode-1",
+                "DAY", 2026, 11, NOW.minusSeconds(86400), NOW,
+                "UPSTOX_ANALYTICS", "v1", 4, 0, "GAP", NOW, null);
+        var newVersion = new UpstoxCoverageRetryCandidates.Observation("same", "episode-1",
+                "DAY", 2026, 11, NOW.minusSeconds(86400), NOW,
+                "UPSTOX_ANALYTICS", "v2", 4, 0, "GAP", NOW, null);
+        var page = UpstoxCoverageRetryCandidates.select(List.of(newVersion, oldVersion), NOW, 0, 1);
+        assertEquals("v1", page.items().get(0).observation().datasetVersion());
+        assertEquals("v2", UpstoxCoverageRetryCandidates.select(
+                List.of(oldVersion, newVersion), NOW, 1, 1)
+                .items().get(0).observation().datasetVersion());
+    }
+
+
 }
