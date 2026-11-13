@@ -28,6 +28,9 @@ jobs:
       - name: Enforce canonical MintTick brand spelling
         run: python3 -m unittest discover -s scripts/tests -p test_minttick_brand_consistency.py -v
 
+      - name: Verify safe Upstox activation failure-stage telemetry
+        run: python3 -m unittest discover -s scripts/tests -p test_upstox_analytics_activation_stage_contract.py -v
+
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:

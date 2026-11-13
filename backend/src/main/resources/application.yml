@@ -188,6 +188,10 @@ minttick:
       expected-owner: ${MINTTICK_GOLDEN_S3_EXPECTED_OWNER:}
       kms-key-arn: ${MINTTICK_GOLDEN_S3_KMS_KEY_ARN:}
       prefix: golden-source/bronze/v1/
+  bse-security-master:
+    # Explicit operator refresh is available. Automation remains disabled
+    # until official BSE source access is verified in the production environment.
+    cron: ${BSE_SECURITY_MASTER_CRON:-}
   owner-feed:
     enabled: ${OWNER_FEED_ENABLED:false}
     user-id: ${OWNER_FEED_USER_ID:f3122ced-5304-4f06-9a4d-3edeccbe07c1}
