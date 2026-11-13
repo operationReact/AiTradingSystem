@@ -13,7 +13,7 @@ class UpstoxWorkerReportLedgerTest {
         return String.join("\n", "MINTTICK_UPSTOX_WORKER_V1",
             "worker=" + worker, "scope=" + scope, "result=PR_OPEN",
             "pr=1015", "head=NONE", "ci=PENDING", "runtime=NOT_OBSERVED",
-            "blocker=RIGHTS_UNKNOWN", "next=CHECK_CI", "note=SOURCE_ONLY");
+            "blocker=RIGHTS_UNKNOWN", "next=CHECK_CI");
     }
     @Test void acceptsCorrectWorkerAndDoesNotInferRuntime() {
         var r = UpstoxWorkerReportLedger.parse(
