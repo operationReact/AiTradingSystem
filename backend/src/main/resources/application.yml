@@ -109,10 +109,22 @@ app:
     lambda-function-name: ${MARKET_DATA_LAMBDA_FUNCTION_NAME:}
     max-range-days: 366
     max-chunks-per-run: 5
+    board:
+      # Customer Markets board: demand-driven intraday FULL refresh of official index members
+      # (<= 800 NSE stocks in 50-token batches), only while the cash session is open.
+      intraday-refresh:
+        enabled: ${MARKET_BOARD_INTRADAY_REFRESH_ENABLED:true}
+        interval-seconds: ${MARKET_BOARD_INTRADAY_REFRESH_INTERVAL_SECONDS:90}
     official-sources:
       # Scheduler is opt-in. The direct NIFTY 50 constituent CSV is stable and verified; historical
       # endpoints stay empty unless explicitly configured because NSE has changed those routes over time.
       constituents-url: ${OFFICIAL_NIFTY50_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_nifty50list.csv}
+      # Official cap-segment lists. Each ingested list replaces its market_universe_member universe and
+      # drives the customer Markets board's large/mid/small/micro cap segments and sector heat map.
+      nifty100-constituents-url: ${OFFICIAL_NIFTY100_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_nifty100list.csv}
+      midcap150-constituents-url: ${OFFICIAL_MIDCAP150_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv}
+      smallcap250-constituents-url: ${OFFICIAL_SMALLCAP250_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap250list.csv}
+      microcap250-constituents-url: ${OFFICIAL_MICROCAP250_CONSTITUENTS_URL:https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv}
       index-history-endpoint: ${OFFICIAL_INDEX_HISTORY_ENDPOINT:}
       vix-history-endpoint: ${OFFICIAL_VIX_HISTORY_ENDPOINT:}
       nse-bootstrap-url: ${OFFICIAL_NSE_BOOTSTRAP_URL:https://www.nseindia.com/}

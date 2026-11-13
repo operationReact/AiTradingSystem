@@ -182,20 +182,25 @@ public final class CustomerMarketUniverseController {
                 rs.getLong("matched"), rs.getObject("as_of", LocalDate.class),
                 rs.getString("member_source")));
 
-        // Do not label the 50 Nifty constituent sectors as market-wide
-        // classifications. A separate complete, sourced import is required.
+        // Classifications become AVAILABLE only once the official Nifty lists that define them
+        // have been ingested (see MarketUniverseMembershipStore). Nothing is inferred from price.
+        java.util.Set<String> loaded = new java.util.HashSet<>();
+        for (IndexFacet index : indices) if (index.officialMembers() > 0) loaded.add(index.universeCode());
+        boolean caps = loaded.containsAll(List.of("NIFTY100", "MIDCAP150", "SMALLCAP250"));
         List<ClassificationState> state = List.of(
             new ClassificationState("ALL_CASH_EQUITIES",
                 catalogue.version() == null ? "CATALOGUE_NOT_ACTIVE" : "AVAILABLE",
                 "Every active NSE/BSE -EQ listing, no index size limit"),
             new ClassificationState("INDEX_MEMBERSHIP", "PARTIAL",
                 "Only index universes with verified imported membership appear"),
-            new ClassificationState("NSE_SECTOR_INDUSTRY", "NOT_FULLY_INGESTED",
-                "Nifty 50 constituent sectors do not classify the full catalogue"),
-            new ClassificationState("MARKET_CAP", "NOT_FULLY_INGESTED",
-                "AMFI/official market-cap rankings must be imported with as-of dates"),
-            new ClassificationState("MICRO_NANO_CAP", "DEFINITION_REQUIRED",
-                "Index membership and custom capitalization bands are distinct"));
+            new ClassificationState("NSE_SECTOR_INDUSTRY",
+                loaded.contains("NIFTY500") || caps ? "PARTIAL" : "NOT_FULLY_INGESTED",
+                "Official Nifty list industries classify index members, not every listing"),
+            new ClassificationState("MARKET_CAP", caps ? "AVAILABLE" : "NOT_FULLY_INGESTED",
+                "Nifty 100 / Midcap 150 / Smallcap 250 official lists define large, mid and small cap"),
+            new ClassificationState("MICRO_NANO_CAP",
+                loaded.contains("MICROCAP250") ? "AVAILABLE" : "DEFINITION_REQUIRED",
+                "Nifty Microcap 250 (ranks 501-750) defines micro cap; nano cap is not official"));
 
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(new Facets("customer.market.universe.v1", Instant.now(),

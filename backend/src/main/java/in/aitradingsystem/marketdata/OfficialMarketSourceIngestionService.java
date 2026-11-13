@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -52,6 +53,12 @@ public class OfficialMarketSourceIngestionService {
     private final URI nseBootstrapUri;
     private final int historyLookbackDays;
     private final List<String> sectorIndices;
+    private List<URI> capSegmentUris = List.of(
+            URI.create("https://www.niftyindices.com/IndexConstituent/ind_nifty100list.csv"),
+            URI.create("https://www.niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv"),
+            URI.create("https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap250list.csv"),
+            URI.create("https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv"));
+    private MarketUniverseMembershipStore membership;
 
     public OfficialMarketSourceIngestionService(
             OfficialMarketSourceArchiveService archive,
@@ -79,6 +86,26 @@ public class OfficialMarketSourceIngestionService {
         this.sectorIndices = parseSectorIndices(sectorIndices);
     }
 
+    /** Official cap-segment lists (large/mid/small/micro), overridable per environment. */
+    @Autowired(required = false)
+    void configureCapSegmentSources(
+            @Value("${app.market-data.official-sources.nifty100-constituents-url:https://www.niftyindices.com/IndexConstituent/ind_nifty100list.csv}") String nifty100,
+            @Value("${app.market-data.official-sources.midcap150-constituents-url:https://www.niftyindices.com/IndexConstituent/ind_niftymidcap150list.csv}") String midcap150,
+            @Value("${app.market-data.official-sources.smallcap250-constituents-url:https://www.niftyindices.com/IndexConstituent/ind_niftysmallcap250list.csv}") String smallcap250,
+            @Value("${app.market-data.official-sources.microcap250-constituents-url:https://www.niftyindices.com/IndexConstituent/ind_niftymicrocap250_list.csv}") String microcap250) {
+        this.capSegmentUris = List.of(
+                requiredUri(nifty100, "NIFTY 100 constituent URL"),
+                requiredUri(midcap150, "NIFTY MIDCAP 150 constituent URL"),
+                requiredUri(smallcap250, "NIFTY SMALLCAP 250 constituent URL"),
+                requiredUri(microcap250, "NIFTY MICROCAP 250 constituent URL"));
+    }
+
+    /** Optional: when present, each archived constituent list also refreshes market_universe_member. */
+    @Autowired(required = false)
+    void setMembershipStore(MarketUniverseMembershipStore membership) {
+        this.membership = membership;
+    }
+
     public List<SourceRequest> scheduledRequests() {
         LocalDate to = LocalDate.now(clock.withZone(MARKET_ZONE));
         LocalDate from = to.minusDays(historyLookbackDays);
@@ -93,6 +120,14 @@ public class OfficialMarketSourceIngestionService {
                 "",
                 nifty500ConstituentUri,
                 null));
+        OfficialMarketSourceFamily[] capFamilies = {
+                OfficialMarketSourceFamily.NIFTY100_CONSTITUENTS,
+                OfficialMarketSourceFamily.NIFTY_MIDCAP150_CONSTITUENTS,
+                OfficialMarketSourceFamily.NIFTY_SMALLCAP250_CONSTITUENTS,
+                OfficialMarketSourceFamily.NIFTY_MICROCAP250_CONSTITUENTS};
+        for (int i = 0; i < capFamilies.length; i++) {
+            requests.add(new SourceRequest(capFamilies[i], "", capSegmentUris.get(i), null));
+        }
 
         if (indexHistoryEndpoint != null) {
             requests.add(indexHistoryRequest(OfficialMarketSourceFamily.NIFTY50_HISTORY, "", "NIFTY 50", from, to));
@@ -129,13 +164,20 @@ public class OfficialMarketSourceIngestionService {
                 request.bootstrapUri(),
                 request.family().maxBytes());
         Instant observedAt = clock.instant();
-        return archive.archive(
+        OfficialMarketSourceSnapshot snapshot = archive.archive(
                 request.family(),
                 request.variant(),
                 request.sourceUri().toString(),
                 observedAt,
                 response.contentType(),
                 response.payload());
+        // The raw archive is the evidence; membership is a derived, replaceable view of it.
+        // A rejected list (wrong size, unexpected series) leaves the previous membership intact.
+        if (membership != null && snapshot != null
+                && IndexConstituentCsv.universeFor(request.family()).isPresent()) {
+            membership.materialize(snapshot);
+        }
+        return snapshot;
     }
 
     private SourceRequest indexHistoryRequest(
