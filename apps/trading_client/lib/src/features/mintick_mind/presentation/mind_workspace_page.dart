@@ -15,6 +15,7 @@ import '../data/mind_progress_repository.dart';
 import 'mind_progress_panel.dart';
 import '../data/mind_paper_cycle_repository.dart';
 import 'mind_paper_cycle_panel.dart';
+import '../data/mind_paper_portfolio_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -100,6 +101,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.prospectiveEvidenceCompletenessRepository,
     this.progressRepository,
     this.paperCycleRepository,
+    this.paperPortfolioRepository,
     super.key,
   });
 
@@ -124,6 +126,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Real owner-initiated PAPER strategy cycle (#998 PR C). Null in prototype tests.
   final MindPaperCycleRepository? paperCycleRepository;
+
+  /// Virtual PAPER portfolio + enforced risk policy (#998 PR D2).
+  final MindPaperPortfolioRepository? paperPortfolioRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -198,6 +203,34 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     }, onError: (Object _) {
       _updateMind(() => _registryFailed = true);
     });
+  }
+
+  MindPaperPortfolio? _portfolio;
+  bool _portfolioFailed = false;
+  bool _portfolioRequested = false;
+  final Set<String> _pausing = {};
+
+  void _ensurePortfolio({bool force = false}) {
+    final repository = widget.paperPortfolioRepository;
+    if (repository == null || (_portfolioRequested && !force)) return;
+    _portfolioRequested = true;
+    repository.load().then((p) => _updateMind(() { _portfolio = p; _portfolioFailed = false; }),
+        onError: (Object _) => _updateMind(() => _portfolioFailed = true));
+  }
+
+  Future<void> _setRoomPaused(String roomId, bool paused) async {
+    final repository = widget.paperPortfolioRepository;
+    if (repository == null || _pausing.contains(roomId)) return;
+    _updateMind(() => _pausing.add(roomId));
+    try {
+      await repository.setPaused(roomId, paused);
+      _notice(paused ? 'PAPER room paused · no new virtual fills' : 'PAPER room resumed');
+    } catch (_) {
+      _notice('Could not change the PAPER room. Nothing was changed.');
+    } finally {
+      _updateMind(() => _pausing.remove(roomId));
+      _ensurePortfolio(force: true);
+    }
   }
 
   MindProgressItem? _capability(String id) {

@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.3"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.4"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -75,6 +75,19 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Status, blocker and code evidence from the registry; fake health percentages and latency removed.",
         "endpoints": ["/api/customer/mind/v1/progress"],
         "missing": ["Serving path and monitored health", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "portfolio": {
+        "status": "IMPLEMENTING",
+        "note": "Virtual PAPER equity, realized/unrealized P&L, exposure, rooms and positions with mark freshness from "
+                "/api/customer/mind/v1/paper-portfolio; what-if shock applies to real positions.",
+        "endpoints": ["/api/customer/mind/v1/paper-portfolio"],
+        "missing": ["Sector / correlation exposure", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "risk": {
+        "status": "IMPLEMENTING",
+        "note": "Shows the enforced automatic PAPER risk policy and real per-room PAPER pause/resume; fake sliders removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-portfolio", "/api/customer/trading-rooms/{roomId}/paper/pause"],
+        "missing": ["Daily loss circuit breaker for Mind cycles", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

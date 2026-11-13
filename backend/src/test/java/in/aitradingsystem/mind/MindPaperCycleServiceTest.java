@@ -45,4 +45,18 @@ class MindPaperCycleServiceTest {
         assertThat(decoded).extracting(MindPaperCycleService.Stage::code).containsExactly("QUOTE", "SIZING");
         assertThat(decoded.getFirst().detail()).isEqualTo("LTP 1/2 x");
     }
+
+    @Test
+    void displayedRiskPolicyMatchesEnforcedConstants() {
+        var policy = MindPaperPortfolioService.POLICY;
+        assertThat(MindPaperCycleService.RISK_BUDGET_FRACTION).isEqualByComparingTo("0.01");
+        assertThat(policy.perTradeRiskBudget()).startsWith("1%");
+        assertThat(MindPaperCycleService.MAX_EXPOSURE_FRACTION).isEqualByComparingTo("0.20");
+        assertThat(policy.maxSingleOrderExposure()).startsWith("20%");
+        assertThat(MindPaperCycleService.MAX_QUOTE_DIVERGENCE).isEqualByComparingTo("0.03");
+        assertThat(policy.maxSignalQuoteDivergence()).startsWith("3%");
+        assertThat(MindPaperPortfolioService.FRESH_MARK).isEqualTo(Duration.ofSeconds(15));
+        assertThat(policy.maxQuoteAge()).startsWith("15 seconds");
+        assertThat(policy.liveTrading()).contains("not authorized");
+    }
 }

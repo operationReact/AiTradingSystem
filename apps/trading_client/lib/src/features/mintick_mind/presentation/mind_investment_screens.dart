@@ -211,6 +211,7 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
   ]);
 
   Widget portfolioScreen() {
+    if (widget.paperPortfolioRepository != null) return _realPortfolioScreen();
     final portfolioValue=2846730;
     final stressed=portfolioValue*(1+_scenarioShock/100);
     return _surface('Portfolio Digital Twin','Capital allocation, correlated exposure and hypothetical stress',[
@@ -275,7 +276,126 @@ extension _MindInvestmentScreens on _MindWorkspaceState {
     ]);
   }
 
-  Widget riskScreen()=>_surface('Risk & Capital Authority',
+  Widget _portfolioPending(String title) => _surface(title,'Virtual PAPER portfolio · server data',[
+    MindPanel(key:const ValueKey('mind-portfolio-pending'),child:Row(children:[
+      if(!_portfolioFailed) const SizedBox(width:14,height:14,child:CircularProgressIndicator(strokeWidth:2)),
+      const SizedBox(width:9),
+      Expanded(child:Text(_portfolioFailed
+        ? 'PAPER portfolio unavailable. Nothing is shown rather than estimates.'
+        : 'Loading PAPER portfolio…',
+        style:TextStyle(color:_portfolioFailed?MindPalette.red:MindPalette.muted,fontSize:12))),
+      if(_portfolioFailed) TextButton(onPressed:()=>_ensurePortfolio(force:true),child:const Text('Retry')),
+    ])),
+  ]);
+
+  Widget _realPortfolioScreen() {
+    _ensurePortfolio();
+    final p=_portfolio;
+    if (p==null) return _portfolioPending('Portfolio Digital Twin');
+    final equity=p.equityPaise;
+    final base=p.marketValuePaise??p.costBasisPaise;
+    final stressedValue=(base*(1+_scenarioShock/100)).round();
+    String pnl(int? v)=>v==null?'Mark unavailable':formatPaise(v);
+    return _surface('Portfolio Digital Twin','Virtual PAPER capital across '+p.fundedRooms.toString()+' funded room(s) · no real money',[
+      const MindTag('PAPER · VIRTUAL MONEY',color:MindPalette.yellow),
+      const SizedBox(height:10),
+      _metricGrid([
+        ('Virtual equity',equity==null?'Mark unavailable':formatPaise(equity),'Cash + marked positions'),
+        ('Realized P&L',formatPaise(p.realizedPnlPaise),'Closed PAPER trades'),
+        ('Unrealized P&L',pnl(p.unrealizedPnlPaise),p.staleOrMissingMarks==0?'Fresh verified marks':p.staleOrMissingMarks.toString()+' stale/missing mark(s)'),
+        ('Gross exposure',p.grossExposurePercent==null?'Not verified':p.grossExposurePercent!.toStringAsFixed(1)+'%','Of starting virtual cash'),
+      ]),
+      const SizedBox(height:13),
+      _split(
+        _block('Rooms',Icons.meeting_room_outlined,[
+          if(p.rooms.isEmpty) _empty('No funded PAPER room yet. Activate one in Trading Rooms.'),
+          for(final r in p.rooms) ...[
+            _value(r.name+(r.paused?' · PAUSED':''),formatPaise(r.availableCashPaise)+' cash',
+              color:r.paused?MindPalette.yellow:MindPalette.mint),
+            _progress('Invested',r.initialCashPaise==0?0:
+              (r.initialCashPaise-r.availableCashPaise)/r.initialCashPaise),
+          ],
+        ]),
+        _block('Open Positions',Icons.shield_outlined,[
+          if(p.positions.isEmpty) _empty('No open PAPER positions.'),
+          for(final pos in p.positions)
+            _value(pos.tradingSymbol+' × '+pos.quantity.toString()+' · '+pos.markState,
+              pnl(pos.unrealizedPnlPaise),
+              color:pos.markState!='FRESH'?MindPalette.yellow:
+                (pos.unrealizedPnlPaise??0)<0?MindPalette.red:MindPalette.mint),
+        ]),
+      ),
+      const SizedBox(height:13),
+      _section('What-if Price Shock',Icons.auto_graph_outlined,[
+        MindPanel(highlight:true,child:Column(children:[
+          _value('Scenario shock',_scenarioShock.toStringAsFixed(0)+'%'),
+          Slider(value:_scenarioShock,min:-40,max:20,divisions:60,
+            activeColor:MindPalette.mint,onChanged:(v)=>_updateMind(()=>_scenarioShock=v)),
+          _value(p.marketValuePaise==null?'Positions at cost (marks unavailable)':'Positions at verified marks',formatPaise(base)),
+          _value('Shocked value',formatPaise(stressedValue),
+            color:_scenarioShock<0?MindPalette.red:MindPalette.mint),
+          const Text('Uniform linear shock on your real PAPER positions. Not a prediction or correlation stress model.',
+            style:TextStyle(color:MindPalette.muted,fontSize:11)),
+        ])),
+      ]),
+      _section('Portfolio Controls',Icons.shield_outlined,[
+        _tile('Risk center','Enforced automatic limits and PAPER room pause',Icons.shield_outlined,route:'risk'),
+        _tile('Run a PAPER strategy cycle','Trading Room Detail',Icons.play_circle_outline,route:'room-detail'),
+      ]),
+    ]);
+  }
+
+  Widget _realRiskScreen() {
+    _ensurePortfolio();
+    final p=_portfolio;
+    if (p==null) return _portfolioPending('Risk & Capital Authority');
+    return _surface('Risk & Capital Authority','Deterministic server limits · applied automatically to every PAPER cycle',[
+      MindPanel(key:const ValueKey('mind-risk-policy'),highlight:true,child:Column(
+        crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        const MindSectionTitle(title:'Enforced PAPER Risk Policy',icon:Icons.verified_user_outlined),
+        for(final (label,value) in p.policy) _value(label,value,
+          color:label=='LIVE trading'?MindPalette.red:MindPalette.mint),
+        const SizedBox(height:4),
+        const Text('These limits are fixed server rules, not preferences. No slider can raise them.',
+          style:TextStyle(color:MindPalette.muted,fontSize:11)),
+      ])),
+      const SizedBox(height:12),
+      _section('Emergency Stop · PAPER Rooms',Icons.pan_tool_outlined,[
+        if(p.rooms.isEmpty) _empty('No funded PAPER room.'),
+        for(final r in p.rooms)
+          Padding(padding:const EdgeInsets.only(bottom:7),child:MindPanel(child:Row(children:[
+            Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+              Text(r.name,style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700)),
+              Text(r.paused?'Paused · new virtual fills rejected':'Active · fills allowed inside the gates',
+                style:const TextStyle(color:MindPalette.muted,fontSize:11)),
+            ])),
+            if(_pausing.contains(r.roomId))
+              const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2))
+            else Switch.adaptive(
+              key:ValueKey('mind-room-pause-'+r.roomId),
+              activeTrackColor:MindPalette.red,value:r.paused,
+              onChanged:(v)=>_setRoomPaused(r.roomId,v)),
+          ]))),
+      ]),
+      _split(
+        _block('Current Exposure',Icons.pie_chart_outline,[
+          _value('Gross exposure',p.grossExposurePercent==null?'Not verified':p.grossExposurePercent!.toStringAsFixed(1)+'%'),
+          _value('Open positions',p.positions.length.toString()),
+          _value('Stale/missing marks',p.staleOrMissingMarks.toString(),
+            color:p.staleOrMissingMarks>0?MindPalette.yellow:MindPalette.mint),
+          _value('Realized P&L',formatPaise(p.realizedPnlPaise)),
+        ]),
+        _block('Position & Short Rules',Icons.rule_outlined,[
+          _value('Instruments','NSE/BSE cash equity only'),
+          _value('Short selling','Not available in PAPER cycle'),
+          _value('Futures / options','Not enabled'),
+          _value('Leverage','None'),
+        ]),
+      ),
+    ]);
+  }
+
+  Widget riskScreen()=>widget.paperPortfolioRepository!=null ? _realRiskScreen() : _surface('Risk & Capital Authority',
     'Independent risk checks remain mandatory regardless of intelligence votes',[
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'Risk Limit Simulation',icon:Icons.shield_outlined),

@@ -114,6 +114,18 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(result.get("availableCashPaise").isIntegralNumber()).isTrue();
         assertThat(result.get("realizedPnlPaise").isIntegralNumber()).isTrue();
 
+        var portfolioBody = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/customer/mind/v1/paper-portfolio").with(customerJwt)).andReturn().getResponse();
+        assertThat(portfolioBody.getStatus()).isEqualTo(200);
+        var portfolioJson = json.readTree(portfolioBody.getContentAsString());
+        assertThat(portfolioJson.get("contractVersion").asText()).isEqualTo("mind.paper-portfolio.v1");
+        assertThat(portfolioJson.get("liveMoney").isBoolean()).isTrue();
+        assertThat(portfolioJson.get("liveMoney").asBoolean()).isFalse();
+        assertThat(Instant.parse(portfolioJson.get("generatedAt").asText())).isNotNull();
+        assertThat(portfolioJson.get("initialCashPaise").isIntegralNumber()).isTrue();
+        assertThat(portfolioJson.get("rooms").get(0).get("paused").isBoolean()).isTrue();
+        assertThat(portfolioJson.get("riskPolicy").get("perTradeRiskBudget").isTextual()).isTrue();
+
         var history = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                 .get("/api/customer/trading-rooms/" + room + "/mind/paper-cycles").with(customerJwt))
             .andReturn().getResponse();
@@ -165,6 +177,16 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         var replay = service.run(owner, room, "cycle_key_0001", instrument, HistoricalCandleInterval.FIFTEEN_MINUTE);
         assertThat(replay.cycle().id()).isEqualTo(first.cycle().id());
         // New request on the same candle with an open position: hold, no pyramiding.
+        // Open position is marked with the fresh verified tick, never a candle close.
+        var open = portfolio().inspect(owner);
+        assertThat(open.positions()).singleElement().satisfies(p -> {
+            assertThat(p.tradingSymbol()).isEqualTo("RELIANCE-EQ");
+            assertThat(p.markState()).isEqualTo("FRESH");
+            assertThat(p.markPrice()).isEqualByComparingTo("105.85");
+            assertThat(p.unrealizedPnlPaise()).isNegative();
+        });
+        assertThat(open.grossExposurePercent()).isBetween(19.0, 20.0);
+        assertThat(open.unrealizedPnlPaise()).isEqualTo(open.positions().getFirst().unrealizedPnlPaise());
         var again = service.run(owner, room, "cycle_key_0002", instrument, HistoricalCandleInterval.FIFTEEN_MINUTE);
         assertThat(again.cycle().outcome()).isEqualTo(Outcome.NO_ENTRY);
         assertThat(again.cycle().reasons()).contains("POSITION_ALREADY_OPEN");
@@ -193,6 +215,14 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(exit.holdings()).isEmpty();
         assertThat(exit.realizedPnlPaise()).isNegative();
         assertThat(countOrders(room)).isEqualTo(2);
+
+        // Portfolio aggregate: realized loss carried, no open positions after the exit.
+        var portfolio = portfolio().inspect(owner);
+        assertThat(portfolio.liveMoney()).isFalse();
+        assertThat(portfolio.fundedRooms()).isEqualTo(1);
+        assertThat(portfolio.realizedPnlPaise()).isEqualTo(exit.realizedPnlPaise());
+        assertThat(portfolio.positions()).isEmpty();
+        assertThat(portfolio.grossExposurePercent()).isZero();
     }
 
     @Test
@@ -238,6 +268,12 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     // ------------------------------------------------------------------ fixtures
 
     private MindCapabilityProgressService progress() { return progressAt(REV); }
+
+    private MindPaperPortfolioService portfolio() {
+        Clock clock = Clock.fixed(NOW, ZoneOffset.UTC);
+        return new MindPaperPortfolioService(jdbc, wallets,
+            new CustomerPaperOrderService(jdbc, instruments, lastTicks, calendar, clock), lastTicks, instruments, clock);
+    }
 
     private MindCapabilityProgressService progressAt(String revision) {
         return new MindCapabilityProgressService(jdbc, Clock.fixed(NOW, ZoneOffset.UTC), revision,

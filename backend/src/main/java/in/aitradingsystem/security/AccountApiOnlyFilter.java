@@ -83,6 +83,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
 
     /** Mintick Mind progress registry: read-only status plus owner notes (no status writes). */
     private static final String MIND_PROGRESS = "/api/customer/mind/v1/progress";
+    private static final String MIND_PAPER_PORTFOLIO = "/api/customer/mind/v1/paper-portfolio";
     private static final java.util.regex.Pattern MIND_PROGRESS_ITEM =
         java.util.regex.Pattern.compile(
             "^/api/customer/mind/v1/progress/items/[a-z]+\\.[A-Za-z0-9._-]{1,90}(/notes)?$");
@@ -145,6 +146,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (MIND_PAPER_CYCLES.matcher(path).matches()
                 && Set.of("GET", "POST", "OPTIONS").contains(method))
             || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
+            || (MIND_PAPER_PORTFOLIO.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_ITEM.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/notes") ? "POST".equals(method) : "GET".equals(method))));
