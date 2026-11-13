@@ -40,7 +40,7 @@ public final class UpstoxCoverageRetryCandidates {
                 .map(o -> {
                     Objects.requireNonNull(o, "observation");
                     // Do not disclose future evidence to an as-of consumer.
-                    if (o.lastAttemptAt() != null && o.lastAttemptAt().isAfter(asOf)) return null;
+                    if (o.windowStart().isAfter(asOf) || (o.lastAttemptAt() != null && o.lastAttemptAt().isAfter(asOf))) return null;
                     if ("RIGHTS_DENIED".equals(o.reason()) || "RIGHTS_UNKNOWN".equals(o.reason()))
                         return new Candidate(o, "BLOCKED_RIGHTS");
                     if (o.cooldownUntil() != null && o.cooldownUntil().isAfter(asOf))
