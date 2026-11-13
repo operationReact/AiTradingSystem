@@ -59,6 +59,7 @@ class UpstoxDeliveryWorkstreams {
   // separately attested completion reports before claiming a heartbeat.
   static int? _classify(String text) {
     if (text.contains('upstox-ops') || text.contains('operations ui') ||
+        text.contains('data workstreams') || text.contains('worker activity') ||
         text.contains('operational telemetry') || text.contains('analytics progress')) {
       return 5;
     }
