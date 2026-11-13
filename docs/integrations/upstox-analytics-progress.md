@@ -166,3 +166,30 @@ its verified-acceptance flag. The GitHub verifier reports a bounded, known
 it emits `HOST_ACCEPTANCE_PROOF_MISSING`, never raw SSM stdout or secrets.
 The fixed `ROLLBACK_UNVERIFIED` marker takes priority. Nothing bypasses the
 positive candle/ratio-count checks or activates LIVE orders.
+
+## Backend-only activation correction — 13 November 2026
+
+The approved source acceptance run 43396030458 failed with
+`LOCAL_RELEASE_RESTART_UNCLASSIFIED`. The prior activation script called the
+full PAPER deployment for an Analytics flag change, unnecessarily repeating
+a database dump, full-stack Compose orchestration and web/bridge checks.
+That failure code alone does not prove which of those release steps failed.
+
+The replacement activator checks the exact installed release SHA and ARM64
+non-root image, registered egress IP, live API health, running PostgreSQL,
+root-only runtime files and SSM SecureString access. It validates the
+resulting configuration with strict `TRADING_MODE=PAPER` and loopback-only
+backend binding before changing anything. It updates only three read-only
+Upstox Analytics switches in both protected environment files and recreates
+only the existing backend using `--no-deps --no-build --force-recreate`.
+
+If backend recreation or the bounded Upstox smoke read fails, it restores
+both protected environment files and re-creates the previous backend.
+Unverified rollback is always a hard failure. No credentials, expanded
+Compose configuration, provider payloads, or raw host logs are emitted.
+
+The protected GitHub workflow keeps its original fixed-error whitelist.
+A new host-only error code may appear there as `HOST_UNAVAILABLE`, but it
+cannot be interpreted as successful activation. Provider success still
+requires positive validated daily-candle and fundamentals ratios counts.
+No data retention, model training rights, or broker orders are enabled.

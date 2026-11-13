@@ -26,52 +26,36 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
         self.assertIn("MINTTICK_PAPER_FAILED_STAGE:HOST_PRECHECK", result.stderr)
         self.assertNotIn("POSTGRES_PASSWORD=", result.stderr)
 
-    def test_known_release_stages_are_mapped_and_bounded(self):
-        paper, activate, workflow = [p.read_text() for p in (PAPER, ACTIVATE, WORKFLOW)]
-        stages = {
-            "HOST_PRECHECK": "LOCAL_RELEASE_HOST_PRECHECK",
-            "IMAGE_CHECK": "LOCAL_RELEASE_MISSING_IMAGE",
-            "EGRESS_CHECK": "LOCAL_RELEASE_EGRESS_IP_DRIFT",
-            "NETWORK_IDENTITY": "LOCAL_RELEASE_NETWORK_IDENTITY",
-            "COMPOSE_CONFIG": "LOCAL_RELEASE_COMPOSE_CONFIG",
-            "DATABASE_BACKUP": "LOCAL_RELEASE_DB_BACKUP",
-            "COMPOSE_START": "LOCAL_RELEASE_COMPOSE_START",
-            "API_HEALTH": "LOCAL_RELEASE_BACKEND_HEALTH",
-            "WEB_HEALTH": "LOCAL_RELEASE_WEB_HEALTH",
-            "PROXY_HEALTH": "LOCAL_RELEASE_PROXY_HEALTH",
-            "BRIDGE_HEALTH": "LOCAL_RELEASE_LAMBDA_BRIDGE",
-            "PORT_CONTRACT": "LOCAL_RELEASE_PORT_CONTRACT",
-        }
-        for stage, reason in stages.items():
-            with self.subTest(stage=stage):
-                self.assertIn("stage=" + stage, paper)
-                self.assertIn(stage + ") echo '" + reason + "'; return ;;", activate)
-                self.assertIn("'" + reason + "'", workflow)
-        self.assertIn("row[0]=='ROLLBACK_UNVERIFIED' for row in approved", workflow)
-        self.assertIn("MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true", activate)
+    def test_analytics_uses_backend_only_recreation(self):
+        activate, workflow = ACTIVATE.read_text(), WORKFLOW.read_text()
+        self.assertIn("up -d --no-deps --no-build --force-recreate backend", activate)
+        self.assertNotIn('bash "$root/run_paper.sh" "$sha"', activate)
+        self.assertNotIn("pg_dump -U", activate)
+        self.assertNotIn("/v3/order/place", activate)
+        self.assertIn("stage=backend_precheck", activate)
+        self.assertIn("stage=config_check", activate)
+        self.assertIn("stage=backend_recreate", activate)
+        self.assertIn("stage=backend_health", activate)
+        self.assertIn("stage=read_only_probe", activate)
+        self.assertIn('assert e["TRADING_MODE"]=="PAPER"', activate)
+        self.assertIn("modelTrainingRightsVerified", activate)
         self.assertIn("MINTTICK_UPSTOX_RESULT:ACTIVATED_READ_ONLY", activate)
-        self.assertIn("stage=runtime_prepare", activate)
-        self.assertIn("stage=runtime_publish", activate)
-        self.assertIn("stage=release_restart", activate)
-        self.assertIn("fail HOST_RUNTIME_PASSWORD_INVALID", activate)
-        self.assertIn("fail HOST_RUNTIME_OPERATOR_KEY_INVALID", activate)
-        self.assertIn("fail HOST_RUNTIME_INSTALL_FAILED", activate)
-        self.assertIn('failure_code="$(classify_failure)"', activate)
+        self.assertIn("MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true", activate)
+        self.assertIn("SSM Success is not acceptance", workflow)
+        self.assertIn("HOST_UNAVAILABLE", workflow)
+
+    def test_backend_failure_restores_both_private_env_files(self):
+        activate, workflow = ACTIVATE.read_text(), WORKFLOW.read_text()
+        self.assertIn('"$work/previous.env" "$root/runtime.env"', activate)
+        self.assertIn('"$work/previous.compose.env" "$root/.env"', activate)
         self.assertIn("rollback_state=unverified", activate)
         self.assertIn("reason=ROLLBACK_UNVERIFIED", activate)
-        self.assertIn('if [ "$code" -eq 0 ] && [ "$accepted" -ne 1 ]; then exit 9; fi', activate)
-        self.assertIn("'HOST_ACCEPTANCE_PROOF_MISSING'", workflow)
-        self.assertNotIn("Upstox host script missing acceptance marker", workflow)
-        self.assertIn("SSM Success is not acceptance", workflow)
-        self.assertNotIn("echo 'MINTTICK_UPSTOX_RESULT:ROLLBACK_UNVERIFIED'", activate)
-        for reason in ("HOST_RUNTIME_PREP_FAILED", "HOST_RUNTIME_PASSWORD_INVALID",
-                       "HOST_RUNTIME_OPERATOR_KEY_INVALID", "HOST_RUNTIME_INSTALL_FAILED",
-                       "LOCAL_RELEASE_RESTART_UNCLASSIFIED",
-                       "HOST_ACTIVATION_UNEXPECTED"):
-            with self.subTest(reason=reason):
-                self.assertIn("'" + reason + "'", workflow)
-        self.assertNotIn("getParameterByPath", activate)
-        self.assertNotIn("/v3/order/place", activate)
+        self.assertIn('if [ "$rc" -eq 0 ] && [ "$accepted" -ne 1 ]; then exit 9; fi', activate)
+        for reason in ("BACKEND_PRECHECK_UNHEALTHY", "POSTGRES_NOT_RUNNING",
+                       "BACKEND_CONFIG_INVALID", "BACKEND_RECREATE_FAILED",
+                       "BACKEND_RESTART_UNHEALTHY", "ROLLBACK_UNVERIFIED"):
+            self.assertIn("fail " + reason if reason != "ROLLBACK_UNVERIFIED"
+                          else "rollback_state=unverified", activate)
 
 
 if __name__ == "__main__":
