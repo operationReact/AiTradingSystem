@@ -173,7 +173,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       ]),
       const SizedBox(height: 10),
       Row(children: [
-        metric('Candles', candles, Icons.candlestick_chart_outlined),
+        metric('Candles', candles, Icons.bar_chart_outlined),
         const SizedBox(width: 6),
         metric('Ratios', ratios, Icons.analytics_outlined),
         const SizedBox(width: 6),
