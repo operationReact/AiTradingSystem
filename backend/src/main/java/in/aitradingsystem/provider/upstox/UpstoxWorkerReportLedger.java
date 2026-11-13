@@ -59,6 +59,15 @@ public final class UpstoxWorkerReportLedger {
             String value = lines[i].substring(split + 1).trim();
             if (value.length() > 160 || fields.putIfAbsent(key, value) != null) return Optional.empty();
         }
+        // Human notes may follow the fixed report header, but another machine field
+        // must not override or ambiguously contradict the validated audit evidence.
+        for (int i = 10; i < lines.length; i++) {
+            String trailing = lines[i].trim();
+            int separator = trailing.indexOf('=');
+            if (separator > 0 && java.util.Set.of("worker", "scope", "result", "pr",
+                    "head", "ci", "runtime", "blocker", "next")
+                    .contains(trailing.substring(0, separator).trim())) return Optional.empty();
+        }
         if (!fields.keySet().equals(java.util.Set.of("worker", "scope", "result", "pr",
                 "head", "ci", "runtime", "blocker", "next"))) return Optional.empty();
         // Allow trailing human explanation but reject a repeated structured
