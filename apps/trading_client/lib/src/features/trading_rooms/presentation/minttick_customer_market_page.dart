@@ -45,6 +45,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final Map<int, CustomerLiveQuote> _rows = {};
   int _exploreCategory = 0;
+  int _moverFilter = 0;
   InstrumentCatalogueStatus? _catalogue;
   List<InstrumentRecord> _stocks = const [];
   bool _hasNext = false;
@@ -458,9 +459,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           icon: const Icon(Icons.refresh_rounded),
         ),
       ]),
-      Text('Indian equities · NSE / BSE', style: theme.textTheme.labelSmall
-          ?.copyWith(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 5),
+      const SizedBox(height: 2),
       TabBar(
         key: const ValueKey('customer-market-tabs'),
         controller: _tabs,
@@ -868,7 +867,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         Text('SENSEX and intraday charts: verified source pending',
             style: theme.textTheme.labelSmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 9),
+      const SizedBox(height: 4),
       _BreadthCard(overview: overview),
       const SizedBox(height: 9),
       _MoverSection(title: 'Top gainers', rows: overview.gainers.take(3).toList(),
@@ -919,26 +918,61 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     final overview = _overview;
     if (overview == null) return _overviewStatus();
+    const labels = ['Gainers', 'Losers', 'Gap up', 'Gap down'];
+    const titles = ['Top gainers', 'Top losers', 'Gap up at open', 'Gap down at open'];
+    final rows = switch (_moverFilter) {
+      0 => overview.gainers,
+      1 => overview.losers,
+      2 => overview.gapUp,
+      _ => overview.gapDown,
+    };
+    final emptyText = switch (_moverFilter) {
+      0 => 'No Nifty 50 stock above its previous close.',
+      1 => 'No Nifty 50 stock below its previous close.',
+      2 => 'No Nifty 50 stock opened above its previous close.',
+      _ => 'No Nifty 50 stock opened below its previous close.',
+    };
     return [
-      _UniverseNote(universe: overview.universe),
-      const MintTickInfoText('Movers below cover Nifty 50 only. '
-          'Whole-market rankings require verified full-universe price coverage.'),
-      const SizedBox(height: 12),
-      _MoverSection(title: 'Top gainers', rows: overview.gainers,
-          emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
-          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Top losers', rows: overview.losers,
-          emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
-          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Gap up at open', rows: overview.gapUp,
-          emptyText: 'No Nifty 50 stock opened above its previous close.',
-          pctOf: (m) => m.gapPct, pctLabel: 'Gap', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Gap down at open', rows: overview.gapDown,
-          emptyText: 'No Nifty 50 stock opened below its previous close.',
-          pctOf: (m) => m.gapPct, pctLabel: 'Gap', onOpen: _openMover),
+      Row(children: [
+        Expanded(child: Text(
+          'Nifty 50 sample · ${overview.universe.returned}/${overview.universe.members} quoted',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        )),
+        IconButton(
+          tooltip: 'Mover coverage details',
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            builder: (ctx) => SafeArea(child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: _UniverseNote(universe: overview.universe),
+            )),
+          ),
+          icon: const Icon(Icons.info_outline_rounded, size: 18),
+        ),
+      ]),
+      const SizedBox(height: 4),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        for (var i = 0; i < labels.length; i++)
+          ChoiceChip(
+            key: ValueKey('market-movers-filter-$i'),
+            label: Text(labels[i]),
+            selected: _moverFilter == i,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() => _moverFilter = i),
+          ),
+      ]),
+      const SizedBox(height: 10),
+      _MoverSection(
+        title: titles[_moverFilter],
+        rows: rows,
+        emptyText: emptyText,
+        pctOf: (m) => _moverFilter < 2 ? m.changePct : m.gapPct,
+        pctLabel: _moverFilter < 2 ? 'Change' : 'Gap',
+        onOpen: _openMover,
+      ),
     ];
   }
 
@@ -994,8 +1028,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         ),
         onSubmitted: (_) => _load(),
       ),
-      const SizedBox(height: 12),
-      Wrap(spacing: 8, children: [
+      const SizedBox(height: 7),
+      Wrap(spacing: 6, runSpacing: 4, children: [
         for (final (name, exchange) in [('All', null), ('NSE', 'NSE'), ('BSE', 'BSE')])
           ChoiceChip(
             label: Text(name),
@@ -1007,7 +1041,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             },
           ),
       ]),
-      const SizedBox(height: 14),
+      const SizedBox(height: 6),
       ..._universeIntro(),
       if (_catalogue?.activeCount == 0) ...[
         const MintTickInfoText('The exchange instrument catalogue has not yet '
@@ -1023,8 +1057,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const SizedBox(height: 12),
       ],
       if (_stocks.isNotEmpty) ...[
-        MintTickInfoText(banner.text, icon: banner.icon),
-        const SizedBox(height: 14),
+        _MarketFeedLine(text: banner.text, icon: banner.icon),
+        const SizedBox(height: 7),
       ],
       Row(children: [
         Expanded(child: Text('Cash equities', style: theme.textTheme.titleMedium
@@ -1040,16 +1074,16 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       if (_generatedAt != null)
-        Text('Last API check ${_clock(_generatedAt!.toLocal())} · exchange tick time shown per row',
+        Text('Checked ${_clock(_generatedAt!.toLocal())} · exchange time per quote',
           style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 8),
+      const SizedBox(height: 5),
       if (!_loading && _stocks.isEmpty && _error == null)
         const MintTickInfoText('No stocks available for this search. '
             'Try another symbol or verify the active instrument catalogue.')
       else
         for (final (index, stock) in _stocks.indexed)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 1),
             child: Material(
               color: Colors.transparent,
               child: Semantics(
@@ -1075,10 +1109,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           label: Text(_loadingMore ? 'Loading equities…' : 'Load more equities'),
         )),
       ],
-      const SizedBox(height: 16),
-      Text('Live prices require backend verification. When unavailable, the last '
-          'verified snapshot is shown with its original exchange time, never as LIVE. '
-          'Information only, not investment advice.',
+      const SizedBox(height: 8),
+      Text('Only source-verified prices are displayed · saved quotes are never LIVE.',
         style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
     ];
   }
@@ -1182,6 +1214,28 @@ class _MarketStatusPill extends StatelessWidget {
   }
 }
 
+/// Keep feed limitations readable without turning them into a full-width card.
+class _MarketFeedLine extends StatelessWidget {
+  const _MarketFeedLine({required this.text, required this.icon});
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(children: [
+      Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+      const SizedBox(width: 6),
+      Expanded(child: Text(text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: scheme.onSurfaceVariant),
+      )),
+    ]);
+  }
+}
+
 /// Honest placeholder for market data MintTick does not serve yet.
 class _NotAvailableBlock extends StatelessWidget {
   const _NotAvailableBlock({required this.title, required this.reason});
@@ -1238,6 +1292,8 @@ String _dayClock(DateTime time) {
   return '${time.day.toString().padLeft(2, '0')} ${months[time.month - 1]} ${_clock(time).substring(0, 5)}';
 }
 
+/// A dense market terminal row: no repeated bordered cards or three-line
+/// empty-feed warnings for every equity. Status and source timestamp remain visible.
 class _StockRow extends StatelessWidget {
   const _StockRow({required this.stock, required this.quote, required this.status});
   final InstrumentRecord stock;
@@ -1271,47 +1327,49 @@ class _StockRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-stock-${stock.id}'),
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: scheme.outlineVariant),
+            border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.65))),
           ),
           child: Row(children: [
             MintTickEquityAvatar(
               tradingSymbol: stock.tradingSymbol,
               companyName: stock.name,
-              size: 35,
+              size: 28,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 9),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text('${stock.tradingSymbol} · ${stock.exchange}',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 4),
-                Row(children: [
-                  Icon(style.icon, size: 12, color: style.color),
-                  const SizedBox(width: 4),
-                  Flexible(child: Text(statusLine, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: style.color, fontWeight: FontWeight.w700))),
-                ]),
+                  style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
               ],
             )),
-            const SizedBox(width: 8),
-            Text(priceText,
-              key: ValueKey('customer-market-price-${stock.id}'),
-              maxLines: 1,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: price == null ? scheme.onSurfaceVariant : scheme.onSurface,
-              )),
+            const SizedBox(width: 7),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 146),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(priceText,
+                    key: ValueKey('customer-market-price-${stock.id}'),
+                    maxLines: 1,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: price == null ? scheme.onSurfaceVariant : scheme.onSurface,
+                    )),
+                  const SizedBox(height: 2),
+                  Text(statusLine, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: style.color, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
           ]),
         ),
       ),
@@ -1385,8 +1443,10 @@ class _IndexCard extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-index-${index.indexCode}'),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: _cardDecoration(scheme),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+          ),
           child: Row(children: [
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1427,8 +1487,10 @@ class _BreadthCard extends StatelessWidget {
     final b = overview.breadth;
     return Container(
       key: const ValueKey('customer-market-breadth'),
-      padding: const EdgeInsets.all(10),
-      decoration: _cardDecoration(scheme),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Market breadth · Nifty 50 only', style: theme.textTheme.titleSmall
             ?.copyWith(fontWeight: FontWeight.w800)),
@@ -1523,7 +1585,7 @@ class _MoverSection extends StatelessWidget {
       else
         for (final mover in rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 2),
             child: Semantics(
               container: true,
               button: true,
@@ -1534,12 +1596,12 @@ class _MoverSection extends StatelessWidget {
               child: ExcludeSemantics(
                 child: Material(
                   color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(8),
                     onTap: () => onOpen(mover),
                     child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(children: [
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
