@@ -81,6 +81,12 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         java.util.regex.Pattern.compile(
             "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/orders/intents$");
 
+    /** Mintick Mind progress registry: read-only status plus owner notes (no status writes). */
+    private static final String MIND_PROGRESS = "/api/customer/mind/v1/progress";
+    private static final java.util.regex.Pattern MIND_PROGRESS_ITEM =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/mind/v1/progress/items/[a-z]+\\.[A-Za-z0-9._-]{1,90}(/notes)?$");
+
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
         "/actuator/health/readiness",
@@ -130,7 +136,11 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))
                     || (path.endsWith("/orders/preflight") && "POST".equals(method))))
             || (CUSTOMER_INTENT_RESOURCE.matcher(path).matches()
-                && Set.of("GET", "POST", "OPTIONS").contains(method));
+                && Set.of("GET", "POST", "OPTIONS").contains(method))
+            || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
+            || (MIND_PROGRESS_ITEM.matcher(path).matches()
+                && ("OPTIONS".equals(method)
+                    || (path.endsWith("/notes") ? "POST".equals(method) : "GET".equals(method))));
         if (!allowed) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;

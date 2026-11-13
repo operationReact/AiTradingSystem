@@ -11,6 +11,8 @@ import '../data/mind_prospective_cohort_repository.dart';
 import '../data/mind_prospective_signals_repository.dart';
 import '../data/mind_prospective_outcomes_repository.dart';
 import '../data/mind_prospective_evidence_completeness_repository.dart';
+import '../data/mind_progress_repository.dart';
+import 'mind_progress_panel.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -94,6 +96,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.prospectiveSignalsRepository,
     this.prospectiveOutcomesRepository,
     this.prospectiveEvidenceCompletenessRepository,
+    this.progressRepository,
     super.key,
   });
 
@@ -112,6 +115,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindProspectiveOutcomesRepository? prospectiveOutcomesRepository;
   final MindProspectiveEvidenceCompletenessRepository?
       prospectiveEvidenceCompletenessRepository;
+
+  /// Server progress registry (#998). Null renders an explicit "Not verified" state.
+  final MindProgressRepository? progressRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -283,6 +289,8 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
                     prospectiveOutcomesRepository: widget.prospectiveOutcomesRepository,
                     prospectiveEvidenceCompletenessRepository:
                         widget.prospectiveEvidenceCompletenessRepository,
+                    progressRepository: widget.progressRepository,
+                    onOpenProgress: () => _go('coverage'),
                   )
                 : _screen()),
             if (!wide && !widget.embeddedInProductShell) _mobileNavigation(),

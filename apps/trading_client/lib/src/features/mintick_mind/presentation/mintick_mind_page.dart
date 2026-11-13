@@ -16,6 +16,8 @@ import 'mind_ma_walkforward_panel.dart';
 import 'mind_strategy_replay_panel.dart';
 import 'mind_readiness_panel.dart';
 import 'mind_widgets.dart';
+import 'mind_progress_panel.dart';
+import '../data/mind_progress_repository.dart';
 
 /// MintTick Mind — mock-only first vertical slice, translated into native
 /// Flutter from the approved standalone HTML/screenshot. No API calls or
@@ -25,6 +27,7 @@ class MintickMindPage extends StatefulWidget {
     this.walkForwardRepository, this.prospectiveRepository,
     this.prospectiveSignalsRepository, this.prospectiveOutcomesRepository,
     this.prospectiveEvidenceCompletenessRepository,
+    this.progressRepository, this.onOpenProgress,
     super.key});
 
   /// Null in isolated demo/golden tests; authenticated app injects real API.
@@ -36,6 +39,8 @@ class MintickMindPage extends StatefulWidget {
   final MindProspectiveOutcomesRepository? prospectiveOutcomesRepository;
   final MindProspectiveEvidenceCompletenessRepository?
       prospectiveEvidenceCompletenessRepository;
+  final MindProgressRepository? progressRepository;
+  final VoidCallback? onOpenProgress;
 
   @override
   State<MintickMindPage> createState() => _MintickMindPageState();
@@ -88,6 +93,11 @@ class _MintickMindPageState extends State<MintickMindPage> {
               const SizedBox(height: 20),
               _tabsBar(),
               const SizedBox(height: 16),
+              if (widget.progressRepository != null) ...[
+                MindProgressStrip(repository: widget.progressRepository!,
+                    onOpen: widget.onOpenProgress),
+                const SizedBox(height: 12),
+              ],
               if (widget.readinessRepository != null) ...[
                 MindReadinessPanel(repository: widget.readinessRepository!),
                 const SizedBox(height: 16),

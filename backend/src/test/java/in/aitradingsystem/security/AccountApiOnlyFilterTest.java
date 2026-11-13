@@ -116,6 +116,23 @@ class AccountApiOnlyFilterTest {
         assertBlocked("PATCH", "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012");
     }
 
+    @Test
+    void mindProgressIsReadOnlyExceptOwnerNotes() throws Exception {
+        String progress = "/api/customer/mind/v1/progress";
+        assertPasses("GET", progress);
+        assertPasses("OPTIONS", progress);
+        assertBlocked("POST", progress);
+        assertBlocked("PUT", progress);
+        assertPasses("GET", progress + "/items/strategy.STR-001");
+        assertPasses("GET", progress + "/items/paper.vertical-slice");
+        assertBlocked("POST", progress + "/items/strategy.STR-001");
+        assertBlocked("PUT", progress + "/items/strategy.STR-001");
+        assertPasses("POST", progress + "/items/screen.coverage/notes");
+        assertBlocked("GET", progress + "/items/screen.coverage/notes");
+        assertBlocked("POST", progress + "/items/screen.coverage/status");
+        assertBlocked("GET", progress + "/items/../../admin");
+    }
+
     private void assertPasses(String method, String path) throws Exception {
         var request = new MockHttpServletRequest(method, path);
         var response = new MockHttpServletResponse();

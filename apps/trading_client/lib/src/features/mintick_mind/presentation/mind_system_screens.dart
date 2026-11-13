@@ -370,36 +370,32 @@ extension _MindSystemScreens on _MindWorkspaceState {
       child:Text(label,style:const TextStyle(color:MindPalette.mint)));
 
   Widget coverageScreen() {
+    final repository = widget.progressRepository;
+    if (repository != null) {
+      return _surface('Screen & Strategy Coverage',
+        'Audited inventory with server-side evidence. DONE only after runtime verification.',[
+        MindProgressCoverageView(
+          key: const ValueKey('mind-progress-coverage'),
+          repository: repository,
+          onOpenRoute: _go,
+        ),
+      ]);
+    }
     final groups=['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM'];
     return _surface('Screen & Strategy Coverage',
-      'All source prototype routes available inside one mock workspace',[
-      _metricGrid([
-        ('Connected screens','43','42 original + 1 research-planning route'),
-        ('Strategies','232','20 families'),
-        ('Models','18','Research fixtures'),
-        ('Original UI refs','9','Preview records'),
-      ]),
+      'Progress registry not connected · nothing on this page is verified',[
+      MindPanel(key:const ValueKey('mind-progress-not-connected'),
+        child:const Text('Progress not verified: sign in to load the audited server registry. '
+          'Screens below are listed for navigation only.',
+          style:TextStyle(color:MindPalette.text,fontSize:12))),
       const SizedBox(height:13),
       for(final group in groups)
         _section(group,Icons.fact_check_outlined,[
           for(final screen in MintickMindScreens.all.where((s)=>s.group==group))
             Padding(padding:const EdgeInsets.only(bottom:7),
-              child:_tile(screen.label,'Route: '+screen.id+
-                ' · Mock frontend only',screen.icon,
-                trailing:'Open',tap:()=>_go(screen.id))),
+              child:_tile(screen.label,'Route: '+screen.id+' · Not verified',
+                screen.icon,trailing:'Open',tap:()=>_go(screen.id))),
         ]),
-      _section('External research integration status',Icons.extension_outlined,[
-        _tile('Research Engines Lab',
-          '5 assessed · 0 connected · all research-only placeholders',
-          Icons.construction_outlined,route:'research-engines',
-          trailing:'PLANNED',color:MindPalette.yellow),
-      ]),
-      _section('Safety & Verification',Icons.shield_outlined,[
-        _value('Backend API calls','None in Mind UI'),
-        _value('Futures/options execution','Disabled'),
-        _value('Pixel parity','Not certified'),
-        _value('Flutter native tests','Requires CI / toolchain'),
-      ]),
     ]);
   }
 
