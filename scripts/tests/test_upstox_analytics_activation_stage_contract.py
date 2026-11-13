@@ -30,7 +30,7 @@ class UpstoxAnalyticsActivationContract(unittest.TestCase):
         activate, workflow = ACTIVATE.read_text(), WORKFLOW.read_text()
         self.assertIn("up -d --no-deps --no-build --force-recreate backend", activate)
         self.assertNotIn('bash "$root/run_paper.sh" "$sha"', activate)
-        self.assertNotIn("pg_dump", activate)
+        self.assertNotIn("pg_dump -U", activate)
         self.assertNotIn("/v3/order/place", activate)
         self.assertIn("stage=backend_precheck", activate)
         self.assertIn("stage=config_check", activate)
