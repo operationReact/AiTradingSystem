@@ -33,7 +33,7 @@ public class UpstoxAnalyticsProgressScheduler {
             UpstoxGitHubProgressReader github,
             UpstoxAnalyticsSource source, Clock clock,
             @Value("${MINTTICK_GITHUB_PROGRESS_ENABLED:true}") boolean githubEnabled,
-            @Value("${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:false}") boolean sourceProbeEnabled) {
+            @Value("${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:true}") boolean sourceProbeEnabled) {
         this.progress = progress;
         this.github = github;
         this.source = source;
@@ -72,8 +72,12 @@ public class UpstoxAnalyticsProgressScheduler {
                initialDelayString = "${minttick.upstox-analytics.progress.source-start-delay-ms:60000}")
     public void verifySource() {
         Instant now = clock.instant();
-        if (!sourceProbeEnabled || !source.enabled()) {
-            progress.disabled(SOURCE, "OPERATOR_OPT_IN_REQUIRED", now);
+        if (!sourceProbeEnabled) {
+            progress.disabled(SOURCE, "SOURCE_PROBE_DISABLED", now);
+            return;
+        }
+        if (!source.enabled()) {
+            progress.disabled(SOURCE, "ANALYTICS_SOURCE_DISABLED", now);
             return;
         }
         UUID lease = progress.claim(SOURCE, now);

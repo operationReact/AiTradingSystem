@@ -1,5 +1,5 @@
 {
-    "kind": "minttick-upstox-readonly-activation-v1",
+  "kind": "minttick-upstox-readonly-activation-v1",
     "action": "activate-and-probe",
     "account": "098859530205",
     "region": "ap-south-1",

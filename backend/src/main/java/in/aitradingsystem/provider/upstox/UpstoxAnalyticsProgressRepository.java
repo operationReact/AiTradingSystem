@@ -130,10 +130,13 @@ public class UpstoxAnalyticsProgressRepository {
     public void disabled(String code, String reason, Instant now) {
         jdbc.update("""
             UPDATE minttick_upstox_analytics_progress
-               SET state = 'DISABLED', reason_code = ?, updated_at = ?,
+               SET state = 'DISABLED', reason_code = ?, checked_count = NULL,
+                   verified_count = NULL, issue_count = NULL,
+                   details_json = '{}'::jsonb, updated_at = ?,
                    lease_token = NULL, lease_until = NULL
-             WHERE task_code = ? AND state <> 'DISABLED'
-            """, reason, utc(now), code);
+             WHERE task_code = ?
+               AND (state <> 'DISABLED' OR reason_code IS DISTINCT FROM ?)
+            """, reason, utc(now), code, reason);
     }
 
     private static OffsetDateTime utc(Instant now) {

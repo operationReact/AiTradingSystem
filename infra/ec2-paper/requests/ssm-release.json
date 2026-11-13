@@ -1,5 +1,5 @@
 {
-  "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY",
+    "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY",
   "kind": "ec2-paper-ssm-release-v1",
   "account": "098859530205",
   "region": "ap-south-1",
