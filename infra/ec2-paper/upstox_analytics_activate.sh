@@ -19,6 +19,8 @@ on_exit() {
     case "$stage" in
       ssm_authorization) reason=SSM_UNAVAILABLE ;;
       read_only_probe|result_validation) reason=PROVIDER_OR_RESPONSE_UNAVAILABLE ;;
+      precheck) reason=HOST_PRECHECK_FAILED ;;
+      release_identity) reason=HOST_RELEASE_IDENTITY_INVALID ;;
       *) reason=LOCAL_RELEASE_UNCLASSIFIED ;;
     esac
     printf 'MINTTICK_UPSTOX_RESULT:%s\n' "$reason"
@@ -95,6 +97,24 @@ rollback() {
 classify_failure() {
   # Never echo the private file or raw Docker/host errors.
   local logfile="$work/release.log"
+  # A fixed stage marker from the reviewed run_paper.sh is safe to report.
+  # Never forward raw host logs (which can contain environment/config values).
+  local failed_stage
+  failed_stage="$(sed -n 's/^MINTTICK_PAPER_FAILED_STAGE:\([A-Z_]*\)$/\1/p' "$logfile" | tail -n 1)"
+  case "$failed_stage" in
+    HOST_PRECHECK) echo 'LOCAL_RELEASE_HOST_PRECHECK'; return ;;
+    IMAGE_CHECK) echo 'LOCAL_RELEASE_MISSING_IMAGE'; return ;;
+    EGRESS_CHECK) echo 'LOCAL_RELEASE_EGRESS_IP_DRIFT'; return ;;
+    NETWORK_IDENTITY) echo 'LOCAL_RELEASE_NETWORK_IDENTITY'; return ;;
+    COMPOSE_CONFIG) echo 'LOCAL_RELEASE_COMPOSE_CONFIG'; return ;;
+    DATABASE_BACKUP) echo 'LOCAL_RELEASE_DB_BACKUP'; return ;;
+    COMPOSE_START) echo 'LOCAL_RELEASE_COMPOSE_START'; return ;;
+    API_HEALTH) echo 'LOCAL_RELEASE_BACKEND_HEALTH'; return ;;
+    WEB_HEALTH) echo 'LOCAL_RELEASE_WEB_HEALTH'; return ;;
+    PROXY_HEALTH) echo 'LOCAL_RELEASE_PROXY_HEALTH'; return ;;
+    BRIDGE_HEALTH) echo 'LOCAL_RELEASE_LAMBDA_BRIDGE'; return ;;
+    PORT_CONTRACT) echo 'LOCAL_RELEASE_PORT_CONTRACT'; return ;;
+  esac
   if grep -Fq 'Angel One registered static egress IP mismatch' "$logfile"; then
     echo 'LOCAL_RELEASE_EGRESS_IP_DRIFT'
   elif grep -Fq 'PAPER Postgres-backed Java API local health failed' "$logfile"; then
