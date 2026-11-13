@@ -17,6 +17,7 @@ public class InstrumentMasterService {
     private final InstrumentMasterParser parser;
     private final InstrumentMasterRepository repository;
     private final BseSecurityMasterRepository bseSecurityMaster;
+    private final UpstoxBseCrosswalkRepository upstoxBseReference;
 
     /** Existing constructor retained for isolated importer unit tests. */
     public InstrumentMasterService(AngelOneProperties properties, InstrumentMasterDownloader downloader,
@@ -24,15 +25,23 @@ public class InstrumentMasterService {
         this(properties, downloader, parser, repository, null);
     }
 
-    @org.springframework.beans.factory.annotation.Autowired
     public InstrumentMasterService(AngelOneProperties properties, InstrumentMasterDownloader downloader,
                                    InstrumentMasterParser parser, InstrumentMasterRepository repository,
                                    BseSecurityMasterRepository bseSecurityMaster) {
+        this(properties, downloader, parser, repository, bseSecurityMaster, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public InstrumentMasterService(AngelOneProperties properties, InstrumentMasterDownloader downloader,
+                                   InstrumentMasterParser parser, InstrumentMasterRepository repository,
+                                   BseSecurityMasterRepository bseSecurityMaster,
+                                   UpstoxBseCrosswalkRepository upstoxBseReference) {
         this.properties = properties;
         this.downloader = downloader;
         this.parser = parser;
         this.repository = repository;
         this.bseSecurityMaster = bseSecurityMaster;
+        this.upstoxBseReference = upstoxBseReference;
     }
 
     public InstrumentImportSummary importLatest() {
@@ -58,6 +67,12 @@ public class InstrumentMasterService {
             // source-versioned broker catalogue; never revise old research rows.
             if (bseSecurityMaster != null) {
                 unique = bseSecurityMaster.enrichForNewCatalogue(unique);
+            }
+            // Secondary cross-broker proof requires matching BOTH BSE scrip
+            // code and exact trading symbol before publication, never fuzzy
+            // company-name, trading quantity or merely reused exchange tokens.
+            if (upstoxBseReference != null) {
+                unique = upstoxBseReference.enrich(unique);
             }
 
             // The official master contains NCO/NCDEX, but MintTick does not ingest those venues.
