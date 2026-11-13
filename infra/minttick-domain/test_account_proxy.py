@@ -364,6 +364,62 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_reads_cycle_and_notes_are_exact_and_never_write_status(self):
+        for path in ("overview","evidence","strategy-replay","ma-walkforward","prospective-cohort",
+                     "prospective-signals","prospective-outcomes","prospective-evidence-completeness",
+                     "progress","paper-portfolio","paper-journal"):
+            self.assertTrue(proxy.allowed("GET","/api/customer/mind/v1/"+path),path)
+            self.assertFalse(proxy.allowed("POST","/api/customer/mind/v1/"+path),path)
+        item="/api/customer/mind/v1/progress/items/strategy.STR-001"
+        self.assertTrue(proxy.allowed("GET",item))
+        self.assertTrue(proxy.allowed("GET","/api/customer/mind/v1/progress/items/paper.vertical-slice"))
+        self.assertTrue(proxy.allowed("POST",item+"/notes"))
+        for method,path in (("POST",item),("PUT",item),("DELETE",item),("GET",item+"/notes"),
+                ("POST",item+"/status"),("GET","/api/customer/mind/v1/progress/items/../admin"),
+                ("GET","/api/customer/mind/v1/progress/items/strategy..x"),
+                ("POST","/api/customer/mind/v1/admin"),("GET","/api/customer/mind/v1/demo")):
+            self.assertFalse(proxy.allowed(method,path),(method,path))
+        cycles="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/paper-cycles"
+        self.assertTrue(proxy.allowed("GET",cycles))
+        self.assertTrue(proxy.allowed("POST",cycles))
+        self.assertFalse(proxy.allowed("PUT",cycles))
+        self.assertFalse(proxy.allowed("POST",cycles+"/live"))
+
+        good=json.dumps({"instrumentId":7,"interval":"FIFTEEN_MINUTE"})
+        for headers,body in (({},good),
+                ({"idempotency-key":"mindcycle-abcdef12"},json.dumps({"instrumentId":7,"interval":"ONE_MINUTE"})),
+                ({"idempotency-key":"mindcycle-abcdef12"},json.dumps({"instrumentId":7,"interval":"ONE_DAY","side":"BUY"})),
+                ({"idempotency-key":"mindcycle-abcdef12"},json.dumps({"instrumentId":"7","interval":"ONE_DAY"}))):
+            request=event("POST",cycles,body=body)
+            request["headers"].update(headers)
+            with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+                self.assertEqual(proxy.handler(request,None)["statusCode"],400)
+            upstream.assert_not_called()
+        request=event("POST",cycles,body=good)
+        request["headers"]["idempotency-key"]="mindcycle-abcdef12"
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as upstream:
+            self.assertEqual(proxy.handler(request,None)["statusCode"],200)
+        req=upstream.call_args.args[0]
+        self.assertEqual(req.get_header("Idempotency-key"),"mindcycle-abcdef12")
+        self.assertEqual(json.loads(req.data),json.loads(good))
+
+        for body in (json.dumps({"type":"RUNTIME_VERIFIED"}),json.dumps({"type":"NOTE","status":"DONE"}),
+                     json.dumps({"type":"NOTE","text":"x"*501})):
+            request=event("POST",item+"/notes",body=body)
+            request["headers"]["idempotency-key"]="mind-note-12345678"
+            with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+                self.assertEqual(proxy.handler(request,None)["statusCode"],400)
+            upstream.assert_not_called()
+        request=event("POST",item+"/notes",body=json.dumps({"type":"RECHECK_REQUESTED"}))
+        request["headers"]["idempotency-key"]="mind-note-12345678"
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as upstream:
+            self.assertEqual(proxy.handler(request,None)["statusCode"],200)
+        self.assertEqual(upstream.call_args.args[0].get_header("Idempotency-key"),"mind-note-12345678")
+        with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+            denied=proxy.handler(event("GET","/api/customer/mind/v1/progress",jwt={"claims":{}}),None)
+        self.assertEqual(denied["statusCode"],401)
+        upstream.assert_not_called()
+
     def test_paper_activation_and_pause_never_accept_request_bodies(self):
         paper="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper"
         for action in ("activate","resume","pause"):

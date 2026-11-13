@@ -88,6 +88,16 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final String MIND_PROGRESS = "/api/customer/mind/v1/progress";
     private static final String MIND_PAPER_PORTFOLIO = "/api/customer/mind/v1/paper-portfolio";
     private static final String MIND_PAPER_JOURNAL = "/api/customer/mind/v1/paper-journal";
+    /** Existing customer-authenticated, read-only Mind research endpoints used by the Flutter app. */
+    private static final Set<String> MIND_RESEARCH_READS = Set.of(
+        "/api/customer/mind/v1/overview",
+        "/api/customer/mind/v1/evidence",
+        "/api/customer/mind/v1/strategy-replay",
+        "/api/customer/mind/v1/ma-walkforward",
+        "/api/customer/mind/v1/prospective-cohort",
+        "/api/customer/mind/v1/prospective-signals",
+        "/api/customer/mind/v1/prospective-outcomes",
+        "/api/customer/mind/v1/prospective-evidence-completeness");
     private static final java.util.regex.Pattern MIND_PROGRESS_ITEM =
         java.util.regex.Pattern.compile(
             "^/api/customer/mind/v1/progress/items/[a-z]+\\.[A-Za-z0-9._-]{1,90}(/notes)?$");
@@ -152,6 +162,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PAPER_PORTFOLIO.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PAPER_JOURNAL.equals(path) && Set.of("GET", "OPTIONS").contains(method))
+            || (MIND_RESEARCH_READS.contains(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_ITEM.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/notes") ? "POST".equals(method) : "GET".equals(method))));
