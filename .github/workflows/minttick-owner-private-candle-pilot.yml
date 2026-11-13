@@ -17,10 +17,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
-  cancel-in-progress: false
-
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -34,8 +30,13 @@ jobs:
           bash -n infra/ec2-paper/run_owner_personal_history.sh
           python3 -m unittest discover -s scripts/tests -p test_owner_personal_angelone_history.py -v
           python3 -m unittest discover -s scripts/tests -p test_owner_history_request.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_ssm_timeout_contract.py -v
 
   execute:
+    # Only host mutations share the EC2 lane. Offline PR tests never block.
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
     name: One fixed-path private owner historical pilot on existing PAPER EC2
     needs: verify
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
@@ -144,6 +145,10 @@ jobs:
           assert re.fullmatch('[a-f0-9]{40}',sha) and re.fullmatch('[a-f0-9]{64}',digest)
           script=r"""set -Eeuo pipefail
           umask 077
+          # On failure, expose only one fixed stage name. Never echo SSM
+          # stderr, request metadata, broker material, or archive contents.
+          stage=PRECHECK
+          trap 'printf "OWNER_AUDIT_STAGE: %s\n" "$stage"' ERR
           test "$(id -u)" -eq 0
           test "$(uname -m)" = aarch64
           root=/opt/aitradingsystem-paper
@@ -152,7 +157,9 @@ jobs:
           cleanup() { rm -rf -- "$work"; }
           trap cleanup EXIT
           chmod 0700 "$work"
+          stage=RELEASE_FETCH
           aws s3 cp 's3://aitrading-paper-releases-098859530205/releases/@@SHA@@/owner-personal/@@HASH@@/scripts.tar' "$work/scripts.tar" --region ap-south-1 --no-progress --only-show-errors
+          stage=RELEASE_VERIFY
           printf '%s  %s\n' '@@HASH@@' "$work/scripts.tar" | sha256sum -c - >/dev/null
           files="$(tar -tf "$work/scripts.tar" | LC_ALL=C sort)"
           expected="$(printf 'probe_owner_angelone_auth.py\nowner_personal_angelone_history.py\nrun_owner_personal_history.sh\n' | LC_ALL=C sort)"
@@ -172,10 +179,121 @@ jobs:
           merged=a.split('\nif __name__ == "__main__":',1)[0]+'\n'+b
           compile(merged,'<restricted-owner-review>','exec')
           PYCHECK
+          stage=COLLECTOR_INSTALL
           install -o root -g root -m 0600 "$work/probe_owner_angelone_auth.py" "$root/probe_owner_angelone_auth.py"
           install -o root -g root -m 0600 "$work/owner_personal_angelone_history.py" "$root/owner_personal_angelone_history.py"
           install -o root -g root -m 0700 "$work/run_owner_personal_history.sh" "$root/run_owner_personal_history.sh"
-          "$root/run_owner_personal_history.sh" '@@OWNER_MODE@@' """
+          stage=COLLECTOR_AUDIT
+          if test '@@OWNER_MODE@@' = audit-only; then
+            # Owner writer legitimately holds an exclusive flock during a
+            # batch. Inspect the atomic metadata snapshot instead; NEVER
+            # read mutable archive pages without the integrity lock.
+            audit_output=""
+            audit_exit=0
+            audit_output="$("$root/run_owner_personal_history.sh" audit-only 2>/dev/null)" || audit_exit=$?
+            if [ "$audit_exit" -eq 0 ]; then
+              printf '%s\n' "$audit_output"
+            elif [ "$audit_exit" -eq 2 ] && [ "$audit_output" = 'PERSONAL_DOWNLOAD_BLOCKED: ACTIVE_COLLECTOR' ]; then
+              printf 'PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR\n'
+              printf 'PERSONAL_ARCHIVE_API_CALLS: 0\n'
+              printf 'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE\n'
+            else
+              if [[ "$audit_output" =~ ^PERSONAL_DOWNLOAD_BLOCKED:\ [A-Z0-9_]{3,64}$ ]]; then
+                printf '%s\n' "$audit_output"
+              fi
+              false  # All other collector failures still fail closed.
+            fi
+          else
+            "$root/run_owner_personal_history.sh" download
+          fi
+          stage=RUNTIME_STATUS
+          if test '@@OWNER_MODE@@' = audit-only; then
+            python3 - <<'PYOWNERSTATUS'
+          import json,re,sqlite3,subprocess
+          from pathlib import Path
+          def read(*args):
+              try:
+                  return subprocess.run(args, capture_output=True, text=True,
+                                        timeout=7, check=False)
+              except (OSError, subprocess.TimeoutExpired):
+                  return None
+          for field,unit in (("TIMER_ACTIVE","is-active"),("TIMER_ENABLED","is-enabled")):
+              result=read("systemctl",unit,"--quiet","minttick-owner-history.timer")
+              print("OWNER_RUNTIME_"+field+": "+str(int(result is not None and result.returncode==0)))
+          path=Path("/opt/aitradingsystem-paper/monitor/progress.json")
+          progress=None
+          if path.is_file() and not path.is_symlink() and path.stat().st_size<=80000:
+              try:
+                  progress=json.loads(path.read_text(encoding="utf-8"))
+              except (ValueError,OSError):
+                  pass
+          valid=isinstance(progress,dict) and progress.get("schema")=="minttick.owner.history.progress.v1"
+          status=progress.get("status") if valid else None
+          print("OWNER_RUNTIME_PROGRESS_STATUS: "+(status if status in
+                {"RUNNING","IDLE","PAUSED","ERROR"} else "UNAVAILABLE"))
+          runs=progress.get("recentRuns",[]) if valid else []
+          latest=runs[0] if isinstance(runs,list) and runs and isinstance(runs[0],dict) else {}
+          print("OWNER_RUNTIME_LAST_RUN_STATE: "+(latest.get("state") if latest.get("state")
+                in ("COMPLETED","FAILED") else "NONE"))
+          for field,key in (("LAST_RUN_NEW_CANDLES","newCandles"),("LAST_RUN_WINDOWS","windowsQueried")):
+              value=latest.get(key)
+              print("OWNER_RUNTIME_"+field+": "+str(value if type(value) is int and
+                    0<=value<=999999999 else 0))
+          service=read("systemctl","show","--value","-p","Result","minttick-owner-history.service")
+          result=service.stdout.strip().upper().replace("-","_") if service and service.returncode==0 else ""
+          print("OWNER_RUNTIME_SERVICE_RESULT: "+(result if result in
+                {"SUCCESS","EXIT_CODE","TIMEOUT","SIGNAL","CORE_DUMP"} else "UNKNOWN"))
+          journal=read("journalctl","-u","minttick-owner-history.service",
+                       "--since=-40min","--no-pager","-o","cat","-n","150")
+          events=[]
+          if journal and journal.returncode==0:
+              for line in journal.stdout.splitlines():
+                  event=re.fullmatch(r"OWNER_SCHEDULER_(RUN|BLOCKED|PAUSED|WAIT): ([A-Z_]{2,60})",line.strip())
+                  if event:
+                      events.append(event.group(1)+"_"+event.group(2))
+          print("OWNER_RUNTIME_EVENTS_SAMPLED: "+str(min(len(events),999999)))
+          print("OWNER_RUNTIME_LAST_EVENT: "+(events[-1] if events else "NONE"))
+          # Read only recent *outcome categories* from the private request ledger.
+          # No symbols, tokens, precise dates or raw OHLCV leave this host.
+          # A separate SQLite read-only transaction can coexist with the writer;
+          # never touch the mutable archive pages while its lock is held.
+          ledger=Path("/var/lib/minttick/owner-personal-angelone-history/manifest.sqlite3")
+          try:
+              if (not ledger.is_file() or ledger.is_symlink()
+                      or ledger.stat().st_uid!=0
+                      or ledger.stat().st_mode & 0o077):
+                  raise OSError("untrusted ledger")
+              with sqlite3.connect("file:"+str(ledger)+"?mode=ro",
+                                   uri=True,timeout=3) as db:
+                  db.execute("PRAGMA query_only=ON")
+                  rows=db.execute(
+                      "SELECT outcome, count(*) FROM "
+                      "(SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50) "
+                      "GROUP BY outcome").fetchall()
+              if not all(isinstance(outcome,str) and type(count) is int
+                         and 0<=count<=50 for outcome,count in rows):
+                  raise ValueError("invalid ledger summary")
+              counts=dict(rows)
+              total=sum(counts.values())
+              if total>50:
+                  raise ValueError("invalid ledger count")
+              bucket={
+                  "RETURNED": counts.get("CANDLES_RETURNED",0),
+                  "EMPTY": counts.get("EMPTY_CAUSE_UNKNOWN",0),
+                  "RATE_LIMITED": counts.get("PROVIDER_RATE_LIMITED",0),
+                  "PENDING": counts.get("OUTCOME_UNKNOWN",0)
+              }
+              bucket["FAILED"]=total-sum(bucket.values())
+              if bucket["FAILED"]<0:
+                  raise ValueError("invalid ledger categories")
+              print("OWNER_RUNTIME_REQUESTS_SAMPLED: "+str(total))
+              for name in ("RETURNED","EMPTY","RATE_LIMITED","FAILED","PENDING"):
+                  print("OWNER_RUNTIME_REQUESTS_"+name+": "+str(bucket[name]))
+          except (OSError,sqlite3.Error,ValueError):
+              print("OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE")
+          PYOWNERSTATUS
+          fi
+          """
           mode=os.environ.get('OWNER_HISTORY_MODE')
           if mode not in ('download','audit-only'):
               raise SystemExit('Invalid fixed owner mode')
@@ -189,7 +307,11 @@ jobs:
               script = "export OWNER_REPORT_RECIPIENT='" + recipient + "'\n" + script
           script=script.replace('@@SHA@@',sha).replace('@@HASH@@',digest).replace('@@OWNER_MODE@@',mode)
           path=Path(os.environ['RUNNER_TEMP'])/'owner-personal-ssm.json'
-          path.write_text(json.dumps({'commands':[script]}))
+          # Cap SSM plugin execution independently of the delivery timeout.
+          # Audit is read-only and must not occupy the host queue for an hour.
+          execution_timeout = '180' if mode == 'audit-only' else '660'
+          path.write_text(json.dumps({'commands':[script],
+                                      'executionTimeout':[execution_timeout]}))
           path.chmod(0o600)
           PY
           rm -f "$RUNNER_TEMP/owner-personal-scripts.tar"
@@ -207,13 +329,20 @@ jobs:
           if mode == 'download' and local_time >= time(21, 20):
               raise SystemExit('PERSONAL_HISTORY_BLOCKED: NIGHTLY_STOP_CUTOFF')
           PY
+          # Bounded 120-second delivery + bounded execution for both modes.
+          # Total timeout remains shorter than the finite GitHub polling budget.
+          delivery_timeout=120
           id="$(aws ssm send-command --document-name AWS-RunShellScript \
-            --instance-ids "$INSTANCE_ID" --timeout-seconds 720 \
+            --instance-ids "$INSTANCE_ID" --timeout-seconds "$delivery_timeout" \
             --parameters "file://$RUNNER_TEMP/owner-personal-ssm.json" \
             --comment 'MintTick private personal trading: max five equities, no redistribution' \
             --query Command.CommandId --output text)"
           rm -f "$RUNNER_TEMP/owner-personal-ssm.json"
-          for attempt in $(seq 1 165); do
+          # Audit: 120s delivery + 180s execution; download: 120s + 660s.
+          # Stop polling at 8 minutes for audit and 15 minutes for download.
+          poll_attempts=96
+          if [[ "$OWNER_HISTORY_MODE" == download ]]; then poll_attempts=180; fi
+          for attempt in $(seq 1 "$poll_attempts"); do
             aws ssm get-command-invocation --command-id "$id" --instance-id "$INSTANCE_ID" \
               --output json > "$RUNNER_TEMP/personal-history-status.json" 2>/dev/null || true
             status="$(python3 - <<'PY'
@@ -223,8 +352,36 @@ jobs:
               z=json.loads((Path(os.environ['RUNNER_TEMP'])/'personal-history-status.json').read_text())
           except (ValueError,OSError):
               print('PENDING');raise SystemExit
-          if z.get('Status') not in ('Success','Failed','TimedOut','Cancelled'):
+          terminal=('Success','Failed','TimedOut','Cancelled')
+          failed_details={
+              'Delivery Timed Out':'DELIVERY_TIMEOUT',
+              'Execution Timed Out':'EXECUTION_TIMEOUT',
+              'Undeliverable':'UNDELIVERABLE',
+              'Terminated':'TERMINATED',
+          }
+          status=z.get('Status')
+          detail=z.get('StatusDetails')
+          if status not in terminal and detail not in failed_details:
               print('PENDING');raise SystemExit
+          if status != 'Success':
+              # Print strictly preapproved host-stage and collector error
+              # categories. Never pass arbitrary host stdout/stderr.
+              output=z.get('StandardOutputContent','') or ''
+              stages=[line for line in output.splitlines() if re.fullmatch(
+                  r'OWNER_AUDIT_STAGE: (?:PRECHECK|RELEASE_FETCH|RELEASE_VERIFY|COLLECTOR_INSTALL|COLLECTOR_AUDIT|RUNTIME_STATUS)',
+                  line)]
+              blocked=[line for line in output.splitlines() if re.fullmatch(
+                  r'PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_]{3,64}',line)]
+              for line in stages[-1:]+blocked[-1:]:
+                  print(line)
+              response=z.get('ResponseCode')
+              if type(response) is int and -1<=response<=255:
+                  print('OWNER_SSM_RESPONSE_CODE: '+str(response))
+              code=failed_details.get(detail,
+                  'EXECUTION_FAILED' if status == 'Failed' else 'FAILED_OR_CANCELLED')
+              print('OWNER_SSM_TERMINAL: '+code)
+              print('FAILED')
+              raise SystemExit
           output=z.get('StandardOutputContent','') or ''
           mode=os.environ.get('OWNER_HISTORY_MODE')
           lines=output.splitlines()
@@ -238,6 +395,13 @@ jobs:
                         and len(counts)==2
                         and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_PAGES: ') for x in counts)
                         and any(x.startswith('PERSONAL_ARCHIVE_VERIFIED_ROWS: ') for x in counts))
+              # ACTIVE_COLLECTOR proves a live writer held the archive lock.
+              # BUSY is not equivalent to a verified integrity audit.
+              busy=(z['Status']=='Success' and not counts and {
+                  'PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR',
+                  'PERSONAL_ARCHIVE_API_CALLS: 0',
+                  'PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE'
+              }.issubset(set(lines)))
               if verified:
                   for line in counts:
                       print(line)
@@ -245,9 +409,21 @@ jobs:
                       r"PERSONAL_ENCRYPTED_REQUEST_REPORT: [A-Za-z0-9+/]{100,18000}={0,2}", line)]
                   if len(encrypted) == 1:
                       print(encrypted[0])
+              if verified or busy:
+                  # Root host only emits fixed enum and bounded integer categories.
+                  # Never print raw SSM stdout/stderr, candle pages, or bearer tokens.
+                  safe_runtime = [line for line in lines if (
+                      re.fullmatch(r'OWNER_RUNTIME_(?:TIMER_ACTIVE|TIMER_ENABLED|LAST_RUN_NEW_CANDLES|LAST_RUN_WINDOWS|EVENTS_SAMPLED|REQUESTS_SAMPLED|REQUESTS_RETURNED|REQUESTS_EMPTY|REQUESTS_RATE_LIMITED|REQUESTS_FAILED|REQUESTS_PENDING): [0-9]{1,9}',line)
+                      or re.fullmatch(r'OWNER_RUNTIME_(?:PROGRESS_STATUS|LAST_RUN_STATE|SERVICE_RESULT|LAST_EVENT): [A-Z_]{2,95}',line)
+                      or line == 'OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE')]
+                  for line in safe_runtime[:16]:
+                      print(line)
                   print('PERSONAL_ARCHIVE_API_CALLS: 0')
-                  print('PERSONAL_ARCHIVE_AUDIT_STATUS: VERIFIED')
-              print('SUCCESS' if verified else 'FAILED')
+                  print('PERSONAL_ARCHIVE_AUDIT_STATUS: '+
+                        ('VERIFIED' if verified else 'BUSY_ACTIVE_COLLECTOR'))
+              if not verified and not busy:
+                  print('OWNER_AUDIT_INCOMPLETE: MISSING_VERIFIED_MARKERS')
+              print('SUCCESS' if verified or busy else 'FAILED')
               raise SystemExit(0)
           if mode != 'download':
               print('FAILED')

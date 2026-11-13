@@ -17,7 +17,10 @@ const _closedPoll = Duration(seconds: 30);
 const _failedPoll = Duration(seconds: 15);
 
 const _overviewPoll = Duration(seconds: 30);
-const _tabLabels = ['Overview', 'Movers', 'Sectors', 'Explore'];
+const _tabLabels = [
+  'Overview', 'All Stocks', 'Market Cap', 'Indices', 'Sectors',
+  'Industries', 'Movers',
+];
 
 /// Markets shell with four tabs. Only Overview and Explore show real data;
 /// Movers and Sectors state what is missing instead of inventing values.
@@ -58,6 +61,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   DateTime? _generatedAt;
   Timer? _pollTimer;
   int _version = 0;
+  CustomerUniverseFacets? _facets;
+  bool _facetsLoading = false;
+  String? _facetsError;
   CustomerMarketOverview? _overview;
   String? _overviewError;
   bool _overviewLoading = false;
@@ -131,6 +137,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     WidgetsBinding.instance.addObserver(this);
     _tabs.addListener(_onTabChanged);
     _load();
+    if (widget.repository is CustomerUniverseFacetsRepository) {
+      unawaited(_loadFacets());
+    }
     if (widget.repository is CustomerOverviewRepository) {
       unawaited(_loadOverview());
       _overviewTimer = Timer.periodic(_overviewPoll, (_) => unawaited(_loadOverview()));
@@ -152,6 +161,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
 
   void _onTabChanged() {
     if (!_tabs.indexIsChanging) setState(() {});
+  }
+
+  Future<void> _loadFacets() async {
+    if (_facetsLoading || !mounted) return;
+    final repo = widget.repository;
+    if (repo is! CustomerUniverseFacetsRepository) return;
+    setState(() { _facetsLoading = true; _facetsError = null; });
+    try {
+      final result = await (repo as CustomerUniverseFacetsRepository).universeFacets();
+      if (!mounted) return;
+      setState(() => _facets = result);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _facetsError = 'Market coverage could not be verified.');
+    } finally {
+      if (mounted) setState(() => _facetsLoading = false);
+    }
   }
 
   @override
@@ -388,17 +414,23 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         if (!didPop && _tabs.index != 0) _tabs.animateTo(0);
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
-      const SizedBox(height: 18),
+      const SizedBox(height: 8),
       const MintTickEyebrow('MintTick / Markets'),
-      const SizedBox(height: 6),
-      Text('Markets', style: theme.textTheme.headlineSmall
-          ?.copyWith(fontWeight: FontWeight.w800)),
-      const SizedBox(height: 6),
-      Text('NSE and BSE cash equities from MintTick’s app-managed feed. '
-          'No personal broker login is needed.',
-        style: theme.textTheme.bodyMedium?.copyWith(
-            color: scheme.onSurfaceVariant, height: 1.4)),
-      const SizedBox(height: 14),
+      const SizedBox(height: 4),
+      Row(children: [
+        Expanded(child: Text('Markets', style: theme.textTheme.headlineSmall
+            ?.copyWith(fontWeight: FontWeight.w800))),
+        IconButton(
+          key: const ValueKey('market-universe-refresh'),
+          tooltip: 'Refresh market coverage',
+          onPressed: _facetsLoading ? null : _loadFacets,
+          icon: const Icon(Icons.refresh_rounded),
+        ),
+      ]),
+      Text('All supported NSE & BSE cash equities · app-managed feed',
+        style: theme.textTheme.bodySmall?.copyWith(
+            color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 8),
       TabBar(
         key: const ValueKey('customer-market-tabs'),
         controller: _tabs,
@@ -407,18 +439,231 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         dividerColor: scheme.outlineVariant,
         tabs: [for (final label in _tabLabels) Tab(text: label, height: 44)],
       ),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       ...switch (_tabs.index) {
         0 => _overviewTab(),
-        1 => _moversTab(),
-        2 => _sectorsTab(),
-        _ => _exploreTab(context),
+        1 => _exploreTab(context),
+        2 => _marketCapTab(),
+        3 => _indicesTab(),
+        4 => _sectorsTab(),
+        5 => _industriesTab(),
+        _ => _moversTab(),
       },
     ]),
     );
   }
 
+  List<Widget> _universeIntro() {
+    final data = _facets;
+    final theme = Theme.of(context);
+    if (data == null) {
+      if (_facetsLoading) {
+        return const [LinearProgressIndicator(minHeight: 2), SizedBox(height: 8)];
+      }
+      return [MintTickInfoText(_facetsError ??
+          'The full-universe catalogue coverage has not been verified.'),
+          const SizedBox(height: 8)];
+    }
+    final scheme = theme.colorScheme;
+    return [
+      Material(
+        key: const ValueKey('market-full-universe-banner'),
+        borderRadius: BorderRadius.circular(10),
+        color: scheme.surfaceContainerLow,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10),
+          onTap: () => _tabs.animateTo(1),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+            decoration: BoxDecoration(
+              border: Border.all(color: scheme.outlineVariant),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(children: [
+              Icon(Icons.account_tree_outlined, color: scheme.primary, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${data.totalListings} cash-equity listings',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800)),
+                  Text('NSE ${data.exchanges['NSE'] ?? 0} · '
+                       'BSE ${data.exchanges['BSE'] ?? 0} · '
+                       'exchange listings, not unique issuers',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant)),
+                ],
+              )),
+              const Icon(Icons.chevron_right_rounded, size: 17),
+            ]),
+          ),
+        ),
+      ),
+      const SizedBox(height: 9),
+    ];
+  }
+
+  Widget _compactCategory(String title, String detail, IconData icon) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+        constraints: const BoxConstraints(minHeight: 54),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLow,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: scheme.outlineVariant),
+        ),
+        child: Row(children: [
+          Icon(icon, size: 17, color: scheme.primary),
+          const SizedBox(width: 11),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text(detail, style: theme.textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+            ],
+          )),
+        ]),
+      ),
+    );
+  }
+
+  List<Widget> _marketCapTab() {
+    final ready = _facets?.classifications['MARKET_CAP'] == 'AVAILABLE';
+    final label = ready ? 'verified ranking available' : 'ranking not imported';
+    return [
+      ..._universeIntro(),
+      const MintTickInfoText('Capitalization groups require a dated official '
+          'company ranking; Nifty membership is not a market-cap category.'),
+      const SizedBox(height: 9),
+      _compactCategory('Large cap', 'Top 100 · $label',
+          Icons.account_balance_outlined),
+      _compactCategory('Mid cap', 'Ranks 101–250 · $label',
+          Icons.stacked_line_chart_rounded),
+      _compactCategory('Small cap', 'Ranks 251 onward · $label',
+          Icons.show_chart_rounded),
+      _compactCategory('Micro cap', 'Custom thresholds and market-cap data required',
+          Icons.tune_rounded),
+      _compactCategory('Nano cap', 'Not an official broad-market NSE classification',
+          Icons.tune_rounded),
+      const MintTickInfoText('Every eligible share remains in All Stocks '
+          'even when no verified capitalization assignment exists.'),
+    ];
+  }
+
+  List<Widget> _indicesTab() {
+    final data = _facets;
+    final scheme = Theme.of(context).colorScheme;
+    return [
+      ..._universeIntro(),
+      const MintTickInfoText('Index membership is overlapping, versioned '
+          'reference data. It does not limit the complete stock universe.'),
+      const SizedBox(height: 9),
+      if (data == null)
+        const MintTickInfoText('Index reference data unavailable.')
+      else if (data.indices.isEmpty)
+        const MintTickInfoText('No sourced index membership records are '
+            'available. Constituents cannot be guessed.')
+      else
+        for (final index in data.indices) ...[
+          Material(
+            color: scheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              key: ValueKey('market-index-${index.code}'),
+              onTap: () => showModalBottomSheet<void>(
+                context: context,
+                showDragHandle: true,
+                builder: (ctx) => SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(index.code,
+                            style: Theme.of(ctx).textTheme.titleLarge),
+                        const SizedBox(height: 8),
+                        Text('${index.matched} of ${index.members} constituents '
+                            'matched to the active catalogue'),
+                        Text('Source: ${index.source}'),
+                        Text('Membership as of '
+                            "${index.sourceAsOf?.toIso8601String().split('T').first ?? 'unverified'}"),
+                        const SizedBox(height: 8),
+                        const Text('Constituent drill-down requires a '
+                            'verified member-listing API. All Stocks currently '
+                            'does not filter by this index.'),
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('Close')),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              borderRadius: BorderRadius.circular(10),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 11, vertical: 11),
+                decoration: BoxDecoration(
+                  border: Border.all(color: scheme.outlineVariant),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Row(children: [
+                  Icon(Icons.view_list_outlined, size: 18,
+                      color: scheme.primary),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(index.code, style:
+                      Theme.of(context).textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w800))),
+                  Text('${index.matched}/${index.members}'),
+                  const SizedBox(width: 5),
+                  const Icon(Icons.info_outline_rounded, size: 16),
+                ]),
+              ),
+            ),
+          ),
+          const SizedBox(height: 7),
+        ],
+      const MintTickInfoText('Nifty broad, mid, small, micro, sectoral, '
+          'thematic and BSE indices will appear as their official '
+          'constituents are imported and verified.'),
+    ];
+  }
+
+  List<Widget> _industriesTab() {
+    final ready = _facets?.classifications['NSE_SECTOR_INDUSTRY']
+        == 'AVAILABLE';
+    return [
+      ..._universeIntro(),
+      MintTickInfoText(ready
+          ? 'Official hierarchy mapping is available.'
+          : 'The complete NSE sector and industry hierarchy has not been '
+            'imported. Nifty 50 sectors are only a sample.'),
+      const SizedBox(height: 9),
+      _compactCategory('Macro-economic sectors',
+          'Source-backed mapping required', Icons.category_outlined),
+      _compactCategory('Sectors', 'All official sectors, not a fixed 27',
+          Icons.pie_chart_outline_rounded),
+      _compactCategory('Industries', 'Drill down into verified industries',
+          Icons.account_tree_outlined),
+      _compactCategory('Basic industries',
+          'Most granular official classifications', Icons.list_alt_rounded),
+      _compactCategory('Unclassified',
+          'Always include unmapped equities in All Stocks',
+          Icons.help_outline_rounded),
+    ];
+  }
+
   List<Widget> _overviewTab() => [
+        ..._universeIntro(),
         _MarketStatusPill(overview: _overview, failed: _overviewError != null),
         const SizedBox(height: 12),
         TextField(
@@ -608,7 +853,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     return [
       _UniverseNote(universe: overview.universe),
-      const SizedBox(height: 14),
+      const MintTickInfoText('Movers below cover Nifty 50 only. '
+          'Whole-market rankings require verified full-universe price coverage.'),
+      const SizedBox(height: 12),
       _MoverSection(title: 'Top gainers', rows: overview.gainers,
           emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
@@ -640,7 +887,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (overview == null) return _overviewStatus();
     return [
       _UniverseNote(universe: overview.universe),
-      const SizedBox(height: 14),
+      const MintTickInfoText('Sector performance below covers Nifty 50 '
+          'only. The complete industry mapping is not yet ingested.'),
+      const SizedBox(height: 10),
       if (overview.sectors.isEmpty)
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
@@ -691,6 +940,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       const SizedBox(height: 14),
+      ..._universeIntro(),
       if (_catalogue?.activeCount == 0) ...[
         const MintTickInfoText('The exchange instrument catalogue has not yet '
             'been activated on the backend. An authorized catalogue import is required.'),
@@ -774,8 +1024,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         icon: Icons.sensors_rounded);
     }
     if (statuses.every((s) => s == 'MARKET_CLOSED')) {
-      return (text: 'Market closed. No saved price is available for these stocks yet.',
-        icon: Icons.bedtime_outlined);
+      return (text: 'No verified last price has been saved for these stocks yet.',
+        icon: Icons.history_rounded);
     }
     if (statuses.every((s) => s == 'LAST_CLOSE')) {
       // The provider may also be down DURING an open session: saved ticks
@@ -784,8 +1034,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         icon: Icons.history_rounded);
     }
     if (statuses.every((s) => s == 'MARKET_CLOSED' || s == 'LAST_CLOSE')) {
-      return (text: 'Market closed. Showing last saved prices where available.',
-        icon: Icons.bedtime_outlined);
+      return (text: 'Showing the last verified price wherever available.',
+        icon: Icons.history_rounded);
     }
     if (statuses.contains('LAST_CLOSE')) {
       return (text: 'Some saved prices are available; others have no verified quote.',
@@ -905,7 +1155,7 @@ class _NotAvailableBlock extends StatelessWidget {
       'STALE' => (label: 'STALE', icon: Icons.schedule_rounded, color: scheme.tertiary),
       'RECONNECTING' => (label: 'RECONNECTING', icon: Icons.sync_rounded, color: scheme.tertiary),
       'CONNECTING' => (label: 'CONNECTING', icon: Icons.sync_rounded, color: scheme.onSurfaceVariant),
-      'MARKET_CLOSED' => (label: 'CLOSED', icon: Icons.bedtime_outlined, color: scheme.onSurfaceVariant),
+      'MARKET_CLOSED' => (label: 'NO PRICE', icon: Icons.bedtime_outlined, color: scheme.onSurfaceVariant),
       'LAST_CLOSE' => (label: 'LAST TRADED', icon: Icons.history_rounded, color: scheme.onSurfaceVariant),
       'PENDING' => (label: 'LOADING', icon: Icons.hourglass_empty_rounded, color: scheme.onSurfaceVariant),
       _ => (label: 'NO FEED', icon: Icons.cloud_off_outlined, color: scheme.error),
@@ -953,7 +1203,7 @@ class _StockRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-stock-${stock.id}'),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
           decoration: BoxDecoration(
             color: scheme.surfaceContainerLow,
             borderRadius: BorderRadius.circular(14),
@@ -963,7 +1213,7 @@ class _StockRow extends StatelessWidget {
             MintTickEquityAvatar(
               tradingSymbol: stock.tradingSymbol,
               companyName: stock.name,
-              size: 42,
+              size: 35,
             ),
             const SizedBox(width: 12),
             Expanded(child: Column(

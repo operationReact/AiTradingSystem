@@ -1,0 +1,93 @@
+"""Offline contract checks: never contact AWS, EC2, brokers or GitHub."""
+from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW = ROOT / ".github/workflows/minttick-owner-private-candle-pilot.yml"
+
+
+class OwnerHistorySsmTimeoutContract(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = WORKFLOW.read_text()
+
+    def test_audit_and_download_have_bounded_explicit_ssm_execution(self):
+        src = self.source
+        self.assertIn("execution_timeout = '180' if mode == 'audit-only' else '660'", src)
+        self.assertIn("'executionTimeout':[execution_timeout]", src)
+        self.assertIn("delivery_timeout=120", src)
+        self.assertIn('--timeout-seconds "$delivery_timeout"', src)
+        self.assertNotIn("--timeout-seconds 720", src)
+
+    def test_polling_outlives_ssm_timeouts_and_has_finite_limit(self):
+        src = self.source
+        # Audit < 300 seconds max SSM; 96 checks * 5s = 480s.
+        # Download < 780 seconds max SSM; 180 checks * 5s = 900s.
+        self.assertIn("poll_attempts=96", src)
+        self.assertIn('poll_attempts=180', src)
+        self.assertIn('seq 1 "$poll_attempts"', src)
+
+    def test_offline_pull_request_tests_do_not_wait_for_ec2_host_lock(self):
+        src = self.source
+        before_jobs, execute_job = src.split("  execute:", 1)
+        self.assertNotIn("concurrency:", before_jobs.split("jobs:", 1)[0])
+        self.assertIn("    concurrency:", execute_job)
+        self.assertIn("      group: aitrading-paper-ec2-manual-lifecycle", execute_job)
+
+    def test_failed_audit_emits_only_allowlisted_stage_and_error(self):
+        src = self.source
+        for stage in ("PRECHECK", "RELEASE_FETCH", "RELEASE_VERIFY",
+                      "COLLECTOR_INSTALL", "COLLECTOR_AUDIT", "RUNTIME_STATUS"):
+            self.assertIn(stage, src)
+        self.assertIn('OWNER_AUDIT_STAGE: %s', src)
+        self.assertIn("PERSONAL_DOWNLOAD_BLOCKED: [A-Z0-9_]{3,64}", src)
+        self.assertIn("OWNER_SSM_RESPONSE_CODE: ", src)
+        self.assertIn("EXECUTION_FAILED", src)
+        self.assertIn("stages[-1:]+blocked[-1:]", src)
+
+    def test_live_collector_is_busy_not_false_integrity_success(self):
+        src = self.source
+        self.assertIn("'PERSONAL_DOWNLOAD_BLOCKED: ACTIVE_COLLECTOR'", src)
+        self.assertIn("PERSONAL_ARCHIVE_AUDIT_STATUS: BUSY_ACTIVE_COLLECTOR", src)
+        self.assertIn('if verified or busy:', src)
+        self.assertIn("print('SUCCESS' if verified or busy else 'FAILED')", src)
+        self.assertIn("if not verified and not busy:", src)
+        self.assertIn('not counts and {', src)
+        self.assertIn("if [ \"$audit_exit\" -eq 0 ]; then", src)
+
+    def test_entire_owner_ssm_release_python_generator_compiles(self):
+        import textwrap
+        src = self.source
+        anchor = 'python3 - "$GITHUB_SHA" "$digest" '
+        builder = src.split(anchor, 1)[1].split("\n          PY\n", 1)[0]
+        builder = builder.split("\n", 1)[1]
+        compile(textwrap.dedent(builder), "<owner-ssm-release-builder>", "exec")
+
+    def test_readonly_recent_request_outcome_summary_stays_private(self):
+        import textwrap
+        src = self.source
+        for fragment in ("mode=ro", "PRAGMA query_only=ON",
+                         "SELECT outcome FROM candle_request ORDER BY id DESC LIMIT 50",
+                         'print("OWNER_RUNTIME_REQUESTS_"+name+',
+                         "REQUESTS_RETURNED|REQUESTS_EMPTY|REQUESTS_RATE_LIMITED",
+                         '("RETURNED","EMPTY","RATE_LIMITED","FAILED","PENDING")',
+                         "OWNER_RUNTIME_REQUEST_LEDGER: UNAVAILABLE",
+                         "safe_runtime[:16]"):
+            self.assertIn(fragment, src)
+        self.assertIn("ledger.stat().st_mode & 0o077", src)
+        embedded = src.split("python3 - <<'PYOWNERSTATUS'\n", 1)[1]
+        embedded = embedded.split("\n          PYOWNERSTATUS", 1)[0]
+        compile(textwrap.dedent(embedded), "<safe-owner-ssm-audit>", "exec")
+
+    def test_terminal_error_is_sanitized_without_logging_ssm_payload(self):
+        src = self.source
+        for marker in ("Delivery Timed Out", "Execution Timed Out",
+                       "Undeliverable", "Terminated", "OWNER_SSM_TERMINAL: ",
+                       "OWNER_AUDIT_INCOMPLETE: MISSING_VERIFIED_MARKERS"):
+            self.assertIn(marker, src)
+        self.assertIn("max_provider_calls", (ROOT / "infra/ec2-paper/"
+                                              "owner_personal_history_request.py").read_text())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -113,13 +113,13 @@ def verify_aws() -> None:
         ids = json.loads(target.get("Input", "null"))
     except (ValueError, TypeError) as exc:
         raise Rejected("scheduled stop target not parseable") from exc
-    if (schedule.get("State") != "ENABLED"
+    if (schedule.get("State") not in ("ENABLED", "DISABLED")
         or schedule.get("ScheduleExpression") != "cron(0 22 * * ? *)"
         or schedule.get("ScheduleExpressionTimezone") != "Asia/Kolkata"
         or target.get("RoleArn") != STOP_ROLE
         or target.get("Arn") != STOP_TARGET
         or ids != {"InstanceIds": [INSTANCE]}):
-        raise Rejected("enabled exact 22 IST nightly stop schedule required")
+        raise Rejected("exact 22 IST EC2 stop schedule identity or state invalid")
 
     managed = aws_json("ssm", "describe-instance-information", "--filters",
                        f"Key=InstanceIds,Values={INSTANCE}")
@@ -128,7 +128,7 @@ def verify_aws() -> None:
         raise Rejected("SSM managed-node registration absent for exact EC2")
     if found[0].get("PingStatus") != "Online":
         raise Rejected("SSM agent not Online; inspect cloud-init and instance role")
-    print("PAPER EC2 running; SSM Online; exact enabled nightly stop verified", flush=True)
+    print("PAPER EC2 running; SSM Online; exact nightly stop schedule verified (state=" + schedule["State"] + ")", flush=True)
 
 
 def make_command(action: str, sha: str = "", digest: str = "") -> str:
@@ -190,6 +190,7 @@ def send_command(action: str, sha: str = "", digest: str = "") -> None:
                     "host_precheck", "artifact_download",
                     "artifact_integrity", "archive_validation",
                     "image_load", "host_activation",
+                    "history_precheck", "history_activation",
                 }
                 combined = (str(result.get("StandardOutputContent") or "") +
                             "\n" + str(result.get("StandardErrorContent") or ""))

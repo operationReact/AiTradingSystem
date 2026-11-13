@@ -15,6 +15,21 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 @Repository
 public class InstrumentMasterRepository {
+    /**
+     * Cross-exchange cash-equity eligibility. NSE equity series commonly use
+     * -EQ; Angel One BSE cash equity symbols can be UNSUFFIXED but explicitly
+     * carry instrument_type EQ. No derivatives or unverified BSE records.
+     * Shared with the complete-universe category counts to prevent drift.
+     */
+    public static final String CASH_EQUITY_PREDICATE = """
+        AND ((i.exchange_segment = 'NSE_CM'
+                  AND i.trading_symbol LIKE '%-EQ')
+             OR (i.exchange_segment = 'BSE_CM'
+                  AND (upper(coalesce(i.instrument_type, '')) = 'EQ'
+                       OR i.trading_symbol LIKE '%-EQ')))
+        AND upper(i.trading_symbol) NOT LIKE '%NSETEST%'
+        """;
+
     private static final int BATCH_SIZE = 1_000;
     private final JdbcTemplate jdbc;
     private final TransactionTemplate transaction;
@@ -230,14 +245,9 @@ public class InstrumentMasterRepository {
             args.add(exchange);
         }
         if ("EQ".equalsIgnoreCase(type)) {
-            // Angel One cash equities (e.g. RELIANCE-EQ) often carry an
-            // empty instrumenttype, not the literal EQ value. Trust the
-            // cash segment AND equity trading-symbol suffix instead.
-            where.append(" AND i.exchange_segment IN ('NSE_CM','BSE_CM') ");
-            where.append(" AND i.trading_symbol LIKE '%-EQ' ");
-            // Official SmartAPI masters may contain connectivity/test instruments
-            // such as 011NSETEST-EQ. Never present these as listed equities.
-            where.append(" AND upper(i.trading_symbol) NOT LIKE '%NSETEST%' ");
+            // The cash-equity classification must include explicitly typed
+            // BSE securities whose symbols have no NSE-style -EQ suffix.
+            where.append(CASH_EQUITY_PREDICATE);
         } else if (type != null && !type.isBlank()) {
             where.append(" AND i.instrument_type = ? ");
             args.add(type);

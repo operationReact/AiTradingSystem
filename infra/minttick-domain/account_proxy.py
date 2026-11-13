@@ -34,6 +34,8 @@ EXACT = {
     ("POST", "/api/customer/brokers/upstox/start"),
     ("POST", "/api/customer/brokers/upstox/disconnect"),
     ("GET", "/api/customer/brokers/upstox/status"),
+    ("GET", "/api/customer/brokers/upstox/configured-login"),
+    ("POST", "/api/customer/brokers/upstox/connect-configured"),
     ("GET", "/api/customer/brokers/upstox/funds"),
     ("GET", "/api/customer/brokers/upstox/holdings"),
     ("GET", "/api/customer/brokers/upstox/positions"),
@@ -42,11 +44,14 @@ EXACT = {
     ("GET", "/api/customer/portfolio/records"),
     ("GET", "/api/customer/home/v1/summary"),
     ("GET", "/api/customer/home/v1/activity"),
+    ("GET", "/api/customer/owner-history/v1/progress"),
+    ("GET", "/api/customer/owner-upstox-analytics/v1/progress"),
     ("GET", "/api/customer/market-data/instruments/status"),
     ("GET", "/api/customer/market-data/instruments"),
     ("GET", "/api/customer/market-data/quotes"),
     ("GET", "/api/customer/market-data/quotes/detail"),
     ("GET", "/api/customer/market-data/overview"),
+    ("GET", "/api/customer/market-data/universe-facets"),
     ("GET", "/api/customer/market-data/snapshot"),
     ("GET", "/api/customer/market-data/candles"),
     ("GET", "/api/customer/watchlist"),
@@ -55,7 +60,10 @@ EXACT = {
 WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
-PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(account|ledger)$")
+ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
+PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
+READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
+LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
 ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
 MAX_BODY = 65536
 
@@ -66,11 +74,22 @@ def reply(status, obj):
         "x-content-type-options": "nosniff",
     }, "body": json.dumps(obj, separators=(",", ":"))}
 
+def paper_allowed(method, path):
+    if not PAPER.fullmatch(path):
+        return False
+    action = path.rsplit("/", 1)[-1]
+    return ((method == "GET" and action in {"account", "ledger", "orders", "positions"})
+            or (method == "POST" and action in {"activate", "resume", "pause", "orders"}))
+
 def allowed(method, path):
     return ((method, path) in EXACT
             or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
             or (method == "GET" and path == UPSTOX_CALLBACK)
-            or (method == "GET" and (ROOM.fullmatch(path) or PAPER.fullmatch(path))))
+            or (method == "GET" and ROOM.fullmatch(path))
+            or (method == "PUT" and ROOM_RENAME.fullmatch(path))
+            or (method == "GET" and READINESS.fullmatch(path))
+            or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
+            or paper_allowed(method, path))
 
 def callback_query_safe(query):
     # The public redirect's one-time state is independently consumed by Spring.
@@ -96,11 +115,38 @@ def callback_query_safe(query):
             and len(error) <= 200)
 
 
-def callback_html(ok):
+# These statuses are hard-coded constants from MintTick's own backend only.
+# Never render arbitrary provider query parameters or upstream response bodies.
+CALLBACK_OUTCOMES = {
+    "STATE_INVALID": "The secure login session expired or was replaced. "
+                     "Close this browser tab and start a new Upstox login inside MintTick.",
+    "CALLBACK_PARAMETERS": "Upstox returned an unexpected authorization response. "
+                           "Close this tab and start a fresh login inside MintTick.",
+    "DECLINED": "The Upstox authorization was cancelled or declined. Start a fresh login.",
+    "CODE_INVALID": "The one-time Upstox authorization code is invalid or has been used. "
+                    "Start a fresh login; do not reopen the old callback.",
+    "APP_CREDENTIALS": "Upstox rejected the developer application's credentials. "
+                       "The protected server configuration needs attention.",
+    "REDIRECT_REJECTED": "Upstox rejected the application's registered callback URL.",
+    "SEGMENTS_INACTIVE": "Upstox reports inactive trading segments for this account.",
+    "PROFILE_REJECTED": "Upstox could not verify an active account profile.",
+    "ALREADY_CONNECTED": "This Upstox account is connected to another MintTick user.",
+    "BROKER_UNAVAILABLE": "MintTick could not establish the Upstox token exchange connection. "
+                          "Retry a new login, and check protected backend network access.",
+    "INVALID_TOKEN_RESPONSE": "Upstox returned an unexpected token response. "
+                              "MintTick needs its response parser checked.",
+    "TOKEN_CLIENT_FAILURE": "MintTick encountered a token-exchange client error. "
+                            "This does not establish an Upstox outage.",
+    "BACKEND_UNAVAILABLE": "MintTick could not reach its private broker backend. Retry later.",
+    "UNVERIFIED": "Return to MintTick and tap Refresh connection to inspect the result.",
+}
+
+def callback_html(ok, reason="UNVERIFIED"):
     # Fixed HTML prevents any broker-supplied state, code, or error reflecting
     # into rendered content, cache, redirects or referrer headers.
     message = ("Upstox connected to MintTick. Return to MintTick and refresh."
-               if ok else "Upstox connection was not completed. Try again in MintTick.")
+               if ok else "Upstox connection was not completed. "
+                          + CALLBACK_OUTCOMES.get(reason, CALLBACK_OUTCOMES["UNVERIFIED"]))
     html = ("<!doctype html><html><head><meta charset='utf-8'>"
             "<meta name='viewport' content='width=device-width,initial-scale=1'>"
             "<title>MintTick broker connection</title></head><body>"
@@ -138,7 +184,7 @@ def handler(event, context):
     if not isinstance(query, str) or len(query) > (4096 if is_callback else 300):
         return reply(400, {"error": "INVALID_QUERY"})
     if is_callback and not callback_query_safe(query):
-        return callback_html(False)
+        return callback_html(False, "CALLBACK_PARAMETERS")
     if query and is_health:
         return reply(400, {"error": "INVALID_QUERY"})
     headers = event.get("headers", {})
@@ -158,14 +204,61 @@ def handler(event, context):
         return reply(413, {"error": "BODY_TOO_LARGE"})
     if method == "GET" and body:
         return reply(400, {"error": "INVALID_BODY"})
+    if method == "PUT" and ROOM_RENAME.fullmatch(path):
+        # A display-only rename is the sole exposed PUT route. Validate the
+        # exact payload before forwarding to the customer-scoped Java backend.
+        try:
+            rename = json.loads(body)
+            name = rename.get("name") if type(rename) is dict else None
+            normalized = re.sub(r"\s+", " ", name.strip()) if isinstance(name, str) else ""
+            valid = (type(rename) is dict and set(rename) == {"name"}
+                     and 1 <= len(normalized) <= 80
+                     and not any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_ROOM_NAME"})
     if method == "POST" and path in {
         "/api/auth/cognito/provision",
         "/api/customer/brokers/angel-one/connect-configured",
         "/api/customer/brokers/angel-one/disconnect",
         "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/connect-configured",
         "/api/customer/brokers/upstox/disconnect",
     } and body:
         return reply(400, {"error": "INVALID_BODY"})
+    if method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path):
+        try:
+            selected = json.loads(body)
+            valid = (type(selected) is dict
+                     and set(selected) == {"broker"}
+                     and selected["broker"] in {"ANGEL_ONE", "UPSTOX"})
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_LIVE_BROKER_SELECTION"})
+    paper_order_key = None
+    if method == "POST" and PAPER.fullmatch(path):
+        action = path.rsplit("/", 1)[-1]
+        if action in {"activate", "resume", "pause"} and body:
+            return reply(400, {"error": "INVALID_BODY"})
+        if action == "orders":
+            paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+            if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+                return reply(400, {"error": "INVALID_PAPER_ORDER_KEY"})
+            try:
+                order = json.loads(body)
+                valid = (isinstance(order, dict)
+                    and set(order) == {"instrumentId", "side", "quantity", "limitPrice"}
+                    and type(order["instrumentId"]) is int and order["instrumentId"] > 0
+                    and order["side"] in ("BUY", "SELL")
+                    and type(order["quantity"]) is int and 1 <= order["quantity"] <= 10000
+                    and type(order["limitPrice"]) in (int, float)
+                    and 0.01 <= order["limitPrice"] <= 1000000)
+            except (ValueError, TypeError, KeyError, OverflowError):
+                valid = False
+            if not valid:
+                return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
     # Manual SmartAPI login is customer-scoped and authorized. Accept only the
     # four required short-lived input fields; never log, cache or echo them.
     if method == "POST" and path == "/api/customer/brokers/angel-one/connect":
@@ -190,11 +283,14 @@ def handler(event, context):
         upstream_headers["Authorization"] = bearer
     if body:
         upstream_headers["Content-Type"] = "application/json"
+    if paper_order_key is not None:
+        upstream_headers["Idempotency-Key"] = paper_order_key
     request = urllib.request.Request(
         BACKEND + internal_path,
-        data=body if method == "POST" else None,
+        data=body if method in {"POST", "PUT"} else None,
         headers=upstream_headers,
         method=method)
+    callback_outcome = "UNVERIFIED"
     try:
         with urllib.request.urlopen(request, timeout=7) as upstream:
             status = upstream.status
@@ -202,7 +298,14 @@ def handler(event, context):
     except urllib.error.HTTPError as exc:
         status = exc.code
         payload = exc.read(131073)
+        if is_callback:
+            # Never reflect arbitrary headers: only internally-defined enum.
+            candidate = exc.headers.get("X-MintTick-Upstox-Outcome", "")
+            if candidate in CALLBACK_OUTCOMES:
+                callback_outcome = candidate
     except (urllib.error.URLError, TimeoutError, OSError):
+        if is_callback:
+            return callback_html(False, "BACKEND_UNAVAILABLE")
         return reply(503, {"error": "PRIVATE_BACKEND_UNAVAILABLE"})
     if len(payload) > 131072 or status not in ALLOWED_RESPONSES:
         return reply(502, {"error": "INVALID_UPSTREAM_RESPONSE"})
@@ -210,7 +313,7 @@ def handler(event, context):
         return reply(200 if status == 200 else 503,
                      {"status": "UP" if status == 200 else "DOWN"})
     if is_callback:
-        return callback_html(status == 200)
+        return callback_html(status == 200, callback_outcome)
     try:
         decoded = json.loads(payload) if payload else {}
         if not isinstance(decoded, (dict, list)):

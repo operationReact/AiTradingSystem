@@ -278,7 +278,7 @@ public class CustomerMarketDataController {
             try {
                 var detail = applicationFeed.detail(instrument);
                 // Off-hours FULL quotes can carry a holiday fetch date, not an exchange trade.
-                if (!validStoredExchangeTime(detail.exchangeAt())) {
+                if (!VerifiedFullQuoteSession.accepts(instrument.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar)) {
                     return noStore(storedDetail(instrument.id()).orElseThrow(() ->
                         new MarketDataException("QUOTE_DETAIL_OUTSIDE_SESSION",
                             "No verified trading-session detail is available")));
@@ -306,7 +306,7 @@ public class CustomerMarketDataController {
                 .filter(detail -> ("ANGEL_ONE_SMARTAPI_FULL_APP".equals(detail.source())
                         || "STORED_LAST_DETAIL".equals(detail.source()))
                     && detail.ltp() != null && detail.ltp().signum() > 0
-                    && validStoredExchangeTime(detail.exchangeAt()))
+                    && VerifiedFullQuoteSession.accepts(detail.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar))
                 .map(DetailQuote::asStored);
         } catch (DataAccessException | IllegalStateException ex) {
             return Optional.empty();
@@ -424,12 +424,10 @@ public class CustomerMarketDataController {
             return new SnapshotRow(instrument.id(), instrument.exchange(),
                 instrument.tradingSymbol(), reply.ltp(), reply.exchangeAt(), "LIVE", reply.source(), null);
         }
-        if ("MARKET_CLOSED".equals(reply.status()) && lastTick != null
-                && lastTick.ltp() != null && lastTick.ltp().signum() > 0
-                && validStoredExchangeTime(lastTick.exchangeAt())) {
-            return new SnapshotRow(instrument.id(), instrument.exchange(),
-                instrument.tradingSymbol(), lastTick.ltp(), lastTick.exchangeAt(), "LAST_CLOSE",
-                "STORED_LAST_LIVE_TICK", lastTick.changePercent());
+        if ("MARKET_CLOSED".equals(reply.status())) {
+            // WS and FULL quote caches may have different exchange timestamps.
+            // Never prefer an older persisted tick just because it came from WS.
+            return storedSnapshotRow(instrument, lastTick);
         }
         String status = java.util.Set.of("CONNECTING", "RECONNECTING", "STALE", "UNAVAILABLE",
                 "MARKET_CLOSED").contains(reply.status()) ? reply.status() : "UNAVAILABLE";
@@ -470,15 +468,17 @@ public class CustomerMarketDataController {
     }
 
     private SnapshotRow storedSnapshotRow(Instrument stock, MarketLastTickStore.LastTick tick) {
+        SnapshotRow savedTick = null;
         if (tick != null && tick.ltp() != null && tick.ltp().signum() > 0
                 && validStoredExchangeTime(tick.exchangeAt())) {
-            return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
+            savedTick = new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
                 tick.ltp(), tick.exchangeAt(), "LAST_CLOSE", "STORED_LAST_LIVE_TICK",
                 tick.changePercent());
         }
-        // This table is populated by the existing verified FULL stock-detail
-        // endpoint. Unlike market_last_tick, it may already contain data after
-        // a deployment made outside market hours.
+
+        // The independent FULL detail quote may be newer than the last tick
+        // persisted from a disconnected WebSocket. Select strictly by the
+        // source's exchange event time, never by fetch time or cache type.
         var cached = storedDetail(stock.id());
         if (cached.isPresent()) {
             DetailQuote detail = cached.get();
@@ -487,7 +487,8 @@ public class CustomerMarketDataController {
                 && stock.tradingSymbol().equals(detail.tradingSymbol());
             if (sameInstrument && "STORED_LAST_DETAIL".equals(detail.source())
                     && detail.ltp() != null && detail.ltp().signum() > 0
-                    && validStoredExchangeTime(detail.exchangeAt())) {
+                    && VerifiedFullQuoteSession.accepts(detail.exchange(), detail.exchangeAt(), Instant.now(), cashCalendar)
+                    && (savedTick == null || detail.exchangeAt().isAfter(savedTick.exchangeAt()))) {
                 BigDecimal change = detail.previousClose() == null
                         || detail.previousClose().signum() <= 0 ? null
                     : detail.ltp().subtract(detail.previousClose())
@@ -497,6 +498,7 @@ public class CustomerMarketDataController {
                     detail.ltp(), detail.exchangeAt(), "LAST_CLOSE", "STORED_LAST_DETAIL", change);
             }
         }
+        if (savedTick != null) return savedTick;
         return new SnapshotRow(stock.id(), stock.exchange(), stock.tradingSymbol(),
             null, null, "UNAVAILABLE", null, null);
     }

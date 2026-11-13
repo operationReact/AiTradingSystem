@@ -11,6 +11,7 @@ import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -35,7 +36,7 @@ public class CustomerExecutionReadinessService {
     }
 
     public record Readiness(UUID roomId, String mode, String roomStatus,
-                            boolean brokerConnected, boolean virtualCashReady,
+                            String selectedBroker, boolean brokerConnected, boolean virtualCashReady,
                             boolean accountWideRiskReady, boolean brokerExecutionApproved,
                             boolean marketDataVerified, boolean executionEnabled,
                             List<String> blockers) {}
@@ -62,8 +63,12 @@ public class CustomerExecutionReadinessService {
                 .param("id", roomId).param("user", owner)
                 .query(Boolean.class).single();
         }
+        // A connection to some OTHER broker must not satisfy this room.
+        // A LIVE Room has exactly one persisted owner-chosen broker.
+        String selected = "LIVE".equals(room.mode())
+            ? selectedLiveBroker(owner, roomId) : null;
         boolean connected = "LIVE".equals(room.mode())
-            && (broker.status(owner).connected() || upstox.status(owner).connected());
+            && selected != null && brokerConnected(owner, selected);
         List<String> blockers = new ArrayList<>();
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
@@ -71,10 +76,12 @@ public class CustomerExecutionReadinessService {
             }
             blockers.add("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
         } else {
+            if (selected == null) {
+                blockers.add("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
+            }
             if (!connected) blockers.add("BROKER_NOT_CONNECTED");
-            // A Live room must explicitly select ONE authenticated broker
-            // account; no implicit fallback to Angel One or Upstox.
-            blockers.add("ROOM_BROKER_ASSIGNMENT_NOT_CONFIGURED");
+            // Selecting a broker does not establish approved static IP,
+            // reconciled funds, risk policy, or execution consent.
             blockers.add("BROKER_APPROVED_HOSTING_NOT_VERIFIED");
             blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
             blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
@@ -84,8 +91,66 @@ public class CustomerExecutionReadinessService {
         // All mode-specific order submissions fail closed, regardless of
         // application flags, UI state, or client-supplied claims.
         blockers.add("EXECUTION_DISABLED");
-        return new Readiness(roomId, room.mode(), room.status(), connected, paperFunded,
+        return new Readiness(roomId, room.mode(), room.status(), selected, connected, paperFunded,
                 false, false, false, false, List.copyOf(blockers));
+    }
+
+    /**
+     * Explicitly binds an owner-selected broker to a LIVE Room. No PIN, token,
+     * trading capital, order authorization, or broker request crosses this API.
+     * The composite FK prevents persistence against PAPER Rooms.
+     */
+    @Transactional
+    public Readiness selectLiveBroker(UUID owner, UUID roomId, String selected) {
+        if (!"ANGEL_ONE".equals(selected) && !"UPSTOX".equals(selected)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Choose Angel One or Upstox");
+        }
+        Room room = jdbc.sql("""
+                SELECT mode, status FROM customer_trading_room
+                WHERE id=:room AND user_id=:owner FOR UPDATE
+                """)
+            .param("room", roomId).param("owner", owner)
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status")))
+            .optional().orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Trading Room not found"));
+        if (!"LIVE".equals(room.mode())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Paper Rooms cannot select a LIVE broker");
+        }
+        int updated = jdbc.sql("""
+                INSERT INTO customer_live_room_broker
+                    (room_id,user_id,mode,broker)
+                VALUES (:room,:owner,'LIVE',:broker)
+                ON CONFLICT (room_id) DO UPDATE
+                SET broker=EXCLUDED.broker, updated_at=NOW()
+                WHERE customer_live_room_broker.user_id=EXCLUDED.user_id
+                """)
+            .param("room", roomId).param("owner", owner)
+            .param("broker", selected).update();
+        if (updated != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Live broker assignment conflicts with room ownership");
+        }
+        // Re-evaluate the authoritative readiness, which remains nonexecutable.
+        return readiness(owner, roomId);
+    }
+
+    private String selectedLiveBroker(UUID owner, UUID roomId) {
+        return jdbc.sql("""
+                SELECT broker FROM customer_live_room_broker
+                WHERE room_id=:room AND user_id=:owner AND mode='LIVE'
+                """)
+            .param("room", roomId).param("owner", owner)
+            .query(String.class).optional().orElse(null);
+    }
+
+    private boolean brokerConnected(UUID owner, String selected) {
+        return switch (selected) {
+            case "ANGEL_ONE" -> broker.status(owner).connected();
+            case "UPSTOX" -> upstox.status(owner).connected();
+            default -> false;
+        };
     }
 
     public Preflight preflight(UUID owner, UUID roomId, long instrumentId,

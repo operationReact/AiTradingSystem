@@ -639,6 +639,117 @@ class CustomerMarketOverview {
   }
 }
 
+/// Source-backed category metadata across the complete active cash-equity
+/// catalogue. A missing classification is not silently counted as zero stocks.
+class CustomerUniverseIndexFacet {
+  const CustomerUniverseIndexFacet({
+    required this.code, required this.members, required this.matched,
+    required this.source, required this.sourceAsOf,
+  });
+  final String code;
+  final int members;
+  final int matched;
+  final String source;
+  final DateTime? sourceAsOf;
+
+  factory CustomerUniverseIndexFacet.fromJson(Map<String, dynamic> json) {
+    final members = json['officialMembers'];
+    final matched = json['matchedActiveNseStocks'];
+    final code = json['universeCode'];
+    final source = json['membershipSource'];
+    if (code is! String || code.isEmpty || source is! String ||
+        source.isEmpty || members is! int || members < 0 ||
+        matched is! int || matched < 0 || matched > members) {
+      throw const FormatException('Invalid sourced index membership');
+    }
+    final rawDate = json['sourceAsOf'];
+    final asOf = rawDate is String ? DateTime.tryParse(rawDate) : null;
+    if (rawDate != null && asOf == null) {
+      throw const FormatException('Invalid index membership timestamp');
+    }
+    return CustomerUniverseIndexFacet(
+      code: code, members: members, matched: matched,
+      source: source, sourceAsOf: asOf,
+    );
+  }
+}
+
+class CustomerUniverseFacets {
+  const CustomerUniverseFacets({
+    required this.totalListings, required this.exchanges,
+    required this.indices, required this.classifications,
+    required this.generatedAt, this.catalogueActivatedAt,
+  });
+
+  final int totalListings;
+  final Map<String, int> exchanges;
+  final List<CustomerUniverseIndexFacet> indices;
+  final Map<String, String> classifications;
+  final DateTime generatedAt;
+  final DateTime? catalogueActivatedAt;
+
+  factory CustomerUniverseFacets.fromJson(Map<String, dynamic> value) {
+    if (value['contractVersion'] != 'customer.market.universe.v1' ||
+        value['totalActiveCashEquityListings'] is! int ||
+        (value['totalActiveCashEquityListings'] as int) < 0 ||
+        value['exchanges'] is! List ||
+        value['verifiedMemberships'] is! List ||
+        value['classificationStates'] is! List) {
+      throw const FormatException('Invalid complete market universe');
+    }
+    final exchanges = <String, int>{};
+    for (final raw in value['exchanges'] as List) {
+      if (raw is! Map<String, dynamic>) {
+        throw const FormatException('Invalid exchange count');
+      }
+      final exchange = raw['exchange'];
+      final count = raw['activeListings'];
+      if (exchange is! String ||
+          !const {'NSE', 'BSE'}.contains(exchange) ||
+          count is! int || count < 0 || exchanges.containsKey(exchange)) {
+        throw const FormatException('Unverified exchange scope');
+      }
+      exchanges[exchange] = count;
+    }
+    final total = value['totalActiveCashEquityListings'] as int;
+    if (exchanges.values.fold<int>(0, (sum, count) => sum + count) != total) {
+      throw const FormatException('Exchange counts disagree with universe');
+    }
+    final indices = <CustomerUniverseIndexFacet>[];
+    for (final raw in value['verifiedMemberships'] as List) {
+      if (raw is! Map<String, dynamic>) {
+        throw const FormatException('Invalid index metadata');
+      }
+      indices.add(CustomerUniverseIndexFacet.fromJson(raw));
+    }
+    final classifications = <String, String>{};
+    for (final raw in value['classificationStates'] as List) {
+      if (raw is! Map<String, dynamic> ||
+          raw['family'] is! String || raw['state'] is! String) {
+        throw const FormatException('Invalid market classification');
+      }
+      classifications[raw['family'] as String] = raw['state'] as String;
+    }
+    final generated = DateTime.tryParse('${value['generatedAt'] ?? ''}');
+    final rawActivated = value['catalogueActivatedAt'];
+    final activated = rawActivated == null
+        ? null : DateTime.tryParse('$rawActivated');
+    if (generated == null || (rawActivated != null && activated == null)) {
+      throw const FormatException('Invalid universe timestamp');
+    }
+    return CustomerUniverseFacets(
+      totalListings: total, exchanges: Map.unmodifiable(exchanges),
+      indices: List.unmodifiable(indices),
+      classifications: Map.unmodifiable(classifications),
+      generatedAt: generated, catalogueActivatedAt: activated,
+    );
+  }
+}
+
+abstract interface class CustomerUniverseFacetsRepository {
+  Future<CustomerUniverseFacets> universeFacets();
+}
+
 /// Nifty 50 overview from the backend's 30-second cache. Values are provider data, never estimates.
 abstract interface class CustomerOverviewRepository {
   Future<CustomerMarketOverview> overview();
@@ -659,7 +770,8 @@ abstract interface class CustomerPaginatedMarketRepository {
 class HttpCustomerMarketRepository implements CustomerMarketRepository,
     CustomerLiveMarketRepository, CustomerSnapshotMarketRepository,
     CustomerPaginatedMarketRepository, CustomerCandleRepository,
-    CustomerDetailRepository, CustomerWatchlistRepository, CustomerOverviewRepository {
+    CustomerDetailRepository, CustomerWatchlistRepository, CustomerOverviewRepository,
+    CustomerUniverseFacetsRepository {
   HttpCustomerMarketRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -815,6 +927,15 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
   Future<void> remove(int instrumentId) async {
     if (instrumentId < 1) throw ArgumentError.value(instrumentId);
     await api.deleteJson('$_watchRoot/items/$instrumentId');
+  }
+
+  @override
+  Future<CustomerUniverseFacets> universeFacets() async {
+    final data = await api.getJson('$_root/universe-facets');
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid market universe metadata');
+    }
+    return CustomerUniverseFacets.fromJson(data);
   }
 
   @override

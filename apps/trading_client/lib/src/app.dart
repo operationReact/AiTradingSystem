@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -36,7 +39,10 @@ import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
+import 'features/trading_rooms/data/customer_paper_trading_repository.dart';
+import 'features/trading_rooms/data/customer_trade_intent_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
+import 'features/trading_rooms/data/customer_broker_auto_restore.dart';
 import 'features/trading_rooms/data/customer_portfolio_repository.dart';
 import 'features/trading_rooms/data/customer_market_repository.dart';
 import 'features/trading_rooms/data/customer_upstox_repository.dart';
@@ -65,6 +71,10 @@ import 'presentation/research_experiment_jobs_page.dart';
 import 'presentation/risk_approvals_page.dart';
 import 'presentation/scenario_lookup_page.dart';
 import 'presentation/settings_page.dart';
+import 'features/upstox_analytics/presentation/upstox_analytics_progress_page.dart';
+import 'features/upstox_analytics/data/upstox_analytics_progress_repository.dart';
+import 'presentation/historical_data_monitor_page.dart';
+import 'data/history_monitor_repository.dart';
 import 'presentation/create_account_page.dart';
 import 'presentation/cognito_test_page.dart';
 import 'presentation/customer_account_page.dart';
@@ -96,9 +106,11 @@ class _TradingAppState extends State<TradingApp> {
   });
   late final TradingRoomDraftStore _roomDrafts;
   late final TradingWorkspaceMode _workspaceMode;
+  String? _brokerRestoreCustomerId;
   ThemeMode _themeMode = ThemeMode.dark;
   String _selectedRoute = '/';
   bool _exitDialogOpen = false;
+  bool _moreSheetOpen = false;
 
   AuthenticatedApiClient get _api => AuthenticatedApiClient(session: widget.session);
   HttpOperationsEvidenceRepository get _operationsEvidence => HttpOperationsEvidenceRepository(_api);
@@ -158,6 +170,31 @@ class _TradingAppState extends State<TradingApp> {
                   isCustomer: widget.session.isCustomerAuthenticated,
                 ),
               ),
+              // The product navigation sits outside the Navigator overlay.
+              // Blur and block it separately while More is open, so every
+              // visible element behind the sheet is treated consistently.
+              if (_moreSheetOpen)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: ClipRect(
+                    child: BackdropFilter(
+                      key: const ValueKey('more-navigation-blur'),
+                      filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => _navigatorKey.currentState?.maybePop(),
+                        child: ColoredBox(
+                          color: Colors.black54,
+                          child: SizedBox(
+                            height: 64 + MediaQuery.paddingOf(context).bottom,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },
@@ -183,6 +220,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintTickTradingRoomsPage(
                 store: _roomDrafts,
                 mode: _workspaceMode,
+                metricsRepository: HttpCustomerRoomRepository(_api),
                 onCreate: _openCreateRoom,
                 onOpen: _openRoom,
               )
@@ -252,6 +290,7 @@ class _TradingAppState extends State<TradingApp> {
                 brokerRepository: HttpCustomerAngelOneRepository(_api),
                 upstoxRepository: HttpCustomerUpstoxRepository(_api),
                 portfolioRepository: HttpCustomerPortfolioRepository(_api),
+                paperTradingRepository: HttpCustomerPaperTradingRepository(_api),
                 onRooms: () => _navigate('/rooms'),
                 onBroker: () => _navigate('/brokers'),
               )
@@ -269,10 +308,24 @@ class _TradingAppState extends State<TradingApp> {
         '/news': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.news),
         '/notifications': (_) => widget.session.isCustomerAuthenticated ? _customerState('Notifications') : OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.notifications),
         '/audit': (_) => OperationsEvidencePage(repository: _operationsEvidence, section: OperationsEvidenceSection.audit),
+        '/history-monitor': (_) => widget.session.isCustomerAuthenticated
+            ? HistoricalDataMonitorPage(
+                repository: HttpHistoryMonitorRepository(_api),
+              )
+            : _overviewPage(),
+        '/upstox-analytics-progress': (_) => widget.session.isCustomerAuthenticated
+            ? UpstoxAnalyticsProgressPage(
+                repository: HttpUpstoxAnalyticsProgressRepository(_api),
+              )
+            : _overviewPage(),
         '/settings': (_) => SettingsPage(
               themeMode: _themeMode,
               onThemeModeChanged: _setThemeMode,
               onSignOut: _signOut,
+              onHistoryMonitor: widget.session.isCustomerAuthenticated
+                  ? () => _navigate('/history-monitor') : null,
+              onUpstoxAnalyticsProgress: widget.session.isCustomerAuthenticated
+                  ? () => _navigate('/upstox-analytics-progress') : null,
               tradingControlRepository: widget.session.isCustomerAuthenticated ? null : HttpTradingControlRepository(_api),
             ),
         '/operations': (_) => _healthPage(),
@@ -292,6 +345,8 @@ class _TradingAppState extends State<TradingApp> {
   }
 
   Future<void> _signOut() async {
+    // A new Cognito sign-in can attempt owner-only broker restoration again.
+    _brokerRestoreCustomerId = null;
     // Best-effort server-side disconnect while the customer JWT is still
     // available. A network failure must never block local sign-out; the
     // server also expires all broker sessions automatically.
@@ -305,7 +360,20 @@ class _TradingAppState extends State<TradingApp> {
         // Bounded session expiry still applies when offline.
       }
     }
+    // An owner session stays bound to the same verified Cognito customer and
+    // can be resumed on their next login until Upstox's daily token expiry.
+    // Other customers continue to revoke their broker session at sign-out.
+    bool verifiedOwner = false;
     if (widget.session.isCustomerAuthenticated) {
+      try {
+        verifiedOwner = await HttpCustomerAngelOneRepository(_api)
+            .configuredLoginAvailable()
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {
+        // Fail closed; sign-out must never assume the user is the owner.
+      }
+    }
+    if (widget.session.isCustomerAuthenticated && !verifiedOwner) {
       try {
         await _api.postJson(
           '/api/customer/brokers/upstox/disconnect',
@@ -437,23 +505,33 @@ class _TradingAppState extends State<TradingApp> {
 
   Future<void> _openMoreNavigation() async {
     final navContext = _navigatorKey.currentContext;
-    if (navContext == null) return;
+    if (navContext == null || _moreSheetOpen) return;
     final previousRoute = _selectedRoute;
-    setState(() => _selectedRoute = '/more');
-    final route = await showModalBottomSheet<String>(
-      context: navContext,
-      showDragHandle: true,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
-      builder: (context) => _MoreProductSheet(isCustomer: widget.session.isCustomerAuthenticated),
+    setState(() {
+      _selectedRoute = '/more';
+      _moreSheetOpen = true;
+    });
+    // showModalBottomSheet only dims the page. A dedicated route supplies a
+    // blurred modal barrier without filtering the More menu itself.
+    final route = await Navigator.of(navContext).push<String>(
+      _BlurredMoreBottomSheetRoute<String>(
+        showDragHandle: true,
+        isScrollControlled: true,
+        useSafeArea: true,
+        modalBarrierColor:
+            Theme.of(navContext).bottomSheetTheme.modalBarrierColor ??
+            Colors.black54,
+        backgroundColor: Theme.of(navContext).colorScheme.surfaceContainer,
+        builder: (context) =>
+            _MoreProductSheet(isCustomer: widget.session.isCustomerAuthenticated),
+      ),
     );
     if (!mounted) return;
-    if (route != null) {
-      _navigate(route);
-    } else {
-      setState(() => _selectedRoute = previousRoute);
-    }
+    setState(() {
+      _moreSheetOpen = false;
+      if (route == null) _selectedRoute = previousRoute;
+    });
+    if (route != null) _navigate(route);
   }
 
   void _setThemeMode(ThemeMode value) {
@@ -466,7 +544,29 @@ class _TradingAppState extends State<TradingApp> {
     if (result is! Map<String, dynamic>) {
       throw const FormatException('Invalid customer profile');
     }
+    // Run only after a real authenticated backend identity has been verified,
+    // once per customer login. Never block Home on a third-party broker.
+    final userId = result['userId'];
+    if (widget.session.isCustomerAuthenticated &&
+        result['role'] == 'CUSTOMER' && userId is String &&
+        userId.isNotEmpty && result['email'] is String &&
+        (result['email'] as String).isNotEmpty &&
+        _brokerRestoreCustomerId != userId) {
+      _brokerRestoreCustomerId = userId;
+      unawaited(_restoreBrokerSessions());
+    }
     return result;
+  }
+
+  Future<void> _restoreBrokerSessions() async {
+    try {
+      await CustomerBrokerAutoRestore(
+        angelOne: HttpCustomerAngelOneRepository(_api),
+        upstox: HttpCustomerUpstoxRepository(_api),
+      ).restore();
+    } catch (_) {
+      // Broker outage never blocks Cognito sign-in, Home or Paper Rooms.
+    }
   }
 
   Widget _customerState(String section) => MintTickCustomerUnavailablePage(
@@ -512,6 +612,30 @@ class _TradingAppState extends State<TradingApp> {
     if (!mounted || room == null) return;
     try {
       await _roomDrafts.create(room);
+      // A Paper room's planned budget is already confirmed in the creation
+      // wizard. Allocate virtual cash only, exactly once per saved Paper room.
+      // This does NOT unlock paper order execution or any LIVE money.
+      if (room.mode == TradingWorkspaceMode.paper) {
+        try {
+          final saved = _roomDrafts.drafts.first;
+          if (saved.mode != TradingWorkspaceMode.paper) {
+            throw const FormatException('Created Paper room mismatch');
+          }
+          await HttpCustomerRoomRepository(_api).activatePaper(saved.id);
+          await _roomDrafts.load();
+        } catch (_) {
+          // Preserve the saved room; the user can retry funding in Details.
+          final current = _navigatorKey.currentContext;
+          if (mounted && current != null && current.mounted) {
+            ScaffoldMessenger.of(current).showSnackBar(
+              const SnackBar(content: Text(
+                'Paper Room saved, but virtual funding could not be verified. '
+                'Open the room to retry. No real money was used.',
+              )),
+            );
+          }
+        }
+      }
       if (mounted) _navigate('/rooms');
     } catch (_) {
       // Never add a phantom room when the server write failed.
@@ -547,6 +671,9 @@ class _TradingAppState extends State<TradingApp> {
           room: room,
           repository: HttpCustomerRoomRepository(_api),
           executionRepository: HttpCustomerExecutionRepository(_api),
+          paperTradingRepository: HttpCustomerPaperTradingRepository(_api),
+          marketRepository: HttpCustomerMarketRepository(_api),
+          intentsRepository: HttpCustomerTradeIntentRepository(_api),
           onBroker: () => _navigate('/brokers'),
           onRoomChanged: _roomDrafts.load,
         ),
@@ -744,6 +871,28 @@ class _RailAction extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Keeps Flutter's native modal-sheet interactions (drag, scrim and Back)
+/// while blurring only the screen behind its barrier.
+class _BlurredMoreBottomSheetRoute<T> extends ModalBottomSheetRoute<T> {
+  _BlurredMoreBottomSheetRoute({
+    required super.builder,
+    required super.isScrollControlled,
+    super.backgroundColor,
+    super.modalBarrierColor,
+    super.showDragHandle,
+    super.useSafeArea,
+  });
+
+  @override
+  Widget buildModalBarrier() => ClipRect(
+    child: BackdropFilter(
+      key: const ValueKey('more-background-blur'),
+      filter: ImageFilter.blur(sigmaX: 7, sigmaY: 7),
+      child: super.buildModalBarrier(),
+    ),
+  );
 }
 
 class _MoreProductSheet extends StatelessWidget {

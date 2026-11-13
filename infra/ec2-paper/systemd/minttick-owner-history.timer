@@ -1,0 +1,14 @@
+[Unit]
+Description=Run MintTick owner-private Angel One backfill whenever the previous bounded job frees
+[Timer]
+# Two-minute scheduler CHECKS, not two-minute provider calls.
+# systemd never starts the same oneshot service twice concurrently.
+# The collector owns a private exclusive flock, 10-second API-call pacing and
+# per-provider rate-limit cooldown. EC2 shutdown is controlled separately by AWS.
+OnCalendar=*-*-* *:0/2:00 Asia/Kolkata
+Persistent=false
+AccuracySec=10s
+RandomizedDelaySec=0
+Unit=minttick-owner-history.service
+[Install]
+WantedBy=timers.target

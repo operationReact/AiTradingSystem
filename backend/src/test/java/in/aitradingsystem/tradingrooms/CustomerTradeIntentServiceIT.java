@@ -82,7 +82,7 @@ class CustomerTradeIntentServiceIT extends AbstractPostgresIT {
                 List.of("EXECUTION_DISABLED", "AUTHORITATIVE_QUOTE_NOT_VERIFIED")));
         when(readiness.readiness(any(), any()))
             .thenReturn(new CustomerExecutionReadinessService.Readiness(
-                room, mode, "DRAFT", false, false, false, false,
+                room, mode, "DRAFT", null, false, false, false, false,
                 false, false, List.of("EXECUTION_DISABLED")));
         return new CustomerTradeIntentService(jdbc, new ObjectMapper(), readiness);
     }

@@ -59,11 +59,22 @@ services:
       ANGELONE_CLIENT_MAC_ADDRESS: ${ANGELONE_CLIENT_MAC_ADDRESS:-}
       # Exact Cognito owner-subject binding; not an API key or broker credential.
       MINTTICK_ANGEL_ONE_OWNER_SUB: ${MINTTICK_ANGEL_ONE_OWNER_SUB:-}
-      # Upstox app-owned OAuth credentials are injected only from protected host runtime.env.
-      # These are never compiled into the Flutter client or CI release artifacts.
+      # Upstox OAuth can read only three allowlisted SSM credentials via the
+      # EC2 instance role after IAM review. Off by default. When enabled,
+      # the backend ignores the legacy environment credentials entirely.
+      # No broker secret is written to runtime.env, GitHub or Flutter.
+      MINTTICK_UPSTOX_OAUTH_SSM_ENABLED: ${MINTTICK_UPSTOX_OAUTH_SSM_ENABLED:-false}
+      # Owner-only individual-app TOTP login. No secrets in Compose.
+      MINTTICK_UPSTOX_OWNER_TOTP_ENABLED: ${MINTTICK_UPSTOX_OWNER_TOTP_ENABLED:-false}
       UPSTOX_CLIENT_ID: ${UPSTOX_CLIENT_ID:-}
       UPSTOX_CLIENT_SECRET: ${UPSTOX_CLIENT_SECRET:-}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-}
+      # Independent one-year read-only Analytics Token: fetched directly from SSM by
+      # the backend instance role; no token is injected into Compose or Flutter.
+      MINTTICK_UPSTOX_ANALYTICS_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_ENABLED:-false}
+      MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED:-false}
+      # Separate bounded read-only source health scheduler; off unless explicitly approved.
+      MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED: ${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:-true}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aitrading
       SPRING_DATASOURCE_USERNAME: aitrading
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?required}
@@ -88,6 +99,10 @@ services:
       NEWS_INGESTION_ENABLED: "false"
       PAPER_INTRADAY_CLOSE_ENABLED: "false"
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx1024m -XX:ActiveProcessorCount=2 -Djava.security.egd=file:/dev/./urandom"
+    # Metadata-only, root-published sanitized counts. The raw root-only
+    # SQLite and gzip candle archive must NEVER be mounted in this container.
+    volumes:
+      - /opt/aitradingsystem-paper/monitor:/run/minttick-owner-history:ro
     ports:
       - "127.0.0.1:8080:8080"
     networks:

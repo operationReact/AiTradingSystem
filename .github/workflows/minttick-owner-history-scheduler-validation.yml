@@ -1,0 +1,44 @@
+name: MintTick - owner history scheduler offline validation
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/owner_history_scheduler.py'
+      - 'infra/ec2-paper/owner_history_progress.py'
+      - 'infra/ec2-paper/systemd/**'
+      - 'scripts/tests/test_owner_history_scheduler.py'
+      - 'scripts/tests/test_owner_history_progress.py'
+      - '.github/workflows/minttick-owner-history-scheduler-validation.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/owner_history_scheduler.py'
+      - 'infra/ec2-paper/owner_history_progress.py'
+      - 'infra/ec2-paper/systemd/**'
+      - 'scripts/tests/test_owner_history_scheduler.py'
+      - 'scripts/tests/test_owner_history_progress.py'
+      - '.github/workflows/minttick-owner-history-scheduler-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Compile and run offline scheduler tests (no AWS, no provider calls)
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/owner_history_scheduler.py infra/ec2-paper/owner_history_progress.py
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_scheduler.py -v
+          python3 -m unittest discover -s scripts/tests -p test_owner_history_progress.py -v
+      - name: Validate systemd unit and IST calendar syntax
+        run: |
+          set -euo pipefail
+          systemd-analyze verify             infra/ec2-paper/systemd/minttick-owner-history.service             infra/ec2-paper/systemd/minttick-owner-history.timer
+          systemd-analyze calendar '*-*-* *:0/2:00 Asia/Kolkata' >/dev/null

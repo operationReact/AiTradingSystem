@@ -1,9 +1,10 @@
+import 'package:flutter/foundation.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../domain/trading_room_draft.dart';
 
 /// Authenticated, customer-owned Trading Room plans.
 /// No order-placement, broker authorization, or account balances are implied.
-class HttpCustomerRoomRepository implements RoomDraftPersistence {
+class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenaming {
   HttpCustomerRoomRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -26,6 +27,34 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence {
       'mode': draft.mode,
     });
     return _decode(data);
+  }
+
+  @override
+  Future<TradingRoomDraft> rename(String roomId, String name) async {
+    if (!RegExp(r'^[0-9a-fA-F-]{36}$').hasMatch(roomId)) {
+      throw const FormatException('Invalid room identifier');
+    }
+    final normalized = name.trim().replaceAll(RegExp(r'\s+'), ' ');
+    if (normalized.isEmpty || normalized.length > 80 ||
+        normalized.runes.any((point) => point < 32 || point == 127)) {
+      throw const FormatException('Room name must be 1–80 printable characters');
+    }
+    final stored = _decode(await api.putJson(
+      '$_path/$roomId/name',
+      body: {'name': normalized},
+    ));
+    if (stored.id != roomId || stored.name != normalized) {
+      throw const FormatException('Unverified room rename result');
+    }
+    return stored;
+  }
+
+  /// Read-only aggregate for compact tiles. Never treats planned LIVE capital
+  /// as available brokerage cash. Server scopes every metric by customer.
+  Future<List<CustomerRoomMetric>> dashboard() async {
+    final raw = await api.getJson('$_path/dashboard');
+    if (raw is! List) throw const FormatException('Invalid room dashboard');
+    return raw.map(CustomerRoomMetric.decode).toList(growable: false);
   }
 
   /// Only PAPER rooms can initialize virtual funding; LIVE is never touched.
@@ -180,6 +209,49 @@ class CustomerPaperCashEvent {
       cashDeltaPaise: raw['cashDeltaPaise'] as int,
       cashAfterPaise: raw['cashAfterPaise'] as int,
       createdAt: time,
+    );
+  }
+}
+
+@immutable
+class CustomerRoomMetric {
+  const CustomerRoomMetric({
+    required this.roomId, required this.mode, required this.status,
+    required this.plannedBudgetInr, this.availableCashPaise,
+    this.paperHalted, required this.positionCount,
+    required this.paperFillCount, required this.blockedIntentCount,
+  });
+  final String roomId, mode, status;
+  final int plannedBudgetInr;
+  final int? availableCashPaise;
+  final bool? paperHalted;
+  final int positionCount, paperFillCount, blockedIntentCount;
+
+  static CustomerRoomMetric decode(Object? raw) {
+    if (raw is! Map<String, dynamic> ||
+        raw['roomId'] is! String || raw['status'] is! String ||
+        !(raw['mode'] == 'PAPER' || raw['mode'] == 'LIVE') ||
+        raw['plannedBudgetInr'] is! int ||
+        raw['positionCount'] is! int || raw['paperFillCount'] is! int ||
+        raw['blockedIntentCount'] is! int ||
+        (raw['availableCashPaise'] != null && raw['availableCashPaise'] is! int) ||
+        (raw['paperHalted'] != null && raw['paperHalted'] is! bool)) {
+      throw const FormatException('Invalid room metrics');
+    }
+    if (raw['mode'] == 'LIVE' &&
+        (raw['availableCashPaise'] != null || raw['paperHalted'] != null ||
+        raw['positionCount'] != 0 || raw['paperFillCount'] != 0)) {
+      throw const FormatException('LIVE/PAPER metric isolation breached');
+    }
+    return CustomerRoomMetric(
+      roomId: raw['roomId'] as String, mode: raw['mode'] as String,
+      status: raw['status'] as String,
+      plannedBudgetInr: raw['plannedBudgetInr'] as int,
+      availableCashPaise: raw['availableCashPaise'] as int?,
+      paperHalted: raw['paperHalted'] as bool?,
+      positionCount: raw['positionCount'] as int,
+      paperFillCount: raw['paperFillCount'] as int,
+      blockedIntentCount: raw['blockedIntentCount'] as int,
     );
   }
 }

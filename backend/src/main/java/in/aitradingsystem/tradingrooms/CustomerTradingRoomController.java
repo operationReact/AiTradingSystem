@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -46,6 +47,8 @@ public class CustomerTradingRoomController {
 
     public record RoomView(UUID id, String name, String focus, long plannedBudgetInr,
                            String riskPreference, String mode, String status, Instant createdAt) {}
+
+    public record RenameRoomRequest(@NotBlank @Size(max = 80) String name) {}
 
     public record CreateRoomRequest(
             @NotBlank @Size(max = 80) String name,
@@ -107,6 +110,42 @@ public class CustomerTradingRoomController {
                 "A room with this name already exists or its settings are invalid");
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(get(id, authentication));
+    }
+
+    /**
+     * Only a user-owned display label may change, in any room state.
+     * The room ID is stable: Paper wallets, fills, positions, broker
+     * preferences and audit records remain associated with that ID.
+     */
+    @PutMapping("/{roomId}/name")
+    @Transactional
+    public RoomView rename(@PathVariable UUID roomId,
+                           @Valid @RequestBody RenameRoomRequest request,
+                           org.springframework.security.core.Authentication authentication) {
+        UUID owner = customer(authentication);
+        String normalized = request.name().trim().replaceAll("\\s+", " ");
+        if (normalized.isEmpty() || normalized.length() > 80 ||
+                normalized.codePoints().anyMatch(Character::isISOControl)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid room name");
+        }
+        try {
+            int updated = jdbc.sql("""
+                    UPDATE customer_trading_room
+                       SET name = :name, updated_at = NOW()
+                     WHERE id = :id AND user_id = :user
+                    """)
+                .param("name", normalized)
+                .param("id", roomId)
+                .param("user", owner)
+                .update();
+            if (updated == 0) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Room not found");
+            }
+        } catch (DataIntegrityViolationException conflict) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "A room with this name already exists");
+        }
+        return get(roomId, authentication);
     }
 
     @DeleteMapping("/{roomId}")

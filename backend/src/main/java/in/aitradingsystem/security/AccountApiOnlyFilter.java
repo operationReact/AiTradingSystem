@@ -40,7 +40,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/market-data/snapshot",
         "/api/customer/market-data/candles",
         "/api/customer/market-data/quotes/detail",
-        "/api/customer/market-data/overview");
+        "/api/customer/market-data/overview",
+        "/api/customer/market-data/universe-facets");
     private static final Set<String> PORTFOLIO_READS = Set.of(
         "/api/customer/portfolio/records",
         "/api/customer/home/v1/summary",
@@ -50,6 +51,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         java.util.regex.Pattern.compile("^/api/customer/watchlist/items/[0-9]{1,18}$");
     private static final Set<String> UPSTOX_READS = Set.of(
         "/api/customer/brokers/upstox/status",
+        "/api/customer/brokers/upstox/configured-login",
         "/api/customer/brokers/upstox/funds",
         "/api/customer/brokers/upstox/holdings",
         "/api/customer/brokers/upstox/positions",
@@ -57,6 +59,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/brokers/upstox/registered-ips");
     private static final Set<String> UPSTOX_WRITES = Set.of(
         "/api/customer/brokers/upstox/start",
+        "/api/customer/brokers/upstox/connect-configured",
         "/api/customer/brokers/upstox/disconnect");
     private static final String UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback";
     private static final Set<String> BROKER_WRITES = Set.of(
@@ -68,7 +71,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
 
     private static final java.util.regex.Pattern PAPER_WALLET_RESOURCE =
         java.util.regex.Pattern.compile(
-            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger)$");
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$");
 
     private static final java.util.regex.Pattern CUSTOMER_EXECUTION_RESOURCE =
         java.util.regex.Pattern.compile(
@@ -116,8 +119,12 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (UPSTOX_CALLBACK.equals(path) && "GET".equals(method))
             || (PAPER_WALLET_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
-                    || (path.endsWith("/activate") && "POST".equals(method))
-                    || (!path.endsWith("/activate") && "GET".equals(method))))
+                    || ((path.endsWith("/activate") || path.endsWith("/resume")
+                        || path.endsWith("/pause")) && "POST".equals(method))
+                    || (path.endsWith("/orders")
+                        && ("GET".equals(method) || "POST".equals(method)))
+                    || ((path.endsWith("/account") || path.endsWith("/ledger")
+                        || path.endsWith("/positions")) && "GET".equals(method))))
             || (CUSTOMER_EXECUTION_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))

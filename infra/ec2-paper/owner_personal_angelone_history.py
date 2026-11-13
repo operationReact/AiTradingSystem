@@ -83,6 +83,11 @@ COOLDOWN_SCHEMA = """CREATE TABLE IF NOT EXISTS provider_cooldown (
     provider TEXT PRIMARY KEY CHECK(provider = 'ANGEL_ONE'),
     retry_after TEXT NOT NULL
 )"""
+QUEUE_SCHEMA = """CREATE TABLE IF NOT EXISTS collection_queue (
+    sole INTEGER PRIMARY KEY CHECK(sole=1),
+    last_mode TEXT NOT NULL CHECK(last_mode IN ('FRESH','RECOVERY'))
+)"""
+
 FAILURE_CODES = frozenset((
     "PROVIDER_REJECTED", "PROVIDER_HTTP_ERROR",
     "PROVIDER_RATE_LIMITED", "PROVIDER_UNREACHABLE",
@@ -251,6 +256,25 @@ def select_recovery_windows(conn, catalogue):
     return result
 
 
+def choose_collection_mode(conn, fresh, recovery):
+    """Alternate new stock coverage and recovery; do not starve either queue."""
+    if not recovery:
+        return "FRESH"
+    if not fresh:
+        return "RECOVERY"
+    row = conn.execute("SELECT last_mode FROM collection_queue WHERE sole=1").fetchone()
+    if row is None or row[0] not in ("FRESH", "RECOVERY"):
+        raise PersonalHistoryBlocked("INVALID_COLLECTION_QUEUE")
+    return "RECOVERY" if row[0] == "FRESH" else "FRESH"
+
+
+def record_collection_mode(conn, mode):
+    if mode not in ("FRESH", "RECOVERY"):
+        raise PersonalHistoryBlocked("INVALID_COLLECTION_QUEUE")
+    conn.execute("UPDATE collection_queue SET last_mode=? WHERE sole=1", (mode,))
+    conn.commit()
+
+
 def validate_rows(payload, first, through):
     if not isinstance(payload, dict) or payload.get("status") is not True:
         raise PersonalHistoryBlocked("PROVIDER_REJECTED")
@@ -360,6 +384,8 @@ def init_db(root):
     conn.execute(COOLDOWN_SCHEMA)
     conn.execute(RECOVERY_SCHEMA)
     conn.execute(REQUEST_SCHEMA)
+    conn.execute(QUEUE_SCHEMA)
+    conn.execute("INSERT OR IGNORE INTO collection_queue VALUES (1,'RECOVERY')")
     conn.commit()
     return conn
 
@@ -772,6 +798,11 @@ def audit_private_archive(root=ROOT, *, expected_owner=0):
     return pages, rows
 
 
+def request_attempt_count(conn):
+    """Number of persisted provider request attempts, not pages or returned bars."""
+    return int(conn.execute("SELECT count(*) FROM candle_request").fetchone()[0])
+
+
 def run():
     root = ensure_private_store()
     lockfile = root / ".exclusive.lock"
@@ -781,20 +812,25 @@ def run():
         conn = init_db(root)
         try:
             verified_pages, verified_rows = verify_archive_integrity(conn, root)
+            attempts_before = request_attempt_count(conn)
             print("PERSONAL_ARCHIVE_VERIFIED_PAGES: " + str(verified_pages),
                   flush=True)
             print("PERSONAL_ARCHIVE_VERIFIED_ROWS: " + str(verified_rows),
                   flush=True)
             catalogue = select_catalogue_symbols()
             recovery = select_recovery_windows(conn, catalogue)
+            fresh = select_next_batch(conn, catalogue)
+            mode = choose_collection_mode(conn, fresh, recovery)
+            use_recovery = mode == "RECOVERY"
             entries = (sorted({(symbol, token) for symbol, token, _, _ in recovery})
-                       if recovery else select_next_batch(conn, catalogue))
+                       if use_recovery else fresh)
+            print("PERSONAL_COLLECTION_MODE: " + mode, flush=True)
             print("PERSONAL_UNIVERSE_EQUITIES: " + str(len(catalogue)), flush=True)
             if len(entries) > MAX_STOCKS_PER_RUN:
                 raise PersonalHistoryBlocked("RUN_STOCK_LIMIT")
-            remaining = recovery.copy()
+            remaining = recovery.copy() if use_recovery else []
             skipped = 0
-            if not recovery:
+            if not use_recovery:
                 planned = [(sym, token, start, end)
                            for sym, token in entries for start, end in windows()]
                 # Validate previous files before making any provider requests.
@@ -803,16 +839,18 @@ def run():
                         remaining.append((sym, token, start, end))
                     else:
                         skipped += 1
-            print("PERSONAL_RECOVERY_WINDOWS_SELECTED: " + str(len(recovery)), flush=True)
+            print("PERSONAL_RECOVERY_WINDOWS_SELECTED: " + str(len(remaining) if use_recovery else 0), flush=True)
             print("PERSONAL_STOCKS_SELECTED: " + str(len(entries)), flush=True)
             print("PERSONAL_PAGES_ALREADY_VERIFIED: " + str(skipped), flush=True)
             print("PERSONAL_PAGES_REMAINING: " + str(len(remaining)), flush=True)
             if not remaining:
+                print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: 0", flush=True)
                 print_archive_progress(conn)
                 print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
                 return 0
             if provider_cooldown_active(conn):
+                print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: 0", flush=True)
                 print("PERSONAL_DOWNLOAD_PAUSED: PROVIDER_COOLDOWN", flush=True)
                 print_archive_progress(conn)
                 print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
@@ -834,10 +872,10 @@ def run():
                     break
                 try:
                     request_start, request_end = (recovery_slice(conn, token, start, end)
-                                                  if recovery else (start, end))
+                                                  if use_recovery else (start, end))
                     rows, first, last = tracked_fetch(
                         conn, headers, sym, token, request_start, request_end)
-                    if recovery:
+                    if use_recovery:
                         short_responses += 1
                         short_rows += len(rows)
                         gained, _ = recover_page(conn, root, sym, token, start, end, rows)
@@ -872,8 +910,11 @@ def run():
             print("PERSONAL_SHORT_WINDOW_RESPONSES: " + str(short_responses), flush=True)
             print("PERSONAL_SHORT_WINDOW_CANDLES_RETURNED: " + str(short_rows), flush=True)
             print("PERSONAL_PAGES_DOWNLOADED_THIS_RUN: " + str(completed), flush=True)
+            print("PERSONAL_REQUESTS_ATTEMPTED_THIS_RUN: " +
+                  str(request_attempt_count(conn) - attempts_before), flush=True)
             print("PERSONAL_ROWS_DOWNLOADED_THIS_RUN: " + str(new_bars), flush=True)
             print("PERSONAL_ARCHIVE_SCOPE: PRIVATE_EC2_OWNER_ONLY", flush=True)
+            record_collection_mode(conn, mode)
             print("PERSONAL_GOLDEN_SOURCE_PUBLISHED: FALSE", flush=True)
             return 0
         finally:

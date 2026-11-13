@@ -8,6 +8,7 @@ class CustomerUpstoxStatus {
     required this.accountMasked,
     required this.expiresAt,
     required this.orderExecutionEnabled,
+    this.lastAuthError,
   });
 
   final bool available;
@@ -15,6 +16,8 @@ class CustomerUpstoxStatus {
   final String? accountMasked;
   final DateTime? expiresAt;
   final bool orderExecutionEnabled;
+  /// Fixed non-secret reason for the most recent failed OAuth callback.
+  final String? lastAuthError;
 
   factory CustomerUpstoxStatus.fromJson(Object? raw) {
     if (raw is! Map<String, dynamic> || raw['broker'] != 'UPSTOX' ||
@@ -29,6 +32,8 @@ class CustomerUpstoxStatus {
       expiresAt: raw['expiresAt'] is String
           ? DateTime.tryParse(raw['expiresAt'] as String) : null,
       orderExecutionEnabled: raw['orderExecutionEnabled'] as bool,
+      lastAuthError: raw['lastAuthError'] is String
+          ? raw['lastAuthError'] as String : null,
     );
   }
 }
@@ -41,6 +46,23 @@ class HttpCustomerUpstoxRepository {
 
   Future<CustomerUpstoxStatus> status() async =>
       CustomerUpstoxStatus.fromJson(await api.getJson('$_root/status'));
+
+  /// Optional exact-Cognito-owner PIN+TOTP capability. The backend alone
+  /// authorizes access to SSM and verifies the provider account identity.
+  Future<bool> configuredLoginAvailable() async {
+    final data = await api.getJson('$_root/configured-login');
+    if (data is! Map<String, dynamic> || data['available'] is! bool) {
+      throw const FormatException('Invalid secure Upstox login availability');
+    }
+    return data['available'] as bool;
+  }
+
+  /// No PIN, TOTP seed, API key or one-time code ever crosses Flutter.
+  Future<CustomerUpstoxStatus> connectConfigured() async =>
+      CustomerUpstoxStatus.fromJson(
+        await api.postJson('$_root/connect-configured'));
+
+
 
   Future<Uri> startAuthorization() async {
     final raw = await api.postJson('$_root/start');

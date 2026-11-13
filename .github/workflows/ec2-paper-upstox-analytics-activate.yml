@@ -1,0 +1,194 @@
+name: MintTick PAPER - private Upstox Analytics source activation (one-shot)
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-analytics-activate.json'
+  # Explicit operator-driven retry without changing the approval file.
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  activate:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      AWS_REGION: ap-south-1
+      AWS_ACCOUNT: "098859530205"
+      INSTANCE_ID: i-09c01b470fb39b85a
+      REQUEST: infra/ec2-paper/requests/upstox-analytics-activate.json
+      APPROVAL_INPUT: ${{ github.event.inputs.confirmation || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Validate single-file exact owner-approved Upstox source activation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF" = "refs/heads/dev"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            # Historical exact one-file approval; never permit other push changes.
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "$REQUEST"
+          elif [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # A real operator must enter the exact confirmation; no scheduled
+            # runs, hidden bypass or arbitrary run arguments are accepted.
+            test "${APPROVAL_INPUT:-}" = "AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE"
+          else
+            echo "Unsupported private activation event" >&2
+            exit 2
+          fi
+          python3 - <<'PY'
+          import json, pathlib
+          expected = {
+              "kind": "minttick-upstox-readonly-activation-v1",
+              "action": "activate-and-probe",
+              "account": "098859530205",
+              "region": "ap-south-1",
+              "instance_id": "i-09c01b470fb39b85a",
+              "trading_mode": "PAPER",
+              "confirmation": "AUTHORIZE_PRIVATE_UPSTOX_READONLY_ACCEPTANCE"
+          }
+          path = pathlib.Path("infra/ec2-paper/requests/upstox-analytics-activate.json")
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size < 2048
+          assert json.loads(path.read_text()) == expected, "request mismatch"
+          PY
+          bash -n infra/ec2-paper/upstox_analytics_activate.sh
+          test "$(wc -c < infra/ec2-paper/upstox_analytics_activate.sh)" -lt 9000
+          echo "One-shot private PAPER Upstox activation request validated"
+
+      - name: Assume narrow existing PAPER SSM OIDC role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: upstox-analytics-readonly
+          role-duration-seconds: 1500
+
+      - name: Validate exact existing host and run private source acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64
+          import gzip
+          import hashlib
+          import json
+          import pathlib
+          import re
+          import subprocess
+          import sys
+          import time
+          sys.path.insert(0, 'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()  # existing host, agent, schedule, IAM and region
+          script = pathlib.Path('infra/ec2-paper/upstox_analytics_activate.sh').read_bytes()
+          assert len(script) < 9000
+          # The previous uncompressed Base64 script was ~8.7 KB; one SSM
+          # invocation reported Success with no mandatory completion marker.
+          # Compress and checksum before transport, and fail if any pipeline
+          # stage is truncated or rejected. Never send credentials in payload.
+          compressed = gzip.compress(script, compresslevel=9, mtime=0)
+          assert gzip.decompress(compressed) == script
+          payload = base64.b64encode(compressed).decode('ascii')
+          assert len(payload) < 6000, 'SSM script transport exceeds safe bound'
+          digest = hashlib.sha256(script).hexdigest()
+          # Decode and checksum on the host before invoking bash. Mandatory
+          # transport markers distinguish a silent no-op from a real script run.
+          # Neither the script nor its transport contains customer credentials.
+          remote = (
+              'import base64,gzip,hashlib,subprocess,sys;'
+              'p=gzip.decompress(base64.b64decode(sys.argv[1],validate=True));'
+              'assert len(p)>1000 and hashlib.sha256(p).hexdigest()==sys.argv[2];'
+              'print("MINTTICK_UPSTOX_TRANSPORT:VERIFIED",flush=True);'
+              'result=subprocess.run(["bash","-s"],input=p,check=False);'
+              'sys.exit(result.returncode)'
+          )
+          command = (
+              "set -eu\n"
+              "printf 'MINTTICK_UPSTOX_TRANSPORT:START\\n'\n"
+              "python3 -c '" + remote + "' '" + payload + "' '" + digest + "'\n"
+              "printf 'MINTTICK_UPSTOX_TRANSPORT:FINISHED\\n'\n"
+          )
+          base = ['aws','ssm']
+          common = ['--region','ap-south-1','--no-cli-pager']
+          def aws(*args):
+              result = subprocess.run(base + list(args) + common + ['--output','json'],
+                  capture_output=True,text=True,timeout=40)
+              if result.returncode:
+                  raise RuntimeError('approved AWS SSM operation unavailable')
+              return json.loads(result.stdout)
+          response = aws('send-command','--document-name','AWS-RunShellScript',
+              '--instance-ids','i-09c01b470fb39b85a','--timeout-seconds','1100',
+              '--comment','Private PAPER Upstox analytics read-only acceptance',
+              '--parameters',json.dumps({'commands':[command]}))
+          cid = response.get('Command',{}).get('CommandId','')
+          if not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise RuntimeError('missing SSM command identifier')
+          for attempt in range(125):
+              time.sleep(8)
+              try:
+                  got = aws('get-command-invocation','--command-id',cid,
+                            '--instance-id','i-09c01b470fb39b85a')
+              except RuntimeError:
+                  if attempt < 5:
+                      continue
+                  raise
+              status=got.get('Status')
+              output=str(got.get('StandardOutputContent') or '')+' '+str(got.get('StandardErrorContent') or '')
+              approved=re.findall(r'MINTTICK_UPSTOX_RESULT:([A-Z_]+)(?: candles=(\d+) ratios=(\d+))?',output)
+              safe={'SSM_UNAVAILABLE','SSM_ACCESS_DENIED','SSM_PARAMETER_MISSING',
+                    'SSM_KMS_DENIED','SSM_NETWORK_UNAVAILABLE','SSM_NOT_SECURESTRING',
+                    'LOCAL_RELEASE_FAILED','LOCAL_RELEASE_EGRESS_IP_DRIFT',
+                    'LOCAL_RELEASE_BACKEND_HEALTH','LOCAL_RELEASE_WEB_HEALTH',
+                    'LOCAL_RELEASE_PROXY_HEALTH','LOCAL_RELEASE_LAMBDA_BRIDGE',
+                    'LOCAL_RELEASE_DB_BACKUP','LOCAL_RELEASE_DISK_FULL',
+                    'LOCAL_RELEASE_MISSING_IMAGE','LOCAL_RELEASE_DOCKER_ERROR',
+                    'LOCAL_RELEASE_UNCLASSIFIED','ROLLBACK_UNVERIFIED',
+                    'OPERATOR_AUTH_UNAVAILABLE',
+                    'PROBE_HTTP_UNAVAILABLE','PROVIDER_OR_RESPONSE_UNAVAILABLE',
+                    'READS_VERIFIED','ACTIVATED_READ_ONLY'}
+              if status == 'Success':
+                  if ('MINTTICK_UPSTOX_TRANSPORT:START' not in output or
+                      'MINTTICK_UPSTOX_TRANSPORT:VERIFIED' not in output or
+                      'MINTTICK_UPSTOX_TRANSPORT:FINISHED' not in output):
+                      raise RuntimeError('UPSTOX TRANSPORT NOT VERIFIED: no host execution evidence')
+                  if not any(row[0]=='ACTIVATED_READ_ONLY' for row in approved):
+                      raise RuntimeError('Upstox host script missing acceptance marker')
+                  verified=[row for row in approved if row[0]=='READS_VERIFIED']
+                  if len(verified)!=1:
+                      raise RuntimeError('Upstox checked data counts absent')
+                  print('UPSTOX PRIVATE ACCEPTANCE PASSED candles='+verified[0][1]+
+                        ' ratios='+verified[0][2]+'; zero orders')
+                  break
+              if status in {'Failed','Cancelled','TimedOut','Cancelling'}:
+                  failure=next((row[0] for row in approved if row[0] in safe and row[0] not in
+                                {'READS_VERIFIED','ACTIVATED_READ_ONLY'}), 'HOST_UNAVAILABLE')
+                  raise RuntimeError('UPSTOX ACTIVATION BLOCKED: '+failure)
+              if status not in {'Pending','InProgress','Delayed'}:
+                  raise RuntimeError('Unexpected SSM status')
+          else:
+              raise RuntimeError('Read-only Upstox acceptance timed out')
+          PY
+
+# Never print SSM raw stdout/stderr, parameters, host env, tokens, or backend
+# API bodies. No LIVE broker actions, AWS IAM writes or EC2 lifecycle actions.

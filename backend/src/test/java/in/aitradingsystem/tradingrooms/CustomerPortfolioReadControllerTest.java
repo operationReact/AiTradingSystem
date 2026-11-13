@@ -42,6 +42,22 @@ class CustomerPortfolioReadControllerTest {
     }
 
     @Test
+    void malformedNonemptyProviderDataDoesNotProduceFalseEmptyAccount() throws Exception {
+        JsonNode bad = mapper.readTree("""
+            [{"unrelated_field":"not-a-holding"}]
+            """);
+        assertThrows(IllegalArgumentException.class,
+            () -> CustomerPortfolioReadController.normalize(bad, false));
+        JsonNode partial = mapper.readTree("""
+            [{"trading_symbol":"SBIN","quantity":1}, {"unexpected":"shape"}]
+            """);
+        assertThrows(IllegalArgumentException.class,
+            () -> CustomerPortfolioReadController.normalize(partial, false));
+        assertTrue(CustomerPortfolioReadController.normalize(
+            mapper.readTree("[]"), false).isEmpty());
+    }
+
+    @Test
     void doesNotComputeDerivativePositionValueOrClaimOrderAttribution() throws Exception {
         JsonNode raw = mapper.readTree("""
             [{"tradingsymbol":"NIFTY26NOVFUT","netqty":-25,"ltp":225.5}]

@@ -97,8 +97,10 @@ void main() {
     expect(reloads, 1);
     expect(find.byKey(const ValueKey('paper-wallet-cash')), findsOneWidget);
     expect(find.text('₹20,000.00'), findsAtLeastNWidgets(1));
-    expect(find.text('Automated execution'), findsOneWidget);
-    expect(find.text('Disabled'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('room-tab-mind')));
+    await tester.pumpAndSettle();
+    expect(find.text('Room engine'), findsOneWidget);
+    expect(find.text('NOT RUNNING'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -114,6 +116,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('activate-paper-wallet')), findsNothing);
-    expect(find.text('Live broker authorization required'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('room-tab-mind')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('live-room-broker-upstox')), findsOneWidget);
+    expect(find.text('No assigned broker account'), findsOneWidget);
   });
 }

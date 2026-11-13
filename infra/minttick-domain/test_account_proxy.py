@@ -48,16 +48,29 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/connect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/angel-one/disconnect"))
         self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/start"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/configured-login"))
+        self.assertTrue(proxy.allowed("POST","/api/customer/brokers/upstox/connect-configured"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/brokers/upstox/connect-configured"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/brokers/upstox/configured-login"))
         self.assertTrue(proxy.allowed("GET","/api/customer/brokers/upstox/holdings"))
         self.assertTrue(proxy.allowed("GET","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/summary"))
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/activity"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/owner-history/v1/progress"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/owner-upstox-analytics/v1/progress"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress/raw"))
+        self.assertFalse(proxy.allowed("GET","/api/admin/market-data/upstox-analytics/probe"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/activity"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/owner-history/v1/progress"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/owner-history/v1/progress/raw"))
         self.assertFalse(proxy.allowed("POST","/api/customer/home/v1/summary"))
         self.assertFalse(proxy.allowed("POST","/api/customer/portfolio/records"))
         self.assertTrue(proxy.allowed("GET",proxy.UPSTOX_CALLBACK))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/instruments/status"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/market-data/universe-facets"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/market-data/universe-facets"))
         self.assertTrue(proxy.allowed("GET","/api/customer/market-data/quotes"))
         for path in ("/api/customer/market-data/quotes/detail", "/api/customer/market-data/overview", "/api/customer/market-data/snapshot", "/api/customer/market-data/candles", "/api/customer/watchlist"):
             self.assertTrue(proxy.allowed("GET", path), path)
@@ -65,6 +78,7 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("DELETE", "/api/customer/watchlist/items/123"))
         self.assertFalse(proxy.allowed("DELETE", "/api/customer/watchlist/items/abc"))
         self.assertTrue(proxy.allowed("GET","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"))
+        self.assertTrue(proxy.allowed("PUT","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/name"))
         for method, path in [
             ("GET","/api/admin/users"),
             ("GET","/api/risk/approvals"),
@@ -78,11 +92,98 @@ class AccountProxyTest(unittest.TestCase):
             ("GET","/api/market-data/quotes"),
             ("GET","/api/customer/brokers/upstox/start"),
             ("POST","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/orders/intents"),
+            ("POST","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/name"),
+            ("PUT","/api/customer/trading-rooms"),
+            ("PUT","/api/customer/trading-rooms/00000000-0000-4000-8000-000000000001/paper/account"),
+            ("PUT","/api/customer/brokers/upstox/holdings"),
+            ("PUT","/api/customer/trading-rooms/non-uuid/name"),
             ("DELETE","/api/customer/trading-rooms"),
             ("GET","/v3/api-docs"),
             ("GET","/api/health"),
         ]:
             self.assertFalse(proxy.allowed(method,path), f"accidentally allowed {path}")
+
+
+    def test_owner_history_progress_requires_jwt_and_backend_owner_gate(self):
+        # Only safe, read-only metadata may traverse the existing Cognito edge.
+        # Exact owner-sub authorization is enforced again by the private backend.
+        path = "/api/customer/owner-history/v1/progress"
+        for method, endpoint in (
+            ("POST", path), ("GET", path + "/raw"),
+            ("GET", "/api/customer/owner-history/v1/archive"),
+        ):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+                response = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(response["statusCode"], 404)
+            urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+            denied = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(denied["statusCode"], 401)
+        urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as urlopen:
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        req = urlopen.call_args.args[0]
+        self.assertEqual(req.full_url, proxy.BACKEND + path)
+        self.assertEqual(req.get_method(), "GET")
+        self.assertEqual(req.headers.get("Authorization"), "Bearer public-test-token")
+        self.assertIsNone(req.data)
+
+        # Backend owner-sub denial must not be downgraded to a public success.
+        rejection = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen", side_effect=rejection):
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 403)
+        self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+
+    def test_upstox_analytics_monitor_accepts_only_owner_checked_get(self):
+        # Route is HTTPS Cognito-authorized and the Spring backend validates
+        # exact JWT subject against MINTTICK_ANGEL_ONE_OWNER_SUB.
+        # The proxy must never expose analytics probe/admin endpoints.
+        path = "/api/customer/owner-upstox-analytics/v1/progress"
+        forbidden = (
+            ("POST", path),
+            ("PUT", path),
+            ("DELETE", path),
+            ("GET", path + "/raw"),
+            ("GET", "/api/admin/market-data/upstox-analytics/probe"),
+        )
+        for method, endpoint in forbidden:
+            with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+                response = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(response["statusCode"], 404, endpoint)
+            urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+            response = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(response["statusCode"], 401)
+        urlopen.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as urlopen:
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, proxy.BACKEND + path)
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer public-test-token")
+        self.assertIsNone(request.data)
+
+        backend_owner_denial = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               side_effect=backend_owner_denial):
+            response = proxy.handler(event("GET", path), None)
+        self.assertEqual(response["statusCode"], 403)
+        self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
 
     def test_rejects_missing_or_wrong_jwt_even_when_gateway_is_misconfigured(self):
         for claims in [
@@ -121,6 +222,171 @@ class AccountProxyTest(unittest.TestCase):
         forwarded = urlopen.call_args.args[0]
         self.assertEqual(forwarded.full_url, proxy.BACKEND + path)
         self.assertEqual(forwarded.headers.get("Authorization"), "Bearer public-test-token")
+
+    def test_room_rename_put_forwards_only_validated_name_with_owner_jwt(self):
+        room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
+        endpoint = room + "/name"
+        self.assertTrue(proxy.allowed("PUT", endpoint))
+        self.assertFalse(proxy.allowed("POST", endpoint))
+        self.assertFalse(proxy.allowed("PUT", room + "/orders/place"))
+        self.assertFalse(proxy.allowed("PUT", "/api/customer/trading-rooms"))
+
+        for payload in (
+                "", "{}", "[]", "null", "broken-json",
+                '{"name":null}', '{"name":12}', '{"name":""}',
+                '{"name":"   "}', '{"name":"\\u0001"}',
+                '{"name":"OK","id":"do-not-change"}',
+                json.dumps({"name": "x" * 81})):
+            with self.subTest(payload=payload):
+                with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                    response = proxy.handler(
+                        event("PUT", endpoint, body=payload), None)
+                self.assertEqual(response["statusCode"], 400)
+                send.assert_not_called()
+
+        valid = json.dumps({"name": "Swing Trade Updated"})
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            invalid_auth = proxy.handler(event("PUT", endpoint,
+                jwt={"claims":{}}, body=valid), None)
+        self.assertEqual(invalid_auth["statusCode"], 401)
+        send.assert_not_called()
+
+        expected_id = "12345678-1234-1234-1234-123456789012"
+        class RenameReply(Reply):
+            def read(self, max_bytes):
+                return json.dumps({
+                    "id": expected_id, "name": "Swing Trade Updated",
+                    "mode": "PAPER", "status": "PAPER_FUNDED",
+                    "focus": "SWING", "plannedBudgetInr": 30000,
+                    "riskPreference": "BALANCED",
+                }).encode()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               return_value=RenameReply()) as send:
+            response = proxy.handler(event("PUT", endpoint, body=valid), None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        self.assertEqual(json.loads(response["body"])["name"],
+                         "Swing Trade Updated")
+        request = send.call_args.args[0]
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(request.full_url, proxy.BACKEND + endpoint)
+        self.assertEqual(request.get_header("Authorization"),
+                         "Bearer public-test-token")
+        self.assertEqual(request.get_header("Content-type"), "application/json")
+        self.assertEqual(json.loads(request.data), {"name": "Swing Trade Updated"})
+
+    def test_rename_backend_404_is_preserved_only_after_forwarding_to_owner_api(self):
+        endpoint = ("/api/customer/trading-rooms/"
+                    "12345678-1234-1234-1234-123456789012/name")
+        error = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + endpoint, 404, "Not Found",
+            {}, io.BytesIO(b'{"code":"ROOM_NOT_FOUND"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               side_effect=error) as send:
+            response = proxy.handler(event("PUT", endpoint,
+                body='{"name":"New Swing"}'), None)
+        self.assertEqual(response["statusCode"], 404)
+        self.assertEqual(json.loads(response["body"])["code"], "ROOM_NOT_FOUND")
+        send.assert_called_once()
+
+    def test_live_broker_selection_is_only_an_owner_preference_not_order_route(self):
+        room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
+        endpoint = room + "/execution/broker-selection"
+        self.assertTrue(proxy.allowed("POST", endpoint))
+        self.assertFalse(proxy.allowed("GET", endpoint))
+        self.assertFalse(proxy.allowed("DELETE", endpoint))
+        self.assertFalse(proxy.allowed("POST", room + "/orders/execute"))
+        for payload in (
+                "", "{}", '{"broker":"ZERODHA"}',
+                '{"broker":"UPSTOX","token":"secret"}',
+                '{"broker":null}', '{"broker":["UPSTOX"]}'):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                result = proxy.handler(event("POST", endpoint, body=payload), None)
+                self.assertEqual(result["statusCode"], 400, payload)
+                send.assert_not_called()
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            result = proxy.handler(event("POST", endpoint,
+                jwt={"claims":{}}, body='{"broker":"UPSTOX"}'), None)
+            self.assertEqual(result["statusCode"], 401)
+            send.assert_not_called()
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+            return_value=Reply()) as send:
+            result = proxy.handler(event("POST", endpoint,
+                body='{"broker":"UPSTOX"}'), None)
+            self.assertEqual(result["statusCode"], 200)
+            request = send.call_args.args[0]
+            self.assertEqual(request.get_method(), "POST")
+            self.assertEqual(request.get_header("Authorization"),
+                             "Bearer public-test-token")
+            self.assertEqual(json.loads(request.data), {"broker": "UPSTOX"})
+
+    def test_paper_manual_order_requires_jwt_and_idempotency_no_live_routes(self):
+        room = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012"
+        paper = room + "/paper"
+        for action in ("account", "ledger", "orders", "positions"):
+            self.assertTrue(proxy.allowed("GET", paper + "/" + action))
+        for action in ("activate", "resume", "pause", "orders"):
+            self.assertTrue(proxy.allowed("POST", paper + "/" + action))
+        self.assertTrue(proxy.allowed("GET", room + "/execution/readiness"))
+        for method,path in (
+                ("GET",paper+"/pause"),("POST",paper+"/positions"),
+                ("POST",room+"/orders/execute"),("POST",room+"/orders/place"),
+                ("POST","/api/customer/brokers/upstox/orders")):
+            self.assertFalse(proxy.allowed(method,path))
+
+        payload = json.dumps({"instrumentId":42,"side":"BUY",
+                              "quantity":1,"limitPrice":100.05})
+        with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+            wrong = proxy.handler(event("POST",paper+"/orders",body=payload),None)
+        self.assertEqual(wrong["statusCode"],400)
+        upstream.assert_not_called()
+
+        request = event("POST",paper+"/orders",body=payload)
+        request["headers"]["idempotency-key"]="paper_test_request_1234"
+        with mock.patch.object(proxy.urllib.request, "urlopen",return_value=Reply()) as upstream:
+            ok=proxy.handler(request,None)
+        self.assertEqual(ok["statusCode"],200)
+        self.assertEqual(ok["headers"]["cache-control"],"no-store")
+        req=upstream.call_args.args[0]
+        self.assertEqual(req.get_method(),"POST")
+        self.assertEqual(req.get_header("Idempotency-key"),"paper_test_request_1234")
+        self.assertEqual(req.headers.get("Authorization"),"Bearer public-test-token")
+        self.assertEqual(json.loads(req.data),json.loads(payload))
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+            denied=proxy.handler(event("POST",paper+"/orders",jwt={"claims":{}},
+                body=payload),None)
+        self.assertEqual(denied["statusCode"],401)
+        upstream.assert_not_called()
+
+    def test_paper_activation_and_pause_never_accept_request_bodies(self):
+        paper="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper"
+        for action in ("activate","resume","pause"):
+            with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+                result=proxy.handler(event("POST",paper+"/"+action,
+                    body='{"enableLiveTrading":true}'),None)
+            self.assertEqual(result["statusCode"],400)
+            upstream.assert_not_called()
+
+    def test_upstox_owner_secure_login_never_accepts_client_credentials(self):
+        path = "/api/customer/brokers/upstox/connect-configured"
+        with mock.patch.object(proxy.urllib.request, "urlopen") as backend:
+            no_jwt = proxy.handler(event("POST", path, jwt={"claims":{}}), None)
+            with_pin = proxy.handler(event("POST", path,
+                body='{"pin":"123456","totp":"123456"}'), None)
+        self.assertEqual(no_jwt["statusCode"], 401)
+        self.assertEqual(with_pin["statusCode"], 400)
+        backend.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               return_value=Reply()) as backend:
+            ok = proxy.handler(event("POST", path), None)
+        self.assertEqual(ok["statusCode"], 200)
+        self.assertEqual(ok["headers"]["cache-control"], "no-store")
+        req=backend.call_args.args[0]
+        self.assertEqual(req.data, b"")  # POST with zero credential bytes
+        self.assertEqual(req.headers.get("Authorization"), "Bearer public-test-token")
 
     def test_owner_configured_broker_route_forwards_only_jwt_and_empty_post(self):
         # The backend independently checks exact Cognito owner-sub + CUSTOMER
@@ -203,6 +469,9 @@ class AccountProxyTest(unittest.TestCase):
             with mock.patch.object(proxy.urllib.request,"urlopen") as urlopen:
                 result=proxy.handler(data,None)
             self.assertEqual(result["statusCode"],400,query[:40])
+            self.assertIn("unexpected authorization response", result["body"])
+            if query:
+                self.assertNotIn(query, result["body"])
             urlopen.assert_not_called()
 
     def test_upstox_callback_returns_constant_failure_on_backend_rejection(self):
@@ -216,7 +485,53 @@ class AccountProxyTest(unittest.TestCase):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Declined()):
             result=proxy.handler(data,None)
         self.assertEqual(result["statusCode"],400)
+        self.assertIn("Refresh connection",result["body"])
         self.assertNotIn("secret",result["body"])
+
+    def test_callback_displays_only_allowlisted_internal_failure_categories(self):
+        query="state="+"A"*43+"&code=one-use-value"
+        event_data=event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        event_data["rawQueryString"]=query
+        cases=(
+            ("STATE_INVALID", "secure login session expired"),
+            ("CODE_INVALID", "authorization code is invalid"),
+            ("APP_CREDENTIALS", "developer application's credentials"),
+            ("REDIRECT_REJECTED", "registered callback URL"),
+            ("SEGMENTS_INACTIVE", "inactive trading segments"),
+            ("PROFILE_REJECTED", "active account profile"),
+            ("ALREADY_CONNECTED", "another MintTick user"),
+            ("INVALID_TOKEN_RESPONSE", "unexpected token response"),
+            ("TOKEN_CLIENT_FAILURE", "token-exchange client error"),
+            ("BROKER_UNAVAILABLE", "token exchange connection"),
+            ("UNVERIFIED", "Refresh connection"),
+        )
+        for outcome,expected in cases:
+            error=proxy.urllib.error.HTTPError(
+                "http://private-backend",400,"Bad Request",
+                {"X-MintTick-Upstox-Outcome":outcome},
+                io.BytesIO(b"<html>authorization-code=secret-do-not-reflect</html>"))
+            with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=error):
+                result=proxy.handler(event_data,None)
+            self.assertEqual(result["statusCode"],400,outcome)
+            self.assertIn(expected,result["body"])
+            self.assertNotIn(query,result["body"])
+            self.assertNotIn("secret-do-not-reflect",result["body"])
+            self.assertEqual(result["headers"]["cache-control"],"no-store")
+
+    def test_callback_rejects_forged_broker_response_header(self):
+        event_data=event("GET",proxy.UPSTOX_CALLBACK,jwt={"claims":{}},bearer="")
+        event_data["rawQueryString"]="state="+"A"*43+"&code=one-use"
+        invalid_header="STATE_INVALID <img src=https://example.com>"
+        error=proxy.urllib.error.HTTPError(
+            "http://private-backend",400,"Bad Request",
+            {"X-MintTick-Upstox-Outcome":invalid_header},
+            io.BytesIO(b"token=private-secret"))
+        with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=error):
+            result=proxy.handler(event_data,None)
+        self.assertEqual(result["statusCode"],400)
+        self.assertIn("Refresh connection",result["body"])
+        self.assertNotIn("<img",result["body"])
+        self.assertNotIn("private-secret",result["body"])
 
     def test_readiness_is_through_existing_private_backend(self):
         with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as urlopen:
