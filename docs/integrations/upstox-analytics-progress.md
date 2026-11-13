@@ -152,3 +152,17 @@ This correction does not itself authorize Upstox data retention or establish
 that source verification succeeds. Use the next owner-approved activation run
 to determine which exact stage still fails. Do not assume a passing GitHub CI
 build proves the live provider is functioning.
+
+## SSM success without source acceptance proof (13 November 2026)
+The user-triggered dev acceptance run [43391186744](https://github.com/operationReact/AiTradingSystem/actions/runs/43391186744)
+failed after a successful SSM precheck, reporting `Upstox host script missing acceptance marker`.
+This means a successful SSM command status did **not** carry the required
+`ACTIVATED_READ_ONLY` terminal proof. It does not prove that Upstox data was
+read successfully, and the cause of the missing marker remains unresolved.
+
+The guarded host script now fails closed if it exits normally without setting
+its verified-acceptance flag. The GitHub verifier reports a bounded, known
+`MINTTICK_UPSTOX_RESULT` reason if present even on SSM Success; if absent,
+it emits `HOST_ACCEPTANCE_PROOF_MISSING`, never raw SSM stdout or secrets.
+The fixed `ROLLBACK_UNVERIFIED` marker takes priority. Nothing bypasses the
+positive candle/ratio-count checks or activates LIVE orders.
