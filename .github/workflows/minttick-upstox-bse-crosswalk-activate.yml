@@ -136,7 +136,8 @@ jobs:
               if code: label+='_'+code.group(1)
               print(label)
               for category in ('SOURCE_EQUITIES','RAW','MATCHED','SYMBOL_MISMATCH',
-                               'TOKEN_OVERLAP','EXACT_OVERLAP','SUFFIX_OVERLAP'):
+                               'TOKEN_OVERLAP','EXACT_OVERLAP','SUFFIX_OVERLAP',
+                               'EMPTY_TYPE','TYPE_A','NULL_EXPIRY','ZERO_STRIKE'):
                   value=read_num('MINTTICK_BSE_'+category)
                   if value is not None: print('BSE_'+category+':'+str(value))
           else:
