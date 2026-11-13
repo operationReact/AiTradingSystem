@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../brand/minttick_brand.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../data/upstox_analytics_progress_repository.dart';
+import '../data/upstox_delivery_workstreams.dart';
 
 /// Backend-evidence-only owner monitor. Never places PAPER/LIVE orders.
 class UpstoxAnalyticsProgressPage extends StatefulWidget {
@@ -142,6 +143,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
                 if (activeTab == 'Operations') ...taskList(data, specs),
+                if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
               ],
@@ -209,6 +211,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           pipelineRow(specs[i], data.find(specs[i].$1), last: i == 3),
       ]), padding: EdgeInsets.zero),
       const SizedBox(height: 11),
+      ...workerDelivery(data),
+      const SizedBox(height: 11),
       Text('Analytics reads, dataset rights and trade execution are separate '
         'checks. Tap any stage for evidence and the latest failure reason.',
         style: const TextStyle(color: MintTickPalette.mutedSilver,
@@ -219,6 +223,62 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
   List<Widget> taskList(UpstoxAnalyticsProgress data,
       Iterable<(String, String, String, IconData)> source) =>
     [for (final spec in source) taskTile(spec, data.find(spec.$1))];
+
+  List<Widget> workerDelivery(UpstoxAnalyticsProgress data) {
+    final githubTask = data.find('GITHUB_DEVELOPMENT');
+    final observed = githubTask != null &&
+        githubTask.state == 'VERIFIED' && !githubTask.stale;
+    final workstreams = UpstoxDeliveryWorkstreams.fromRecentPrs(
+        observed ? githubTask.details['trackedPrs'] : null);
+    return [
+      heading('Five data workstreams', 'Recent GitHub PR evidence · not scheduler/runtime health'),
+      panel(Column(children: [
+        for (var i = 0; i < workstreams.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+            child: Row(children: [
+              SizedBox(width: 20, child: Text('${workstreams[i].number}',
+                  style: const TextStyle(fontSize: 11,
+                      color: MintTickPalette.mint,
+                      fontWeight: FontWeight.w800))),
+              const SizedBox(width: 5),
+              Expanded(child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(workstreams[i].label, maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                  Text(workstreams[i].pr == null
+                      ? 'No PR observed in recent sample'
+                      : '#${workstreams[i].pr!.number} · ${workstreams[i].pr!.state}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                          color: MintTickPalette.mutedSilver)),
+                ],
+              )),
+              if (workstreams[i].pr != null)
+                IconButton(
+                  tooltip: 'Copy workstream PR link',
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: const Icon(Icons.copy_outlined, size: 16),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(
+                        text: workstreams[i].pr!.url));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('PR link copied')));
+                    }
+                  },
+                ),
+            ]),
+          ),
+      ]), padding: const EdgeInsets.all(5)),
+      const SizedBox(height: 8),
+      note('PRs indicate code delivery, not a running downloader. '
+        'Worker run timestamps and persisted candle counts need separate '
+        'backend evidence. A missing recent PR does not mean the worker stopped.'),
+    ];
+  }
 
   List<Widget> history(UpstoxAnalyticsProgress data) => [
     heading('Historical coverage', 'Per-instrument and per-year receipts'),
