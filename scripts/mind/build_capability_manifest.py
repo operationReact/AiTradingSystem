@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.5"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.6"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -114,6 +114,19 @@ SCREEN_AUDIT: dict[str, dict] = {
         "endpoints": ["/api/customer/mind/v1/paper-journal"],
         "missing": ["Equity curve once sample is meaningful", "Backtest vs PAPER comparison",
                     "Flutter web/Android/iOS runtime evidence"],
+    },
+    "controls": {
+        "status": "IMPLEMENTING",
+        "note": "Engine status, pipeline, PAPER/LIVE and data-dependency states from the registry; local fake toggles "
+                "and simulated emergency stop removed (real PAPER pause is in Risk Center).",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Run coordinator health (heartbeat, queue lag, errors)", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "dependencies": {
+        "status": "IMPLEMENTING",
+        "note": "Real dependsOn chains from the registry with the status of each prerequisite; fixture graph removed.",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Visual graph layout", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

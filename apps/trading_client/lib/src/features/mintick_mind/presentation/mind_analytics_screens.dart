@@ -513,7 +513,36 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     ]);
   }
 
+  Widget _realDependenciesScreen() {
+    _ensureRegistry();
+    final snap=_registrySnapshot;
+    if(snap==null) {
+      return _surface('Dependency Map','Audited dependency graph · server data',[
+        _empty(_registryFailed?'Registry unavailable.':'Loading registry…')]);
+    }
+    final byId={for(final i in snap.items) i.id:i};
+    final nodes=snap.items.where((i)=>i.dependsOn.isNotEmpty).toList();
+    return _surface('Dependency Map','What each capability needs before it can be verified',[
+      _section('Dependency Chains · '+nodes.length.toString(),Icons.hub_outlined,[
+        for(final n in nodes.where((i)=>i.kind!='STRATEGY'))
+          Padding(padding:const EdgeInsets.only(bottom:7),child:MindPanel(
+            key:ValueKey('mind-dependency-'+n.id),
+            child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Row(children:[
+                Expanded(child:Text(n.name,style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700,fontSize:13))),
+                MindStatusPill(n.status),
+              ]),
+              const SizedBox(height:5),
+              for(final d in n.dependsOn) _value('needs '+d,_statusLabel(byId[d]),color:_statusColor(byId[d])),
+            ]))),
+        _value('Strategies depending on F&O data',
+          nodes.where((i)=>i.kind=='STRATEGY').length.toString(),color:MindPalette.yellow),
+      ]),
+    ]);
+  }
+
   Widget dependenciesScreen() {
+    if(widget.progressRepository!=null) return _realDependenciesScreen();
     return _surface('Dependency Map','How models, strategies, filters and risk authority connect',[
       _chips(['Graph','Matrix'],_graphMode?'Graph':'Matrix',
         (v)=>_updateMind(()=>_graphMode=v=='Graph')),

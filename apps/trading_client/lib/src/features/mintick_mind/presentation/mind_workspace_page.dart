@@ -196,6 +196,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   // Shared audited registry (#998). Loaded once; screens show "Not verified" until it arrives.
   Map<String, MindProgressItem>? _registry;
+  MindProgressSnapshot? _registrySnapshot;
   bool _registryFailed = false;
   bool _registryRequested = false;
 
@@ -204,7 +205,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     if (_registryRequested || repository == null) return;
     _registryRequested = true;
     repository.load().then((snapshot) {
-      _updateMind(() => _registry = {for (final item in snapshot.items) item.id: item});
+      _updateMind(() {
+        _registrySnapshot = snapshot;
+        _registry = {for (final item in snapshot.items) item.id: item};
+      });
     }, onError: (Object _) {
       _updateMind(() => _registryFailed = true);
     });

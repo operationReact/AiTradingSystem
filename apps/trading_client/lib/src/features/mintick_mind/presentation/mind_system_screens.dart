@@ -137,7 +137,68 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ],backTo:'trading-rooms');
   }
 
-  Widget controlScreen()=>_surface('Engine Control',
+  Widget _registryPending(String title) => _surface(title,'Audited engine registry · server data',[
+    MindPanel(key:const ValueKey('mind-registry-pending'),child:Row(children:[
+      if(!_registryFailed) const SizedBox(width:14,height:14,child:CircularProgressIndicator(strokeWidth:2)),
+      const SizedBox(width:9),
+      Expanded(child:Text(_registryFailed?'Engine registry unavailable. Nothing is shown as running.'
+        :'Loading engine registry…',
+        style:TextStyle(color:_registryFailed?MindPalette.red:MindPalette.muted,fontSize:12))),
+    ])),
+  ]);
+
+  Widget _capabilityRow(MindProgressItem item) => Padding(
+    padding:const EdgeInsets.only(bottom:7),
+    child:MindPanel(key:ValueKey('mind-engine-'+item.id),onTap:()=>_go('coverage'),
+      padding:const EdgeInsets.symmetric(horizontal:12,vertical:10),
+      child:Row(children:[
+        Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+          Text(item.name,maxLines:1,overflow:TextOverflow.ellipsis,
+            style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700,fontSize:13)),
+          Text([item.id,if(item.blockerCode!=null) item.blockerCode!,
+              if(item.runtime.lastVerifiedAt!=null)
+                'verified '+item.runtime.lastVerifiedAt!.toUtc().toIso8601String().substring(0,16)+'Z'].join(' · '),
+            maxLines:2,overflow:TextOverflow.ellipsis,
+            style:const TextStyle(color:MindPalette.muted,fontSize:10.5)),
+        ])),
+        const SizedBox(width:8),
+        MindStatusPill(item.status),
+      ])));
+
+  Widget _realControlScreen() {
+    _ensureRegistry();
+    final snap=_registrySnapshot;
+    if(snap==null) return _registryPending('Engine Control');
+    List<MindProgressItem> of(String kind)=>snap.items.where((i)=>i.kind==kind).toList();
+    return _surface('Engine Control','Real engine pipeline state from the audited server registry',[
+      MindPanel(key:const ValueKey('mind-engine-status'),highlight:true,child:Column(children:[
+        const MindSectionTitle(title:'Engine Status',icon:Icons.settings_outlined),
+        _value('Backend revision',snap.revisionKnown?snap.backendRevision:'Unknown · nothing can be verified',
+          color:snap.revisionKnown?MindPalette.mint:MindPalette.yellow),
+        _value('PAPER stage',snap.paperStage.name+' · '+snap.paperStage.status.label,
+          color:MindStatusPill.colorFor(snap.paperStage.status)),
+        _value('Execution mode','PAPER virtual only'),
+        _value('LIVE broker execution','Not authorized',color:MindPalette.red),
+        _value('Automation','Owner-initiated cycles only · no scheduler'),
+        _value('Registry','Manifest '+snap.manifestVersion),
+      ])),
+      const SizedBox(height:12),
+      _section('Engine Pipeline',Icons.account_tree_outlined,[
+        for(final i in [...of('ENGINE'),...of('PAPER'),...of('LIVE')]) _capabilityRow(i),
+      ]),
+      _section('Data Dependencies',Icons.storage_outlined,[
+        for(final i in of('DATA')) _capabilityRow(i),
+      ]),
+      _section('Safety & Interlocks',Icons.shield_outlined,[
+        _tile('Pause a PAPER room','Real emergency stop for virtual fills (Risk Center)',
+          Icons.pan_tool_outlined,route:'risk'),
+        const SizedBox(height:7),
+        _tile('Enforced risk policy','Automatic limits applied to every cycle',Icons.shield_outlined,route:'risk'),
+      ]),
+    ]);
+  }
+
+  Widget controlScreen()=>widget.progressRepository!=null ? _realControlScreen() : _surface('Engine Control',
     'Personal model participation and emergency controls · local UI state only',[
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'Engine Status',icon:Icons.settings_outlined),
