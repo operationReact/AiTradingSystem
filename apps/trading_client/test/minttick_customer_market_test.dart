@@ -559,6 +559,26 @@ void main() {
     }
   }
 
+  testWidgets('stock catalogue uses compact rows instead of repeated cards on narrow screens',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _CustomerMarketFake()..status = 'LIVE';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await _openExplore(tester);
+    final row = find.byKey(const ValueKey('customer-market-stock-101'));
+    expect(row, findsOneWidget);
+    expect(tester.getSize(row).height, lessThan(75));
+    expect(find.text('₹125.55'), findsOneWidget);
+    expect(find.textContaining('LIVE ·'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('LIVE rows show verified price and a text status label', (tester) async {
     final fake = _CustomerMarketFake()..status = 'LIVE';
     await tester.pumpWidget(MaterialApp(
@@ -677,7 +697,15 @@ void main() {
     expect(find.text('Top gainers'), findsOneWidget);
     expect(find.text('Alpha Ltd'), findsWidgets);
     expect(find.text('Change +10.00%'), findsOneWidget);
+    // Only one mover category is rendered at a time, not four long lists.
+    expect(find.text('Change -10.00%'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('market-movers-filter-1')));
+    await tester.pumpAndSettle();
+    expect(find.text('Top losers'), findsOneWidget);
     expect(find.text('Change -10.00%'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('market-movers-filter-2')));
+    await tester.pumpAndSettle();
+    expect(find.text('Gap up at open'), findsOneWidget);
     expect(find.text('₹125.55'), findsNothing);
     expect(tester.takeException(), isNull);
 
