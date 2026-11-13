@@ -54,7 +54,7 @@ public final class OwnerPostCloseFullQuoteWarmer {
     public OwnerPostCloseFullQuoteWarmer(AppAngelOneMarketFeedService feed,
             MarketSessionCalendar calendar, ResearchScanRepository scans,
             MarketDetailSnapshotStore store,
-            @Value("${minttick.owner-feed.universe-limit:6000}") int universeLimit) {
+            @Value("${minttick.owner-feed.postclose-universe-limit:6000}") int universeLimit) {
         this(feed, calendar, scans, store, Clock.systemUTC(), universeLimit);
     }
 
