@@ -29,6 +29,9 @@ class UpstoxReadinessProgress {
   final List<UpstoxProgressGate> gates;
 
   int? get percent => observed ? verifiedWeight : null;
+  int? get remainingPercent => observed ? 100 - verifiedWeight : null;
+  int get verifiedStages => gates.where((g) => g.earned == g.weight).length;
+  int get outstandingStages => gates.length - verifiedStages;
   double? get fraction => percent == null ? null : percent! / 100;
 
   static UpstoxReadinessProgress calculate(UpstoxAnalyticsProgress progress) {

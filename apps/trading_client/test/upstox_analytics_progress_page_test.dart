@@ -66,6 +66,7 @@ void main() {
     expect(find.text('Operations'), findsOneWidget);
     expect(find.text('Verified project completion'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
+    expect(find.text('Remaining: 95%'), findsOneWidget);
     expect(find.byKey(const ValueKey('upstox-verified-completion-bar')), findsOneWidget);
     expect(find.text('Candles'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
@@ -96,12 +97,12 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Calculation'));
+    await tester.tap(find.text('Pending details'));
     await tester.pumpAndSettle();
     expect(find.text('Percentage calculation'), findsOneWidget);
     expect(find.text('Persistent historical data'), findsOneWidget);
-    expect(find.text('0/20%'), findsWidgets);
-    expect(find.text('5/5%'), findsOneWidget);
+    expect(find.text('20% left'), findsWidgets);
+    expect(find.text('5% done'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

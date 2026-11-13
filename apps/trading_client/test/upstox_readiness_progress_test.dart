@@ -27,6 +27,7 @@ void main() {
   test('unobserved backend must not invent a zero-percent baseline', () {
     final progress = UpstoxReadinessProgress.calculate(snapshot([]));
     expect(progress.percent, isNull);
+    expect(progress.remainingPercent, isNull);
     expect(progress.fraction, isNull);
     expect(progress.gates.every((gate) => gate.evidenceState == 'NOT_OBSERVED'), true);
   });
@@ -39,6 +40,9 @@ void main() {
       task('PAPER_READINESS', 'NOT_STARTED'),
     ]));
     expect(progress.percent, 5);
+    expect(progress.remainingPercent, 95);
+    expect(progress.verifiedStages, 1);
+    expect(progress.outstandingStages, 6);
     expect(progress.fraction, 0.05);
     expect(progress.gates.first.earned, 5);
     expect(progress.gates.last.earned, 0);
@@ -78,6 +82,8 @@ void main() {
         task(code, 'VERIFIED'),
     ]));
     expect(progress.percent, 100);
+    expect(progress.remainingPercent, 0);
+    expect(progress.outstandingStages, 0);
     expect(progress.gates.map((e) => e.earned).reduce((a, b) => a + b), 100);
   });
 }
