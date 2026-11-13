@@ -67,11 +67,14 @@ public final class UpstoxBseCrosswalkParser {
                 String exchange = value(row,"exchange");
                 String type = value(row,"instrument_type");
                 String security = value(row,"security_type");
-                // BSE equity series may be A or EQ. Other BSE series,
-                // funds, debt, indexes and missing status fail closed.
+                // BSE A/EQ series is explicit equity evidence. Upstox's BSE
+                // BOD JSON (verified 2026-11-13) omits security_type on
+                // EVERY BSE_EQ row, unlike its NSE examples. A missing
+                // optional field is not suspended evidence; any explicitly
+                // non-NORMAL security type still fails closed.
                 if (!"BSE_EQ".equals(segment) || !"BSE".equals(exchange)
                         || !("A".equals(type) || "EQ".equals(type))
-                        || !"NORMAL".equals(security)) {
+                        || (security != null && !"NORMAL".equals(security))) {
                     excluded++;
                     continue;
                 }
