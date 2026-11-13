@@ -17,8 +17,7 @@ class UpstoxAnalyticsProgressPage extends StatefulWidget {
 }
 
 class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPage> {
-  static const tabs = ['Overview', 'Tasks', 'History', 'Quality', 'Mind', 'GitHub', 'Paper'];
-  static const intervals = ['1m', '5m', '15m', '1h', '1D', '1W', '1M'];
+  static const tabs = ['Overview', 'Coverage', 'Operations'];
   static const specs = <(String, String, String, IconData)>[
     ('SOURCE_VERIFICATION', 'Source verification', 'Analytics token and validated source reads', Icons.verified_user_outlined),
     ('INSTRUMENT_MAPPING', 'Instrument mapping', 'ISIN and canonical MintTick listing identity', Icons.account_tree_outlined),
@@ -32,7 +31,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
 
   Timer? refreshTimer;
   UpstoxAnalyticsProgress? snapshot;
-  String activeTab = 'Overview', interval = '1D';
+  String activeTab = 'Overview';
   String? error;
   bool loading = true;
   int generation = 0;
@@ -104,22 +103,20 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               labelOverride: data?.find('SOURCE_VERIFICATION')?.state == 'DISABLED'
                 ? 'PROBE OFF' : null),
           ])),
-        SizedBox(height: 45,
-          child: ListView(scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            children: [for (final name in tabs)
-              Padding(padding: const EdgeInsets.only(right: 6),
-                child: ChoiceChip(label: Text(name),
-                  selected: name == activeTab, showCheckmark: false,
-                  selectedColor: const Color(0xFF18231A),
-                  backgroundColor: MintTickPalette.darkCard,
-                  side: BorderSide(color: name == activeTab
-                    ? MintTickPalette.mint : MintTickPalette.darkBorder),
-                  labelStyle: TextStyle(fontSize: 12,
-                    color: name == activeTab ? MintTickPalette.mint
-                      : MintTickPalette.mutedSilver),
-                  onSelected: (_) => setState(() => activeTab = name)))],
-          )),
+        Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(children: [for (final name in tabs)
+            Expanded(child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: ChoiceChip(label: Center(child: Text(name,
+                  maxLines: 1, overflow: TextOverflow.ellipsis)),
+                selected: name == activeTab, showCheckmark: false,
+                selectedColor: const Color(0xFF18231A),
+                backgroundColor: MintTickPalette.darkCard,
+                side: BorderSide(color: name == activeTab
+                  ? MintTickPalette.mint : MintTickPalette.darkBorder),
+                labelStyle: TextStyle(fontSize: 11,
+                  color: name == activeTab ? MintTickPalette.mint
+                    : MintTickPalette.mutedSilver),
+                onSelected: (_) => setState(() => activeTab = name))))])),
         const Divider(color: MintTickPalette.darkBorder, height: 12),
         if (loading && data == null)
           const Expanded(child: Center(child: CircularProgressIndicator()))
@@ -141,12 +138,12 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
               children: [
                 if (activeTab == 'Overview') ...overview(data),
-                if (activeTab == 'Tasks') ...taskList(data, specs),
-                if (activeTab == 'History') ...history(data),
-                if (activeTab == 'Quality') ...quality(data),
-                if (activeTab == 'Mind') ...mind(data),
-                if (activeTab == 'GitHub') ...github(data),
-                if (activeTab == 'Paper') ...paper(data),
+                if (activeTab == 'Coverage') ...history(data), 
+                if (activeTab == 'Coverage') ...quality(data),
+                if (activeTab == 'Coverage') ...mind(data),
+                if (activeTab == 'Operations') ...taskList(data, specs),
+                if (activeTab == 'Operations') ...github(data),
+                if (activeTab == 'Operations') ...paper(data),
               ],
             ),
           )),
@@ -160,6 +157,13 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         t.state == 'BLOCKED' || t.state == 'FAILED').length;
     final active = data.tasks.where((t) => t.state == 'RUNNING').length;
     final source = data.find('SOURCE_VERIFICATION');
+    // Only current, verified monitor observations may be displayed as evidence.
+    final evidence = source?.state == 'VERIFIED' && source?.stale == false
+        ? source!.details : const <String, dynamic>{};
+    final candleCount = evidence['validatedDailyCandles'];
+    final ratioCount = evidence['currentRatios'];
+    final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
+    final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
       Row(children: [
         const Expanded(child: Text('Analytics health',
@@ -169,14 +173,16 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       ]),
       const SizedBox(height: 10),
       Row(children: [
-        metric('Verified', verified.toString(), Icons.check_circle_outline),
+        metric('Candles', candles, Icons.candlestick_chart_outlined),
         const SizedBox(width: 6),
-        metric('Running', active.toString(), Icons.sync_outlined),
+        metric('Ratios', ratios, Icons.analytics_outlined),
         const SizedBox(width: 6),
-        metric('Blocked', blocked.toString(), Icons.report_problem_outlined),
-        const SizedBox(width: 6),
-        metric('Stages', '7', Icons.account_tree_outlined),
+        metric('Verified jobs', verified.toString(), Icons.check_circle_outline),
       ]),
+      const SizedBox(height: 6),
+      Text('Read-only sample · $active active · $blocked blocked · '
+        'not a historical download',
+        style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
       const SizedBox(height: 13),
       if (source == null || source.state != 'VERIFIED' || source.stale)
         Padding(padding: const EdgeInsets.only(bottom: 12),
@@ -192,15 +198,15 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 color: MintTickPalette.mutedSilver, height: 1.35))),
           ]), padding: const EdgeInsets.all(10))),
       Row(children: [
-        const Expanded(child: Text('Data pipeline',
+        const Expanded(child: Text('Data readiness',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
         TextButton(
-          onPressed: () => setState(() => activeTab = 'Tasks'),
+          onPressed: () => setState(() => activeTab = 'Operations'),
           child: const Text('All details', style: TextStyle(fontSize: 12))),
       ]),
       panel(Column(children: [
-        for (var i = 0; i < 7; i++)
-          pipelineRow(specs[i], data.find(specs[i].$1), last: i == 6),
+        for (var i = 0; i < 4; i++)
+          pipelineRow(specs[i], data.find(specs[i].$1), last: i == 3),
       ]), padding: EdgeInsets.zero),
       const SizedBox(height: 11),
       Text('Analytics reads, dataset rights and trade execution are separate '
@@ -215,22 +221,13 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     [for (final spec in source) taskTile(spec, data.find(spec.$1))];
 
   List<Widget> history(UpstoxAnalyticsProgress data) => [
-    heading('History & coverage', 'Verified timeframes, completeness and gap recovery'),
-    SingleChildScrollView(scrollDirection: Axis.horizontal,
-      child: Row(children: [for (final v in intervals)
-        Padding(padding: const EdgeInsets.only(right: 5),
-          child: ChoiceChip(label: Text(v), selected: v == interval,
-            showCheckmark: false,
-            onSelected: (_) => setState(() => interval = v)))])),
-    const SizedBox(height: 10),
-    note('$interval coverage has no verified per-instrument/year receipt yet. '
-      'Unavailable is not equivalent to zero records.'),
-    const SizedBox(height: 10),
+    heading('Historical coverage', 'Per-instrument and per-year receipts'),
+    note('No verified timeframe, instrument or year coverage is available '
+      'from the Upstox Analytics read-only sample. Counts are not backfill.'),
     taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
     taskTile(specs[2], data.find('HISTORICAL_INGESTION')),
-    taskTile(specs[3], data.find('QUALITY_RIGHTS')),
-    note('NIFTY 50, NIFTY 500 and the complete cash-equity universe require '
-      'independent coverage verification before percentages appear.'),
+    note('NIFTY 50, NIFTY 500 and wider NSE/BSE coverage require '
+      'independent ingestion and source-rights validation.'),
   ];
 
   List<Widget> quality(UpstoxAnalyticsProgress data) => [
@@ -271,7 +268,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       'complete candle history, validated strategy, fresh exchange quote, '
       'virtual wallet and risk approval. No automatic PAPER or LIVE order is enabled here.'),
     const SizedBox(height: 9),
-    OutlinedButton(onPressed: () => setState(() => activeTab = 'Mind'),
+    OutlinedButton(onPressed: () => setState(() => activeTab = 'Coverage'),
       child: const Text('Review Mind dependencies')),
   ];
 
