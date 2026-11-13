@@ -64,6 +64,9 @@ void main() {
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Coverage'), findsOneWidget);
     expect(find.text('Operations'), findsOneWidget);
+    expect(find.text('Verified project completion'), findsOneWidget);
+    expect(find.text('5%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-verified-completion-bar')), findsOneWidget);
     expect(find.text('Candles'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
@@ -78,6 +81,27 @@ void main() {
     await tester.tap(find.text('Operations'));
     await tester.pumpAndSettle();
     expect(find.text('Source verification'), findsWidgets);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('explains milestone weights without pretending PRs count as completion',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshot()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Calculation'));
+    await tester.pumpAndSettle();
+    expect(find.text('Percentage calculation'), findsOneWidget);
+    expect(find.text('Persistent historical data'), findsOneWidget);
+    expect(find.text('0/20%'), findsWidgets);
+    expect(find.text('5/5%'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
