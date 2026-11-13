@@ -117,12 +117,13 @@ classify_failure() {
     echo 'LOCAL_RELEASE_UNCLASSIFIED'
   fi
 }
-awk '!/^MINTTICK_UPSTOX_ANALYTICS_(ENABLED|PROBE_ENABLED)=/' \
+awk '!/^(MINTTICK_UPSTOX_ANALYTICS_(ENABLED|PROBE_ENABLED)|MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED)=/' \
   "$work/previous.env" > "$work/next.env"
 grep -Eq '^POSTGRES_PASSWORD=[0-9a-f]{64}$' "$work/next.env"
 grep -Eq '^APP_API_KEY=[0-9a-f]{64}$' "$work/next.env"
 printf 'MINTTICK_UPSTOX_ANALYTICS_ENABLED=true\n' >> "$work/next.env"
 printf 'MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED=true\n' >> "$work/next.env"
+printf 'MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED=true\n' >> "$work/next.env"
 install -o root -g root -m 0600 "$work/next.env" "$root/runtime.env"
 if ! bash "$root/run_paper.sh" "$sha" > "$work/release.log" 2>&1; then
   code="$(classify_failure)"

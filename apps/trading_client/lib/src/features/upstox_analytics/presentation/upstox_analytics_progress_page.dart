@@ -102,7 +102,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               ])),
             status(data?.find('SOURCE_VERIFICATION'),
               labelOverride: data?.find('SOURCE_VERIFICATION')?.state == 'DISABLED'
-                ? 'SOURCE OFF' : null),
+                ? 'PROBE OFF' : null),
           ])),
         SizedBox(height: 45,
           child: ListView(scrollDirection: Axis.horizontal,
@@ -155,36 +155,58 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
   }
 
   List<Widget> overview(UpstoxAnalyticsProgress data) {
-    final verified = data.tasks.where((t) => t.state == 'VERIFIED').length;
-    final blocked = data.tasks.where((t) => t.state == 'BLOCKED' || t.state == 'FAILED').length;
+    final verified = data.tasks.where((t) => t.state == 'VERIFIED' && !t.stale).length;
+    final blocked = data.tasks.where((t) =>
+        t.state == 'BLOCKED' || t.state == 'FAILED').length;
     final active = data.tasks.where((t) => t.state == 'RUNNING').length;
+    final source = data.find('SOURCE_VERIFICATION');
     return [
-      heading('Execution overview', 'Persisted backend state · no placeholder percentages'),
       Row(children: [
-        metric('Verified', verified.toString(), Icons.check_circle_outline),
-        const SizedBox(width: 7),
-        metric('Running', active.toString(), Icons.sync_outlined),
-        const SizedBox(width: 7),
-        metric('Blocked', blocked.toString(), Icons.report_problem_outlined),
-        const SizedBox(width: 7),
-        metric('Tasks', data.tasks.length.toString(), Icons.view_list_outlined),
+        const Expanded(child: Text('Analytics health',
+          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
+        Text('Updated ${when(data.generatedAt)}',
+          style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
       ]),
-      const SizedBox(height: 14),
-      heading('Analytics pipeline', 'Every stage feeds the canonical MintTick Mind architecture'),
-      ...taskList(data, specs.take(7)),
-      const SizedBox(height: 8),
-      note('Progress snapshot: ${when(data.generatedAt)}. A connected trading account '
-        'does not establish Analytics source readiness.'),
       const SizedBox(height: 10),
       Row(children: [
-        Expanded(child: OutlinedButton(
-          onPressed: () => setState(() => activeTab = 'Tasks'),
-          child: const Text('All tasks'))),
-        const SizedBox(width: 8),
-        Expanded(child: FilledButton(
-          onPressed: () => setState(() => activeTab = 'Mind'),
-          child: const Text('Mind linkage'))),
+        metric('Verified', verified.toString(), Icons.check_circle_outline),
+        const SizedBox(width: 6),
+        metric('Running', active.toString(), Icons.sync_outlined),
+        const SizedBox(width: 6),
+        metric('Blocked', blocked.toString(), Icons.report_problem_outlined),
+        const SizedBox(width: 6),
+        metric('Stages', '7', Icons.account_tree_outlined),
       ]),
+      const SizedBox(height: 13),
+      if (source == null || source.state != 'VERIFIED' || source.stale)
+        Padding(padding: const EdgeInsets.only(bottom: 12),
+          child: panel(Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.info_outline, size: 17,
+              color: Color(0xFFE6BD73)),
+            const SizedBox(width: 9),
+            Expanded(child: Text(
+              source == null ? 'No verified source telemetry received.'
+                : source.stale ? 'Last source verification is stale.'
+                : reasonDescription(source.reasonCode),
+              style: const TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver, height: 1.35))),
+          ]), padding: const EdgeInsets.all(10))),
+      Row(children: [
+        const Expanded(child: Text('Data pipeline',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
+        TextButton(
+          onPressed: () => setState(() => activeTab = 'Tasks'),
+          child: const Text('All details', style: TextStyle(fontSize: 12))),
+      ]),
+      panel(Column(children: [
+        for (var i = 0; i < 7; i++)
+          pipelineRow(specs[i], data.find(specs[i].$1), last: i == 6),
+      ]), padding: EdgeInsets.zero),
+      const SizedBox(height: 11),
+      Text('Analytics reads, dataset rights and trade execution are separate '
+        'checks. Tap any stage for evidence and the latest failure reason.',
+        style: const TextStyle(color: MintTickPalette.mutedSilver,
+          fontSize: 11, height: 1.4)),
     ];
   }
 
@@ -306,6 +328,43 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     ];
   }
 
+  Widget pipelineRow(
+      (String, String, String, IconData) spec,
+      UpstoxAnalyticsTask? task, {bool last = false}) {
+    final subtitle = task == null
+        ? 'No backend telemetry available'
+        : task.stale ? 'Last verification is stale'
+        : task.state == 'VERIFIED'
+          ? 'Verified ${when(task.lastSuccessAt)}'
+          : task.reasonCode == null ? spec.$3 : reasonDescription(task.reasonCode);
+    return Material(color: Colors.transparent,
+      child: InkWell(
+        key: ValueKey('upstox-stage-${spec.$1}'),
+        onTap: () => showDetails(spec, task),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(border: last ? null
+            : const Border(bottom: BorderSide(color: MintTickPalette.darkBorder))),
+          child: Row(children: [
+            Icon(spec.$4, size: 18, color: MintTickPalette.mint),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(spec.$2, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+                Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 10,
+                    color: MintTickPalette.mutedSilver)),
+              ])),
+            const SizedBox(width: 5),
+            status(task),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Widget taskTile((String, String, String, IconData) spec, UpstoxAnalyticsTask? task) =>
     Padding(padding: const EdgeInsets.only(bottom: 7),
       child: Material(color: MintTickPalette.darkCard,
@@ -322,7 +381,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 children: [
                   Text(spec.$2, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text(spec.$3, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  Text(task?.reasonCode == null ? spec.$3 : reasonDescription(task!.reasonCode),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
                   if (task?.checked != null)
                     Text('Verified ${str(task?.verified)} / ${str(task?.checked)} checks',
@@ -449,7 +509,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     'GITHUB_HTTP_FAILURE' => 'GitHub returned an unexpected HTTP status',
     'GITHUB_READ_UNAVAILABLE' || 'GITHUB_API_UNAVAILABLE' =>
       'GitHub request failed; detailed diagnostics unavailable',
-    'OPERATOR_OPT_IN_REQUIRED' => 'Read-only source verification is switched off',
+    'OPERATOR_OPT_IN_REQUIRED' || 'SOURCE_PROBE_DISABLED' =>
+      'Read-only progress probe is disabled on the backend',
+    'ANALYTICS_SOURCE_DISABLED' =>
+      'Upstox Analytics source is disabled in the backend environment',
     'NO_VERIFIED_COVERAGE' => 'No verified instrument coverage yet',
     'NO_VERIFIED_RIGHTS_RECEIPT' => 'Data usage rights not verified',
     'NO_VERIFIED_MIND_FEED' => 'No verified MintTick Mind feature feed yet',
