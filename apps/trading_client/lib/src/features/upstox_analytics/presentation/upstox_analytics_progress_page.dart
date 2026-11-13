@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../../../brand/minttick_brand.dart';
 import '../../../data/authenticated_api_client.dart';
 import '../data/upstox_analytics_progress_repository.dart';
+import '../data/upstox_delivery_workstreams.dart';
+import '../data/upstox_readiness_progress.dart';
 
 /// Backend-evidence-only owner monitor. Never places PAPER/LIVE orders.
 class UpstoxAnalyticsProgressPage extends StatefulWidget {
@@ -138,9 +140,12 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
               children: [
                 if (activeTab == 'Overview') ...overview(data),
+                if (activeTab == 'Coverage') ...acceptanceProgress(data),
                 if (activeTab == 'Coverage') ...history(data), 
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
+                if (activeTab == 'Operations') ...acceptanceProgress(data),
+                if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') ...taskList(data, specs),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
@@ -165,6 +170,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
+      ...acceptanceProgress(data),
+      const SizedBox(height: 10),
+      workerActivitySummary(data),
+      const SizedBox(height: 14),
       Row(children: [
         const Expanded(child: Text('Analytics health',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
@@ -177,7 +186,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         const SizedBox(width: 6),
         metric('Ratios', ratios, Icons.analytics_outlined),
         const SizedBox(width: 6),
-        metric('Verified jobs', verified.toString(), Icons.check_circle_outline),
+        metric('Passing checks', verified.toString(), Icons.check_circle_outline),
       ]),
       const SizedBox(height: 6),
       Text('Read-only sample · $active active · $blocked blocked · '
@@ -209,6 +218,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           pipelineRow(specs[i], data.find(specs[i].$1), last: i == 3),
       ]), padding: EdgeInsets.zero),
       const SizedBox(height: 11),
+      ...workerDelivery(data),
+      const SizedBox(height: 11),
       Text('Analytics reads, dataset rights and trade execution are separate '
         'checks. Tap any stage for evidence and the latest failure reason.',
         style: const TextStyle(color: MintTickPalette.mutedSilver,
@@ -219,6 +230,241 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
   List<Widget> taskList(UpstoxAnalyticsProgress data,
       Iterable<(String, String, String, IconData)> source) =>
     [for (final spec in source) taskTile(spec, data.find(spec.$1))];
+
+  List<Widget> acceptanceProgress(UpstoxAnalyticsProgress data) {
+    final score = UpstoxReadinessProgress.calculate(data);
+    return [
+      panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('Data & PAPER acceptance',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800))),
+          Text(score.percent == null ? '—' : '${score.percent}%',
+            key: const ValueKey('upstox-verified-completion-percent'),
+            style: const TextStyle(color: MintTickPalette.mint,
+              fontWeight: FontWeight.w800, fontSize: 20)),
+        ]),
+        const SizedBox(height: 8),
+        if (score.fraction != null)
+          LinearProgressIndicator(
+            key: const ValueKey('upstox-verified-completion-bar'),
+            minHeight: 5,
+            value: score.fraction!,
+            backgroundColor: MintTickPalette.darkBorder,
+            valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
+          )
+        else
+          Container(height: 5, decoration: BoxDecoration(
+            color: MintTickPalette.darkBorder,
+            borderRadius: BorderRadius.circular(3))),
+        const SizedBox(height: 8),
+        Row(children: [
+          Expanded(child: Text(
+            score.percent == null ? 'Completed: —'
+              : 'Completed: ${score.percent}%',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
+          Expanded(child: Text(
+            score.remainingPercent == null ? 'Remaining: —'
+              : 'Remaining: ${score.remainingPercent}%',
+            textAlign: TextAlign.right,
+            key: const ValueKey('upstox-remaining-completion-percent'),
+            style: const TextStyle(fontWeight: FontWeight.w700,
+              color: MintTickPalette.mutedSilver, fontSize: 11))),
+        ]),
+        const SizedBox(height: 5),
+        Text('${score.verifiedStages} of ${score.gates.length} milestones verified · '
+          '${score.outstandingStages} outstanding',
+          style: const TextStyle(color: MintTickPalette.mutedSilver, fontSize: 10)),
+        Row(children: [
+          const Expanded(child: Text('Weighted milestones · fresh backend proof only',
+              maxLines: 2, style: TextStyle(color: MintTickPalette.mutedSilver,
+                  fontSize: 10))),
+          TextButton(
+            onPressed: () => showProgressFormula(score),
+            child: const Text('Pending details', style: TextStyle(fontSize: 11))),
+        ]),
+        if (!score.observed)
+          const Text('No verified milestone telemetry yet',
+            style: TextStyle(color: MintTickPalette.mutedSilver, fontSize: 11)),
+      ]), padding: const EdgeInsets.fromLTRB(11, 10, 11, 8)),
+    ];
+  }
+
+  void showProgressFormula(UpstoxReadinessProgress score) {
+    final labels = <String, String>{
+      'SOURCE_VERIFICATION': 'Source access',
+      'INSTRUMENT_MAPPING': 'Instrument mapping',
+      'HISTORICAL_INGESTION': 'Persistent historical data',
+      'QUALITY_RIGHTS': 'Quality and usage rights',
+      'FUNDAMENTALS': 'Fundamentals',
+      'MIND_DATASETS': 'MintTick Mind feature feed',
+      'PAPER_READINESS': 'PAPER end-to-end readiness',
+    };
+    showModalBottomSheet<void>(
+      context: context, showDragHandle: true, isScrollControlled: true,
+      backgroundColor: MintTickPalette.darkCard,
+      builder: (_) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        child: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Percentage calculation',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 5),
+            const Text('Each weight is earned only when that backend milestone '
+              'is VERIFIED and fresh. Draft/merged PRs, UI mocks and API samples '
+              'do not earn unrelated progress.',
+              style: TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver, height: 1.4)),
+            const SizedBox(height: 8),
+            Text(score.remainingPercent == null
+                ? 'Remaining: not verified'
+                : 'Completed ${score.percent}% · Remaining ${score.remainingPercent}%',
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+            const SizedBox(height: 12),
+            for (final gate in score.gates)
+              Padding(padding: const EdgeInsets.symmetric(vertical: 5),
+                child: Row(children: [
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(labels[gate.code] ?? gate.code,
+                        style: const TextStyle(fontSize: 12,
+                          fontWeight: FontWeight.w700)),
+                      Text(gate.evidenceState, style: const TextStyle(
+                        fontSize: 10, color: MintTickPalette.mutedSilver)),
+                    ])),
+                  Text(gate.earned == gate.weight
+                      ? '${gate.weight}% done'
+                      : '${gate.weight - gate.earned}% left',
+                    style: TextStyle(fontSize: 12,
+                      color: gate.earned == gate.weight
+                        ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
+                ])),
+            const SizedBox(height: 8),
+            Text('Formula: ${UpstoxReadinessProgress.formulaVersion}',
+              style: const TextStyle(fontSize: 10,
+                color: MintTickPalette.mutedSilver)),
+            const SizedBox(height: 5),
+            const Text('This is verified acceptance, not developer effort. '
+              'PAPER trading and persisted ingestion remain separate runtime gates.',
+              style: TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver)),
+          ]),
+      )),
+    );
+  }
+
+  List<UpstoxWorkerObservation> workerObservations(UpstoxAnalyticsProgress data) {
+    final task = data.find('WORKER_REPORTS');
+    if (task == null || task.state == 'BLOCKED' || task.state == 'DISABLED') {
+      return UpstoxWorkerObservation.fromBackend(null);
+    }
+    return UpstoxWorkerObservation.fromBackend(
+      task.details['workerReports'], staleSnapshot: task.stale);
+  }
+
+  Widget workerActivitySummary(UpstoxAnalyticsProgress data) {
+    final reports = workerObservations(data);
+    final fresh = reports.where((x) => x.state == 'FRESH').length;
+    final stale = reports.where((x) => x.state == 'STALE').length;
+    return panel(Row(children: [
+      const Icon(Icons.work_history_outlined,
+        size: 19, color: MintTickPalette.mint),
+      const SizedBox(width: 9),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Development activity', style: TextStyle(
+            fontWeight: FontWeight.w800, fontSize: 12)),
+          Text('$fresh/5 fresh worker reports · $stale stale',
+            style: const TextStyle(fontSize: 10,
+              color: MintTickPalette.mutedSilver)),
+          const Text('GitHub evidence, not operational readiness',
+            style: TextStyle(fontSize: 10,
+              color: MintTickPalette.mutedSilver)),
+        ])),
+      TextButton(onPressed: () => setState(() => activeTab = 'Operations'),
+        child: const Text('Work details', style: TextStyle(fontSize: 11))),
+    ]), padding: const EdgeInsets.all(10));
+  }
+
+  List<Widget> workerDelivery(UpstoxAnalyticsProgress data) {
+    final githubTask = data.find('GITHUB_DEVELOPMENT');
+    final observedPrSample = githubTask?.state == 'VERIFIED' && githubTask?.stale == false;
+    final prSample = UpstoxDeliveryWorkstreams.fromRecentPrs(
+        observedPrSample ? githubTask?.details['trackedPrs'] : null);
+    final reports = workerObservations(data);
+    final fresh = reports.where((x) => x.state == 'FRESH').length;
+    final missing = reports.where((x) => x.state == 'NO_REPORT').length;
+    return [
+      heading('Five data workstreams',
+        'Reported GitHub delivery · separate from backend ingestion'),
+      panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('Fresh reports $fresh/5 · No report $missing/5',
+          style: const TextStyle(color: MintTickPalette.mutedSilver,
+            fontSize: 11, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        for (var i = 0; i < reports.length; i++)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              SizedBox(width: 26, child: Text('W${i + 1}',
+                style: const TextStyle(fontSize: 11,
+                  color: MintTickPalette.mint, fontWeight: FontWeight.w800))),
+              const SizedBox(width: 5),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(reports[i].label, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  Text(reports[i].state == 'NO_REPORT'
+                    ? 'No recent worker report · ${prSample[i].pr == null ? 'No PR in sample' : 'PR #${prSample[i].pr!.number} ${prSample[i].pr!.state}'}'
+                    : '${reports[i].result ?? 'UNKNOWN'} · PR ${reports[i].pr?.toString() ?? '—'} · CI ${reports[i].ci ?? 'UNKNOWN'}',
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mutedSilver)),
+                  if (reports[i].state != 'NO_REPORT')
+                    Text('Last reported ${when(reports[i].reportedAt)} · ${reports[i].state}',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mutedSilver)),
+                  if (reports[i].blocker != null && reports[i].blocker != 'NONE')
+                    Text('Blocked: ${reports[i].blocker}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: Color(0xFFE6BD73))),
+                  if (reports[i].next != null)
+                    Text('Next: ${reports[i].next}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mutedSilver)),
+                ])),
+              const SizedBox(width: 4),
+              Text(reports[i].state == 'NO_REPORT' ? 'UNKNOWN'
+                    : reports[i].state,
+                style: TextStyle(fontSize: 9,
+                  color: reports[i].state == 'FRESH'
+                    ? MintTickPalette.mint : const Color(0xFFE6BD73))),
+              if (reports[i].url != null)
+                IconButton(
+                  tooltip: 'Copy worker PR link',
+                  constraints: const BoxConstraints(minWidth: 31, minHeight: 31),
+                  icon: const Icon(Icons.copy_outlined, size: 16),
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: reports[i].url!));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('PR link copied')));
+                    }
+                  },
+                ),
+            ]),
+          ),
+      ]), padding: const EdgeInsets.all(10)),
+      const SizedBox(height: 8),
+      note('Last-reported times come from GitHub issue #1012. '
+        'A recent worker report or merged PR does not prove that a '
+        'Spring Boot downloader, MintTick Mind feed, or PAPER execution is running. '
+        'Without a deployed report collector, worker activity remains unknown.'),
+    ];
+  }
 
   List<Widget> history(UpstoxAnalyticsProgress data) => [
     heading('Historical coverage', 'Per-instrument and per-year receipts'),
@@ -325,6 +571,21 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     ];
   }
 
+  String? relatedDevelopment(String code, UpstoxAnalyticsTask? task) {
+    // This line deliberately never changes an operational readiness state.
+    if (task == null || task.state == 'VERIFIED') return null;
+    final worker = switch (code) {
+      'INSTRUMENT_MAPPING' || 'HISTORICAL_INGESTION' => 1,
+      'QUALITY_RIGHTS' || 'MIND_DATASETS' => 2,
+      'FUNDAMENTALS' => 4,
+      _ => null,
+    };
+    if (worker == null || snapshot == null) return null;
+    final report = workerObservations(snapshot!)[worker - 1];
+    if (report.state == 'NO_REPORT' || report.pr == null) return null;
+    return 'Developer W$worker · PR #${report.pr} · ${report.ci ?? 'CI unknown'}';
+  }
+
   Widget pipelineRow(
       (String, String, String, IconData) spec,
       UpstoxAnalyticsTask? task, {bool last = false}) {
@@ -353,6 +614,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10,
                     color: MintTickPalette.mutedSilver)),
+                if (relatedDevelopment(spec.$1, task) case final work?)
+                  Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mint)),
               ])),
             const SizedBox(width: 5),
             status(task),
@@ -381,6 +646,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                   Text(task?.reasonCode == null ? spec.$3 : reasonDescription(task!.reasonCode),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
+                  if (relatedDevelopment(spec.$1, task) case final work?)
+                    Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mint)),
                   if (task?.checked != null)
                     Text('Verified ${str(task?.verified)} / ${str(task?.checked)} checks',
                       style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),

@@ -322,13 +322,31 @@ jobs:
             module_path="org/jetbrains/kotlin/kotlin-compiler-embeddable/$version"
             mkdir -p "$local_repo/$module_path"
             artifact="kotlin-compiler-embeddable-$version.jar"
-            mirror="https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"
-            curl --fail --show-error --location --retry 4 --retry-all-errors \
-              --retry-delay 5 --connect-timeout 12 --max-time 180 \
-              "$mirror" --output "$local_repo/$module_path/$artifact"
-            (cd "$local_repo/$module_path" && \
-              printf '%s  %s\n' "$expected_sha" "$artifact" \
-              | sha256sum --check --status)
+            # Mirror outages must never require removing integrity checks.
+            # Try independent caches, accepting bytes only with JetBrains' pinned SHA-256.
+            verified=false
+            for mirror in \
+              "https://maven.wso2.org/nexus/content/groups/public/$module_path/$artifact" \
+              "https://repository.liferay.com/nexus/content/repositories/gradle-plugins/$module_path/$artifact" \
+              "https://maven.aliyun.com/repository/central/$module_path/$artifact" \
+              "https://artifacts-oss.talend.com/nexus/content/repositories/public/$module_path/$artifact"; do
+              rm -f -- "$local_repo/$module_path/$artifact"
+              if curl --fail --silent --show-error --location \
+                  --retry 2 --retry-all-errors --retry-delay 2 \
+                  --connect-timeout 12 --max-time 180 \
+                  "$mirror" --output "$local_repo/$module_path/$artifact" \
+                  && (cd "$local_repo/$module_path" && \
+                    printf '%s  %s\n' "$expected_sha" "$artifact" \
+                    | sha256sum --check --status); then
+                verified=true
+                break
+              fi
+              echo 'Rejected unavailable or unverified Kotlin compiler mirror'
+            done
+            if [ "$verified" != true ]; then
+              echo "::error::No SHA-256 verified Kotlin compiler $version available"
+              exit 2
+            fi
             curl --fail --show-error --location --retry 3 --retry-all-errors \
               --connect-timeout 12 --max-time 25 \
               "https://repo.maven.apache.org/maven2/$module_path/kotlin-compiler-embeddable-$version.pom" \
