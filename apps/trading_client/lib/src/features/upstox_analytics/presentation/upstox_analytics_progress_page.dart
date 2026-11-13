@@ -242,13 +242,18 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               fontWeight: FontWeight.w800, fontSize: 20)),
         ]),
         const SizedBox(height: 8),
-        LinearProgressIndicator(
-          key: const ValueKey('upstox-verified-completion-bar'),
-          minHeight: 5,
-          value: score.fraction,
-          backgroundColor: MintTickPalette.darkBorder,
-          valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
-        ),
+        if (score.fraction != null)
+          LinearProgressIndicator(
+            key: const ValueKey('upstox-verified-completion-bar'),
+            minHeight: 5,
+            value: score.fraction!,
+            backgroundColor: MintTickPalette.darkBorder,
+            valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
+          )
+        else
+          Container(height: 5, decoration: BoxDecoration(
+            color: MintTickPalette.darkBorder,
+            borderRadius: BorderRadius.circular(3))),
         const SizedBox(height: 8),
         Row(children: [
           const Expanded(child: Text('Weighted milestones · fresh backend proof only',
