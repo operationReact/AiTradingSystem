@@ -560,7 +560,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         if ((data.exchanges['BSE'] ?? 0) == 0)
           Text(coverage.activeBseCmRecords == 0
                   ? 'BSE: no active cash-segment records imported'
-                  : 'BSE: ${coverage.activeBseCmRecords} cash-segment records need verified EQ classification',
+                  : 'BSE: ${coverage.activeBseCmRecords} BSE_CM records; 0 verified EQ listings',
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: scheme.onSurfaceVariant)),
         const SizedBox(height: 4),
