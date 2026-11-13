@@ -60,6 +60,37 @@ public class ResearchScanRepository {
                 """, instrumentMapper, limit);
     }
 
+    /**
+     * REST FULL quote warmer universe. Unlike the 3,000-WebSocket-token priority list,
+     * this can cover both verified cash exchanges without reserving WebSocket shards.
+     * Interleaved exchange ranks prevent thousands of BSE listings from starving NSE
+     * (or vice versa). The caller groups each exchange into <=50-token REST batches.
+     */
+    public List<Instrument> postCloseFullQuoteUniverse(int limit) {
+        if (limit < 1 || limit > 10_000) {
+            throw new IllegalArgumentException("Post-close cash universe limit must be 1..10000");
+        }
+        return jdbc.query("""
+                SELECT i.instrument_id, i.exchange_segment, i.exchange, i.symbol_token, i.trading_symbol,
+                       i.instrument_name, i.instrument_type, i.expiry, i.strike, i.lot_size, i.tick_size,
+                       i.catalogue_version
+                  FROM instrument_master i
+                  JOIN instrument_catalogue_state s
+                    ON s.singleton_id = 1 AND s.active_version = i.catalogue_version
+                 WHERE i.active = TRUE AND i.exchange IN ('NSE','BSE')
+                """ + in.aitradingsystem.instrument.InstrumentMasterRepository.CASH_EQUITY_PREDICATE + """
+                 ORDER BY ROW_NUMBER() OVER (PARTITION BY i.exchange ORDER BY
+                     CASE WHEN i.exchange = 'NSE' AND i.trading_symbol = 'RELIANCE-EQ' THEN 0
+                          WHEN i.exchange = 'NSE' AND i.trading_symbol = 'TCS-EQ' THEN 1
+                          WHEN i.exchange = 'NSE' AND i.trading_symbol = 'INFY-EQ' THEN 2
+                          ELSE 100 END,
+                     i.trading_symbol, i.symbol_token),
+                     CASE WHEN i.exchange = 'NSE' THEN 0 ELSE 1 END,
+                     i.trading_symbol, i.symbol_token
+                 LIMIT ?
+                """, instrumentMapper, limit);
+    }
+
     public void createRun(UUID id, String interval, int requestedLimit, String strategySet) {
         jdbc.update("""
                 INSERT INTO research_scan_run (id, interval, status, requested_limit, strategy_set)
