@@ -8,8 +8,7 @@ CREATE TABLE upstox_bse_reference_import (
     source_total_rows INTEGER NOT NULL CHECK (source_total_rows > 0),
     eligible_rows INTEGER NOT NULL CHECK (eligible_rows > 0),
     excluded_rows INTEGER NOT NULL CHECK (excluded_rows >= 0),
-    imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (content_sha256)
+    imported_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE TABLE upstox_bse_reference_equity (
     import_id UUID NOT NULL REFERENCES upstox_bse_reference_import(id),
