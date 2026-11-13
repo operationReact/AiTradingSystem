@@ -38,10 +38,13 @@ void main() {
       ..['storedFullQuotes'] = 875
       ..['withProviderPreviousClose'] = 800
       ..['activeBseCmRecords'] = 0;
-    (input['exchanges'] as List)[1] = {
-      'exchange': 'BSE', 'activeListings': 0, 'storedFullQuotes': 0,
-      'withProviderPreviousClose': 0, 'newestExchangeAt': null,
-    };
+    input['exchanges'] = <Map<String, dynamic>>[
+      Map<String, dynamic>.from((input['exchanges'] as List).first as Map),
+      {
+        'exchange': 'BSE', 'activeListings': 0, 'storedFullQuotes': 0,
+        'withProviderPreviousClose': 0, 'newestExchangeAt': null,
+      },
+    ];
     final parsed = CustomerFullQuoteCoverage.fromJson(input);
     expect(parsed.exchanges[1].storedFullQuotes, 0);
     expect(parsed.exchanges[1].newestExchangeAt, isNull);
