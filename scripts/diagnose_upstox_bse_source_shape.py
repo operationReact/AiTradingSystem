@@ -62,7 +62,7 @@ def main():
         if security is None:counts["missing_security"]+=1
         if typ not in ("A","EQ"):continue
         counts["equity_series"]+=1
-        if security != "NORMAL":continue
+        if security not in ("NORMAL", None):continue
         counts["normal_equity_series"]+=1
         token=row.get("exchange_token")
         symbol=row.get("trading_symbol")
