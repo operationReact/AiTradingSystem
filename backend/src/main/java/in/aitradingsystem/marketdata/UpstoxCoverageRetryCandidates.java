@@ -57,7 +57,10 @@ public final class UpstoxCoverageRetryCandidates {
                         .thenComparing(x -> x.observation().listingEpisodeId())
                         .thenComparing(x -> x.observation().interval())
                         .thenComparing(x -> x.observation().windowStart())
-                        .thenComparing(x -> x.observation().source()))
+                        .thenComparing(x -> x.observation().source())
+                        .thenComparing(x -> x.observation().datasetVersion())
+                        .thenComparing(x -> x.observation().windowEndExclusive())
+                        .thenComparing(x -> x.observation().reason()))
                 .toList();
         int start = Math.min(offset, candidates.size());
         int end = (int) Math.min((long) start + limit, candidates.size());
