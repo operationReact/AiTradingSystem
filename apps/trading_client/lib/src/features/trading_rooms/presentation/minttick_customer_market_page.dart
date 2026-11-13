@@ -1409,12 +1409,6 @@ class _DeltaText extends StatelessWidget {
   }
 }
 
-BoxDecoration _cardDecoration(ColorScheme scheme) => BoxDecoration(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: scheme.outlineVariant),
-    );
-
 class _IndexCard extends StatelessWidget {
   const _IndexCard({required this.index, required this.stored});
   final CustomerIndexRow index;
