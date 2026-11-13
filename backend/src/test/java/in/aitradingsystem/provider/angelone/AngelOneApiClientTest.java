@@ -102,6 +102,32 @@ class AngelOneApiClientTest {
     }
 
     @Test
+    void bseFullQuoteRequestUsesBseExchangeTokens() {
+        server.expect(requestTo(ROOT + AngelOneApiClient.MARKET_QUOTE_PATH))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(content().json(
+                "{\"mode\":\"FULL\",\"exchangeTokens\":{\"BSE\":[\"500112\"]}}", true))
+            .andRespond(withSuccess(
+                "{\"status\":true,\"data\":{\"fetched\":[],\"unfetched\":[]}}",
+                MediaType.APPLICATION_JSON));
+
+        var data = client.customerFullQuotes(API_KEY, JWT, "BSE", java.util.List.of("500112"));
+        assertThat(data.get("fetched").isArray()).isTrue();
+        server.verify();
+    }
+
+    @Test
+    void fullQuoteValidatesExchangeAndNumericTokenBeforeTransport() {
+        assertThatThrownBy(() -> client.customerFullQuotes(API_KEY, JWT, "BSE_CM",
+            java.util.List.of("500112"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.customerFullQuotes(API_KEY, JWT, "BSE",
+            java.util.List.of("bad-token"))).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> client.customerFullQuotes(API_KEY, JWT, "BSE",
+            java.util.Collections.nCopies(51, "500112"))).isInstanceOf(IllegalArgumentException.class);
+        server.verify();
+    }
+
+    @Test
     void candlesPostSdkFieldNamesAndParseArray() {
         server.expect(requestTo(ROOT + AngelOneApiClient.CANDLE_PATH))
                 .andExpect(header("Authorization", "Bearer " + JWT))
