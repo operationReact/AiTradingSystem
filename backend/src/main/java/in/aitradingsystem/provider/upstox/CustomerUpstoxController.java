@@ -184,6 +184,7 @@ public class CustomerUpstoxController {
     public ProblemDetail failClosed(UpstoxProviderException exception) {
         HttpStatus status = switch (exception.code()) {
             case "UPSTOX_APP_NOT_CONFIGURED", "UPSTOX_AUTH_UNAVAILABLE", "UPSTOX_READ_UNAVAILABLE",
+                 "UPSTOX_FUNDS_MAINTENANCE",
                  "UPSTOX_AUTH_CAPACITY_REACHED",
                  "UPSTOX_OWNER_AUTO_LOGIN_DISABLED", "UPSTOX_OWNER_SSM_UNAVAILABLE",
                  "UPSTOX_OWNER_SSM_INVALID", "UPSTOX_TOTP_AUTH_UNAVAILABLE" ->

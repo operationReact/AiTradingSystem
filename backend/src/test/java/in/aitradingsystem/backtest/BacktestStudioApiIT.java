@@ -1,5 +1,6 @@
 package in.aitradingsystem.backtest;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -16,6 +17,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +47,6 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
         jdbc.update("DELETE FROM market_candle");
         jdbc.update("DELETE FROM candle_backfill_checkpoint");
         jdbc.update("DELETE FROM candle_backfill_run");
-        jdbc.update("DELETE FROM market_holiday");
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = NULL, activated_at = NULL WHERE singleton_id = 1");
         jdbc.update("DELETE FROM instrument_master");
         jdbc.update("DELETE FROM instrument_import_run");
@@ -67,9 +68,18 @@ class BacktestStudioApiIT extends AbstractPostgresIT {
         jdbc.update("UPDATE instrument_catalogue_state SET active_version = ?, activated_at = now() WHERE singleton_id = 1",
                 catalogue);
 
+        // The holiday calendar is shared Flyway reference data, not test-owned
+        // fixture state. Never clear it to make synthetic candles appear open.
+        Set<LocalDate> holidays = Set.copyOf(jdbc.queryForList("""
+                SELECT trade_date FROM market_holiday
+                WHERE market = 'NSE_CASH'
+                  AND trade_date BETWEEN DATE '2026-01-01' AND DATE '2026-02-25'
+                """, LocalDate.class));
+        assertThat(holidays).contains(LocalDate.of(2026, 1, 15), LocalDate.of(2026, 1, 26));
         int candleNumber = 0;
         for (LocalDate date = LocalDate.parse("2026-01-01"); !date.isAfter(LocalDate.parse("2026-02-25")); date = date.plusDays(1)) {
-            if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY) continue;
+            if (date.getDayOfWeek() == DayOfWeek.SATURDAY || date.getDayOfWeek() == DayOfWeek.SUNDAY
+                    || holidays.contains(date)) continue;
             BigDecimal close = BigDecimal.valueOf(100L + candleNumber);
             OffsetDateTime timestamp = OffsetDateTime.ofInstant(date.atTime(9, 15).atZone(MARKET_ZONE).toInstant(), ZoneOffset.UTC);
             jdbc.update("""
