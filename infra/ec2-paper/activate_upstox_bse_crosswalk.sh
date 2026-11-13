@@ -84,7 +84,11 @@ try:
     SELECT count(*),
       count(*) FILTER(WHERE upper(i.trading_symbol)=upper(u.trading_symbol)),
       count(*) FILTER(WHERE upper(regexp_replace(i.trading_symbol,'-(EQ|A)$',''))
-        =upper(u.trading_symbol))
+        =upper(u.trading_symbol)),
+      count(*) FILTER(WHERE coalesce(i.instrument_type,'')=''),
+      count(*) FILTER(WHERE upper(i.instrument_type)='A'),
+      count(*) FILTER(WHERE i.expiry IS NULL),
+      count(*) FILTER(WHERE i.strike IS NULL OR i.strike=0)
     FROM instrument_master i JOIN instrument_catalogue_state c
       ON c.active_version=i.catalogue_version AND c.singleton_id=1
     JOIN upstox_bse_reference_active a ON a.singleton_id=1
@@ -95,7 +99,7 @@ try:
     try:
         probe=subprocess.run(base+[overlap_sql],capture_output=True,text=True,timeout=18)
         parts=probe.stdout.strip().split("|")
-        if probe.returncode or len(parts)!=3 or any(
+        if probe.returncode or len(parts)!=7 or any(
            not re.fullmatch(r"[0-9]{1,6}",v) for v in parts):
             block("SOURCE_OVERLAP_AUDIT")
     except (OSError,subprocess.TimeoutExpired):
@@ -107,6 +111,10 @@ try:
     print("MINTTICK_BSE_TOKEN_OVERLAP:"+parts[0],flush=True)
     print("MINTTICK_BSE_EXACT_OVERLAP:"+parts[1],flush=True)
     print("MINTTICK_BSE_SUFFIX_OVERLAP:"+parts[2],flush=True)
+    print("MINTTICK_BSE_EMPTY_TYPE:"+parts[3],flush=True)
+    print("MINTTICK_BSE_TYPE_A:"+parts[4],flush=True)
+    print("MINTTICK_BSE_NULL_EXPIRY:"+parts[5],flush=True)
+    print("MINTTICK_BSE_ZERO_STRIKE:"+parts[6],flush=True)
     if eligible<100 or raw<100 or matched<1:
         block("NO_VALID_MATCHES")
 except (TypeError,ValueError,KeyError,IndexError):
