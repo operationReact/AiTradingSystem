@@ -81,6 +81,10 @@ void main() {
 
     await tester.tap(find.text('Operations'));
     await tester.pumpAndSettle();
+    expect(find.text('Five data workstreams'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Source verification'), 280,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Source verification'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
   });
