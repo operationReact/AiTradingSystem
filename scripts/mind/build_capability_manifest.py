@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.2"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.3"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -50,6 +50,31 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Being replaced by the server progress registry (/api/customer/mind/v1/progress).",
         "endpoints": ["/api/customer/mind/v1/progress"],
         "missing": ["Flutter web/Android/iOS runtime evidence of the progress screen"],
+    },
+    "strategies": {
+        "status": "IMPLEMENTING",
+        "note": "Status, implementation code and counts come from the server registry; fixture 'Paper/Watch/Paused' "
+                "states were removed. Relationship and ranking side panels remain labelled mock.",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Real relationship graph", "Measured risk-adjusted ranking", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "strategy-detail": {
+        "status": "IMPLEMENTING",
+        "note": "Identity, blocker, evidence and before-DONE checklist from the registry; backtest curve is a labelled mock.",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Per-strategy backtest/walk-forward results", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "models": {
+        "status": "IMPLEMENTING",
+        "note": "Model status/blockers from the registry; fixture AUC/Sharpe metrics replaced with 'Not measured'.",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Model training lifecycle", "Measured out-of-sample metrics", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "model-detail": {
+        "status": "IMPLEMENTING",
+        "note": "Status, blocker and code evidence from the registry; fake health percentages and latency removed.",
+        "endpoints": ["/api/customer/mind/v1/progress"],
+        "missing": ["Serving path and monitored health", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

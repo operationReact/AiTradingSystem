@@ -16,7 +16,7 @@ test `mind_progress_repository_test.dart` fails if the manifest and UI diverge.
 
 | Kind | Denominator | Audit result |
 |---|---|---|
-| Screens | 43 | 4 IMPLEMENTING (overview, agent-evidence, coverage, room-detail), 39 MOCK |
+| Screens | 43 | 8 IMPLEMENTING (overview, agent-evidence, coverage, room-detail, strategies, strategy-detail, models, model-detail), 35 MOCK |
 | Strategies | 232 | 21 TESTED code links (6 Java evaluators, 6 Java risk gates, 9 Python research), 1 RIGHTS_BLOCKED, 113 DATA_BLOCKED, 97 catalog name only |
 | Models | 18 | 12 TESTED Python research code, 3 RIGHTS_BLOCKED, 1 IMPLEMENTING, 2 not implemented; no deployed trained artifact |
 

@@ -9,14 +9,13 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       (_strategyMode=='All'||s.modes.contains(_strategyMode)) &&
       (s.name.toLowerCase().contains(_strategyQuery.toLowerCase())||
        s.family.toLowerCase().contains(_strategyQuery.toLowerCase()))).toList();
-    final paper=MindFixtures.strategies.where((s)=>s.status=='Paper').length;
-    final research=MindFixtures.strategies.where((s)=>s.status=='Research').length;
+    _ensureRegistry();
     return _surface('Strategy Universe','All strategies, grouped by family and trading horizon',[
       _metricGrid([
-        ('Strategy templates','232','20 families'),
-        ('Paper candidates',paper.toString(),'Not live-enabled'),
-        ('In research',research.toString(),'Research only'),
-        ('Other states',(232-paper-research).toString(),'Paused / watch'),
+        ('Catalog entries','232','20 families · names are not engines'),
+        ('Tested code',_countOf('STRATEGY',(i)=>i.status==MindProgressStatus.tested),'Unit/IT evidence · '+_registryState),
+        ('Runtime verified',_countOf('STRATEGY',(i)=>i.done),'Deployed PAPER proof'),
+        ('Data blocked',_countOf('STRATEGY',(i)=>i.status.isBlocked),'Awaiting permitted data/rights'),
       ]),
       const SizedBox(height:14),
       TextField(controller:_strategySearch,
@@ -50,13 +49,15 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       _section('Strategy Catalog · '+matches.length.toString(),Icons.layers_outlined,[
         if(matches.isEmpty) _empty('No matching strategies. Clear the filters.'),
         for(final s in matches.take(_showStrategies))
-          Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(s.name,
-            s.id+' · '+s.family+' · '+s.modes.join('/'),
-            Icons.insights_outlined,trailing:s.status,
-            color:s.status=='Research'?MindPalette.purple:
-              s.status=='Watch'?MindPalette.yellow:
-              s.status=='Paused'?MindPalette.red:MindPalette.mint,
-            tap:()=>_selectStrategy(s.id))),
+          Padding(padding:const EdgeInsets.only(bottom:7),child:Builder(builder:(context){
+            final cap=_capability('strategy.'+s.id);
+            return _tile(s.name,
+              s.id+' · '+s.family+' · '+s.modes.join('/')+
+                (cap?.implementationCode==null?'':' · '+cap!.implementationCode!),
+              Icons.insights_outlined,trailing:_statusLabel(cap),
+              color:_statusColor(cap),
+              tap:()=>_selectStrategy(s.id));
+          })),
         if(matches.length>_showStrategies)
           OutlinedButton(onPressed:()=>_updateMind(()=>_showStrategies+=25),
             child:Text('Load more ('+(matches.length-_showStrategies).toString()+' remaining)',
@@ -93,14 +94,18 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     final s=MindFixtures.strategies.firstWhere((e)=>e.id==_selectedStrategy,
       orElse:()=>MindFixtures.strategies.first);
     final idx=MindFixtures.strategies.indexOf(s);
+    final cap=_capability('strategy.'+s.id);
     return _surface(s.name,'Strategy configuration · '+s.id,[
       _split(
         _block('Strategy Identity',Icons.info_outline,[
           _value('Family',s.family),
           _value('Horizons',s.modes.join(', ')),
-          _value('Lifecycle',s.status),
-          _value('Evidence','Synthetic / research'),
-          _value('Execution','DISABLED',color:MindPalette.red),
+          _value('Status',_statusLabel(cap),color:_statusColor(cap)),
+          _value('Implementation',cap?.implementationCode==null?'None in repository'
+            :cap!.implementationCode!+' ('+(cap.implementationMatch??'-')+')'),
+          _value('Blocker',cap?.blockerCode??(cap==null?_registryState:'None')),
+          _value('Evidence',cap==null?'Not verified':cap.evidence.length.toString()+' linked files/APIs'),
+          _value('LIVE execution','DISABLED',color:MindPalette.red),
         ]),
         _block('Dependency Requirements',Icons.hub_outlined,[
           _value('Input freshness','Required'),
@@ -112,13 +117,23 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
         ]),
       ),
       const SizedBox(height:12),
+      if (cap!=null) _section('Before DONE',Icons.checklist_outlined,[
+        MindPanel(key:const ValueKey('mind-strategy-missing'),child:Column(
+          crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+          if (cap.note!=null) Text(cap.note!,style:const TextStyle(color:MindPalette.text,fontSize:12)),
+          for(final m in cap.missing) _value(m,'Missing',color:MindPalette.yellow),
+          if (cap.runtime.lastVerifiedAt!=null)
+            _value('Runtime verified',cap.runtime.lastVerifiedAt!.toUtc().toIso8601String().substring(0,16)+'Z'),
+          _action('Open in coverage','coverage'),
+        ])),
+      ]),
       _section('Historical Performance · Synthetic',Icons.show_chart,[
         MindPanel(child:Column(children:[
           const MindTag('MOCK BACKTEST CURVE',color:MindPalette.purple),
           const SizedBox(height:9),
           _mockChart(seed:idx+5,height:210),
-          _value('Sample observations',(43+idx%340).toString()),
-          _value('30-day fictional return','+'+((idx%41)*.18+.4).toStringAsFixed(2)+'%'),
+          _value('Sample observations','Not measured',color:MindPalette.muted),
+          _value('Backtest return','No recorded backtest for this strategy',color:MindPalette.muted),
           _value('Independent validation','Missing',color:MindPalette.yellow),
         ])),
       ]),
@@ -148,10 +163,10 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
           trailing:'PLANNED',color:MindPalette.yellow),
       ]),
       _metricGrid([
-        ('Model records','18','Research catalogue'),
-        ('Champions','2','Provisional research'),
-        ('Challengers','5','Controlled evaluation'),
-        ('Drift alerts','2','Illustrative warnings'),
+        ('Model records','18','Catalog · '+_registryState),
+        ('Tested research code',_countOf('MODEL',(i)=>i.status==MindProgressStatus.tested),'Python modules with tests'),
+        ('Rights blocked',_countOf('MODEL',(i)=>i.status==MindProgressStatus.rightsBlocked),'Licence review'),
+        ('Deployed & verified',_countOf('MODEL',(i)=>i.done),'Trained artifact in runtime'),
       ]),
       const SizedBox(height:13),
       _chips(['All','Champion','Challenger','Research','Planned','Adapter',
@@ -159,27 +174,28 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       const SizedBox(height:11),
       _section('Model Leaderboard',Icons.emoji_events_outlined,[
         for(final model in visible)
-          Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(model.name,
-            model.family+' · '+model.role+' · '+model.description,
-            Icons.memory,trailing:model.metric,
-            color:model.status=='Research'?MindPalette.mint:MindPalette.purple,
-            tap:()=>_selectModel(model.name))),
+          Padding(padding:const EdgeInsets.only(bottom:7),child:Builder(builder:(context){
+            final cap=_capability(_MindWorkspaceState._modelCapabilityId(model.name));
+            return _tile(model.name,
+              model.family+' · '+model.role+' · '+(cap?.blockerCode??model.description),
+              Icons.memory,trailing:_statusLabel(cap),color:_statusColor(cap),
+              tap:()=>_selectModel(model.name));
+          })),
       ]),
       _split(
         _block('Champion vs Challenger',Icons.compare_arrows,[
-          _value('LightGBM · AUC','0.81'),
-          _value('CatBoost · AUC','0.79'),
-          _value('Static ensemble · Sharpe','1.19'),
-          _value('Adaptive ensemble · Sharpe','1.23'),
-          const Text('Metrics are not comparable across model families.',
+          _value('LightGBM · AUC','Not measured',color:MindPalette.muted),
+          _value('CatBoost · AUC','Not measured',color:MindPalette.muted),
+          _value('Static ensemble · Sharpe','Not measured',color:MindPalette.muted),
+          _value('Adaptive ensemble · Sharpe','Not measured',color:MindPalette.muted),
+          const Text('No out-of-sample evaluation on permitted data is recorded yet. Earlier fixture metrics were removed.',
             style:TextStyle(color:MindPalette.muted,fontSize:11)),
         ]),
         _block('Drift & Calibration',Icons.track_changes_outlined,[
-          _value('Feature drift','Watch',color:MindPalette.yellow),
-          _value('Calibration','Review',color:MindPalette.yellow),
-          _value('Retraining','Gated'),
-          _progress('Coverage',.82),
-          _progress('Health',.77),
+          _value('Feature drift','Not monitored',color:MindPalette.muted),
+          _value('Calibration','Not measured',color:MindPalette.muted),
+          _value('Retraining','No lifecycle yet'),
+          _action('Model lifecycle status','coverage'),
         ]),
       ),
     ]);
@@ -189,22 +205,24 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     final model=MindFixtures.models.firstWhere((m)=>m.name==_selectedModel,
       orElse:()=>MindFixtures.models.first);
     final idx=MindFixtures.models.indexOf(model);
-    return _surface(model.name,'Model deep dive · mock version v'+(idx%4+1).toString(),[
+    final cap=_capability(_MindWorkspaceState._modelCapabilityId(model.name));
+    return _surface(model.name,'Model deep dive · no deployed version',[
       _split(
         _block('Identity & Readiness',Icons.memory,[
           _value('Family',model.family),
-          _value('Role',model.role),
-          _value('Status',model.status),
-          _value('Quality',model.metric),
+          _value('Planned role',model.role),
+          _value('Status',_statusLabel(cap),color:_statusColor(cap)),
+          _value('Blocker',cap?.blockerCode??(cap==null?_registryState:'None')),
+          _value('Code evidence',cap==null?'Not verified':
+            cap.evidence.where((e)=>e.kind=='SOURCE').map((e)=>e.display.split('/').last).join(', ')),
           _value('Live execution','Never',color:MindPalette.red),
-          _value('Feature inputs','Causal research data'),
         ]),
         _block('Model Health',Icons.monitor_heart_outlined,[
-          _progress('Coverage',.66+(idx%3)*.08),
-          _progress('Calibration',.82-(idx%3)*.07),
-          _progress('Drift stability',.91-(idx%5)*.09),
-          _value('Latency','~'+(16+idx*13).toString()+' ms (mock)'),
-          _value('Promotion','Requires validation'),
+          _value('Coverage','Not measured',color:MindPalette.muted),
+          _value('Calibration','Not measured',color:MindPalette.muted),
+          _value('Drift stability','Not monitored',color:MindPalette.muted),
+          _value('Latency','No serving path',color:MindPalette.muted),
+          _value('Promotion','Requires trained artifact + validation'),
         ]),
       ),
       const SizedBox(height:12),

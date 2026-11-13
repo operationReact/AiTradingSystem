@@ -183,6 +183,46 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     'F&O execution': false,
   };
   final Set<String> _watchlist = {'TITAN', 'CDSL'};
+
+  // Shared audited registry (#998). Loaded once; screens show "Not verified" until it arrives.
+  Map<String, MindProgressItem>? _registry;
+  bool _registryFailed = false;
+  bool _registryRequested = false;
+
+  void _ensureRegistry() {
+    final repository = widget.progressRepository;
+    if (_registryRequested || repository == null) return;
+    _registryRequested = true;
+    repository.load().then((snapshot) {
+      _updateMind(() => _registry = {for (final item in snapshot.items) item.id: item});
+    }, onError: (Object _) {
+      _updateMind(() => _registryFailed = true);
+    });
+  }
+
+  MindProgressItem? _capability(String id) {
+    _ensureRegistry();
+    return _registry?[id];
+  }
+
+  static String _modelCapabilityId(String name) =>
+      'model.' + name.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+          .replaceAll(RegExp(r'^-+|-+$'), '');
+
+  String get _registryState => widget.progressRepository == null
+      ? 'Registry not connected'
+      : _registryFailed ? 'Registry unavailable' : _registry == null ? 'Loading registry…' : 'Server registry';
+
+  String _statusLabel(MindProgressItem? item) => item?.status.label ?? 'Not verified';
+
+  Color _statusColor(MindProgressItem? item) =>
+      item == null ? MindPalette.muted : MindStatusPill.colorFor(item.status);
+
+  String _countOf(String kind, bool Function(MindProgressItem) test) {
+    final registry = _registry;
+    if (registry == null) return 'Not verified';
+    return registry.values.where((i) => i.kind == kind && test(i)).length.toString();
+  }
   final List<String> _assistantHistory = [
     'Mind: Ask about strategy evidence, model comparisons or portfolio risk. All answers use static sample data.',
   ];
