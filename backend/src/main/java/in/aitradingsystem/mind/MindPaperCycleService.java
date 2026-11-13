@@ -146,7 +146,9 @@ public class MindPaperCycleService {
         d.symbol = instrument.tradingSymbol();
 
         // 1. Data + deterministic strategy (stored completed candles, quality gate).
-        StrategyEvaluation evaluation = strategies.evaluate(instrumentId, interval);
+        // Never persisted to strategy_signal: the legacy automated PAPER engine trades persisted BUY
+        // signals, and Mind keeps its own trail in mind_paper_cycle.
+        StrategyEvaluation evaluation = strategies.evaluateWithoutPersisting(instrumentId, interval);
         StrategySignal signal = evaluation.signal();
         d.source = evaluation.dataSource();
         d.candleTime = evaluation.latestCandleAt();

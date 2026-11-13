@@ -170,6 +170,9 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(again.cycle().reasons()).contains("POSITION_ALREADY_OPEN");
         assertThat(countOrders(room)).isEqualTo(1);
         assertThat(service.recent(owner, room)).hasSize(2);
+        // Regression: Mind candidates must never reach the legacy automated engine's signal table.
+        assertThat(jdbc.sql("SELECT count(*) FROM strategy_signal WHERE id::text=:id")
+            .param("id", first.cycle().signalId()).query(Integer.class).single()).isZero();
 
         // Runtime evidence makes the PAPER slice DONE on this known revision only.
         var slice = progress.detail(owner, "paper.vertical-slice");
