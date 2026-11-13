@@ -188,7 +188,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   Future<void> _loadFullQuoteCoverage() async {
     final repo = widget.repository;
     if (repo is! CustomerFullQuoteCoverageRepository ||
-        _fullCoverageLoading || !mounted) return;
+        _fullCoverageLoading || !mounted) {
+      return;
+    }
     _fullCoverageLoading = true;
     try {
       final latest = await (repo as CustomerFullQuoteCoverageRepository).fullQuoteCoverage();
