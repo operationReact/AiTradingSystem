@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.4"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.5"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -88,6 +88,32 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Shows the enforced automatic PAPER risk policy and real per-room PAPER pause/resume; fake sliders removed.",
         "endpoints": ["/api/customer/mind/v1/paper-portfolio", "/api/customer/trading-rooms/{roomId}/paper/pause"],
         "missing": ["Daily loss circuit breaker for Mind cycles", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "decisions": {
+        "status": "IMPLEMENTING",
+        "note": "Lists every recorded Mind PAPER cycle with outcome filters from /paper-journal; fixture timeline removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Decisions from strategies other than SMA_TREND_VOLUME_V1", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "decision-detail": {
+        "status": "IMPLEMENTING",
+        "note": "Server-recorded gate-by-gate trail, quote, sizing and reason codes for one cycle.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Counterfactual / alternative evaluation", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "journal": {
+        "status": "IMPLEMENTING",
+        "note": "Recorded cycles with virtual order ids and audit values from the server; mock export removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Signed export", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "performance": {
+        "status": "IMPLEMENTING",
+        "note": "Closed Mind PAPER round trips only: count, win rate, realized P&L, max drawdown, explicit small-sample "
+                "warning (<30); invented returns removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-journal"],
+        "missing": ["Equity curve once sample is meaningful", "Backtest vs PAPER comparison",
+                    "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

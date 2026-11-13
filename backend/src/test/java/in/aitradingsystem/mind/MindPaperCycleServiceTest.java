@@ -59,4 +59,20 @@ class MindPaperCycleServiceTest {
         assertThat(policy.maxQuoteAge()).startsWith("15 seconds");
         assertThat(policy.liveTrading()).contains("not authorized");
     }
+
+    @Test
+    void performanceUsesClosedTradesOnlyAndFlagsSmallSamples() {
+        var p = MindPaperCycleService.performance(10, 4, 3, 3, List.of(500L, -200L, -400L, 300L));
+        assertThat(p.closedTrades()).isEqualTo(4);
+        assertThat(p.wins()).isEqualTo(2);
+        assertThat(p.losses()).isEqualTo(2);
+        assertThat(p.realizedPnlPaise()).isEqualTo(200L);
+        assertThat(p.averagePnlPaise()).isEqualTo(50L);
+        assertThat(p.maxDrawdownPaise()).isEqualTo(600L); // peak 500 -> trough -100
+        assertThat(p.winRatePercent()).isEqualTo(50.0);
+        assertThat(p.sampleTooSmall()).isTrue();
+        var empty = MindPaperCycleService.performance(0, 0, 0, 0, List.of());
+        assertThat(empty.winRatePercent()).isNull();
+        assertThat(empty.averagePnlPaise()).isNull();
+    }
 }

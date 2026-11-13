@@ -284,6 +284,59 @@ public class MindPaperCycleService {
             .param("owner", owner).param("room", roomId).query((rs, row) -> map(rs)).list();
     }
 
+    /** Closed Mind-originated PAPER round trips only; small samples are flagged, never extrapolated. */
+    public record Performance(int cycles, int fills, int noEntry, int blocked, int closedTrades, int wins,
+                              int losses, long realizedPnlPaise, Long averagePnlPaise, long maxDrawdownPaise,
+                              Double winRatePercent, boolean sampleTooSmall, int minimumMeaningfulSample) {}
+
+    public record Journal(String contractVersion, Instant generatedAt, boolean liveMoney,
+                          List<Cycle> cycles, Performance performance) {}
+
+    static final int MIN_MEANINGFUL_TRADES = 30;
+
+    public Journal journal(UUID owner, int limit) {
+        if (owner == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Customer required");
+        int bounded = Math.max(1, Math.min(limit, 200));
+        List<Cycle> cycles = jdbc.sql(SELECT + " " + """
+                 WHERE user_id=:owner AND room_id IN (SELECT id FROM customer_trading_room
+                     WHERE user_id=:owner AND mode='PAPER')
+                 ORDER BY created_at DESC, id DESC LIMIT :limit""")
+            .param("owner", owner).param("limit", bounded).query((rs, row) -> map(rs)).list();
+        record Counts(int cycles, int fills, int noEntry, int blocked) {}
+        Counts counts = jdbc.sql("""
+                SELECT count(*) AS cycles,
+                       count(*) FILTER (WHERE outcome='FILLED') AS fills,
+                       count(*) FILTER (WHERE outcome='NO_ENTRY') AS no_entry,
+                       count(*) FILTER (WHERE outcome IN ('DATA_BLOCKED','QUOTE_UNAVAILABLE','REJECTED_BY_GATE')) AS blocked
+                FROM mind_paper_cycle WHERE user_id=:owner
+                """).param("owner", owner).query((rs, row) -> new Counts(rs.getInt("cycles"), rs.getInt("fills"),
+                    rs.getInt("no_entry"), rs.getInt("blocked"))).single();
+        List<Long> closed = jdbc.sql("""
+                SELECT o.realized_pnl_delta_paise FROM mind_paper_cycle c
+                JOIN customer_paper_manual_order o ON o.id=c.order_id AND o.user_id=c.user_id
+                WHERE c.user_id=:owner AND c.outcome='FILLED' AND c.side='SELL'
+                ORDER BY o.created_at, o.id
+                """).param("owner", owner).query(Long.class).list();
+        return new Journal("mind.paper-journal.v1", clock.instant(), false, List.copyOf(cycles),
+            performance(counts.cycles(), counts.fills(), counts.noEntry(), counts.blocked(), closed));
+    }
+
+    static Performance performance(int cycles, int fills, int noEntry, int blocked, List<Long> closedPnl) {
+        long total = 0, peak = 0, maxDrawdown = 0;
+        int wins = 0, losses = 0;
+        for (long pnl : closedPnl) {
+            total += pnl;
+            if (pnl > 0) wins++; else if (pnl < 0) losses++;
+            peak = Math.max(peak, total);
+            maxDrawdown = Math.max(maxDrawdown, peak - total);
+        }
+        int n = closedPnl.size();
+        return new Performance(cycles, fills, noEntry, blocked, n, wins, losses, total,
+            n == 0 ? null : total / n, maxDrawdown,
+            n == 0 ? null : Math.round(wins * 1000.0 / n) / 10.0,
+            n < MIN_MEANINGFUL_TRADES, MIN_MEANINGFUL_TRADES);
+    }
+
     // ------------------------------------------------------------------ policy
 
     static int size(long initialCashPaise, long availableCashPaise, BigDecimal limit, BigDecimal stop) {

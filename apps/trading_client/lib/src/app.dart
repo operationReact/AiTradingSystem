@@ -38,6 +38,7 @@ import 'features/mintick_mind/data/mind_prospective_evidence_completeness_reposi
 import 'features/mintick_mind/data/mind_progress_repository.dart';
 import 'features/mintick_mind/data/mind_paper_cycle_repository.dart';
 import 'features/mintick_mind/data/mind_paper_portfolio_repository.dart';
+import 'features/mintick_mind/data/mind_paper_journal_repository.dart';
 import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
@@ -220,6 +221,7 @@ class _TradingAppState extends State<TradingApp> {
                 progressRepository: HttpMindProgressRepository(_api),
                 paperCycleRepository: HttpMindPaperCycleRepository(_api),
                 paperPortfolioRepository: HttpMindPaperPortfolioRepository(_api),
+                paperJournalRepository: HttpMindPaperJournalRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated

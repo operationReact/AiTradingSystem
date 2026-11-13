@@ -16,6 +16,7 @@ import 'mind_progress_panel.dart';
 import '../data/mind_paper_cycle_repository.dart';
 import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
+import '../data/mind_paper_journal_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -102,6 +103,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.progressRepository,
     this.paperCycleRepository,
     this.paperPortfolioRepository,
+    this.paperJournalRepository,
     super.key,
   });
 
@@ -129,6 +131,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Virtual PAPER portfolio + enforced risk policy (#998 PR D2).
   final MindPaperPortfolioRepository? paperPortfolioRepository;
+
+  /// Recorded Mind PAPER cycles + closed-trade performance (#998 PR D3).
+  final MindPaperJournalRepository? paperJournalRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -203,6 +208,20 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     }, onError: (Object _) {
       _updateMind(() => _registryFailed = true);
     });
+  }
+
+  MindPaperJournal? _journal;
+  bool _journalFailed = false;
+  bool _journalRequested = false;
+  String? _selectedCycleId;
+  String _cycleFilter = 'All';
+
+  void _ensureJournal({bool force = false}) {
+    final repository = widget.paperJournalRepository;
+    if (repository == null || (_journalRequested && !force)) return;
+    _journalRequested = true;
+    repository.load().then((j) => _updateMind(() { _journal = j; _journalFailed = false; }),
+        onError: (Object _) => _updateMind(() => _journalFailed = true));
   }
 
   MindPaperPortfolio? _portfolio;

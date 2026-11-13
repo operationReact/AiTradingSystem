@@ -1,5 +1,6 @@
 package in.aitradingsystem.api;
 
+import in.aitradingsystem.mind.MindPaperCycleService;
 import in.aitradingsystem.mind.MindPaperPortfolioService;
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.util.UUID;
@@ -16,12 +17,23 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 public class CustomerMindPaperPortfolioController {
     private final MindPaperPortfolioService portfolio;
+    private final MindPaperCycleService cycles;
     private final CustomerIdentityStore identities;
 
     public CustomerMindPaperPortfolioController(MindPaperPortfolioService portfolio,
+                                                MindPaperCycleService cycles,
                                                 CustomerIdentityStore identities) {
         this.portfolio = portfolio;
+        this.cycles = cycles;
         this.identities = identities;
+    }
+
+    /** Owner's Mind PAPER decision journal across rooms, with closed-trade performance. */
+    @GetMapping("/api/customer/mind/v1/paper-journal")
+    public ResponseEntity<MindPaperCycleService.Journal> journal(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "50") int limit,
+            Authentication auth) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(cycles.journal(customer(auth), limit));
     }
 
     @GetMapping("/api/customer/mind/v1/paper-portfolio")

@@ -321,7 +321,88 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     ('BANKNIFTY','Options','ABSTAIN','No derivatives capital authority'),
   ];
 
+  Widget _journalPending(String title) => _surface(title,'Recorded Mind PAPER cycles · server data',[
+    MindPanel(key:const ValueKey('mind-journal-pending'),child:Row(children:[
+      if(!_journalFailed) const SizedBox(width:14,height:14,child:CircularProgressIndicator(strokeWidth:2)),
+      const SizedBox(width:9),
+      Expanded(child:Text(_journalFailed?'Decision journal unavailable. Nothing is shown rather than samples.'
+        :'Loading recorded decisions…',
+        style:TextStyle(color:_journalFailed?MindPalette.red:MindPalette.muted,fontSize:12))),
+      if(_journalFailed) TextButton(onPressed:()=>_ensureJournal(force:true),child:const Text('Retry')),
+    ])),
+  ]);
+
+  Color _outcomeTone(MindPaperOutcome o) => switch(o) {
+    MindPaperOutcome.filled => MindPalette.mint,
+    MindPaperOutcome.noEntry => MindPalette.blue,
+    MindPaperOutcome.failedUnknown => MindPalette.red,
+    _ => MindPalette.yellow,
+  };
+
+  String _cycleTime(MindPaperCycle c) => c.createdAt.toUtc().toIso8601String().substring(0,16)+'Z';
+
+  Widget _realDecisionsScreen() {
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Decision Explorer');
+    final filters=['All',for(final o in MindPaperOutcome.values) if(j.cycles.any((c)=>c.outcome==o)) o.label];
+    final rows=j.cycles.where((c)=>_cycleFilter=='All'||c.outcome.label==_cycleFilter).toList();
+    return _surface('Decision Explorer','Every Mind PAPER cycle: why it filled, held, waited or was blocked',[
+      const MindTag('RECORDED PAPER DECISIONS · NO BROKER ORDERS',color:MindPalette.yellow),
+      const SizedBox(height:10),
+      _chips(filters,_cycleFilter,(v)=>_updateMind(()=>_cycleFilter=v)),
+      _section('Recorded Decisions · '+rows.length.toString(),Icons.history_outlined,[
+        if(rows.isEmpty) _empty('No Mind PAPER cycles yet. Run one from Trading Room Detail.'),
+        for(final c in rows)
+          Padding(padding:const EdgeInsets.only(bottom:7),child:_tile(
+            c.tradingSymbol+' · '+(c.side??c.signalAction??'NO SIGNAL'),
+            _cycleTime(c)+' · '+c.interval+' · '+c.reasons.take(2).join(', '),
+            Icons.track_changes_outlined,trailing:c.outcome.label,color:_outcomeTone(c.outcome),
+            tap:(){ _updateMind(()=>_selectedCycleId=c.id); _go('decision-detail'); })),
+      ]),
+    ]);
+  }
+
+  Widget _realDecisionDetailScreen() {
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Decision Anatomy');
+    final c=j.cycles.where((e)=>e.id==_selectedCycleId).firstOrNull ?? j.cycles.firstOrNull;
+    if(c==null) {
+      return _surface('Decision Anatomy','No recorded decision',[
+        _empty('No Mind PAPER cycles yet.')],backTo:'decisions');
+    }
+    return _surface('Decision Anatomy · '+c.tradingSymbol,'Server-recorded trail · '+c.id,[
+      MindPanel(key:const ValueKey('mind-decision-anatomy'),highlight:true,child:Column(children:[
+        _value('Outcome',c.outcome.label,color:_outcomeTone(c.outcome)),
+        _value('Strategy',c.strategyCode),
+        _value('Signal',c.signalAction??'None'),
+        _value('Interval',c.interval),
+        _value('Recorded',_cycleTime(c)),
+        _value('Execution','PAPER virtual only',color:MindPalette.yellow),
+        if(c.quantity!=null) _value('Order',(c.side??'')+' '+c.quantity.toString()+' @ '+(c.limitPrice??'-').toString()),
+        if(c.quoteLtp!=null) _value('Verified quote',c.quoteLtp.toString()),
+        if(c.stopPrice!=null) _value('Stop / target',c.stopPrice.toString()+' / '+(c.targetPrice??'-').toString()),
+        _value('Data',c.dataLabel),
+      ])),
+      const SizedBox(height:12),
+      _section('Gate-by-gate Trail',Icons.account_tree_outlined,[
+        MindPanel(child:Column(children:[
+          for(final s in c.stages) _value(s.code+' · '+s.result,s.detail,
+            color:const {'PASSED','FILLED','EVALUATED','POSTED','EXIT'}.contains(s.result)
+              ?MindPalette.mint:MindPalette.yellow),
+        ])),
+      ]),
+      _section('Reason Codes',Icons.rule_outlined,[
+        MindPanel(child:Wrap(spacing:6,runSpacing:6,children:[
+          for(final r in c.reasons) MindTag(r,color:MindPalette.blue),
+        ])),
+      ]),
+    ],backTo:'decisions');
+  }
+
   Widget decisionsScreen() {
+    if(widget.paperJournalRepository!=null) return _realDecisionsScreen();
     final matches=_decisionRows.where((r)=>_decisionFilter=='All'||
       r.$3==_decisionFilter||r.$2==_decisionFilter).toList();
     return _surface('Decision Explorer','Why the engine bought, waited or abstained',[
@@ -341,6 +422,7 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
   }
 
   Widget decisionDetailScreen() {
+    if(widget.paperJournalRepository!=null) return _realDecisionDetailScreen();
     final row=_decisionRows.firstWhere((r)=>r.$1==_selectedDecision,
       orElse:()=>_decisionRows.first);
     return _surface('Decision Anatomy · '+row.$1,

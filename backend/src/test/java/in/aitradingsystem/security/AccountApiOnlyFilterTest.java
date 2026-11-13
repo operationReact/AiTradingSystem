@@ -133,6 +133,8 @@ class AccountApiOnlyFilterTest {
         assertBlocked("GET", progress + "/items/../../admin");
         assertPasses("GET", "/api/customer/mind/v1/paper-portfolio");
         assertBlocked("POST", "/api/customer/mind/v1/paper-portfolio");
+        assertPasses("GET", "/api/customer/mind/v1/paper-journal");
+        assertBlocked("DELETE", "/api/customer/mind/v1/paper-journal");
         String cycles = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/paper-cycles";
         assertPasses("POST", cycles);
         assertPasses("GET", cycles);

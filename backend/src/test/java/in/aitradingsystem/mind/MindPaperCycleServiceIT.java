@@ -126,6 +126,15 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(portfolioJson.get("rooms").get(0).get("paused").isBoolean()).isTrue();
         assertThat(portfolioJson.get("riskPolicy").get("perTradeRiskBudget").isTextual()).isTrue();
 
+        var journalBody = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/customer/mind/v1/paper-journal").with(customerJwt)).andReturn().getResponse();
+        assertThat(journalBody.getStatus()).isEqualTo(200);
+        var journalJson = json.readTree(journalBody.getContentAsString());
+        assertThat(journalJson.get("contractVersion").asText()).isEqualTo("mind.paper-journal.v1");
+        assertThat(journalJson.get("liveMoney").asBoolean(true)).isFalse();
+        assertThat(journalJson.get("cycles").isArray()).isTrue();
+        assertThat(journalJson.get("performance").get("sampleTooSmall").isBoolean()).isTrue();
+
         var history = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
                 .get("/api/customer/trading-rooms/" + room + "/mind/paper-cycles").with(customerJwt))
             .andReturn().getResponse();
@@ -223,6 +232,17 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
         assertThat(portfolio.realizedPnlPaise()).isEqualTo(exit.realizedPnlPaise());
         assertThat(portfolio.positions()).isEmpty();
         assertThat(portfolio.grossExposurePercent()).isZero();
+
+        // Journal: 3 cycles for this owner, one closed round trip with its realized loss.
+        var journal = service.journal(owner, 50);
+        assertThat(journal.liveMoney()).isFalse();
+        assertThat(journal.cycles()).hasSize(3);
+        assertThat(journal.performance().fills()).isEqualTo(2);
+        assertThat(journal.performance().closedTrades()).isEqualTo(1);
+        assertThat(journal.performance().losses()).isEqualTo(1);
+        assertThat(journal.performance().realizedPnlPaise()).isEqualTo(exit.realizedPnlPaise());
+        assertThat(journal.performance().sampleTooSmall()).isTrue();
+        assertThat(service.journal(customer(), 50).cycles()).isEmpty();
     }
 
     @Test

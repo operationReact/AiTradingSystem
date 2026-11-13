@@ -132,7 +132,82 @@ extension _MindResearchScreens on _MindWorkspaceState {
     ],backTo:'research');
   }
 
-  Widget performanceScreen()=>_surface('Performance & Learning',
+  Widget _realPerformanceScreen() {
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Performance & Learning');
+    final p=j.performance;
+    return _surface('Performance & Learning','Measured from closed Mind PAPER round trips only',[
+      const MindTag('PAPER · VIRTUAL MONEY',color:MindPalette.yellow),
+      const SizedBox(height:10),
+      _metricGrid([
+        ('Closed PAPER trades',p.closedTrades.toString(),p.fills.toString()+' fills / '+p.cycles.toString()+' cycles'),
+        ('Win rate',p.winRatePercent==null?'No closed trades':p.winRatePercent!.toStringAsFixed(1)+'%',
+          p.sampleTooSmall?'Sample < '+p.minimumMeaningfulSample.toString()+' · not meaningful':'Closed trades'),
+        ('Realized P&L',formatPaise(p.realizedPnlPaise),'After simulated fees'),
+        ('Max drawdown',formatPaise(-p.maxDrawdownPaise),'Closed-trade equity'),
+      ]),
+      const SizedBox(height:13),
+      if(p.sampleTooSmall) MindPanel(key:const ValueKey('mind-performance-sample-warning'),child:Text(
+        'Only '+p.closedTrades.toString()+' closed trade(s). At least '+p.minimumMeaningfulSample.toString()+
+        ' are needed before any performance figure is meaningful. No equity curve is drawn until then.',
+        style:const TextStyle(color:MindPalette.yellow,fontSize:12))),
+      const SizedBox(height:12),
+      _split(
+        _block('Strategy Attribution',Icons.layers_outlined,[
+          _value('SMA_TREND_VOLUME_V1',p.closedTrades.toString()+' closed · '+formatPaise(p.realizedPnlPaise)),
+          _value('Other strategies','Not yet wired to PAPER',color:MindPalette.muted),
+        ]),
+        _block('Model Attribution',Icons.memory_outlined,[
+          _value('Participating models','None',color:MindPalette.muted),
+          const Text('No model votes in PAPER decisions yet; attribution starts when one is deployed and verified.',
+            style:TextStyle(color:MindPalette.muted,fontSize:11)),
+        ]),
+      ),
+      const SizedBox(height:12),
+      _split(
+        _block('Decision Mix',Icons.pie_chart_outline,[
+          _value('Fills',p.fills.toString()),
+          _value('No entry',p.noEntry.toString()),
+          _value('Blocked by gates',p.blocked.toString()),
+        ]),
+        _block('Learning',Icons.school_outlined,[
+          _value('Retraining','No model lifecycle yet',color:MindPalette.muted),
+          _action('Decision journal','journal'),
+        ]),
+      ),
+    ]);
+  }
+
+  static String _shortId(String id) => id.length <= 8 ? id : id.substring(0, 8);
+
+  Widget _realJournalScreen() {
+    _ensureJournal();
+    final j=_journal;
+    if(j==null) return _journalPending('Decision Journal');
+    return _surface('Decision Journal','Server-recorded Mind PAPER cycles, newest first',[
+      _section('Decision Records · '+j.cycles.length.toString(),Icons.history_outlined,[
+        if(j.cycles.isEmpty) _empty('No Mind PAPER cycles yet.'),
+        for(final c in j.cycles)
+          Padding(padding:const EdgeInsets.only(bottom:8),child:_tile(
+            c.tradingSymbol+' · '+(c.side??c.signalAction??'NO SIGNAL'),
+            _cycleTime(c)+' · '+_shortId(c.id)+(c.orderId==null?'':' · order '+_shortId(c.orderId!)),
+            Icons.receipt_long_outlined,trailing:c.outcome.label,color:_outcomeTone(c.outcome),
+            tap:(){ _updateMind(()=>_selectedCycleId=c.id); _go('decision-detail'); })),
+      ]),
+      _section('Audit',Icons.fact_check_outlined,[
+        MindPanel(child:Column(children:[
+          _value('Market data source',j.cycles.isEmpty?'None yet':j.cycles.first.dataLabel),
+          _value('Broker order IDs','None · PAPER virtual orders only'),
+          _value('Strategy version','SMA_TREND_VOLUME_V1'),
+          _value('Timestamps','Server clock (UTC)'),
+          _value('Realized P&L',formatPaise(j.performance.realizedPnlPaise)),
+        ])),
+      ]),
+    ]);
+  }
+
+  Widget performanceScreen()=>widget.paperJournalRepository!=null ? _realPerformanceScreen() : _surface('Performance & Learning',
     'Measure model, strategy and portfolio value independently',[
     _metricGrid([
       ('Simulated net return','+12.4%','No actual trades'),
@@ -188,6 +263,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
   ]);
 
   Widget journalScreen() {
+    if(widget.paperJournalRepository!=null) return _realJournalScreen();
     final items=_MindAnalyticsScreens._decisionRows.where((r)=>
       _decisionFilter=='All'||r.$3==_decisionFilter||r.$2==_decisionFilter).toList();
     return _surface('Decision Journal','Immutable-looking audit timeline of mock signals and outcomes',[
