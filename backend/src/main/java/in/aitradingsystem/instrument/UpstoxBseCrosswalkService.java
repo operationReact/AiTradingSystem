@@ -11,8 +11,11 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -113,6 +116,17 @@ class UpstoxBseCrosswalkController {
     ResponseEntity<UpstoxBseCrosswalkRepository.Reconciliation> audit() {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(service.audit());
     }
+    /** Expected source and import failures must not masquerade as unknown HTTP 500. */
+    @ExceptionHandler(InstrumentMasterException.class)
+    ResponseEntity<ProblemDetail> sourceError(InstrumentMasterException error) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(
+            HttpStatus.UNPROCESSABLE_ENTITY,
+            "BSE reference activation failed source or catalogue verification");
+        detail.setProperty("code", error.code());
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+            .cacheControl(CacheControl.noStore()).body(detail);
+    }
+
     /** Generic Spring Security /api/** POST policy restricts to ADMIN/OPERATOR. */
     @PostMapping("/refresh")
     ResponseEntity<UpstoxBseCrosswalkService.Result> refresh() {
