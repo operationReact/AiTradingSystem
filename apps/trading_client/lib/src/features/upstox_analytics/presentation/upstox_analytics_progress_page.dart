@@ -571,6 +571,21 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     ];
   }
 
+  String? relatedDevelopment(String code, UpstoxAnalyticsTask? task) {
+    // This line deliberately never changes an operational readiness state.
+    if (task == null || task.state == 'VERIFIED') return null;
+    final worker = switch (code) {
+      'INSTRUMENT_MAPPING' || 'HISTORICAL_INGESTION' => 1,
+      'QUALITY_RIGHTS' || 'MIND_DATASETS' => 2,
+      'FUNDAMENTALS' => 4,
+      _ => null,
+    };
+    if (worker == null || snapshot == null) return null;
+    final report = workerObservations(snapshot!)[worker - 1];
+    if (report.state == 'NO_REPORT' || report.pr == null) return null;
+    return 'Developer W$worker · PR #${report.pr} · ${report.ci ?? 'CI unknown'}';
+  }
+
   Widget pipelineRow(
       (String, String, String, IconData) spec,
       UpstoxAnalyticsTask? task, {bool last = false}) {
@@ -599,6 +614,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontSize: 10,
                     color: MintTickPalette.mutedSilver)),
+                if (relatedDevelopment(spec.$1, task) case final work?)
+                  Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mint)),
               ])),
             const SizedBox(width: 5),
             status(task),
@@ -627,6 +646,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                   Text(task?.reasonCode == null ? spec.$3 : reasonDescription(task!.reasonCode),
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 11, color: MintTickPalette.mutedSilver)),
+                  if (relatedDevelopment(spec.$1, task) case final work?)
+                    Text(work, maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mint)),
                   if (task?.checked != null)
                     Text('Verified ${str(task?.verified)} / ${str(task?.checked)} checks',
                       style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
