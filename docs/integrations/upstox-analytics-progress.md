@@ -117,3 +117,18 @@ GitHub polling succeeded.
 - Deploying the code does **not** establish that the host is online, the
   analytics token works, or that dataset rights exist. Verify with the
   owner-only progress endpoint and acceptance workflow after deployment.
+
+## Activation failure diagnostic follow-up (13 November 2026)
+- One-shot private acceptance run 43335068276 failed after SSM preflight with
+  `LOCAL_RELEASE_UNCLASSIFIED`. The preceding PAPER deployment run
+  43335030317 succeeded; Upstox source verification is **not** complete.
+- Each reviewed PAPER host deploy now emits a fixed `MINTTICK_PAPER_FAILED_STAGE`
+  code on errors. The activation script maps those codes to bounded, safe
+  `LOCAL_RELEASE_*` reasons. No raw host log, token or SSM stdout is displayed.
+- The activation workflow prioritizes `ROLLBACK_UNVERIFIED` if restoration
+  fails, so operators do not mistake a rollback problem for a source API failure.
+- These changes improve diagnosis; they do **not** prove or repair the unknown
+  infrastructure/application issue, nor do they license data retention.
+- Do not retry activation until an exact-host PAPER deployment containing
+  the new stage markers has passed and the operator can verify the current
+  server state. Automatic PAPER/LIVE orders remain outside this workflow.
