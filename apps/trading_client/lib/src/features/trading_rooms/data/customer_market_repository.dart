@@ -841,6 +841,304 @@ abstract interface class CustomerUniverseFacetsRepository {
 }
 
 /// Nifty 50 overview from the backend's 30-second cache. Values are provider data, never estimates.
+/// Whole-market NSE board row from a stored, verified FULL quote. [exchangeAt] is the
+/// exchange time of that quote; it is never relabelled as a live tick.
+class CustomerBoardRow {
+  const CustomerBoardRow({required this.instrumentId, required this.tradingSymbol,
+    required this.companyName, required this.ltp, required this.previousClose,
+    required this.change, required this.changePct, required this.gapPct,
+    required this.volume, required this.tradedValue, required this.exchangeAt,
+    this.industry, this.capSegment, this.open, this.high, this.low,
+    this.week52High, this.week52Low});
+  final int instrumentId;
+  final String tradingSymbol;
+  final String companyName;
+  final String? industry;
+  /// LARGE, MID, SMALL or MICRO from official Nifty lists; null when unclassified.
+  final String? capSegment;
+  final num ltp;
+  final num previousClose;
+  final num change;
+  final num changePct;
+  final num gapPct;
+  final num? open;
+  final num? high;
+  final num? low;
+  final int volume;
+  final num tradedValue;
+  final num? week52High;
+  final num? week52Low;
+  final DateTime exchangeAt;
+
+  String get symbol => tradingSymbol.replaceFirst(RegExp(r'-EQ$'), '');
+
+  factory CustomerBoardRow.fromJson(Map<String, dynamic> value) {
+    num? optional(String key) {
+      final raw = value[key];
+      if (raw == null) return null;
+      final parsed = raw is num ? raw : num.tryParse('$raw');
+      return parsed == null || !parsed.isFinite || parsed <= 0 ? null : parsed;
+    }
+    final id = value['instrumentId'];
+    final segment = value['capSegment'];
+    if (id is! num || id < 1 ||
+        (segment != null && !const {'LARGE', 'MID', 'SMALL', 'MICRO'}.contains(segment))) {
+      throw const FormatException('Invalid market board row');
+    }
+    final row = CustomerBoardRow(
+      instrumentId: id.toInt(),
+      tradingSymbol: _overviewText(value['tradingSymbol']),
+      companyName: _overviewText(value['companyName'], allowEmpty: true),
+      industry: value['industry'] is String ? value['industry'] as String : null,
+      capSegment: segment as String?,
+      ltp: _overviewNumber(value['ltp'], positive: true),
+      previousClose: _overviewNumber(value['previousClose'], positive: true),
+      change: _overviewNumber(value['change']),
+      changePct: _overviewNumber(value['changePct']),
+      gapPct: _overviewNumber(value['gapPct']),
+      open: optional('open'), high: optional('high'), low: optional('low'),
+      volume: _overviewCount(value['volume']),
+      tradedValue: _overviewNumber(value['tradedValue']),
+      week52High: optional('week52High'), week52Low: optional('week52Low'),
+      exchangeAt: _overviewTime(value['exchangeAt']),
+    );
+    final high = row.high;
+    final low = row.low;
+    if (high != null && low != null && high < low) {
+      throw const FormatException('Inverted market board range');
+    }
+    return row;
+  }
+
+  InstrumentRecord toInstrument() => InstrumentRecord(
+    id: instrumentId, exchange: 'NSE', exchangeSegment: 'NSE_CM', symbolToken: '',
+    tradingSymbol: tradingSymbol, name: companyName, instrumentType: 'EQ',
+    expiry: null, strike: null, lotSize: 1, tickSize: 0.05);
+}
+
+class CustomerBoardBreadth {
+  const CustomerBoardBreadth({required this.advancers, required this.decliners,
+    required this.unchanged, required this.total});
+  final int advancers;
+  final int decliners;
+  final int unchanged;
+  final int total;
+
+  factory CustomerBoardBreadth.fromJson(Map<String, dynamic> value) {
+    final b = CustomerBoardBreadth(
+      advancers: _overviewCount(value['advancers']),
+      decliners: _overviewCount(value['decliners']),
+      unchanged: _overviewCount(value['unchanged']),
+      total: _overviewCount(value['total']),
+    );
+    if (b.advancers + b.decliners + b.unchanged != b.total) {
+      throw const FormatException('Market breadth does not reconcile');
+    }
+    return b;
+  }
+}
+
+/// LIVE (session open, recent quotes), DELAYED (open, older quotes), LAST_SESSION (closed)
+/// or UNAVAILABLE. Never an exchange open/closed declaration on its own.
+class CustomerBoardFreshness {
+  const CustomerBoardFreshness({required this.state, this.sessionDate, this.asOf,
+    this.excludedOlderSession = 0});
+  final String state;
+  final DateTime? sessionDate;
+  final DateTime? asOf;
+  final int excludedOlderSession;
+
+  factory CustomerBoardFreshness.fromJson(Map<String, dynamic> value) {
+    final state = value['state'];
+    if (!const {'LIVE', 'DELAYED', 'LAST_SESSION', 'UNAVAILABLE'}.contains(state)) {
+      throw const FormatException('Unknown market board freshness');
+    }
+    final rawAsOf = value['asOf'];
+    final rawDate = value['sessionDate'];
+    final asOf = rawAsOf == null ? null : _overviewTime(rawAsOf);
+    if ((state == 'UNAVAILABLE') != (asOf == null)) {
+      throw const FormatException('Market board freshness lacks evidence');
+    }
+    return CustomerBoardFreshness(
+      state: state as String,
+      sessionDate: rawDate == null ? null : _overviewTime(rawDate),
+      asOf: asOf,
+      excludedOlderSession: value['excludedOlderSession'] is int
+          ? value['excludedOlderSession'] as int : 0,
+    );
+  }
+}
+
+/// Exchange session state from the backend trading calendar (OPEN, PRE_OPEN, CLOSED, UNKNOWN).
+class CustomerMarketStatus {
+  const CustomerMarketStatus({required this.state, this.opensAt, this.closesAt});
+  final String state;
+  final DateTime? opensAt;
+  final DateTime? closesAt;
+
+  factory CustomerMarketStatus.fromJson(Map<String, dynamic> value) {
+    final state = value['state'];
+    if (!const {'OPEN', 'PRE_OPEN', 'CLOSED', 'UNKNOWN'}.contains(state)) {
+      throw const FormatException('Unknown market session state');
+    }
+    DateTime? time(String key) => value[key] == null ? null : _overviewTime(value[key]);
+    return CustomerMarketStatus(state: state as String,
+        opensAt: time('opensAt'), closesAt: time('closesAt'));
+  }
+}
+
+class CustomerSegmentSummary {
+  const CustomerSegmentSummary({required this.segment, required this.label,
+    required this.available, required this.members, required this.quoted,
+    required this.breadth, this.avgChangePct, this.medianChangePct, this.membershipAsOf});
+  /// ALL, NIFTY50, LARGE, MID, SMALL or MICRO.
+  final String segment;
+  final String label;
+  final bool available;
+  final int members;
+  final int quoted;
+  final CustomerBoardBreadth breadth;
+  final num? avgChangePct;
+  final num? medianChangePct;
+  final DateTime? membershipAsOf;
+
+  factory CustomerSegmentSummary.fromJson(Map<String, dynamic> value) {
+    final available = value['available'];
+    final breadth = value['breadth'];
+    if (available is! bool || breadth is! Map<String, dynamic>) {
+      throw const FormatException('Invalid market segment');
+    }
+    num? optional(String key) => value[key] == null ? null : _overviewNumber(value[key]);
+    final asOf = value['membershipAsOf'];
+    return CustomerSegmentSummary(
+      segment: _overviewText(value['segment']),
+      label: _overviewText(value['label']),
+      available: available,
+      members: _overviewCount(value['members']),
+      quoted: _overviewCount(value['quoted']),
+      breadth: CustomerBoardBreadth.fromJson(breadth),
+      avgChangePct: optional('avgChangePct'),
+      medianChangePct: optional('medianChangePct'),
+      membershipAsOf: asOf == null ? null : _overviewTime(asOf),
+    );
+  }
+}
+
+class CustomerBoardSector {
+  const CustomerBoardSector({required this.sector, required this.quoted,
+    required this.advancers, required this.decliners, required this.avgChangePct,
+    this.leader, this.leaderChangePct});
+  final String sector;
+  final int quoted;
+  final int advancers;
+  final int decliners;
+  final num avgChangePct;
+  final String? leader;
+  final num? leaderChangePct;
+
+  factory CustomerBoardSector.fromJson(Map<String, dynamic> value) => CustomerBoardSector(
+    sector: _overviewText(value['sector']),
+    quoted: _overviewCount(value['quoted']),
+    advancers: _overviewCount(value['advancers']),
+    decliners: _overviewCount(value['decliners']),
+    avgChangePct: _overviewNumber(value['avgChangePct']),
+    leader: value['leader'] is String ? value['leader'] as String : null,
+    leaderChangePct: value['leaderChangePct'] == null
+        ? null : _overviewNumber(value['leaderChangePct']),
+  );
+}
+
+class CustomerBoardSummary {
+  const CustomerBoardSummary({required this.generatedAt, required this.market,
+    required this.freshness, required this.listed, required this.segments,
+    required this.sectors});
+  final DateTime generatedAt;
+  final CustomerMarketStatus market;
+  final CustomerBoardFreshness freshness;
+  final int listed;
+  final List<CustomerSegmentSummary> segments;
+  final List<CustomerBoardSector> sectors;
+
+  CustomerSegmentSummary? segment(String code) {
+    for (final s in segments) {
+      if (s.segment == code) return s;
+    }
+    return null;
+  }
+
+  factory CustomerBoardSummary.fromJson(Map<String, dynamic> value) {
+    if (value['contractVersion'] != 'customer.market.board-summary.v1') {
+      throw const FormatException('Unsupported market board summary');
+    }
+    final market = value['market'];
+    final freshness = value['freshness'];
+    final segments = value['segments'];
+    final sectors = value['sectors'];
+    if (market is! Map<String, dynamic> || freshness is! Map<String, dynamic> ||
+        segments is! List || sectors is! List) {
+      throw const FormatException('Invalid market board summary');
+    }
+    return CustomerBoardSummary(
+      generatedAt: _overviewTime(value['generatedAt']),
+      market: CustomerMarketStatus.fromJson(market),
+      freshness: CustomerBoardFreshness.fromJson(freshness),
+      listed: _overviewCount(value['listed']),
+      segments: [
+        for (final s in segments)
+          s is Map<String, dynamic> ? CustomerSegmentSummary.fromJson(s)
+              : throw const FormatException('Invalid market segment row'),
+      ],
+      sectors: [
+        for (final s in sectors)
+          s is Map<String, dynamic> ? CustomerBoardSector.fromJson(s)
+              : throw const FormatException('Invalid market sector row'),
+      ],
+    );
+  }
+}
+
+class CustomerBoard {
+  const CustomerBoard({required this.segment, required this.sort, required this.available,
+    required this.quoted, required this.freshness, required this.rows, this.sector});
+  final String segment;
+  final String sort;
+  final String? sector;
+  final bool available;
+  final int quoted;
+  final CustomerBoardFreshness freshness;
+  final List<CustomerBoardRow> rows;
+
+  factory CustomerBoard.fromJson(Map<String, dynamic> value) {
+    final available = value['available'];
+    final freshness = value['freshness'];
+    final rows = value['rows'];
+    if (value['contractVersion'] != 'customer.market.board.v1' || available is! bool ||
+        freshness is! Map<String, dynamic> || rows is! List) {
+      throw const FormatException('Invalid market board');
+    }
+    return CustomerBoard(
+      segment: _overviewText(value['segment']),
+      sort: _overviewText(value['sort']),
+      sector: value['sector'] is String ? value['sector'] as String : null,
+      available: available,
+      quoted: _overviewCount(value['quoted']),
+      freshness: CustomerBoardFreshness.fromJson(freshness),
+      rows: [
+        for (final r in rows)
+          r is Map<String, dynamic> ? CustomerBoardRow.fromJson(r)
+              : throw const FormatException('Invalid market board row'),
+      ],
+    );
+  }
+}
+
+/// Whole-market NSE board: segments, sectors, movers, most active and 52-week extremes.
+abstract interface class CustomerMarketBoardRepository {
+  Future<CustomerBoardSummary> boardSummary();
+  Future<CustomerBoard> board({required String segment, required String sort,
+    String? sector, int limit = 20});
+}
+
 abstract interface class CustomerOverviewRepository {
   Future<CustomerMarketOverview> overview();
 }
@@ -861,7 +1159,8 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     CustomerLiveMarketRepository, CustomerSnapshotMarketRepository,
     CustomerPaginatedMarketRepository, CustomerCandleRepository,
     CustomerDetailRepository, CustomerWatchlistRepository, CustomerOverviewRepository,
-    CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository {
+    CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository,
+    CustomerMarketBoardRepository {
   HttpCustomerMarketRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -1044,5 +1343,31 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
       throw const FormatException('Invalid market overview response');
     }
     return CustomerMarketOverview.fromJson(data);
+  }
+
+  @override
+  Future<CustomerBoardSummary> boardSummary() async {
+    final data = await api.getJson('$_root/board/summary', timeout: const Duration(seconds: 12));
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid market board summary response');
+    }
+    return CustomerBoardSummary.fromJson(data);
+  }
+
+  @override
+  Future<CustomerBoard> board({required String segment, required String sort,
+      String? sector, int limit = 20}) async {
+    if (limit < 1 || limit > 100) throw ArgumentError.value(limit);
+    final data = await api.getJson('$_root/board', query: {
+      'segment': segment, 'sort': sort, 'sector': sector, 'limit': '$limit',
+    }, timeout: const Duration(seconds: 12));
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid market board response');
+    }
+    final board = CustomerBoard.fromJson(data);
+    if (board.segment != segment || board.sort != sort) {
+      throw const FormatException('Market board identity mismatch');
+    }
+    return board;
   }
 }
