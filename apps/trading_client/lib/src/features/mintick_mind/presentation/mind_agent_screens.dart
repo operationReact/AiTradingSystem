@@ -408,6 +408,26 @@ extension _MintickMindAgentScreens on _MindWorkspaceState {
 
   Widget shadowArenaScreen()=>_agentPage('Shadow Trading Arena',
     'Hypothetical model comparisons with aligned decision timestamps',[
+      if(widget.prospectiveRepository!=null||widget.prospectiveSignalsRepository!=null||
+          widget.prospectiveOutcomesRepository!=null) ...[
+        const MindTag('FORWARD-ONLY SHADOW EVIDENCE · NO ORDERS',color:MindPalette.blue),
+        const SizedBox(height:10),
+        if(widget.prospectiveRepository!=null) ...[
+          MindProspectiveCohortPanel(key:const ValueKey('mind-shadow-cohort'),
+            repository:widget.prospectiveRepository!),
+          const SizedBox(height:12),
+        ],
+        if(widget.prospectiveSignalsRepository!=null) ...[
+          MindProspectiveSignalsPanel(repository:widget.prospectiveSignalsRepository!),
+          const SizedBox(height:12),
+        ],
+        if(widget.prospectiveOutcomesRepository!=null) ...[
+          MindProspectiveOutcomesPanel(repository:widget.prospectiveOutcomesRepository!),
+          const SizedBox(height:12),
+        ],
+        const MindTag('COMPARISON CARDS BELOW: MOCK FIXTURES',color:MindPalette.yellow),
+        const SizedBox(height:10),
+      ],
       _chips(['Strategies','Regimes','Agent votes','Counterfactuals'],
         _agentShadowTab,(v)=>_updateMind(()=>_agentShadowTab=v)),
       const SizedBox(height:8),

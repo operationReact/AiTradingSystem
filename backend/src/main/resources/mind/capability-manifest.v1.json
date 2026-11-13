@@ -1,5 +1,5 @@
 {
- "manifestVersion": "mind.capability-manifest.v1+2026-11-13.8",
+ "manifestVersion": "mind.capability-manifest.v1+2026-11-13.9",
  "auditedAt": "2026-11-13",
  "sourceIssues": [
   "#997",
@@ -253,19 +253,25 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/mind/v1/prospective-cohort"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/mind/v1/prospective-signals"
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Model-vs-model shadow comparisons",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Real forward-only prospective cohort, signals and outcomes panels; comparison cards below are mocks.",
    "id": "screen.shadow-arena",
    "kind": "SCREEN",
    "name": "Shadow Trading Arena",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,
@@ -643,19 +649,25 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/mind/v1/ma-walkforward"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/mind/v1/strategy-replay"
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Per-strategy backtests for every registry evaluator",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Real MA walk-forward and strategy-replay research panels (/api/customer/mind/v1/ma-walkforward, /strategy-replay) above labelled mock experiment cards.",
    "id": "screen.research",
    "kind": "SCREEN",
    "name": "Research & Backtesting",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,
@@ -945,16 +957,15 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
-    "Flutter web/Android/iOS runtime evidence"
+    "Permitted F&O contracts/OI/option-chain source (#924)",
+    "Real chain and greeks",
+    "Flutter runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
    "id": "screen.derivatives",
    "kind": "SCREEN",
    "name": "Futures & Options",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -971,16 +982,15 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
-    "Flutter web/Android/iOS runtime evidence"
+    "Permitted F&O contracts/OI/option-chain source (#924)",
+    "Real chain and greeks",
+    "Flutter runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
    "id": "screen.options-chain",
    "kind": "SCREEN",
    "name": "Option Chain",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
@@ -997,16 +1007,15 @@
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
-    "Flutter web/Android/iOS runtime evidence"
+    "Permitted F&O contracts/OI/option-chain source (#924)",
+    "Real chain and greeks",
+    "Flutter runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
    "id": "screen.option-builder",
    "kind": "SCREEN",
    "name": "Strategy Payoff Builder",
-   "status": "MOCK"
+   "status": "DATA_BLOCKED"
   },
   {
    "parentId": null,
