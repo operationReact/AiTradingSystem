@@ -11,6 +11,7 @@ import '../data/customer_market_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_room_production_workspace.dart';
+import 'minttick_room_rename_dialog.dart';
 
 
 class MintTickTradingRoomsPage extends StatefulWidget {
@@ -45,6 +46,24 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
   Future<void> _refresh() async {
     await widget.store.load();
     if (mounted) setState(_refreshMetrics);
+  }
+
+  Future<void> _renameRoom(TradingRoomDraft room) async {
+    var renamed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => MintTickRoomRenameDialog(
+        currentName: room.name,
+        onSave: (name) async {
+          await widget.store.rename(room.id, name);
+          renamed = true;
+        },
+      ),
+    );
+    if (renamed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trading Room renamed.')));
+    }
   }
 
   @override
@@ -147,7 +166,18 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
                         Text(room.status == 'PAPER_FUNDED' ? 'FUNDED' : 'DRAFT',
                           style: type.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant, fontWeight: FontWeight.w700)),
-                        const SizedBox(width: 2),
+                        const SizedBox(width: 3),
+                        IconButton(
+                          key: ValueKey('room-rename-${room.id}'),
+                          tooltip: 'Rename ${room.name}',
+                          onPressed: widget.store.repository is RoomDraftRenaming
+                            ? () => _renameRoom(room) : null,
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 32, height: 32),
+                          padding: EdgeInsets.zero,
+                          icon: const Icon(Icons.edit_outlined, size: 17),
+                        ),
                         const Icon(Icons.chevron_right_rounded, size: 19),
                       ]),
                     ),
@@ -697,6 +727,7 @@ class MintTickRoomDetailPage extends StatefulWidget {
 }
 
 class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
+  TradingRoomDraft? _renamedRoom;
   CustomerPaperWallet? _wallet;
   CustomerExecutionReadiness? _readiness;
   List<CustomerPaperCashEvent> _events = const [];
@@ -846,10 +877,46 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
     }
   }
 
+  Future<void> _renameRoom() async {
+    final repo = widget.repository;
+    if (repo == null) return;
+    final current = _renamedRoom ?? widget.room;
+    var renamed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => MintTickRoomRenameDialog(
+        currentName: current.name,
+        onSave: (name) async {
+          final saved = await repo.rename(current.id, name);
+          if (saved.id != current.id || saved.mode != current.mode ||
+              saved.status != current.status ||
+              saved.paperBudget != current.paperBudget ||
+              saved.focus != current.focus ||
+              saved.riskPreference != current.riskPreference) {
+            throw const FormatException('Unexpected room state after rename');
+          }
+          if (mounted) setState(() => _renamedRoom = saved);
+          renamed = true;
+          try {
+            await widget.onRoomChanged?.call();
+          } catch (_) {
+            // The server rename succeeded. A transient room-list refresh
+            // failure must never re-submit or roll back that valid change.
+          }
+        },
+      ),
+    );
+    if (renamed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trading Room renamed.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return MintTickRoomProductionWorkspace(
-      room: widget.room,
+      room: _renamedRoom ?? widget.room,
+      onRename: widget.repository == null ? null : _renameRoom,
       wallet: _wallet,
       readiness: _readiness,
       events: _events,

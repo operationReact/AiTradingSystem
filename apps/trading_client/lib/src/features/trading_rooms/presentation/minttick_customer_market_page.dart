@@ -17,10 +17,8 @@ const _closedPoll = Duration(seconds: 30);
 const _failedPoll = Duration(seconds: 15);
 
 const _overviewPoll = Duration(seconds: 30);
-const _tabLabels = [
-  'Overview', 'All Stocks', 'Market Cap', 'Indices', 'Sectors',
-  'Industries', 'Movers',
-];
+const _tabLabels = ['Overview', 'All Stocks', 'Explore'];
+const _exploreLabels = ['Indices', 'Sectors', 'Market Cap', 'Industries', 'Movers'];
 
 /// Markets shell with four tabs. Only Overview and Explore show real data;
 /// Movers and Sectors state what is missing instead of inventing values.
@@ -46,6 +44,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   int _overviewSearchSeq = 0;
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final Map<int, CustomerLiveQuote> _rows = {};
+  int _exploreCategory = 0;
+  int _moverFilter = 0;
   InstrumentCatalogueStatus? _catalogue;
   List<InstrumentRecord> _stocks = const [];
   bool _hasNext = false;
@@ -62,6 +62,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
   Timer? _pollTimer;
   int _version = 0;
   CustomerUniverseFacets? _facets;
+  CustomerFullQuoteCoverage? _fullQuoteCoverage;
+  bool _fullCoverageLoading = false;
+  bool _fullCoverageFailed = false;
   bool _facetsLoading = false;
   String? _facetsError;
   CustomerMarketOverview? _overview;
@@ -140,6 +143,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     if (widget.repository is CustomerUniverseFacetsRepository) {
       unawaited(_loadFacets());
     }
+    if (widget.repository is CustomerFullQuoteCoverageRepository) {
+      unawaited(_loadFullQuoteCoverage());
+    }
     if (widget.repository is CustomerOverviewRepository) {
       unawaited(_loadOverview());
       _overviewTimer = Timer.periodic(_overviewPoll, (_) => unawaited(_loadOverview()));
@@ -180,6 +186,28 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
   }
 
+  Future<void> _loadFullQuoteCoverage() async {
+    final repo = widget.repository;
+    if (repo is! CustomerFullQuoteCoverageRepository ||
+        _fullCoverageLoading || !mounted) {
+      return;
+    }
+    _fullCoverageLoading = true;
+    try {
+      final latest = await (repo as CustomerFullQuoteCoverageRepository).fullQuoteCoverage();
+      if (!mounted) return;
+      setState(() {
+        _fullQuoteCoverage = latest;
+        _fullCoverageFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _fullCoverageFailed = true);
+    } finally {
+      _fullCoverageLoading = false;
+    }
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final active = state == AppLifecycleState.resumed;
@@ -201,6 +229,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     } else {
       _schedulePoll(Duration.zero);
       unawaited(_loadOverview());
+      unawaited(_loadFullQuoteCoverage());
     }
   }
 
@@ -414,94 +443,133 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         if (!didPop && _tabs.index != 0) _tabs.animateTo(0);
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
-      const SizedBox(height: 8),
-      const MintTickEyebrow('MintTick / Markets'),
       const SizedBox(height: 4),
       Row(children: [
         Expanded(child: Text('Markets', style: theme.textTheme.headlineSmall
             ?.copyWith(fontWeight: FontWeight.w800))),
         IconButton(
           key: const ValueKey('market-universe-refresh'),
-          tooltip: 'Refresh market coverage',
-          onPressed: _facetsLoading ? null : _loadFacets,
+          tooltip: 'Refresh market coverage and quotes',
+          onPressed: () {
+            unawaited(_loadFacets());
+            unawaited(_loadFullQuoteCoverage());
+            unawaited(_loadOverview());
+            unawaited(_load());
+          },
           icon: const Icon(Icons.refresh_rounded),
         ),
       ]),
-      Text('All supported NSE & BSE cash equities · app-managed feed',
-        style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 8),
+      const SizedBox(height: 2),
       TabBar(
         key: const ValueKey('customer-market-tabs'),
         controller: _tabs,
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
+        isScrollable: false,
         dividerColor: scheme.outlineVariant,
-        tabs: [for (final label in _tabLabels) Tab(text: label, height: 44)],
+        labelPadding: EdgeInsets.zero,
+        tabs: [for (final label in _tabLabels) Tab(text: label, height: 38)],
       ),
-      const SizedBox(height: 9),
+      const SizedBox(height: 7),
       ...switch (_tabs.index) {
         0 => _overviewTab(),
         1 => _exploreTab(context),
-        2 => _marketCapTab(),
-        3 => _indicesTab(),
-        4 => _sectorsTab(),
-        5 => _industriesTab(),
-        _ => _moversTab(),
+        _ => _exploreHub(),
       },
     ]),
     );
   }
 
-  List<Widget> _universeIntro() {
-    final data = _facets;
-    final theme = Theme.of(context);
-    if (data == null) {
-      if (_facetsLoading) {
-        return const [LinearProgressIndicator(minHeight: 2), SizedBox(height: 8)];
-      }
-      return [MintTickInfoText(_facetsError ??
-          'The full-universe catalogue coverage has not been verified.'),
-          const SizedBox(height: 8)];
-    }
-    final scheme = theme.colorScheme;
-    return [
-      Material(
-        key: const ValueKey('market-full-universe-banner'),
-        borderRadius: BorderRadius.circular(10),
-        color: scheme.surfaceContainerLow,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () => _tabs.animateTo(1),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-            decoration: BoxDecoration(
-              border: Border.all(color: scheme.outlineVariant),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(children: [
-              Icon(Icons.account_tree_outlined, color: scheme.primary, size: 18),
-              const SizedBox(width: 10),
-              Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('${data.totalListings} cash-equity listings',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w800)),
-                  Text('NSE ${data.exchanges['NSE'] ?? 0} · '
-                       'BSE ${data.exchanges['BSE'] ?? 0} · '
-                       'exchange listings, not unique issuers',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: scheme.onSurfaceVariant)),
-                ],
-              )),
-              const Icon(Icons.chevron_right_rounded, size: 17),
-            ]),
-          ),
+  List<Widget> _exploreHub() => [
+    Row(children: [
+      Expanded(child: Text('Browse markets', style: Theme.of(context).textTheme.titleSmall
+          ?.copyWith(fontWeight: FontWeight.w800))),
+      PopupMenuButton<int>(
+        key: const ValueKey('market-explore-menu'),
+        tooltip: 'Choose market category',
+        onSelected: (value) => setState(() => _exploreCategory = value),
+        itemBuilder: (context) => [
+          for (var i = 0; i < _exploreLabels.length; i++)
+            PopupMenuItem<int>(value: i, child: Text(_exploreLabels[i])),
+        ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Text(_exploreLabels[_exploreCategory],
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: Theme.of(context).colorScheme.primary)),
+            const SizedBox(width: 5),
+            const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+          ]),
         ),
       ),
-      const SizedBox(height: 9),
+    ]),
+    const SizedBox(height: 8),
+    ...switch (_exploreCategory) {
+      0 => _indicesTab(),
+      1 => _sectorsTab(),
+      2 => _marketCapTab(),
+      3 => _industriesTab(),
+      _ => _moversTab(),
+    },
+  ];
+
+  List<Widget> _universeIntro() {
+    final data = _facets;
+    final scheme = Theme.of(context).colorScheme;
+    if (data == null) {
+      return [
+        if (_facetsLoading) const LinearProgressIndicator(minHeight: 2)
+        else Text(_facetsError ?? 'Catalogue coverage unavailable',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 8),
+      ];
+    }
+    return [
+      InkWell(
+        key: const ValueKey('market-full-universe-banner'),
+        onTap: () => _tabs.animateTo(1),
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(children: [
+            Icon(Icons.dataset_outlined, size: 16, color: scheme.primary),
+            const SizedBox(width: 7),
+            Expanded(child: Text(
+              '${data.totalListings} listings · NSE ${data.exchanges['NSE'] ?? 0}'
+              ' · BSE ${data.exchanges['BSE'] ?? 0}',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700),
+            )),
+            Text('Browse', style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.primary)),
+            const Icon(Icons.chevron_right_rounded, size: 15),
+          ]),
+        ),
+      ),
+      if (_fullQuoteCoverage case final coverage?) ...[
+        if (coverage.totalActiveListings == data.totalListings)
+          Text('Stored FULL quotes ${coverage.storedFullQuotes}/'
+              '${coverage.totalActiveListings} · not live',
+            key: const ValueKey('market-full-quote-coverage'),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant))
+        else
+          Text('Quote coverage catalogue changed · refresh',
+              style: Theme.of(context).textTheme.labelSmall
+                  ?.copyWith(color: scheme.onSurfaceVariant)),
+        if ((data.exchanges['BSE'] ?? 0) == 0)
+          Text(coverage.activeBseCmRecords == 0
+                  ? 'BSE: no active cash-segment records imported'
+                  : 'BSE: ${coverage.activeBseCmRecords} BSE_CM records; 0 verified EQ listings',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant)),
+        const SizedBox(height: 4),
+      ] else if (_fullCoverageFailed)
+        Text('Full-market quote audit unavailable',
+            style: Theme.of(context).textTheme.labelSmall
+                ?.copyWith(color: scheme.onSurfaceVariant)),
+      const SizedBox(height: 7),
     ];
   }
 
@@ -541,8 +609,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final label = ready ? 'verified ranking available' : 'ranking not imported';
     return [
       ..._universeIntro(),
-      const MintTickInfoText('Capitalization groups require a dated official '
-          'company ranking; Nifty membership is not a market-cap category.'),
+      Text('Dated official rankings required · not inferred from Nifty membership',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       const SizedBox(height: 9),
       _compactCategory('Large cap', 'Top 100 · $label',
           Icons.account_balance_outlined),
@@ -564,8 +633,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final scheme = Theme.of(context).colorScheme;
     return [
       ..._universeIntro(),
-      const MintTickInfoText('Index membership is overlapping, versioned '
-          'reference data. It does not limit the complete stock universe.'),
+      Text('Verified index membership · indices overlap',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
       const SizedBox(height: 9),
       if (data == null)
         const MintTickInfoText('Index reference data unavailable.')
@@ -632,9 +702,9 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
           const SizedBox(height: 7),
         ],
-      const MintTickInfoText('Nifty broad, mid, small, micro, sectoral, '
-          'thematic and BSE indices will appear as their official '
-          'constituents are imported and verified.'),
+      Text('Other index lists appear after official constituents are verified.',
+          style: Theme.of(context).textTheme.labelSmall
+              ?.copyWith(color: scheme.onSurfaceVariant)),
     ];
   }
 
@@ -682,7 +752,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
         ),
         ..._overviewSearchResults(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
         ..._overviewSection(),
       ];
 
@@ -771,55 +841,52 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const SizedBox(height: 12),
       ],
       if (overview.source == 'STORED_LAST_OVERVIEW') ...[
-        MintTickInfoText(
-          'Last verified snapshot · exchange ${(overview.exchangeAsOf ?? overview.generatedAt).toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first}. '
-          'Historical prices only, not a live market view.',
-          icon: Icons.history_rounded,
-        ),
-        const SizedBox(height: 12),
-      ],
-      if (overview.source != 'STORED_LAST_OVERVIEW' &&
-          !overview.indices.any((index) => index.freshness == 'LIVE')) ...[
-        const MintTickInfoText(
-          'No verified live index quote. Market breadth, movers and sectors '
-          'reflect last recorded provider data, not an active trading signal.',
-          icon: Icons.schedule_rounded,
-        ),
-        const SizedBox(height: 12),
+        Text('Last verified snapshot · historical, not live',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
+      ] else if (!overview.indices.any((index) => index.freshness == 'LIVE')) ...[
+        Text('Last recorded quotes · not a live trading signal',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+        const SizedBox(height: 6),
       ],
       Text('Major indices', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.indices.isEmpty)
-        const MintTickInfoText('Index quotes are not in this snapshot. None are shown.')
+        Text('No verified index quote in this snapshot',
+            style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant))
       else
         for (final index in overview.indices) ...[
           _IndexCard(index: index, stored: overview.source == 'STORED_LAST_OVERVIEW'),
-          const SizedBox(height: 8),
+          const SizedBox(height: 5),
         ],
-      const MintTickInfoText('SENSEX and intraday sparklines are not available yet: '
-          'no verified SENSEX token and no stored intraday history. None are estimated.',
-          icon: Icons.hourglass_empty_rounded),
-      const SizedBox(height: 16),
+      if (!overview.indices.any((i) => i.indexCode.toUpperCase().contains('SENSEX')))
+        Text('SENSEX and intraday charts: verified source pending',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 4),
       _BreadthCard(overview: overview),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       _MoverSection(title: 'Top gainers', rows: overview.gainers.take(3).toList(),
           emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       _MoverSection(title: 'Top losers', rows: overview.losers.take(3).toList(),
           emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
           pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
+      const SizedBox(height: 9),
       Text('Sector performance', style: theme.textTheme.titleMedium
           ?.copyWith(fontWeight: FontWeight.w800)),
       const SizedBox(height: 8),
       if (overview.sectors.isEmpty)
         const MintTickInfoText('No sector has a verified quote in this snapshot.')
       else
-        for (final sector in overview.sectors.take(5)) ...[
-          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(5))),
-          const SizedBox(height: 8),
+        for (final sector in overview.sectors.take(3)) ...[
+          _SectorCard(sector: sector, scale: _sectorScale(overview.sectors.take(3))),
+          const SizedBox(height: 3),
         ],
       const SizedBox(height: 8),
       _IdeasSection(
@@ -851,26 +918,61 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     }
     final overview = _overview;
     if (overview == null) return _overviewStatus();
+    const labels = ['Gainers', 'Losers', 'Gap up', 'Gap down'];
+    const titles = ['Top gainers', 'Top losers', 'Gap up at open', 'Gap down at open'];
+    final rows = switch (_moverFilter) {
+      0 => overview.gainers,
+      1 => overview.losers,
+      2 => overview.gapUp,
+      _ => overview.gapDown,
+    };
+    final emptyText = switch (_moverFilter) {
+      0 => 'No Nifty 50 stock above its previous close.',
+      1 => 'No Nifty 50 stock below its previous close.',
+      2 => 'No Nifty 50 stock opened above its previous close.',
+      _ => 'No Nifty 50 stock opened below its previous close.',
+    };
     return [
-      _UniverseNote(universe: overview.universe),
-      const MintTickInfoText('Movers below cover Nifty 50 only. '
-          'Whole-market rankings require verified full-universe price coverage.'),
-      const SizedBox(height: 12),
-      _MoverSection(title: 'Top gainers', rows: overview.gainers,
-          emptyText: 'No Nifty 50 stock is above its previous close in this snapshot.',
-          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Top losers', rows: overview.losers,
-          emptyText: 'No Nifty 50 stock is below its previous close in this snapshot.',
-          pctOf: (m) => m.changePct, pctLabel: 'Change', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Gap up at open', rows: overview.gapUp,
-          emptyText: 'No Nifty 50 stock opened above its previous close.',
-          pctOf: (m) => m.gapPct, pctLabel: 'Gap', onOpen: _openMover),
-      const SizedBox(height: 16),
-      _MoverSection(title: 'Gap down at open', rows: overview.gapDown,
-          emptyText: 'No Nifty 50 stock opened below its previous close.',
-          pctOf: (m) => m.gapPct, pctLabel: 'Gap', onOpen: _openMover),
+      Row(children: [
+        Expanded(child: Text(
+          'Nifty 50 sample · ${overview.universe.returned}/${overview.universe.members} quoted',
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant),
+        )),
+        IconButton(
+          tooltip: 'Mover coverage details',
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            builder: (ctx) => SafeArea(child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: _UniverseNote(universe: overview.universe),
+            )),
+          ),
+          icon: const Icon(Icons.info_outline_rounded, size: 18),
+        ),
+      ]),
+      const SizedBox(height: 4),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        for (var i = 0; i < labels.length; i++)
+          ChoiceChip(
+            key: ValueKey('market-movers-filter-$i'),
+            label: Text(labels[i]),
+            selected: _moverFilter == i,
+            showCheckmark: false,
+            visualDensity: VisualDensity.compact,
+            onSelected: (_) => setState(() => _moverFilter = i),
+          ),
+      ]),
+      const SizedBox(height: 10),
+      _MoverSection(
+        title: titles[_moverFilter],
+        rows: rows,
+        emptyText: emptyText,
+        pctOf: (m) => _moverFilter < 2 ? m.changePct : m.gapPct,
+        pctLabel: _moverFilter < 2 ? 'Change' : 'Gap',
+        onOpen: _openMover,
+      ),
     ];
   }
 
@@ -926,8 +1028,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         ),
         onSubmitted: (_) => _load(),
       ),
-      const SizedBox(height: 12),
-      Wrap(spacing: 8, children: [
+      const SizedBox(height: 7),
+      Wrap(spacing: 6, runSpacing: 4, children: [
         for (final (name, exchange) in [('All', null), ('NSE', 'NSE'), ('BSE', 'BSE')])
           ChoiceChip(
             label: Text(name),
@@ -939,7 +1041,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
             },
           ),
       ]),
-      const SizedBox(height: 14),
+      const SizedBox(height: 6),
       ..._universeIntro(),
       if (_catalogue?.activeCount == 0) ...[
         const MintTickInfoText('The exchange instrument catalogue has not yet '
@@ -955,8 +1057,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         const SizedBox(height: 12),
       ],
       if (_stocks.isNotEmpty) ...[
-        MintTickInfoText(banner.text, icon: banner.icon),
-        const SizedBox(height: 14),
+        _MarketFeedLine(text: banner.text, icon: banner.icon),
+        const SizedBox(height: 7),
       ],
       Row(children: [
         Expanded(child: Text('Cash equities', style: theme.textTheme.titleMedium
@@ -972,16 +1074,16 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
       ]),
       if (_generatedAt != null)
-        Text('Last API check ${_clock(_generatedAt!.toLocal())} · exchange tick time shown per row',
+        Text('Checked ${_clock(_generatedAt!.toLocal())} · exchange time per quote',
           style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-      const SizedBox(height: 8),
+      const SizedBox(height: 5),
       if (!_loading && _stocks.isEmpty && _error == null)
         const MintTickInfoText('No stocks available for this search. '
             'Try another symbol or verify the active instrument catalogue.')
       else
         for (final (index, stock) in _stocks.indexed)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 1),
             child: Material(
               color: Colors.transparent,
               child: Semantics(
@@ -1007,10 +1109,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           label: Text(_loadingMore ? 'Loading equities…' : 'Load more equities'),
         )),
       ],
-      const SizedBox(height: 16),
-      Text('Live prices require backend verification. When unavailable, the last '
-          'verified snapshot is shown with its original exchange time, never as LIVE. '
-          'Information only, not investment advice.',
+      const SizedBox(height: 8),
+      Text('Only source-verified prices are displayed · saved quotes are never LIVE.',
         style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
     ];
   }
@@ -1114,6 +1214,28 @@ class _MarketStatusPill extends StatelessWidget {
   }
 }
 
+/// Keep feed limitations readable without turning them into a full-width card.
+class _MarketFeedLine extends StatelessWidget {
+  const _MarketFeedLine({required this.text, required this.icon});
+  final String text;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Row(children: [
+      Icon(icon, size: 14, color: scheme.onSurfaceVariant),
+      const SizedBox(width: 6),
+      Expanded(child: Text(text,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: Theme.of(context).textTheme.labelSmall
+            ?.copyWith(color: scheme.onSurfaceVariant),
+      )),
+    ]);
+  }
+}
+
 /// Honest placeholder for market data MintTick does not serve yet.
 class _NotAvailableBlock extends StatelessWidget {
   const _NotAvailableBlock({required this.title, required this.reason});
@@ -1170,6 +1292,8 @@ String _dayClock(DateTime time) {
   return '${time.day.toString().padLeft(2, '0')} ${months[time.month - 1]} ${_clock(time).substring(0, 5)}';
 }
 
+/// A dense market terminal row: no repeated bordered cards or three-line
+/// empty-feed warnings for every equity. Status and source timestamp remain visible.
 class _StockRow extends StatelessWidget {
   const _StockRow({required this.stock, required this.quote, required this.status});
   final InstrumentRecord stock;
@@ -1203,47 +1327,49 @@ class _StockRow extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-stock-${stock.id}'),
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: scheme.outlineVariant),
+            border: Border(bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.65))),
           ),
           child: Row(children: [
             MintTickEquityAvatar(
               tradingSymbol: stock.tradingSymbol,
               companyName: stock.name,
-              size: 35,
+              size: 28,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 9),
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+                  style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 2),
                 Text('${stock.tradingSymbol} · ${stock.exchange}',
                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 4),
-                Row(children: [
-                  Icon(style.icon, size: 12, color: style.color),
-                  const SizedBox(width: 4),
-                  Flexible(child: Text(statusLine, maxLines: 1, overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                        color: style.color, fontWeight: FontWeight.w700))),
-                ]),
+                  style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
               ],
             )),
-            const SizedBox(width: 8),
-            Text(priceText,
-              key: ValueKey('customer-market-price-${stock.id}'),
-              maxLines: 1,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w800,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                color: price == null ? scheme.onSurfaceVariant : scheme.onSurface,
-              )),
+            const SizedBox(width: 7),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 146),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(priceText,
+                    key: ValueKey('customer-market-price-${stock.id}'),
+                    maxLines: 1,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: price == null ? scheme.onSurfaceVariant : scheme.onSurface,
+                    )),
+                  const SizedBox(height: 2),
+                  Text(statusLine, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: style.color, fontWeight: FontWeight.w700)),
+                ],
+              ),
+            ),
           ]),
         ),
       ),
@@ -1283,12 +1409,6 @@ class _DeltaText extends StatelessWidget {
   }
 }
 
-BoxDecoration _cardDecoration(ColorScheme scheme) => BoxDecoration(
-      color: scheme.surfaceContainerLow,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: scheme.outlineVariant),
-    );
-
 class _IndexCard extends StatelessWidget {
   const _IndexCard({required this.index, required this.stored});
   final CustomerIndexRow index;
@@ -1317,8 +1437,10 @@ class _IndexCard extends StatelessWidget {
       child: ExcludeSemantics(
         child: Container(
           key: ValueKey('customer-market-index-${index.indexCode}'),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: _cardDecoration(scheme),
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+          ),
           child: Row(children: [
             Expanded(child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1357,17 +1479,16 @@ class _BreadthCard extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final b = overview.breadth;
-    final muted = theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant);
     return Container(
       key: const ValueKey('customer-market-breadth'),
-      padding: const EdgeInsets.all(14),
-      decoration: _cardDecoration(scheme),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('Market breadth', style: theme.textTheme.titleSmall
+        Text('Market breadth · Nifty 50 only', style: theme.textTheme.titleSmall
             ?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 2),
-        Text('Nifty 50 constituents only', style: muted),
-        const SizedBox(height: 10),
+        const SizedBox(height: 7),
         if (b.total == 0)
           const MintTickInfoText('No Nifty 50 stock has a verified quote in this snapshot.')
         else ...[
@@ -1458,7 +1579,7 @@ class _MoverSection extends StatelessWidget {
       else
         for (final mover in rows)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: 2),
             child: Semantics(
               container: true,
               button: true,
@@ -1469,13 +1590,12 @@ class _MoverSection extends StatelessWidget {
               child: ExcludeSemantics(
                 child: Material(
                   color: Colors.transparent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(8),
                   child: InkWell(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(8),
                     onTap: () => onOpen(mover),
-                    child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  decoration: _cardDecoration(scheme),
+                    child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   child: Row(children: [
                     Expanded(child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1528,9 +1648,8 @@ class _SectorCard extends StatelessWidget {
       label: '${sector.sector}, ${sector.members} stocks, ${sector.advancers} up, '
           '${sector.decliners} down, average change ${_signedPct(sector.avgChangePct)}.',
       child: ExcludeSemantics(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: _cardDecoration(scheme),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1551,12 +1670,12 @@ class _SectorCard extends StatelessWidget {
                 )),
                 _DeltaText(pct: sector.avgChangePct, label: 'Avg'),
               ]),
-              const SizedBox(height: 10),
+              const SizedBox(height: 5),
               ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: fraction,
-                  minHeight: 4,
+                  minHeight: 2,
                   color: color,
                   backgroundColor: scheme.outlineVariant,
                 ),
@@ -1603,10 +1722,10 @@ class _IdeasSection extends StatelessWidget {
         ]),
         const SizedBox(height: 8),
         if (!enabled)
-          const MintTickInfoText(
-            'Current market ideas paused. Fresh exchange ticks and a live verified '
-            'index quote are required. Stored or stale screening results are hidden.',
-            icon: Icons.schedule_rounded,
+          Text(
+            'Current market ideas paused · verified live ticks required.',
+            style: theme.textTheme.labelSmall?.copyWith(
+                color: scheme.onSurfaceVariant),
           )
         else if (ideas.isEmpty)
           const MintTickInfoText('No Nifty 50 stock meets a screen rule in this snapshot. '

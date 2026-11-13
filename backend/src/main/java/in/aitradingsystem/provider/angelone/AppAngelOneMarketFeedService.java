@@ -55,10 +55,19 @@ public final class AppAngelOneMarketFeedService {
         return sessions.quoteDetail(APPLICATION_FEED_ID, instrument);
     }
 
-    /** Application-session FULL bulk quote for at most 50 NSE tokens in one provider request. */
+    /** Existing NSE-only FULL batch for index/mover overview and research callers. */
     public Map<String, AngelOneQuoteDetailParser.Detail> details(List<AngelOneQuoteDetailParser.Expected> expected) {
+        return details("NSE", expected);
+    }
+
+    /** App-owned read-only FULL quote for one cash exchange, not an end-user broker connection. */
+    public Map<String, AngelOneQuoteDetailParser.Detail> details(String exchange,
+            List<AngelOneQuoteDetailParser.Expected> expected) {
+        if (!"NSE".equals(exchange) && !"BSE".equals(exchange)) {
+            throw new IllegalArgumentException("FULL batch exchange must be NSE or BSE");
+        }
         ensureSession();
-        return sessions.quoteDetailsBatch(APPLICATION_FEED_ID, expected);
+        return sessions.quoteDetailsBatch(APPLICATION_FEED_ID, exchange, expected);
     }
 
     /** Source-authenticated private history; shares the SSM app session and rate limiter. */

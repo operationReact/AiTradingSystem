@@ -1,0 +1,159 @@
+name: MintTick - source-verified Upstox BSE equity activation (PAPER only)
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/activate_upstox_bse_crosswalk.sh'
+      - '.github/workflows/minttick-upstox-bse-crosswalk-activate.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/activate-upstox-bse-crosswalk.json'
+permissions:
+  contents: read
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify safe single-host source activation script
+        run: |
+          set -euo pipefail
+          bash -n infra/ec2-paper/activate_upstox_bse_crosswalk.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/activate_upstox_bse_crosswalk.sh').read_text()
+          assert len(s)<6000
+          assert "TRADING_MODE: PAPER" in s
+          assert "127.0.0.1:8080/api/instruments/upstox-bse-crosswalk/refresh" in s
+          assert "MINTTICK_BSE_RESULT:VERIFIED" in s
+          assert "NO_BSE_COVERAGE_GAIN" in s
+          for x in ("placeOrder","--with-decryption","start-instances","stop-instances",
+                    "api.minttick.com","print(a)","print(b)"):
+              assert x not in s,x
+          import base64
+          assert len(base64.b64encode(s.encode()))<8192
+          embedded=s.split("python3 - \"$root\" <<'PY'")[1].split("\nPY")[0]
+          compile(embedded,"crosswalk-activate","exec")
+          PY
+  activate:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      INSTANCE_ID: i-09c01b470fb39b85a
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact one-file explicit BSE activation
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/activate-upstox-bse-crosswalk.json'
+          python3 - <<'PY'
+          import json,pathlib
+          p=pathlib.Path('infra/ec2-paper/requests/activate-upstox-bse-crosswalk.json')
+          assert json.loads(p.read_text()) == {
+            'application':'MintTick','environment':'paper','aws_account':'098859530205',
+            'region':'ap-south-1','instance_id':'i-09c01b470fb39b85a',
+            'operation':'activate-upstox-bse-crosswalk',
+            'authorization':'USER_APPROVED_SOURCE_VERIFIED_BSE_REPAIR_2026-11-13'
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-bse-source-activate
+      - name: Verify exact existing EC2 identity before operator refresh
+        run: |
+          python3 - <<'PY'
+          import sys
+          sys.path.insert(0,'infra/ec2-paper')
+          import verify_ssm_release
+          verify_ssm_release.verify_aws()
+          PY
+      - name: Run bounded one-shot BSE secondary reference refresh through SSM
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          code=Path('infra/ec2-paper/activate_upstox_bse_crosswalk.sh').read_bytes()
+          assert 1000<len(code)<6000
+          assert len(base64.b64encode(code))<8192
+          command="printf '%s' '"+base64.b64encode(code).decode()+"' | base64 -d | bash"
+          f=Path(os.environ['RUNNER_TEMP'])/'bse-source-command.json'
+          f.write_text(json.dumps({'commands':[command]}))
+          f.chmod(0o600)
+          PY
+          cid="$(aws ssm send-command --document-name AWS-RunShellScript --instance-ids "$INSTANCE_ID"             --timeout-seconds 270 --parameters "file://$RUNNER_TEMP/bse-source-command.json"             --comment 'Source verified, market-only BSE catalogue activation' --query Command.CommandId --output text)"
+          rm -f "$RUNNER_TEMP/bse-source-command.json"
+          for attempt in $(seq 1 55); do
+            aws ssm get-command-invocation --command-id "$cid" --instance-id "$INSTANCE_ID"               --output json > "$RUNNER_TEMP/bse-source-output.json" 2>/dev/null || true
+            result="$(python3 - <<'PY'
+          import json,os,re
+          from pathlib import Path
+          try:
+              doc=json.loads((Path(os.environ['RUNNER_TEMP'])/'bse-source-output.json').read_text())
+          except (OSError,ValueError):
+              print("PENDING");raise SystemExit
+          output=doc.get('StandardOutputContent','')
+          status=doc.get('Status')
+          def read_num(key):
+              m=re.search(r'(?m)^'+key+r':([0-9]{1,6})$',output)
+              return int(m.group(1)) if m else None
+          before=read_num('MINTTICK_BSE_EQ_BEFORE')
+          after=read_num('MINTTICK_BSE_EQ_AFTER')
+          matched=read_num('MINTTICK_BSE_MATCHED')
+          eligible=read_num('MINTTICK_BSE_SOURCE_EQUITIES')
+          if (status=='Success' and re.search(r'(?m)^MINTTICK_BSE_RESULT:VERIFIED$',output)
+              and before is not None and after is not None and matched is not None
+              and eligible is not None and after>before and matched>0 and eligible>=100):
+              print('VERIFIED')
+              print('BSE_EQ_BEFORE:'+str(before))
+              print('BSE_EQ_AFTER:'+str(after))
+              print('BSE_SOURCE_EQUITIES:'+str(eligible))
+              print('BSE_MATCHED:'+str(matched))
+          elif status in ('Success','Failed','TimedOut','Cancelled'):
+              m=re.search(r'(?m)^MINTTICK_BSE_BLOCKER:([A-Z_]+)$',output)
+              label='BLOCKED_'+(m.group(1) if m else 'UNVERIFIED')
+              http=re.search(r'(?m)^MINTTICK_BSE_REFRESH_HTTP:HTTP_([4-5][0-9]{2})$',output)
+              code=re.search(r'(?m)^MINTTICK_BSE_REFRESH_CODE:([A-Z][A-Z0-9_]{2,63})$',output)
+              if http: label+='_HTTP_'+http.group(1)
+              if code: label+='_'+code.group(1)
+              print(label)
+              for category in ('SOURCE_EQUITIES','RAW','MATCHED','SYMBOL_MISMATCH',
+                               'TOKEN_OVERLAP','EXACT_OVERLAP','SUFFIX_OVERLAP',
+                               'EMPTY_TYPE','TYPE_A','NULL_EXPIRY','ZERO_STRIKE'):
+                  value=read_num('MINTTICK_BSE_'+category)
+                  if value is not None: print('BSE_'+category+':'+str(value))
+          else:
+              print('PENDING')
+          PY
+          )"
+            if [[ "$result" == VERIFIED$'\n'* ]]; then
+              printf '%s\n' "$result"
+              exit 0
+            fi
+            if [[ "$result" == BLOCKED_* ]]; then
+              echo "$result" >&2
+              exit 2
+            fi
+            sleep 4
+          done
+          echo "BLOCKED_TIMEOUT" >&2
+          exit 2
+# No AWS mutation except existing-host SSM; no broker credentials or trade APIs.

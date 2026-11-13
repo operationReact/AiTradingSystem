@@ -516,10 +516,19 @@ public class CustomerMarketDataController {
         }
     }
 
+    /** A BSE cash EQ may have an unsuffixed symbol. Never require NSE's -EQ notation for BSE. */
     private static Instrument requireCashEquity(Instrument instrument) {
-        if (!java.util.Set.of("NSE_CM", "BSE_CM").contains(instrument.exchangeSegment())
-                || !java.util.Set.of("NSE", "BSE").contains(instrument.exchange())
-                || !instrument.tradingSymbol().endsWith("-EQ")) {
+        String type = instrument.instrumentType();
+        boolean explicitlyEquity = "EQ".equalsIgnoreCase(type);
+        boolean untyped = type == null || type.isBlank();
+        boolean nseEquity = "NSE".equals(instrument.exchange())
+            && "NSE_CM".equals(instrument.exchangeSegment())
+            && instrument.tradingSymbol().endsWith("-EQ")
+            && (explicitlyEquity || untyped);
+        boolean bseEquity = "BSE".equals(instrument.exchange())
+            && "BSE_CM".equals(instrument.exchangeSegment())
+            && (explicitlyEquity || (untyped && instrument.tradingSymbol().endsWith("-EQ")));
+        if (!(nseEquity || bseEquity)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cash equities only");
         }
         return instrument;

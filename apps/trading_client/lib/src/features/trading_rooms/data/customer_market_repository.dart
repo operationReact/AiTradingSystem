@@ -746,6 +746,96 @@ class CustomerUniverseFacets {
   }
 }
 
+/// Real stored provider FULL quote coverage across the active NSE/BSE catalogue.
+/// Never interpret counts as live or complete quote availability.
+class CustomerExchangeFullQuoteCoverage {
+  const CustomerExchangeFullQuoteCoverage({
+    required this.exchange, required this.activeListings,
+    required this.storedFullQuotes, required this.withProviderPreviousClose,
+    required this.newestExchangeAt,
+  });
+  final String exchange;
+  final int activeListings;
+  final int storedFullQuotes;
+  final int withProviderPreviousClose;
+  final DateTime? newestExchangeAt;
+
+  factory CustomerExchangeFullQuoteCoverage.fromJson(Map<String, dynamic> json) {
+    final exchange = json['exchange'];
+    final listings = json['activeListings'];
+    final quotes = json['storedFullQuotes'];
+    final previous = json['withProviderPreviousClose'];
+    if (!const {'NSE', 'BSE'}.contains(exchange) ||
+        listings is! int || listings < 0 ||
+        quotes is! int || quotes < 0 || quotes > listings ||
+        previous is! int || previous < 0 || previous > quotes) {
+      throw const FormatException('Invalid source-verified exchange quote coverage');
+    }
+    final rawTime = json['newestExchangeAt'];
+    final time = rawTime == null ? null : DateTime.tryParse('$rawTime');
+    if (rawTime != null && time == null) {
+      throw const FormatException('Invalid last quote exchange timestamp');
+    }
+    return CustomerExchangeFullQuoteCoverage(
+      exchange: exchange as String, activeListings: listings,
+      storedFullQuotes: quotes, withProviderPreviousClose: previous,
+      newestExchangeAt: time,
+    );
+  }
+}
+
+class CustomerFullQuoteCoverage {
+  const CustomerFullQuoteCoverage({
+    required this.totalActiveListings, required this.storedFullQuotes,
+    required this.withProviderPreviousClose, required this.activeBseCmRecords,
+    required this.exchanges, required this.generatedAt,
+  });
+  final int totalActiveListings;
+  final int storedFullQuotes;
+  final int withProviderPreviousClose;
+  final int activeBseCmRecords;
+  final List<CustomerExchangeFullQuoteCoverage> exchanges;
+  final DateTime generatedAt;
+
+  factory CustomerFullQuoteCoverage.fromJson(Map<String, dynamic> json) {
+    final rawExchanges = json['exchanges'];
+    final total = json['totalActiveListings'];
+    final stored = json['storedFullQuotes'];
+    final comparable = json['withProviderPreviousClose'];
+    final bse = json['activeBseCmRecords'];
+    final generatedAt = DateTime.tryParse('${json['generatedAt'] ?? ''}');
+    if (json['contractVersion'] != 'customer.market.full-quote-coverage.v1' ||
+        rawExchanges is! List || total is! int || total < 0 ||
+        stored is! int || stored < 0 || comparable is! int || comparable < 0 ||
+        bse is! int || bse < 0 || generatedAt == null) {
+      throw const FormatException('Invalid full-market quote coverage');
+    }
+    final rows = <CustomerExchangeFullQuoteCoverage>[];
+    for (final raw in rawExchanges) {
+      if (raw is! Map<String, dynamic>) {
+        throw const FormatException('Invalid quote coverage row');
+      }
+      rows.add(CustomerExchangeFullQuoteCoverage.fromJson(raw));
+    }
+    if (rows.length != 2 || rows[0].exchange != 'NSE' || rows[1].exchange != 'BSE' ||
+        rows.fold<int>(0, (n, row) => n + row.activeListings) != total ||
+        rows.fold<int>(0, (n, row) => n + row.storedFullQuotes) != stored ||
+        rows.fold<int>(0, (n, row) => n + row.withProviderPreviousClose) != comparable ||
+        comparable > stored || stored > total) {
+      throw const FormatException('Full-market quote totals do not reconcile');
+    }
+    return CustomerFullQuoteCoverage(
+      totalActiveListings: total, storedFullQuotes: stored,
+      withProviderPreviousClose: comparable, activeBseCmRecords: bse,
+      exchanges: List.unmodifiable(rows), generatedAt: generatedAt,
+    );
+  }
+}
+
+abstract interface class CustomerFullQuoteCoverageRepository {
+  Future<CustomerFullQuoteCoverage> fullQuoteCoverage();
+}
+
 abstract interface class CustomerUniverseFacetsRepository {
   Future<CustomerUniverseFacets> universeFacets();
 }
@@ -771,7 +861,7 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     CustomerLiveMarketRepository, CustomerSnapshotMarketRepository,
     CustomerPaginatedMarketRepository, CustomerCandleRepository,
     CustomerDetailRepository, CustomerWatchlistRepository, CustomerOverviewRepository,
-    CustomerUniverseFacetsRepository {
+    CustomerUniverseFacetsRepository, CustomerFullQuoteCoverageRepository {
   HttpCustomerMarketRepository(this.api);
   final AuthenticatedApiClient api;
 
@@ -927,6 +1017,15 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
   Future<void> remove(int instrumentId) async {
     if (instrumentId < 1) throw ArgumentError.value(instrumentId);
     await api.deleteJson('$_watchRoot/items/$instrumentId');
+  }
+
+  @override
+  Future<CustomerFullQuoteCoverage> fullQuoteCoverage() async {
+    final data = await api.getJson('$_root/full-quote-coverage');
+    if (data is! Map<String, dynamic>) {
+      throw const FormatException('Invalid full quote coverage response');
+    }
+    return CustomerFullQuoteCoverage.fromJson(data);
   }
 
   @override

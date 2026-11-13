@@ -1,5 +1,17 @@
 # AI Trading System — cost-optimized EC2 PAPER pilot (November 2026)
 
+> **Current owner directive (2026-11-13):** Keep the existing MintTick EC2 host available
+> for unattended Angel One history collection 24/7. The Terraform default for
+> `daily_stop_enabled` is now `false`, but this source-code change does **not**
+> update the already deployed AWS EventBridge Scheduler. An operator must verify
+> `aitrading-paper-nightly-stop` is **DISABLED** in `ap-south-1`; otherwise EC2
+> may still stop at 22:00 IST. Manual EC2 Start/Stop remains available. Provider
+> rate-limit cooldowns, login/session errors, disk safety, and service restarts
+> still apply; 24/7 host uptime does not guarantee uninterrupted API requests.
+>
+> Historical provisioning notes below describe the *original* nightly-stop pilot
+> policy and are not confirmation of the live AWS schedule state.
+
 ## Decision
 
 **Replace Lightsail**. The pilot should start with **one on-demand EC2 `t4g.medium` (2 vCPU, 4 GiB, Graviton ARM64) in Mumbai `ap-south-1`**, account **`098859530205`**, plus a 35 GiB encrypted gp3 EBS root disk. Host Spring Boot, local Docker PostgreSQL 16 and Flutter static Nginx web using the already-tested internal `infra/lightsail/paper-compose.yml` configuration as an eventual migration source — it contains **no public app/DB/worker port mappings**. File name is historical, not authorization to use the abandoned Lightsail service.

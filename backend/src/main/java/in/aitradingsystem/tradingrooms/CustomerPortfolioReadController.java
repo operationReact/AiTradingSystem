@@ -110,11 +110,19 @@ public final class CustomerPortfolioReadController {
                 "Broker record format not verified");
         }
         boolean truncated = array.size() > MAX_ROWS;
+        List<HoldingRow> normalized;
+        try {
+            normalized = normalize(array, "POSITIONS".equals(kind));
+        } catch (IllegalArgumentException invalid) {
+            // Invalid broker shapes are not evidence that the customer owns zero.
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                "Broker record values not verified");
+        }
         return ResponseEntity.ok()
             .cacheControl(CacheControl.noStore())
             .body(new PortfolioRecords(
                 broker, kind, fetchedAt, truncated, "BROKER_REPORTED_UNATTRIBUTED",
-                normalize(array, "POSITIONS".equals(kind))));
+                normalized));
     }
 
     /** Only allowlisted account fields are reflected, never raw SmartAPI JSON. */
@@ -124,10 +132,14 @@ public final class CustomerPortfolioReadController {
         }
         List<HoldingRow> result = new ArrayList<>();
         for (JsonNode row : rows) {
-            if (!row.isObject()) continue;
+            if (!row.isObject()) {
+                throw new IllegalArgumentException("Unrecognized broker record");
+            }
             String symbol = string(row, "tradingsymbol", "trading_symbol",
                 "tradingSymbol", "symbol", "instrument_key");
-            if (symbol == null) continue;
+            if (symbol == null) {
+                throw new IllegalArgumentException("Missing broker symbol");
+            }
             BigDecimal qty = decimal(row, "quantity", "netqty", "net_qty",
                 "net_quantity", "holding_quantity");
             BigDecimal last = decimal(row, "ltp", "last_price", "lastPrice",
