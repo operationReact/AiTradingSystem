@@ -49,4 +49,11 @@ class UpstoxCoverageRetryCandidatesTest {
         assertThrows(IllegalArgumentException.class, () ->
                 UpstoxCoverageRetryCandidates.select(List.of(), NOW, -1, 1));
     }
+    @Test void futureWindowWithoutAttemptDoesNotLeakIntoAsOfRetryQueue() {
+        var future = new UpstoxCoverageRetryCandidates.Observation("future", "episode-1",
+                "DAY", 2026, 11, NOW.plusSeconds(1), NOW.plusSeconds(3600),
+                "UPSTOX_ANALYTICS", "v1", null, null, "NO_RUN", null, null);
+        assertEquals(0, UpstoxCoverageRetryCandidates.select(List.of(future), NOW, 0, 20).total());
+    }
+
 }
