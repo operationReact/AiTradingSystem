@@ -61,6 +61,15 @@ public final class UpstoxWorkerReportLedger {
         }
         if (!fields.keySet().equals(java.util.Set.of("worker", "scope", "result", "pr",
                 "head", "ci", "runtime", "blocker", "next"))) return Optional.empty();
+        // Allow trailing human explanation but reject a repeated structured
+        // field that would otherwise let a second, contradictory value escape.
+        for (int i = 10; i < lines.length; i++) {
+            String trailing = lines[i].trim();
+            int equalsAt = trailing.indexOf('=');
+            if (equalsAt > 0 && fields.containsKey(trailing.substring(0, equalsAt).trim())) {
+                return Optional.empty();
+            }
+        }
         int worker;
         try { worker = Integer.parseInt(fields.get("worker")); }
         catch (NumberFormatException ex) { return Optional.empty(); }
