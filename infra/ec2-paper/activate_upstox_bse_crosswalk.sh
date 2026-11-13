@@ -12,6 +12,7 @@ grep -Fq 'TRADING_MODE: PAPER' "$root/paper-compose.yml"
 python3 - "$root" <<'PY'
 import hmac,json,pathlib,re,stat,subprocess,sys
 from urllib.request import Request,urlopen
+from urllib.error import HTTPError,URLError
 root=pathlib.Path(sys.argv[1])
 def block(reason):
     print("MINTTICK_BSE_BLOCKER:"+reason,flush=True)
@@ -48,8 +49,20 @@ try:
     with urlopen(req,timeout=200) as response:
         if response.status!=200:block("REFRESH_HTTP")
         data=response.read(200001)
-except Exception:
+except HTTPError as error:
+    # Never echo raw provider JSON, stack traces or credentials; only
+    # operator-safe error codes and the HTTP category are emitted.
+    print("MINTTICK_BSE_REFRESH_HTTP:HTTP_"+str(error.code),flush=True)
+    try:
+        payload=json.loads(error.read(16384))
+        code=payload.get("code") if isinstance(payload,dict) else None
+        if isinstance(code,str) and re.fullmatch(r"[A-Z][A-Z0-9_]{2,63}",code):
+            print("MINTTICK_BSE_REFRESH_CODE:"+code,flush=True)
+    except (OSError,ValueError,UnicodeError):
+        pass
     block("REFRESH_HTTP")
+except (URLError,TimeoutError,OSError):
+    block("REFRESH_NETWORK")
 if len(data)>200000:block("REFRESH_RESPONSE")
 try:
     report=json.loads(data)
