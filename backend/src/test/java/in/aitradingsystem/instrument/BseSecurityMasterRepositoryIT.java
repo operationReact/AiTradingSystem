@@ -35,13 +35,15 @@ class BseSecurityMasterRepositoryIT extends AbstractPostgresIT {
         var bseFund = row("BSE_CM", "BSE", "500325", "RELIANCE", "MF", null);
         var bseFuture = row("BSE_CM", "BSE", "500325", "RELIANCE", null,
             LocalDate.now().plusMonths(1));
+        var reusedCodeWrongCompany = row("BSE_CM", "BSE", "500325", "OTHER", null, null);
         var enhanced = source.enrichForNewCatalogue(
-            List.of(untypedBse, untypedOther, untypedNse, bseFund, bseFuture));
+            List.of(untypedBse, untypedOther, untypedNse, bseFund, bseFuture, reusedCodeWrongCompany));
         assertThat(enhanced.get(0).instrumentType()).isEqualTo("EQ");
         assertThat(enhanced.get(1).instrumentType()).isNull();
         assertThat(enhanced.get(2).instrumentType()).isNull();
         assertThat(enhanced.get(3).instrumentType()).isEqualTo("MF");
         assertThat(enhanced.get(4).instrumentType()).isNull();
+        assertThat(enhanced.get(5).instrumentType()).isNull();
     }
 
     @Test
@@ -59,6 +61,25 @@ class BseSecurityMasterRepositoryIT extends AbstractPostgresIT {
                 "0123012301230123".repeat(4)))
             .isInstanceOf(InstrumentMasterException.class);
         assertThat(source.current().sourceAsOf()).isEqualTo(today);
+    }
+
+    @Test
+    @Transactional
+    void truncatedOrIncompleteOfficialReplacementCannotReplaceActiveSource() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Kolkata"));
+        String file = "BSE_EQ_SCRIP_" + today.format(
+            java.time.format.DateTimeFormatter.ofPattern("ddMMuuuu")) + ".csv";
+        var initial = new BseSecurityMasterParser.Parsed(file, today, 5000,
+            List.of(new BseSecurityMasterParser.Equity("500325", "RELIANCE", "INE002A01018"),
+                new BseSecurityMasterParser.Equity("532540", "TCS", "INE467B01029")));
+        source.publish(initial, "aabbccddeeff0123".repeat(4));
+        var replacement = new BseSecurityMasterParser.Parsed(file, today, 2000,
+            List.of(new BseSecurityMasterParser.Equity("500325", "RELIANCE", "INE002A01018")));
+        assertThatThrownBy(() -> source.publish(replacement, "1000000010000000".repeat(4)))
+            .isInstanceOf(InstrumentMasterException.class)
+            .hasMessageContaining("shrank unexpectedly");
+        assertThat(source.current().verifiedEquities()).isEqualTo(2);
+        assertThat(source.current().sourceRecords()).isEqualTo(5000);
     }
 
     private static InstrumentMasterParser.InstrumentDraft row(
