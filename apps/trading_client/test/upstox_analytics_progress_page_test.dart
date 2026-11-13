@@ -77,7 +77,7 @@ void main() {
 
     await tester.tap(find.text('Operations'));
     await tester.pumpAndSettle();
-    expect(find.text('GitHub development'), findsWidgets);
+    expect(find.text('Source verification'), findsWidgets);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
