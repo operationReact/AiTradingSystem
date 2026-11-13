@@ -632,7 +632,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('market-full-quote-coverage')), findsOneWidget);
     expect(find.text('Stored FULL quotes 620/2756 · not live'), findsOneWidget);
-    expect(find.textContaining('BSE: 175 cash-segment records need verified EQ classification'),
+    expect(find.textContaining('BSE: 175 BSE_CM records; 0 verified EQ listings'),
         findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
