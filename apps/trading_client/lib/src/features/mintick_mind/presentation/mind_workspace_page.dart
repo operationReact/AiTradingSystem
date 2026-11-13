@@ -17,6 +17,7 @@ import '../data/mind_paper_cycle_repository.dart';
 import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
 import '../data/mind_paper_journal_repository.dart';
+import '../../trading_rooms/data/customer_market_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
@@ -104,6 +105,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.paperCycleRepository,
     this.paperPortfolioRepository,
     this.paperJournalRepository,
+    this.candleRepository,
     super.key,
   });
 
@@ -134,6 +136,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Recorded Mind PAPER cycles + closed-trade performance (#998 PR D3).
   final MindPaperJournalRepository? paperJournalRepository;
+
+  /// Stored OHLCV candles for Chart Intelligence (#998 PR D6). Needs [paperCycleRepository] for the watchlist.
+  final CustomerCandleRepository? candleRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -212,6 +217,41 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     }, onError: (Object _) {
       _updateMind(() => _registryFailed = true);
     });
+  }
+
+  List<MindPaperInstrument>? _chartInstruments;
+  bool _chartInstrumentsFailed = false;
+  bool _chartInstrumentsRequested = false;
+  int? _chartInstrumentId;
+  String _chartInterval = 'FIFTEEN_MINUTE';
+  Future<CustomerCandlePage>? _chartCandles;
+
+  static const _chartIntervals = <(String, String, int)>[
+    ('FIVE_MINUTE', '5m', 2), ('FIFTEEN_MINUTE', '15m', 5), ('ONE_HOUR', '1H', 20), ('ONE_DAY', '1D', 180),
+  ];
+
+  void _ensureChartInstruments() {
+    final repository = widget.paperCycleRepository;
+    if (repository == null || _chartInstrumentsRequested) return;
+    _chartInstrumentsRequested = true;
+    repository.instruments().then((list) => _updateMind(() {
+      _chartInstruments = list;
+      if (list.isNotEmpty) {
+        _chartInstrumentId = list.first.instrumentId;
+        _loadChart();
+      }
+    }), onError: (Object _) => _updateMind(() => _chartInstrumentsFailed = true));
+  }
+
+  void _loadChart() {
+    final repository = widget.candleRepository;
+    final id = _chartInstrumentId;
+    if (repository == null || id == null) return;
+    final days = _chartIntervals.firstWhere((i) => i.$1 == _chartInterval).$3;
+    String ist(DateTime d) => d.toUtc().add(const Duration(hours: 5, minutes: 30)).toIso8601String().substring(0, 10);
+    final now = DateTime.now();
+    _chartCandles = repository.candles(instrumentId: id, interval: _chartInterval,
+        fromDate: ist(now.subtract(Duration(days: days))), toDate: ist(now));
   }
 
   MindPaperJournal? _journal;
@@ -809,4 +849,39 @@ class _MindResearchChart extends CustomPainter {
   @override
   bool shouldRepaint(covariant _MindResearchChart old)=>
       old.seed!=seed||old.style!=style||old.color!=color;
+}
+
+/// Real stored-candle painter. Every mark is a stored OHLC value; nothing is interpolated.
+class _StoredCandlePainter extends CustomPainter {
+  _StoredCandlePainter(this.bars);
+  final List<CustomerCandle> bars;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (bars.isEmpty) return;
+    final grid = Paint()..color = MindPalette.border..strokeWidth = .65;
+    for (var i = 0; i <= 4; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    final hi = bars.map((b) => b.high.toDouble()).reduce(math.max);
+    final lo = bars.map((b) => b.low.toDouble()).reduce(math.min);
+    final span = (hi - lo).abs() < 1e-9 ? 1.0 : hi - lo;
+    double y(num v) => size.height - (v.toDouble() - lo) / span * size.height;
+    final step = size.width / bars.length;
+    final body = math.max(1.0, step * .6);
+    for (var i = 0; i < bars.length; i++) {
+      final b = bars[i];
+      final x = step * i + step / 2;
+      final up = b.close >= b.open;
+      final paint = Paint()..color = up ? MindPalette.mint : MindPalette.red..strokeWidth = 1;
+      canvas.drawLine(Offset(x, y(b.high)), Offset(x, y(b.low)), paint);
+      final top = y(math.max(b.open.toDouble(), b.close.toDouble()));
+      final bottom = y(math.min(b.open.toDouble(), b.close.toDouble()));
+      canvas.drawRect(Rect.fromLTRB(x - body / 2, top, x + body / 2, math.max(bottom, top + 1)), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _StoredCandlePainter old) => !identical(old.bars, bars);
 }

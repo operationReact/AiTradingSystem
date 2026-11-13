@@ -244,7 +244,83 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     ],backTo:'models');
   }
 
+  Widget _realChartScreen() {
+    _ensureChartInstruments();
+    final instruments=_chartInstruments;
+    if(instruments==null) {
+      return _surface('Chart Intelligence','Stored broker candles · server data',[
+        _empty(_chartInstrumentsFailed?'Watchlist unavailable. No chart is drawn rather than a simulated one.'
+          :'Loading watchlist…')]);
+    }
+    if(instruments.isEmpty) {
+      return _surface('Chart Intelligence','Stored broker candles · server data',[
+        _empty('Add an NSE/BSE cash equity to your watchlist to chart its stored candles.')]);
+    }
+    return _surface('Chart Intelligence','Stored completed candles · not a live quote',[
+      _chips([for(final i in instruments) i.label],
+        instruments.firstWhere((i)=>i.instrumentId==_chartInstrumentId,orElse:()=>instruments.first).label,
+        (v)=>_updateMind((){ _chartInstrumentId=instruments.firstWhere((i)=>i.label==v).instrumentId; _loadChart(); })),
+      _chips([for(final i in _MindWorkspaceState._chartIntervals) i.$2],
+        _MindWorkspaceState._chartIntervals.firstWhere((i)=>i.$1==_chartInterval).$2,
+        (v)=>_updateMind((){ _chartInterval=_MindWorkspaceState._chartIntervals.firstWhere((i)=>i.$2==v).$1; _loadChart(); })),
+      const SizedBox(height:9),
+      FutureBuilder<CustomerCandlePage>(
+        future:_chartCandles,
+        builder:(context,snap){
+          if(snap.connectionState!=ConnectionState.done) {
+            return const MindPanel(child:Text('Loading stored candles…',style:TextStyle(color:MindPalette.muted,fontSize:12)));
+          }
+          if(snap.hasError||snap.data==null) {
+            return const MindPanel(key:ValueKey('mind-chart-error'),child:Text(
+              'Stored candles unavailable. No simulated chart is shown.',style:TextStyle(color:MindPalette.red,fontSize:12)));
+          }
+          final bars=[...snap.data!.items]..sort((a,b)=>a.candleTime.compareTo(b.candleTime));
+          if(bars.isEmpty) {
+            return const MindPanel(key:ValueKey('mind-chart-empty'),child:Text(
+              'No stored candles for this interval and range yet.',style:TextStyle(color:MindPalette.muted,fontSize:12)));
+          }
+          double sma(int n)=>bars.length<n?double.nan:
+            bars.sublist(bars.length-n).fold<double>(0,(s,b)=>s+b.close.toDouble())/n;
+          final last=bars.last;
+          final hi=bars.map((b)=>b.high.toDouble()).reduce(math.max);
+          final lo=bars.map((b)=>b.low.toDouble()).reduce(math.min);
+          final s5=sma(5), s20=sma(20);
+          String f(double v)=>v.isNaN?'Not enough bars':'₹'+v.toStringAsFixed(2);
+          return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            MindPanel(key:const ValueKey('mind-real-chart'),highlight:true,child:Column(
+              crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+              Row(children:[
+                const Expanded(child:Text('Stored OHLCV',style:TextStyle(color:MindPalette.text,fontSize:17,fontWeight:FontWeight.w800))),
+                MindTag(last.source,color:MindPalette.blue),
+              ]),
+              const SizedBox(height:10),
+              SizedBox(height:265,width:double.infinity,child:CustomPaint(painter:_StoredCandlePainter(bars))),
+              _value('Last stored close',f(last.close.toDouble())),
+              _value('Last candle',last.candleTime.toUtc().toIso8601String().substring(0,16)+'Z'),
+              _value('Bars in range',bars.length.toString()),
+            ])),
+            const SizedBox(height:12),
+            _split(
+              _block('Computed from these candles',Icons.functions,[
+                _value('SMA 5',f(s5)),
+                _value('SMA 20',f(s20)),
+                _value('Trend (SMA5 vs SMA20)',s5.isNaN||s20.isNaN?'Not enough bars':s5>s20?'Above':'Below',
+                  color:s5.isNaN||s20.isNaN?MindPalette.muted:s5>s20?MindPalette.mint:MindPalette.red),
+                _value('Range high / low','₹'+hi.toStringAsFixed(2)+' / ₹'+lo.toStringAsFixed(2)),
+              ]),
+              _block('Use',Icons.info_outline,[
+                const Text('Stored candles are never executable prices. A PAPER decision needs a fresh verified quote and every gate.',
+                  style:TextStyle(color:MindPalette.muted,fontSize:11)),
+                _action('Run a PAPER strategy cycle','room-detail'),
+              ]),
+            ),
+          ]);
+        }),
+    ]);
+  }
+
   Widget chartIntelligenceScreen() {
+    if(widget.candleRepository!=null&&widget.paperCycleRepository!=null) return _realChartScreen();
     return _surface('Chart Intelligence','Multi-timeframe technical interpretation',[
       _chips(['RELIANCE','TCS','HDFCBANK','TITAN','CDSL','IREDA','INFY'],
         _instrument,(v)=>_updateMind((){_instrument=v;_chartSeed++;})),

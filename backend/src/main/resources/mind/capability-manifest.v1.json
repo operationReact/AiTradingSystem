@@ -1,5 +1,5 @@
 {
- "manifestVersion": "mind.capability-manifest.v1+2026-11-13.7",
+ "manifestVersion": "mind.capability-manifest.v1+2026-11-13.8",
  "auditedAt": "2026-11-13",
  "sourceIssues": [
   "#997",
@@ -444,19 +444,25 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/market-data/candles"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/watchlist"
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Additional chart styles from real data",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "Watchlist instruments charted from stored completed OHLCV candles (/api/customer/market-data/candles) with SMA5/SMA20, range and source; simulated chart, fictional price and invented signal stack removed.",
    "id": "screen.charts",
    "kind": "SCREEN",
    "name": "Chart Intelligence",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,

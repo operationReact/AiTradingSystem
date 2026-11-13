@@ -222,6 +222,7 @@ class _TradingAppState extends State<TradingApp> {
                 paperCycleRepository: HttpMindPaperCycleRepository(_api),
                 paperPortfolioRepository: HttpMindPaperPortfolioRepository(_api),
                 paperJournalRepository: HttpMindPaperJournalRepository(_api),
+                candleRepository: HttpCustomerMarketRepository(_api),
               )
             : _overviewPage(),
         '/rooms': (_) => widget.session.isCustomerAuthenticated
