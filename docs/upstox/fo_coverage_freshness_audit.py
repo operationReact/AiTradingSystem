@@ -46,6 +46,8 @@ def assess(receipt, now, max_age_seconds=15):
     exchange_today = (now.astimezone(timezone.utc) + timedelta(hours=5, minutes=30)).date()
     verified = 0
     fresh = 0
+    seen = set()
+    # Duplicate receipts cannot increase coverage or freshness counts.
     for item in contracts:
         if not isinstance(item, dict):
             continue
@@ -70,6 +72,12 @@ def assess(receipt, now, max_age_seconds=15):
             continue
         if expiry_day < exchange_today:
             continue
+        identity = item["instrumentKey"]
+        if identity in seen:
+            result.update(status="UNKNOWN", reason="DUPLICATE_CONTRACT_RECEIPT",
+                          verifiedContracts=None, freshContracts=None)
+            return result
+        seen.add(identity)
         verified += 1
         stamp = _instant(item.get("exchangeLtt"))
         if stamp is None:
