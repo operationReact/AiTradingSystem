@@ -13,7 +13,8 @@ import org.springframework.stereotype.Repository;
 /**
  * Persisted, read-only per-provider manifest receipts for a single listing and interval.
  * Counts are evidence of checkpointed metadata, never proof of physical object readback,
- * continuous coverage, or a live executable quote.
+ * continuous coverage, or a live executable quote. Each verified chunk is counted
+ * once even when multiple matching object-manifest receipts exist.
  */
 @Repository
 public class CanonicalManifestReceiptSummary {
@@ -45,24 +46,27 @@ public class CanonicalManifestReceiptSummary {
         }
         List<ProviderReceipt> receipts = jdbc.query("""
                 SELECT p.provider_code, j.source_domain,
-                       COUNT(DISTINCT m.manifest_id) AS verified_manifests,
+                       COUNT(DISTINCT c.chunk_id) AS verified_manifests,
                        SUM(c.valid_records) AS verified_rows,
                        MIN(c.first_available_at) AS first_available_at,
                        MAX(c.last_available_at) AS last_available_at
-                  FROM golden_dataset_object_manifest m
-                  JOIN golden_dataset_backfill_chunk c ON c.chunk_id = m.chunk_id
+                  FROM golden_dataset_backfill_chunk c
                   JOIN golden_dataset_backfill_job j ON j.job_id = c.job_id
                   JOIN golden_data_provider p ON p.provider_id = j.provider_id
                  WHERE j.listing_id = ? AND j.interval_name = ?
                    AND p.source_kind = 'EXTERNAL'
-                   AND m.layer = 'BRONZE'
                    AND c.status = 'VERIFIED'
                    AND c.expected_records > 0
                    AND c.valid_records = c.expected_records
-                   AND c.dataset_digest = m.object_sha256
-                   AND c.archive_uri = m.object_uri
                    AND c.last_available_at <= ?
-                   AND m.published_at <= ?
+                   AND EXISTS (
+                       SELECT 1 FROM golden_dataset_object_manifest m
+                        WHERE m.chunk_id = c.chunk_id
+                          AND m.layer = 'BRONZE'
+                          AND m.object_sha256 = c.dataset_digest
+                          AND m.object_uri = c.archive_uri
+                          AND m.published_at <= ?
+                   )
                  GROUP BY p.provider_code, j.source_domain
                  ORDER BY p.provider_code, j.source_domain
                  LIMIT 100
