@@ -30,6 +30,17 @@ class UpstoxCorporateEventTemporalQualityTest {
                 assess(observation(PUBLISHED, AVAILABLE, PUBLISHED, 1), AS_OF));
     }
 
+    @Test void rejectsLateDiscoveredHistoricalEventAndAcceptsCutoffBoundary() {
+        // The issuer may have published earlier, but this source first observed
+        // the revision after the requested as-of instant.
+        assertEquals(Status.FUTURE_AVAILABLE,
+                assess(observation(PUBLISHED, AVAILABLE, AS_OF.plusSeconds(1), 2), AS_OF));
+        assertEquals(Status.VALID_METADATA,
+                assess(observation(PUBLISHED, AVAILABLE, AS_OF, 2), AS_OF));
+        assertEquals(Status.VALID_METADATA,
+                assess(observation(PUBLISHED, AVAILABLE, AS_OF.minusSeconds(1), 2), AS_OF));
+    }
+
     @Test void rejectsMissingTimestampsAndInvalidRevision() {
         assertEquals(Status.MISSING_TIME, assess(observation(null, AVAILABLE, AS_OF, 1), AS_OF));
         assertEquals(Status.MISSING_TIME, assess(observation(PUBLISHED, AVAILABLE, null, 1), AS_OF));
