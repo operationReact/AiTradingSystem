@@ -29,7 +29,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
         self.assertEqual(d["operation"],"probe-upstox-nifty-options-read-only")
         self.assertEqual(d["backend_release"],
                          "641a2bed49ac7ce07aa673e810a03b7a1632dc27")
-        self.assertEqual(len(d),9)
+        self.assertEqual(len(d),10)
 
     def test_counts_are_accepted_without_any_quote_values(self):
         status, contracts, strikes, calls, puts, greeks=validate_response(valid())
