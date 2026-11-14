@@ -72,6 +72,7 @@ EXACT = {
     ("GET", "/api/customer/mind/v1/paper-portfolio"),
     ("GET", "/api/customer/mind/v1/paper-journal"),
 }
+MIND_ASSISTANT_QUERY = "/api/customer/mind/v1/assistant/query"
 WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
@@ -111,6 +112,7 @@ def allowed(method, path):
             or (method == "GET" and MIND_PROGRESS_ITEM.fullmatch(path) and len(path) <= 160)
             or (method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path) and len(path) <= 170)
             or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
+            or (method == "POST" and path == MIND_ASSISTANT_QUERY)
             or paper_allowed(method, path))
 
 def callback_query_safe(query):
@@ -295,6 +297,17 @@ def handler(event, context):
             valid = False
         if not valid:
             return reply(400, {"error": "INVALID_MIND_CYCLE_INPUT"})
+    # Read-only Mind assistant: body is exactly {"question": 1-280 printable chars}; no trade fields.
+    if method == "POST" and path == MIND_ASSISTANT_QUERY:
+        try:
+            question = json.loads(body)
+            text = question.get("question") if type(question) is dict and set(question) == {"question"} else None
+            valid = (isinstance(text, str) and 1 <= len(text) <= 280
+                     and not any(ord(ch) < 32 and ch not in "\n\t" for ch in text))
+        except (ValueError, TypeError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_QUESTION"})
     # Mind progress annotation: a note or recheck request only; never a status write.
     if method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path):
         paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
