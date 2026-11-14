@@ -140,8 +140,9 @@ public class UpstoxFnoReadinessProbeController {
             case "UPSTOX_FNO_UPSTREAM_REJECTED" -> "UPSTREAM_REJECTED";
             case "UPSTOX_FNO_TRANSPORT_FAILURE" -> "TRANSPORT_FAILURE";
             case "UPSTOX_SSM_UNAVAILABLE" -> "CREDENTIAL_UNAVAILABLE";
-            case "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN",
-                 "UPSTOX_FNO_INVALID_PAYLOAD" -> "INVALID_PAYLOAD";
+            case "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN"
+                    -> "SCHEMA_INVALID";
+            case "UPSTOX_FNO_INVALID_PAYLOAD" -> "ENVELOPE_INVALID";
             default -> null; // Do not reveal arbitrary upstream exception text.
         };
         return category == null ? "PROVIDER_UNAVAILABLE" : phase + "_" + category;

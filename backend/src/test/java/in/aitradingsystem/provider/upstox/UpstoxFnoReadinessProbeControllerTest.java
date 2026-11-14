@@ -186,10 +186,23 @@ class UpstoxFnoReadinessProbeControllerTest {
         when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
                 .thenThrow(new IllegalStateException("UPSTOX_FNO_INVALID_CHAIN"));
         var answer = controller().probe(EXPIRY).getBody();
-        assertThat(answer.status()).isEqualTo("CHAIN_INVALID_PAYLOAD");
+        assertThat(answer.status()).isEqualTo("CHAIN_SCHEMA_INVALID");
         assertThat(answer.toString()).doesNotContain("token", "Bearer");
         assertThat(answer.validatedContracts()).isZero();
         assertThat(answer.liveTradingEnabled()).isFalse();
+    }
+
+    @Test
+    void badJsonEnvelopeIsDifferentFromAnInvalidChainRow() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .thenReturn(List.of(contract("NSE_FO|61001", "CE")));
+        when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                .thenThrow(new IllegalStateException("UPSTOX_FNO_INVALID_PAYLOAD"));
+        var answer = controller().probe(EXPIRY).getBody();
+        assertThat(answer.status()).isEqualTo("CHAIN_ENVELOPE_INVALID");
+        assertThat(answer.validatedStrikes()).isZero();
+        assertThat(answer.displayRightsVerified()).isFalse();
     }
 
     @Test
