@@ -49,6 +49,8 @@ class UpstoxFnoV3PaperQuoteGateTest {
             assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
             feed(s);
             var quote=s.eligiblePaperQuote("NSE_FO|61001").orElseThrow();
+            assertThat(s.status().freshExchangeTimedQuotes()).isEqualTo(1);
+            assertThat(s.status().latestFreshExchangeTradeAt()).isEqualTo(TRADE);
             assertThat(quote.instrumentKey()).isEqualTo("NSE_FO|61001");
             assertThat(quote.exchangeAt()).isEqualTo(TRADE);
             assertThat(quote.bid()).isEqualByComparingTo("119.5");
@@ -56,6 +58,8 @@ class UpstoxFnoV3PaperQuoteGateTest {
             assertThat(s.eligiblePaperQuote("NSE_FO|999999")).isEmpty();
             s.stop();
             assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
+            assertThat(s.status().freshExchangeTimedQuotes()).isZero();
+            assertThat(s.status().latestFreshExchangeTradeAt()).isNull();
         }finally{s.shutdown();}
     }
 
@@ -65,6 +69,10 @@ class UpstoxFnoV3PaperQuoteGateTest {
         try{
             feed(s);
             assertThat(s.status().decodedFrames()).isEqualTo(1);
+            assertThat(s.status().providerTradeTimeAvailable()).isTrue();
+            // The old timestamp remains an observation, not a fresh quote.
+            assertThat(s.status().freshExchangeTimedQuotes()).isZero();
+            assertThat(s.status().latestFreshExchangeTradeAt()).isNull();
             assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
         }finally{s.shutdown();}
     }
