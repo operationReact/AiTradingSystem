@@ -63,7 +63,8 @@ class UpstoxFnoV3AuthorizationTest {
                     """, MediaType.APPLICATION_JSON));
         assertThatThrownBy(source::authorizeFnoMarketFeedV3)
                 .hasMessage("UPSTOX_FNO_WS_AUTH_UNAVAILABLE")
-                .hasMessageNotContaining("private-secret", "evil.example");
+                .hasMessageNotContaining("private-secret")
+                .hasMessageNotContaining("evil.example");
         server.verify();
     }
 
