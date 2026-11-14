@@ -124,6 +124,12 @@ void main() {
     expect(find.text('5'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
+    // The evidence disclaimer is deliberately below the compact source
+    // metrics; scroll the list rather than assuming it starts on screen.
+    await tester.scrollUntilVisible(
+      find.textContaining('not a historical download'), 160,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.textContaining('not a historical download'), findsOneWidget);
 
     await tester.tap(find.text('Coverage'));
