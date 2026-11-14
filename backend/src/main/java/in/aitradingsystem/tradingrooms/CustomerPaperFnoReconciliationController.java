@@ -25,12 +25,15 @@ import org.springframework.web.server.ResponseStatusException;
     havingValue="true")
 public class CustomerPaperFnoReconciliationController {
     private final CustomerPaperFnoReconciliationService reconciliation;
+    private final CustomerPaperSharedWalletAuditService walletAudit;
     private final CustomerIdentityStore identities;
 
     public CustomerPaperFnoReconciliationController(
             CustomerPaperFnoReconciliationService reconciliation,
+            CustomerPaperSharedWalletAuditService walletAudit,
             CustomerIdentityStore identities) {
         this.reconciliation=reconciliation;
+        this.walletAudit=walletAudit;
         this.identities=identities;
     }
 
@@ -39,6 +42,14 @@ public class CustomerPaperFnoReconciliationController {
             @PathVariable UUID roomId, Authentication authentication) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(reconciliation.inspect(owner(authentication),roomId));
+    }
+
+    /** Cash/P&L only; stock and option positions need separate verification. */
+    @GetMapping("/wallet-reconciliation")
+    public ResponseEntity<CustomerPaperSharedWalletAuditService.Audit> walletReconciliation(
+            @PathVariable UUID roomId, Authentication authentication) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(walletAudit.inspect(owner(authentication),roomId));
     }
 
     private UUID owner(Authentication authentication) {

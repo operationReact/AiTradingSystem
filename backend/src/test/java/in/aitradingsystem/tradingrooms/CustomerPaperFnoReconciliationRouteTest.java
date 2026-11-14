@@ -36,6 +36,29 @@ class CustomerPaperFnoReconciliationRouteTest {
     }
 
     @Test
+    void walletReconciliationIsReadOnlyAtThePublicAccountEdge() throws Exception {
+        String path=PATH.replace("/reconciliation","/wallet-reconciliation");
+        for (String method : new String[]{"GET","POST","PUT","PATCH","DELETE"}) {
+            var request=new MockHttpServletRequest(method,path);
+            var response=new MockHttpServletResponse();
+            var chain=new MockFilterChain();
+            new AccountApiOnlyFilter().doFilter(request,response,chain);
+            if("GET".equals(method)) {
+                assertThat(response.getStatus()).isEqualTo(200);
+                assertThat(chain.getRequest()).isNotNull();
+            } else {
+                assertThat(response.getStatus()).isEqualTo(404);
+                assertThat(chain.getRequest()).isNull();
+            }
+        }
+        var method=CustomerPaperFnoReconciliationController.class.getMethod(
+                "walletReconciliation",UUID.class,
+                org.springframework.security.core.Authentication.class);
+        assertThat(method.getAnnotation(GetMapping.class).value())
+                .containsExactly("/wallet-reconciliation");
+    }
+
+    @Test
     void endpointRemainsFeatureGatedAndUsesOnlyGet() throws Exception {
         var feature=CustomerPaperFnoReconciliationController.class
                 .getAnnotation(ConditionalOnProperty.class);

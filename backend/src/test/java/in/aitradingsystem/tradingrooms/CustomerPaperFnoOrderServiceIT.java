@@ -340,4 +340,118 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         verifyNoInteractions(source,live);
     }
 
+    @Test
+    void sharedVirtualWalletAuditReconcilesFnoAndEquityMoneyWithoutAProviderRead() {
+        UUID owner=customer(), outsider=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        var audit=new CustomerPaperSharedWalletAuditService(jdbc);
+
+        var empty=audit.inspect(owner,paper);
+        assertThat(empty.status()).isEqualTo("CASH_AND_REALIZED_PNL_MATCHED");
+        assertThat(empty.initialAllocations()).isEqualTo(1);
+        assertThat(empty.equityFills()).isZero();
+        assertThat(empty.optionFills()).isZero();
+        assertThat(empty.expectedCashPaise()).isEqualTo(2_000_000L);
+        assertThat(empty.cashAndRealizedPnlReconciled()).isTrue();
+        assertThat(empty.positionsReconciled()).isFalse();
+        assertThat(empty.marketDataVerified()).isFalse();
+        assertThat(empty.providerRightsVerified()).isFalse();
+        assertThat(empty.tradingApproved()).isFalse();
+
+        prepareMarket("99.00","100.00");
+        var orders=engine(true);
+        tx(()->orders.submit(owner,paper,"mix_wallet_buy1",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101.00")));
+        clearInvocations(source,live);
+        var held=audit.inspect(owner,paper);
+        assertThat(held.status()).isEqualTo("CASH_AND_REALIZED_PNL_MATCHED");
+        assertThat(held.optionFills()).isEqualTo(1);
+        assertThat(held.recordedCashPaise()).isEqualTo(1_349_675L);
+        verifyNoInteractions(source,live);
+
+        prepareMarket("110.00","111.00");
+        tx(()->orders.submit(owner,paper,"mix_wallet_sell1",CONTRACT,
+                EXPIRY,"SELL",1,new BigDecimal("109.00")));
+        clearInvocations(source,live);
+        var closed=audit.inspect(owner,paper);
+        assertThat(closed.status()).isEqualTo("CASH_AND_REALIZED_PNL_MATCHED");
+        assertThat(closed.optionFills()).isEqualTo(2);
+        assertThat(closed.expectedCashPaise()).isEqualTo(2_064_317L);
+        assertThat(closed.expectedRealizedPnlPaise()).isEqualTo(64_317L);
+        assertThat(closed.recordedRealizedPnlPaise()).isEqualTo(64_317L);
+        verifyNoInteractions(source,live);
+
+        // A synthetic separately-recorded cash-equity fill also affects the
+        // same wallet; F&O-only math would incorrectly report a cash mismatch.
+        tx(()->{
+            int rows=jdbc.sql("""
+                INSERT INTO customer_paper_manual_order
+                 (id,room_id,user_id,instrument_id,exchange,trading_symbol,
+                  side,quantity,limit_price,fill_price,notional_paise,fees_paise,
+                  realized_pnl_delta_paise,cash_after_paise,exchange_at,
+                  idempotency_key,payload_hash)
+                VALUES (:id,:room,:owner,123456,'NSE','SYNTHETIC_EQ',
+                        'BUY',10,100.00,100.00,100000,100,0,1964217,
+                        :exchangeAt,'eq_wallet_buy01',:hash)
+                """).param("id",UUID.randomUUID()).param("room",paper).param("owner",owner)
+                .param("exchangeAt",java.sql.Timestamp.from(NOW))
+                .param("hash","a".repeat(64)).update();
+            assertThat(rows).isEqualTo(1);
+            jdbc.sql("""
+                UPDATE customer_paper_account
+                SET available_cash_paise=1964217,
+                    ledger_version=ledger_version+1
+                WHERE room_id=:room AND user_id=:owner
+                """).param("room",paper).param("owner",owner).update();
+            return true;
+        });
+
+        var mixed=audit.inspect(owner,paper);
+        assertThat(mixed.status()).isEqualTo("CASH_AND_REALIZED_PNL_MATCHED");
+        assertThat(mixed.equityFills()).isEqualTo(1);
+        assertThat(mixed.optionFills()).isEqualTo(2);
+        assertThat(mixed.expectedCashPaise()).isEqualTo(1_964_217L);
+        assertThat(mixed.recordedCashPaise()).isEqualTo(1_964_217L);
+        assertThat(mixed.expectedRealizedPnlPaise()).isEqualTo(64_317L);
+        assertThat(mixed.positionsReconciled()).isFalse();
+        assertThat(mixed.tradingApproved()).isFalse();
+        verifyNoInteractions(source,live);
+        assertThatThrownBy(()->audit.inspect(outsider,paper))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex->assertThat(((ResponseStatusException)ex).getStatusCode())
+                        .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void sharedWalletAuditFlagsCashTamperAndUnreconciledReservedFunds() {
+        UUID owner=customer();
+        UUID room=room(owner,"PAPER");
+        wallets.activate(owner,room);
+        var audit=new CustomerPaperSharedWalletAuditService(jdbc);
+        assertThat(audit.inspect(owner,room).cashAndRealizedPnlReconciled()).isTrue();
+
+        jdbc.sql("""
+            UPDATE customer_paper_account
+            SET available_cash_paise=available_cash_paise+1
+            WHERE room_id=:room AND user_id=:owner
+            """).param("room",room).param("owner",owner).update();
+        var damaged=audit.inspect(owner,room);
+        assertThat(damaged.status()).isEqualTo("INCONSISTENT");
+        assertThat(damaged.blockerCodes()).contains("SHARED_WALLET_CASH_MISMATCH");
+        assertThat(damaged.cashAndRealizedPnlReconciled()).isFalse();
+
+        jdbc.sql("""
+            UPDATE customer_paper_account
+            SET available_cash_paise=initial_cash_paise, reserved_cash_paise=5
+            WHERE room_id=:room AND user_id=:owner
+            """).param("room",room).param("owner",owner).update();
+        var reserved=audit.inspect(owner,room);
+        assertThat(reserved.status()).isEqualTo("INCONSISTENT");
+        assertThat(reserved.blockerCodes()).contains("RESERVED_CASH_NOT_SUPPORTED_BY_AUDIT");
+        assertThat(reserved.cashAndRealizedPnlReconciled()).isFalse();
+        assertThat(reserved.tradingApproved()).isFalse();
+    }
+
 }
