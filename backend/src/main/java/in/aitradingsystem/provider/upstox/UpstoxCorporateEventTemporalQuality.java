@@ -31,7 +31,7 @@ public final class UpstoxCorporateEventTemporalQuality {
         if (o.availableAt().isBefore(o.publishedAt())
                 || o.observedAt().isBefore(o.availableAt()))
             return Status.INCONSISTENT_PUBLICATION;
-        if (o.availableAt().isAfter(asOf)) return Status.FUTURE_AVAILABLE;
+        if (o.availableAt().isAfter(asOf) || o.observedAt().isAfter(asOf)) return Status.FUTURE_AVAILABLE;
         return Status.VALID_METADATA;
     }
 
