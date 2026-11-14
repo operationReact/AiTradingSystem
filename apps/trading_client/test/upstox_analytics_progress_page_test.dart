@@ -169,11 +169,16 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    // A stale source is surfaced first; the source metrics remain further
+    // down in the scroll view and must never display cached values.
+    expect(find.textContaining('source verification is stale'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Candles'), 180,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Candles'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
     expect(find.text('5'), findsNothing);
     expect(find.text('7'), findsNothing);
-    expect(find.textContaining('source verification is stale'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
