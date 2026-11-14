@@ -18,6 +18,7 @@ import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
 import '../data/mind_paper_journal_repository.dart';
 import '../data/mind_assistant_repository.dart';
+import '../data/mind_research_engine_repository.dart';
 import '../../trading_rooms/data/customer_market_repository.dart';
 import '../../trading_rooms/data/customer_home_summary_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
@@ -115,6 +116,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.candleRepository,
     this.homeSummaryRepository,
     this.assistantRepository,
+    this.researchEngineRepository,
     super.key,
   });
 
@@ -154,6 +156,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Read-only grounded assistant (#998 D9).
   final MindAssistantRepository? assistantRepository;
+
+  /// Server engine capability registry (#998 Phase 1).
+  final MindResearchEngineRepository? researchEngineRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
