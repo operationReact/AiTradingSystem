@@ -120,6 +120,9 @@ void main() {
     expect(find.text('5%'), findsOneWidget);
     expect(find.text('Remaining: 95%'), findsOneWidget);
     expect(find.byKey(const ValueKey('upstox-verified-completion-bar')), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Candles'), 150,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Candles'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
@@ -134,10 +137,19 @@ void main() {
 
     await tester.tap(find.text('Coverage'));
     await tester.pumpAndSettle();
+    expect(find.text('Evidence tracking'), findsOneWidget);
+    expect(find.text('Receipt API unobserved'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Historical coverage'), 150,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Historical coverage'), findsOneWidget);
-    expect(find.textContaining('No verified timeframe'), findsOneWidget);
+    expect(find.textContaining('No accepted per-instrument'), findsOneWidget);
 
     await tester.tap(find.text('Operations'));
+    await tester.pumpAndSettle();
+    expect(find.text('Evidence tracking'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Five data workstreams'), 150,
+      scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
     expect(find.text('Five data workstreams'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Source verification'), 280,
@@ -334,6 +346,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('UNOBSERVED'), findsOneWidget);
     expect(find.textContaining('unknown, not zero'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+
+  testWidgets('first-screen tracking shows report movement and storage unknown '
+      'without increasing verified acceptance', (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshotWithWorkerReports()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-tracker-version')), findsOneWidget);
+    expect(find.text('TRACKER v3'), findsOneWidget);
+    expect(find.text('5/5'), findsOneWidget);
+    expect(find.text('0/5'), findsOneWidget);
+    expect(find.text('8/15'), findsOneWidget);
+    expect(find.text('Receipt API unobserved'), findsOneWidget);
+    expect(find.text('5%'), findsOneWidget);
+    await tester.tap(find.text('Coverage'));
+    await tester.pumpAndSettle();
+    expect(find.text('5/5'), findsOneWidget);
+    expect(find.text('8/15'), findsOneWidget);
+    expect(find.text('5%'), findsOneWidget);
+    await tester.tap(find.text('Operations'));
+    await tester.pumpAndSettle();
+    expect(find.text('5/5'), findsOneWidget);
+    expect(find.text('8/15'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
