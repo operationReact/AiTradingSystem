@@ -76,10 +76,22 @@ public class UpstoxFnoReadinessProbeController {
         // Reserve budget before the first provider read, including failures.
         retryAfter = now.plus(COOLDOWN);
         try {
-            List<UpstoxAnalyticsSource.FnoOptionContract> contracts =
-                    source.currentFnoOptionContracts(UNDERLYING, expiry);
-            UpstoxAnalyticsSource.OptionChainSnapshot chain =
-                    source.currentFnoOptionChain(UNDERLYING, expiry);
+            // Split contract metadata vs chain failures without exposing
+            // upstream response bodies, signed URLs or SSM credentials.
+            List<UpstoxAnalyticsSource.FnoOptionContract> contracts;
+            try {
+                contracts = source.currentFnoOptionContracts(UNDERLYING, expiry);
+            } catch (RuntimeException ex) {
+                return result(safeFailure("CONTRACTS", ex), expiry,
+                        0, 0, 0, 0, 0, now);
+            }
+            UpstoxAnalyticsSource.OptionChainSnapshot chain;
+            try {
+                chain = source.currentFnoOptionChain(UNDERLYING, expiry);
+            } catch (RuntimeException ex) {
+                return result(safeFailure("CHAIN", ex), expiry,
+                        0, 0, 0, 0, 0, now);
+            }
             if (!"UPSTOX_ANALYTICS".equals(chain.source()) || chain.retrievedAt() == null
                     || chain.exchangeQuoteTimeVerified()) {
                 return result("INVALID_PROVENANCE", expiry, 0, 0, 0, 0, 0, now);
@@ -115,6 +127,24 @@ public class UpstoxFnoReadinessProbeController {
             // No upstream response, AWS exception, access token or private quote escapes.
             return result("PROVIDER_UNAVAILABLE", expiry, 0, 0, 0, 0, 0, now);
         }
+    }
+
+    /** Only classifies exact code strings emitted by our own Upstox source. */
+    private static String safeFailure(String phase, RuntimeException ex) {
+        String category = switch (ex.getMessage() == null ? "" : ex.getMessage()) {
+            case "UPSTOX_FNO_UNAUTHORIZED" -> "UNAUTHORIZED";
+            case "UPSTOX_FNO_FORBIDDEN" -> "FORBIDDEN";
+            case "UPSTOX_FNO_RATE_LIMITED" -> "RATE_LIMITED";
+            case "UPSTOX_FNO_NOT_FOUND" -> "NOT_FOUND";
+            case "UPSTOX_FNO_UPSTREAM_UNAVAILABLE" -> "UPSTREAM_UNAVAILABLE";
+            case "UPSTOX_FNO_UPSTREAM_REJECTED" -> "UPSTREAM_REJECTED";
+            case "UPSTOX_FNO_TRANSPORT_FAILURE" -> "TRANSPORT_FAILURE";
+            case "UPSTOX_SSM_UNAVAILABLE" -> "CREDENTIAL_UNAVAILABLE";
+            case "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN",
+                 "UPSTOX_FNO_INVALID_PAYLOAD" -> "INVALID_PAYLOAD";
+            default -> null; // Do not reveal arbitrary upstream exception text.
+        };
+        return category == null ? "PROVIDER_UNAVAILABLE" : phase + "_" + category;
     }
 
     private static boolean completeGreeks(UpstoxAnalyticsSource.FnoOptionQuote leg) {
