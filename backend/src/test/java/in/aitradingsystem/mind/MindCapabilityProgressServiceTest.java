@@ -36,9 +36,9 @@ class MindCapabilityProgressServiceTest {
             .map(ManifestItem::group).collect(Collectors.toSet())).hasSize(20);
         assertThat(manifest.items()).noneMatch(i -> Set.of("RUNTIME_VERIFIED", "DEPLOYED", "FAILED")
             .contains(i.status()));
-        // Every screen without a real endpoint is honestly MOCK; none is declared beyond IMPLEMENTING.
+        // Exactly the audited MOCK screens (Settings became IMPLEMENTING in the Settings PR).
         assertThat(manifest.items().stream().filter(i -> "SCREEN".equals(i.kind())
-            && "MOCK".equals(i.status())).count()).isGreaterThanOrEqualTo(5);
+            && "MOCK".equals(i.status())).count()).isEqualTo(4);
         assertThat(manifest.items()).filteredOn(i -> "SCREEN".equals(i.kind()))
             .allMatch(i -> Set.of("MOCK", "IMPLEMENTING", "NOT_STARTED", "DATA_BLOCKED").contains(i.status()));
         // A TESTED strategy must carry source and test evidence.
