@@ -1,7 +1,8 @@
 import 'upstox_analytics_progress_repository.dart';
 
 /// Owner-readable, versioned weights for verification gates. A weight is
-/// earned only on fresh backend VERIFIED evidence for that exact capability.
+/// earned only on fresh backend VERIFIED evidence or bounded, receipt-backed
+/// PARTIAL coverage for that exact capability.
 /// This is an acceptance score, not an estimate of developer hours or PR count.
 class UpstoxReadinessProgress {
   const UpstoxReadinessProgress._({
@@ -58,8 +59,9 @@ class UpstoxReadinessProgress {
   };
 
   static int _partialTenths(String code, int weight, UpstoxAnalyticsTask? task) {
-    if (task == null || task.state != 'PARTIAL' || task.stale ||
-        task.details['progressProof'] != partialProofs[code]) return 0;
+    final proof = partialProofs[code];
+    if (proof == null || task == null || task.state != 'PARTIAL' ||
+        task.stale || task.details['progressProof'] != proof) return 0;
     final total = task.details['targetUnits'];
     final verified = task.verified;
     final checked = task.checked;
