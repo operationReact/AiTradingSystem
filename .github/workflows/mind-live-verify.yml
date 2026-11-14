@@ -1,10 +1,18 @@
 name: Mind live edge verification
 
 # Read-only. Runs on pushes to dev (the default branch is main, so dispatch
-# from the API is not available). Sends no trading calls and writes nothing.
-# Anonymous 401s prove routing only; authenticated reads need a test customer
-# token in the MINDTICK_VERIFY_CUSTOMER_TOKEN secret. Without it the
-# authenticated section is reported as NOT VERIFIED, never as passed.
+# from the API is not available). It sends no trading calls and writes nothing.
+#
+# Security model verified in infra/minttick-domain/bootstrap-account-api.yml:
+# `ANY /api/customer/{proxy+}` is protected by the Cognito JWT authorizer at API
+# Gateway, so an anonymous request is refused (401) before the account proxy
+# routes it. Unknown customer routes therefore also return 401 anonymously. That
+# is deliberate, because it does not reveal which routes exist. A 404 for an
+# unknown route is only observable with a valid customer token.
+#
+# Authenticated checks need MINDTICK_VERIFY_CUSTOMER_TOKEN. Without it they are
+# reported as AUTHENTICATED_RUNTIME_NOT_VERIFIED, never as passed. The token is
+# never printed.
 on:
   push:
     branches: [dev]
@@ -27,7 +35,7 @@ jobs:
           test "$code" = 200 || { echo "FAIL readiness $code"; exit 1; }
           echo "PASS readiness 200"
 
-      - name: Mind routes exist and reject anonymous access (401, not 404)
+      - name: Anonymous customer Mind routes are refused by the gateway (401)
         run: |
           set -euo pipefail
           fail=0
@@ -40,35 +48,47 @@ jobs:
             fi
             if [ "$code" = 401 ]; then echo "PASS $method $path -> 401"; else echo "FAIL $method $path -> $code"; fail=1; fi
           }
+          # Known protected routes.
           check GET /api/customer/mind/v1/progress
           check GET /api/customer/mind/v1/paper-portfolio
           check GET /api/customer/mind/v1/paper-journal
           check GET /api/customer/mind/v1/research-engines
+          check GET /api/customer/mind/v1/decision-history
           check POST /api/customer/mind/v1/assistant/query '{"question":"status"}'
+          # Unknown and trade-like customer routes are refused identically, so route names are not disclosed.
+          check GET /api/customer/mind/v1/admin
+          check GET /api/customer/mind/v1/orders
           exit $fail
 
-      - name: Unknown Mind routes and trade-like routes stay closed (404)
-        run: |
-          set -euo pipefail
-          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/progress/items/x/status /api/customer/mind/v1/orders; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE$path")"
-            test "$code" = 404 || { echo "FAIL GET $path -> $code"; exit 1; }
-            echo "PASS GET $path -> 404"
-          done
-
-      - name: Authenticated Mind reads (needs test customer token)
+      - name: Authenticated Mind reads and denials (needs test customer token)
         env:
           TOKEN: ${{ secrets.MINDTICK_VERIFY_CUSTOMER_TOKEN }}
         run: |
           set -euo pipefail
           if [ -z "$TOKEN" ]; then
-            echo "::warning title=Mind authenticated verification::NOT VERIFIED. No MINDTICK_VERIFY_CUSTOMER_TOKEN secret is configured, so authenticated reads were not executed."
+            echo "AUTHENTICATED_RUNTIME_NOT_VERIFIED: MINDTICK_VERIFY_CUSTOMER_TOKEN is not configured, so authenticated reads and denials were not executed."
+            echo "::warning title=Mind authenticated verification::AUTHENTICATED_RUNTIME_NOT_VERIFIED. No verification token is configured."
+            {
+              echo "### Mind live verification"
+              echo "- Anonymous gateway refusal: checked in the previous step"
+              echo "- Authenticated reads and denials: AUTHENTICATED_RUNTIME_NOT_VERIFIED"
+              echo "- Deployed backend and account-edge revision: not verified by this workflow"
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          set +x
           auth=(-H "Authorization: Bearer $TOKEN")
-          for path in /api/customer/mind/v1/progress /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines; do
+          fail=0
+          for path in /api/customer/mind/v1/progress /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines /api/customer/mind/v1/decision-history; do
             code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "$BASE$path")"
-            test "$code" = 200 || { echo "FAIL $path -> $code"; exit 1; }
-            python3 -c "import json,sys;d=json.load(open('/tmp/body.json'));assert isinstance(d,dict)" || { echo "FAIL $path body"; exit 1; }
-            echo "PASS authenticated $path -> 200"
+            if [ "$code" != 200 ] || ! python3 -c "import json;d=json.load(open('/tmp/body.json'));assert isinstance(d,dict)"; then
+              echo "FAIL authenticated $path -> $code"; fail=1; continue
+            fi
+            echo "PASS authenticated $path -> 200 JSON object"
           done
+          # Authenticated unknown and trade-like routes must be 404 from the proxy.
+          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "$BASE$path")"
+            if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
+          done
+          exit $fail
