@@ -40,6 +40,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   CustomerFnoMarket? _market;
   List<CustomerFnoPosition> _positions = const [];
   List<CustomerFnoFill> _orders = const [];
+  CustomerFnoReceipt? _receipt;
+  String? _receiptError;
   bool _positionsLoading = true;
   String? _positionsError;
   int _positionsRequest = 0;
@@ -130,6 +132,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   Future<void> _loadPositions() async {
     final request = ++_positionsRequest;
     if (!mounted) return;
+    // Bookkeeping loads independently: its failure never hides positions or orders.
+    _loadReceipt();
     setState(() {
       _positionsLoading = true;
       _positionsError = null;
@@ -410,6 +414,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           _positionsView(colors, type),
           const SizedBox(height: 12),
           _ordersView(colors, type),
+          const SizedBox(height: 12),
+          _bookkeepingView(colors, type),
         ],
       ),
     );
@@ -574,6 +580,59 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
                   ? 'P&L not valued' : 'P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}'}',
               style: type.bodySmall),
           ),
+      ],
+    );
+  }
+
+  Future<void> _loadReceipt() async {
+    try {
+      final receipt = await widget.repository.reconciliation(widget.roomId);
+      if (!mounted) return;
+      setState(() {
+        _receipt = receipt;
+        _receiptError = null;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _receipt = null;
+        _receiptError = 'Bookkeeping check unavailable. Trading readiness is unknown.';
+      });
+    }
+  }
+
+  /// Bookkeeping consistency is shown apart from trading readiness. A reconciled
+  /// ledger never approves trading by itself.
+  Widget _bookkeepingView(ColorScheme colors, TextTheme type) {
+    final r = _receipt;
+    if (r == null) {
+      return Text(_receiptError ?? 'Checking bookkeeping…',
+        key: const ValueKey('paper-fno-receipt-unknown'), style: type.bodySmall);
+    }
+    return Column(
+      key: const ValueKey('paper-fno-receipt'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Bookkeeping', style: type.labelLarge),
+        Text(
+          'Ledger ${r.walletReconciled ? 'reconciled' : 'NOT reconciled'} · '
+          'fills ${r.recordedFills} · open contracts ${r.openContracts} · '
+          'realized ${_rupees(r.recordedRealizedPnlPaise)} '
+          '(computed ${_rupees(r.computedRealizedPnlPaise)})',
+          style: type.bodySmall),
+        const SizedBox(height: 4),
+        Text('Trading readiness', style: type.labelLarge),
+        Text(
+          'Approved for trading: ${r.tradingApproved ? 'yes' : 'no'} · '
+          'market data ${r.marketDataVerified ? 'verified' : 'not verified'} · '
+          'provider rights ${r.providerRightsVerified ? 'verified' : 'not verified'}',
+          style: type.bodySmall),
+        if (r.blockerCodes.isNotEmpty)
+          Text('Blockers: ${r.blockerCodes.join(', ')}',
+            style: type.labelSmall?.copyWith(color: colors.error)),
+        Text('Bookkeeping consistency does not approve trading. Checked '
+            '${r.checkedAt?.toIso8601String() ?? 'unknown'}.',
+          style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       ],
     );
   }

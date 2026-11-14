@@ -19,6 +19,10 @@ class CustomerPaperFnoRepository {
     return CustomerFnoMarket.decode(raw);
   }
 
+  /// Read-only bookkeeping receipt. It never authorizes trading by itself.
+  Future<CustomerFnoReceipt> reconciliation(String roomId) async =>
+      CustomerFnoReceipt.decode(await api.getJson('$_path/$roomId/paper/fno/reconciliation'));
+
   /// Server-verified listed expiries. The list is never inferred on the client.
   Future<CustomerFnoExpiries> expiries(String roomId) async =>
       CustomerFnoExpiries.decode(await api.getJson('$_path/$roomId/paper/fno/expiries'));
@@ -72,6 +76,72 @@ class CustomerPaperFnoRepository {
 
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+/// Bookkeeping consistency (walletReconciled, realized P&L) kept separate from
+/// trading readiness (tradingApproved, rights, market data). Read-only.
+class CustomerFnoReceipt {
+  const CustomerFnoReceipt({
+    required this.status,
+    required this.checkedAt,
+    required this.recordedFills,
+    required this.openContracts,
+    required this.computedRealizedPnlPaise,
+    required this.recordedRealizedPnlPaise,
+    required this.walletReconciled,
+    required this.marketDataVerified,
+    required this.providerRightsVerified,
+    required this.tradingApproved,
+    required this.blockerCodes,
+  });
+
+  final String status;
+  final DateTime? checkedAt;
+  final int recordedFills;
+  final int openContracts;
+  final int computedRealizedPnlPaise;
+  final int recordedRealizedPnlPaise;
+  final bool walletReconciled;
+  final bool marketDataVerified;
+  final bool providerRightsVerified;
+  final bool tradingApproved;
+  final List<String> blockerCodes;
+
+  static CustomerFnoReceipt decode(Object? value) {
+    if (value is! Map<String, dynamic>) throw const FormatException('Invalid F&O receipt');
+    final status = value['status'];
+    final fills = value['recordedFills'];
+    final open = value['openContracts'];
+    final computed = value['computedRealizedPnlPaise'];
+    final recorded = value['recordedRealizedPnlPaise'];
+    final wallet = value['walletReconciled'];
+    final market = value['marketDataVerified'];
+    final rights = value['providerRightsVerified'];
+    final approved = value['tradingApproved'];
+    final blockers = value['blockerCodes'];
+    if (status is! String || status.isEmpty || status.length > 64 ||
+        fills is! int || fills < 0 || open is! int || open < 0 ||
+        computed is! int || recorded is! int ||
+        wallet is! bool || market is! bool || rights is! bool || approved is! bool ||
+        blockers is! List || blockers.any((b) => b is! String)) {
+      throw const FormatException('Untrustworthy F&O receipt');
+    }
+    final checked = value['checkedAt'] == null
+        ? null : DateTime.tryParse(value['checkedAt'].toString());
+    return CustomerFnoReceipt(
+      status: status,
+      checkedAt: checked?.toUtc(),
+      recordedFills: fills,
+      openContracts: open,
+      computedRealizedPnlPaise: computed,
+      recordedRealizedPnlPaise: recorded,
+      walletReconciled: wallet,
+      marketDataVerified: market,
+      providerRightsVerified: rights,
+      tradingApproved: approved,
+      blockerCodes: List.unmodifiable(blockers.cast<String>()),
+    );
+  }
 }
 
 /// Listed NIFTY option expiries. Only `VERIFIED` carries dates; anything else is blocked.
