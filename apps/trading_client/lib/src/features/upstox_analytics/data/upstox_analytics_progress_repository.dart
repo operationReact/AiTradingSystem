@@ -86,9 +86,11 @@ class UpstoxPersistedReceipts {
     if (evidence == 'PERSISTED_CHECKPOINTS_ONLY' &&
         ([jobs, chunks, attempts, verified, attested, records,
           retained, failed, retry].any((n) => n == null) ||
-          verified! > chunks! || attested! > verified! ||
-          retained! > records! || failed! > chunks! ||
-          retry! > chunks!)) {
+          (verified ?? 0) > (chunks ?? 0) ||
+          (attested ?? 0) > (verified ?? 0) ||
+          (retained ?? 0) > (records ?? 0) ||
+          (failed ?? 0) > (chunks ?? 0) ||
+          (retry ?? 0) > (chunks ?? 0))) {
       throw const FormatException('Inconsistent persisted receipt counts');
     }
     return UpstoxPersistedReceipts(
