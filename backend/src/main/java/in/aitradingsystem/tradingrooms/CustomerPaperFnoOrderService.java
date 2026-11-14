@@ -134,6 +134,20 @@ public class CustomerPaperFnoOrderService {
         UpstoxFnoV3LiveFeedService.PaperQuote quote=live.eligiblePaperQuote(instrumentKey)
                 .orElseThrow(()->reject(HttpStatus.CONFLICT,
                         "Fresh verified F&O bid/ask unavailable"));
+        // Defense in depth: executable PAPER fill requires both observation
+        // and provider exchange time fresh INSIDE the active Indian session.
+        if (quote.exchangeAt()==null || quote.observedAt()==null
+                || !calendar.isInsideCashSession(quote.exchangeAt())
+                || quote.exchangeAt().isAfter(now.plusSeconds(2))
+                || quote.observedAt().isAfter(now.plusSeconds(2))
+                || java.time.Duration.between(quote.exchangeAt(),now).isNegative()
+                || java.time.Duration.between(quote.exchangeAt(),now)
+                        .compareTo(java.time.Duration.ofSeconds(15))>0
+                || java.time.Duration.between(quote.observedAt(),now).isNegative()
+                || java.time.Duration.between(quote.observedAt(),now)
+                        .compareTo(java.time.Duration.ofSeconds(15))>0) {
+            throw reject(HttpStatus.CONFLICT,"F&O PAPER provider quote is stale or outside session");
+        }
         BigDecimal price="BUY".equals(side)?quote.ask():quote.bid();
         if(("BUY".equals(side) && limit.compareTo(price)<0)
                 || ("SELL".equals(side) && limit.compareTo(price)>0))
