@@ -93,6 +93,61 @@ class UpstoxFnoAnalyticsSourceTest {
     }
 
     @Test
+    void acceptsLosslessDoubleEncodedOiAndPreviousOiFromPublishedOptionChainSchema() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/chain?")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"expiry":"2026-11-19","underlying_key":"NSE_INDEX|Nifty 50",
+                       "strike_price":25000.0,"underlying_spot_price":25050.0,
+                       "call_options":{"instrument_key":"NSE_FO|61001",
+                         "market_data":{"ltp":120.0,"bid_price":119.0,"ask_price":121.0,
+                           "volume":300,"oi":4500.0,"prev_oi":3500.0},
+                         "option_greeks":{"iv":17.8,"delta":0.52}},
+                       "put_options":{"instrument_key":"NSE_FO|61002",
+                         "market_data":{"ltp":70.0,"bid_price":69.0,"ask_price":71.0,
+                           "volume":400,"oi":6000.0,"prev_oi":5000.0}}}
+                    ]}
+                    """, MediaType.APPLICATION_JSON));
+        var chain = source.currentFnoOptionChain(UNDERLYING, EXPIRY);
+        assertThat(chain.strikes()).hasSize(1);
+        assertThat(chain.strikes().getFirst().call().openInterest()).isEqualTo(4500L);
+        assertThat(chain.strikes().getFirst().call().previousOpenInterest()).isEqualTo(3500L);
+        assertThat(chain.strikes().getFirst().put().openInterest()).isEqualTo(6000L);
+        assertThat(chain.exchangeQuoteTimeVerified()).isFalse();
+        server.verify();
+    }
+
+    @Test
+    void fractionalOrMissingOiNeverRoundsOrInventsAContractCount() {
+        validSsm();
+        String[] invalidCounts = {"4500.5", "null", "-1.0", "1e25"};
+        // Register all mocks before issuing the first call: MockRestServiceServer
+        // freezes expectations once any HTTP request has been observed.
+        for (String bad : invalidCounts) {
+            server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/chain?")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"expiry":"2026-11-19","underlying_key":"NSE_INDEX|Nifty 50",
+                       "strike_price":25000,"underlying_spot_price":25050,
+                       "call_options":{"instrument_key":"NSE_FO|61001",
+                         "market_data":{"ltp":120,"bid_price":119,"ask_price":121,
+                           "volume":300,"oi":%s,"prev_oi":3500}},
+                       "put_options":{"instrument_key":"NSE_FO|61002",
+                         "market_data":{"ltp":70,"bid_price":69,"ask_price":71,
+                           "volume":400,"oi":6000,"prev_oi":5000}}}
+                    ]}
+                    """.formatted(bad), MediaType.APPLICATION_JSON));
+        }
+        for (String bad : invalidCounts) {
+            assertThatThrownBy(() -> source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                    .as("Reject F&O count: " + bad)
+                    .hasMessage("UPSTOX_FNO_INVALID_CHAIN");
+        }
+        server.verify();
+    }
+
+    @Test
     void emptyProviderChainIsObservedZeroNotInventedData() {
         validSsm();
         server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/chain?")))
