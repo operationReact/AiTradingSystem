@@ -45,6 +45,7 @@ import 'features/trading_rooms/domain/trading_workspace_mode.dart';
 import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
+import 'features/trading_rooms/data/customer_paper_fno_repository.dart';
 import 'features/trading_rooms/data/customer_paper_trading_repository.dart';
 import 'features/trading_rooms/data/customer_trade_intent_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
@@ -686,6 +687,7 @@ class _TradingAppState extends State<TradingApp> {
           repository: HttpCustomerRoomRepository(_api),
           executionRepository: HttpCustomerExecutionRepository(_api),
           paperTradingRepository: HttpCustomerPaperTradingRepository(_api),
+          paperFnoRepository: CustomerPaperFnoRepository(_api),
           marketRepository: HttpCustomerMarketRepository(_api),
           intentsRepository: HttpCustomerTradeIntentRepository(_api),
           onBroker: () => _navigate('/brokers'),

@@ -6,6 +6,7 @@ import '../domain/trading_workspace_mode.dart';
 import 'minttick_mode_switcher.dart';
 import '../data/customer_room_repository.dart';
 import '../data/customer_execution_repository.dart';
+import '../data/customer_paper_fno_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
@@ -706,6 +707,7 @@ class MintTickRoomDetailPage extends StatefulWidget {
     this.repository,
     this.executionRepository,
     this.paperTradingRepository,
+    this.paperFnoRepository,
     this.marketRepository,
     this.intentsRepository,
     this.onBroker,
@@ -717,6 +719,7 @@ class MintTickRoomDetailPage extends StatefulWidget {
   final HttpCustomerRoomRepository? repository;
   final HttpCustomerExecutionRepository? executionRepository;
   final HttpCustomerPaperTradingRepository? paperTradingRepository;
+  final CustomerPaperFnoRepository? paperFnoRepository;
   final HttpCustomerMarketRepository? marketRepository;
   final HttpCustomerTradeIntentRepository? intentsRepository;
   final VoidCallback? onBroker;
@@ -922,6 +925,7 @@ class _MintTickRoomDetailPageState extends State<MintTickRoomDetailPage> {
       events: _events,
       market: widget.marketRepository,
       paper: widget.paperTradingRepository,
+      fno: widget.paperFnoRepository,
       execution: widget.executionRepository,
       intents: widget.intentsRepository,
       onBack: () => Navigator.of(context).pop(),
