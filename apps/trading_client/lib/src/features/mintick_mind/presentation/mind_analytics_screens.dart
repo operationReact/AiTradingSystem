@@ -551,6 +551,10 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
       !_riskApproved?'ABSTAIN · RISK VETO':
       good?'BUY CANDIDATE · RESEARCH':'WAIT · DISAGREEMENT';
     return _surface('Decision Simulator','Change evidence, freshness and portfolio vetoes',[
+      const MindTag('LOCAL SCENARIO ARITHMETIC · NOT A SERVER DECISION',color:MindPalette.yellow),
+      const SizedBox(height:10),
+      const MindTag('NO ORDERS · NO BROKER ACCESS · NOTHING IS SAVED',color:MindPalette.red),
+      const SizedBox(height:12),
       MindPanel(highlight:true,child:Column(children:[
         const MindSectionTitle(title:'Scenario Conditions',icon:Icons.tune),
         _value('Model agreement',_modelWeight.toStringAsFixed(0)+'%'),
