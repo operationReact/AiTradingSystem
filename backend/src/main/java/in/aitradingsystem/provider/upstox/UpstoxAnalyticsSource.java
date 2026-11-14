@@ -327,10 +327,20 @@ public final class UpstoxAnalyticsSource {
 
     private static long fnoLong(JsonNode row, String field) {
         JsonNode value = row.path(field);
-        if (!value.isIntegralNumber()) throw new IllegalArgumentException();
-        long number = value.bigIntegerValue().longValueExact();
-        if (number < 0) throw new IllegalArgumentException();
-        return number;
+        // Upstox's published Options API models option-chain oi and prev_oi
+        // as JSON number/double, unlike the integer-valued volume. Values
+        // such as 4500.0 represent exact whole contracts and must not reject
+        // an otherwise valid source response. Never round a fractional OI,
+        // overflow a long, or turn missing/null upstream data into zero.
+        if (!value.isNumber()) throw new IllegalArgumentException();
+        try {
+            java.math.BigDecimal number = value.decimalValue();
+            if (number.signum() < 0 || number.precision() > 20)
+                throw new IllegalArgumentException();
+            return number.longValueExact();
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException("Invalid nonintegral F&O count");
+        }
     }
 
 
