@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -8,14 +9,22 @@ import '../data/customer_paper_fno_repository.dart';
 /// PAPER-only NIFTY long options: contract selection, BUY/SELL ticket and
 /// virtual positions. Every value comes from the server. Anything the server
 /// does not confirm is shown as unavailable, never as zero or as tradable.
+/// Client-side ceiling for acting on a quote. The server allows 15s; this is
+/// conservative and fails closed. The backend still enforces its own limit.
+const Duration kPaperFnoQuoteMaxAge = Duration(seconds: 12);
+
 class MintTickPaperFnoPanel extends StatefulWidget {
   const MintTickPaperFnoPanel({
     required this.roomId,
     required this.repository,
     this.initialExpiry,
     this.onFilled,
+    this.clock = DateTime.now,
     super.key,
   });
+
+  /// Injected for tests; the production default is the device clock.
+  final DateTime Function() clock;
 
   final String roomId;
   final CustomerPaperFnoRepository repository;
@@ -40,6 +49,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   final _price = TextEditingController();
   final _expiryText = TextEditingController();
   DateTime? _expiry;
+  DateTime? _quotesReceivedAt;
+  Timer? _ageTimer;
   int _request = 0;
 
   @override
@@ -56,6 +67,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
 
   @override
   void dispose() {
+    _ageTimer?.cancel();
     _price.dispose();
     _expiryText.dispose();
     super.dispose();
@@ -91,8 +103,15 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         widget.repository.positions(widget.roomId),
       ]);
       if (!mounted || request != _request) return;
+      _ageTimer?.cancel();
+      // Re-evaluate eligibility every second so quotes age out on screen
+      // without any user action. This only disables; it never claims freshness.
+      _ageTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
       setState(() {
         _market = results[0] as CustomerFnoMarket;
+        _quotesReceivedAt = widget.clock();
         _positions = results[1] as List<CustomerFnoPosition>;
         // A refresh replaces every leg. Clear the old selection and price so an
         // earlier quote can never gate a new order; the user re-selects a leg.
@@ -102,8 +121,10 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       });
     } catch (error) {
       if (!mounted || request != _request) return;
+      _ageTimer?.cancel();
       setState(() {
         _market = null;
+        _quotesReceivedAt = null;
         _positions = const [];
         _selected = null;
         _price.text = '';
@@ -118,7 +139,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       return switch (error.statusCode) {
         409 => 'Upstox F&O display rights are not verified. No quotes are shown.',
         503 => 'F&O source is disabled or unavailable. Orders are closed.',
-        404 => 'This PAPER room is unavailable.',
+        404 => 'F&O PAPER data is not available for this room. The feature may be turned off, or the room may not be a PAPER room.',
         401 || 403 => 'Sign in again to view F&O PAPER data.',
         _ => 'F&O data could not be loaded (HTTP ${error.statusCode}).',
       };
@@ -129,11 +150,20 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     return 'F&O data is unavailable. Check your connection and try again.';
   }
 
+  /// True only while the quotes were received within the client ceiling.
+  bool get _quotesWithinAge {
+    final received = _quotesReceivedAt;
+    if (received == null) return false;
+    final age = widget.clock().difference(received);
+    return !age.isNegative && age <= kPaperFnoQuoteMaxAge;
+  }
+
   bool get _canSubmit {
     final leg = _selected;
     final market = _market;
     if (_submitting || market == null || leg == null) return false;
-    return market.hasFreshQuotes && leg.quoteFresh && leg.paperEligible &&
+    return _quotesWithinAge && market.hasFreshQuotes &&
+        leg.quoteFresh && leg.paperEligible && leg.observedAt != null &&
         _limitPrice() != null;
   }
 
@@ -269,6 +299,17 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
             Text(_blocker!, key: const ValueKey('paper-fno-blocker'),
               style: TextStyle(color: colors.error)),
           if (!_loading && _expiry != null && _market != null) ..._marketView(colors, type),
+          if (!_loading && _market != null && !_quotesWithinAge) ...[
+            const SizedBox(height: 8),
+            Text('Quotes are older than ${kPaperFnoQuoteMaxAge.inSeconds}s. Refresh before trading.',
+              key: const ValueKey('paper-fno-stale'),
+              style: type.bodySmall?.copyWith(color: colors.error)),
+            const SizedBox(height: 4),
+            FilledButton.tonal(
+              key: const ValueKey('paper-fno-refresh'),
+              onPressed: _load,
+              child: const Text('Refresh quotes')),
+          ],
           if (_message != null) ...[
             const SizedBox(height: 8),
             Text(_message!, key: const ValueKey('paper-fno-message'),

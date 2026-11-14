@@ -74,14 +74,15 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 }
 
 Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
-    {bool withExpiry = true}) async {
+    {bool withExpiry = true, DateTime Function()? clock}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(900, 2400);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
     child: MintTickPaperFnoPanel(roomId: 'room', repository: repo,
-      initialExpiry: withExpiry ? DateTime(2026, 11, 20) : null)))));
+      initialExpiry: withExpiry ? DateTime(2026, 11, 20) : null,
+      clock: clock ?? DateTime.now)))));
   await tester.pumpAndSettle();
 }
 
@@ -223,5 +224,37 @@ void main() {
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
       isNull);
     expect(repo.submits, isEmpty);
+  });
+
+  testWidgets('quotes stop being tradable after 12s, and a refresh makes them tradable again', (tester) async {
+    var now = DateTime.utc(2026, 11, 16, 4, 30);
+    final repo = _FakeRepo(marketResult: market());
+    await pump(tester, repo, clock: () => now);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNotNull);
+
+    // 13 seconds later the ticker re-evaluates and fails closed.
+    now = now.add(const Duration(seconds: 13));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNull);
+    expect(find.byKey(const ValueKey('paper-fno-stale')), findsOneWidget);
+
+    // Refresh restores eligibility; the user re-selects the contract.
+    await tester.tap(find.byKey(const ValueKey('paper-fno-refresh')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-fno-stale')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNotNull);
+  });
+
+  testWidgets('a 404 is described as possibly feature-disabled, not as a missing room', (tester) async {
+    await pump(tester, _FakeRepo(failure: const ApiHttpFailure('NOT_FOUND', null, 404)));
+    expect(find.textContaining('feature may be turned off'), findsOneWidget);
+    expect(find.textContaining('is unavailable'), findsNothing);
   });
 }
