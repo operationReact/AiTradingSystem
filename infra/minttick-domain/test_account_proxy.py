@@ -666,9 +666,9 @@ class AccountProxyTest(unittest.TestCase):
 
     def test_fno_paper_order_routes_never_enable_live_or_admin(self):
         route="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
-        for method, suffix in (("POST","orders"),("GET","orders"),("GET","positions"),("GET","market")):
+        for method, suffix in (("POST","orders"),("GET","orders"),("GET","positions"),("GET","market"),("GET","expiries")):
             self.assertTrue(proxy.allowed(method,route+suffix))
-        for method,suffix in (("POST","positions"),("POST","market"),("PUT","market"),("DELETE","market"),("DELETE","orders"),
+        for method,suffix in (("POST","positions"),("POST","market"),("POST","expiries"),("PUT","market"),("DELETE","market"),("DELETE","orders"),("DELETE","expiries"),
                               ("PUT","orders"),("POST","live"),("GET","execute")):
             self.assertFalse(proxy.allowed(method,route+suffix))
         self.assertFalse(proxy.allowed("POST",

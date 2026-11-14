@@ -43,9 +43,25 @@ CustomerFnoPosition heldPosition() => CustomerFnoPosition.decode({
       'priceFresh': false,
     });
 
+CustomerFnoExpiries verifiedExpiries([List<String> dates = const ['2026-11-20']]) =>
+    CustomerFnoExpiries.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'status': 'VERIFIED',
+      'observedAt': '2026-11-16T04:00:00Z',
+      'expiries': dates,
+    });
+
+CustomerFnoExpiries blockedExpiries() => CustomerFnoExpiries.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'status': 'BLOCKED_SOURCE_NOT_BOUND',
+      'observedAt': null,
+      'expiries': <String>[],
+    });
+
 class _FakeRepo implements CustomerPaperFnoRepository {
   _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure,
-      this.positionResult = const [], this.positionsFailure});
+      this.positionResult = const [], this.positionsFailure, this.expiriesResult});
+  final CustomerFnoExpiries? expiriesResult;
   final CustomerFnoMarket? marketResult;
   /// Successive responses for refresh tests; the last one repeats.
   final List<CustomerFnoMarket>? markets;
@@ -69,6 +85,10 @@ class _FakeRepo implements CustomerPaperFnoRepository {
     }
     return marketResult!;
   }
+
+  @override
+  Future<CustomerFnoExpiries> expiries(String roomId) async =>
+      expiriesResult ?? verifiedExpiries();
 
   @override
   Future<List<CustomerFnoPosition>> positions(String roomId) async {
@@ -108,7 +128,7 @@ void main() {
   testWidgets('without an entered expiry no request is made and the user is asked for one', (tester) async {
     final repo = _FakeRepo(failure: const ApiHttpFailure('CONFLICT', null, 409));
     await pump(tester, repo, withExpiry: false);
-    expect(find.textContaining('Enter the expiry'), findsOneWidget);
+    expect(find.text('Select a verified expiry to see strikes.'), findsOneWidget);
     expect(find.textContaining('display rights'), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
   });
@@ -223,15 +243,18 @@ void main() {
             },
           ],
         });
+    var now = DateTime.utc(2026, 11, 16, 4, 30);
     final repo = _FakeRepo(markets: [twoLegs(ceFresh: true), twoLegs(ceFresh: false)]);
-    await pump(tester, repo);
+    await pump(tester, repo, clock: () => now);
     await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
       isNotNull);
 
-    // Refresh through the same Load control; the CE is now stale.
-    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-load')));
+    // Quotes age out after 12s, which reveals the explicit refresh control.
+    now = now.add(const Duration(seconds: 13));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.tap(find.byKey(const ValueKey('paper-fno-refresh')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-price')), findsNothing);
@@ -313,4 +336,23 @@ void main() {
     expect(repo.submits, isEmpty);
   });
 
+
+  testWidgets('a blocked expiry list shows its status and offers no dates or strikes', (tester) async {
+    final repo = _FakeRepo(marketResult: market(), expiriesResult: blockedExpiries());
+    await pump(tester, repo, withExpiry: false);
+    expect(find.byKey(const ValueKey('paper-fno-expiry-blocked')), findsOneWidget);
+    expect(find.textContaining('Expiry list not verified (BLOCKED_SOURCE_NOT_BOUND)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-expiry-dropdown')), findsNothing);
+  });
+
+  testWidgets('choosing a verified expiry from the dropdown loads that market', (tester) async {
+    final repo = _FakeRepo(marketResult: market(), expiriesResult: verifiedExpiries(['2026-11-20', '2026-11-27']));
+    await pump(tester, repo, withExpiry: false);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-dropdown')));
+    await tester.pumpAndSettle();
+    expect(find.text('2026-11-27'), findsOneWidget);
+    await tester.tap(find.text('2026-11-20').last);
+    await tester.pumpAndSettle();
+    expect(find.text('Fresh quotes'), findsOneWidget);
+  });
 }

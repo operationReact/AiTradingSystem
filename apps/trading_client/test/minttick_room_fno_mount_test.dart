@@ -10,6 +10,13 @@ import 'package:trading_client/src/features/trading_rooms/presentation/minttick_
 /// mounted section renders its blocker without any network or quote data.
 class _BlockedRepo implements CustomerPaperFnoRepository {
   @override
+  Future<CustomerFnoExpiries> expiries(String roomId) async => CustomerFnoExpiries.decode({
+        'underlyingKey': 'NSE_INDEX|Nifty 50',
+        'status': 'VERIFIED',
+        'observedAt': '2026-11-16T04:00:00Z',
+        'expiries': ['2026-11-20'],
+      });
+  @override
   Future<CustomerFnoMarket> market(String roomId, DateTime expiry) async =>
       throw const ApiHttpFailure('CONFLICT', null, 409);
   @override
@@ -48,8 +55,9 @@ void main() {
     expect(find.byType(MintTickPaperFnoPanel), findsOneWidget);
     // Nothing is requested until the user enters a verified expiry.
     expect(find.textContaining('display rights are not verified'), findsNothing);
-    await tester.enterText(find.byKey(const ValueKey('paper-fno-expiry')), '2026-11-20');
-    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-load')));
+    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-dropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('2026-11-20').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('display rights are not verified'), findsOneWidget);
   });

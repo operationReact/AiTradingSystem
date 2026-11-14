@@ -50,8 +50,11 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   String _side = 'BUY';
   int _lots = 1;
   final _price = TextEditingController();
-  final _expiryText = TextEditingController();
   DateTime? _expiry;
+  // Server-verified listed expiries only. Empty unless the list is VERIFIED.
+  List<DateTime> _expiries = const [];
+  String? _expiryBlocker;
+  bool _expiriesLoading = false;
   DateTime? _quotesReceivedAt;
   Timer? _ageTimer;
   int _request = 0;
@@ -61,34 +64,63 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     super.initState();
     _expiry = widget.initialExpiry;
     if (_expiry != null) {
-      _expiryText.text = _ymd(_expiry!);
       _load();
     } else {
       _loading = false;
       _loadPositions();
     }
+    _loadExpiries();
   }
 
   @override
   void dispose() {
     _ageTimer?.cancel();
     _price.dispose();
-    _expiryText.dispose();
     super.dispose();
   }
 
-  void _applyExpiry() {
-    final text = _expiryText.text.trim();
-    final parsed = RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(text)
-        ? DateTime.tryParse(text) : null;
-    if (parsed == null) {
-      setState(() => _blocker = 'Enter the verified expiry as YYYY-MM-DD.');
-      return;
+  /// Reads the server's listed expiries. Nothing is inferred on the client, and a
+  /// blocked or failed list shows its reason and offers no dates.
+  Future<void> _loadExpiries() async {
+    if (!mounted) return;
+    setState(() => _expiriesLoading = true);
+    try {
+      final listed = await widget.repository.expiries(widget.roomId);
+      if (!mounted) return;
+      setState(() {
+        _expiriesLoading = false;
+        _expiries = listed.verified ? listed.expiries : const [];
+        _expiryBlocker = listed.verified
+            ? null
+            : 'Expiry list not verified (${listed.status}). No strikes or orders are available.';
+        // A chosen date that is no longer listed is dropped, with its quotes.
+        if (_expiry != null && !_expiries.contains(_expiry)) {
+          _expiry = null;
+          _selected = null;
+          _market = null;
+          _price.text = '';
+        }
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _expiriesLoading = false;
+        _expiries = const [];
+        _expiryBlocker = _describe(error);
+        _expiry = null;
+        _selected = null;
+        _market = null;
+        _price.text = '';
+      });
     }
+  }
+
+  void _selectExpiry(DateTime expiry) {
     setState(() {
-      _expiry = parsed;
+      _expiry = expiry;
       _selected = null;
       _message = null;
+      _price.text = '';
     });
     _load();
   }
@@ -299,24 +331,29 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
           ]),
           const SizedBox(height: 4),
-          Row(children: [
-            Expanded(child: TextField(
-              key: const ValueKey('paper-fno-expiry'),
-              controller: _expiryText,
-              decoration: const InputDecoration(
-                labelText: 'Verified NIFTY expiry (YYYY-MM-DD)',
-                isDense: true),
-            )),
-            const SizedBox(width: 8),
-            FilledButton.tonal(
-              key: const ValueKey('paper-fno-expiry-load'),
-              onPressed: _applyExpiry,
-              child: const Text('Load')),
-          ]),
+          if (_expiryBlocker != null)
+            Text(_expiryBlocker!, key: const ValueKey('paper-fno-expiry-blocked'),
+              style: TextStyle(color: colors.error))
+          else
+            DropdownButton<DateTime>(
+              key: const ValueKey('paper-fno-expiry-dropdown'),
+              isExpanded: true,
+              hint: Text(_expiriesLoading
+                  ? 'Loading verified expiries…' : 'Select a verified expiry'),
+              value: _expiries.contains(_expiry) ? _expiry : null,
+              items: [
+                for (final d in _expiries)
+                  DropdownMenuItem<DateTime>(value: d, child: Text(_ymd(d))),
+              ],
+              onChanged: _expiriesLoading || _expiries.isEmpty
+                  ? null
+                  : (d) {
+                      if (d != null) _selectExpiry(d);
+                    },
+            ),
           const SizedBox(height: 10),
-          if (_expiry == null)
-            Text('Enter the expiry from the verified contract list to see strikes.',
-              style: type.bodySmall),
+          if (_expiry == null && _expiryBlocker == null)
+            Text('Select a verified expiry to see strikes.', style: type.bodySmall),
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
