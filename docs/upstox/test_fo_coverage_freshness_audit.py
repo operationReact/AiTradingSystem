@@ -1,0 +1,108 @@
+"""Offline regression tests for the read-only F&O receipt assessor."""
+import unittest
+from datetime import datetime, timezone, timedelta
+from fo_coverage_freshness_audit import assess, assess_cli
+
+
+NOW = datetime(2026, 11, 16, 5, 0, tzinfo=timezone.utc)
+
+
+def receipt(**changes):
+    base = {"source": "UPSTOX", "exchange": "NSE_FO",
+            "readRightsVerified": True, "displayRightsVerified": True,
+            "sessionState": "OPEN", "sessionVerified": True,
+            "contracts": [{"underlying": "NIFTY", "optionType": "CE",
+                           "listingVerified": True, "lotSize": 65,
+                           "instrumentKey": "NSE_FO|test-contract",
+                           "tradingSymbol": "NIFTY_TEST_CE", "strikePrice": 25000,
+                           "expiry": "2026-11-17",
+                           "exchangeLtt": NOW.isoformat()}]}
+    base.update(changes)
+    return base
+
+
+class AuditTests(unittest.TestCase):
+    def test_fresh_is_not_order_permission(self):
+        r = assess(receipt(), NOW)
+        self.assertEqual(r["status"], "FRESH")
+        self.assertTrue(r["tradeTimeReady"])
+        self.assertEqual(r["freshContracts"], 1)
+
+    def test_closed_market_is_unknown_not_live(self):
+        r = assess(receipt(sessionState="CLOSED"), NOW)
+        self.assertEqual(r["status"], "UNKNOWN")
+        self.assertFalse(r["tradeTimeReady"])
+        self.assertIsNone(r["freshContracts"])
+
+    def test_rights_unknown_fail_closed(self):
+        self.assertEqual(assess(receipt(displayRightsVerified=False), NOW)["reason"],
+                         "RIGHTS_UNVERIFIED")
+
+    def test_missing_receipts_distinct_from_unknown(self):
+        self.assertEqual(assess(receipt(contracts=[]), NOW)["verifiedContracts"], 0)
+        self.assertIsNone(assess(receipt(contracts=None), NOW)["verifiedContracts"])
+
+    def test_old_or_future_quote_not_fresh(self):
+        for offset in (-16, 1):
+            data = receipt()
+            data["contracts"][0]["exchangeLtt"] = (NOW + timedelta(seconds=offset)).isoformat()
+            self.assertEqual(assess(data, NOW)["status"], "STALE")
+
+    def test_expired_wrong_lot_and_unverified_listing(self):
+        for change in ({"expiry": "2026-11-13"}, {"lotSize": 0},
+                       {"listingVerified": False}, {"optionType": "FUT"}):
+            data = receipt()
+            data["contracts"][0].update(change)
+            self.assertEqual(assess(data, NOW)["verifiedContracts"], 0)
+
+    def test_contract_identity_required(self):
+        for field, invalid in (("instrumentKey", "NSE_EQ|bad"),
+                               ("instrumentKey", ""),
+                               ("tradingSymbol", ""),
+                               ("strikePrice", 0),
+                               ("strikePrice", True)):
+            data = receipt()
+            data["contracts"][0][field] = invalid
+            self.assertEqual(assess(data, NOW)["verifiedContracts"], 0)
+
+    def test_expiry_uses_ist_not_utc_date(self):
+        near_midnight = datetime(2026, 11, 16, 19, 0, tzinfo=timezone.utc)
+        data = receipt()
+        data["contracts"][0]["expiry"] = "2026-11-16"
+        data["contracts"][0]["exchangeLtt"] = near_midnight.isoformat()
+        self.assertEqual(assess(data, near_midnight)["verifiedContracts"], 0)
+
+    def test_duplicate_contract_receipts_fail_closed(self):
+        data = receipt()
+        data["contracts"].append(dict(data["contracts"][0]))
+        result = assess(data, NOW)
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertEqual(result["reason"], "DUPLICATE_CONTRACT_RECEIPT")
+        self.assertIsNone(result["verifiedContracts"])
+        self.assertFalse(result["tradeTimeReady"])
+
+    def test_cli_rejects_self_asserted_observation_and_stale_receipt(self):
+        data = receipt(observedAt=NOW.isoformat())
+        self.assertEqual(assess_cli(data, NOW)["reason"], "OBSERVATION_UNVERIFIED")
+        data["observationVerified"] = True
+        self.assertEqual(assess_cli(data, NOW + timedelta(seconds=16))["status"], "STALE")
+        self.assertEqual(assess_cli(data, NOW - timedelta(seconds=1))["status"], "STALE")
+        self.assertEqual(assess_cli(data, NOW)["status"], "UNKNOWN")
+        self.assertEqual(assess_cli(data, NOW)["reason"], "PROVENANCE_UNVERIFIED")
+        self.assertFalse(assess_cli(data, NOW)["tradeTimeReady"])
+
+    def test_cli_cannot_spoof_rights_listing_or_session(self):
+        data = receipt(observedAt=NOW.isoformat(), observationVerified=True)
+        for key in ("readRightsVerified", "displayRightsVerified", "sessionVerified"):
+            self.assertTrue(data[key])
+        self.assertEqual(assess_cli(data, NOW)["reason"], "PROVENANCE_UNVERIFIED")
+        self.assertIsNone(assess_cli(data, NOW)["verifiedContracts"])
+
+    def test_unverified_exchange_time(self):
+        data = receipt()
+        data["contracts"][0]["exchangeLtt"] = None
+        self.assertEqual(assess(data, NOW)["status"], "STALE")
+
+
+if __name__ == "__main__":
+    unittest.main()
