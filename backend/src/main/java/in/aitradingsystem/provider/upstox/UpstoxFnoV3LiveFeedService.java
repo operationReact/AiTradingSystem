@@ -189,6 +189,43 @@ public class UpstoxFnoV3LiveFeedService {
                 mostRecentTrade != null, false, false, false);
     }
 
+
+    /**
+     * Bounded, ephemeral option quote evidence for PAPER-only execution.
+     * This does NOT authorize any real-money order or grant feed usage rights.
+     * The operator must separately enable PAPER and confirm permitted-use rights.
+     * A connected socket alone is not price-freshness evidence.
+     */
+    public record PaperQuote(String instrumentKey, java.math.BigDecimal bid,
+                             java.math.BigDecimal ask, Instant exchangeAt,
+                             Instant observedAt) {}
+
+    public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
+                || !wanted || destroyed || !"CONNECTED".equals(state)) {
+            return java.util.Optional.empty();
+        }
+        Observation observed = latest.get(key);
+        if (observed == null) return java.util.Optional.empty();
+        var tick = observed.tick();
+        Instant now = clock.instant();
+        Instant trade = tick.tradedAt();
+        if (trade == null || trade.isAfter(now.plusSeconds(2))
+                || observed.observedAt().isAfter(now.plusSeconds(2))
+                || java.time.Duration.between(trade, now).isNegative()
+                || java.time.Duration.between(trade, now).compareTo(Duration.ofSeconds(15)) > 0
+                || java.time.Duration.between(observed.observedAt(), now).isNegative()
+                || java.time.Duration.between(observed.observedAt(), now)
+                        .compareTo(Duration.ofSeconds(15)) > 0
+                || tick.bid() == null || tick.ask() == null
+                || tick.bid().signum() <= 0 || tick.ask().signum() <= 0
+                || tick.bid().compareTo(tick.ask()) > 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new PaperQuote(
+                key, tick.bid(), tick.ask(), trade, observed.observedAt()));
+    }
+
     /** A frame is observation evidence only; never a trade or permission grant. */
     private void consume(byte[] frame) {
         try {
