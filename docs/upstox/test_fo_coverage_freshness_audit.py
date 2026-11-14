@@ -87,7 +87,16 @@ class AuditTests(unittest.TestCase):
         data["observationVerified"] = True
         self.assertEqual(assess_cli(data, NOW + timedelta(seconds=16))["status"], "STALE")
         self.assertEqual(assess_cli(data, NOW - timedelta(seconds=1))["status"], "STALE")
-        self.assertEqual(assess_cli(data, NOW)["status"], "FRESH")
+        self.assertEqual(assess_cli(data, NOW)["status"], "UNKNOWN")
+        self.assertEqual(assess_cli(data, NOW)["reason"], "PROVENANCE_UNVERIFIED")
+        self.assertFalse(assess_cli(data, NOW)["tradeTimeReady"])
+
+    def test_cli_cannot_spoof_rights_listing_or_session(self):
+        data = receipt(observedAt=NOW.isoformat(), observationVerified=True)
+        for key in ("readRightsVerified", "displayRightsVerified", "sessionVerified"):
+            self.assertTrue(data[key])
+        self.assertEqual(assess_cli(data, NOW)["reason"], "PROVENANCE_UNVERIFIED")
+        self.assertIsNone(assess_cli(data, NOW)["verifiedContracts"])
 
     def test_unverified_exchange_time(self):
         data = receipt()
