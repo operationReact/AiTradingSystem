@@ -30,7 +30,7 @@ public final class UpstoxRetryAfterHeader {
             Duration delay = Duration.between(receivedAt, deadline);
             if (delay.isNegative()) delay = Duration.ZERO;
             return delay.compareTo(MAX) <= 0 ? Optional.of(delay) : Optional.empty();
-        } catch (DateTimeParseException | ArithmeticException ex) {
+        } catch (DateTimeParseException | NumberFormatException | ArithmeticException ex) {
             return Optional.empty();
         }
     }
