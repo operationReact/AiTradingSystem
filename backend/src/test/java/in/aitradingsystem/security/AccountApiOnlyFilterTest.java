@@ -163,6 +163,9 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET",root+"orders");
         assertPasses("GET",root+"positions");
         assertPasses("GET",root+"market");
+        assertPasses("GET",root+"expiries");
+        assertBlocked("POST",root+"expiries");
+        assertBlocked("PUT",root+"expiries");
         assertPasses("OPTIONS",root+"market");
         assertPasses("OPTIONS",root+"orders");
         assertPasses("OPTIONS",root+"positions");

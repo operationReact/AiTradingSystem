@@ -19,6 +19,10 @@ class CustomerPaperFnoRepository {
     return CustomerFnoMarket.decode(raw);
   }
 
+  /// Server-verified listed expiries. The list is never inferred on the client.
+  Future<CustomerFnoExpiries> expiries(String roomId) async =>
+      CustomerFnoExpiries.decode(await api.getJson('$_path/$roomId/paper/fno/expiries'));
+
   Future<List<CustomerFnoFill>> orders(String roomId) async {
     final raw = await api.getJson('$_path/$roomId/paper/fno/orders');
     if (raw is! List) throw const FormatException('Invalid F&O orders');
@@ -68,6 +72,64 @@ class CustomerPaperFnoRepository {
 
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+/// Listed NIFTY option expiries. Only `VERIFIED` carries dates; anything else is blocked.
+class CustomerFnoExpiries {
+  const CustomerFnoExpiries({
+    required this.status,
+    required this.observedAt,
+    required this.expiries,
+  });
+
+  final String status;
+  final DateTime? observedAt;
+  final List<DateTime> expiries;
+
+  bool get verified =>
+      status == 'VERIFIED' && observedAt != null && expiries.isNotEmpty;
+
+  static final _date = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+  static CustomerFnoExpiries decode(Object? value) {
+    if (value is! Map<String, dynamic>) throw const FormatException('Invalid F&O expiries');
+    final status = value['status'];
+    final underlying = value['underlyingKey'];
+    final raw = value['expiries'];
+    if (status is! String || status.isEmpty || status.length > 64 ||
+        underlying is! String || raw is! List) {
+      throw const FormatException('Untrustworthy F&O expiries');
+    }
+    final observedAt = value['observedAt'] == null
+        ? null : DateTime.tryParse(value['observedAt'].toString());
+    if (value['observedAt'] != null && observedAt == null) {
+      throw const FormatException('Invalid expiry timestamp');
+    }
+    final dates = <DateTime>[];
+    for (final item in raw) {
+      if (item is! String || !_date.hasMatch(item)) {
+        throw const FormatException('Invalid expiry date');
+      }
+      final parsed = DateTime.tryParse(item);
+      // Reject rolled-over dates such as 2026-02-31 instead of coercing them.
+      if (parsed == null || parsed.year != int.parse(item.substring(0, 4)) ||
+          parsed.month != int.parse(item.substring(5, 7)) ||
+          parsed.day != int.parse(item.substring(8, 10))) {
+        throw const FormatException('Invalid expiry date');
+      }
+      dates.add(parsed);
+    }
+    // A blocked or empty listing must never carry dates to the UI.
+    if (status != 'VERIFIED' && dates.isNotEmpty) {
+      throw const FormatException('Expiries returned without a verified listing');
+    }
+    final unique = dates.toSet().toList()..sort();
+    return CustomerFnoExpiries(
+      status: status,
+      observedAt: observedAt?.toUtc(),
+      expiries: List.unmodifiable(unique),
+    );
+  }
 }
 
 class CustomerFnoLeg {

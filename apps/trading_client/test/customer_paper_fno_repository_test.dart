@@ -52,6 +52,7 @@ Map<String, dynamic> fill() => {
     };
 
 void main() {
+  expiryDecodeTests();
   test('decodes a fresh market with provider lot size and quote freshness', () {
     final m = CustomerFnoMarket.decode(market());
     expect(m.hasFreshQuotes, isTrue);
@@ -118,4 +119,47 @@ void main() {
 class _NoCallApi implements AuthenticatedApiClient {
   @override
   dynamic noSuchMethod(Invocation invocation) => throw StateError('network call not expected');
+}
+
+void expiryDecodeTests() {
+  test('expiries decode only verified dates, sorted and deduped', () {
+    final e = CustomerFnoExpiries.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'status': 'VERIFIED',
+      'observedAt': '2026-11-16T04:00:00Z',
+      'expiries': ['2026-11-24', '2026-11-17', '2026-11-17'],
+    });
+    expect(e.verified, isTrue);
+    expect(e.expiries.map((d) => d.day).toList(), [17, 24]);
+  });
+
+  test('a blocked listing never carries dates', () {
+    expect(() => CustomerFnoExpiries.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'status': 'BLOCKED_SOURCE_NOT_BOUND',
+      'observedAt': null,
+      'expiries': ['2026-11-17'],
+    }), throwsFormatException);
+  });
+
+  test('malformed expiry strings are rejected, not coerced', () {
+    for (final bad in ['2026-13-40', '2026-02-31', '17-11-2026', 'current_week', '2026-11-17T00:00:00Z']) {
+      expect(() => CustomerFnoExpiries.decode({
+        'underlyingKey': 'NSE_INDEX|Nifty 50',
+        'status': 'VERIFIED',
+        'observedAt': '2026-11-16T04:00:00Z',
+        'expiries': [bad],
+      }), throwsFormatException, reason: bad);
+    }
+  });
+
+  test('an empty verified-status listing is not verified', () {
+    final e = CustomerFnoExpiries.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'status': 'NO_LISTED_EXPIRIES',
+      'observedAt': null,
+      'expiries': <String>[],
+    });
+    expect(e.verified, isFalse);
+  });
 }

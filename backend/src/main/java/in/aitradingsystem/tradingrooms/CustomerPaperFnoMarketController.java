@@ -14,6 +14,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -61,6 +62,7 @@ public class CustomerPaperFnoMarketController {
     private final CustomerIdentityStore identities;
     private final UpstoxAnalyticsSource source;
     private final UpstoxFnoV3LiveFeedService live;
+    private final CustomerFnoExpiryCatalog expiryCatalog;
     private final MarketSessionCalendar calendar;
     private final Clock clock;
     private final boolean displayAllowed;
@@ -70,8 +72,8 @@ public class CustomerPaperFnoMarketController {
     public CustomerPaperFnoMarketController(JdbcClient jdbc,
             CustomerIdentityStore identities, UpstoxAnalyticsSource source,
             UpstoxFnoV3LiveFeedService live, MarketSessionCalendar calendar,
-            Environment env) {
-        this(jdbc, identities, source, live, calendar, Clock.systemUTC(),
+            CustomerFnoExpiryCatalog expiryCatalog, Environment env) {
+        this(jdbc, identities, source, live, calendar, expiryCatalog, Clock.systemUTC(),
             env.getProperty("minttick.upstox-fno.display-rights-verified", Boolean.class, false),
             env.getProperty("minttick.upstox-fno.paper-usage-rights-verified", Boolean.class, false));
     }
@@ -80,9 +82,45 @@ public class CustomerPaperFnoMarketController {
             CustomerIdentityStore identities, UpstoxAnalyticsSource source,
             UpstoxFnoV3LiveFeedService live, MarketSessionCalendar calendar,
             Clock clock, boolean displayAllowed, boolean paperAllowed) {
+        this(jdbc, identities, source, live, calendar,
+            new UnboundCustomerFnoExpiryCatalog(), clock, displayAllowed, paperAllowed);
+    }
+
+    CustomerPaperFnoMarketController(JdbcClient jdbc,
+            CustomerIdentityStore identities, UpstoxAnalyticsSource source,
+            UpstoxFnoV3LiveFeedService live, MarketSessionCalendar calendar,
+            CustomerFnoExpiryCatalog expiryCatalog, Clock clock,
+            boolean displayAllowed, boolean paperAllowed) {
         this.jdbc=jdbc; this.identities=identities; this.source=source;
         this.live=live; this.calendar=calendar; this.clock=clock;
+        this.expiryCatalog=expiryCatalog;
         this.displayAllowed=displayAllowed; this.paperAllowed=paperAllowed;
+    }
+
+    /** Server-verified, currently listed expiries. Dates are never inferred or hard-coded. */
+    public record Expiries(String underlyingKey, String status, Instant observedAt,
+                           List<LocalDate> expiries) {}
+
+    @GetMapping("/expiries")
+    public ResponseEntity<Expiries> expiries(@PathVariable UUID roomId, Authentication authentication) {
+        UUID owner=owner(authentication);
+        if (roomId==null || !ownedPaperRoom(owner,roomId))
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "PAPER room unavailable");
+        if (!displayAllowed)
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Upstox F&O customer display rights not verified");
+        Instant now=clock.instant();
+        LocalDate today=now.atZone(IST).toLocalDate();
+        CustomerFnoExpiryCatalog.Listing listing=expiryCatalog.listing(now);
+        if (listing==null || !listing.usable()) {
+            String status=listing==null ? CustomerFnoExpiryCatalog.Listing.BLOCKED : listing.status();
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new Expiries(UNDERLYING,status,null,List.of()));
+        }
+        List<LocalDate> valid=validExpiries(listing.expiries(), today);
+        String status=valid.isEmpty() ? "NO_LISTED_EXPIRIES" : CustomerFnoExpiryCatalog.Listing.VERIFIED;
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(new Expiries(UNDERLYING,status,listing.observedAt(),valid));
     }
 
     @GetMapping("/market")
@@ -119,6 +157,14 @@ public class CustomerPaperFnoMarketController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(new Market(UNDERLYING,expiry,"UPSTOX_ANALYTICS",status,
                 chain.retrievedAt(),false,true,false,false,strikes));
+    }
+
+    /** Future expiries within the 90-day window the market endpoint accepts; deduped and sorted. */
+    static List<LocalDate> validExpiries(List<LocalDate> listed, LocalDate today) {
+        return listed.stream()
+            .filter(Objects::nonNull)
+            .filter(d -> !d.isBefore(today) && !d.isAfter(today.plusDays(90)))
+            .distinct().sorted().toList();
     }
 
     static List<Strike> select(List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
