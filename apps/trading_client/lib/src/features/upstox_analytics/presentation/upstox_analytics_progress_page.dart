@@ -147,7 +147,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           Expanded(child: RefreshIndicator(
             onRefresh: refresh,
             child: ListView(
-              key: const ValueKey('upstox-analytics-progress-list'),
+              key: ValueKey('upstox-analytics-progress-list-$activeTab'),
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
               children: [
                 if (activeTab == 'Overview') ...overview(data),
