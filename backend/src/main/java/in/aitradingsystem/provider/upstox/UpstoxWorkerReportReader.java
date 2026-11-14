@@ -73,6 +73,20 @@ public class UpstoxWorkerReportReader {
         }
     }
 
+    private static String runChange(
+            UpstoxWorkerReportLedger.Report current,
+            UpstoxWorkerReportLedger.Report previous) {
+        if (!current.pr().equals(previous.pr())) return "PR_REFERENCE_CHANGED";
+        if ("MERGED".equals(current.result()) && !"MERGED".equals(previous.result()))
+            return "MERGE_REPORTED";
+        if ("PASS".equals(current.ci()) && !"PASS".equals(previous.ci()))
+            return "CI_PASS_REPORTED";
+        if (!"NONE".equals(current.head()) && !current.head().equals(previous.head()))
+            return "COMMIT_REPORTED";
+        if (!current.blocker().equals(previous.blocker())) return "BLOCKER_CHANGED";
+        return "NO_NEW_DELIVERY";
+    }
+
     static Result summarize(JsonNode comments, Instant now) {
         if (comments == null || !comments.isArray() || comments.size() > 100 || now == null) {
             throw new IllegalArgumentException("Invalid worker report sample");
@@ -90,6 +104,21 @@ public class UpstoxWorkerReportReader {
         }
         Map<Integer, java.util.Optional<UpstoxWorkerReportLedger.Report>> latest =
                 UpstoxWorkerReportLedger.latest(reportComments, now, Duration.ofHours(2));
+        // Keep distinct, validated run reports to show what changed between
+        // actual worker notes. Re-polling the same note is not new progress.
+        Map<Integer, List<UpstoxWorkerReportLedger.Report>> history =
+                new java.util.HashMap<>();
+        for (var comment : reportComments) {
+            var parsed = UpstoxWorkerReportLedger.parse(
+                    comment, now, Duration.ofHours(2));
+            parsed.ifPresent(report -> history
+                    .computeIfAbsent(report.worker(), key -> new ArrayList<>())
+                    .add(report));
+        }
+        for (var entries : history.values()) {
+            entries.sort(java.util.Comparator
+                    .comparing(UpstoxWorkerReportLedger.Report::reportedAt).reversed());
+        }
         List<Map<String, Object>> rows = new ArrayList<>();
         long fresh = 0, observed = 0;
         String[] scopes = {"", "SOURCE_INGESTION", "CANONICAL_DATA", "COVERAGE_GAPS",
@@ -114,6 +143,14 @@ public class UpstoxWorkerReportReader {
                 row.put("reportedAt", report.reportedAt().toString());
                 // Self-reported value is not independent proof of production activity.
                 row.put("runtimeClaim", report.runtime());
+                var reports = history.getOrDefault(worker, List.of());
+                row.put("reports12h", reports.size());
+                row.put("lastRunChange", reports.size() < 2
+                        ? "BASELINE_ONLY"
+                        : runChange(reports.get(0), reports.get(1)));
+                if (reports.size() >= 2) {
+                    row.put("previousReportedAt", reports.get(1).reportedAt().toString());
+                }
                 if (!"NONE".equals(report.pr())) {
                     row.put("url", "https://github.com/operationReact/AiTradingSystem/pull/"
                             + report.pr());
