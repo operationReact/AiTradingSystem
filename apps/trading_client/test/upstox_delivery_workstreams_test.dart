@@ -99,4 +99,27 @@ void main() {
     ]);
     expect(work.first.pr?.number, 1009);
   });
+
+  test('worker run evidence shows previous report and no-change explicitly', () {
+    final rows = UpstoxWorkerObservation.fromBackend([
+      {
+        'worker': 3, 'scope': 'COVERAGE_GAPS', 'state': 'FRESH',
+        'reports12h': 3, 'lastRunChange': 'NO_NEW_DELIVERY',
+        'previousReportedAt': '2026-11-14T00:15:00Z',
+      },
+    ]);
+    expect(rows[2].reportCount12h, 3);
+    expect(rows[2].lastRunChange, 'NO_NEW_DELIVERY');
+    expect(rows[2].previousReportedAt, DateTime.utc(2026, 11, 14, 0, 15));
+    expect(rows[0].lastRunChange, isNull);
+  });
+  test('rejects bogus worker run change and inflated report count', () {
+    final rows = UpstoxWorkerObservation.fromBackend([
+      {'worker': 2, 'scope': 'CANONICAL_DATA', 'state': 'FRESH',
+       'reports12h': 10000, 'lastRunChange': 'MERGED_AND_DEPLOYED'},
+    ]);
+    expect(rows[1].reportCount12h, isNull);
+    expect(rows[1].lastRunChange, isNull);
+  });
+
 }
