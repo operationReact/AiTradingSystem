@@ -82,4 +82,20 @@ class UpstoxCoverageRetryCandidatesTest {
                 List.of(first, second), NOW, 0, 20).total());
     }
 
+    @Test void sameStartPartitionsHaveDeterministicPaginationIndependentOfInputOrder() {
+        var earlier = new UpstoxCoverageRetryCandidates.Observation("a", "episode-1",
+                "DAY", 2025, 12, NOW.minusSeconds(86400), NOW,
+                "UPSTOX_ANALYTICS", "v1", 5, 2, "GAP", NOW.minusSeconds(30), null);
+        var later = new UpstoxCoverageRetryCandidates.Observation("a", "episode-1",
+                "DAY", 2026, 11, NOW.minusSeconds(86400), NOW,
+                "UPSTOX_ANALYTICS", "v2", 5, 1, "GAP", NOW, null);
+        var forward = UpstoxCoverageRetryCandidates.select(List.of(later, earlier), NOW, 0, 1);
+        var reversed = UpstoxCoverageRetryCandidates.select(List.of(earlier, later), NOW, 0, 1);
+        assertEquals(2, forward.total());
+        assertEquals(earlier, forward.items().get(0).observation());
+        assertEquals(forward.items(), reversed.items());
+        assertEquals(later, UpstoxCoverageRetryCandidates.select(
+                List.of(later, earlier), NOW, 1, 1).items().get(0).observation());
+    }
+
 }
