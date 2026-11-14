@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.12"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.13"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -282,6 +282,12 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Server registry of named research engines (/api/customer/mind/v1/research-engines). All five are reported NOT_CONNECTED or NOT_APPLICABLE; none is available until an adapter and its own runtime evidence exist.",
         "endpoints": ["/api/customer/mind/v1/research-engines"],
         "missing": ["Adapters for VectorBT, Backtesting.py, Nautilus and LEAN", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "settings": {
+        "status": "IMPLEMENTING",
+        "note": "Real controls only: per-room PAPER pause/resume (existing wallet service), execution boundary (PAPER only, LIVE not authorized) and the deployed backend revision from the progress registry. Fake monitoring switches removed.",
+        "endpoints": ["/api/customer/mind/v1/paper-portfolio", "/api/customer/trading-rooms/{roomId}/paper/pause", "/api/customer/mind/v1/progress"],
+        "missing": ["Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

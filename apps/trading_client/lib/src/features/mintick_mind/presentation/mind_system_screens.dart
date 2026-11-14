@@ -610,7 +610,57 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ]);
   }
 
-  Widget settingsScreen()=>_surface('Preferences',
+  Widget _realSettingsScreen() {
+    _ensurePortfolio();
+    _ensureRegistry();
+    final p=_portfolio;
+    final snap=_registrySnapshot;
+    return _surface('Preferences','Real controls only · PAPER virtual money · LIVE is not authorized here',[
+      MindPanel(highlight:true,child:Column(children:[
+        const MindSectionTitle(title:'Execution Boundary',icon:Icons.shield_outlined),
+        _value('Execution mode','PAPER virtual only'),
+        _value('LIVE broker orders','Not authorized',color:MindPalette.red),
+        _value('Automatic risk limits','Enforced by the server; not user-adjustable'),
+        _value('Backend revision',snap==null?'Loading…':(snap.revisionKnown?snap.backendRevision:'Unknown')),
+      ])),
+      const SizedBox(height:12),
+      _section('PAPER Room Controls',Icons.pan_tool_outlined,[
+        if(p==null) const MindPanel(child:Text('Loading PAPER rooms…',
+          style:TextStyle(color:MindPalette.muted,fontSize:12))),
+        if(p!=null && p.rooms.isEmpty)
+          _empty('No funded PAPER room. Activate one in Trading Rooms first.'),
+        if(p!=null) for(final r in p.rooms)
+          Padding(padding:const EdgeInsets.only(bottom:7),child:MindPanel(
+            key:ValueKey('mind-settings-room-${r.roomId}'),child:Row(children:[
+              Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+                Text(r.name,style:const TextStyle(color:MindPalette.text,fontWeight:FontWeight.w700)),
+                Text(r.paused?'Paused · new virtual fills are rejected':'Active · fills allowed inside the server gates',
+                  style:const TextStyle(color:MindPalette.muted,fontSize:11)),
+              ])),
+              if(_pausing.contains(r.roomId))
+                const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2))
+              else Switch.adaptive(
+                key:ValueKey('mind-settings-pause-${r.roomId}'),
+                activeTrackColor:MindPalette.red,value:r.paused,
+                onChanged:(v)=>_setRoomPaused(r.roomId,v)),
+            ]))),
+      ]),
+      _section('Reference & Completeness',Icons.fact_check_outlined,[
+        _tile('Every route and family','Coverage and audited progress',
+          Icons.fact_check_outlined,route:'coverage'),
+        const SizedBox(height:8),
+        _tile('Ask MintTick Mind','Read-only answers from recorded data',
+          Icons.forum_outlined,route:'assistant'),
+        const SizedBox(height:8),
+        _tile('Original design gallery','Layout reference only, not a product feature',
+          Icons.grid_view_outlined,route:'design-gallery'),
+      ]),
+    ]);
+  }
+
+  Widget settingsScreen(){
+    if(widget.paperPortfolioRepository!=null) return _realSettingsScreen();
+    return _surface('Preferences',
     'Single-owner MintTick Mind mock UI settings; account settings are unchanged',[
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'Personal Workspace',icon:Icons.tune_outlined),
@@ -641,4 +691,5 @@ extension _MindSystemScreens on _MindWorkspaceState {
         Icons.forum_outlined,route:'assistant'),
     ]),
   ]);
+  }
 }
