@@ -22,7 +22,7 @@ import urllib.request
 ACCOUNT = "098859530205"
 REGION = "ap-south-1"
 INSTANCE = "i-09c01b470fb39b85a"
-EXPECTED_RELEASE = "641a2bed49ac7ce07aa673e810a03b7a1632dc27"
+EXPECTED_RELEASE = "d99ba1670b24fb144ba2361269dbed6b2cf530ff"
 EXPIRY = "2026-11-17"
 STATUS = {"READS_VERIFIED", "PARTIAL_DATA", "INVALID_PROVENANCE",
           "PROVIDER_UNAVAILABLE", "DISABLED", "INVALID_EXPIRY", "COOLDOWN"}
@@ -97,6 +97,11 @@ def host() -> None:
             if k in {"RELEASE_SHA", "TRADING_MODE"}:
                 version[k] = v
     if version.get("RELEASE_SHA") != EXPECTED_RELEASE:
+        # A release SHA is not a credential. Report the strictly validated
+        # value to reconcile deployment/probe skew without exposing env.
+        actual = version.get("RELEASE_SHA", "")
+        if re.fullmatch(r"[0-9a-f]{40}", actual):
+            print("MINTTICK_FNO_HOST_RELEASE:sha=" + actual, flush=True)
         raise SystemExit("FNO_BACKEND_REVISION_MISMATCH")
     if vals.get("MINTTICK_UPSTOX_ANALYTICS_ENABLED") != "true" or \
             vals.get("MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED") != "true":
@@ -192,6 +197,10 @@ def runner() -> None:
                   (got.get("StandardErrorContent") or "")
             known = re.findall(r"\b(FNO_[A-Z_]+)\b", out)
             code = known[-1] if known else "FNO_HOST_PROBE_FAILED"
+            releases = re.findall(r"MINTTICK_FNO_HOST_RELEASE:sha=([0-9a-f]{40})", out)
+            if len(releases) == 1:
+                print("FNO HOST RELEASE observed=" + releases[0]
+                      + " pinned=" + EXPECTED_RELEASE, flush=True)
             print("FNO PRIVATE SOURCE BLOCKED: " + code, flush=True)
             raise SystemExit(1)
         if state not in {"Pending", "InProgress", "Delayed"}:
