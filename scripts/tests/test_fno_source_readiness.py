@@ -105,6 +105,34 @@ class FnoSourceReadinessTest(unittest.TestCase):
                         good * 2000):
             self.assertIsNone(sanitized_source_receipt(invalid))
 
+    def test_classified_http_failure_is_bounded_and_never_verified(self):
+        for status in ("CONTRACTS_UNAUTHORIZED", "CONTRACTS_FORBIDDEN",
+                       "CONTRACTS_RATE_LIMITED", "CONTRACTS_NOT_FOUND",
+                       "CONTRACTS_UPSTREAM_UNAVAILABLE",
+                       "CONTRACTS_UPSTREAM_REJECTED",
+                       "CONTRACTS_TRANSPORT_FAILURE",
+                       "CONTRACTS_CREDENTIAL_UNAVAILABLE",
+                       "CONTRACTS_INVALID_PAYLOAD",
+                       "CHAIN_UNAUTHORIZED", "CHAIN_FORBIDDEN",
+                       "CHAIN_UPSTREAM_UNAVAILABLE", "CHAIN_INVALID_PAYLOAD"):
+            v=valid()
+            v.update(status=status, validatedContracts=0, validatedStrikes=0,
+                callsWithContract=0, putsWithContract=0, rowsWithCompleteGreeks=0)
+            self.assertEqual(validate_response(v)[0],status)
+            line=("Bearer private-secret\n"
+                +f"MINTTICK_FNO_SOURCE:status={status} contracts=0 strikes=0 "
+                "calls=0 puts=0 greeks=0 expiry=2026-11-17 stored=false rights=false\n"
+                "private-secret")
+            result=sanitized_source_receipt(line)
+            self.assertIn("status="+status,result)
+            self.assertNotIn("private-secret",result)
+        for invalid in ("CONTRACTS_SECRET_BEARER", "CHAIN_FAILURE_HTTP_BODY",
+                        "CONTRACTS_HTTP_200", "CONTRACTS_INTERNAL_ERROR"):
+            v=valid()
+            v["status"]=invalid
+            with self.assertRaisesRegex(ValueError,"FNO_INVALID_PROVIDER_STATUS"):
+                validate_response(v)
+
     def test_unknown_status_never_verified(self):
         v=valid()
         v["status"]="SUCCESS"

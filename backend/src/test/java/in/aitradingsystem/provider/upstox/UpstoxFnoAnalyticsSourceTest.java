@@ -137,8 +137,43 @@ class UpstoxFnoAnalyticsSourceTest {
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED)
                         .body("test-token-never-log private upstream message"));
         assertThatThrownBy(() -> source.currentFnoOptionChain(UNDERLYING, EXPIRY))
-                .hasMessage("UPSTOX_READ_UNAVAILABLE")
+                .hasMessage("UPSTOX_FNO_UNAUTHORIZED")
                 .hasMessageNotContaining("test-token-never-log");
+        server.verify();
+    }
+
+    @Test
+    void onlySanitizedSafeHttpClassesEscapeFromFnoSource() {
+        validSsm();
+        var cases = java.util.Map.of(
+            HttpStatus.FORBIDDEN, "FORBIDDEN",
+            HttpStatus.TOO_MANY_REQUESTS, "RATE_LIMITED",
+            HttpStatus.BAD_REQUEST, "UPSTREAM_REJECTED",
+            HttpStatus.NOT_FOUND, "NOT_FOUND",
+            HttpStatus.INTERNAL_SERVER_ERROR, "UPSTREAM_UNAVAILABLE");
+        for (var entry : cases.entrySet()) {
+            server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+                    .andRespond(withStatus(entry.getKey())
+                            .body("test-token-never-log secret diagnostics"));
+        }
+        // MockRestServiceServer enforces request ordering, so test each
+        // expected category against a stable sorted input below.
+        for (var entry : cases.entrySet()) {
+            assertThatThrownBy(() -> source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                    .hasMessage("UPSTOX_FNO_" + entry.getValue())
+                    .hasMessageNotContaining("test-token-never-log");
+        }
+        server.verify();
+    }
+
+    @Test
+    void invalidProviderEnvelopeFailsWithoutPrintingRawResponse() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+            .andRespond(withSuccess("not-json private token", MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+            .hasMessage("UPSTOX_FNO_INVALID_PAYLOAD")
+            .hasMessageNotContaining("private token");
         server.verify();
     }
 
