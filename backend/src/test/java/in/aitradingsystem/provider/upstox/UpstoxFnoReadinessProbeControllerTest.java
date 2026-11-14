@@ -166,6 +166,42 @@ class UpstoxFnoReadinessProbeControllerTest {
     }
 
     @Test
+    void contractHttpErrorIsReportedWithoutSecretsOrFalseVerification() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .thenThrow(new IllegalStateException("UPSTOX_FNO_UNAUTHORIZED"));
+        var answer = controller().probe(EXPIRY).getBody();
+        assertThat(answer.status()).isEqualTo("CONTRACTS_UNAUTHORIZED");
+        assertThat(answer.validatedContracts()).isZero();
+        assertThat(answer.validatedStrikes()).isZero();
+        assertThat(answer.displayRightsVerified()).isFalse();
+        verify(source, never()).currentFnoOptionChain(UNDERLYING, EXPIRY);
+    }
+
+    @Test
+    void chainFailureIsDistinguishedFromContractsAndNeverLeaksPayload() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .thenReturn(List.of(contract("NSE_FO|61001", "CE")));
+        when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                .thenThrow(new IllegalStateException("UPSTOX_FNO_INVALID_CHAIN"));
+        var answer = controller().probe(EXPIRY).getBody();
+        assertThat(answer.status()).isEqualTo("CHAIN_INVALID_PAYLOAD");
+        assertThat(answer.toString()).doesNotContain("token", "Bearer");
+        assertThat(answer.validatedContracts()).isZero();
+        assertThat(answer.liveTradingEnabled()).isFalse();
+    }
+
+    @Test
+    void onlyExactSourceOwnedCodesMayBecomeSafeCategories() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .thenThrow(new IllegalStateException("URL bearer token response HTTP 401"));
+        assertThat(controller().probe(EXPIRY).getBody().status())
+                .isEqualTo("PROVIDER_UNAVAILABLE");
+    }
+
+    @Test
     void falseSourceProvenanceIsNotRepresentedAsVerified() {
         when(source.enabled()).thenReturn(true);
         when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
