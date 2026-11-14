@@ -120,8 +120,11 @@ class UpstoxFnoAnalyticsSourceTest {
 
     @Test
     void fractionalOrMissingOiNeverRoundsOrInventsAContractCount() {
-        for (String bad : new String[] {"4500.5", "null", "-1.0", "1e25"}) {
-            validSsm();
+        validSsm();
+        String[] invalidCounts = {"4500.5", "null", "-1.0", "1e25"};
+        // Register all mocks before issuing the first call: MockRestServiceServer
+        // freezes expectations once any HTTP request has been observed.
+        for (String bad : invalidCounts) {
             server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/chain?")))
                 .andRespond(withSuccess("""
                     {"status":"success","data":[
@@ -135,7 +138,10 @@ class UpstoxFnoAnalyticsSourceTest {
                            "volume":400,"oi":6000,"prev_oi":5000}}}
                     ]}
                     """.formatted(bad), MediaType.APPLICATION_JSON));
+        }
+        for (String bad : invalidCounts) {
             assertThatThrownBy(() -> source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                    .as("Reject F&O count: " + bad)
                     .hasMessage("UPSTOX_FNO_INVALID_CHAIN");
         }
         server.verify();
