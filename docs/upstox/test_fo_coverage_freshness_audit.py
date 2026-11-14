@@ -72,6 +72,15 @@ class AuditTests(unittest.TestCase):
         data["contracts"][0]["exchangeLtt"] = near_midnight.isoformat()
         self.assertEqual(assess(data, near_midnight)["verifiedContracts"], 0)
 
+    def test_duplicate_contract_receipts_fail_closed(self):
+        data = receipt()
+        data["contracts"].append(dict(data["contracts"][0]))
+        result = assess(data, NOW)
+        self.assertEqual(result["status"], "UNKNOWN")
+        self.assertEqual(result["reason"], "DUPLICATE_CONTRACT_RECEIPT")
+        self.assertIsNone(result["verifiedContracts"])
+        self.assertFalse(result["tradeTimeReady"])
+
     def test_unverified_exchange_time(self):
         data = receipt()
         data["contracts"][0]["exchangeLtt"] = None
