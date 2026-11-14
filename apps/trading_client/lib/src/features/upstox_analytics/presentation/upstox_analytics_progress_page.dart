@@ -403,7 +403,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       LinearProgressIndicator(
         key: const ValueKey('upstox-reported-pr-delivery-bar'),
         minHeight: 4,
-        value: pipeline.percent == null ? 0 : pipeline.percent! / 100,
+        value: pipeline.percent == null ? 0.0 : pipeline.percent! / 100,
         backgroundColor: MintTickPalette.darkBorder,
         valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
       ),
