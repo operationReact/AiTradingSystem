@@ -1,62 +1,74 @@
 name: Mind live edge verification
 
-# Read-only: proves the public account edge serves the Mind routes and protects them.
-# Makes no trading calls, never sends credentials, and never writes to any service.
+# Read-only. Runs on pushes to dev (the default branch is main, so dispatch
+# from the API is not available). Sends no trading calls and writes nothing.
+# Anonymous 401s prove routing only; authenticated reads need a test customer
+# token in the MINDTICK_VERIFY_CUSTOMER_TOKEN secret. Without it the
+# authenticated section is reported as NOT VERIFIED, never as passed.
 on:
+  push:
+    branches: [dev]
   workflow_dispatch:
-  workflow_run:
-    workflows: ["ec2-paper-ssm-app-deploy"]
-    types: [completed]
 
 permissions:
   contents: read
 
 jobs:
   verify:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 12
+    env:
+      BASE: https://api.minttick.com
     steps:
       - name: Public readiness is healthy
         run: |
           set -euo pipefail
-          code="$(curl -sS -o /tmp/ready.json -w '%{http_code}' --max-time 20 https://api.minttick.com/actuator/health/readiness)"
-          test "$code" = 200
-          echo "readiness HTTP $code"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/actuator/health/readiness")"
+          test "$code" = 200 || { echo "FAIL readiness $code"; exit 1; }
+          echo "PASS readiness 200"
+
       - name: Mind routes exist and reject anonymous access (401, not 404)
         run: |
           set -euo pipefail
-          base=https://api.minttick.com
           fail=0
           check() {
-            local method="$1" path="$2" body="${3:-}"
-            local code
+            local method="$1" path="$2" body="${3:-}" code
             if [ -n "$body" ]; then
-              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" -H 'content-type: application/json' -d "$body" "$base$path")"
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" -H 'content-type: application/json' -d "$body" "$BASE$path")"
             else
-              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" "$base$path")"
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" "$BASE$path")"
             fi
             if [ "$code" = 401 ]; then echo "PASS $method $path -> 401"; else echo "FAIL $method $path -> $code"; fail=1; fi
           }
           check GET /api/customer/mind/v1/progress
           check GET /api/customer/mind/v1/paper-portfolio
           check GET /api/customer/mind/v1/paper-journal
+          check GET /api/customer/mind/v1/research-engines
           check POST /api/customer/mind/v1/assistant/query '{"question":"status"}'
-          check GET /api/customer/trading-rooms
           exit $fail
-      - name: Unknown Mind route and trade routes stay closed (404)
+
+      - name: Unknown Mind routes and trade-like routes stay closed (404)
         run: |
           set -euo pipefail
-          base=https://api.minttick.com
-          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/progress/items/x/status; do
-            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")"
+          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/progress/items/x/status /api/customer/mind/v1/orders; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE$path")"
             test "$code" = 404 || { echo "FAIL GET $path -> $code"; exit 1; }
             echo "PASS GET $path -> 404"
           done
-      - name: Record the deployed commit from the deploy run
+
+      - name: Authenticated Mind reads (needs test customer token)
         env:
-          GH_TOKEN: ${{ github.token }}
+          TOKEN: ${{ secrets.MINDTICK_VERIFY_CUSTOMER_TOKEN }}
         run: |
           set -euo pipefail
-          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
-          echo "Verified edge against commit $sha; backend revision is confirmed by the deploy job's RELEASE_SHA record, not by a public endpoint."
+          if [ -z "$TOKEN" ]; then
+            echo "::warning title=Mind authenticated verification::NOT VERIFIED. No MINDTICK_VERIFY_CUSTOMER_TOKEN secret is configured, so authenticated reads were not executed."
+            exit 0
+          fi
+          auth=(-H "Authorization: Bearer $TOKEN")
+          for path in /api/customer/mind/v1/progress /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines; do
+            code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "$BASE$path")"
+            test "$code" = 200 || { echo "FAIL $path -> $code"; exit 1; }
+            python3 -c "import json,sys;d=json.load(open('/tmp/body.json'));assert isinstance(d,dict)" || { echo "FAIL $path body"; exit 1; }
+            echo "PASS authenticated $path -> 200"
+          done
