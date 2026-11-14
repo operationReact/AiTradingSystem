@@ -171,6 +171,168 @@ public final class UpstoxAnalyticsSource {
         return List.copyOf(values);
     }
 
+
+    // ---- Read-only F&O source, issue #1063. No persistence, training or orders. ----
+
+    public record FnoOptionContract(String underlyingKey, String instrumentKey,
+                                    LocalDate expiry, BigDecimal strikePrice, String side,
+                                    int lotSize, BigDecimal tickSize, String tradingSymbol) {}
+
+    public record FnoOptionQuote(String instrumentKey, BigDecimal ltp,
+                                 BigDecimal bidPrice, BigDecimal askPrice,
+                                 long volume, long openInterest, long previousOpenInterest,
+                                 BigDecimal iv, BigDecimal delta, BigDecimal gamma,
+                                 BigDecimal theta, BigDecimal vega) {}
+
+    public record FnoOptionStrike(LocalDate expiry, String underlyingKey,
+                                  BigDecimal strikePrice, BigDecimal underlyingSpotPrice,
+                                  FnoOptionQuote call, FnoOptionQuote put) {}
+
+    /**
+     * retrievedAt is our HTTP observation time, NOT the exchange tick timestamp.
+     * The option-chain response has no documented per-leg trade timestamps, so
+     * downstream execution must NEVER treat this as a fresh executable quote.
+     */
+    public record OptionChainSnapshot(String source, Instant retrievedAt,
+                                      boolean exchangeQuoteTimeVerified,
+                                      List<FnoOptionStrike> strikes) {}
+
+    /** Bound current contract metadata; expiry and lot size come from Upstox. */
+    public List<FnoOptionContract> currentFnoOptionContracts(String underlyingKey,
+                                                              LocalDate expiry) {
+        validateFnoRequest(underlyingKey, expiry);
+        JsonNode rows = get("/v2/option/contract?instrument_key={underlying}&expiry_date={expiry}",
+                underlyingKey, expiry.toString()).path("data");
+        if (!rows.isArray() || rows.size() > 1024) {
+            throw unavailable("UPSTOX_FNO_INVALID_CONTRACTS");
+        }
+        List<FnoOptionContract> result = new ArrayList<>();
+        Set<String> seenKeys = new HashSet<>();
+        for (JsonNode row : rows) {
+            try {
+                if (!underlyingKey.equals(fnoText(row, "underlying_key"))
+                        || !expiry.equals(LocalDate.parse(fnoText(row, "expiry")))) {
+                    throw new IllegalArgumentException();
+                }
+                String side = fnoText(row, "instrument_type");
+                if (!"CE".equals(side) && !"PE".equals(side)) throw new IllegalArgumentException();
+                String key = fnoContractKey(row, "instrument_key");
+                BigDecimal strike = fnoNumber(row, "strike_price", true);
+                BigDecimal tick = fnoNumber(row, "tick_size", true);
+                long lot = fnoLong(row, "lot_size");
+                if (lot < 1 || lot > 1_000_000 || !seenKeys.add(key)) {
+                    throw new IllegalArgumentException();
+                }
+                result.add(new FnoOptionContract(underlyingKey, key, expiry, strike,
+                        side, Math.toIntExact(lot), tick, fnoText(row, "trading_symbol")));
+            } catch (RuntimeException ex) {
+                throw unavailable("UPSTOX_FNO_INVALID_CONTRACTS");
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    /** No cache/storage/booking/order side effects; strictly read-only Upstox API. */
+    public OptionChainSnapshot currentFnoOptionChain(String underlyingKey, LocalDate expiry) {
+        validateFnoRequest(underlyingKey, expiry);
+        JsonNode rows = get("/v2/option/chain?instrument_key={underlying}&expiry_date={expiry}",
+                underlyingKey, expiry.toString()).path("data");
+        if (!rows.isArray() || rows.size() > 1024) {
+            throw unavailable("UPSTOX_FNO_INVALID_CHAIN");
+        }
+        List<FnoOptionStrike> result = new ArrayList<>();
+        Set<BigDecimal> seenStrikes = new java.util.TreeSet<>();
+        for (JsonNode row : rows) {
+            try {
+                if (!underlyingKey.equals(fnoText(row, "underlying_key"))
+                        || !expiry.equals(LocalDate.parse(fnoText(row, "expiry")))) {
+                    throw new IllegalArgumentException();
+                }
+                BigDecimal strike = fnoNumber(row, "strike_price", true);
+                BigDecimal spot = fnoNumber(row, "underlying_spot_price", true);
+                if (!seenStrikes.add(strike)) throw new IllegalArgumentException();
+                result.add(new FnoOptionStrike(expiry, underlyingKey, strike, spot,
+                        fnoQuote(row.path("call_options")),
+                        fnoQuote(row.path("put_options"))));
+            } catch (RuntimeException ex) {
+                throw unavailable("UPSTOX_FNO_INVALID_CHAIN");
+            }
+        }
+        result.sort(Comparator.comparing(FnoOptionStrike::strikePrice));
+        return new OptionChainSnapshot("UPSTOX_ANALYTICS", Instant.now(), false,
+                List.copyOf(result));
+    }
+
+    private static void validateFnoRequest(String underlyingKey, LocalDate expiry) {
+        // No user-supplied URL, HTTP method or unbounded expiry keyword reaches RestClient.
+        if (underlyingKey == null || !underlyingKey.matches(
+                "((NSE_INDEX|BSE_INDEX)\\|[A-Za-z0-9 ._-]{1,80}|(NSE_EQ|BSE_EQ)\\|[A-Z0-9]{12})")
+                || expiry == null || expiry.isBefore(LocalDate.of(2000, 1, 1))
+                || expiry.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")).plusYears(2))) {
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_REQUEST");
+        }
+    }
+
+    private static FnoOptionQuote fnoQuote(JsonNode option) {
+        if (!option.isObject()) throw new IllegalArgumentException();
+        JsonNode market = option.path("market_data");
+        if (!market.isObject()) throw new IllegalArgumentException();
+        JsonNode greeks = option.path("option_greeks");
+        BigDecimal iv = fnoOptionalNumber(greeks, "iv");
+        if (iv != null && iv.signum() < 0) throw new IllegalArgumentException();
+        return new FnoOptionQuote(fnoContractKey(option, "instrument_key"),
+                fnoNumber(market, "ltp", false),
+                fnoNumber(market, "bid_price", false),
+                fnoNumber(market, "ask_price", false),
+                fnoLong(market, "volume"), fnoLong(market, "oi"),
+                fnoLong(market, "prev_oi"),
+                iv, fnoOptionalNumber(greeks, "delta"),
+                fnoOptionalNumber(greeks, "gamma"),
+                fnoOptionalNumber(greeks, "theta"),
+                fnoOptionalNumber(greeks, "vega"));
+    }
+
+    private static String fnoContractKey(JsonNode row, String field) {
+        String key = fnoText(row, field);
+        if (!key.matches("(NSE_FO|BSE_FO)\\|[A-Za-z0-9._-]{1,64}")) {
+            throw new IllegalArgumentException();
+        }
+        return key;
+    }
+
+    private static String fnoText(JsonNode row, String field) {
+        JsonNode value = row.path(field);
+        if (!value.isTextual() || value.asText().isBlank()
+                || value.asText().length() > 128) throw new IllegalArgumentException();
+        return value.asText();
+    }
+
+    private static BigDecimal fnoNumber(JsonNode row, String field, boolean positive) {
+        JsonNode value = row.path(field);
+        if (!value.isNumber()) throw new IllegalArgumentException();
+        BigDecimal number = value.decimalValue();
+        if (number.precision() > 20 || number.signum() < 0
+                || (positive && number.signum() == 0)) throw new IllegalArgumentException();
+        return number;
+    }
+
+    private static BigDecimal fnoOptionalNumber(JsonNode row, String field) {
+        JsonNode value = row.path(field);
+        if (value.isMissingNode() || value.isNull()) return null;
+        if (!value.isNumber() || value.decimalValue().precision() > 20) {
+            throw new IllegalArgumentException();
+        }
+        return value.decimalValue();
+    }
+
+    private static long fnoLong(JsonNode row, String field) {
+        JsonNode value = row.path(field);
+        if (!value.isIntegralNumber()) throw new IllegalArgumentException();
+        long number = value.bigIntegerValue().longValueExact();
+        if (number < 0) throw new IllegalArgumentException();
+        return number;
+    }
+
     private JsonNode get(String path, Object... pathVariables) {
         String token = token();
         try {
