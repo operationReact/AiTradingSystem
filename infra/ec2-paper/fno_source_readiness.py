@@ -26,6 +26,16 @@ EXPECTED_RELEASE = "7309809474b84742b37e8258f8115ea4c9436ba6"
 EXPIRY = "2026-11-17"
 STATUS = {"READS_VERIFIED", "PARTIAL_DATA", "INVALID_PROVENANCE",
           "PROVIDER_UNAVAILABLE", "DISABLED", "INVALID_EXPIRY", "COOLDOWN"}
+# Only the server-owned, sanitized F&O failure enum is printable; never errors
+# sourced from provider text, URLs, token material or JSON body fields.
+SOURCE_FAILURES = {
+    "UNAUTHORIZED", "FORBIDDEN", "RATE_LIMITED", "NOT_FOUND",
+    "UPSTREAM_UNAVAILABLE", "UPSTREAM_REJECTED", "TRANSPORT_FAILURE",
+    "CREDENTIAL_UNAVAILABLE", "INVALID_PAYLOAD"
+}
+STATUS |= {stage + "_" + failure
+           for stage in ("CONTRACTS", "CHAIN")
+           for failure in SOURCE_FAILURES}
 REQUEST_PATH = "infra/ec2-paper/requests/fno-source-readiness.json"
 
 
