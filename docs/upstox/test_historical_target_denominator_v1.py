@@ -34,6 +34,15 @@ class HistoricalDenominatorTests(unittest.TestCase):
         result = evaluate([target()], [r, r, bad], True)
         self.assertEqual((result["target"], result["verified"], result["missing"]), (2, 1, 1))
 
+    def test_unauthorized_receipt_cannot_shadow_verified_partition(self):
+        wrong = Receipt("listing-1", "NSE_EQ|TEST", "day", 2026, 1,
+                        "VERIFIED", "wrong-rights", "historical-candle")
+        valid = Receipt("listing-1", "NSE_EQ|TEST", "day", 2026, 1,
+                        "VERIFIED", "rights-1", "historical-candle")
+        for receipts in ([wrong, valid], [valid, wrong]):
+            result = evaluate([target()], receipts, True)
+            self.assertEqual((result["verified"], result["missing"]), (1, 1))
+
     def test_duplicate_target_rejected(self):
         with self.assertRaises(ValueError):
             evaluate([target(), target()], [], True)
