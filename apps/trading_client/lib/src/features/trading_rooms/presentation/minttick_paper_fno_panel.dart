@@ -39,6 +39,7 @@ class MintTickPaperFnoPanel extends StatefulWidget {
 class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   CustomerFnoMarket? _market;
   List<CustomerFnoPosition> _positions = const [];
+  List<CustomerFnoFill> _orders = const [];
   bool _positionsLoading = true;
   String? _positionsError;
   int _positionsRequest = 0;
@@ -134,16 +135,22 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       _positionsError = null;
     });
     try {
-      final positions = await widget.repository.positions(widget.roomId);
+      // Positions and orders are read together; either failing blocks both.
+      final results = await Future.wait<Object>([
+        widget.repository.positions(widget.roomId),
+        widget.repository.orders(widget.roomId),
+      ]);
       if (!mounted || request != _positionsRequest) return;
       setState(() {
-        _positions = positions;
+        _positions = results[0] as List<CustomerFnoPosition>;
+        _orders = results[1] as List<CustomerFnoFill>;
         _positionsLoading = false;
       });
     } catch (_) {
       if (!mounted || request != _positionsRequest) return;
       setState(() {
         _positions = const [];
+        _orders = const [];
         _positionsLoading = false;
         _positionsError = 'Virtual F&O positions unavailable. Retry before acting.';
       });
@@ -222,7 +229,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     return _quotesWithinAge && market.hasFreshQuotes &&
         market.displayRightsVerified && leg.quoteFresh && leg.paperEligible &&
         leg.observedAt != null && _sidePrice(leg, _side) != null &&
-        _limitPrice() != null;
+        _sideAllowed(leg) && _limitPrice() != null;
   }
 
   double? _limitPrice() {
@@ -234,6 +241,22 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     if ((steps - steps.roundToDouble()).abs() > 1e-6) return null;
     return value;
   }
+
+  /// Virtual lots currently held in this contract, from server positions only.
+  int _heldLots(CustomerFnoLeg leg) {
+    var contracts = 0;
+    for (final p in _positions) {
+      if (p.instrumentKey == leg.instrumentKey) contracts += p.quantity;
+    }
+    return leg.lotSize <= 0 ? 0 : contracts ~/ leg.lotSize;
+  }
+
+  /// SELL only closes held long lots. BUY is bounded by the server's own checks.
+  bool _sideAllowed(CustomerFnoLeg leg) =>
+      _side == 'BUY' || _heldLots(leg) >= _lots;
+
+  int _maxLotsFor(CustomerFnoLeg leg) =>
+      _side == 'SELL' ? _heldLots(leg).clamp(0, 20) : 20;
 
   /// BUY prices at the server ask, SELL-to-close at the server bid. A missing
   /// quote leaves the price empty, which keeps submission disabled.
@@ -256,6 +279,11 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       final leg = _selected;
       final suggested = leg == null ? null : _sidePrice(leg, side);
       _price.text = suggested == null ? '' : suggested.toString();
+      // Never leave more lots selected than the side allows.
+      if (leg != null) {
+        final max = _maxLotsFor(leg);
+        _lots = max < 1 ? 1 : _lots.clamp(1, max);
+      }
     });
   }
 
@@ -380,6 +408,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           ],
           const SizedBox(height: 12),
           _positionsView(colors, type),
+          const SizedBox(height: 12),
+          _ordersView(colors, type),
         ],
       ),
     );
@@ -461,9 +491,10 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           Row(children: [
             SegmentedButton<String>(
               key: const ValueKey('paper-fno-side'),
-              segments: const [
+              segments: [
                 ButtonSegment(value: 'BUY', label: Text('BUY')),
-                ButtonSegment(value: 'SELL', label: Text('SELL to close')),
+                ButtonSegment(value: 'SELL', label: Text('SELL to close'),
+                  enabled: _heldLots(leg) > 0),
               ],
               selected: {_side},
               onSelectionChanged: (s) => _setSide(s.first),
@@ -478,7 +509,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               key: const ValueKey('paper-fno-lots')),
             IconButton(
               key: const ValueKey('paper-fno-lots-plus'),
-              onPressed: _lots < 20 ? () => setState(() => _lots++) : null,
+              onPressed: _selected != null && _lots < _maxLotsFor(_selected!)
+                  ? () => setState(() => _lots++) : null,
               icon: const Icon(Icons.add)),
           ]),
           TextField(
@@ -497,6 +529,13 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
             onPressed: _canSubmit ? _submit : null,
             child: Text(_submitting ? 'Submitting…' : 'Place PAPER $_side'),
           ),
+          if (_heldLots(leg) == 0)
+            Text('No virtual position in this contract to close.',
+              key: const ValueKey('paper-fno-no-position'),
+              style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+          if (_side == 'SELL' && _heldLots(leg) > 0 && _lots > _heldLots(leg))
+            Text('You hold ${_heldLots(leg)} lot(s) of this contract.',
+              style: type.labelSmall?.copyWith(color: colors.error)),
           if (!_canSubmit)
             Text('Disabled until the server reports fresh, PAPER-eligible quotes.',
               style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
@@ -533,6 +572,30 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               '${p.quantity} qty · cost ${_rupees(p.costBasisPaise)} · '
               '${p.indicativeUnrealizedPnlPaise == null || !p.priceFresh
                   ? 'P&L not valued' : 'P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}'}',
+              style: type.bodySmall),
+          ),
+      ],
+    );
+  }
+
+  Widget _ordersView(ColorScheme colors, TextTheme type) {
+    if (_positionsLoading) return const SizedBox.shrink();
+    if (_orders.isEmpty) {
+      return Text('No virtual F&O orders.', style: type.bodySmall);
+    }
+    return Column(
+      key: const ValueKey('paper-fno-orders'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Virtual F&O orders', style: type.labelLarge),
+        for (final f in _orders.take(10))
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${f.side} ${f.quantity ~/ f.lotSize} lot(s) · ${f.optionType} '
+              '${_ymd(f.expiry)} · fill ${f.fillPrice} · '
+              'cash after ${_rupees(f.cashAfterPaise)}'
+              '${f.side == 'SELL' ? ' · realized ${_rupees(f.realizedPnlDeltaPaise)}' : ''}',
               style: type.bodySmall),
           ),
       ],

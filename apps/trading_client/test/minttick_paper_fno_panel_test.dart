@@ -58,10 +58,40 @@ CustomerFnoExpiries blockedExpiries() => CustomerFnoExpiries.decode({
       'expiries': <String>[],
     });
 
+CustomerFnoPosition heldCe(int quantity) => CustomerFnoPosition.decode({
+      'instrumentKey': 'NSE_FO|NIFTY24CE',
+      'optionType': 'CE',
+      'expiry': '2026-11-20',
+      'lotSize': 75,
+      'quantity': quantity,
+      'costBasisPaise': 765000,
+      'indicativeUnrealizedPnlPaise': null,
+      'priceFresh': false,
+    });
+
+CustomerFnoFill buyFill({String side = 'BUY'}) => CustomerFnoFill.decode({
+      'id': '3f2c9d1e-0000-4000-8000-000000000009',
+      'instrumentKey': 'NSE_FO|NIFTY24CE',
+      'optionType': 'CE',
+      'expiry': '2026-11-20',
+      'side': side,
+      'quantity': 75,
+      'lotSize': 75,
+      'fillPrice': 102,
+      'notionalPaise': 765000,
+      'estimatedFeesPaise': 120,
+      'realizedPnlDeltaPaise': side == 'SELL' ? 4500 : 0,
+      'cashAfterPaise': 9234880,
+      'createdAt': '2026-11-16T04:30:02Z',
+    });
+
 class _FakeRepo implements CustomerPaperFnoRepository {
   _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure,
-      this.positionResult = const [], this.positionsFailure, this.expiriesResult});
+      this.positionResult = const [], this.positionsFailure, this.expiriesResult,
+      this.ordersResult = const [], this.submitResult});
   final CustomerFnoExpiries? expiriesResult;
+  final List<CustomerFnoFill> ordersResult;
+  final CustomerFnoFill? submitResult;
   final CustomerFnoMarket? marketResult;
   /// Successive responses for refresh tests; the last one repeats.
   final List<CustomerFnoMarket>? markets;
@@ -91,6 +121,9 @@ class _FakeRepo implements CustomerPaperFnoRepository {
       expiriesResult ?? verifiedExpiries();
 
   @override
+  Future<List<CustomerFnoFill>> orders(String roomId) async => ordersResult;
+
+  @override
   Future<List<CustomerFnoPosition>> positions(String roomId) async {
     if (positionsFailure != null) throw positionsFailure!;
     return positionResult;
@@ -107,6 +140,7 @@ class _FakeRepo implements CustomerPaperFnoRepository {
     required num limitPrice,
   }) async {
     submits.add({'key': idempotencyKey, 'side': side, 'lots': lots, 'price': limitPrice});
+    if (submitResult != null) return submitResult!;
     throw submitFailure ?? const ApiTransportFailure('NETWORK_OR_PARSE_FAILURE', null);
   }
 }
@@ -187,7 +221,7 @@ void main() {
   });
 
   testWidgets('switching BUY to SELL reprices to the server bid and sends that price', (tester) async {
-    final repo = _FakeRepo(marketResult: market());
+    final repo = _FakeRepo(marketResult: market(), positionResult: [heldCe(75)]);
     await pump(tester, repo);
     await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
     await tester.pumpAndSettle();
@@ -354,5 +388,57 @@ void main() {
     await tester.tap(find.text('2026-11-20').last);
     await tester.pumpAndSettle();
     expect(find.text('Fresh quotes'), findsOneWidget);
+  });
+
+  testWidgets('SELL to close is unavailable when no virtual position is held', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market()));
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    // The SELL segment is disabled, so tapping it leaves the side on BUY.
+    await tester.tap(find.text('SELL to close'));
+    await tester.pumpAndSettle();
+    expect(find.text('Place PAPER BUY'), findsOneWidget);
+    expect(find.text('Place PAPER SELL'), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-no-position')), findsOneWidget);
+  });
+
+  testWidgets('SELL is capped at the lots actually held in that contract', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(), positionResult: [heldCe(75)]));
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('SELL to close'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNotNull);
+    // One held lot caps the stepper at one.
+    expect(tester.widget<IconButton>(find.byKey(const ValueKey('paper-fno-lots-plus'))).onPressed,
+      isNull);
+  });
+
+  testWidgets('virtual F&O orders show each fill with its cash after and realized P&L on sells', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(), ordersResult: [buyFill(), buyFill(side: 'SELL')]));
+    expect(find.byKey(const ValueKey('paper-fno-orders')), findsOneWidget);
+    expect(find.textContaining('BUY 1 lot(s)'), findsOneWidget);
+    expect(find.textContaining('realized ₹45.00'), findsOneWidget);
+  });
+
+  testWidgets('a successful BUY refreshes positions, orders and the room wallet via onFilled', (tester) async {
+    var refreshed = 0;
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 2400);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+      child: MintTickPaperFnoPanel(roomId: 'room', repository: _FakeRepo(
+        marketResult: market(), submitResult: buyFill()),
+        initialExpiry: DateTime(2026, 11, 20),
+        onFilled: () async { refreshed++; })))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('paper-fno-submit')));
+    await tester.pumpAndSettle();
+    expect(refreshed, 1);
+    expect(find.textContaining('BUY 75 filled'), findsOneWidget);
   });
 }
