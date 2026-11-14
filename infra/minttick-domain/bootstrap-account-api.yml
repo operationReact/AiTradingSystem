@@ -161,7 +161,7 @@ Resources:
           ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
           ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
           PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
-          PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions)$")
+          PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions|market)$")
           READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
           LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
           MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
@@ -189,7 +189,7 @@ Resources:
               if not PAPER_FNO.fullmatch(path):
                   return False
               action = path.rsplit("/", 1)[-1]
-              return ((method == "GET" and action in {"orders", "positions"})
+              return ((method == "GET" and action in {"orders", "positions", "market"})
                       or (method == "POST" and action == "orders"))
           
           def allowed(method, path):

@@ -79,6 +79,8 @@ services:
       # A source read does not authorize data retention, PAPER use or real orders.
       MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED: ${MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED:-false}
       MINTTICK_UPSTOX_FNO_PAPER_ENABLED: ${MINTTICK_UPSTOX_FNO_PAPER_ENABLED:-false}
+      # Customer F&O display usage rights are a separate source-license gate.
+      MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED:-false}
       MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED:-false}
       # Separate bounded read-only source health scheduler; off unless explicitly approved.
       MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED: ${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:-true}
