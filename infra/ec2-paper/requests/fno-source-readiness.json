@@ -1,0 +1,12 @@
+{
+  "kind": "minttick-private-fno-source-readiness-v1",
+  "operation": "probe-upstox-nifty-options-read-only",
+  "environment": "PAPER",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "backend_release": "641a2bed49ac7ce07aa673e810a03b7a1632dc27",
+  "underlying": "NSE_INDEX|Nifty 50",
+  "expiry": "2026-11-17",
+  "authorization": "OWNER_APPROVED_READ_ONLY_FNO_CHECK_2026_11_14"
+}
