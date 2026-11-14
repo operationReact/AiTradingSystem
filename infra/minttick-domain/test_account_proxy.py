@@ -401,6 +401,12 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_research_engines_is_get_only(self):
+        path="/api/customer/mind/v1/research-engines"
+        self.assertTrue(proxy.allowed("GET",path))
+        self.assertFalse(proxy.allowed("POST",path))
+        self.assertFalse(proxy.allowed("PUT",path))
+
     def test_mind_assistant_accepts_only_a_question_and_is_read_only(self):
         path="/api/customer/mind/v1/assistant/query"
         self.assertTrue(proxy.allowed("POST",path))

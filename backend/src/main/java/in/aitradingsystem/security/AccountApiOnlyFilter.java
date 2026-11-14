@@ -94,6 +94,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final String MIND_PAPER_PORTFOLIO = "/api/customer/mind/v1/paper-portfolio";
     private static final String MIND_PAPER_JOURNAL = "/api/customer/mind/v1/paper-journal";
     private static final String MIND_ASSISTANT_QUERY = "/api/customer/mind/v1/assistant/query";
+    private static final String MIND_RESEARCH_ENGINES = "/api/customer/mind/v1/research-engines";
     /** Existing customer-authenticated, read-only Mind research endpoints used by the Flutter app. */
     private static final Set<String> MIND_RESEARCH_READS = Set.of(
         "/api/customer/mind/v1/overview",
@@ -175,6 +176,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
             || (MIND_PAPER_JOURNAL.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_RESEARCH_READS.contains(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_ASSISTANT_QUERY.equals(path) && Set.of("POST", "OPTIONS").contains(method))
+            || (MIND_RESEARCH_ENGINES.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_ITEM.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/notes") ? "POST".equals(method) : "GET".equals(method))));

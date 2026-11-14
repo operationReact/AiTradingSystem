@@ -72,6 +72,7 @@ EXACT = {
     ("GET", "/api/customer/mind/v1/progress"),
     ("GET", "/api/customer/mind/v1/paper-portfolio"),
     ("GET", "/api/customer/mind/v1/paper-journal"),
+    ("GET", "/api/customer/mind/v1/research-engines"),
 }
 MIND_ASSISTANT_QUERY = "/api/customer/mind/v1/assistant/query"
 WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")

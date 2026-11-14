@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.11"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.12"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -276,6 +276,12 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "Read-only grounded assistant (/api/customer/mind/v1/assistant/query): answers from the progress registry, PAPER portfolio and journal with sources and timestamps; refuses trade requests; no language model.",
         "endpoints": ["/api/customer/mind/v1/assistant/query"],
         "missing": ["Broader question coverage", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "research-engines": {
+        "status": "IMPLEMENTING",
+        "note": "Server registry of named research engines (/api/customer/mind/v1/research-engines). All five are reported NOT_CONNECTED or NOT_APPLICABLE; none is available until an adapter and its own runtime evidence exist.",
+        "endpoints": ["/api/customer/mind/v1/research-engines"],
+        "missing": ["Adapters for VectorBT, Backtesting.py, Nautilus and LEAN", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",
