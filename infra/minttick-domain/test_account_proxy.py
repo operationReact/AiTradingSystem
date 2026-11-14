@@ -58,6 +58,9 @@ class AccountProxyTest(unittest.TestCase):
         self.assertTrue(proxy.allowed("GET","/api/customer/home/v1/activity"))
         self.assertTrue(proxy.allowed("GET","/api/customer/owner-history/v1/progress"))
         self.assertTrue(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress"))
+        self.assertTrue(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/persisted-receipts"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/owner-upstox-analytics/v1/persisted-receipts"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/persisted-receipts/raw"))
         self.assertFalse(proxy.allowed("POST","/api/customer/owner-upstox-analytics/v1/progress"))
         self.assertFalse(proxy.allowed("GET","/api/customer/owner-upstox-analytics/v1/progress/raw"))
         self.assertFalse(proxy.allowed("GET","/api/admin/market-data/upstox-analytics/probe"))
@@ -188,6 +191,40 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(response["statusCode"], 403)
         self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
         self.assertEqual(response["headers"]["cache-control"], "no-store")
+
+    def test_persisted_upstox_receipts_are_owner_checked_and_get_only(self):
+        path = "/api/customer/owner-upstox-analytics/v1/persisted-receipts"
+        for method, endpoint in (
+                ("POST", path), ("DELETE", path), ("PUT", path),
+                ("GET", path + "/raw"),
+                ("GET", "/api/admin/market-data/upstox-analytics/receipts")):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as forwarded:
+                result = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(result["statusCode"], 404)
+            forwarded.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as forwarded:
+            result = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(result["statusCode"], 401)
+        forwarded.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as forwarded:
+            result = proxy.handler(event("GET", path), None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(result["headers"]["cache-control"], "no-store")
+        request = forwarded.call_args.args[0]
+        self.assertEqual(request.full_url, proxy.BACKEND + path)
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(request.headers.get("Authorization"), "Bearer public-test-token")
+        self.assertIsNone(request.data)
+
+        rejection = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen", side_effect=rejection):
+            denied = proxy.handler(event("GET", path), None)
+        self.assertEqual(denied["statusCode"], 403)
+        self.assertEqual(json.loads(denied["body"])["error"], "OWNER_ONLY")
 
     def test_rejects_missing_or_wrong_jwt_even_when_gateway_is_misconfigured(self):
         for claims in [
