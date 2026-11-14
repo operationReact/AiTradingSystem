@@ -184,9 +184,18 @@ public class UpstoxFnoV3LiveFeedService {
 
     public Status status() {
         Instant mostRecentTrade = lastTradeAt;
+        // A historical exchange LTT is evidence of a decoded trade, not proof
+        // of a fresh session quote. Never substitute frame arrival for LTT.
+        Instant now = clock.instant();
+        boolean freshTrade = wanted && "CONNECTED".equals(state)
+                && mostRecentTrade != null && lastFrameAt != null
+                && !mostRecentTrade.isAfter(now)
+                && !lastFrameAt.isAfter(now)
+                && Duration.between(mostRecentTrade, now).compareTo(Duration.ofSeconds(15)) <= 0
+                && Duration.between(lastFrameAt, now).compareTo(Duration.ofSeconds(15)) <= 0;
         return new Status(state, subscribed.size(), latest.size(), decodedFrames,
                 discardedFrames, lastFrameAt, mostRecentTrade, retryCount,
-                mostRecentTrade != null, false, false, false);
+                freshTrade, false, false, false);
     }
 
 
