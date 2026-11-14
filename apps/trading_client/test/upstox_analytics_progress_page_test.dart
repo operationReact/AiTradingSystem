@@ -11,7 +11,7 @@ class _FixedProgressRepository implements UpstoxAnalyticsProgressRepository {
   Future<UpstoxAnalyticsProgress> load() async => progress;
 }
 
-UpstoxAnalyticsProgress _snapshot({bool stale = false}) {
+UpstoxAnalyticsProgress _snapshot({bool stale = false, bool partial = false}) {
   final at = DateTime.parse('2026-11-13T10:00:00Z');
   return UpstoxAnalyticsProgress(
     contractVersion: 'minttick.upstox.analytics.progress.v1',
@@ -30,13 +30,23 @@ UpstoxAnalyticsProgress _snapshot({bool stale = false}) {
         lastAttemptAt: at,
         lastSuccessAt: at,
       ),
-      const UpstoxAnalyticsTask(
-        code: 'HISTORICAL_INGESTION',
-        state: 'NOT_STARTED',
-        reasonCode: 'NO_VERIFIED_COVERAGE',
-        details: {},
-        stale: false,
-      ),
+      if (partial)
+        const UpstoxAnalyticsTask(
+          code: 'HISTORICAL_INGESTION',
+          state: 'PARTIAL',
+          reasonCode: null,
+          details: {'progressProof': 'PERSISTED_CANDLE_CHECKPOINTS_V1',
+            'targetUnits': 100},
+          checked: 60, verified: 40, stale: false,
+        )
+      else
+        const UpstoxAnalyticsTask(
+          code: 'HISTORICAL_INGESTION',
+          state: 'NOT_STARTED',
+          reasonCode: 'NO_VERIFIED_COVERAGE',
+          details: {},
+          stale: false,
+        ),
       const UpstoxAnalyticsTask(
         code: 'QUALITY_RIGHTS',
         state: 'NOT_STARTED',
@@ -125,4 +135,25 @@ void main() {
     expect(find.textContaining('source verification is stale'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets('shows genuine partial receipt coverage in tenths-based score',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshot(partial: true)),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('13%'), findsOneWidget);
+    expect(find.text('Remaining: 87%'), findsOneWidget);
+    await tester.tap(find.text('Pending details'));
+    await tester.pumpAndSettle();
+    expect(find.text('8% / 20% earned'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }
