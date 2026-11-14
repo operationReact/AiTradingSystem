@@ -30,7 +30,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/market-data/upstox-analytics/fno")
 @ConditionalOnProperty(prefix = "minttick.upstox-analytics",
         name = "probe-enabled", havingValue = "true")
-public final class UpstoxFnoReadinessProbeController {
+public class UpstoxFnoReadinessProbeController {
     private static final String UNDERLYING = "NSE_INDEX|Nifty 50";
     private static final ZoneId MARKET = ZoneId.of("Asia/Kolkata");
     private static final Duration COOLDOWN = Duration.ofMinutes(15);
