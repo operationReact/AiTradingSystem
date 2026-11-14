@@ -139,6 +139,28 @@ def host() -> None:
         raise SystemExit(safe)
 
 
+
+def sanitized_source_receipt(output: str) -> str | None:
+    """Only permit exact, bounded, nonsecret status counters into CI."""
+    if not isinstance(output, str) or len(output) > 20000:
+        return None
+    found = re.findall(
+        r"MINTTICK_FNO_SOURCE:status=([A-Z_]+) contracts=(\d+) "
+        r"strikes=(\d+) calls=(\d+) puts=(\d+) greeks=(\d+) "
+        r"expiry=2026-11-17 stored=false rights=false", output)
+    if len(found) != 1 or found[0][0] not in STATUS:
+        return None
+    state, *values = found[0]
+    counts = [int(n) for n in values]
+    if any(n > 1024 for n in counts):
+        return None
+    contracts, strikes, calls, puts, greeks = counts
+    if calls > strikes or puts > strikes or greeks > strikes:
+        return None
+    return (f"status={state} contracts={contracts} strikes={strikes} "
+            f"calls={calls} puts={puts} greeks={greeks} expiry={EXPIRY} "
+            "stored=false rights=false")
+
 def runner() -> None:
     """AWS actions runner: no arbitrary commands, only verified read-only probe."""
     path = Path(REQUEST_PATH)
@@ -195,6 +217,10 @@ def runner() -> None:
         if state in {"Failed", "Cancelled", "TimedOut", "Cancelling"}:
             out = (got.get("StandardOutputContent") or "") + "\n" + \
                   (got.get("StandardErrorContent") or "")
+            receipt = sanitized_source_receipt(out)
+            if receipt is not None:
+                # Non-verifying codes such as DISABLED/PROVIDER_UNAVAILABLE remain blocked.
+                print("FNO SOURCE OBSERVED (not verified): " + receipt, flush=True)
             known = re.findall(r"\b(FNO_[A-Z_]+)\b", out)
             code = known[-1] if known else "FNO_HOST_PROBE_FAILED"
             releases = re.findall(r"MINTTICK_FNO_HOST_RELEASE:sha=([0-9a-f]{40})", out)
