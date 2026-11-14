@@ -19,6 +19,22 @@ extension _MindResearchScreens on _MindWorkspaceState {
       _researchMode==e.$2||(_researchMode=='Backtests'&&e.$2=='Backtest')).toList();
     return _surface('Research & Backtesting',
       'Experiments, validation, paper and shadow performance',[
+      if(widget.walkForwardRepository!=null||widget.strategyReplayRepository!=null) ...[
+        const MindTag('SERVER RESEARCH EVIDENCE · RESEARCH ONLY',color:MindPalette.blue),
+        const SizedBox(height:10),
+        if(widget.walkForwardRepository!=null) ...[
+          MindMaWalkForwardPanel(key:const ValueKey('mind-research-walkforward'),
+            repository:widget.walkForwardRepository!),
+          const SizedBox(height:12),
+        ],
+        if(widget.strategyReplayRepository!=null) ...[
+          MindStrategyReplayPanel(key:const ValueKey('mind-research-replay'),
+            repository:widget.strategyReplayRepository!),
+          const SizedBox(height:12),
+        ],
+        const MindTag('EXPERIMENT CARDS BELOW: MOCK FIXTURES',color:MindPalette.yellow),
+        const SizedBox(height:10),
+      ],
       _section('External research engines · roadmap',Icons.extension_outlined,[
         _tile('Research Engines Lab',
           'VectorBT / Backtesting.py / Nautilus / LEAN / Freqtrade · NOT CONNECTED',
@@ -300,8 +316,25 @@ extension _MindResearchScreens on _MindWorkspaceState {
     ]);
   }
 
+  Widget _fnoBlockedBanner() {
+    final cap=_capability('data.fno');
+    return Padding(padding:const EdgeInsets.only(bottom:12),child:MindPanel(
+      key:const ValueKey('mind-fno-data-blocked'),
+      child:Row(children:[
+        const Icon(Icons.block,color:MindPalette.red,size:18),
+        const SizedBox(width:9),
+        Expanded(child:Text(cap==null
+            ? 'F&O data status not verified. Everything below is an illustrative mock.'
+            : 'F&O contracts / OI / option chain: '+cap.status.label+
+              (cap.blockerCode==null?'':' ('+cap.blockerCode!+')')+
+              '. No permitted data source yet (#924). Everything below is an illustrative mock.',
+          style:const TextStyle(color:MindPalette.text,fontSize:12))),
+      ])));
+  }
+
   Widget derivativesScreen()=>_surface('Futures & Options',
     'India derivatives research: contract-aware and non-executable',[
+    _fnoBlockedBanner(),
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'F&O Research Modules',icon:Icons.layers_outlined),
       const MindTag('ORDER EXECUTION DISABLED',color:MindPalette.red),
@@ -350,6 +383,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
 
   Widget optionChainScreen()=>_surface('Option Chain',
     'Illustrative NIFTY and BANKNIFTY contract research',[
+    _fnoBlockedBanner(),
     _chips(['NIFTY','BANKNIFTY'],_optionUnderlying,
       (v)=>_updateMind((){
         _optionUnderlying=v;
@@ -426,6 +460,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
     final samplePayoff=_estimatePayoff(spot,spot,width);
     return _surface('Options Payoff Builder',
       'Evaluate illustrative defined-risk options scenarios',[
+      _fnoBlockedBanner(),
       _chips(['Bull Call Spread','Bear Put Spread','Long Straddle',
         'Iron Condor','Covered Call','Protective Put'],
         _optionStructure,(v)=>_updateMind(()=>_optionStructure=v)),

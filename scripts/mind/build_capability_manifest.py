@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.8"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.10"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -152,6 +152,110 @@ SCREEN_AUDIT: dict[str, dict] = {
                 "with SMA5/SMA20, range and source; simulated chart, fictional price and invented signal stack removed.",
         "endpoints": ["/api/customer/market-data/candles", "/api/customer/watchlist"],
         "missing": ["Additional chart styles from real data", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "research": {
+        "status": "IMPLEMENTING",
+        "note": "Real MA walk-forward and strategy-replay research panels (/api/customer/mind/v1/ma-walkforward, "
+                "/strategy-replay) above labelled mock experiment cards.",
+        "endpoints": ["/api/customer/mind/v1/ma-walkforward", "/api/customer/mind/v1/strategy-replay"],
+        "missing": ["Per-strategy backtests for every registry evaluator", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "shadow-arena": {
+        "status": "IMPLEMENTING",
+        "note": "Real forward-only prospective cohort, signals and outcomes panels; comparison cards below are mocks.",
+        "endpoints": ["/api/customer/mind/v1/prospective-cohort", "/api/customer/mind/v1/prospective-signals"],
+        "missing": ["Model-vs-model shadow comparisons", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "derivatives": {
+        "status": "DATA_BLOCKED",
+        "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
+        "missing": ["Permitted F&O contracts/OI/option-chain source (#924)", "Real chain and greeks", "Flutter runtime evidence"],
+    },
+    "options-chain": {
+        "status": "DATA_BLOCKED",
+        "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
+        "missing": ["Permitted F&O contracts/OI/option-chain source (#924)", "Real chain and greeks", "Flutter runtime evidence"],
+    },
+    "option-builder": {
+        "status": "DATA_BLOCKED",
+        "note": "Banner shows the real data.fno registry blocker; contracts, OI, chain and prices below are labelled mocks.",
+        "missing": ["Permitted F&O contracts/OI/option-chain source (#924)", "Real chain and greeks", "Flutter runtime evidence"],
+    },
+    "app-home": {
+        "status": "IMPLEMENTING",
+        "note": "Customer Home summary from /api/customer/home/v1/summary: PAPER rooms, broker connection state, Mind evidence status and next action; live execution shown as not authorized.",
+        "endpoints": ["/api/customer/home/v1/summary"],
+        "missing": ["Flutter web/Android/iOS runtime evidence"],
+    },
+    "intelligence-hub": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "agent-council": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "regime-weights": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "confidence-lab": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "institutional-flow": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "daily-verdict": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "multibagger": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "thesis-detail": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "events": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "regimes": {
+        "status": "DATA_BLOCKED",
+        "blockerCode": "NO_BACKEND_SOURCE",
+        "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
+        "endpoints": [],
+        "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",
@@ -403,6 +507,7 @@ def build() -> dict:
         evidence = [{"kind": "SOURCE", "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"}]
         evidence += [{"kind": "API", "ref": e} for e in audit.get("endpoints", [])]
         items.append(item(id=f"screen.{sid}", kind="SCREEN", name=label, group=group, status=status,
+                          blockerCode=audit.get("blockerCode"),
                           note=audit.get("note") or ("Navigation / design reference screen; values are fixtures."
                                                      if sid in NAV_SCREENS else "Renders fixture data only; no API calls."),
                           missing=audit.get("missing", DEFAULT_SCREEN_MISSING), evidence=evidence))

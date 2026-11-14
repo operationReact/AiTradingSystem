@@ -59,6 +59,18 @@ EXACT = {
     ("GET", "/api/customer/market-data/board/summary"),
     ("GET", "/api/customer/watchlist"),
     ("POST", "/api/customer/watchlist"),
+    # Mintick Mind: customer-authenticated, read-only research/progress/PAPER views.
+    ("GET", "/api/customer/mind/v1/overview"),
+    ("GET", "/api/customer/mind/v1/evidence"),
+    ("GET", "/api/customer/mind/v1/strategy-replay"),
+    ("GET", "/api/customer/mind/v1/ma-walkforward"),
+    ("GET", "/api/customer/mind/v1/prospective-cohort"),
+    ("GET", "/api/customer/mind/v1/prospective-signals"),
+    ("GET", "/api/customer/mind/v1/prospective-outcomes"),
+    ("GET", "/api/customer/mind/v1/prospective-evidence-completeness"),
+    ("GET", "/api/customer/mind/v1/progress"),
+    ("GET", "/api/customer/mind/v1/paper-portfolio"),
+    ("GET", "/api/customer/mind/v1/paper-journal"),
 }
 WATCHLIST_ITEM = re.compile(r"^/api/customer/watchlist/items/[1-9][0-9]*$")
 UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
@@ -67,6 +79,10 @@ ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
 LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
+MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
+MIND_PROGRESS_NOTES = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*/notes$")
+MIND_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/paper-cycles$")
+MIND_CYCLE_INTERVALS = {"FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR", "ONE_DAY"}
 ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
 MAX_BODY = 65536
 
@@ -92,6 +108,9 @@ def allowed(method, path):
             or (method == "PUT" and ROOM_RENAME.fullmatch(path))
             or (method == "GET" and READINESS.fullmatch(path))
             or (method == "POST" and LIVE_BROKER_SELECTION.fullmatch(path))
+            or (method == "GET" and MIND_PROGRESS_ITEM.fullmatch(path) and len(path) <= 160)
+            or (method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path) and len(path) <= 170)
+            or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
             or paper_allowed(method, path))
 
 def callback_query_safe(query):
@@ -262,6 +281,34 @@ def handler(event, context):
                 valid = False
             if not valid:
                 return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
+    # Mind PAPER strategy cycle: owner-initiated, virtual money only; exact payload.
+    if method == "POST" and MIND_PAPER_CYCLES.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_MIND_CYCLE_KEY"})
+        try:
+            cycle = json.loads(body)
+            valid = (isinstance(cycle, dict) and set(cycle) == {"instrumentId", "interval"}
+                     and type(cycle["instrumentId"]) is int and cycle["instrumentId"] > 0
+                     and cycle["interval"] in MIND_CYCLE_INTERVALS)
+        except (ValueError, TypeError, KeyError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_CYCLE_INPUT"})
+    # Mind progress annotation: a note or recheck request only; never a status write.
+    if method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_:.-]{8,128}", paper_order_key):
+            return reply(400, {"error": "INVALID_MIND_NOTE_KEY"})
+        try:
+            note = json.loads(body)
+            valid = (isinstance(note, dict) and "type" in note and set(note) <= {"type", "text"}
+                     and note["type"] in ("NOTE", "RECHECK_REQUESTED")
+                     and (("text" not in note) or (isinstance(note["text"], str) and len(note["text"]) <= 500)))
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_MIND_NOTE"})
     # Manual SmartAPI login is customer-scoped and authorized. Accept only the
     # four required short-lived input fields; never log, cache or echo them.
     if method == "POST" and path == "/api/customer/brokers/angel-one/connect":

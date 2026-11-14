@@ -18,7 +18,13 @@ import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
 import '../data/mind_paper_journal_repository.dart';
 import '../../trading_rooms/data/customer_market_repository.dart';
+import '../../trading_rooms/data/customer_home_summary_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
+import 'mind_ma_walkforward_panel.dart';
+import 'mind_strategy_replay_panel.dart';
+import 'mind_prospective_cohort_panel.dart';
+import 'mind_prospective_signals_panel.dart';
+import 'mind_prospective_outcomes_panel.dart';
 import '../data/mind_agent_fixtures.dart';
 import '../data/mind_research_engine_fixtures.dart';
 import 'mind_widgets.dart';
@@ -106,6 +112,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.paperPortfolioRepository,
     this.paperJournalRepository,
     this.candleRepository,
+    this.homeSummaryRepository,
     super.key,
   });
 
@@ -139,12 +146,22 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Stored OHLCV candles for Chart Intelligence (#998 PR D6). Needs [paperCycleRepository] for the watchlist.
   final CustomerCandleRepository? candleRepository;
+
+  /// Real customer Home summary (#998 PR D8).
+  final CustomerHomeSummaryRepository? homeSummaryRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
 
 class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _route = 'overview';
+
+  /// Screens whose content has no backend source yet. They keep their labelled
+  /// preview but are never presented as working features (DATA_BLOCKED).
+  static const noBackendSourceRoutes = <String>{
+    'intelligence-hub', 'agent-council', 'regime-weights', 'confidence-lab', 'institutional-flow',
+    'daily-verdict', 'multibagger', 'thesis-detail', 'events', 'regimes',
+  };
   final List<String> _mindRouteHistory = <String>[];
   String _agentCouncilSymbol = 'CDSL';
   String _agentCouncilView = 'All';
@@ -567,6 +584,11 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       child:ListView(key:ValueKey('mind-screen-' + _route),
         padding:const EdgeInsets.fromLTRB(14,16,14,30),
         children:[
+          if (noBackendSourceRoutes.contains(_route)) Padding(
+            padding:const EdgeInsets.only(bottom:10),
+            child:MindPanel(key:const ValueKey('mind-no-backend-source'),child:const Text(
+              'No backend data source for this screen yet. Everything shown is a labelled preview, not a signal or a result.',
+              style:TextStyle(color:MindPalette.yellow,fontSize:12)))),
           if (backTo != null) Align(alignment:Alignment.centerLeft,
             child:TextButton.icon(onPressed:()=>_go(backTo),
               icon:const Icon(Icons.arrow_back,size:16),

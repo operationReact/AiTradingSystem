@@ -10,7 +10,51 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ('Options Research Room','Disabled','F&O','Greeks and payoff simulation only'),
   ];
 
-  Widget homeScreen()=>_surface('MintTick Home · Mind Preview',
+  Widget _realHomeScreen() {
+    final repository=widget.homeSummaryRepository!;
+    return _surface('MintTick Home','Your PAPER workspace · server summary · no live orders',[
+      FutureBuilder<CustomerHomeSummary>(
+        future:repository.load('PAPER'),
+        builder:(context,snap){
+          if(snap.connectionState!=ConnectionState.done) {
+            return const MindPanel(child:Text('Loading your workspace…',
+              style:TextStyle(color:MindPalette.muted,fontSize:12)));
+          }
+          final s=snap.data;
+          if(snap.hasError||s==null) {
+            return const MindPanel(key:ValueKey('mind-home-error'),child:Text(
+              'Workspace summary unavailable. Nothing is shown as status.',
+              style:TextStyle(color:MindPalette.red,fontSize:12)));
+          }
+          return Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+            MindPanel(key:const ValueKey('mind-home-summary'),highlight:true,child:Column(children:[
+              _value('Next step',s.nextAction.code.replaceAll('_',' ').toLowerCase()),
+              _value('PAPER rooms',s.rooms.funded.toString()+' funded · '+s.rooms.drafts.toString()+' draft'),
+              _value('Virtual budget','₹'+s.rooms.plannedBudgetInr.toString()),
+              _value('Broker connections',s.brokers.connected.toString()+(s.brokers.complete?'':' · incomplete')),
+              _value('Mind market evidence',s.mind.market.status),
+              _value('Mind research evidence',s.mind.research.status),
+              _value('Live execution','Not authorized',color:MindPalette.red),
+            ])),
+          ]);
+        }),
+      const SizedBox(height:12),
+      _tile('Mind Overview','Readiness, evidence and the audited progress tracker',
+        Icons.psychology_outlined,route:'overview'),
+      const SizedBox(height:9),
+      _tile('Trading Rooms','Funded PAPER rooms and virtual positions',
+        Icons.meeting_room_outlined,route:'trading-rooms'),
+      const SizedBox(height:9),
+      _tile('Strategy Universe','Catalog status from the audited registry',
+        Icons.layers_outlined,route:'strategies'),
+      const SizedBox(height:9),
+      _tile('Risk Center','Enforced automatic PAPER limits',Icons.shield_outlined,route:'risk'),
+    ]);
+  }
+
+  Widget homeScreen(){
+    if(widget.homeSummaryRepository!=null) return _realHomeScreen();
+    return _surface('MintTick Home · Mind Preview',
     'A mock landing page demonstrating access to the complete MintTick Mind workspace',[
     MindPanel(highlight:true,child:Column(children:[
       const Row(children:[
@@ -60,6 +104,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
       ])),
     ]),
   ]);
+  }
 
   Widget _realRoomsScreen() {
     _ensurePortfolio();

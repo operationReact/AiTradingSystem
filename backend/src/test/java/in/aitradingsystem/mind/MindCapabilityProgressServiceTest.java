@@ -38,9 +38,9 @@ class MindCapabilityProgressServiceTest {
             .contains(i.status()));
         // Every screen without a real endpoint is honestly MOCK; none is declared beyond IMPLEMENTING.
         assertThat(manifest.items().stream().filter(i -> "SCREEN".equals(i.kind())
-            && "MOCK".equals(i.status())).count()).isGreaterThanOrEqualTo(23);
+            && "MOCK".equals(i.status())).count()).isGreaterThanOrEqualTo(7);
         assertThat(manifest.items()).filteredOn(i -> "SCREEN".equals(i.kind()))
-            .allMatch(i -> Set.of("MOCK", "IMPLEMENTING", "NOT_STARTED").contains(i.status()));
+            .allMatch(i -> Set.of("MOCK", "IMPLEMENTING", "NOT_STARTED", "DATA_BLOCKED").contains(i.status()));
         // A TESTED strategy must carry source and test evidence.
         manifest.items().stream().filter(i -> "STRATEGY".equals(i.kind()) && "TESTED".equals(i.status()))
             .forEach(i -> {
