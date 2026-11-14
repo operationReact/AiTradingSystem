@@ -63,7 +63,7 @@ class UpstoxFnoV3LiveOperatorControllerTest {
                                 strike("25000", "NSE_FO|101", "NSE_FO|102"))));
         when(service.start(anyList())).thenReturn(
                 new UpstoxFnoV3LiveFeedService.Status("CONNECTING", 2, 0, 0, 0,
-                        null, null, 0, false, false, false, false));
+                        null, null, 0, false, false, false, false, 0, null));
 
         var response = controller().start(EXPIRY);
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
