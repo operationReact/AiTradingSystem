@@ -3,7 +3,7 @@
 Input is an operator-sanitized receipt JSON, not a provider quote. Never pass tokens,
 premiums, positions, customer identifiers, or unredacted market data.
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import json
 import sys
 
@@ -42,6 +42,8 @@ def assess(receipt, now, max_age_seconds=15):
         result.update(status="MISSING", reason="NO_CONTRACT_RECEIPTS",
                       verifiedContracts=0, freshContracts=0)
         return result
+    # NSE contract expiry is a local exchange date, not a UTC date.
+    exchange_today = (now.astimezone(timezone.utc) + timedelta(hours=5, minutes=30)).date()
     verified = 0
     fresh = 0
     for item in contracts:
@@ -49,6 +51,14 @@ def assess(receipt, now, max_age_seconds=15):
             continue
         if (item.get("underlying") != "NIFTY" or item.get("optionType") not in ("CE", "PE")
                 or item.get("listingVerified") is not True
+                or not isinstance(item.get("instrumentKey"), str)
+                or not item["instrumentKey"].startswith("NSE_FO|")
+                or len(item["instrumentKey"]) <= len("NSE_FO|")
+                or not isinstance(item.get("tradingSymbol"), str)
+                or not item["tradingSymbol"].strip()
+                or not isinstance(item.get("strikePrice"), (int, float))
+                or isinstance(item.get("strikePrice"), bool)
+                or item["strikePrice"] <= 0
                 or not isinstance(item.get("lotSize"), int)
                 or isinstance(item.get("lotSize"), bool)
                 or item["lotSize"] <= 0):
@@ -58,7 +68,7 @@ def assess(receipt, now, max_age_seconds=15):
             expiry_day = datetime.strptime(expiry, "%Y-%m-%d").date()
         except (TypeError, ValueError):
             continue
-        if expiry_day < now.date():
+        if expiry_day < exchange_today:
             continue
         verified += 1
         stamp = _instant(item.get("exchangeLtt"))
