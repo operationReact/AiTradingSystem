@@ -19,21 +19,36 @@ class CustomerExecutionReadinessServiceIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
 
     @Test
-    void paperAndLiveHaveIndependentBlockersAndNeitherCanTrade() {
+    void manualPaperReadinessTracksWalletPauseWithoutAuthorizingUnverifiedFills() {
         UUID owner = customer();
         UUID paper = room(owner, "PAPER", 20000);
         UUID live = room(owner, "LIVE", 20000);
         var before = service.readiness(owner, paper);
         assertThat(before.mode()).isEqualTo("PAPER");
-        assertThat(before.blockers()).contains("PAPER_WALLET_NOT_FUNDED", "EXECUTION_DISABLED");
+        assertThat(before.blockers()).contains("PAPER_WALLET_NOT_FUNDED", "AUTHORITATIVE_QUOTE_NOT_VERIFIED");
         assertThat(before.executionEnabled()).isFalse();
 
         paperWallets.activate(owner, paper);
         var after = service.readiness(owner, paper);
         assertThat(after.virtualCashReady()).isTrue();
         assertThat(after.blockers()).doesNotContain("PAPER_WALLET_NOT_FUNDED");
-        assertThat(after.blockers()).contains("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
+        assertThat(after.blockers()).contains("PAPER_WALLET_PAUSED",
+            "AUTHORITATIVE_QUOTE_NOT_VERIFIED", "SERVER_SIDE_ORDER_RISK_NOT_EVALUATED");
+        assertThat(after.blockers()).doesNotContain("EXECUTION_DISABLED",
+            "CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
         assertThat(after.executionEnabled()).isFalse();
+
+        paperWallets.setPaused(owner, paper, false);
+        var unpaused = service.readiness(owner, paper);
+        assertThat(unpaused.virtualCashReady()).isTrue();
+        assertThat(unpaused.blockers()).doesNotContain("PAPER_WALLET_PAUSED",
+            "PAPER_WALLET_NOT_FUNDED", "EXECUTION_DISABLED");
+        assertThat(unpaused.blockers()).contains("AUTHORITATIVE_QUOTE_NOT_VERIFIED",
+            "SERVER_SIDE_ORDER_RISK_NOT_EVALUATED");
+        assertThat(unpaused.executionEnabled()).isFalse();
+
+        paperWallets.setPaused(owner, paper, true);
+        assertThat(service.readiness(owner, paper).blockers()).contains("PAPER_WALLET_PAUSED");
 
         var liveReadiness = service.readiness(owner, live);
         assertThat(liveReadiness.mode()).isEqualTo("LIVE");
