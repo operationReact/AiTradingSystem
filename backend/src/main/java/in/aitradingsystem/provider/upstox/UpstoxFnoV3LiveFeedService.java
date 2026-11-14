@@ -147,7 +147,11 @@ public class UpstoxFnoV3LiveFeedService {
     private synchronized void scheduleReconnect(long attempt) {
         if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) return;
         retryScheduled = true;
+        // Ensure the previous WebSocket cannot survive a reconnect and consume
+        // another of the provider's tightly limited concurrent connections.
+        WebSocket previous = socket;
         socket = null;
+        if (previous != null) previous.abort();
         if (retryCount >= MAX_RECONNECTS) {
             wanted = false;
             retryScheduled = false;
