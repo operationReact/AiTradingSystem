@@ -96,10 +96,22 @@ def assess(receipt, now, max_age_seconds=15):
     return result
 
 
+def assess_cli(receipt, clock):
+    """Receipt timestamps must not serve as their own independent freshness clock."""
+    observation = _instant(receipt.get("observedAt"))
+    if observation is None or receipt.get("observationVerified") is not True:
+        return {"contract": CONTRACT, "status": "UNKNOWN", "tradeTimeReady": False,
+                "reason": "OBSERVATION_UNVERIFIED", "verifiedContracts": None,
+                "freshContracts": None}
+    delay = (clock - observation).total_seconds()
+    if delay < 0 or delay > 15:
+        return {"contract": CONTRACT, "status": "STALE", "tradeTimeReady": False,
+                "reason": "OBSERVATION_STALE_OR_FUTURE", "verifiedContracts": None,
+                "freshContracts": None}
+    return assess(receipt, clock)
+
+
 if __name__ == "__main__":
     # No network, DB, or filesystem writes. Read a sanitized receipt from stdin.
     payload = json.load(sys.stdin)
-    observation = _instant(payload.get("observedAt"))
-    if observation is None:
-        raise SystemExit("observedAt must be an offset-aware ISO timestamp")
-    print(json.dumps(assess(payload, observation), sort_keys=True))
+    print(json.dumps(assess_cli(payload, datetime.now(timezone.utc)), sort_keys=True))
