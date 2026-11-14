@@ -171,6 +171,9 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Pending details'), 130,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Pending details'));
     await tester.pumpAndSettle();
     expect(find.text('Percentage calculation'), findsOneWidget);
@@ -215,6 +218,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('13%'), findsOneWidget);
     expect(find.text('Remaining: 87%'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Pending details'), 130,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Pending details'));
     await tester.pumpAndSettle();
     expect(find.text('8% / 20% earned'), findsOneWidget);
