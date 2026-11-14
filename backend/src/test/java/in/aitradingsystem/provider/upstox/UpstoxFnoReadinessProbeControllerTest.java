@@ -10,6 +10,10 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import in.aitradingsystem.security.AccountApiOnlyFilter;
+import org.springframework.mock.web.MockFilterChain;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -184,4 +188,19 @@ class UpstoxFnoReadinessProbeControllerTest {
         assertThat(role).isNotNull();
         assertThat(role.value()).contains("ADMIN", "OPERATOR");
     }
+    @Test
+    void customerAccountIsolationFilterRejectsPrivateFnoProbe() throws Exception {
+        var request = new MockHttpServletRequest("POST",
+                "/api/admin/market-data/upstox-analytics/fno/probe");
+        var response = new MockHttpServletResponse();
+        var filter = new AccountApiOnlyFilter();
+        var chain = new MockFilterChain();
+
+        filter.doFilter(request, response, chain);
+
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(chain.getRequest()).isNull();
+        verifyNoInteractions(source);
+    }
+
 }
