@@ -1,10 +1,10 @@
 {
-    "operation": "deploy",
-    "environment": "PAPER",
-    "instance_id": "i-09c01b470fb39b85a",
-    "instance_type": "t4g.medium",
-    "account": "098859530205",
-    "region": "ap-south-1",
-    "kind": "ec2-paper-ssm-release-v1",
-    "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY"
+  "operation": "deploy",
+  "environment": "PAPER",
+  "instance_id": "i-09c01b470fb39b85a",
+  "instance_type": "t4g.medium",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "kind": "ec2-paper-ssm-release-v1",
+  "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY"
 }
