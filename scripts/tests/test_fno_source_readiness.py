@@ -4,7 +4,7 @@ from pathlib import Path
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra" / "ec2-paper"))
-from fno_source_readiness import validate_response, expected_request
+from fno_source_readiness import validate_response, expected_request, sanitized_source_receipt
 
 
 def valid():
@@ -77,6 +77,33 @@ class FnoSourceReadinessTest(unittest.TestCase):
         v["callsWithContract"]=66
         with self.assertRaisesRegex(ValueError,"FNO_INVALID_COUNTS"):
             validate_response(v)
+
+    def test_safe_partial_and_disabled_receipts_are_reported_without_secret(self):
+        sample=("some secret Bearer abcdef\n"
+                "MINTTICK_FNO_SOURCE:status=DISABLED contracts=0 strikes=0 "
+                "calls=0 puts=0 greeks=0 expiry=2026-11-17 stored=false rights=false\n"
+                "raw provider secret")
+        parsed=sanitized_source_receipt(sample)
+        self.assertEqual(parsed,
+            "status=DISABLED contracts=0 strikes=0 calls=0 puts=0 greeks=0 "
+            "expiry=2026-11-17 stored=false rights=false")
+        self.assertNotIn("secret",parsed)
+        self.assertNotIn("Bearer",parsed)
+        sample=sample.replace("status=DISABLED","status=PARTIAL_DATA")
+        self.assertIn("status=PARTIAL_DATA",sanitized_source_receipt(sample))
+
+    def test_unsafe_receipts_are_suppressed(self):
+        good=("MINTTICK_FNO_SOURCE:status=READS_VERIFIED contracts=130 "
+              "strikes=65 calls=65 puts=65 greeks=57 "
+              "expiry=2026-11-17 stored=false rights=false")
+        self.assertIsNotNone(sanitized_source_receipt(good))
+        for invalid in (good+"\n"+good,
+                        good.replace("contracts=130","contracts=99999999"),
+                        good.replace("status=READS_VERIFIED","status=SUCCESS"),
+                        good.replace("rights=false","rights=true"),
+                        good.replace("calls=65","calls=70"),
+                        good * 2000):
+            self.assertIsNone(sanitized_source_receipt(invalid))
 
     def test_unknown_status_never_verified(self):
         v=valid()
