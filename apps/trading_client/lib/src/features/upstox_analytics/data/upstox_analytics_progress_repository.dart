@@ -51,8 +51,8 @@ class UpstoxJobPlanCoverage {
     final eligible = count('retentionEligibleChunks');
     final raw = json['retentionEligiblePercent'];
     final percent = raw is num ? raw.toDouble() : null;
-    if (raw != null && (raw is! num || !percent!.isFinite ||
-        percent < 0 || percent > 100)) {
+    if (raw != null && (raw is! num || percent == null ||
+        !percent.isFinite || percent < 0 || percent > 100)) {
       throw const FormatException('Invalid Upstox job-plan percent');
     }
     final valid = state == 'VALID_CURRENT_JOB_PLANS';
