@@ -63,4 +63,23 @@ class UpstoxCoverageRetryCandidatesTest {
         assertEquals(0, UpstoxCoverageRetryCandidates.select(List.of(future), NOW, 0, 20).total());
     }
 
+    @Test void replayedIdenticalReceiptsDoNotInflateCountsOrPagination() {
+        var a = observation("a", 5, 2, "GAP", NOW, null);
+        var b = observation("b", 5, 1, "GAP", NOW, null);
+        var first = UpstoxCoverageRetryCandidates.select(List.of(a, a, b, a), NOW, 0, 1);
+        assertEquals(2, first.total());
+        assertEquals("a", first.items().get(0).observation().canonicalInstrumentId());
+        assertTrue(first.hasMore());
+        var second = UpstoxCoverageRetryCandidates.select(List.of(a, a, b, a), NOW, 1, 1);
+        assertEquals("b", second.items().get(0).observation().canonicalInstrumentId());
+        assertFalse(second.hasMore());
+    }
+
+    @Test void differentAttemptReceiptsRemainDistinctForAudit() {
+        var first = observation("a", 5, 2, "GAP", NOW.minusSeconds(30), null);
+        var second = observation("a", 5, 3, "GAP", NOW, null);
+        assertEquals(2, UpstoxCoverageRetryCandidates.select(
+                List.of(first, second), NOW, 0, 20).total());
+    }
+
 }
