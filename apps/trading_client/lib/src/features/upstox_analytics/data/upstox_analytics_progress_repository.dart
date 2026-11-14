@@ -1,6 +1,97 @@
 import '../../../data/authenticated_api_client.dart';
 
 
+
+/// Audited plan scope is the registered UPSTOX backfill jobs, NOT the full
+/// NSE universe, expected trading days, independently validated object bytes,
+/// or a training/inference/display entitlement. The denominator may change
+/// when authorized jobs are registered or their revisions advance.
+class UpstoxJobPlanCoverage {
+  const UpstoxJobPlanCoverage({
+    required this.evidenceState,
+    required this.selectedJobs,
+    required this.plannedChunks,
+    required this.receiptVerifiedChunks,
+    required this.retentionEligibleChunks,
+    required this.retentionEligiblePercent,
+  });
+
+  final String evidenceState;
+  final int? selectedJobs;
+  final int? plannedChunks;
+  final int? receiptVerifiedChunks;
+  final int? retentionEligibleChunks;
+  final double? retentionEligiblePercent;
+
+  static UpstoxJobPlanCoverage fromJson(Object? json) {
+    if (json is! Map<String, dynamic> ||
+        json['denominatorScope'] !=
+            'CURRENT_UPSTOX_BACKFILL_JOB_CHUNKS_NOT_FULL_MARKET_UNIVERSE') {
+      throw const FormatException('Untrusted Upstox coverage denominator');
+    }
+    final state = json['evidenceState'];
+    if (!const {
+      'NO_PROVIDER_RECEIPT', 'NON_EXTERNAL_PROVIDER',
+      'NO_JOB_PLANS', 'PLAN_TOO_LARGE',
+      'UNVERIFIED_OR_OVERLAPPING_PLAN', 'VALID_CURRENT_JOB_PLANS',
+    }.contains(state)) {
+      throw const FormatException('Unknown Upstox job-plan evidence state');
+    }
+    int? count(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! int || value < 0) {
+        throw const FormatException('Invalid Upstox job-plan count');
+      }
+      return value;
+    }
+    final selectedJobs = count('selectedJobs');
+    final planned = count('plannedChunks');
+    final verified = count('receiptVerifiedChunks');
+    final eligible = count('retentionEligibleChunks');
+    final raw = json['retentionEligiblePercent'];
+    final percent = raw is num ? raw.toDouble() : null;
+    if (raw != null && (raw is! num || !percent!.isFinite ||
+        percent < 0 || percent > 100)) {
+      throw const FormatException('Invalid Upstox job-plan percent');
+    }
+    final valid = state == 'VALID_CURRENT_JOB_PLANS';
+    if (valid) {
+      if (selectedJobs == null || selectedJobs <= 0 ||
+          planned == null || planned <= 0 ||
+          verified == null || eligible == null ||
+          verified > planned || eligible > verified || percent == null) {
+        throw const FormatException('Incomplete Upstox job-plan proof');
+      }
+      // Score uses DOWN rounding to one decimal place, never an invented
+      // figure derived from API-smoke or GitHub development evidence.
+      final calculated = (eligible * 1000 ~/ planned) / 10;
+      if ((percent - calculated).abs() > 0.0000001) {
+        throw const FormatException('Inconsistent Upstox job-plan percent');
+      }
+    } else if (percent != null ||
+        (state != 'UNVERIFIED_OR_OVERLAPPING_PLAN' &&
+          [selectedJobs, planned, verified, eligible]
+              .any((x) => x != null))) {
+      throw const FormatException('Unverified job-plan percentage');
+    }
+    if (!valid && state == 'UNVERIFIED_OR_OVERLAPPING_PLAN' &&
+        (selectedJobs == null || selectedJobs <= 0 ||
+         planned == null || verified == null || eligible == null ||
+         verified > planned || eligible > verified)) {
+      throw const FormatException('Malformed incomplete job-plan audit');
+    }
+    return UpstoxJobPlanCoverage(
+      evidenceState: state as String,
+      selectedJobs: selectedJobs,
+      plannedChunks: planned,
+      receiptVerifiedChunks: verified,
+      retentionEligibleChunks: eligible,
+      retentionEligiblePercent: percent,
+    );
+  }
+}
+
 /// Authoritative *observations*, not a coverage denominator or licence grant.
 /// Absent provider registration remains unknown; no fake 0% is generated.
 class UpstoxPersistedReceipts {
@@ -18,6 +109,7 @@ class UpstoxPersistedReceipts {
     required this.retryChunks,
     required this.lastCheckpointAt,
     required this.cooldownUntil,
+    this.jobPlan,
   });
 
   final String evidenceState;
@@ -33,6 +125,7 @@ class UpstoxPersistedReceipts {
   final int? retryChunks;
   final DateTime? lastCheckpointAt;
   final DateTime? cooldownUntil;
+  final UpstoxJobPlanCoverage? jobPlan;
 
   static UpstoxPersistedReceipts fromJson(Object? json) {
     if (json is! Map<String, dynamic> ||
@@ -101,6 +194,8 @@ class UpstoxPersistedReceipts {
       failedChunks: failed, retryChunks: retry,
       lastCheckpointAt: date('lastCheckpointAt'),
       cooldownUntil: date('cooldownUntil'),
+      jobPlan: json['jobPlan'] == null
+          ? null : UpstoxJobPlanCoverage.fromJson(json['jobPlan']),
     );
   }
 }
