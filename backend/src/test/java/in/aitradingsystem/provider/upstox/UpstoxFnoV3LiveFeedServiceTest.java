@@ -26,6 +26,10 @@ class UpstoxFnoV3LiveFeedServiceTest {
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-14T10:00:00Z"), ZoneOffset.UTC);
 
     private UpstoxFnoV3LiveFeedService service() {
+        return service(clock);
+    }
+
+    private UpstoxFnoV3LiveFeedService service(Clock testClock) {
         when(source.enabled()).thenReturn(true);
         when(source.authorizeFnoMarketFeedV3()).thenReturn(URI.create(
                 "wss://prod-feed.upstox.com/market-data-feeder/v3/feeds?code=test-one-use"));
@@ -33,7 +37,7 @@ class UpstoxFnoV3LiveFeedServiceTest {
                 .thenReturn(CompletableFuture.completedFuture(socket));
         when(socket.sendClose(anyInt(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(socket));
-        return new UpstoxFnoV3LiveFeedService(source, clock, (uri, capture) -> {
+        return new UpstoxFnoV3LiveFeedService(source, testClock, (uri, capture) -> {
             listener.set(capture);
             return CompletableFuture.completedFuture(socket);
         }, executor);
@@ -61,11 +65,30 @@ class UpstoxFnoV3LiveFeedServiceTest {
             assertThat(status.decodedFrames()).isEqualTo(1);
             assertThat(status.latestExchangeTradeAt())
                     .isEqualTo(Instant.parse("2026-11-13T09:15:00Z"));
-            assertThat(status.providerTradeTimeAvailable()).isTrue();
+            assertThat(status.providerTradeTimeAvailable()).isFalse(); // prior-day LTT is stale
             assertThat(status.displayRightsVerified()).isFalse();
             assertThat(status.trainingRightsVerified()).isFalse();
             assertThat(status.liveTradingEnabled()).isFalse();
             verify(source, times(1)).authorizeFnoMarketFeedV3();
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
+    void reportsFreshTradeOnlyForRecentExchangeLttAndClearsOnStop() {
+        var freshClock = Clock.fixed(Instant.parse("2026-11-13T09:15:05Z"), ZoneOffset.UTC);
+        var s = service(freshClock);
+        try {
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                    ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            assertThat(s.status().providerTradeTimeAvailable()).isTrue();
+            assertThat(s.status().latestExchangeTradeAt())
+                    .isEqualTo(Instant.parse("2026-11-13T09:15:00Z"));
+            s.stop();
+            assertThat(s.status().providerTradeTimeAvailable()).isFalse();
         } finally {
             s.shutdown();
         }
