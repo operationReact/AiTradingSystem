@@ -31,7 +31,9 @@ import org.springframework.web.server.ResponseStatusException;
 /** Feature-gated manual PAPER options; no broker/live order endpoint. */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno")
-@ConditionalOnProperty(name="minttick.upstox-fno.paper-enabled", havingValue="true")
+@ConditionalOnProperty(
+    name={"minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled"},
+    havingValue="true")
 public class CustomerPaperFnoOrderController {
     private final CustomerPaperFnoOrderService orders;
     private final CustomerIdentityStore identities;

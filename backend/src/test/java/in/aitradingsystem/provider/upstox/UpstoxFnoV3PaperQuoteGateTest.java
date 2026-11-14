@@ -78,4 +78,31 @@ class UpstoxFnoV3PaperQuoteGateTest {
             verify(source,never()).authorizeFnoMarketFeedV3();
         }finally{s.shutdown();}
     }
+    @Test
+    void disconnectClearsLastQuoteAndLateOldSocketFramesCannotRearmPaper() {
+        var s=create(Clock.fixed(TRADE.plusSeconds(2),ZoneOffset.UTC));
+        try {
+            feed(s);
+            assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isPresent();
+            var priorSocketListener=listener.get();
+            priorSocketListener.onError(websocket,new java.io.IOException("closed"));
+            assertThat(s.status().state()).isEqualTo("RECONNECTING");
+            assertThat(s.status().observedInstruments()).isZero();
+            assertThat(s.status().latestExchangeTradeAt()).isNull();
+            assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
+
+            // The old socket can still dispatch one more callback. It cannot
+            // repopulate observed quotes or mark the new stream connected.
+            priorSocketListener.onBinary(websocket,
+                    ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()),true);
+            assertThat(s.status().state()).isEqualTo("RECONNECTING");
+            assertThat(s.status().observedInstruments()).isZero();
+            assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
+            s.stop();
+            assertThat(s.status().state()).isEqualTo("STOPPED");
+        } finally {
+            s.shutdown();
+        }
+    }
+
 }

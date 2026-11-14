@@ -41,8 +41,11 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
     private final UpstoxFnoV3LiveFeedService live=mock(UpstoxFnoV3LiveFeedService.class);
 
     private CustomerPaperFnoOrderService engine(boolean rights) {
+        return engine(rights, false);
+    }
+    private CustomerPaperFnoOrderService engine(boolean paperRights, boolean displayRights) {
         return new CustomerPaperFnoOrderService(jdbc,source,live,marketCalendar,
-                Clock.fixed(NOW,ZoneOffset.UTC),rights);
+                Clock.fixed(NOW,ZoneOffset.UTC),paperRights,displayRights);
     }
     private <T> T tx(java.util.function.Supplier<T> fn) {
         return new TransactionTemplate(transactionManager).execute(status->fn.get());
@@ -150,4 +153,34 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         assertThat(engine.orders(owner,paper)).isEmpty();
         assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
     }
+    @Test
+    void existingPaperPositionRemainsVisibleButNoPriceValuationWithoutDisplayRights() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var restricted=engine(true,false);
+        tx(()->restricted.submit(owner,paper,"fno_rights_buy1",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101.00")));
+
+        // Quote reading is independent from showing the owner's own virtual ledger.
+        clearInvocations(live);
+        var held=restricted.positions(owner,paper);
+        assertThat(held).hasSize(1);
+        assertThat(held.getFirst().quantity()).isEqualTo(65);
+        assertThat(held.getFirst().costBasisPaise()).isEqualTo(650_325L); // premium plus simulated buy fee
+        assertThat(held.getFirst().indicativeUnrealizedPnlPaise()).isNull();
+        assertThat(held.getFirst().priceFresh()).isFalse();
+        verifyNoInteractions(live);
+
+        // Display permission alone does not grant any new PAPER order privilege.
+        var displayPermitted=engine(false,true);
+        var valued=displayPermitted.positions(owner,paper);
+        assertThat(valued).hasSize(1);
+        assertThat(valued.getFirst().priceFresh()).isTrue();
+        assertThat(valued.getFirst().indicativeUnrealizedPnlPaise()).isNotNull();
+        verify(live).eligiblePaperQuote(CONTRACT);
+    }
+
 }
