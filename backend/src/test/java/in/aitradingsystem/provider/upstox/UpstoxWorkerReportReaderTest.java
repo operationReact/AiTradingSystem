@@ -51,4 +51,41 @@ class UpstoxWorkerReportReaderTest {
                 JSON.readTree("[" + "{},".repeat(101) + "{}]"), NOW))
                 .isInstanceOf(IllegalArgumentException.class);
     }
+
+    @Test
+    void runDeltaShowsEvidenceChangesNotRepeatedPolls() throws Exception {
+        var sample = JSON.readTree("""
+          [
+            {"user":{"login":"operationReact"},"created_at":"2026-11-14T00:10:00Z",
+             "body":"MINTTICK_UPSTOX_WORKER_V1\\nworker=1\\nscope=SOURCE_INGESTION\\nresult=PR_OPEN\\npr=1030\\nhead=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\nci=PENDING\\nruntime=NOT_OBSERVED\\nblocker=RIGHTS_UNVERIFIED\\nnext=CHECK_CI"},
+            {"user":{"login":"operationReact"},"created_at":"2026-11-14T00:40:00Z",
+             "body":"MINTTICK_UPSTOX_WORKER_V1\\nworker=1\\nscope=SOURCE_INGESTION\\nresult=PR_OPEN\\npr=1030\\nhead=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\nci=PENDING\\nruntime=NOT_OBSERVED\\nblocker=RIGHTS_UNVERIFIED\\nnext=CHECK_CI"}
+          ]""");
+        var result = UpstoxWorkerReportReader.summarize(sample, NOW);
+        var rows = (java.util.List<?>) result.details().get("workerReports");
+        var worker = (java.util.Map<?, ?>) rows.get(0);
+        assertThat(worker.get("reports12h")).isEqualTo(2);
+        assertThat(worker.get("lastRunChange")).isEqualTo("COMMIT_REPORTED");
+        assertThat(worker.get("previousReportedAt")).isEqualTo("2026-11-14T00:10:00Z");
+        // Same sampled notes on another poll give the same last-run change;
+        // they do not become new evidence simply because the scheduler ran.
+        var again = UpstoxWorkerReportReader.summarize(sample, NOW);
+        assertThat(again.details()).isEqualTo(result.details());
+    }
+
+    @Test
+    void noChangeBetweenNotesIsVisible() throws Exception {
+        var sample = JSON.readTree("""
+          [
+            {"user":{"login":"operationReact"},"created_at":"2026-11-14T00:10:00Z",
+             "body":"MINTTICK_UPSTOX_WORKER_V1\\nworker=3\\nscope=COVERAGE_GAPS\\nresult=BLOCKED\\npr=NONE\\nhead=NONE\\nci=NOT_RUN\\nruntime=NOT_OBSERVED\\nblocker=RIGHTS_UNVERIFIED\\nnext=REVIEW"},
+            {"user":{"login":"operationReact"},"created_at":"2026-11-14T00:40:00Z",
+             "body":"MINTTICK_UPSTOX_WORKER_V1\\nworker=3\\nscope=COVERAGE_GAPS\\nresult=BLOCKED\\npr=NONE\\nhead=NONE\\nci=NOT_RUN\\nruntime=NOT_OBSERVED\\nblocker=RIGHTS_UNVERIFIED\\nnext=REVIEW"}
+          ]""");
+        var result = UpstoxWorkerReportReader.summarize(sample, NOW);
+        var rows = (java.util.List<?>) result.details().get("workerReports");
+        var worker = (java.util.Map<?, ?>) rows.get(2);
+        assertThat(worker.get("lastRunChange")).isEqualTo("NO_NEW_DELIVERY");
+    }
+
 }
