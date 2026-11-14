@@ -59,7 +59,17 @@ public final class UpstoxCoverageRetryCandidates {
                         .thenComparing(x -> x.observation().listingEpisodeId())
                         .thenComparing(x -> x.observation().interval())
                         .thenComparing(x -> x.observation().windowStart())
-                        .thenComparing(x -> x.observation().source()))
+                        .thenComparing(x -> x.observation().source())
+                        // Total order across distinct partitions and attempts makes offset pages repeatable.
+                        .thenComparingInt(x -> x.observation().year())
+                        .thenComparingInt(x -> x.observation().month())
+                        .thenComparing(x -> x.observation().windowEndExclusive())
+                        .thenComparing(x -> x.observation().datasetVersion())
+                        .thenComparing(x -> x.observation().lastAttemptAt(), Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(x -> x.observation().reason())
+                        .thenComparing(x -> x.observation().expectedSlots(), Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(x -> x.observation().verifiedSlots(), Comparator.nullsFirst(Comparator.naturalOrder()))
+                        .thenComparing(x -> x.observation().cooldownUntil(), Comparator.nullsFirst(Comparator.naturalOrder())))
                 .toList();
         int start = Math.min(offset, candidates.size());
         int end = (int) Math.min((long) start + limit, candidates.size());
