@@ -72,6 +72,10 @@ class CanonicalManifestReceiptSummaryTest {
         assertTrue(sql.getValue().contains("EXISTS ("));
         assertTrue(sql.getValue().contains("m.object_sha256 = c.dataset_digest"));
         assertTrue(sql.getValue().contains("m.published_at <= ?"));
+        assertTrue(sql.getValue().contains("m.published_at >= c.last_available_at"));
+        assertTrue(sql.getValue().contains("c.first_available_at <= c.last_available_at"));
+        assertTrue(sql.getValue().contains("c.first_available_at IS NOT NULL"));
+        assertTrue(sql.getValue().contains("c.last_available_at IS NOT NULL"));
         assertTrue(!sql.getValue().contains("JOIN golden_dataset_object_manifest"));
     }
 
