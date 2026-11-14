@@ -272,10 +272,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         ]),
         const SizedBox(height: 5),
         Text('${score.verifiedStages} of ${score.gates.length} milestones verified · '
-          '${score.outstandingStages} outstanding',
+          '${score.outstandingStages} not fully verified',
           style: const TextStyle(color: MintTickPalette.mutedSilver, fontSize: 10)),
         Row(children: [
-          const Expanded(child: Text('Weighted milestones · fresh backend proof only',
+          const Expanded(child: Text('Verified + receipt-backed partial · no PR credit',
               maxLines: 2, style: TextStyle(color: MintTickPalette.mutedSilver,
                   fontSize: 10))),
           TextButton(
@@ -309,9 +309,11 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
             const Text('Percentage calculation',
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800)),
             const SizedBox(height: 5),
-            const Text('Each weight is earned only when that backend milestone '
-              'is VERIFIED and fresh. Draft/merged PRs, UI mocks and API samples '
-              'do not earn unrelated progress.',
+            const Text('A fresh VERIFIED milestone earns its full weight. '
+              'Validated partial coverage can earn tenths of a percent only '
+              'with a matching persisted-receipt proof and fixed target. '
+              'GitHub PRs, worker notes and API smoke tests cannot earn '
+              'backend acceptance.',
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver, height: 1.4)),
             const SizedBox(height: 8),
@@ -333,7 +335,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                     ])),
                   Text(gate.earned == gate.weight
                       ? '${gate.weight}% done'
-                      : '${gate.weight - gate.earned}% left',
+                      : gate.earned > 0
+                        ? '${gate.earned}% / ${gate.weight}% earned'
+                        : '${gate.weight}% left',
                     style: TextStyle(fontSize: 12,
                       color: gate.earned == gate.weight
                         ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
@@ -425,6 +429,12 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10,
                         color: MintTickPalette.mutedSilver)),
+                  if (reports[i].lastRunChange != null)
+                    Text('Last report change: ${reports[i].lastRunChange!.replaceAll('_', ' ').toLowerCase()}'
+                      ' · ${reports[i].reportCount12h ?? '—'} reports / 12h',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10,
+                        color: MintTickPalette.mutedSilver)),
                   if (reports[i].blocker != null && reports[i].blocker != 'NONE')
                     Text('Blocked: ${reports[i].blocker}',
                       maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -460,8 +470,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       ]), padding: const EdgeInsets.all(10)),
       const SizedBox(height: 8),
       note('Last-reported times come from GitHub issue #1012. '
-        'A recent worker report or merged PR does not prove that a '
-        'Spring Boot downloader, MintTick Mind feed, or PAPER execution is running. '
+        'Reported run changes compare GitHub issue notes, not '
+        'independently validated production milestones. Repeated notes '
+        'do not count as new delivery. A recent worker report or merged PR '
+        'does not prove that a Spring Boot downloader, MintTick Mind feed, or PAPER execution is running. '
         'Without a deployed report collector, worker activity remains unknown.'),
     ];
   }
