@@ -154,6 +154,22 @@ class AccountApiOnlyFilterTest {
         assertBlocked("POST", "/api/customer/trading-rooms/not-a-room/mind/paper-cycles");
     }
 
+    @Test
+    void onlyPaperOptionsOrdersAndReadbackMayCrossCustomerAccountBoundary() throws Exception {
+        String root="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/";
+        assertPasses("POST",root+"orders");
+        assertPasses("GET",root+"orders");
+        assertPasses("GET",root+"positions");
+        assertPasses("OPTIONS",root+"orders");
+        assertPasses("OPTIONS",root+"positions");
+        assertBlocked("POST",root+"positions");
+        assertBlocked("DELETE",root+"orders");
+        assertBlocked("PUT",root+"orders");
+        assertBlocked("GET",root+"execute");
+        assertBlocked("POST",root+"live");
+        assertBlocked("POST","/api/admin/market-data/upstox-analytics/fno/live/start");
+    }
+
     private void assertPasses(String method, String path) throws Exception {
         var request = new MockHttpServletRequest(method, path);
         var response = new MockHttpServletResponse();

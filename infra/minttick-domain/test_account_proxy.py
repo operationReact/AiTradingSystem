@@ -658,6 +658,18 @@ class AccountProxyTest(unittest.TestCase):
         with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=OSError("private connect refused")):
             self.assertEqual(proxy.handler(event("GET","/api/auth/cognito/me"),None)["statusCode"],503)
 
+    def test_fno_paper_order_routes_never_enable_live_or_admin(self):
+        route="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
+        for method, suffix in (("POST","orders"),("GET","orders"),("GET","positions")):
+            self.assertTrue(proxy.allowed(method,route+suffix))
+        for method,suffix in (("POST","positions"),("DELETE","orders"),
+                              ("PUT","orders"),("POST","live"),("GET","execute")):
+            self.assertFalse(proxy.allowed(method,route+suffix))
+        self.assertFalse(proxy.allowed("POST",
+            "/api/admin/market-data/upstox-analytics/fno/live/start"))
+        self.assertFalse(proxy.allowed("POST",
+            "/api/customer/brokers/upstox/orders"))
+
     def test_template_embeds_identical_reviewed_python_source(self):
         text=Path(__file__).with_name("bootstrap-account-api.yml").read_text()
         anchor="        ZipFile: |\n"

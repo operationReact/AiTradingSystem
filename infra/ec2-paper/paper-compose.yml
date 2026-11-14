@@ -75,6 +75,11 @@ services:
       # the backend instance role; no token is injected into Compose or Flutter.
       MINTTICK_UPSTOX_ANALYTICS_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_ENABLED:-false}
       MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED: ${MINTTICK_UPSTOX_ANALYTICS_PROBE_ENABLED:-false}
+      # F&O WebSocket and PAPER option premium engine are independently OFF by default.
+      # A source read does not authorize data retention, PAPER use or real orders.
+      MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED: ${MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED:-false}
+      MINTTICK_UPSTOX_FNO_PAPER_ENABLED: ${MINTTICK_UPSTOX_FNO_PAPER_ENABLED:-false}
+      MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED:-false}
       # Separate bounded read-only source health scheduler; off unless explicitly approved.
       MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED: ${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:-true}
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aitrading
