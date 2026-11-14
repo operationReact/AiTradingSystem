@@ -118,7 +118,7 @@ void main() {
     expect(find.text('SOURCE OK'), findsOneWidget);
     expect(find.text('Data & PAPER acceptance'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
-    expect(find.text('Remaining: 95%'), findsOneWidget);
+    expect(find.text('Awaiting proof: 95%'), findsOneWidget);
     expect(find.byKey(const ValueKey('upstox-verified-completion-bar')), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Candles'), 150,
       scrollable: find.byType(Scrollable).first);
@@ -178,7 +178,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Percentage calculation'), findsOneWidget);
     expect(find.text('Persistent historical data'), findsOneWidget);
-    expect(find.text('20% left'), findsWidgets);
+    expect(find.text('20% awaiting proof'), findsWidgets);
+    expect(find.textContaining('NOT VERIFIED'), findsWidgets);
+    expect(find.text('NOT_STARTED'), findsNothing);
+    expect(find.textContaining('not a claim that the five workers'), findsOneWidget);
     expect(find.text('5% done'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -217,7 +220,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('13%'), findsOneWidget);
-    expect(find.text('Remaining: 87%'), findsOneWidget);
+    expect(find.text('Awaiting proof: 87%'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Pending details'), 130,
       scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
@@ -266,7 +269,7 @@ void main() {
         findsOneWidget);
     expect(find.text('53.3%'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
-    expect(find.text('Remaining: 95%'), findsOneWidget);
+    expect(find.text('Awaiting proof: 95%'), findsOneWidget);
     await tester.tap(find.text('Operations'));
     await tester.pumpAndSettle();
     expect(find.text('Current PR delivery (reported)'), findsOneWidget);
