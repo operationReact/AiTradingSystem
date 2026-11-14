@@ -36,20 +36,29 @@ public class CustomerPaperFnoOrderService {
     private final MarketSessionCalendar calendar;
     private final Clock clock;
     private final boolean rightsVerified;
+    private final boolean displayRightsVerified;
 
     @Autowired
     public CustomerPaperFnoOrderService(JdbcClient jdbc,
             UpstoxAnalyticsSource source, UpstoxFnoV3LiveFeedService live,
             MarketSessionCalendar calendar,
-            @Value("${minttick.upstox-fno.paper-usage-rights-verified:false}") boolean rightsVerified) {
-        this(jdbc, source, live, calendar, Clock.systemUTC(), rightsVerified);
+            @Value("${minttick.upstox-fno.paper-usage-rights-verified:false}") boolean rightsVerified,
+            @Value("${minttick.upstox-fno.display-rights-verified:false}") boolean displayRightsVerified) {
+        this(jdbc, source, live, calendar, Clock.systemUTC(), rightsVerified, displayRightsVerified);
     }
 
     CustomerPaperFnoOrderService(JdbcClient jdbc, UpstoxAnalyticsSource source,
             UpstoxFnoV3LiveFeedService live, MarketSessionCalendar calendar,
             Clock clock, boolean rightsVerified) {
+        this(jdbc, source, live, calendar, clock, rightsVerified, false);
+    }
+
+    CustomerPaperFnoOrderService(JdbcClient jdbc, UpstoxAnalyticsSource source,
+            UpstoxFnoV3LiveFeedService live, MarketSessionCalendar calendar,
+            Clock clock, boolean rightsVerified, boolean displayRightsVerified) {
         this.jdbc=jdbc; this.source=source; this.live=live;
         this.calendar=calendar; this.clock=clock; this.rightsVerified=rightsVerified;
+        this.displayRightsVerified=displayRightsVerified;
     }
 
     public record Fill(UUID id, UUID roomId, String instrumentKey, String optionType,
@@ -277,7 +286,12 @@ public class CustomerPaperFnoOrderService {
                 String key=rs.getString("instrument_key");
                 int qty=rs.getInt("quantity");
                 long cost=rs.getLong("cost_basis_paise");
-                var quote=live.eligiblePaperQuote(key);
+                // A stored PAPER position remains readable even without feed rights.
+                // Never disclose a quote-derived valuation if display permission
+                // is unverified; UNKNOWN is different from a measured zero P&L.
+                var quote=displayRightsVerified
+                        ? live.eligiblePaperQuote(key)
+                        : java.util.Optional.<UpstoxFnoV3LiveFeedService.PaperQuote>empty();
                 Long pnl=quote.map(q->{
                     long proceeds=paise(q.bid().multiply(BigDecimal.valueOf(qty)));
                     long fee=Math.max(1,Math.addExact(proceeds,1999)/2000);
