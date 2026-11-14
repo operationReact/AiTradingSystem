@@ -39,6 +39,9 @@ class MintTickPaperFnoPanel extends StatefulWidget {
 class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   CustomerFnoMarket? _market;
   List<CustomerFnoPosition> _positions = const [];
+  bool _positionsLoading = true;
+  String? _positionsError;
+  int _positionsRequest = 0;
   String? _blocker;
   bool _loading = true;
   bool _submitting = false;
@@ -62,6 +65,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       _load();
     } else {
       _loading = false;
+      _loadPositions();
     }
   }
 
@@ -89,19 +93,42 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     _load();
   }
 
+  // A quote rights/source error must not erase existing PAPER positions.
+  Future<void> _loadPositions() async {
+    final request = ++_positionsRequest;
+    if (!mounted) return;
+    setState(() {
+      _positionsLoading = true;
+      _positionsError = null;
+    });
+    try {
+      final positions = await widget.repository.positions(widget.roomId);
+      if (!mounted || request != _positionsRequest) return;
+      setState(() {
+        _positions = positions;
+        _positionsLoading = false;
+      });
+    } catch (_) {
+      if (!mounted || request != _positionsRequest) return;
+      setState(() {
+        _positions = const [];
+        _positionsLoading = false;
+        _positionsError = 'Virtual F&O positions unavailable. Retry before acting.';
+      });
+    }
+  }
+
   Future<void> _load() async {
     final expiry = _expiry;
     if (expiry == null) return;
+    _loadPositions();
     final request = ++_request;
     setState(() {
       _loading = true;
       _blocker = null;
     });
     try {
-      final results = await Future.wait<Object>([
-        widget.repository.market(widget.roomId, expiry),
-        widget.repository.positions(widget.roomId),
-      ]);
+      final market = await widget.repository.market(widget.roomId, expiry);
       if (!mounted || request != _request) return;
       _ageTimer?.cancel();
       // Re-evaluate eligibility every second so quotes age out on screen
@@ -110,9 +137,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         if (mounted) setState(() {});
       });
       setState(() {
-        _market = results[0] as CustomerFnoMarket;
+        _market = market;
         _quotesReceivedAt = widget.clock();
-        _positions = results[1] as List<CustomerFnoPosition>;
         // A refresh replaces every leg. Clear the old selection and price so an
         // earlier quote can never gate a new order; the user re-selects a leg.
         _selected = null;
@@ -125,7 +151,6 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       setState(() {
         _market = null;
         _quotesReceivedAt = null;
-        _positions = const [];
         _selected = null;
         _price.text = '';
         _blocker = _describe(error);
@@ -163,7 +188,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     final market = _market;
     if (_submitting || market == null || leg == null) return false;
     return _quotesWithinAge && market.hasFreshQuotes &&
-        leg.quoteFresh && leg.paperEligible && leg.observedAt != null &&
+        market.displayRightsVerified && leg.quoteFresh && leg.paperEligible &&
+        leg.observedAt != null && _sidePrice(leg, _side) != null &&
         _limitPrice() != null;
   }
 
@@ -324,7 +350,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
 
   List<Widget> _marketView(ColorScheme colors, TextTheme type) {
     final market = _market!;
-    final statusLabel = switch (market.status) {
+    final statusLabel = !market.displayRightsVerified
+        ? 'Display rights not verified · orders disabled'
+        : switch (market.status) {
       'FRESH_QUOTES' => 'Fresh quotes',
       'NO_FRESH_QUOTES' => 'No fresh quotes · orders disabled',
       _ => 'Market closed · orders disabled',
@@ -361,7 +389,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     if (leg == null) {
       return Text('$label not listed', style: type.labelSmall);
     }
-    final usable = leg.quoteFresh && leg.paperEligible;
+    final usable = _quotesWithinAge && _market?.hasFreshQuotes == true &&
+        _market?.displayRightsVerified == true && leg.quoteFresh && leg.paperEligible;
     final selected = identical(_selected, leg) ||
         _selected?.instrumentKey == leg.instrumentKey;
     return OutlinedButton(
@@ -440,6 +469,18 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   }
 
   Widget _positionsView(ColorScheme colors, TextTheme type) {
+    if (_positionsLoading) {
+      return Text('Loading virtual F&O positions…', style: type.bodySmall);
+    }
+    if (_positionsError != null) {
+      return Row(children: [
+        Expanded(child: Text(_positionsError!, style: type.bodySmall?.copyWith(color: colors.error))),
+        TextButton(
+          key: const ValueKey('paper-fno-positions-retry'),
+          onPressed: _loadPositions,
+          child: const Text('Retry positions')),
+      ]);
+    }
     if (_positions.isEmpty) {
       return Text('No virtual F&O positions.', style: type.bodySmall);
     }
