@@ -169,7 +169,7 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         var held=restricted.positions(owner,paper);
         assertThat(held).hasSize(1);
         assertThat(held.getFirst().quantity()).isEqualTo(65);
-        assertThat(held.getFirst().costBasisPaise()).isEqualTo(650_000L);
+        assertThat(held.getFirst().costBasisPaise()).isEqualTo(650_325L); // premium plus simulated buy fee
         assertThat(held.getFirst().indicativeUnrealizedPnlPaise()).isNull();
         assertThat(held.getFirst().priceFresh()).isFalse();
         verifyNoInteractions(live);
