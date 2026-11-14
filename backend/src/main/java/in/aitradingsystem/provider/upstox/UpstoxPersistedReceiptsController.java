@@ -22,13 +22,16 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/customer/owner-upstox-analytics/v1")
 public class UpstoxPersistedReceiptsController {
     private final UpstoxPersistedIngestionReceipts store;
+    private final UpstoxHistoricalJobPlanAudit jobPlan;
     private final Clock clock;
     private final String ownerSubject;
 
     public UpstoxPersistedReceiptsController(
-            UpstoxPersistedIngestionReceipts store, Clock clock,
+            UpstoxPersistedIngestionReceipts store,
+            UpstoxHistoricalJobPlanAudit jobPlan, Clock clock,
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerSubject) {
         this.store = store;
+        this.jobPlan = jobPlan;
         this.clock = clock;
         this.ownerSubject = ownerSubject;
     }
@@ -39,7 +42,8 @@ public class UpstoxPersistedReceiptsController {
             String provider,
             boolean modelTrainingRightsVerified,
             boolean paperTradingEnabled,
-            UpstoxPersistedIngestionReceipts.Snapshot receipts) {}
+            UpstoxPersistedIngestionReceipts.Snapshot receipts,
+            UpstoxHistoricalJobPlanAudit.Snapshot jobPlan) {}
 
     @GetMapping("/persisted-receipts")
     public ResponseEntity<Response> read(Authentication authentication) {
@@ -52,6 +56,7 @@ public class UpstoxPersistedReceiptsController {
         var snapshot = store.snapshot(now);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(new Response("minttick.upstox.persisted-receipts.v1",
-                        now, "UPSTOX", false, false, snapshot));
+                        now, "UPSTOX", false, false, snapshot,
+                        jobPlan.snapshot(now)));
     }
 }

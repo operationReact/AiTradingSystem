@@ -24,12 +24,17 @@ class UpstoxPersistedReceiptsControllerTest {
     @Test
     void ownerReceivesNoStoreSourceScopedReceiptsWithoutInventedReadiness() {
         var receipts = mock(UpstoxPersistedIngestionReceipts.class);
+        var audit = mock(UpstoxHistoricalJobPlanAudit.class);
         var snapshot = new UpstoxPersistedIngestionReceipts.Snapshot(
                 "NO_PROVIDER_RECEIPT", null, null, null, null,
                 null, null, null, null, null, null, null);
         when(receipts.snapshot(NOW)).thenReturn(snapshot);
+        var jobPlan = new UpstoxHistoricalJobPlanAudit.Snapshot(
+                "NO_PROVIDER_RECEIPT", null, null, null, null, null,
+                "CURRENT_UPSTOX_BACKFILL_JOB_CHUNKS_NOT_FULL_MARKET_UNIVERSE");
+        when(audit.snapshot(NOW)).thenReturn(jobPlan);
         var controller = new UpstoxPersistedReceiptsController(receipts,
-                Clock.fixed(NOW, ZoneOffset.UTC), "owner-sub");
+                audit, Clock.fixed(NOW, ZoneOffset.UTC), "owner-sub");
         var response = controller.read(jwt("owner-sub"));
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(response.getHeaders().getCacheControl()).contains("no-store");
@@ -40,19 +45,25 @@ class UpstoxPersistedReceiptsControllerTest {
         assertThat(response.getBody().modelTrainingRightsVerified()).isFalse();
         assertThat(response.getBody().paperTradingEnabled()).isFalse();
         assertThat(response.getBody().receipts().jobs()).isNull();
+        assertThat(response.getBody().jobPlan().evidenceState())
+                .isEqualTo("NO_PROVIDER_RECEIPT");
+        assertThat(response.getBody().jobPlan().retentionEligiblePercent()).isNull();
         verify(receipts).snapshot(NOW);
+        verify(audit).snapshot(NOW);
     }
 
     @Test
     void missingOwnerOrOtherUserMustNotQueryDatabase() {
         var receipts = mock(UpstoxPersistedIngestionReceipts.class);
+        var audit = mock(UpstoxHistoricalJobPlanAudit.class);
         var clock = Clock.fixed(NOW, ZoneOffset.UTC);
-        var controller = new UpstoxPersistedReceiptsController(receipts, clock, "owner-sub");
+        var controller = new UpstoxPersistedReceiptsController(receipts, audit,
+                clock, "owner-sub");
         assertThatThrownBy(() -> controller.read(jwt("other")))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
-        var unconfigured = new UpstoxPersistedReceiptsController(receipts, clock, "");
+        var unconfigured = new UpstoxPersistedReceiptsController(receipts, audit, clock, "");
         assertThatThrownBy(() -> unconfigured.read(jwt("owner-sub")))
                 .isInstanceOf(ResponseStatusException.class).hasMessageContaining("403");
-        verifyNoInteractions(receipts);
+        verifyNoInteractions(receipts, audit);
     }
 }

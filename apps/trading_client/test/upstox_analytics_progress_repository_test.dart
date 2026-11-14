@@ -121,4 +121,56 @@ void main() {
         throwsFormatException);
   });
 
+
+  test('reads genuine finite current-job denominator without changing acceptance', () {
+    final valid = persisted();
+    valid['jobPlan'] = <String, dynamic>{
+      'evidenceState': 'VALID_CURRENT_JOB_PLANS',
+      'selectedJobs': 2,
+      'plannedChunks': 8,
+      'receiptVerifiedChunks': 5,
+      'retentionEligibleChunks': 3,
+      'retentionEligiblePercent': 37.5,
+      'denominatorScope':
+          'CURRENT_UPSTOX_BACKFILL_JOB_CHUNKS_NOT_FULL_MARKET_UNIVERSE',
+    };
+    final rows = UpstoxPersistedReceipts.fromJson(valid);
+    expect(rows.jobPlan?.evidenceState, 'VALID_CURRENT_JOB_PLANS');
+    expect(rows.jobPlan?.retentionEligiblePercent, 37.5);
+    expect(rows.jobPlan?.selectedJobs, 2);
+    expect(rows.attestedRetentionChunks, 1);
+    expect(UpstoxAnalyticsProgress.fromJson(fixture())
+        .find('HISTORICAL_INGESTION')?.state, 'NOT_STARTED');
+  });
+
+  test('rejects inconsistent or unscoped job-plan percentages', () {
+    final valid = persisted();
+    final plan = <String, dynamic>{
+      'evidenceState': 'VALID_CURRENT_JOB_PLANS',
+      'selectedJobs': 1,
+      'plannedChunks': 3,
+      'receiptVerifiedChunks': 2,
+      'retentionEligibleChunks': 1,
+      'retentionEligiblePercent': 33.3,
+      'denominatorScope':
+          'CURRENT_UPSTOX_BACKFILL_JOB_CHUNKS_NOT_FULL_MARKET_UNIVERSE',
+    };
+    valid['jobPlan'] = plan;
+    expect(UpstoxPersistedReceipts.fromJson(valid)
+        .jobPlan?.retentionEligiblePercent, 33.3);
+    plan['retentionEligiblePercent'] = 100.0;
+    expect(() => UpstoxPersistedReceipts.fromJson(valid),
+        throwsFormatException);
+    plan['retentionEligiblePercent'] = 33.3;
+    plan['evidenceState'] = 'UNVERIFIED_OR_OVERLAPPING_PLAN';
+    expect(() => UpstoxPersistedReceipts.fromJson(valid),
+        throwsFormatException);
+    plan['retentionEligiblePercent'] = null;
+    final unsafe = UpstoxPersistedReceipts.fromJson(valid);
+    expect(unsafe.jobPlan?.retentionEligiblePercent, isNull);
+    plan['denominatorScope'] = 'FULL_NSE_UNIVERSE';
+    expect(() => UpstoxPersistedReceipts.fromJson(valid),
+        throwsFormatException);
+  });
+
 }

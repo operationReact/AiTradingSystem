@@ -185,6 +185,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         }.contains(report.lastRunChange)).length;
     final pr = UpstoxReportedPrPipeline.fromReports(reports);
     final stored = data.persistedReceipts;
+    final plan = stored?.jobPlan;
     final hasDb = stored?.evidenceState == 'PERSISTED_CHECKPOINTS_ONLY';
     final archived = hasDb ? stored!.archivedVerifiedChunks?.toString() ?? '—' : '—';
     final attested = hasDb ? stored!.attestedRetentionChunks?.toString() ?? '—' : '—';
@@ -224,6 +225,16 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       const SizedBox(height: 6),
       Text(dbState, key: const ValueKey('upstox-first-screen-stored-evidence'),
         style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
+      const SizedBox(height: 3),
+      Text(plan?.evidenceState == 'VALID_CURRENT_JOB_PLANS'
+          ? 'Current job plan: ${plan!.retentionEligibleChunks}/'
+              '${plan.plannedChunks} rights-eligible verified partitions'
+              ' · ${plan.retentionEligiblePercent!.toStringAsFixed(1)}%'
+          : 'Current job-plan percentage: unknown'
+              ' (no complete, non-overlapping registered target)',
+        key: const ValueKey('upstox-current-job-plan-summary'),
+        style: const TextStyle(fontSize: 10,
+          color: MintTickPalette.mutedSilver)),
       const SizedBox(height: 4),
       const Text('*Latest reported PR stages only; may reset. Not cumulative '
         'product completion. Data acceptance below requires independently '
@@ -237,6 +248,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final receipt = data.persistedReceipts;
     final absent = receipt == null;
     final registered = receipt?.evidenceState == 'PERSISTED_CHECKPOINTS_ONLY';
+    final jobPlan = receipt?.jobPlan;
     String fmt(int? value) => value == null ? '—' : '$value';
     return panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
@@ -278,9 +290,20 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           style: const TextStyle(fontSize: 10,
             color: MintTickPalette.mutedSilver)),
       ],
-      const SizedBox(height: 5),
-      const Text('Observed database evidence only · no fixed coverage target, '
-          'model-training permission or PAPER readiness implied.',
+      const SizedBox(height: 7),
+      Text(jobPlan?.evidenceState == 'VALID_CURRENT_JOB_PLANS'
+          ? 'CURRENT JOB PLAN: ${fmt(jobPlan?.retentionEligibleChunks)} / '
+              '${fmt(jobPlan?.plannedChunks)} rights-eligible verified'
+              ' · ${jobPlan!.retentionEligiblePercent!.toStringAsFixed(1)}%'
+          : 'CURRENT JOB PLAN: unknown'
+              ' · ${jobPlan?.evidenceState ?? 'NOT_OBSERVED'}',
+        key: const ValueKey('upstox-current-job-plan-coverage'),
+        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 3),
+      const Text('Denominator is only the complete, non-overlapping current '
+          'UPSTOX backfill-job chunks, not NIFTY 500/NSE coverage. '
+          'Archived receipts are not verified object readbacks; '
+          'RAW_RETENTION rights do not grant model use or PAPER readiness.',
         style: TextStyle(fontSize: 10,
           color: MintTickPalette.mutedSilver, height: 1.35)),
     ]), padding: const EdgeInsets.all(11));

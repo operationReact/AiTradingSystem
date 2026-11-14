@@ -387,4 +387,58 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('audited job-plan percentage never replaces 5% verified acceptance',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final base = _snapshot();
+    final stored = UpstoxPersistedReceipts.fromJson({
+      'contractVersion': 'minttick.upstox.persisted-receipts.v1',
+      'generatedAt': '2026-11-14T09:00:00Z',
+      'provider': 'UPSTOX',
+      'modelTrainingRightsVerified': false,
+      'paperTradingEnabled': false,
+      'receipts': {
+        'evidenceState': 'PERSISTED_CHECKPOINTS_ONLY',
+        'jobs': 1, 'chunks': 2, 'attempts': 1,
+        'archivedVerifiedChunks': 1, 'attestedRetentionChunks': 1,
+        'archivedVerifiedRecords': 1, 'attestedRetentionRecords': 1,
+        'failedChunks': 0, 'retryChunks': 0,
+        'lastCheckpointAt': '2026-11-14T08:45:00Z',
+        'cooldownUntil': null,
+      },
+      'jobPlan': {
+        'evidenceState': 'VALID_CURRENT_JOB_PLANS',
+        'selectedJobs': 1, 'plannedChunks': 2,
+        'receiptVerifiedChunks': 1, 'retentionEligibleChunks': 1,
+        'retentionEligiblePercent': 50.0,
+        'denominatorScope':
+          'CURRENT_UPSTOX_BACKFILL_JOB_CHUNKS_NOT_FULL_MARKET_UNIVERSE',
+      },
+    });
+    await tester.pumpWidget(MaterialApp(home: UpstoxAnalyticsProgressPage(
+      repository: _FixedProgressRepository(UpstoxAnalyticsProgress(
+        generatedAt: base.generatedAt, contractVersion: base.contractVersion,
+        tasks: base.tasks, persistedReceipts: stored,
+      )),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.text('5%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-current-job-plan-summary')),
+        findsOneWidget);
+    expect(find.textContaining('Current job plan: 1/2'), findsOneWidget);
+    await tester.tap(find.text('Coverage'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('upstox-current-job-plan-coverage')),
+      180, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('CURRENT JOB PLAN: 1 / 2'), findsOneWidget);
+    expect(find.textContaining('not NIFTY 500/NSE coverage'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }
