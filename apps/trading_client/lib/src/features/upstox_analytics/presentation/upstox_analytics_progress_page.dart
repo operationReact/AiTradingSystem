@@ -37,6 +37,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
   String? error;
   bool loading = true;
   int generation = 0;
+  double? changeSinceRefresh;
 
   @override
   void initState() {
@@ -60,7 +61,15 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     try {
       final data = await widget.repository.load();
       if (!mounted || request != generation) return;
-      setState(() { snapshot = data; error = null; });
+      final previous = snapshot == null ? null
+          : UpstoxReadinessProgress.calculate(snapshot!).percent;
+      final current = UpstoxReadinessProgress.calculate(data).percent;
+      setState(() {
+        changeSinceRefresh = previous == null || current == null
+            ? null : (current - previous).toDouble();
+        snapshot = data;
+        error = null;
+      });
     } on ApiHttpFailure catch (ex) {
       if (!mounted || request != generation) return;
       setState(() {
@@ -274,6 +283,13 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         Text('${score.verifiedStages} of ${score.gates.length} milestones verified · '
           '${score.outstandingStages} not fully verified',
           style: const TextStyle(color: MintTickPalette.mutedSilver, fontSize: 10)),
+        if (changeSinceRefresh != null)
+          Text('Since previous refresh: '
+            '${changeSinceRefresh! > 0 ? '+' : ''}${changeSinceRefresh!.toStringAsFixed(1)} pp',
+            key: const ValueKey('upstox-acceptance-refresh-delta'),
+            style: TextStyle(fontSize: 10,
+              color: changeSinceRefresh! > 0
+                ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
         Row(children: [
           const Expanded(child: Text('Verified + receipt-backed partial · no PR credit',
               maxLines: 2, style: TextStyle(color: MintTickPalette.mutedSilver,
