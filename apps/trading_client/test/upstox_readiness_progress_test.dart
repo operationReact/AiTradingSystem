@@ -20,7 +20,7 @@ UpstoxAnalyticsTask task(String code, String state, {bool stale = false}) =>
 
 void main() {
   test('weights sum to 100 and are versioned', () {
-    expect(UpstoxReadinessProgress.formulaVersion, 'upstox.analytics.acceptance.v1');
+    expect(UpstoxReadinessProgress.formulaVersion, 'upstox.analytics.acceptance.v2');
     expect(UpstoxReadinessProgress.weights.values.reduce((a, b) => a + b), 100);
   });
 
@@ -86,4 +86,58 @@ void main() {
     expect(progress.outstandingStages, 0);
     expect(progress.gates.map((e) => e.earned).reduce((a, b) => a + b), 100);
   });
+
+  test('partial progress requires a known receipt proof and target', () {
+    final progress = UpstoxReadinessProgress.calculate(snapshot([
+      task('SOURCE_VERIFICATION', 'VERIFIED'),
+      const UpstoxAnalyticsTask(
+        code: 'HISTORICAL_INGESTION', state: 'PARTIAL',
+        reasonCode: null, stale: false, checked: 60, verified: 40,
+        details: {'progressProof': 'PERSISTED_CANDLE_CHECKPOINTS_V1',
+          'targetUnits': 100},
+      ),
+    ]));
+    expect(progress.percent, 13);
+    expect(progress.remainingPercent, 87);
+    expect(progress.verifiedStages, 1);
+    expect(progress.gates[2].earned, 8);
+  });
+
+  test('partial precision supports tenths without awarding an entire gate', () {
+    final progress = UpstoxReadinessProgress.calculate(snapshot([
+      const UpstoxAnalyticsTask(
+        code: 'INSTRUMENT_MAPPING', state: 'PARTIAL',
+        reasonCode: null, stale: false, checked: 8, verified: 1,
+        details: {'progressProof': 'PERSISTED_INSTRUMENT_MAP_V1',
+          'targetUnits': 100},
+      ),
+    ]));
+    expect(progress.percent, 0.1);
+    expect(progress.verifiedStages, 0);
+    expect(progress.outstandingStages, 7);
+  });
+
+  test('missing proof, stale, or rights-only partial never earn', () {
+    final progress = UpstoxReadinessProgress.calculate(snapshot([
+      const UpstoxAnalyticsTask(
+        code: 'HISTORICAL_INGESTION', state: 'PARTIAL',
+        reasonCode: null, stale: false, checked: 10, verified: 10,
+        details: {'targetUnits': 10},
+      ),
+      const UpstoxAnalyticsTask(
+        code: 'FUNDAMENTALS', state: 'PARTIAL',
+        reasonCode: null, stale: true, checked: 10, verified: 10,
+        details: {'progressProof': 'PERSISTED_FUNDAMENTAL_RECEIPTS_V1',
+          'targetUnits': 10},
+      ),
+      const UpstoxAnalyticsTask(
+        code: 'QUALITY_RIGHTS', state: 'PARTIAL',
+        reasonCode: null, stale: false, checked: 10, verified: 10,
+        details: {'progressProof': 'PERSISTED_QUALITY_RIGHTS_V1',
+          'targetUnits': 10},
+      ),
+    ]));
+    expect(progress.percent, 0);
+  });
+
 }
