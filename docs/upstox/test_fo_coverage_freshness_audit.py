@@ -1,7 +1,7 @@
 """Offline regression tests for the read-only F&O receipt assessor."""
 import unittest
 from datetime import datetime, timezone, timedelta
-from fo_coverage_freshness_audit import assess
+from fo_coverage_freshness_audit import assess, assess_cli
 
 
 NOW = datetime(2026, 11, 16, 5, 0, tzinfo=timezone.utc)
@@ -80,6 +80,14 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(result["reason"], "DUPLICATE_CONTRACT_RECEIPT")
         self.assertIsNone(result["verifiedContracts"])
         self.assertFalse(result["tradeTimeReady"])
+
+    def test_cli_rejects_self_asserted_observation_and_stale_receipt(self):
+        data = receipt(observedAt=NOW.isoformat())
+        self.assertEqual(assess_cli(data, NOW)["reason"], "OBSERVATION_UNVERIFIED")
+        data["observationVerified"] = True
+        self.assertEqual(assess_cli(data, NOW + timedelta(seconds=16))["status"], "STALE")
+        self.assertEqual(assess_cli(data, NOW - timedelta(seconds=1))["status"], "STALE")
+        self.assertEqual(assess_cli(data, NOW)["status"], "FRESH")
 
     def test_unverified_exchange_time(self):
         data = receipt()
