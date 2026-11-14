@@ -32,8 +32,11 @@ CustomerFnoMarket market({String status = 'FRESH_QUOTES', bool fresh = true}) =>
     });
 
 class _FakeRepo implements CustomerPaperFnoRepository {
-  _FakeRepo({this.marketResult, this.failure, this.submitFailure});
+  _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure});
   final CustomerFnoMarket? marketResult;
+  /// Successive responses for refresh tests; the last one repeats.
+  final List<CustomerFnoMarket>? markets;
+  int _marketCalls = 0;
   final ApiFailure? failure;
   final ApiFailure? submitFailure;
   final submits = <Map<String, Object?>>[];
@@ -44,6 +47,11 @@ class _FakeRepo implements CustomerPaperFnoRepository {
   @override
   Future<CustomerFnoMarket> market(String roomId, DateTime expiry) async {
     if (failure != null) throw failure!;
+    if (markets != null) {
+      final i = _marketCalls < markets!.length ? _marketCalls : markets!.length - 1;
+      _marketCalls++;
+      return markets![i];
+    }
     return marketResult!;
   }
 
@@ -177,5 +185,43 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('paper-fno-submit')));
     await tester.pumpAndSettle();
     expect(find.textContaining('Nothing was filled'), findsOneWidget);
+  });
+
+  testWidgets('a refresh that makes the selected CE stale disables BUY even though a PE is fresh', (tester) async {
+    CustomerFnoMarket twoLegs({required bool ceFresh}) => CustomerFnoMarket.decode({
+          'underlyingKey': 'NSE_INDEX|Nifty 50',
+          'expiry': '2026-11-20',
+          'status': 'FRESH_QUOTES',
+          'snapshotAt': '2026-11-16T04:30:00Z',
+          'displayRightsVerified': true,
+          'liveOrderEnabled': false,
+          'strikes': [
+            {
+              'strikePrice': 24000,
+              'call': leg(fresh: ceFresh),
+              'put': {...leg(fresh: true, side: 'PE'),
+                'instrumentKey': 'NSE_FO|NIFTY24PE', 'tradingSymbol': 'NIFTY 24000 PE'},
+            },
+          ],
+        });
+    final repo = _FakeRepo(markets: [twoLegs(ceFresh: true), twoLegs(ceFresh: false)]);
+    await pump(tester, repo);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNotNull);
+
+    // Refresh through the same Load control; the CE is now stale.
+    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-load')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-price')), findsNothing);
+
+    // Re-selecting the stale CE must not re-enable BUY.
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+      isNull);
+    expect(repo.submits, isEmpty);
   });
 }

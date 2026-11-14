@@ -94,6 +94,10 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       setState(() {
         _market = results[0] as CustomerFnoMarket;
         _positions = results[1] as List<CustomerFnoPosition>;
+        // A refresh replaces every leg. Clear the old selection and price so an
+        // earlier quote can never gate a new order; the user re-selects a leg.
+        _selected = null;
+        _price.text = '';
         _loading = false;
       });
     } catch (error) {
@@ -101,6 +105,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       setState(() {
         _market = null;
         _positions = const [];
+        _selected = null;
+        _price.text = '';
         _blocker = _describe(error);
         _loading = false;
       });
