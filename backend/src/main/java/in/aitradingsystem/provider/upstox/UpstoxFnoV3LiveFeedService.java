@@ -147,6 +147,11 @@ public class UpstoxFnoV3LiveFeedService {
     private synchronized void scheduleReconnect(long attempt) {
         if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) return;
         retryScheduled = true;
+        // A new connection must NEVER inherit the old socket's price evidence,
+        // even if the old exchange tick would still fall within the 15s window.
+        latest.clear();
+        lastTradeAt = null;
+        lastFrameAt = null;
         // Ensure the previous WebSocket cannot survive a reconnect and consume
         // another of the provider's tightly limited concurrent connections.
         WebSocket previous = socket;
@@ -176,6 +181,9 @@ public class UpstoxFnoV3LiveFeedService {
         retryScheduled = false;
         state = "STOPPED";
         subscribed = Set.of();
+        latest.clear();
+        lastTradeAt = null;
+        lastFrameAt = null;
         WebSocket ws = socket;
         socket = null;
         if (ws != null) ws.sendClose(WebSocket.NORMAL_CLOSURE, "operator stop");
@@ -285,11 +293,17 @@ public class UpstoxFnoV3LiveFeedService {
 
         @Override
         public CompletionStage<?> onBinary(WebSocket ws, ByteBuffer message, boolean last) {
-            if (attempt != connectionAttemptId || !wanted || destroyed) {
-                ws.request(1);
-                return CompletableFuture.completedFuture(null);
-            }
-            try {
+            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                // Serialize observations with stop/reconnect. Late frames from the
+                // prior socket must not restore eligibility or mark us CONNECTED.
+                if (attempt != connectionAttemptId || !wanted || destroyed
+                        || retryScheduled || socket != ws
+                        || (!"CONNECTED_AWAITING_TICKS".equals(state)
+                            && !"CONNECTED".equals(state))) {
+                    ws.request(1);
+                    return CompletableFuture.completedFuture(null);
+                }
+                try {
                 if (message.remaining() > MAX_FRAGMENT_BYTES - fragments.size()) {
                     fragments.reset();
                     discardedFrames++;
@@ -310,6 +324,7 @@ public class UpstoxFnoV3LiveFeedService {
                 discardedFrames++;
                 ws.abort();
                 scheduleReconnect(attempt);
+                }
             }
             ws.request(1);
             return CompletableFuture.completedFuture(null);
@@ -343,6 +358,10 @@ public class UpstoxFnoV3LiveFeedService {
             ++connectionAttemptId;
             retryScheduled = false;
             state = "STOPPED";
+            subscribed = Set.of();
+            latest.clear();
+            lastTradeAt = null;
+            lastFrameAt = null;
             WebSocket ws = socket;
             socket = null;
             if (ws != null) ws.abort();
