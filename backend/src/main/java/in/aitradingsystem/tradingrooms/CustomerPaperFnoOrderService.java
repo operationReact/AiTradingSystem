@@ -41,7 +41,7 @@ public class CustomerPaperFnoOrderService {
     public CustomerPaperFnoOrderService(JdbcClient jdbc,
             UpstoxAnalyticsSource source, UpstoxFnoV3LiveFeedService live,
             MarketSessionCalendar calendar,
-            @Value("\${minttick.upstox-fno.paper-usage-rights-verified:false}") boolean rightsVerified) {
+            @Value("${minttick.upstox-fno.paper-usage-rights-verified:false}") boolean rightsVerified) {
         this(jdbc, source, live, calendar, Clock.systemUTC(), rightsVerified);
     }
 
