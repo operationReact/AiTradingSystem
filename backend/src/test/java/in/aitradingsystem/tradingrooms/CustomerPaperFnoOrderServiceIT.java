@@ -260,4 +260,84 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
     }
 
+    @Test
+    void boundedPaperReconciliationProvesOneLotBuyCloseWithoutMarketOrWalletSideEffects() {
+        UUID owner=customer(), stranger=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        var audit=new CustomerPaperFnoReconciliationService(jdbc);
+        var empty=audit.inspect(owner,paper);
+        assertThat(empty.status()).isEqualTo("NO_FILLS");
+        assertThat(empty.recordedFills()).isZero();
+        assertThat(empty.walletReconciled()).isFalse();
+        assertThat(empty.marketDataVerified()).isFalse();
+        assertThat(empty.providerRightsVerified()).isFalse();
+        assertThat(empty.tradingApproved()).isFalse();
+
+        prepareMarket("99.00","100.00");
+        var orderService=engine(true);
+        tx(()->orderService.submit(owner,paper,"audit_buy_00001",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101.00")));
+        clearInvocations(source,live);
+        var held=audit.inspect(owner,paper);
+        assertThat(held.status()).isEqualTo("BOOKKEEPING_MATCHED");
+        assertThat(held.recordedFills()).isEqualTo(1);
+        assertThat(held.buyFills()).isEqualTo(1);
+        assertThat(held.sellFills()).isZero();
+        assertThat(held.openContracts()).isEqualTo(1);
+        assertThat(held.completedRoundTrips()).isZero();
+        assertThat(held.blockerCodes()).isEmpty();
+        verifyNoInteractions(source,live);
+
+        prepareMarket("110.00","111.00");
+        tx(()->orderService.submit(owner,paper,"audit_sell_0001",CONTRACT,
+                EXPIRY,"SELL",1,new BigDecimal("109.00")));
+        clearInvocations(source,live);
+        var closed=audit.inspect(owner,paper);
+        assertThat(closed.status()).isEqualTo("BOOKKEEPING_MATCHED");
+        assertThat(closed.recordedFills()).isEqualTo(2);
+        assertThat(closed.buyFills()).isEqualTo(1);
+        assertThat(closed.sellFills()).isEqualTo(1);
+        assertThat(closed.completedRoundTrips()).isEqualTo(1);
+        assertThat(closed.openContracts()).isZero();
+        assertThat(closed.computedRealizedPnlPaise()).isEqualTo(64_317L);
+        assertThat(closed.recordedRealizedPnlPaise()).isEqualTo(64_317L);
+        assertThat(closed.blockerCodes()).isEmpty();
+        assertThat(closed.walletReconciled()).isFalse();
+        assertThat(closed.tradingApproved()).isFalse();
+        verifyNoInteractions(source,live);
+        assertThatThrownBy(()->audit.inspect(stranger,paper))
+                .isInstanceOf(ResponseStatusException.class)
+                .satisfies(ex->assertThat(((ResponseStatusException)ex).getStatusCode())
+                        .isEqualTo(HttpStatus.NOT_FOUND));
+    }
+
+    @Test
+    void paperReconciliationDetectsLedgerTamperAndNeverGivesFalseMatchedReceipt() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var orderService=engine(true);
+        tx(()->orderService.submit(owner,paper,"audit_tamper_buy",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101.00")));
+
+        var audit=new CustomerPaperFnoReconciliationService(jdbc);
+        assertThat(audit.inspect(owner,paper).status()).isEqualTo("BOOKKEEPING_MATCHED");
+        // Simulate a corrupted/cross-system position snapshot, not an application write.
+        jdbc.sql("""
+            UPDATE customer_paper_fno_position
+            SET cost_basis_paise=cost_basis_paise+100
+            WHERE room_id=:room AND user_id=:owner AND instrument_key=:key
+            """).param("room",paper).param("owner",owner).param("key",CONTRACT).update();
+        clearInvocations(source,live);
+        var damaged=audit.inspect(owner,paper);
+        assertThat(damaged.status()).isEqualTo("INCONSISTENT");
+        assertThat(damaged.blockerCodes()).contains("POSITION_BASIS_OR_QUANTITY_MISMATCH");
+        assertThat(damaged.tradingApproved()).isFalse();
+        verifyNoInteractions(source,live);
+    }
+
 }

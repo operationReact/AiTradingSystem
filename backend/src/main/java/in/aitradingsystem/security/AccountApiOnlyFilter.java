@@ -79,7 +79,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     /** Explicit customer PAPER-only long-option route. Never LIVE or admin. */
     private static final java.util.regex.Pattern PAPER_FNO_RESOURCE =
         java.util.regex.Pattern.compile(
-            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions|market|expiries)$");
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions|market|expiries|reconciliation)$");
 
     private static final java.util.regex.Pattern CUSTOMER_EXECUTION_RESOURCE =
         java.util.regex.Pattern.compile(
@@ -164,7 +164,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                         && ("GET".equals(method) || "POST".equals(method)))
                     || (path.endsWith("/positions") && "GET".equals(method))
                     || (path.endsWith("/market") && "GET".equals(method))
-                    || (path.endsWith("/expiries") && "GET".equals(method))))
+                    || (path.endsWith("/expiries") && "GET".equals(method))
+                    || (path.endsWith("/reconciliation") && "GET".equals(method))))
             || (CUSTOMER_EXECUTION_RESOURCE.matcher(path).matches()
                 && ("OPTIONS".equals(method)
                     || (path.endsWith("/execution/readiness") && "GET".equals(method))
