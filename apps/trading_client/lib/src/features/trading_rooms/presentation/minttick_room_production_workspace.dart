@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../brand/minttick_brand.dart';
 import '../../../data/instrument_repository.dart';
 import '../data/customer_execution_repository.dart';
+import '../data/customer_paper_fno_repository.dart';
 import '../data/customer_market_repository.dart';
 import '../data/customer_paper_trading_repository.dart';
 import '../data/customer_portfolio_models.dart';
@@ -10,6 +11,7 @@ import '../data/customer_room_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
 import '../domain/trading_room_draft.dart';
 import 'minttick_customer_widgets.dart';
+import 'minttick_paper_fno_panel.dart';
 import 'minttick_room_candlestick_desk.dart';
 import 'minttick_room_order_sheet.dart';
 
@@ -29,6 +31,7 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
     this.events = const [],
     this.market,
     this.paper,
+    this.fno,
     this.execution,
     this.intents,
     this.onBrokers,
@@ -43,6 +46,8 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
   final List<CustomerPaperCashEvent> events;
   final HttpCustomerMarketRepository? market;
   final HttpCustomerPaperTradingRepository? paper;
+  /// PAPER-only NIFTY options. Null hides the F&O section.
+  final CustomerPaperFnoRepository? fno;
   final HttpCustomerExecutionRepository? execution;
   final HttpCustomerTradeIntentRepository? intents;
   final VoidCallback onBack;
@@ -486,6 +491,15 @@ class _MintTickRoomProductionWorkspaceState
       _PageTitle(live ? 'Live positions' : 'Paper portfolio',
         trailing: live ? '—' : '${rows.length} holdings',
         onRefresh: _loadHistory),
+      if (!live && widget.room.mode == 'PAPER' && widget.fno != null) ...[
+        MintTickPaperFnoPanel(
+          key: ValueKey('paper-fno-${widget.room.id}'),
+          roomId: widget.room.id,
+          repository: widget.fno!,
+          onFilled: _loadHistory,
+        ),
+        const SizedBox(height: 10),
+      ],
       if (!live) Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 10),
         decoration: BoxDecoration(
