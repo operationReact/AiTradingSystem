@@ -333,6 +333,37 @@ public final class UpstoxAnalyticsSource {
         return number;
     }
 
+
+    /**
+     * Read-only V3 websocket authorization via existing SSM Analytics Token.
+     * The returned URL carries a one-use credential: never log, cache or expose it.
+     * Restricted to Upstox's TLS websocket host/path to prevent SSRF.
+     */
+    java.net.URI authorizeFnoMarketFeedV3() {
+        JsonNode value = get("/v3/feed/market-data-feed/authorize")
+                .path("data").path("authorized_redirect_uri");
+        if (!value.isTextual() || value.asText().length() > 4096) {
+            throw unavailable("UPSTOX_FNO_WS_AUTH_UNAVAILABLE");
+        }
+        try {
+            java.net.URI uri = java.net.URI.create(value.asText());
+            String host = uri.getHost();
+            if (!"wss".equalsIgnoreCase(uri.getScheme())
+                    || host == null
+                    || !host.toLowerCase(java.util.Locale.ROOT).endsWith(".upstox.com")
+                    || uri.getUserInfo() != null || uri.getFragment() != null
+                    || (uri.getPort() != -1 && uri.getPort() != 443)
+                    || uri.getRawQuery() == null || uri.getRawQuery().isBlank()
+                    || uri.getPath() == null || !uri.getPath().startsWith("/market-data-feeder/v3/")) {
+                throw new IllegalArgumentException();
+            }
+            return uri;
+        } catch (RuntimeException ignored) {
+            // URL query contains one-use credentials; never include it in exceptions.
+            throw unavailable("UPSTOX_FNO_WS_AUTH_UNAVAILABLE");
+        }
+    }
+
     private JsonNode get(String path, Object... pathVariables) {
         String token = token();
         try {
