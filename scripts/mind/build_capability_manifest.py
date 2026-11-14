@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.15"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.16"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -259,10 +259,10 @@ SCREEN_AUDIT: dict[str, dict] = {
     },
     "decision-lab": {
         "status": "IMPLEMENTING",
-        "blockerCode": "ONE_STRATEGY_REPLAY_ONLY",
-        "note": "Shows the server replay of the latest completed research scan (research only, no order authority). The local what-if simulator is labelled as local arithmetic. Only one deterministic strategy is covered.",
-        "endpoints": ["/api/customer/mind/v1/strategy-replay"],
-        "missing": ["Per-decision history and dataset version beyond the scan fingerprint", "Other strategies and models", "Flutter web/Android/iOS runtime evidence"],
+        "blockerCode": "ABSTENTIONS_NOT_PERSISTED",
+        "note": "Shows the server replay of the latest completed research scan and a searchable history of persisted research candidates from succeeded runs. Research only, no order authority. The local what-if simulator is labelled as local arithmetic. Abstentions are not persisted per decision.",
+        "endpoints": ["/api/customer/mind/v1/strategy-replay", "/api/customer/mind/v1/decision-history"],
+        "missing": ["Abstentions and no-signal outcomes per decision", "Other strategies' replay and model evaluations", "Flutter web/Android/iOS runtime evidence"],
     },
     "experiment-detail": {
         "status": "IMPLEMENTING",
