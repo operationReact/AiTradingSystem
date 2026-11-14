@@ -1,0 +1,78 @@
+name: MintTick PAPER - private read-only Upstox persisted checkpoint audit
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-persisted-audit.json'
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-upstox-persisted-audit.yml'
+      - 'infra/ec2-paper/upstox_persisted_count_audit.py'
+      - 'scripts/tests/test_upstox_persisted_count_audit.py'
+
+permissions:
+  contents: read
+  id-token: write
+
+# Same serialized existing EC2 role as deployments and market-data probes.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  audit:
+    if: github.repository == 'operationReact/AiTradingSystem'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Run read-only audit parser and identity/security regression tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/upstox_persisted_count_audit.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_upstox_persisted_count_audit.py -v
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            test "${GITHUB_REF}" = "refs/heads/dev"
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+              "infra/ec2-paper/requests/upstox-persisted-audit.json"
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "infra/ec2-paper")
+          from upstox_persisted_count_audit import expected_request
+          file = Path("infra/ec2-paper/requests/upstox-persisted-audit.json")
+          assert file.is_file() and not file.is_symlink() and file.stat().st_size < 2048
+          assert json.loads(file.read_text()) == expected_request()
+          PY
+          fi
+
+      - name: Assume existing exact-account, single-instance SSM role
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-upstox-private-counts
+          role-duration-seconds: 900
+
+      - name: Audit only existing Upstox source metadata on approved PAPER host
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/upstox_persisted_count_audit.py runner
+
+# Deliberately no public data, API credential output, candle/OI or quote values,
+# provider API call, AWS resource mutation, entitlement grant or trading action.
