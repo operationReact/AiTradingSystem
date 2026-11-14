@@ -65,4 +65,60 @@ void main() {
     tasks.add(Map<String, dynamic>.from(tasks[0] as Map));
     expect(() => UpstoxAnalyticsProgress.fromJson(invalid), throwsFormatException);
   });
+
+  Map<String, dynamic> persisted() => {
+    'contractVersion': 'minttick.upstox.persisted-receipts.v1',
+    'generatedAt': '2026-11-14T09:00:00Z',
+    'provider': 'UPSTOX',
+    'modelTrainingRightsVerified': false,
+    'paperTradingEnabled': false,
+    'receipts': <String, dynamic>{
+      'evidenceState': 'PERSISTED_CHECKPOINTS_ONLY',
+      'jobs': 2, 'chunks': 5, 'attempts': 8,
+      'archivedVerifiedChunks': 3, 'attestedRetentionChunks': 1,
+      'archivedVerifiedRecords': 200, 'attestedRetentionRecords': 75,
+      'failedChunks': 1, 'retryChunks': 1,
+      'lastCheckpointAt': '2026-11-14T08:00:00Z',
+      'cooldownUntil': null,
+    },
+  };
+
+  test('reads independent database receipts without manufacturing readiness', () {
+    final receipt = UpstoxPersistedReceipts.fromJson(persisted());
+    expect(receipt.jobs, 2);
+    expect(receipt.archivedVerifiedChunks, 3);
+    expect(receipt.attestedRetentionChunks, 1);
+    expect(receipt.attestedRetentionRecords, 75);
+    expect(receipt.lastCheckpointAt, DateTime.utc(2026, 11, 14, 8));
+    final noProvider = persisted();
+    (noProvider['receipts'] as Map<String, dynamic>)['evidenceState'] =
+        'NO_PROVIDER_RECEIPT';
+    for (final key in <String>[
+      'jobs','chunks','attempts','archivedVerifiedChunks',
+      'attestedRetentionChunks','archivedVerifiedRecords',
+      'attestedRetentionRecords','failedChunks','retryChunks',
+    ]) {
+      (noProvider['receipts'] as Map<String, dynamic>)[key] = null;
+    }
+    final unknown = UpstoxPersistedReceipts.fromJson(noProvider);
+    expect(unknown.jobs, isNull);
+  });
+
+  test('rejects forged rights, impossible counts and provider mismatch', () {
+    final malformed = persisted();
+    malformed['modelTrainingRightsVerified'] = true;
+    expect(() => UpstoxPersistedReceipts.fromJson(malformed),
+        throwsFormatException);
+    malformed['modelTrainingRightsVerified'] = false;
+    (malformed['receipts'] as Map<String, dynamic>)
+        ['attestedRetentionChunks'] = 5;
+    expect(() => UpstoxPersistedReceipts.fromJson(malformed),
+        throwsFormatException);
+    (malformed['receipts'] as Map<String, dynamic>)
+        ['attestedRetentionChunks'] = 1;
+    malformed['provider'] = 'ANGEL_ONE';
+    expect(() => UpstoxPersistedReceipts.fromJson(malformed),
+        throwsFormatException);
+  });
+
 }

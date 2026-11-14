@@ -152,12 +152,14 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               children: [
                 if (activeTab == 'Overview') ...overview(data),
                 if (activeTab == 'Coverage') ...acceptanceProgress(data),
-                if (activeTab == 'Coverage') ...history(data), 
+                if (activeTab == 'Coverage') ...history(data),
+                if (activeTab == 'Coverage') persistedReceiptPanel(data),
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
                 if (activeTab == 'Operations') workerActivitySummary(data),
                 if (activeTab == 'Operations') ...acceptanceProgress(data),
                 if (activeTab == 'Operations') ...workerDelivery(data),
+                if (activeTab == 'Operations') persistedReceiptPanel(data),
                 if (activeTab == 'Operations') ...taskList(data, specs.take(4)),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
@@ -166,6 +168,59 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           )),
       ])),
     );
+  }
+
+  Widget persistedReceiptPanel(UpstoxAnalyticsProgress data) {
+    final receipt = data.persistedReceipts;
+    final absent = receipt == null;
+    final registered = receipt?.evidenceState == 'PERSISTED_CHECKPOINTS_ONLY';
+    String fmt(int? value) => value == null ? '—' : '$value';
+    return panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Expanded(child: Text('Stored Upstox checkpoints',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+        Text(absent ? 'UNOBSERVED'
+             : registered ? 'DB OBSERVED' : 'NO PROVIDER',
+          key: const ValueKey('upstox-storage-evidence-status'),
+          style: const TextStyle(fontSize: 9,
+            color: MintTickPalette.mutedSilver)),
+      ]),
+      const SizedBox(height: 5),
+      if (absent)
+        const Text('Persisted receipt endpoint has not been observed. '
+          'This is unknown, not zero completed historical coverage.',
+          style: TextStyle(fontSize: 10,
+            color: MintTickPalette.mutedSilver))
+      else if (!registered)
+        const Text('No registered UPSTOX golden-source provider. '
+          'Source API samples are not stored historical ingestion.',
+          style: TextStyle(fontSize: 10,
+            color: MintTickPalette.mutedSilver))
+      else ...[
+        Text('Jobs ${fmt(receipt.jobs)} · Chunks ${fmt(receipt.chunks)}'
+            ' · Attempts ${fmt(receipt.attempts)}',
+          key: const ValueKey('upstox-stored-job-counts'),
+          style: const TextStyle(fontSize: 11)),
+        Text('Archived verified chunks ${fmt(receipt.archivedVerifiedChunks)}'
+            ' · RAW_RETENTION attested ${fmt(receipt.attestedRetentionChunks)}',
+          style: const TextStyle(fontSize: 10,
+            color: MintTickPalette.mutedSilver)),
+        Text('Archived records ${fmt(receipt.archivedVerifiedRecords)}'
+            ' · Retention-attested ${fmt(receipt.attestedRetentionRecords)}',
+          style: const TextStyle(fontSize: 10,
+            color: MintTickPalette.mutedSilver)),
+        Text('Retries ${fmt(receipt.retryChunks)}'
+            ' · Failed ${fmt(receipt.failedChunks)}'
+            ' · Last checkpoint ${when(receipt.lastCheckpointAt)}',
+          style: const TextStyle(fontSize: 10,
+            color: MintTickPalette.mutedSilver)),
+      ],
+      const SizedBox(height: 5),
+      const Text('Observed database evidence only · no fixed coverage target, '
+          'model-training permission or PAPER readiness implied.',
+        style: TextStyle(fontSize: 10,
+          color: MintTickPalette.mutedSilver, height: 1.35)),
+    ]), padding: const EdgeInsets.all(11));
   }
 
   List<Widget> overview(UpstoxAnalyticsProgress data) {
@@ -229,6 +284,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         for (var i = 0; i < 4; i++)
           pipelineRow(specs[i], data.find(specs[i].$1), last: i == 3),
       ]), padding: EdgeInsets.zero),
+      const SizedBox(height: 11),
+      persistedReceiptPanel(data),
       const SizedBox(height: 11),
       ...workerDelivery(data),
       const SizedBox(height: 11),

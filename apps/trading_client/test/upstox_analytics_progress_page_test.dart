@@ -271,4 +271,70 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+
+  testWidgets('historical coverage separates stored chunks from rights attestation',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final base = _snapshot();
+    final observed = UpstoxPersistedReceipts.fromJson({
+      'contractVersion': 'minttick.upstox.persisted-receipts.v1',
+      'provider': 'UPSTOX',
+      'generatedAt': '2026-11-14T09:00:00Z',
+      'modelTrainingRightsVerified': false,
+      'paperTradingEnabled': false,
+      'receipts': {
+        'evidenceState': 'PERSISTED_CHECKPOINTS_ONLY',
+        'jobs': 2, 'chunks': 3, 'attempts': 7,
+        'archivedVerifiedChunks': 2, 'attestedRetentionChunks': 1,
+        'archivedVerifiedRecords': 50, 'attestedRetentionRecords': 30,
+        'failedChunks': 0, 'retryChunks': 1,
+        'lastCheckpointAt': '2026-11-14T08:45:00Z',
+        'cooldownUntil': null,
+      },
+    });
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(repository: _FixedProgressRepository(
+        UpstoxAnalyticsProgress(
+          contractVersion: base.contractVersion,
+          generatedAt: base.generatedAt,
+          tasks: base.tasks,
+          persistedReceipts: observed,
+        ),
+      )),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('5%'), findsOneWidget);
+    await tester.tap(find.text('Coverage'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Stored Upstox checkpoints'), 220,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('DB OBSERVED'), findsOneWidget);
+    expect(find.textContaining('Jobs 2'), findsOneWidget);
+    expect(find.textContaining('Archived verified chunks 2'), findsOneWidget);
+    expect(find.textContaining('RAW_RETENTION attested 1'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('unavailable persisted receipt endpoint is unknown, not zero',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshot()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Coverage'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Stored Upstox checkpoints'), 220,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    expect(find.text('UNOBSERVED'), findsOneWidget);
+    expect(find.textContaining('unknown, not zero'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
 }

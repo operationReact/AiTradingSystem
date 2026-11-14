@@ -1,5 +1,110 @@
 import '../../../data/authenticated_api_client.dart';
 
+
+/// Authoritative *observations*, not a coverage denominator or licence grant.
+/// Absent provider registration remains unknown; no fake 0% is generated.
+class UpstoxPersistedReceipts {
+  const UpstoxPersistedReceipts({
+    required this.evidenceState,
+    required this.generatedAt,
+    required this.jobs,
+    required this.chunks,
+    required this.attempts,
+    required this.archivedVerifiedChunks,
+    required this.attestedRetentionChunks,
+    required this.archivedVerifiedRecords,
+    required this.attestedRetentionRecords,
+    required this.failedChunks,
+    required this.retryChunks,
+    required this.lastCheckpointAt,
+    required this.cooldownUntil,
+  });
+
+  final String evidenceState;
+  final DateTime generatedAt;
+  final int? jobs;
+  final int? chunks;
+  final int? attempts;
+  final int? archivedVerifiedChunks;
+  final int? attestedRetentionChunks;
+  final int? archivedVerifiedRecords;
+  final int? attestedRetentionRecords;
+  final int? failedChunks;
+  final int? retryChunks;
+  final DateTime? lastCheckpointAt;
+  final DateTime? cooldownUntil;
+
+  static UpstoxPersistedReceipts fromJson(Object? json) {
+    if (json is! Map<String, dynamic> ||
+        json['contractVersion'] != 'minttick.upstox.persisted-receipts.v1' ||
+        json['provider'] != 'UPSTOX' ||
+        json['modelTrainingRightsVerified'] != false ||
+        json['paperTradingEnabled'] != false ||
+        json['receipts'] is! Map<String, dynamic>) {
+      throw const FormatException('Invalid Upstox persisted receipt contract');
+    }
+    final generated = DateTime.tryParse((json['generatedAt'] ?? '').toString());
+    if (generated == null) {
+      throw const FormatException('Missing persisted receipt timestamp');
+    }
+    final data = json['receipts'] as Map<String, dynamic>;
+    final evidence = data['evidenceState'];
+    if (!const {'NO_PROVIDER_RECEIPT', 'PERSISTED_CHECKPOINTS_ONLY'}
+        .contains(evidence)) {
+      throw const FormatException('Unknown persisted receipt state');
+    }
+    int? count(String key) {
+      final value = data[key];
+      if (value == null) return null;
+      if (value is! int || value < 0) {
+        throw const FormatException('Invalid persisted receipt count');
+      }
+      return value;
+    }
+    DateTime? date(String key) {
+      final value = data[key];
+      if (value == null) return null;
+      if (value is! String) throw const FormatException('Invalid receipt time');
+      final result = DateTime.tryParse(value);
+      if (result == null) throw const FormatException('Invalid receipt time');
+      return result;
+    }
+    final jobs = count('jobs');
+    final chunks = count('chunks');
+    final attempts = count('attempts');
+    final verified = count('archivedVerifiedChunks');
+    final attested = count('attestedRetentionChunks');
+    final records = count('archivedVerifiedRecords');
+    final retained = count('attestedRetentionRecords');
+    final failed = count('failedChunks');
+    final retry = count('retryChunks');
+    if (evidence == 'NO_PROVIDER_RECEIPT' &&
+        [jobs, chunks, attempts, verified, attested, records,
+          retained, failed, retry].any((n) => n != null)) {
+      throw const FormatException('Unknown provider cannot have observed counts');
+    }
+    if (evidence == 'PERSISTED_CHECKPOINTS_ONLY' &&
+        ([jobs, chunks, attempts, verified, attested, records,
+          retained, failed, retry].any((n) => n == null) ||
+          (verified ?? 0) > (chunks ?? 0) ||
+          (attested ?? 0) > (verified ?? 0) ||
+          (retained ?? 0) > (records ?? 0) ||
+          (failed ?? 0) > (chunks ?? 0) ||
+          (retry ?? 0) > (chunks ?? 0))) {
+      throw const FormatException('Inconsistent persisted receipt counts');
+    }
+    return UpstoxPersistedReceipts(
+      evidenceState: evidence as String, generatedAt: generated,
+      jobs: jobs, chunks: chunks, attempts: attempts,
+      archivedVerifiedChunks: verified, attestedRetentionChunks: attested,
+      archivedVerifiedRecords: records, attestedRetentionRecords: retained,
+      failedChunks: failed, retryChunks: retry,
+      lastCheckpointAt: date('lastCheckpointAt'),
+      cooldownUntil: date('cooldownUntil'),
+    );
+  }
+}
+
 /// Authenticated owner-only Spring Boot progress contract. No mock numbers are
 /// substituted when the telemetry endpoint is absent or unavailable.
 class UpstoxAnalyticsProgress {
@@ -7,8 +112,10 @@ class UpstoxAnalyticsProgress {
     required this.generatedAt,
     required this.tasks,
     required this.contractVersion,
+    this.persistedReceipts,
   });
 
+  final UpstoxPersistedReceipts? persistedReceipts;
   final DateTime generatedAt;
   final List<UpstoxAnalyticsTask> tasks;
   final String contractVersion;
@@ -145,6 +252,23 @@ class HttpUpstoxAnalyticsProgressRepository
   @override
   Future<UpstoxAnalyticsProgress> load() async {
     final raw = await api.getJson('/api/customer/owner-upstox-analytics/v1/progress');
-    return UpstoxAnalyticsProgress.fromJson(raw);
+    final data = UpstoxAnalyticsProgress.fromJson(raw);
+    try {
+      final stored = await api.getJson(
+        '/api/customer/owner-upstox-analytics/v1/persisted-receipts');
+      return UpstoxAnalyticsProgress(
+        contractVersion: data.contractVersion,
+        generatedAt: data.generatedAt,
+        tasks: data.tasks,
+        persistedReceipts: UpstoxPersistedReceipts.fromJson(stored),
+      );
+    } on ApiHttpFailure catch (ex) {
+      // A failed owner authorization is never hidden as an empty dataset.
+      if (ex.statusCode == 401 || ex.statusCode == 403) rethrow;
+      // A not-yet-published gateway route is explicitly *unobserved* in UI.
+      return data;
+    } on FormatException {
+      return data;
+    }
   }
 }
