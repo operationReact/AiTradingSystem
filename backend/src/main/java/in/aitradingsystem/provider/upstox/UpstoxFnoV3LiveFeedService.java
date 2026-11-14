@@ -224,6 +224,18 @@ public class UpstoxFnoV3LiveFeedService {
                              java.math.BigDecimal ask, Instant exchangeAt,
                              Instant observedAt) {}
 
+    /** Regular NSE session time guard; exchange holidays require a separate calendar gate. */
+    static boolean regularNseSession(Instant instant) {
+        if (instant == null) return false;
+        var ist = instant.atZone(java.time.ZoneId.of("Asia/Kolkata"));
+        var day = ist.getDayOfWeek();
+        if (day == java.time.DayOfWeek.SATURDAY || day == java.time.DayOfWeek.SUNDAY)
+            return false;
+        var time = ist.toLocalTime();
+        return !time.isBefore(java.time.LocalTime.of(9, 15))
+                && time.isBefore(java.time.LocalTime.of(15, 30));
+    }
+
     public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
         if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
                 || !wanted || destroyed || !"CONNECTED".equals(state)) {
@@ -233,6 +245,7 @@ public class UpstoxFnoV3LiveFeedService {
         if (observed == null) return java.util.Optional.empty();
         var tick = observed.tick();
         Instant now = clock.instant();
+        if (!regularNseSession(now)) return java.util.Optional.empty();
         Instant trade = tick.tradedAt();
         if (trade == null || trade.isAfter(now.plusSeconds(2))
                 || observed.observedAt().isAfter(now.plusSeconds(2))
