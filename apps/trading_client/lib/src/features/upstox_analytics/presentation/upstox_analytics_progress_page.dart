@@ -416,12 +416,12 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         const SizedBox(height: 8),
         Row(children: [
           Expanded(child: Text(
-            score.percent == null ? 'Completed: —'
-              : 'Completed: ${score.percent}%',
+            score.percent == null ? 'Verified: —'
+              : 'Verified: ${score.percent}%',
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11))),
           Expanded(child: Text(
-            score.remainingPercent == null ? 'Remaining: —'
-              : 'Remaining: ${score.remainingPercent}%',
+            score.remainingPercent == null ? 'Awaiting proof: —'
+              : 'Awaiting proof: ${score.remainingPercent}%',
             textAlign: TextAlign.right,
             key: const ValueKey('upstox-remaining-completion-percent'),
             style: const TextStyle(fontWeight: FontWeight.w700,
@@ -477,13 +477,14 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               'Validated partial coverage can earn tenths of a percent only '
               'with a matching persisted-receipt proof and fixed target. '
               'GitHub PRs, worker notes and API smoke tests cannot earn '
-              'backend acceptance.',
+              'backend acceptance. NOT_STARTED here is a verification-gate '
+              'state, not a claim that the five workers have done no work.',
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver, height: 1.4)),
             const SizedBox(height: 8),
             Text(score.remainingPercent == null
                 ? 'Remaining: not verified'
-                : 'Completed ${score.percent}% · Remaining ${score.remainingPercent}%',
+                : 'Verified ${score.percent}% · Awaiting proof ${score.remainingPercent}%',
               style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
             const SizedBox(height: 12),
             for (final gate in score.gates)
@@ -494,14 +495,17 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                       Text(labels[gate.code] ?? gate.code,
                         style: const TextStyle(fontSize: 12,
                           fontWeight: FontWeight.w700)),
-                      Text(gate.evidenceState, style: const TextStyle(
+                      Text(gate.evidenceState == 'NOT_STARTED'
+                          ? 'NOT VERIFIED · no accepted runtime proof'
+                          : gate.evidenceState,
+                        style: const TextStyle(
                         fontSize: 10, color: MintTickPalette.mutedSilver)),
                     ])),
                   Text(gate.earned == gate.weight
                       ? '${gate.weight}% done'
                       : gate.earned > 0
                         ? '${gate.earned}% / ${gate.weight}% earned'
-                        : '${gate.weight}% left',
+                        : '${gate.weight}% awaiting proof',
                     style: TextStyle(fontSize: 12,
                       color: gate.earned == gate.weight
                         ? MintTickPalette.mint : MintTickPalette.mutedSilver)),
@@ -511,8 +515,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               style: const TextStyle(fontSize: 10,
                 color: MintTickPalette.mutedSilver)),
             const SizedBox(height: 5),
-            const Text('This is verified acceptance, not developer effort. '
-              'PAPER trading and persisted ingestion remain separate runtime gates.',
+            const Text('This is acceptance, not development progress. '
+              'See Evidence tracking for five-worker delivery. PAPER trading '
+              'and persisted ingestion require separate runtime proof.',
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver)),
           ]),
