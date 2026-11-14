@@ -53,6 +53,8 @@ public final class UpstoxCoverageRetryCandidates {
                     return null;
                 })
                 .filter(Objects::nonNull)
+                // Replayed identical receipts must not inflate retry totals or shift pages.
+                .distinct()
                 .sorted(Comparator.comparing((Candidate x) -> x.observation().canonicalInstrumentId())
                         .thenComparing(x -> x.observation().listingEpisodeId())
                         .thenComparing(x -> x.observation().interval())
