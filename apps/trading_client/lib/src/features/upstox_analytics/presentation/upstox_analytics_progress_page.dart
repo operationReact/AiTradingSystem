@@ -466,7 +466,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     showModalBottomSheet<void>(
       context: context, showDragHandle: true, isScrollControlled: true,
       backgroundColor: MintTickPalette.darkCard,
-      builder: (_) => SafeArea(child: Padding(
+      builder: (_) => SafeArea(child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+        child: SingleChildScrollView(child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
         child: Column(mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -521,7 +523,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver)),
           ]),
-      )),
+      ))))),
     );
   }
 
