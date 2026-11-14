@@ -1,10 +1,10 @@
 {
-  "kind": "minttick-owner-upstox-persisted-count-audit-v1",
-  "operation": "audit-upstox-checkpoints-metadata-only",
-  "environment": "PAPER",
-  "account": "098859530205",
-  "region": "ap-south-1",
-  "instance_id": "i-09c01b470fb39b85a",
+  "authorization": "OWNER_APPROVED_READ_ONLY_UPSTOX_RECEIPT_AUDIT_2026_11_14",
   "backend_release": "4084238ffac0206a8acfbdaa24f9ad06d0a67554",
-  "authorization": "OWNER_APPROVED_READ_ONLY_UPSTOX_RECEIPT_AUDIT_2026_11_14"
+  "instance_id": "i-09c01b470fb39b85a",
+  "region": "ap-south-1",
+  "account": "098859530205",
+  "environment": "PAPER",
+  "operation": "audit-upstox-checkpoints-metadata-only",
+  "kind": "minttick-owner-upstox-persisted-count-audit-v1"
 }
