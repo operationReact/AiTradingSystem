@@ -11,7 +11,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.HttpHeaders;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
 
@@ -80,6 +79,7 @@ class UpstoxFnoReadinessProbeControllerTest {
         assertThat(response.getHeaders().getCacheControl()).contains("no-store");
         verify(source).currentFnoOptionContracts(UNDERLYING, EXPIRY);
         verify(source).currentFnoOptionChain(UNDERLYING, EXPIRY);
+        verify(source).enabled();
         verifyNoMoreInteractions(source);
     }
 
