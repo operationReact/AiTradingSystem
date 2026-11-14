@@ -115,6 +115,7 @@ void main() {
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Coverage'), findsOneWidget);
     expect(find.text('Operations'), findsOneWidget);
+    expect(find.text('SOURCE OK'), findsOneWidget);
     expect(find.text('Data & PAPER acceptance'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
     expect(find.text('Remaining: 95%'), findsOneWidget);
