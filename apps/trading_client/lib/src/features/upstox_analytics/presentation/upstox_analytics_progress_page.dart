@@ -197,21 +197,21 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           style: TextStyle(fontSize: 10,
             color: MintTickPalette.mutedSilver))
       else ...[
-        Text('Jobs ${fmt(receipt.jobs)} · Chunks ${fmt(receipt.chunks)}'
-            ' · Attempts ${fmt(receipt.attempts)}',
+        Text('Jobs ${fmt(receipt?.jobs)} · Chunks ${fmt(receipt?.chunks)}'
+            ' · Attempts ${fmt(receipt?.attempts)}',
           key: const ValueKey('upstox-stored-job-counts'),
           style: const TextStyle(fontSize: 11)),
-        Text('Archived verified chunks ${fmt(receipt.archivedVerifiedChunks)}'
-            ' · RAW_RETENTION attested ${fmt(receipt.attestedRetentionChunks)}',
+        Text('Archived verified chunks ${fmt(receipt?.archivedVerifiedChunks)}'
+            ' · RAW_RETENTION attested ${fmt(receipt?.attestedRetentionChunks)}',
           style: const TextStyle(fontSize: 10,
             color: MintTickPalette.mutedSilver)),
-        Text('Archived records ${fmt(receipt.archivedVerifiedRecords)}'
-            ' · Retention-attested ${fmt(receipt.attestedRetentionRecords)}',
+        Text('Archived records ${fmt(receipt?.archivedVerifiedRecords)}'
+            ' · Retention-attested ${fmt(receipt?.attestedRetentionRecords)}',
           style: const TextStyle(fontSize: 10,
             color: MintTickPalette.mutedSilver)),
-        Text('Retries ${fmt(receipt.retryChunks)}'
-            ' · Failed ${fmt(receipt.failedChunks)}'
-            ' · Last checkpoint ${when(receipt.lastCheckpointAt)}',
+        Text('Retries ${fmt(receipt?.retryChunks)}'
+            ' · Failed ${fmt(receipt?.failedChunks)}'
+            ' · Last checkpoint ${when(receipt?.lastCheckpointAt)}',
           style: const TextStyle(fontSize: 10,
             color: MintTickPalette.mutedSilver)),
       ],
