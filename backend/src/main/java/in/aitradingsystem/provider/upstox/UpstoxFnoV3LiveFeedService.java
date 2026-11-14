@@ -290,7 +290,7 @@ public class UpstoxFnoV3LiveFeedService {
 
         @Override
         public void onError(WebSocket ws, Throwable error) {
-            if (wanted && !destroyed) scheduleReconnect();
+            if (wanted && !destroyed) scheduleReconnect(attempt);
         }
     }
 
