@@ -180,6 +180,19 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
+      if (source == null || source.state != 'VERIFIED' || source.stale)
+        Padding(padding: const EdgeInsets.only(bottom: 12),
+          child: panel(Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.info_outline, size: 17,
+              color: Color(0xFFE6BD73)),
+            const SizedBox(width: 9),
+            Expanded(child: Text(
+              source == null ? 'No verified source telemetry received.'
+                : source.stale ? 'Last source verification is stale.'
+                : reasonDescription(source.reasonCode),
+              style: const TextStyle(fontSize: 11,
+                color: MintTickPalette.mutedSilver, height: 1.35))),
+          ]), padding: const EdgeInsets.all(10))),
       workerActivitySummary(data),
       const SizedBox(height: 10),
       ...acceptanceProgress(data),
@@ -203,19 +216,6 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         'not a historical download',
         style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
       const SizedBox(height: 13),
-      if (source == null || source.state != 'VERIFIED' || source.stale)
-        Padding(padding: const EdgeInsets.only(bottom: 12),
-          child: panel(Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.info_outline, size: 17,
-              color: Color(0xFFE6BD73)),
-            const SizedBox(width: 9),
-            Expanded(child: Text(
-              source == null ? 'No verified source telemetry received.'
-                : source.stale ? 'Last source verification is stale.'
-                : reasonDescription(source.reasonCode),
-              style: const TextStyle(fontSize: 11,
-                color: MintTickPalette.mutedSilver, height: 1.35))),
-          ]), padding: const EdgeInsets.all(10))),
       Row(children: [
         const Expanded(child: Text('Data readiness',
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800))),
