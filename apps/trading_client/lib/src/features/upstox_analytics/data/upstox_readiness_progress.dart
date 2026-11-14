@@ -94,7 +94,7 @@ class UpstoxReadinessProgress {
       gates.add(UpstoxProgressGate(
         code: entry.key,
         weight: entry.value,
-        earned: accepted ? entry.value : partial / 10,
+        earned: accepted ? entry.value : (partial % 10 == 0 ? partial ~/ 10 : partial / 10),
         evidenceState: task == null ? 'NOT_OBSERVED'
             : task.stale ? 'STALE' : task.state,
       ));
