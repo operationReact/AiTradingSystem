@@ -496,7 +496,10 @@ class _MintTickRoomProductionWorkspaceState
           key: ValueKey('paper-fno-${widget.room.id}'),
           roomId: widget.room.id,
           repository: widget.fno!,
-          onFilled: _loadHistory,
+          onFilled: () async {
+            await _loadHistory();
+            await widget.onRefresh();
+          },
         ),
         const SizedBox(height: 10),
       ],
