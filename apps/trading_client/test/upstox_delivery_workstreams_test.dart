@@ -139,8 +139,8 @@ void main() {
     ]);
     final cycle = UpstoxReportedPrPipeline.fromReports(reports);
     expect(cycle.observedWorkers, 5);
-    expect(cycle.earnedGates, 9); // 3 + 1 + 2 + 1 + 1
-    expect(cycle.percent, 60);
+    expect(cycle.earnedGates, 8); // 3 + 1 + 2 + 1 + 1
+    expect(cycle.percent, 53.3);
     expect(cycle.stages[0].percent, 100);
     expect(cycle.stages[1].percent, 33.3);
     expect(cycle.stages[2].percent, 66.6);
