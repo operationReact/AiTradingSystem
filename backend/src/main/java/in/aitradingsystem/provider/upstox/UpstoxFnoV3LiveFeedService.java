@@ -43,7 +43,8 @@ public class UpstoxFnoV3LiveFeedService {
                          Instant lastFrameObservedAt, Instant latestExchangeTradeAt,
                          int reconnectAttempt, boolean providerTradeTimeAvailable,
                          boolean displayRightsVerified, boolean trainingRightsVerified,
-                         boolean liveTradingEnabled) {}
+                         boolean liveTradingEnabled,
+                         int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt) {}
 
     /** Internal-only snapshot; never a broker-authoritative order quote. */
     record Observation(UpstoxFnoV3FeedCodec.Tick tick, Instant observedAt) {}
@@ -192,9 +193,24 @@ public class UpstoxFnoV3LiveFeedService {
 
     public Status status() {
         Instant mostRecentTrade = lastTradeAt;
+        // This operational count is neither a source-rights grant nor a PAPER
+        // session/contract acceptance. It only counts ephemeral *currently*
+        // timestamp-valid bid/ask observations on active subscriptions.
+        int freshQuotes = 0;
+        Instant latestFresh = null;
+        if (wanted && !destroyed && "CONNECTED".equals(state)) {
+            for (String key : subscribed) {
+                var candidate = eligiblePaperQuote(key);
+                if (candidate.isEmpty()) continue;
+                freshQuotes++;
+                Instant at = candidate.get().exchangeAt();
+                if (latestFresh == null || at.isAfter(latestFresh)) latestFresh = at;
+            }
+        }
         return new Status(state, subscribed.size(), latest.size(), decodedFrames,
                 discardedFrames, lastFrameAt, mostRecentTrade, retryCount,
-                mostRecentTrade != null, false, false, false);
+                mostRecentTrade != null, false, false, false,
+                freshQuotes, latestFresh);
     }
 
 
