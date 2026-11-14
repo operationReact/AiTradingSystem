@@ -108,7 +108,13 @@ def assess_cli(receipt, clock):
         return {"contract": CONTRACT, "status": "STALE", "tradeTimeReady": False,
                 "reason": "OBSERVATION_STALE_OR_FUTURE", "verifiedContracts": None,
                 "freshContracts": None}
-    return assess(receipt, clock)
+    # stdin is an untrusted assertion surface: booleans do not authenticate
+    # exchange listings, source rights, or exchange-session provenance.
+    # Only an independently authenticated runtime adapter may assess trusted
+    # evidence. Until wired, CLI must never report FRESH or trade readiness.
+    return {"contract": CONTRACT, "status": "UNKNOWN", "tradeTimeReady": False,
+            "reason": "PROVENANCE_UNVERIFIED", "verifiedContracts": None,
+            "freshContracts": None}
 
 
 if __name__ == "__main__":
