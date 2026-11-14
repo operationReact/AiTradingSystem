@@ -75,10 +75,11 @@ def evaluate(targets: Optional[Sequence[Target]], receipts: Sequence[Receipt],
                receipt.year, receipt.month)
         if key not in expected or key in seen:
             continue
-        seen.add(key)
         rights_id, source_domain = expected[key]
         if receipt.rights_receipt_id != rights_id or receipt.source_domain != source_domain:
+            # A foreign/unauthorized receipt must not shadow a later valid one.
             continue
+        seen.add(key)
         if receipt.status == "VERIFIED":
             verified += 1
         elif receipt.status == "CANDIDATE":
