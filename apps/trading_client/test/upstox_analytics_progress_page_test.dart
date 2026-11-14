@@ -66,6 +66,39 @@ UpstoxAnalyticsProgress _snapshot({bool stale = false, bool partial = false}) {
   );
 }
 
+UpstoxAnalyticsProgress _snapshotWithWorkerReports() {
+  final original = _snapshot();
+  return UpstoxAnalyticsProgress(
+    generatedAt: original.generatedAt,
+    contractVersion: original.contractVersion,
+    tasks: [
+      ...original.tasks,
+      UpstoxAnalyticsTask(
+        code: 'WORKER_REPORTS', state: 'VERIFIED',
+        reasonCode: null, stale: false,
+        details: {
+          'workerReports': [
+            for (var i = 1; i <= 5; i++)
+              {
+                'worker': i,
+                'scope': const [
+                  'SOURCE_INGESTION', 'CANONICAL_DATA', 'COVERAGE_GAPS',
+                  'FUNDAMENTALS_EVENTS', 'OPERATIONS_UI',
+                ][i - 1],
+                'state': 'FRESH',
+                'result': i == 1 ? 'MERGED' : i == 3 ? 'BLOCKED' : 'PR_OPEN',
+                'ci': i == 1 || i == 3 ? 'PASS' : 'PENDING',
+                'pr': '${1060 + i}',
+                'url': 'https://github.com/operationReact/AiTradingSystem/pull/${1060 + i}',
+                'reportedAt': '2026-11-14T09:00:00Z',
+              },
+          ],
+        },
+      ),
+    ],
+  );
+}
+
 void main() {
   testWidgets('shows read-only sample evidence in compact three-tab layout',
       (tester) async {
@@ -82,6 +115,7 @@ void main() {
     expect(find.text('Overview'), findsOneWidget);
     expect(find.text('Coverage'), findsOneWidget);
     expect(find.text('Operations'), findsOneWidget);
+    expect(find.text('SOURCE OK'), findsOneWidget);
     expect(find.text('Data & PAPER acceptance'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
     expect(find.text('Remaining: 95%'), findsOneWidget);
@@ -90,6 +124,12 @@ void main() {
     expect(find.text('5'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
+    // The evidence disclaimer is deliberately below the compact source
+    // metrics; scroll the list rather than assuming it starts on screen.
+    await tester.scrollUntilVisible(
+      find.textContaining('not a historical download'), 160,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.textContaining('not a historical download'), findsOneWidget);
 
     await tester.tap(find.text('Coverage'));
@@ -136,11 +176,16 @@ void main() {
       ),
     ));
     await tester.pumpAndSettle();
+    // A stale source is surfaced first; the source metrics remain further
+    // down in the scroll view and must never display cached values.
+    expect(find.textContaining('source verification is stale'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Candles'), 180,
+      scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     expect(find.text('Candles'), findsOneWidget);
     expect(find.text('Ratios'), findsOneWidget);
     expect(find.text('5'), findsNothing);
     expect(find.text('7'), findsNothing);
-    expect(find.textContaining('source verification is stale'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -182,6 +227,47 @@ void main() {
     await tester.tap(find.byTooltip('Refresh analytics progress'));
     await tester.pumpAndSettle();
     expect(find.text('Since previous refresh: 0.0 pp'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+
+  testWidgets('shows reported PR delivery without altering 5% operational acceptance',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshotWithWorkerReports()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Current PR delivery (reported)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-reported-pr-delivery-percent')),
+        findsOneWidget);
+    expect(find.text('53.3%'), findsOneWidget);
+    expect(find.text('5%'), findsOneWidget);
+    expect(find.text('Remaining: 95%'), findsOneWidget);
+    await tester.tap(find.text('Operations'));
+    await tester.pumpAndSettle();
+    expect(find.text('Current PR delivery (reported)'), findsOneWidget);
+    expect(find.text('53.3%'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('unknown worker PR reporting is not incorrectly 0% delivered',
+      (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(
+        repository: _FixedProgressRepository(_snapshot()),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Current PR delivery (reported)'), findsOneWidget);
+    expect(find.textContaining('unknown PR stages'), findsOneWidget);
+    expect(find.text('0%'), findsNothing);
+    expect(find.text('5%'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 

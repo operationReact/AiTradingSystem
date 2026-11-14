@@ -122,4 +122,71 @@ void main() {
     expect(rows[1].lastRunChange, isNull);
   });
 
+
+  test('latest reported PR pipeline shows delivery gates, not backend readiness', () {
+    final reports = UpstoxWorkerObservation.fromBackend([
+      for (var i = 1; i <= 5; i++)
+        {
+          'worker': i,
+          'scope': UpstoxWorkerObservation.scopes[i - 1],
+          'state': 'FRESH',
+          'result': i == 1 ? 'MERGED' : i == 3 ? 'BLOCKED' : 'PR_OPEN',
+          'ci': i == 1 || i == 3 ? 'PASS' : 'PENDING',
+          'pr': '${1060 + i}',
+          'url': 'https://github.com/operationReact/AiTradingSystem/pull/${1060 + i}',
+          'reportedAt': '2026-11-14T09:00:00Z',
+        },
+    ]);
+    final cycle = UpstoxReportedPrPipeline.fromReports(reports);
+    expect(cycle.observedWorkers, 5);
+    expect(cycle.earnedGates, 8); // 3 + 1 + 2 + 1 + 1
+    expect(cycle.percent, 53.3);
+    expect(cycle.stages[0].percent, 100);
+    expect(cycle.stages[1].percent, 33.3);
+    expect(cycle.stages[2].percent, 66.6);
+  });
+
+  test('missing stale or forged worker reports never create progress', () {
+    final reports = UpstoxWorkerObservation.fromBackend([
+      {
+        'worker': 1, 'scope': 'SOURCE_INGESTION', 'state': 'STALE',
+        'result': 'MERGED', 'ci': 'PASS', 'pr': '1064',
+        'url': 'https://github.com/operationReact/AiTradingSystem/pull/1064',
+        'reportedAt': '2026-11-14T08:00:00Z',
+      },
+      {
+        'worker': 2, 'scope': 'CANONICAL_DATA', 'state': 'FRESH',
+        'result': 'MERGED', 'ci': 'PASS', 'pr': '1066',
+        'url': 'https://not-github.invalid/1066',
+        'reportedAt': '2026-11-14T09:00:00Z',
+      },
+    ]);
+    final cycle = UpstoxReportedPrPipeline.fromReports(reports);
+    expect(cycle.observedWorkers, 0);
+    expect(cycle.earnedGates, 0);
+    expect(cycle.percent, isNull);
+    expect(cycle.stages.every((w) => w.percent == null), isTrue);
+  });
+
+  test('new PR resets cycle even after a reported merge', () {
+    UpstoxWorkerObservation report(String status, String ci, String pr) =>
+        UpstoxWorkerObservation.fromBackend([
+          {
+            'worker': 1, 'scope': 'SOURCE_INGESTION', 'state': 'FRESH',
+            'result': status, 'ci': ci, 'pr': pr,
+            'url': 'https://github.com/operationReact/AiTradingSystem/pull/$pr',
+            'reportedAt': '2026-11-14T09:00:00Z',
+          },
+        ]).first;
+    final merged = UpstoxReportedPrPipeline.fromReports([
+      report('MERGED', 'PASS', '1064'),
+    ]);
+    final next = UpstoxReportedPrPipeline.fromReports([
+      report('PR_OPEN', 'PENDING', '1071'),
+    ]);
+    expect(merged.stages.single.earned, 3);
+    expect(next.stages.single.earned, 1);
+    expect(next.percent, isNull); // Not comparable across missing workers.
+  });
+
 }
