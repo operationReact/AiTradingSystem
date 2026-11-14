@@ -114,7 +114,9 @@ class FnoSourceReadinessTest(unittest.TestCase):
                        "CONTRACTS_CREDENTIAL_UNAVAILABLE",
                        "CONTRACTS_INVALID_PAYLOAD",
                        "CHAIN_UNAUTHORIZED", "CHAIN_FORBIDDEN",
-                       "CHAIN_UPSTREAM_UNAVAILABLE", "CHAIN_INVALID_PAYLOAD"):
+                       "CHAIN_UPSTREAM_UNAVAILABLE", "CHAIN_INVALID_PAYLOAD",
+                       "CHAIN_SCHEMA_INVALID", "CHAIN_ENVELOPE_INVALID",
+                       "CONTRACTS_SCHEMA_INVALID", "CONTRACTS_ENVELOPE_INVALID"):
             v=valid()
             v.update(status=status, validatedContracts=0, validatedStrikes=0,
                 callsWithContract=0, putsWithContract=0, rowsWithCompleteGreeks=0)
