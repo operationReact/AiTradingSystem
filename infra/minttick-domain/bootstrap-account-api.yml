@@ -159,6 +159,7 @@ Resources:
           ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
           ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
           PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
+          PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions)$")
           READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
           LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
           MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
@@ -182,6 +183,13 @@ Resources:
               return ((method == "GET" and action in {"account", "ledger", "orders", "positions"})
                       or (method == "POST" and action in {"activate", "resume", "pause", "orders"}))
           
+          def paper_fno_allowed(method, path):
+              if not PAPER_FNO.fullmatch(path):
+                  return False
+              action = path.rsplit("/", 1)[-1]
+              return ((method == "GET" and action in {"orders", "positions"})
+                      or (method == "POST" and action == "orders"))
+          
           def allowed(method, path):
               return ((method, path) in EXACT
                       or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
@@ -194,6 +202,7 @@ Resources:
                       or (method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path) and len(path) <= 170)
                       or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
                       or (method == "POST" and path == MIND_ASSISTANT_QUERY)
+                      or paper_fno_allowed(method, path)
                       or paper_allowed(method, path))
           
           def callback_query_safe(query):
