@@ -1,5 +1,5 @@
 {
- "manifestVersion": "mind.capability-manifest.v1+2026-11-14.13",
+ "manifestVersion": "mind.capability-manifest.v1+2026-11-14.14",
  "auditedAt": "2026-11-13",
  "sourceIssues": [
   "#997",
@@ -690,7 +690,7 @@
    "parentId": null,
    "group": "RESEARCH",
    "owner": "Claude",
-   "blockerCode": null,
+   "blockerCode": "FIXTURE_CARDS_REMAIN_WITHOUT_SERVER_RECORD",
    "requiredInputs": [],
    "dependsOn": [],
    "implementation": null,
@@ -698,19 +698,21 @@
     {
      "kind": "SOURCE",
      "path": "apps/trading_client/lib/src/features/mintick_mind/presentation/mind_workspace_page.dart"
+    },
+    {
+     "kind": "API",
+     "ref": "/api/customer/mind/v1/ma-walkforward"
     }
    ],
    "missing": [
-    "Audit each control and value",
-    "Server API for every displayed value",
-    "Replace fixture data or label unavailable",
+    "Experiment catalogue and compare view still fixtures",
     "Flutter web/Android/iOS runtime evidence"
    ],
-   "note": "Renders fixture data only; no API calls.",
+   "note": "With the server walk-forward record wired, shows only that report (research only, no order authority). Without it, the fixture cards are labelled MOCK.",
    "id": "screen.experiment-detail",
    "kind": "SCREEN",
    "name": "Experiment Results",
-   "status": "MOCK"
+   "status": "IMPLEMENTING"
   },
   {
    "parentId": null,

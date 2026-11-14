@@ -104,10 +104,24 @@ extension _MindResearchScreens on _MindWorkspaceState {
   }
 
   Widget experimentDetailScreen() {
+    final walk=widget.walkForwardRepository;
+    if(walk!=null) {
+      // Real path: the only result shown is the server walk-forward report.
+      // Fixture experiment cards are not rendered here.
+      return _surface('Experiment Results',
+        'Server walk-forward evidence · research only · no order authority',[
+        const MindTag('REAL SERVER RECORD · RESEARCH ONLY',color:MindPalette.blue),
+        const SizedBox(height:10),
+        MindMaWalkForwardPanel(key:const ValueKey('mind-experiment-walkforward'),
+          repository:walk),
+      ]);
+    }
     final experiment=_experiments.firstWhere((e)=>e.$1==_selectedExperiment,
       orElse:()=>_experiments.first);
     return _surface(experiment.$1,
       'Experiment result · '+experiment.$4+' · '+experiment.$2,[
+      const MindTag('MOCK FIXTURES · NOT MEASURED RESULTS',color:MindPalette.yellow),
+      const SizedBox(height:10),
       MindPanel(highlight:true,child:Column(children:[
         _mockChart(seed:_experiments.indexOf(experiment)+31,height:236),
         _value('Experiment status',experiment.$3),
