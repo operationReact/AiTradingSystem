@@ -17,6 +17,7 @@ import '../data/mind_paper_cycle_repository.dart';
 import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
 import '../data/mind_paper_journal_repository.dart';
+import '../data/mind_assistant_repository.dart';
 import '../../trading_rooms/data/customer_market_repository.dart';
 import '../../trading_rooms/data/customer_home_summary_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
@@ -113,6 +114,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.paperJournalRepository,
     this.candleRepository,
     this.homeSummaryRepository,
+    this.assistantRepository,
     super.key,
   });
 
@@ -149,6 +151,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Real customer Home summary (#998 PR D8).
   final CustomerHomeSummaryRepository? homeSummaryRepository;
+
+  /// Read-only grounded assistant (#998 D9).
+  final MindAssistantRepository? assistantRepository;
   @override
   State<MintickMindWorkspacePage> createState() => _MindWorkspaceState();
 }
@@ -158,6 +163,9 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
 
   /// Screens whose content has no backend source yet. They keep their labelled
   /// preview but are never presented as working features (DATA_BLOCKED).
+  /// Layout references only. They are not product features and are labelled as such.
+  static const designReferenceRoutes = <String>{'design-gallery', 'design-preview'};
+
   static const noBackendSourceRoutes = <String>{
     'intelligence-hub', 'agent-council', 'regime-weights', 'confidence-lab', 'institutional-flow',
     'daily-verdict', 'multibagger', 'thesis-detail', 'events', 'regimes',
@@ -336,6 +344,7 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
     if (registry == null) return 'Not verified';
     return registry.values.where((i) => i.kind == kind && test(i)).length.toString();
   }
+  bool _assistantBusy = false;
   final List<String> _assistantHistory = [
     'Mind: Ask about strategy evidence, model comparisons or portfolio risk. All answers use static sample data.',
   ];
@@ -584,6 +593,11 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       child:ListView(key:ValueKey('mind-screen-' + _route),
         padding:const EdgeInsets.fromLTRB(14,16,14,30),
         children:[
+          if (designReferenceRoutes.contains(_route)) Padding(
+            padding:const EdgeInsets.only(bottom:10),
+            child:MindPanel(key:const ValueKey('mind-design-reference'),child:const Text(
+              'DESIGN REFERENCE · layout and visual mockups only. Nothing on this page is a working product feature.',
+              style:TextStyle(color:MindPalette.purple,fontSize:12)))),
           if (noBackendSourceRoutes.contains(_route)) Padding(
             padding:const EdgeInsets.only(bottom:10),
             child:MindPanel(key:const ValueKey('mind-no-backend-source'),child:const Text(

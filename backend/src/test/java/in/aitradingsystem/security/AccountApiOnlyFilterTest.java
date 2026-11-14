@@ -134,6 +134,9 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET", "/api/customer/mind/v1/paper-portfolio");
         assertBlocked("POST", "/api/customer/mind/v1/paper-portfolio");
         assertPasses("GET", "/api/customer/mind/v1/paper-journal");
+        assertPasses("POST", "/api/customer/mind/v1/assistant/query");
+        assertBlocked("GET", "/api/customer/mind/v1/assistant/query");
+        assertBlocked("POST", "/api/customer/mind/v1/assistant/query/execute");
         for (String research : List.of("overview", "evidence", "strategy-replay", "ma-walkforward",
                 "prospective-cohort", "prospective-signals", "prospective-outcomes",
                 "prospective-evidence-completeness")) {

@@ -323,7 +323,68 @@ extension _MindSystemScreens on _MindWorkspaceState {
     ]),
   ]);
 
-  Widget assistantScreen()=>_surface('Ask MintTick Mind',
+  Future<void> _askAssistant() async {
+    final repository = widget.assistantRepository;
+    final text = _assistantController.text.trim();
+    if (repository == null || text.isEmpty || _assistantBusy) return;
+    _updateMind(() { _assistantBusy = true; _assistantHistory.add('You: $text'); _assistantController.clear(); });
+    try {
+      final answer = await repository.ask(text);
+      final sources = answer.sources.map((s) => s.name + (s.asOf == null ? '' : ' @ ' +
+          s.asOf!.toUtc().toIso8601String().substring(0, 16) + 'Z')).join(' · ');
+      _updateMind(() => _assistantHistory.add('Mind: ${answer.answer}'
+          '${sources.isEmpty ? '' : '\nSources: $sources'}'));
+    } catch (_) {
+      _updateMind(() => _assistantHistory.add(
+          'Mind: Could not answer from recorded data right now. Nothing was changed.'));
+    } finally {
+      _updateMind(() => _assistantBusy = false);
+    }
+  }
+
+  Widget _realAssistantScreen() {
+    return _surface('Ask MintTick Mind','Read-only · answers from recorded server data · no orders',[
+      MindPanel(key:const ValueKey('mind-assistant-panel'),highlight:true,child:Column(
+        crossAxisAlignment:CrossAxisAlignment.stretch,children:[
+        const MindSectionTitle(title:'Ask about your data',icon:Icons.forum_outlined),
+        const Text('Answers come only from the audited registry, your virtual PAPER portfolio and the recorded decision journal. Trade requests are refused.',
+          style:TextStyle(color:MindPalette.muted,fontSize:11)),
+        const SizedBox(height:10),
+        for(var i=0;i<_assistantHistory.length;i++)
+          Padding(padding:const EdgeInsets.only(bottom:9),child:Container(
+            key:ValueKey('mind-assistant-entry-$i'),
+            padding:const EdgeInsets.all(12),
+            decoration:BoxDecoration(color:_assistantHistory[i].startsWith('You:')?const Color(0xFF12402F):MindPalette.card,
+              border:Border.all(color:MindPalette.border),borderRadius:BorderRadius.circular(13)),
+            child:Text(_assistantHistory[i],style:const TextStyle(color:MindPalette.text,fontSize:12,height:1.5)))),
+        if(_assistantBusy) const Padding(padding:EdgeInsets.only(bottom:8),child:Text('Checking recorded data…',
+          style:TextStyle(color:MindPalette.muted,fontSize:12))),
+        Row(children:[
+          Expanded(child:TextField(controller:_assistantController,
+            key:const ValueKey('mind-assistant-input'),
+            style:const TextStyle(color:MindPalette.text),
+            onSubmitted:(_)=>_askAssistant(),
+            maxLength:280,
+            decoration:InputDecoration(
+              counterText:'',
+              hintText:'What is my PAPER P&L?',
+              hintStyle:const TextStyle(color:MindPalette.muted,fontSize:12),
+              filled:true,fillColor:MindPalette.panel,
+              enabledBorder:OutlineInputBorder(borderSide:const BorderSide(color:MindPalette.border),
+                borderRadius:BorderRadius.circular(12))))),
+          const SizedBox(width:7),
+          IconButton.filled(tooltip:'Ask',key:const ValueKey('mind-assistant-send'),
+            onPressed:_assistantBusy?null:_askAssistant,
+            style:IconButton.styleFrom(backgroundColor:const Color(0xFF1F7655)),
+            icon:const Icon(Icons.send,color:Colors.white)),
+        ]),
+      ])),
+    ]);
+  }
+
+  Widget assistantScreen(){
+    if(widget.assistantRepository!=null) return _realAssistantScreen();
+    return _surface('Ask MintTick Mind',
     'Conversational research explorer · scripted answers from mock evidence',[
     MindPanel(highlight:true,child:Column(crossAxisAlignment:CrossAxisAlignment.stretch,children:[
       const MindSectionTitle(title:'Research Conversation',icon:Icons.forum_outlined),
@@ -370,6 +431,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
           tap:(){_assistantController.text=q;_sendQuestion();})),
     ]),
   ]);
+  }
 
   void _sendQuestion() {
     final message=_assistantController.text.trim();

@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-13.10"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.11"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -256,6 +256,26 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
         "endpoints": [],
         "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "design-gallery": {
+        "status": "MOCK",
+        "blockerCode": "DESIGN_REFERENCE_ONLY",
+        "note": "Design reference only: layout and visual mockups, not a product feature. Labelled on screen.",
+        "endpoints": [],
+        "missing": [],
+    },
+    "design-preview": {
+        "status": "MOCK",
+        "blockerCode": "DESIGN_REFERENCE_ONLY",
+        "note": "Design reference only: clickable layout preview, not a product feature. Labelled on screen.",
+        "endpoints": [],
+        "missing": [],
+    },
+    "assistant": {
+        "status": "IMPLEMENTING",
+        "note": "Read-only grounded assistant (/api/customer/mind/v1/assistant/query): answers from the progress registry, PAPER portfolio and journal with sources and timestamps; refuses trade requests; no language model.",
+        "endpoints": ["/api/customer/mind/v1/assistant/query"],
+        "missing": ["Broader question coverage", "Flutter web/Android/iOS runtime evidence"],
     },
     "room-detail": {
         "status": "IMPLEMENTING",

@@ -364,6 +364,21 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_assistant_accepts_only_a_question_and_is_read_only(self):
+        path="/api/customer/mind/v1/assistant/query"
+        self.assertTrue(proxy.allowed("POST",path))
+        self.assertFalse(proxy.allowed("GET",path))
+        self.assertFalse(proxy.allowed("POST",path+"/execute"))
+        for body in (json.dumps({"question":"x"*281}),json.dumps({"question":""}),
+                     json.dumps({"question":"buy 1","side":"BUY"}),json.dumps({"question":"bad\u0001"}),
+                     json.dumps({"question":42})):
+            with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+                self.assertEqual(proxy.handler(event("POST",path,body=body),None)["statusCode"],400,body)
+            upstream.assert_not_called()
+        with mock.patch.object(proxy.urllib.request,"urlopen",return_value=Reply()) as upstream:
+            self.assertEqual(proxy.handler(event("POST",path,body=json.dumps({"question":"what is my pnl?"})),None)["statusCode"],200)
+        self.assertEqual(json.loads(upstream.call_args.args[0].data),{"question":"what is my pnl?"})
+
     def test_mind_reads_cycle_and_notes_are_exact_and_never_write_status(self):
         for path in ("overview","evidence","strategy-replay","ma-walkforward","prospective-cohort",
                      "prospective-signals","prospective-outcomes","prospective-evidence-completeness",
