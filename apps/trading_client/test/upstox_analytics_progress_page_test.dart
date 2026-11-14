@@ -11,6 +11,14 @@ class _FixedProgressRepository implements UpstoxAnalyticsProgressRepository {
   Future<UpstoxAnalyticsProgress> load() async => progress;
 }
 
+class _SequenceProgressRepository implements UpstoxAnalyticsProgressRepository {
+  int reads = 0;
+  @override
+  Future<UpstoxAnalyticsProgress> load() async {
+    return _snapshot(partial: reads++ > 0);
+  }
+}
+
 UpstoxAnalyticsProgress _snapshot({bool stale = false, bool partial = false}) {
   final at = DateTime.parse('2026-11-13T10:00:00Z');
   return UpstoxAnalyticsProgress(
@@ -153,6 +161,27 @@ void main() {
     await tester.tap(find.text('Pending details'));
     await tester.pumpAndSettle();
     expect(find.text('8% / 20% earned'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+
+  testWidgets('backend refresh delta counts only changed evidence',
+      (tester) async {
+    final repository = _SequenceProgressRepository();
+    await tester.pumpWidget(MaterialApp(
+      home: UpstoxAnalyticsProgressPage(repository: repository),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('5%'), findsOneWidget);
+    expect(find.byKey(const ValueKey('upstox-acceptance-refresh-delta')),
+        findsNothing);
+    await tester.tap(find.byTooltip('Refresh analytics progress'));
+    await tester.pumpAndSettle();
+    expect(find.text('13%'), findsOneWidget);
+    expect(find.text('Since previous refresh: +8.0 pp'), findsOneWidget);
+    await tester.tap(find.byTooltip('Refresh analytics progress'));
+    await tester.pumpAndSettle();
+    expect(find.text('Since previous refresh: 0.0 pp'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
