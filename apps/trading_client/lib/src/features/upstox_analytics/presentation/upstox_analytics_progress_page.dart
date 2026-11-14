@@ -151,15 +151,17 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 30),
               children: [
                 if (activeTab == 'Overview') ...overview(data),
+                if (activeTab == 'Coverage') progressEvidenceStrip(data),
                 if (activeTab == 'Coverage') ...acceptanceProgress(data),
-                if (activeTab == 'Coverage') ...history(data),
                 if (activeTab == 'Coverage') persistedReceiptPanel(data),
+                if (activeTab == 'Coverage') ...history(data),
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
+                if (activeTab == 'Operations') progressEvidenceStrip(data),
                 if (activeTab == 'Operations') workerActivitySummary(data),
                 if (activeTab == 'Operations') ...acceptanceProgress(data),
-                if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') persistedReceiptPanel(data),
+                if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') ...taskList(data, specs.take(4)),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
@@ -168,6 +170,67 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           )),
       ])),
     );
+  }
+
+  /// A small first-screen summary. Each number has its own denominator and
+  /// evidence provenance. Worker reports are NEVER a substitute for accepted
+  /// market data. Unknown provider/target state remains unknown, never zero.
+  Widget progressEvidenceStrip(UpstoxAnalyticsProgress data) {
+    final reports = workerObservations(data);
+    final fresh = reports.where((report) => report.state == 'FRESH').length;
+    final changed = reports.where((report) =>
+        report.state == 'FRESH' && const {
+          'PR_REFERENCE_CHANGED', 'COMMIT_REPORTED', 'MERGE_REPORTED',
+          'CI_PASS_REPORTED', 'BLOCKER_CHANGED',
+        }.contains(report.lastRunChange)).length;
+    final pr = UpstoxReportedPrPipeline.fromReports(reports);
+    final stored = data.persistedReceipts;
+    final hasDb = stored?.evidenceState == 'PERSISTED_CHECKPOINTS_ONLY';
+    final archived = hasDb ? stored!.archivedVerifiedChunks?.toString() ?? '—' : '—';
+    final attested = hasDb ? stored!.attestedRetentionChunks?.toString() ?? '—' : '—';
+    final dbState = stored == null ? 'Receipt API unobserved'
+        : !hasDb ? 'No UPSTOX source registered'
+        : 'Archived $archived · rights-attested $attested';
+    return panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Expanded(child: Text('Evidence tracking',
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800))),
+        const Text('TRACKER v3', key: ValueKey('upstox-tracker-version'),
+          style: TextStyle(fontSize: 9, color: MintTickPalette.mutedSilver)),
+      ]),
+      const SizedBox(height: 7),
+      Row(children: [
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$fresh/5', key: const ValueKey('upstox-worker-report-count'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800,
+              color: MintTickPalette.mint)),
+          const Text('Workers reporting',
+            style: TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
+        ])),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('$changed/5', key: const ValueKey('upstox-worker-run-changes'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text('Latest report changes',
+            style: TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
+        ])),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${pr.earnedGates}/15',
+            key: const ValueKey('upstox-reported-pr-gates'),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+          const Text('PR-cycle gates*',
+            style: TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
+        ])),
+      ]),
+      const SizedBox(height: 6),
+      Text(dbState, key: const ValueKey('upstox-first-screen-stored-evidence'),
+        style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
+      const SizedBox(height: 4),
+      const Text('*Latest reported PR stages only; may reset. Not cumulative '
+        'product completion. Data acceptance below requires independently '
+        'verified source rights and persistent coverage.',
+        style: TextStyle(fontSize: 9.5, color: MintTickPalette.mutedSilver,
+          height: 1.25)),
+    ]), padding: const EdgeInsets.all(10));
   }
 
   Widget persistedReceiptPanel(UpstoxAnalyticsProgress data) {
@@ -237,6 +300,8 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
+      progressEvidenceStrip(data),
+      const SizedBox(height: 8),
       if (source == null || source.state != 'VERIFIED' || source.stale)
         Padding(padding: const EdgeInsets.only(bottom: 12),
           child: panel(Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -605,8 +670,10 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
         ? note('Verified unique historical partitions: '
             '${ingestion.verified} / $target from persisted checkpoint evidence. '
             'This is partial coverage, not full-universe readiness.')
-        : note('No verified timeframe, instrument or year coverage is available '
-            'from the Upstox Analytics read-only sample. Counts are not backfill.'),
+        : note('No accepted per-instrument or per-year historical coverage target '
+            'is verified. See Stored Upstox checkpoints above for observed '
+            'database records; a source sample or archived chunk alone does '
+            'not establish full-universe completion.'),
       taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
       taskTile(specs[2], ingestion),
       note('NIFTY 50, NIFTY 500 and wider NSE/BSE coverage require '
