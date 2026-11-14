@@ -550,7 +550,19 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     final verdict=!_dataFresh?'ABSTAIN · DATA STALE':
       !_riskApproved?'ABSTAIN · RISK VETO':
       good?'BUY CANDIDATE · RESEARCH':'WAIT · DISAGREEMENT';
-    return _surface('Decision Simulator','Change evidence, freshness and portfolio vetoes',[
+    final replay=widget.strategyReplayRepository;
+    return _surface('Decision Lab',replay!=null
+        ? 'Server replay of recorded research · research only'
+        : 'Local simulation · no server decision recorded',[
+      if(replay!=null) ...[
+        const MindTag('SERVER RECORD · RESEARCH ONLY · NO ORDERS',color:MindPalette.blue),
+        const SizedBox(height:10),
+        MindStrategyReplayPanel(key:const ValueKey('mind-decision-lab-replay'),
+          repository:replay),
+        const SizedBox(height:12),
+        const MindTag('LOCAL SIMULATION BELOW · NOT A RECORDED DECISION',color:MindPalette.yellow),
+        const SizedBox(height:10),
+      ],
       const MindTag('LOCAL SCENARIO ARITHMETIC · NOT A SERVER DECISION',color:MindPalette.yellow),
       const SizedBox(height:10),
       const MindTag('NO ORDERS · NO BROKER ACCESS · NOTHING IS SAVED',color:MindPalette.red),

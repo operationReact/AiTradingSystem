@@ -38,7 +38,7 @@ class MindCapabilityProgressServiceTest {
             .contains(i.status()));
         // Exactly the audited MOCK screens (Settings became IMPLEMENTING in the Settings PR).
         assertThat(manifest.items().stream().filter(i -> "SCREEN".equals(i.kind())
-            && "MOCK".equals(i.status())).count()).isEqualTo(3);
+            && "MOCK".equals(i.status())).count()).isEqualTo(2);
         assertThat(manifest.items()).filteredOn(i -> "SCREEN".equals(i.kind()))
             .allMatch(i -> Set.of("MOCK", "IMPLEMENTING", "NOT_STARTED", "DATA_BLOCKED").contains(i.status()));
         // A TESTED strategy must carry source and test evidence.
