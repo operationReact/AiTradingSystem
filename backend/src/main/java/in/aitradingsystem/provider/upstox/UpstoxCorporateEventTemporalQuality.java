@@ -31,7 +31,11 @@ public final class UpstoxCorporateEventTemporalQuality {
         if (o.availableAt().isBefore(o.publishedAt())
                 || o.observedAt().isBefore(o.availableAt()))
             return Status.INCONSISTENT_PUBLICATION;
-        if (o.availableAt().isAfter(asOf)) return Status.FUTURE_AVAILABLE;
+        // An observation first seen after the requested research cutoff cannot be used
+        // to reconstruct an earlier point-in-time state, even if the issuer's
+        // publishedAt/availableAt timestamps precede that cutoff.
+        if (o.availableAt().isAfter(asOf) || o.observedAt().isAfter(asOf))
+            return Status.FUTURE_AVAILABLE;
         return Status.VALID_METADATA;
     }
 
