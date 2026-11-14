@@ -494,15 +494,30 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     ];
   }
 
-  List<Widget> history(UpstoxAnalyticsProgress data) => [
-    heading('Historical coverage', 'Per-instrument and per-year receipts'),
-    note('No verified timeframe, instrument or year coverage is available '
-      'from the Upstox Analytics read-only sample. Counts are not backfill.'),
-    taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
-    taskTile(specs[2], data.find('HISTORICAL_INGESTION')),
-    note('NIFTY 50, NIFTY 500 and wider NSE/BSE coverage require '
-      'independent ingestion and source-rights validation.'),
-  ];
+  List<Widget> history(UpstoxAnalyticsProgress data) {
+    final ingestion = data.find('HISTORICAL_INGESTION');
+    final target = ingestion?.details['targetUnits'];
+    final receiptEvidence = ingestion != null && !ingestion.stale &&
+        ingestion.state == 'PARTIAL' &&
+        ingestion.details['progressProof'] ==
+            'PERSISTED_CANDLE_CHECKPOINTS_V1' &&
+        target is int && target > 0 &&
+        ingestion.verified != null && ingestion.verified! <= target &&
+        ingestion.checked != null && ingestion.checked! >= ingestion.verified!;
+    return [
+      heading('Historical coverage', 'Per-instrument and per-year receipts'),
+      receiptEvidence
+        ? note('Verified unique historical partitions: '
+            '${ingestion.verified} / $target from persisted checkpoint evidence. '
+            'This is partial coverage, not full-universe readiness.')
+        : note('No verified timeframe, instrument or year coverage is available '
+            'from the Upstox Analytics read-only sample. Counts are not backfill.'),
+      taskTile(specs[1], data.find('INSTRUMENT_MAPPING')),
+      taskTile(specs[2], ingestion),
+      note('NIFTY 50, NIFTY 500 and wider NSE/BSE coverage require '
+        'independent ingestion and source-rights validation.'),
+    ];
+  }
 
   List<Widget> quality(UpstoxAnalyticsProgress data) => [
     heading('Quality & rights', 'A working API token never grants model-training rights'),
