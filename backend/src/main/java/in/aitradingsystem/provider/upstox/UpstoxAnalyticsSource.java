@@ -400,8 +400,9 @@ public final class UpstoxAnalyticsSource {
         } catch (Exception ex) {
             // The upstream response and token never escape this source.
             // Recognize only our own strict payload error, not arbitrary strings.
-            if (fno && ex instanceof IllegalStateException
-                    && "UPSTOX_INVALID_RESPONSE".equals(ex.getMessage())) {
+            if (fno && (ex instanceof com.fasterxml.jackson.core.JsonProcessingException
+                    || (ex instanceof IllegalStateException
+                    && "UPSTOX_INVALID_RESPONSE".equals(ex.getMessage())))) {
                 throw unavailable("UPSTOX_FNO_INVALID_PAYLOAD");
             }
             throw unavailable(fno ? "UPSTOX_FNO_UNKNOWN_FAILURE"
