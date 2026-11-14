@@ -664,6 +664,43 @@ class AccountProxyTest(unittest.TestCase):
         with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=OSError("private connect refused")):
             self.assertEqual(proxy.handler(event("GET","/api/auth/cognito/me"),None)["statusCode"],503)
 
+    def test_fno_paper_reconciliation_routes_are_authenticated_get_only(self):
+        room="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
+        for suffix in ("reconciliation", "wallet-reconciliation"):
+            endpoint=room+suffix
+            self.assertTrue(proxy.allowed("GET", endpoint))
+            for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
+                self.assertFalse(proxy.allowed(method, endpoint))
+                with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+                    rejected=proxy.handler(event(method,endpoint),None)
+                self.assertEqual(rejected["statusCode"],404)
+                upstream.assert_not_called()
+            for invalid in (endpoint+"/raw", endpoint+"/status", endpoint+"?admin=true"):
+                self.assertFalse(proxy.allowed("GET", invalid))
+            with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+                denied=proxy.handler(event("GET",endpoint,jwt={"claims":{}}),None)
+            self.assertEqual(denied["statusCode"],401)
+            upstream.assert_not_called()
+            with mock.patch.object(proxy.urllib.request, "urlopen",return_value=Reply()) as upstream:
+                ok=proxy.handler(event("GET",endpoint),None)
+            self.assertEqual(ok["statusCode"],200)
+            self.assertEqual(ok["headers"]["cache-control"],"no-store")
+            req=upstream.call_args.args[0]
+            self.assertEqual(req.full_url,proxy.BACKEND+endpoint)
+            self.assertEqual(req.get_method(),"GET")
+            self.assertEqual(req.get_header("Authorization"),"Bearer public-test-token")
+            self.assertIsNone(req.data)
+            backend_denial=proxy.urllib.error.HTTPError(
+                proxy.BACKEND+endpoint,404,"Not Found",{},
+                io.BytesIO(b'{"error":"PAPER_ROOM_NOT_FOUND"}'))
+            with mock.patch.object(proxy.urllib.request,"urlopen",side_effect=backend_denial):
+                result=proxy.handler(event("GET",endpoint),None)
+            self.assertEqual(result["statusCode"],404)
+            self.assertEqual(json.loads(result["body"])["error"],"PAPER_ROOM_NOT_FOUND")
+        self.assertFalse(proxy.allowed("GET",room+"admin"))
+        self.assertFalse(proxy.allowed("GET",room+"wallet-reconciliation/live"))
+        self.assertFalse(proxy.allowed("GET",room+"reconciliation/orders"))
+
     def test_fno_paper_order_routes_never_enable_live_or_admin(self):
         route="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
         for method, suffix in (("POST","orders"),("GET","orders"),("GET","positions"),("GET","market"),("GET","expiries")):
