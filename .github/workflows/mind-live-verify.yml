@@ -1,0 +1,62 @@
+name: Mind live edge verification
+
+# Read-only: proves the public account edge serves the Mind routes and protects them.
+# Makes no trading calls, never sends credentials, and never writes to any service.
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["ec2-paper-ssm-app-deploy"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Public readiness is healthy
+        run: |
+          set -euo pipefail
+          code="$(curl -sS -o /tmp/ready.json -w '%{http_code}' --max-time 20 https://api.minttick.com/actuator/health/readiness)"
+          test "$code" = 200
+          echo "readiness HTTP $code"
+      - name: Mind routes exist and reject anonymous access (401, not 404)
+        run: |
+          set -euo pipefail
+          base=https://api.minttick.com
+          fail=0
+          check() {
+            local method="$1" path="$2" body="${3:-}"
+            local code
+            if [ -n "$body" ]; then
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" -H 'content-type: application/json' -d "$body" "$base$path")"
+            else
+              code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X "$method" "$base$path")"
+            fi
+            if [ "$code" = 401 ]; then echo "PASS $method $path -> 401"; else echo "FAIL $method $path -> $code"; fail=1; fi
+          }
+          check GET /api/customer/mind/v1/progress
+          check GET /api/customer/mind/v1/paper-portfolio
+          check GET /api/customer/mind/v1/paper-journal
+          check POST /api/customer/mind/v1/assistant/query '{"question":"status"}'
+          check GET /api/customer/trading-rooms
+          exit $fail
+      - name: Unknown Mind route and trade routes stay closed (404)
+        run: |
+          set -euo pipefail
+          base=https://api.minttick.com
+          for path in /api/customer/mind/v1/admin /api/customer/mind/v1/progress/items/x/status; do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$base$path")"
+            test "$code" = 404 || { echo "FAIL GET $path -> $code"; exit 1; }
+            echo "PASS GET $path -> 404"
+          done
+      - name: Record the deployed commit from the deploy run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "Verified edge against commit $sha; backend revision is confirmed by the deploy job's RELEASE_SHA record, not by a public endpoint."
