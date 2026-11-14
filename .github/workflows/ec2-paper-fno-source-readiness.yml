@@ -1,0 +1,74 @@
+name: MintTick PAPER - private F&O current option-chain source proof
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-source-readiness.json'
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-fno-source-readiness.yml'
+      - 'infra/ec2-paper/fno_source_readiness.py'
+      - 'scripts/tests/test_fno_source_readiness.py'
+
+permissions:
+  contents: read
+  id-token: write
+
+# Protect the exact existing PAPER EC2 from competing release/activation changes.
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  source-readiness:
+    if: github.repository == 'operationReact/AiTradingSystem'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Validate reviewed one-file request and offline parser/source test
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p test_fno_source_readiness.py -v
+          python3 -m py_compile infra/ec2-paper/fno_source_readiness.py
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            test "$GITHUB_REF" = "refs/heads/dev"
+            test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/ec2-paper/requests/fno-source-readiness.json"
+            python3 - <<'PY'
+          import json
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, "infra/ec2-paper")
+          from fno_source_readiness import expected_request
+          path=Path("infra/ec2-paper/requests/fno-source-readiness.json")
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size<2048
+          assert json.loads(path.read_text())==expected_request()
+          PY
+          fi
+
+      - name: Assume existing narrow private PAPER SSM role
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno-source-proof
+          role-duration-seconds: 850
+
+      - name: Execute exact host private current NIFTY option-chain acceptance
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_source_readiness.py runner
+
+# No EC2 Start/Stop, no AWS resources, no secrets, no market data return, no
+# persistence/training, no customer routes, and no PAPER/LIVE broker order action.
