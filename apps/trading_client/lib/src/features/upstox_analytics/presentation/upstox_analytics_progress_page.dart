@@ -523,7 +523,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               style: TextStyle(fontSize: 11,
                 color: MintTickPalette.mutedSilver)),
           ]),
-      ))))),
+      )))),
     );
   }
 
