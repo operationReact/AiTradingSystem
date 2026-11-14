@@ -61,13 +61,17 @@ class UpstoxReadinessProgress {
   static int _partialTenths(String code, int weight, UpstoxAnalyticsTask? task) {
     final proof = partialProofs[code];
     if (proof == null || task == null || task.state != 'PARTIAL' ||
-        task.stale || task.details['progressProof'] != proof) return 0;
+        task.stale || task.details['progressProof'] != proof) {
+      return 0;
+    }
     final total = task.details['targetUnits'];
     final verified = task.verified;
     final checked = task.checked;
     if (total is! int || total <= 0 || total > 100000000 ||
         verified == null || verified <= 0 || verified > total ||
-        checked == null || checked < verified) return 0;
+        checked == null || checked < verified) {
+      return 0;
+    }
     // PARTIAL never earns the entire milestone; final completion needs
     // an independently verified VERIFIED state.
     final ratio = verified == total ? 0.99 : verified / total;
