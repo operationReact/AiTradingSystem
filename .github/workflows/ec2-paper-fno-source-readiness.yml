@@ -62,7 +62,7 @@ jobs:
           role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
           aws-region: ap-south-1
           role-session-name: minttick-fno-source-proof
-          role-duration-seconds: 850
+          role-duration-seconds: 900
 
       - name: Execute exact host private current NIFTY option-chain acceptance
         if: github.event_name == 'push'
