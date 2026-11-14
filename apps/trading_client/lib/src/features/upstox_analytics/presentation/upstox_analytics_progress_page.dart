@@ -153,6 +153,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 if (activeTab == 'Coverage') ...history(data), 
                 if (activeTab == 'Coverage') ...quality(data),
                 if (activeTab == 'Coverage') ...mind(data),
+                if (activeTab == 'Operations') workerActivitySummary(data),
                 if (activeTab == 'Operations') ...acceptanceProgress(data),
                 if (activeTab == 'Operations') ...workerDelivery(data),
                 if (activeTab == 'Operations') ...taskList(data, specs),
@@ -179,9 +180,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final candles = candleCount is int && candleCount > 0 ? '$candleCount' : '—';
     final ratios = ratioCount is int && ratioCount > 0 ? '$ratioCount' : '—';
     return [
-      ...acceptanceProgress(data),
-      const SizedBox(height: 10),
       workerActivitySummary(data),
+      const SizedBox(height: 10),
+      ...acceptanceProgress(data),
       const SizedBox(height: 14),
       Row(children: [
         const Expanded(child: Text('Analytics health',
@@ -383,25 +384,47 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
 
   Widget workerActivitySummary(UpstoxAnalyticsProgress data) {
     final reports = workerObservations(data);
+    final pipeline = UpstoxReportedPrPipeline.fromReports(reports);
     final fresh = reports.where((x) => x.state == 'FRESH').length;
-    final stale = reports.where((x) => x.state == 'STALE').length;
-    return panel(Row(children: [
-      const Icon(Icons.work_history_outlined,
-        size: 19, color: MintTickPalette.mint),
-      const SizedBox(width: 9),
-      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Development activity', style: TextStyle(
-            fontWeight: FontWeight.w800, fontSize: 12)),
-          Text('$fresh/5 fresh worker reports · $stale stale',
-            style: const TextStyle(fontSize: 10,
-              color: MintTickPalette.mutedSilver)),
-          const Text('GitHub evidence, not operational readiness',
-            style: TextStyle(fontSize: 10,
-              color: MintTickPalette.mutedSilver)),
-        ])),
-      TextButton(onPressed: () => setState(() => activeTab = 'Operations'),
-        child: const Text('Work details', style: TextStyle(fontSize: 11))),
+    final unknown = pipeline.stages.length - pipeline.observedWorkers;
+    return panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Icon(Icons.work_history_outlined,
+          size: 19, color: MintTickPalette.mint),
+        const SizedBox(width: 9),
+        const Expanded(child: Text('Current PR delivery (reported)',
+          style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12))),
+        Text(pipeline.percent == null ? '—' : '${pipeline.percent}%',
+          key: const ValueKey('upstox-reported-pr-delivery-percent'),
+          style: const TextStyle(fontWeight: FontWeight.w800,
+            color: MintTickPalette.mint, fontSize: 17)),
+      ]),
+      const SizedBox(height: 7),
+      LinearProgressIndicator(
+        key: const ValueKey('upstox-reported-pr-delivery-bar'),
+        minHeight: 4,
+        value: pipeline.percent == null ? 0 : pipeline.percent! / 100,
+        backgroundColor: MintTickPalette.darkBorder,
+        valueColor: const AlwaysStoppedAnimation<Color>(MintTickPalette.mint),
+      ),
+      const SizedBox(height: 6),
+      Text('${pipeline.earnedGates}/15 latest-PR delivery gates reported'
+        ' · ${pipeline.observedWorkers}/5 workstreams observed',
+        style: const TextStyle(fontSize: 10,
+          color: MintTickPalette.mutedSilver)),
+      Text('$fresh/5 fresh reports · $unknown unknown PR stages',
+        style: const TextStyle(fontSize: 10,
+          color: MintTickPalette.mutedSilver)),
+      const SizedBox(height: 3),
+      const Text('Stages: PR referenced → CI PASS reported → MERGED reported. '
+        'This resets for each new PR, is not total project completion, '
+        'and does not change the verified data/PAPER score below.',
+        style: TextStyle(fontSize: 10,
+          color: MintTickPalette.mutedSilver, height: 1.35)),
+      Align(alignment: Alignment.centerRight,
+        child: TextButton(
+          onPressed: () => setState(() => activeTab = 'Operations'),
+          child: const Text('Work details', style: TextStyle(fontSize: 11)))),
     ]), padding: const EdgeInsets.all(10));
   }
 
@@ -411,6 +434,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final prSample = UpstoxDeliveryWorkstreams.fromRecentPrs(
         observedPrSample ? githubTask?.details['trackedPrs'] : null);
     final reports = workerObservations(data);
+    final stages = UpstoxReportedPrPipeline.fromReports(reports).stages;
     final fresh = reports.where((x) => x.state == 'FRESH').length;
     final missing = reports.where((x) => x.state == 'NO_REPORT').length;
     return [
@@ -440,6 +464,14 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                     maxLines: 1, overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 10,
                       color: MintTickPalette.mutedSilver)),
+                  Text(stages[i].earned == null
+                      ? 'Current PR stage: unknown (stale/missing evidence)'
+                      : 'Current PR stage: ${stages[i].earned}/3 · '
+                        '${stages[i].percent}% reported delivery',
+                    key: ValueKey('upstox-worker-${i + 1}-pr-stage'),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 10,
+                      color: MintTickPalette.mint)),
                   if (reports[i].state != 'NO_REPORT')
                     Text('Last reported ${when(reports[i].reportedAt)} · ${reports[i].state}',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -485,7 +517,11 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
           ),
       ]), padding: const EdgeInsets.all(10)),
       const SizedBox(height: 8),
-      note('Last-reported times come from GitHub issue #1012. '
+      note('The PR-stage percentages describe each worker\'s latest '
+        'reported PR cycle, not cumulative project delivery. '
+        'They may drop when a new PR opens and are not independently '
+        'verified CI or deployment evidence. '
+        'Last-reported times come from GitHub issue #1012. '
         'Reported run changes compare GitHub issue notes, not '
         'independently validated production milestones. Repeated notes '
         'do not count as new delivery. A recent worker report or merged PR '
