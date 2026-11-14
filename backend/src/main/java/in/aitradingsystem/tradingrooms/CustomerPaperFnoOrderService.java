@@ -243,8 +243,8 @@ public class CustomerPaperFnoOrderService {
             .param("side",side).param("lot",contract.lotSize())
             .param("qty",quantity).param("limit",limit).param("price",price)
             .param("notional",notional).param("fees",fees).param("pnl",realized)
-            .param("cash",cashAfter).param("exchangeAt",quote.exchangeAt())
-            .param("observedAt",quote.observedAt()).param("idem",idem)
+            .param("cash",cashAfter).param("exchangeAt",java.sql.Timestamp.from(quote.exchangeAt()))
+            .param("observedAt",java.sql.Timestamp.from(quote.observedAt())).param("idem",idem)
             .param("hash",fingerprint).update();
         return new Fill(id,room,instrumentKey,contract.side(),expiry,side,quantity,
                 contract.lotSize(),limit,price,notional,fees,realized,cashAfter,
