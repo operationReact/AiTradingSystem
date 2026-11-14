@@ -44,8 +44,12 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         return engine(rights, false);
     }
     private CustomerPaperFnoOrderService engine(boolean paperRights, boolean displayRights) {
+        return engineAt(NOW, paperRights, displayRights);
+    }
+    private CustomerPaperFnoOrderService engineAt(Instant instant, boolean paperRights,
+                                                  boolean displayRights) {
         return new CustomerPaperFnoOrderService(jdbc,source,live,marketCalendar,
-                Clock.fixed(NOW,ZoneOffset.UTC),paperRights,displayRights);
+                Clock.fixed(instant,ZoneOffset.UTC),paperRights,displayRights);
     }
     private <T> T tx(java.util.function.Supplier<T> fn) {
         return new TransactionTemplate(transactionManager).execute(status->fn.get());
@@ -181,6 +185,79 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         assertThat(valued.getFirst().priceFresh()).isTrue();
         assertThat(valued.getFirst().indicativeUnrealizedPnlPaise()).isNotNull();
         verify(live).eligiblePaperQuote(CONTRACT);
+    }
+
+    @Test
+    void invalidTicksNonCrossingLimitsAndUnlistedContractsNeverDebitVirtualWallet() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var s=engine(true);
+
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_bad_tick1",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101.03"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("limit-price tick");
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_bad_buylim1",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("99.00"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("does not cross");
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_bad_selllim1",CONTRACT,
+                EXPIRY,"SELL",1,new BigDecimal("101.00"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("does not cross");
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_unlisted_01",
+                "NSE_FO|OTHER",EXPIRY,"BUY",1,new BigDecimal("101.00"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("Listed NSE option contract unavailable");
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_premiumcap1",CONTRACT,
+                EXPIRY,"BUY",20,new BigDecimal("101.00"))))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("premium cap");
+
+        assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
+        assertThat(s.positions(owner,paper)).isEmpty();
+        assertThat(s.orders(owner,paper)).isEmpty();
+    }
+
+    @Test
+    void staleFutureAndNonSessionExchangeTimestampsNeverCreatePaperFill() {
+        UUID owner=customer();
+        UUID paper=room(owner,"PAPER");
+        wallets.activate(owner,paper);
+        wallets.setPaused(owner,paper,false);
+        prepareMarket("99.00","100.00");
+        var s=engine(true);
+
+        // Receipt may be new while the exchange last trade is old.
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+                new UpstoxFnoV3LiveFeedService.PaperQuote(CONTRACT,
+                        new BigDecimal("99"),new BigDecimal("100"),
+                        NOW.minusSeconds(30),NOW.minusSeconds(1))));
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_stale_tick",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .hasMessageContaining("stale or outside session");
+
+        // Reject a feed with an exchange trade timestamp in the future.
+        when(live.eligiblePaperQuote(CONTRACT)).thenReturn(java.util.Optional.of(
+                new UpstoxFnoV3LiveFeedService.PaperQuote(CONTRACT,
+                        new BigDecimal("99"),new BigDecimal("100"),
+                        NOW.plusSeconds(3),NOW)));
+        assertThatThrownBy(()->tx(()->s.submit(owner,paper,"fno_future_tick",CONTRACT,
+                EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .hasMessageContaining("stale or outside session");
+
+        // Saturday cannot become a PAPER session just because the fixture has quotes.
+        var saturday=engineAt(Instant.parse("2026-11-14T04:00:00Z"),true,false);
+        assertThatThrownBy(()->tx(()->saturday.submit(owner,paper,"fno_weekend_01",
+                CONTRACT,EXPIRY,"BUY",1,new BigDecimal("101"))))
+                .hasMessageContaining("session closed");
+
+        assertThat(s.orders(owner,paper)).isEmpty();
+        assertThat(s.positions(owner,paper)).isEmpty();
+        assertThat(wallets.get(owner,paper).availableCashPaise()).isEqualTo(2_000_000L);
     }
 
 }
