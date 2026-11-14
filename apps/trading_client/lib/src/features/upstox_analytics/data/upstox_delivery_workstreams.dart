@@ -95,6 +95,9 @@ class UpstoxWorkerObservation {
     this.blocker,
     this.next,
     this.reportedAt,
+    this.previousReportedAt,
+    this.reportCount12h,
+    this.lastRunChange,
     this.url,
   });
 
@@ -107,7 +110,16 @@ class UpstoxWorkerObservation {
   final String? blocker;
   final String? next;
   final DateTime? reportedAt;
+  final DateTime? previousReportedAt;
+  final int? reportCount12h;
+  final String? lastRunChange;
   final String? url;
+
+  static const knownRunChanges = {
+    'BASELINE_ONLY', 'PR_REFERENCE_CHANGED', 'MERGE_REPORTED',
+    'CI_PASS_REPORTED', 'COMMIT_REPORTED', 'BLOCKER_CHANGED',
+    'NO_NEW_DELIVERY',
+  };
 
   static const scopes = [
     'SOURCE_INGESTION',
@@ -152,6 +164,14 @@ class UpstoxWorkerObservation {
           blocker: bounded(item['blocker'], 96),
           next: bounded(item['next'], 160),
           reportedAt: observedAt,
+          previousReportedAt: DateTime.tryParse(
+              (item['previousReportedAt'] ?? '').toString()),
+          reportCount12h: item['reports12h'] is int &&
+                  (item['reports12h'] as int) >= 0 &&
+                  (item['reports12h'] as int) <= 100
+              ? item['reports12h'] as int : null,
+          lastRunChange: knownRunChanges.contains(item['lastRunChange'])
+              ? item['lastRunChange'] as String : null,
         );
       }
     }
