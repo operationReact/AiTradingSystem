@@ -112,7 +112,9 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
               ])),
             status(data?.find('SOURCE_VERIFICATION'),
               labelOverride: data?.find('SOURCE_VERIFICATION')?.state == 'DISABLED'
-                ? 'PROBE OFF' : null),
+                ? 'PROBE OFF'
+                : data?.find('SOURCE_VERIFICATION')?.state == 'VERIFIED'
+                    ? 'SOURCE OK' : null),
           ])),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           child: Row(children: [for (final name in tabs)
@@ -156,7 +158,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
                 if (activeTab == 'Operations') workerActivitySummary(data),
                 if (activeTab == 'Operations') ...acceptanceProgress(data),
                 if (activeTab == 'Operations') ...workerDelivery(data),
-                if (activeTab == 'Operations') ...taskList(data, specs),
+                if (activeTab == 'Operations') ...taskList(data, specs.take(4)),
                 if (activeTab == 'Operations') ...github(data),
                 if (activeTab == 'Operations') ...paper(data),
               ],
@@ -198,7 +200,7 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
       ...acceptanceProgress(data),
       const SizedBox(height: 14),
       Row(children: [
-        const Expanded(child: Text('Analytics health',
+        const Expanded(child: Text('Source probe (sample)',
           style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
         Text('Updated ${when(data.generatedAt)}',
           style: const TextStyle(fontSize: 10, color: MintTickPalette.mutedSilver)),
