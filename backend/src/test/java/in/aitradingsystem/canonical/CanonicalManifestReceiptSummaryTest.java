@@ -2,10 +2,12 @@ package in.aitradingsystem.canonical;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
@@ -14,6 +16,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 
@@ -55,6 +58,21 @@ class CanonicalManifestReceiptSummaryTest {
         when(rights.isPermitted(eq("ANGEL_ONE"), eq("historical"),
                 any(GoldenSourceRightsRepository.Use.class), eq(usageAt))).thenReturn(true);
         assertEquals(List.of(row), summary.findEligible(listing, "DAY", asOf, usageAt));
+    }
+
+    @Test
+    void receiptAggregationUsesExistenceNotManifestJoinToAvoidInflatedRows() {
+        receipts(List.of());
+        summary.findEligible(listing, "DAY", asOf, usageAt);
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc).query(sql.capture(),
+                org.mockito.ArgumentMatchers.<RowMapper<CanonicalManifestReceiptSummary.ProviderReceipt>>any(),
+                eq(listing), eq("DAY"), any(), any());
+        assertTrue(sql.getValue().contains("COUNT(DISTINCT c.chunk_id)"));
+        assertTrue(sql.getValue().contains("EXISTS ("));
+        assertTrue(sql.getValue().contains("m.object_sha256 = c.dataset_digest"));
+        assertTrue(sql.getValue().contains("m.published_at <= ?"));
+        assertTrue(!sql.getValue().contains("JOIN golden_dataset_object_manifest"));
     }
 
     @Test
