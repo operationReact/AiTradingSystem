@@ -141,11 +141,26 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     return value;
   }
 
+  /// BUY prices at the server ask, SELL-to-close at the server bid. A missing
+  /// quote leaves the price empty, which keeps submission disabled.
+  static num? _sidePrice(CustomerFnoLeg leg, String side) =>
+      side == 'BUY' ? leg.ask : leg.bid;
+
   void _select(CustomerFnoLeg leg) {
     setState(() {
       _selected = leg;
       _message = null;
-      final suggested = _side == 'BUY' ? leg.ask : leg.bid;
+      final suggested = _sidePrice(leg, _side);
+      _price.text = suggested == null ? '' : suggested.toString();
+    });
+  }
+
+  void _setSide(String side) {
+    setState(() {
+      _side = side;
+      _message = null;
+      final leg = _selected;
+      final suggested = leg == null ? null : _sidePrice(leg, side);
       _price.text = suggested == null ? '' : suggested.toString();
     });
   }
@@ -180,13 +195,20 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _message = error is ApiHttpFailure
-            ? 'Order rejected by the server (HTTP ${error.statusCode}). Nothing was filled.'
+        // Only a definite 4xx from the server is a rejection. Anything else
+        // (5xx, timeout, network, unreadable response) may have executed.
+        _message = _isDefiniteRejection(error)
+            ? 'Order rejected by the server (HTTP ${(error as ApiHttpFailure).statusCode}). Nothing was filled.'
             : 'The order outcome is unknown. It is not retried. Check positions before acting.';
       });
       await _load();
     }
   }
+
+  static bool _isDefiniteRejection(Object error) =>
+      error is ApiHttpFailure &&
+      error.statusCode != null &&
+      error.statusCode! >= 400 && error.statusCode! < 500;
 
   static final _rand = Random.secure();
   static String _newKey() {
@@ -331,7 +353,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
                 ButtonSegment(value: 'SELL', label: Text('SELL to close')),
               ],
               selected: {_side},
-              onSelectionChanged: (s) => setState(() => _side = s.first),
+              onSelectionChanged: (s) => _setSide(s.first),
             ),
           ]),
           Row(children: [

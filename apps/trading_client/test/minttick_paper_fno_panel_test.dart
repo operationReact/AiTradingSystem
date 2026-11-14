@@ -32,9 +32,10 @@ CustomerFnoMarket market({String status = 'FRESH_QUOTES', bool fresh = true}) =>
     });
 
 class _FakeRepo implements CustomerPaperFnoRepository {
-  _FakeRepo({this.marketResult, this.failure});
+  _FakeRepo({this.marketResult, this.failure, this.submitFailure});
   final CustomerFnoMarket? marketResult;
   final ApiFailure? failure;
+  final ApiFailure? submitFailure;
   final submits = <Map<String, Object?>>[];
 
   @override
@@ -60,7 +61,7 @@ class _FakeRepo implements CustomerPaperFnoRepository {
     required num limitPrice,
   }) async {
     submits.add({'key': idempotencyKey, 'side': side, 'lots': lots, 'price': limitPrice});
-    throw const ApiTransportFailure('NETWORK_OR_PARSE_FAILURE', null);
+    throw submitFailure ?? const ApiTransportFailure('NETWORK_OR_PARSE_FAILURE', null);
   }
 }
 
@@ -136,5 +137,45 @@ void main() {
     expect(repo.submits.single['lots'], 1);
     expect((repo.submits.single['key'] as String).startsWith('fno-'), isTrue);
     expect(find.textContaining('outcome is unknown'), findsOneWidget);
+  });
+
+  testWidgets('switching BUY to SELL reprices to the server bid and sends that price', (tester) async {
+    final repo = _FakeRepo(marketResult: market());
+    await pump(tester, repo);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('paper-fno-price'))).controller!.text,
+      '102.0');
+    await tester.tap(find.text('SELL to close'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byKey(const ValueKey('paper-fno-price'))).controller!.text,
+      '101.5');
+    await tester.tap(find.byKey(const ValueKey('paper-fno-submit')));
+    await tester.pumpAndSettle();
+    expect(repo.submits.single['side'], 'SELL');
+    expect(repo.submits.single['price'], 101.5);
+  });
+
+  testWidgets('a 503 on submit is an unknown outcome, never a rejection', (tester) async {
+    final repo = _FakeRepo(marketResult: market(),
+        submitFailure: const ApiHttpFailure('UNAVAILABLE', null, 503));
+    await pump(tester, repo);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('paper-fno-submit')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('outcome is unknown'), findsOneWidget);
+    expect(find.textContaining('Nothing was filled'), findsNothing);
+  });
+
+  testWidgets('a 409 on submit is a definite rejection', (tester) async {
+    final repo = _FakeRepo(marketResult: market(),
+        submitFailure: const ApiHttpFailure('CONFLICT', null, 409));
+    await pump(tester, repo);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('paper-fno-submit')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Nothing was filled'), findsOneWidget);
   });
 }
