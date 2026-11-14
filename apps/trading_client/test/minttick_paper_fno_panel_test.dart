@@ -18,27 +18,42 @@ Map<String, dynamic> leg({bool fresh = true, String side = 'CE'}) => {
       'paperEligible': fresh,
     };
 
-CustomerFnoMarket market({String status = 'FRESH_QUOTES', bool fresh = true}) =>
+CustomerFnoMarket market({String status = 'FRESH_QUOTES', bool fresh = true,
+    bool rights = true}) =>
     CustomerFnoMarket.decode({
       'underlyingKey': 'NSE_INDEX|Nifty 50',
       'expiry': '2026-11-20',
       'status': status,
       'snapshotAt': '2026-11-16T04:30:00Z',
-      'displayRightsVerified': true,
+      'displayRightsVerified': rights,
       'liveOrderEnabled': false,
       'strikes': [
         {'strikePrice': 24000, 'call': leg(fresh: fresh), 'put': null},
       ],
     });
 
+CustomerFnoPosition heldPosition() => CustomerFnoPosition.decode({
+      'instrumentKey': 'NSE_FO|NIFTY24CE',
+      'optionType': 'CE',
+      'expiry': '2026-11-20',
+      'lotSize': 75,
+      'quantity': 75,
+      'costBasisPaise': 765000,
+      'indicativeUnrealizedPnlPaise': null,
+      'priceFresh': false,
+    });
+
 class _FakeRepo implements CustomerPaperFnoRepository {
-  _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure});
+  _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure,
+      this.positionResult = const [], this.positionsFailure});
   final CustomerFnoMarket? marketResult;
   /// Successive responses for refresh tests; the last one repeats.
   final List<CustomerFnoMarket>? markets;
   int _marketCalls = 0;
   final ApiFailure? failure;
   final ApiFailure? submitFailure;
+  final List<CustomerFnoPosition> positionResult;
+  final ApiFailure? positionsFailure;
   final submits = <Map<String, Object?>>[];
 
   @override
@@ -56,7 +71,10 @@ class _FakeRepo implements CustomerPaperFnoRepository {
   }
 
   @override
-  Future<List<CustomerFnoPosition>> positions(String roomId) async => const [];
+  Future<List<CustomerFnoPosition>> positions(String roomId) async {
+    if (positionsFailure != null) throw positionsFailure!;
+    return positionResult;
+  }
 
   @override
   Future<CustomerFnoFill> submit({
@@ -257,4 +275,42 @@ void main() {
     expect(find.textContaining('feature may be turned off'), findsOneWidget);
     expect(find.textContaining('is unavailable'), findsNothing);
   });
+  testWidgets('held PAPER positions render without entering an expiry', (tester) async {
+    final repo = _FakeRepo(positionResult: [heldPosition()],
+        failure: const ApiHttpFailure('CONFLICT', null, 409));
+    await pump(tester, repo, withExpiry: false);
+    expect(find.textContaining('75 qty'), findsOneWidget);
+    expect(find.text('No virtual F&O positions.'), findsNothing);
+  });
+
+  testWidgets('display-rights 409 hides quotes, not a known virtual position', (tester) async {
+    final repo = _FakeRepo(positionResult: [heldPosition()],
+        failure: const ApiHttpFailure('CONFLICT', null, 409));
+    await pump(tester, repo);
+    expect(find.textContaining('display rights are not verified'), findsOneWidget);
+    expect(find.textContaining('75 qty'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+  });
+
+  testWidgets('failed position read is unknown, not empty positions', (tester) async {
+    final repo = _FakeRepo(marketResult: market(),
+        positionsFailure: const ApiHttpFailure('UNAVAILABLE', null, 503));
+    await pump(tester, repo);
+    expect(find.textContaining('Virtual F&O positions unavailable'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-positions-retry')), findsOneWidget);
+    expect(find.text('No virtual F&O positions.'), findsNothing);
+  });
+
+  testWidgets('fresh quotes without display rights never enable a PAPER order', (tester) async {
+    final repo = _FakeRepo(marketResult: market(rights: false));
+    await pump(tester, repo);
+    expect(find.textContaining('Display rights not verified'), findsOneWidget);
+    expect(find.textContaining('Bid 101.5'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byKey(const ValueKey('paper-fno-submit'))).onPressed,
+        isNull);
+    expect(repo.submits, isEmpty);
+  });
+
 }
