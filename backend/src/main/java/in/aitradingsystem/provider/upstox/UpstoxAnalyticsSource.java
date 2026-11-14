@@ -366,6 +366,9 @@ public final class UpstoxAnalyticsSource {
 
     private JsonNode get(String path, Object... pathVariables) {
         String token = token();
+        // F&O private acceptance needs a safe failure class, not a raw response.
+        // All other existing ingestion error contracts remain unchanged.
+        boolean fno = path.startsWith("/v2/option/");
         try {
             // RestClient constructed without Boot auto-configured Jackson-2
             // converters: read bounded UTF-8 text, then explicitly use Jackson 2.
@@ -382,9 +385,27 @@ public final class UpstoxAnalyticsSource {
                 throw unavailable("UPSTOX_INVALID_RESPONSE");
             }
             return body;
-        } catch (Exception ex) {
-            // Never expose upstream body, request headers, token, AWS errors or URL.
+        } catch (org.springframework.web.client.RestClientResponseException ex) {
+            // No status text, response body, URL or headers; only a known enum.
+            if (fno) {
+                var status = UpstoxSourceFailureClassifier.http(
+                        ex.getStatusCode().value(), null).code();
+                throw unavailable("UPSTOX_FNO_" + status.name());
+            }
             throw unavailable("UPSTOX_READ_UNAVAILABLE");
+        } catch (org.springframework.web.client.ResourceAccessException ex) {
+            // Never emit the transport exception: it may embed a signed URL.
+            throw unavailable(fno ? "UPSTOX_FNO_TRANSPORT_FAILURE"
+                    : "UPSTOX_READ_UNAVAILABLE");
+        } catch (Exception ex) {
+            // The upstream response and token never escape this source.
+            // Recognize only our own strict payload error, not arbitrary strings.
+            if (fno && ex instanceof IllegalStateException
+                    && "UPSTOX_INVALID_RESPONSE".equals(ex.getMessage())) {
+                throw unavailable("UPSTOX_FNO_INVALID_PAYLOAD");
+            }
+            throw unavailable(fno ? "UPSTOX_FNO_UNKNOWN_FAILURE"
+                    : "UPSTOX_READ_UNAVAILABLE");
         }
     }
 
