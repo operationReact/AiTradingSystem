@@ -25,7 +25,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 /** Strict long-NSE-index-option PAPER fills; no broker orders, shorts or futures. */
 @Service
-@ConditionalOnProperty(name="minttick.upstox-fno.paper-enabled", havingValue="true")
+@ConditionalOnProperty(
+    name={"minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled"},
+    havingValue="true")
 public class CustomerPaperFnoOrderService {
     private static final String UNDERLYING = "NSE_INDEX|Nifty 50";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
