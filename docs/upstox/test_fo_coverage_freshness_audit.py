@@ -13,6 +13,8 @@ def receipt(**changes):
             "sessionState": "OPEN", "sessionVerified": True,
             "contracts": [{"underlying": "NIFTY", "optionType": "CE",
                            "listingVerified": True, "lotSize": 65,
+                           "instrumentKey": "NSE_FO|test-contract",
+                           "tradingSymbol": "NIFTY_TEST_CE", "strikePrice": 25000,
                            "expiry": "2026-11-17",
                            "exchangeLtt": NOW.isoformat()}]}
     base.update(changes)
@@ -52,6 +54,23 @@ class AuditTests(unittest.TestCase):
             data = receipt()
             data["contracts"][0].update(change)
             self.assertEqual(assess(data, NOW)["verifiedContracts"], 0)
+
+    def test_contract_identity_required(self):
+        for field, invalid in (("instrumentKey", "NSE_EQ|bad"),
+                               ("instrumentKey", ""),
+                               ("tradingSymbol", ""),
+                               ("strikePrice", 0),
+                               ("strikePrice", True)):
+            data = receipt()
+            data["contracts"][0][field] = invalid
+            self.assertEqual(assess(data, NOW)["verifiedContracts"], 0)
+
+    def test_expiry_uses_ist_not_utc_date(self):
+        near_midnight = datetime(2026, 11, 16, 19, 0, tzinfo=timezone.utc)
+        data = receipt()
+        data["contracts"][0]["expiry"] = "2026-11-16"
+        data["contracts"][0]["exchangeLtt"] = near_midnight.isoformat()
+        self.assertEqual(assess(data, near_midnight)["verifiedContracts"], 0)
 
     def test_unverified_exchange_time(self):
         data = receipt()
