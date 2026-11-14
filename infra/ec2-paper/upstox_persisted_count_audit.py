@@ -138,10 +138,12 @@ def host() -> None:
         raise SystemExit("UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH")
     try:
         p = subprocess.run(
-            ["docker", "exec", "aitradingsystem-paper-postgres-1", "psql",
-             "--no-psqlrc", "--quiet", "--tuples-only", "--no-align",
-             "--set=ON_ERROR_STOP=on", "-U", "aitrading", "-d", "aitrading",
-             "-c", SQL],
+            ["docker", "exec", "aitradingsystem-paper-postgres-1",
+             "sh", "-c",
+             'PGPASSWORD="$POSTGRES_PASSWORD" exec psql '
+             '--no-psqlrc --quiet --tuples-only --no-align '
+             '--set=ON_ERROR_STOP=on -U aitrading -d aitrading -c "$1"',
+             "minttick-private-upstox-metadata-only", SQL],
             capture_output=True, text=True, timeout=15, check=False)
         if p.returncode != 0 or len(p.stdout) > 1200:
             raise ValueError("UPSTOX_AUDIT_DATABASE_UNAVAILABLE")
