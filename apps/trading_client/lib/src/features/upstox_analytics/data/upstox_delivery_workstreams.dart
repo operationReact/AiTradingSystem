@@ -184,3 +184,71 @@ class UpstoxWorkerObservation {
     ]);
   }
 }
+
+
+/// Reported progress of the *latest PR delivery cycle* for each worker.
+/// This is emphatically not project completion, production data acceptance,
+/// runtime scheduler uptime, or proof that a PR actually passed GitHub CI.
+/// The workstream reporter is the source of these claims; labels must say so.
+class UpstoxWorkerPrStage {
+  const UpstoxWorkerPrStage({
+    required this.worker,
+    required this.pr,
+    required this.earned,
+  });
+
+  final int worker;
+  final int? pr;
+  final int? earned;
+
+  static const total = 3;
+
+  /// Unknown is not zero: unavailable/stale reports are excluded.
+  num? get percent {
+    if (earned == null) return null;
+    final tenths = (earned! * 1000 / total).floor();
+    return tenths % 10 == 0 ? tenths ~/ 10 : tenths / 10;
+  }
+}
+
+class UpstoxReportedPrPipeline {
+  const UpstoxReportedPrPipeline._(this.stages);
+
+  final List<UpstoxWorkerPrStage> stages;
+
+  /// Three fixed gates per current PR: PR reference, CI PASS report,
+  /// and MERGED report. This denominator is not an engineering backlog.
+  static const totalGates = 15;
+
+  int get observedWorkers => stages.where((x) => x.earned != null).length;
+  int get earnedGates =>
+      stages.fold<int>(0, (total, x) => total + (x.earned ?? 0));
+
+  /// A comparable 5-workstream snapshot requires five valid fresh reports.
+  /// Partial samples must display an explicit fraction, not false 0% or 100%.
+  num? get percent {
+    if (observedWorkers != 5) return null;
+    final tenths = (earnedGates * 1000 / totalGates).floor();
+    return tenths % 10 == 0 ? tenths ~/ 10 : tenths / 10;
+  }
+
+  static UpstoxReportedPrPipeline fromReports(
+      List<UpstoxWorkerObservation> reports) {
+    final stages = <UpstoxWorkerPrStage>[];
+    for (final report in reports) {
+      final hasPr = report.pr != null && report.pr! > 0 &&
+          report.state == 'FRESH' && report.reportedAt != null;
+      if (!hasPr) {
+        stages.add(UpstoxWorkerPrStage(
+            worker: report.worker, pr: null, earned: null));
+        continue;
+      }
+      var gates = 1;
+      if (report.ci == 'PASS') gates++;
+      if (report.ci == 'PASS' && report.result == 'MERGED') gates++;
+      stages.add(UpstoxWorkerPrStage(
+          worker: report.worker, pr: report.pr, earned: gates));
+    }
+    return UpstoxReportedPrPipeline._(List.unmodifiable(stages));
+  }
+}
