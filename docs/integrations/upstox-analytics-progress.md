@@ -216,3 +216,77 @@ existing stage details, recent GitHub CI sample, and PAPER readiness notes.
 The change does **not** turn on historical ingestion, place orders, change
 backend credentials or create an AWS service. Owner-authenticated runtime UI
 verification is still required after the next APK build/deployment.
+
+## Fine-grained evidence accounting — acceptance v2 (14 November 2026)
+
+The previous 5% shown on the owner Flutter page is **not** a worker-completion
+score. It is one accepted 5%-weight `SOURCE_VERIFICATION` probe, with six other
+runtime milestones not yet accepted. A GitHub report, passing CI, merged PR, or
+another scheduled poll must never earn runtime acceptance points by itself.
+
+`upstox.analytics.acceptance.v2` retains seven fixed milestone weights
+(5/15/20/20/5/15/20) but can award **0.1 percentage-point increments** for
+fresh, `PARTIAL`, receipt-backed progress in these four bounded scopes:
+
+| Task code | Expected `progressProof` | Weight |
+| --- | --- | ---: |
+| `INSTRUMENT_MAPPING` | `PERSISTED_INSTRUMENT_MAP_V1` | 15 |
+| `HISTORICAL_INGESTION` | `PERSISTED_CANDLE_CHECKPOINTS_V1` | 20 |
+| `FUNDAMENTALS` | `PERSISTED_FUNDAMENTAL_RECEIPTS_V1` | 5 |
+| `MIND_DATASETS` | `PERSISTED_MIND_FEATURES_V1` | 15 |
+
+A backend scheduler must publish a truthful snapshot in the existing
+`minttick_upstox_analytics_progress` table, with
+`state=PARTIAL`, `verified_count`, `checked_count` and
+`details_json={"progressProof":"...", "targetUnits":N}`.
+`N` **must be an independently defined and stable set of expected unique
+units**, e.g. authorized instrument × interval × year partitions, not merely
+the number of successful requests in the current sample. Receipts must be
+durable, source-specific, deduplicated and point-in-time/rights safe.
+
+The client rejects partial credit if the proof marker does not match the
+task, `targetUnits` is missing/invalid, verified exceeds expected units,
+checked is less than verified, or the evidence is stale. A `PARTIAL` state
+can never earn its entire milestone; the final weight requires a fresh
+`VERIFIED` state. `QUALITY_RIGHTS` and `PAPER_READINESS` are **binary**
+acceptance gates, because an unauthorized or unsafe partial capability is
+not runtime ready. The bounded source smoke probe remains binary at 5%.
+
+`score = sum(full VERIFIED weights) + sum(floor(partial weight *
+verifiedUnits / targetUnits * 10) / 10)`, with each PARTIAL ratio capped at
+99% of its own milestone. The numerical score is computed from authenticated
+backend telemetry; it is not bumped per scheduler invocation. For example,
+with 40 of 100 independently planned historical partitions verified, the
+historical gate earns 8.0 points and the full score grows from 5% to 13%.
+If no new unique receipt is proven, the change is +0.0 percentage points.
+
+### Worker-level run changes
+
+Spring Boot's independent `WORKER_REPORTS` monitor now compares the latest
+two **validated owner GitHub issue #1012 notes** for each of W1–W5, within
+the bounded 12-hour sample, and exposes:
+
+- `reports12h` — number of eligible reports observed in the sample.
+- `lastRunChange` — `BASELINE_ONLY`, `PR_REFERENCE_CHANGED`,
+  `COMMIT_REPORTED`, `CI_PASS_REPORTED`, `MERGE_REPORTED`,
+  `BLOCKER_CHANGED`, or `NO_NEW_DELIVERY`.
+- `previousReportedAt` — previous report timestamp where available.
+
+These are **reported development changes**, not verified production ingestion
+or the execution of an autonomous worker. Polling the same comments repeatedly
+does not produce a new change. The UI shows each worker's recent change and
+the upstream PR/blocker separately from accepted backend progress.
+
+### Remaining backend integration needed to move beyond 5%
+
+No runtime scheduler in this increment claims new receipt totals or invents
+instrument/year/timeframe coverage. The data workers must implement read-only,
+source-specific receipt aggregation from authorized, persisted production
+tables and update the corresponding milestone rows. They must supply immutable
+unit identity, target-scope version, deduplication, receipt timestamp and
+provider-use rights. Once these backend facts are available, the Flutter
+progress score moves incrementally on the existing 30-second refresh.
+
+Before treating a milestone as production accepted, verify the deployed build,
+the backend source/capability, receipt counts against database records, and
+that no source-rights gate is bypassed.
