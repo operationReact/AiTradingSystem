@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIND = ROOT / "apps/trading_client/lib/src/features/mintick_mind"
 OUT = ROOT / "backend/src/main/resources/mind/capability-manifest.v1.json"
-MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.14"
+MANIFEST_VERSION = "mind.capability-manifest.v1+2026-11-14.15"
 AUDITED_AT = "2026-11-13"
 
 DECLARABLE = {"NOT_STARTED", "MOCK", "IMPLEMENTING", "CODE_COMPLETE", "TESTED",
@@ -256,6 +256,13 @@ SCREEN_AUDIT: dict[str, dict] = {
         "note": "No backend data source for this screen yet; the screen is a labelled preview and is never presented as a working feature.",
         "endpoints": [],
         "missing": ["Backend data source and deterministic evaluator for this screen", "Flutter web/Android/iOS runtime evidence"],
+    },
+    "decision-lab": {
+        "status": "IMPLEMENTING",
+        "blockerCode": "ONE_STRATEGY_REPLAY_ONLY",
+        "note": "Shows the server replay of the latest completed research scan (research only, no order authority). The local what-if simulator is labelled as local arithmetic. Only one deterministic strategy is covered.",
+        "endpoints": ["/api/customer/mind/v1/strategy-replay"],
+        "missing": ["Per-decision history and dataset version beyond the scan fingerprint", "Other strategies and models", "Flutter web/Android/iOS runtime evidence"],
     },
     "experiment-detail": {
         "status": "IMPLEMENTING",
