@@ -64,6 +64,8 @@ public class UpstoxFnoV3LiveFeedService {
     private volatile int retryCount;
     private volatile boolean wanted;
     private volatile boolean destroyed;
+    private volatile boolean retryScheduled;
+    private volatile long connectionAttemptId;
 
     @Autowired
     public UpstoxFnoV3LiveFeedService(UpstoxAnalyticsSource source) {
@@ -112,39 +114,43 @@ public class UpstoxFnoV3LiveFeedService {
         lastTradeAt = null;
         latest.clear();
         state = "CONNECTING";
+        retryScheduled = false;
         connectOnce();
         return status();
     }
 
     private void connectOnce() {
         if (!wanted || destroyed) return;
+        final long attempt = ++connectionAttemptId;
         final URI authorized;
         try {
             // Always request a FRESH one-use wss URL after every reconnect.
             authorized = source.authorizeFnoMarketFeedV3();
         } catch (RuntimeException ignored) {
-            scheduleReconnect();
+            scheduleReconnect(attempt);
             return;
         }
         try {
-            dialer.connect(authorized, new FeedListener()).whenComplete((ws, error) -> {
+            dialer.connect(authorized, new FeedListener(attempt)).whenComplete((ws, error) -> {
                 if (error != null || ws == null) {
-                    scheduleReconnect();
+                    scheduleReconnect(attempt);
                 } else if (!wanted || destroyed) {
                     ws.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
                 }
             });
         } catch (RuntimeException ignored) {
             // Never include URL/query or provider exception in logs/status.
-            scheduleReconnect();
+            scheduleReconnect(attempt);
         }
     }
 
-    private synchronized void scheduleReconnect() {
-        if (!wanted || destroyed) return;
+    private synchronized void scheduleReconnect(long attempt) {
+        if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) return;
+        retryScheduled = true;
         socket = null;
         if (retryCount >= MAX_RECONNECTS) {
             wanted = false;
+            retryScheduled = false;
             state = "FAILED_RECONNECT_LIMIT";
             return;
         }
@@ -153,7 +159,8 @@ public class UpstoxFnoV3LiveFeedService {
         long seconds = Math.min(60, 5L << (retryCount - 1));
         reconnects.schedule(() -> {
             synchronized (UpstoxFnoV3LiveFeedService.this) {
-                if (!wanted || destroyed) return;
+                if (!wanted || destroyed || attempt != connectionAttemptId) return;
+                retryScheduled = false;
                 connectOnce();
             }
         }, seconds, TimeUnit.SECONDS);
@@ -161,6 +168,8 @@ public class UpstoxFnoV3LiveFeedService {
 
     public synchronized Status stop() {
         wanted = false;
+        ++connectionAttemptId;
+        retryScheduled = false;
         state = "STOPPED";
         subscribed = Set.of();
         WebSocket ws = socket;
@@ -205,12 +214,14 @@ public class UpstoxFnoV3LiveFeedService {
     }
 
     private final class FeedListener implements WebSocket.Listener {
+        private final long attempt;
         private final ByteArrayOutputStream fragments = new ByteArrayOutputStream();
+        private FeedListener(long attempt) { this.attempt = attempt; }
 
         @Override
         public void onOpen(WebSocket ws) {
             synchronized (UpstoxFnoV3LiveFeedService.this) {
-                if (!wanted || destroyed) {
+                if (!wanted || destroyed || attempt != connectionAttemptId || retryScheduled) {
                     ws.sendClose(WebSocket.NORMAL_CLOSURE, "stopped");
                     return;
                 }
@@ -221,9 +232,9 @@ public class UpstoxFnoV3LiveFeedService {
                     "sub", "full", List.copyOf(subscribed))), true)
                     .whenComplete((ignored, err) -> {
                         if (err != null) {
-                            scheduleReconnect();
+                            scheduleReconnect(attempt);
                             ws.abort();
-                        } else if (wanted && !destroyed) {
+                        } else if (wanted && !destroyed && attempt == connectionAttemptId) {
                             state = "CONNECTED_AWAITING_TICKS";
                             retryCount = 0;
                         }
@@ -233,12 +244,16 @@ public class UpstoxFnoV3LiveFeedService {
 
         @Override
         public CompletionStage<?> onBinary(WebSocket ws, ByteBuffer message, boolean last) {
+            if (attempt != connectionAttemptId || !wanted || destroyed) {
+                ws.request(1);
+                return CompletableFuture.completedFuture(null);
+            }
             try {
                 if (message.remaining() > MAX_FRAGMENT_BYTES - fragments.size()) {
                     fragments.reset();
                     discardedFrames++;
                     ws.abort();
-                    scheduleReconnect();
+                    scheduleReconnect(attempt);
                 } else {
                     byte[] bytes = new byte[message.remaining()];
                     message.get(bytes);
@@ -253,7 +268,7 @@ public class UpstoxFnoV3LiveFeedService {
                 fragments.reset();
                 discardedFrames++;
                 ws.abort();
-                scheduleReconnect();
+                scheduleReconnect(attempt);
             }
             ws.request(1);
             return CompletableFuture.completedFuture(null);
@@ -269,7 +284,7 @@ public class UpstoxFnoV3LiveFeedService {
 
         @Override
         public CompletionStage<?> onClose(WebSocket ws, int statusCode, String reason) {
-            if (wanted && !destroyed) scheduleReconnect();
+            if (wanted && !destroyed) scheduleReconnect(attempt);
             return CompletableFuture.completedFuture(null);
         }
 
@@ -284,6 +299,8 @@ public class UpstoxFnoV3LiveFeedService {
         synchronized (this) {
             destroyed = true;
             wanted = false;
+            ++connectionAttemptId;
+            retryScheduled = false;
             state = "STOPPED";
             WebSocket ws = socket;
             socket = null;
