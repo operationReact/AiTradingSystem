@@ -197,6 +197,62 @@ public final class UpstoxAnalyticsSource {
                                       boolean exchangeQuoteTimeVerified,
                                       List<FnoOptionStrike> strikes) {}
 
+    /**
+     * Discover exchange-listed NIFTY expiries from bounded provider-defined
+     * relative buckets, never from a guessed calendar or a static fixture.
+     * All values are ephemeral; no prices, contract IDs or raw provider
+     * responses are returned to a customer. Call only after a separate
+     * customer-display-permission gate has passed.
+     *
+     * Upstox documents current/next/far week and month for the Option
+     * Contracts endpoint. Each request returns one bounded expiry bucket,
+     * avoiding a potentially oversized all-expiries response.
+     */
+    public List<LocalDate> currentNiftyOptionExpiries(Instant now) {
+        if (!enabled) throw unavailable("UPSTOX_ANALYTICS_DISABLED");
+        if (now == null) throw new IllegalArgumentException("UPSTOX_FNO_INVALID_REQUEST");
+        LocalDate today = now.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate();
+        LocalDate last = today.plusDays(90);
+        var pairs = new java.util.TreeMap<LocalDate, java.util.Set<String>>();
+        for (String period : List.of("current_week", "next_week", "far_week",
+                                     "current_month", "next_month", "far_month")) {
+            JsonNode rows = get(
+                "/v2/option/contract?instrument_key={underlying}&expiry_date={period}",
+                "NSE_INDEX|Nifty 50", period).path("data");
+            if (!rows.isArray() || rows.isEmpty() || rows.size() > 1024)
+                throw unavailable("UPSTOX_FNO_EXPIRY_SOURCE_UNAVAILABLE");
+            Set<String> seen = new HashSet<>();
+            for (JsonNode row : rows) {
+                try {
+                    if (!"NSE_INDEX|Nifty 50".equals(fnoText(row, "underlying_key"))
+                            || !"NSE_FO".equals(fnoText(row, "segment"))
+                            || !"NSE".equals(fnoText(row, "exchange"))) {
+                        throw new IllegalArgumentException();
+                    }
+                    String key = fnoContractKey(row, "instrument_key");
+                    String side = fnoText(row, "instrument_type");
+                    if (!("CE".equals(side) || "PE".equals(side)) || !seen.add(key))
+                        throw new IllegalArgumentException();
+                    LocalDate expiry = LocalDate.parse(fnoText(row, "expiry"));
+                    if (expiry.isBefore(today) || expiry.isAfter(last))
+                        continue; // never expose expired or distant dates
+                    BigDecimal strike = fnoNumber(row, "strike_price", true);
+                    BigDecimal tick = fnoNumber(row, "tick_size", true);
+                    long lot = fnoLong(row, "lot_size");
+                    if (lot < 1 || lot > 10_000 || strike.signum() <= 0
+                            || tick.signum() <= 0)
+                        throw new IllegalArgumentException();
+                    pairs.computeIfAbsent(expiry, unused -> new HashSet<>()).add(side);
+                } catch (RuntimeException invalid) {
+                    throw unavailable("UPSTOX_FNO_INVALID_EXPIRY_CONTRACTS");
+                }
+            }
+        }
+        return pairs.entrySet().stream()
+                .filter(e -> e.getValue().contains("CE") && e.getValue().contains("PE"))
+                .map(java.util.Map.Entry::getKey).toList();
+    }
+
     /** Bound current contract metadata; expiry and lot size come from Upstox. */
     public List<FnoOptionContract> currentFnoOptionContracts(String underlyingKey,
                                                               LocalDate expiry) {
