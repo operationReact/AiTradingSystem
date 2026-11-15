@@ -307,7 +307,11 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      '${widget.room.focus} · NSE/BSE equities · MY ROOM',
+                      '${widget.room.focus} · ${switch (widget.room.marketScope) {'
+                      'FNO' => 'NIFTY Options','
+                      'ALL' => 'Equity + F&O','
+                      _ => 'NSE/BSE equities','
+                    }} · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
