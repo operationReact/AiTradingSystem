@@ -43,10 +43,10 @@ Future<void> pumpRoom(WidgetTester tester, TradingRoomDraft room, {CustomerPaper
   await tester.pumpAndSettle();
 }
 
-const _paperRoom = TradingRoomDraft(id: 'room-1', name: 'Paper room', focus: 'F&O',
+const _paperRoom = TradingRoomDraft(id: 'room-1', name: 'Paper room', focus: 'Swing',
     paperBudget: 100000, riskPreference: 'MODERATE', mode: 'PAPER', marketScope: 'FNO');
-const _liveRoom = TradingRoomDraft(id: 'room-2', name: 'Live room', focus: 'F&O',
-    paperBudget: 100000, riskPreference: 'MODERATE', mode: 'LIVE');
+const _liveRoom = TradingRoomDraft(id: 'room-2', name: 'Live room', focus: 'Swing',
+    paperBudget: 100000, riskPreference: 'MODERATE', mode: 'LIVE', marketScope: 'FNO');
 
 void main() {
   testWidgets('a PAPER room mounts the F&O section on Positions and shows the server blocker', (tester) async {
@@ -60,6 +60,20 @@ void main() {
     await tester.tap(find.text('2026-11-20').last);
     await tester.pumpAndSettle();
     expect(find.textContaining('display rights are not verified'), findsOneWidget);
+  });
+
+  testWidgets('F&O-only room cannot expose equity order shortcuts in Positions or Orders',
+      (tester) async {
+    await pumpRoom(tester, _paperRoom, fno: _BlockedRepo());
+    expect(find.byKey(const ValueKey('paper-fno-room-1')), findsOneWidget);
+    expect(find.text('New Buy'), findsNothing);
+    expect(find.text('New Sell'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('room-tab-orders')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('fno-order-history-room-1')), findsOneWidget);
+    expect(find.text('New Buy'), findsNothing);
+    expect(find.text('New Sell'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a LIVE room never shows the PAPER F&O section', (tester) async {
