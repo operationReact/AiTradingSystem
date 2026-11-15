@@ -94,6 +94,14 @@ class _FakeUpstox extends Fake implements HttpCustomerUpstoxRepository {
 
   @override
   Future<Object?> registeredIps() async => {'primary_ip': '192.0.2.1'};
+
+  @override
+  Future<Object?> registeredIpCheck() async => {
+    'expectedEc2Ip': '3.108.130.17',
+    'status': 'REGISTERED_MATCH',
+    'registrationMatchesEc2': true,
+    'liveExecutionAuthorized': false,
+  };
 }
 
 void main() {
@@ -384,6 +392,29 @@ void main() {
     expect(find.byKey(const ValueKey('upstox-disconnect')), findsOneWidget);
     expect(find.textContaining('Paper and Live portfolios are separate'),
       findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('registered IP displays broker-confirmed EC2 match without LIVE authority',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final repo = _FakeUpstox()..linked = true;
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickUpstoxPage(repository: repo),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('upstox-account-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Registered IP'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('upstox-ip-match')), findsOneWidget);
+    expect(find.textContaining('matches MintTick EC2'), findsOneWidget);
+    expect(find.textContaining('3.108.130.17'), findsOneWidget);
+    expect(find.textContaining('still needs broker permissions'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
