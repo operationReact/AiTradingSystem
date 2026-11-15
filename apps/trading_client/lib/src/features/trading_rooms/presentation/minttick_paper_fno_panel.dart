@@ -229,6 +229,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   bool get _canSubmit {
     final leg = _selected;
     final market = _market;
+    // The position/order inventory must be verified before any new virtual
+    // order. An unavailable read is not equivalent to an empty portfolio.
+    if (_positionsLoading || _positionsError != null) return false;
     if (_submitting || market == null || leg == null) return false;
     return _quotesWithinAge && market.hasFreshQuotes &&
         market.displayRightsVerified && leg.quoteFresh && leg.paperEligible &&
@@ -639,6 +642,13 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
 
   Widget _ordersView(ColorScheme colors, TextTheme type) {
     if (_positionsLoading) return const SizedBox.shrink();
+    if (_positionsError != null) {
+      return Text(
+        'Virtual F&O orders could not be verified. Retry positions before acting.',
+        key: const ValueKey('paper-fno-orders-unavailable'),
+        style: type.bodySmall?.copyWith(color: colors.error),
+      );
+    }
     if (_orders.isEmpty) {
       return Text('No virtual F&O orders.', style: type.bodySmall);
     }
