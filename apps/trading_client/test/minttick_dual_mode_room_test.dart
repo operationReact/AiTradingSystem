@@ -62,7 +62,7 @@ void main() {
     expect(store.drafts, isEmpty);
   });
 
-  testWidgets('PAPER rooms offer Equity, F&O and All as separate market scopes',
+  testWidgets('Room type dropdown has only five market and horizon combinations',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
@@ -73,22 +73,27 @@ void main() {
       home: const MintTickRoomCreationPage(),
     ));
 
-    final market = find.byKey(const ValueKey('room-market-scope-dropdown'));
-    await tester.ensureVisible(market);
+    expect(find.text('Choose a strategy focus'), findsNothing);
+    expect(find.text('Illustrative risk boundaries'), findsNothing);
+    expect(find.text('Example maximum position'), findsNothing);
+    expect(find.byKey(const ValueKey('room-draft-acknowledge')), findsNothing);
+    expect(find.text('Room risk preference'), findsOneWidget);
+    final dropdown = find.byKey(const ValueKey('room-type-dropdown'));
+    await tester.ensureVisible(dropdown);
     await tester.pumpAndSettle();
-    await tester.tap(market);
+    await tester.tap(dropdown);
     await tester.pumpAndSettle();
-    expect(find.text('Equity · NSE/BSE stocks'), findsWidgets);
-    expect(find.text('F&O · NIFTY options (PAPER)'), findsWidgets);
-    expect(find.text('All · Stocks + NIFTY options'), findsWidgets);
-    await tester.tap(find.text('F&O · NIFTY options (PAPER)').last);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Futures and stock options are not available.'),
-        findsOneWidget);
+    for (final label in [
+      'Equity · Intraday', 'Equity · Swing', 'Equity · Long-term',
+      'F&O · Intraday', 'F&O · Positional',
+    ]) {
+      expect(find.text(label), findsWidgets);
+    }
+    expect(find.textContaining('Equity + F&O'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Create Room offers LIVE and PAPER before reviewing a plan',
+  testWidgets('F&O positional choice maps to FNO Swing with room-level risk',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(390, 844);
@@ -111,31 +116,77 @@ void main() {
     ));
     await tester.tap(find.text('New Trading Room'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('room-mode-toggle')), findsOneWidget);
-    await tester.tap(find.text('Live'));
+    await tester.enterText(find.byKey(const ValueKey('room-name-input')),
+        'NIFTY positional');
+    final menu = find.byKey(const ValueKey('room-type-dropdown'));
+    await tester.ensureVisible(menu);
+    await tester.tap(menu);
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('room-name-input')), 'Live morning');
+    await tester.tap(find.text('F&O · Positional').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Positional F&O is a plan only'), findsOneWidget);
+    await tester.enterText(find.byKey(const ValueKey('room-budget-input')),
+        '45000');
+    final cautious = find.byKey(const ValueKey('room-risk-cautious'));
+    await tester.ensureVisible(cautious);
+    await tester.tap(cautious);
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
     await tester.pumpAndSettle();
 
-    // The approved wizard has four steps: Details → Strategy → Risk → Review.
-    for (var next = 0; next < 2; next++) {
-      await tester.tap(find.byKey(const ValueKey('room-creation-next')));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text('Your proposed plan.'), findsOneWidget);
-    expect(find.text('LIVE'), findsWidgets);
-    final ack = find.byKey(const ValueKey('room-draft-acknowledge'));
-    await tester.dragUntilVisible(
-      ack, find.byType(ListView).last, const Offset(0, -240),
-    );
+    expect(result?.name, 'NIFTY positional');
+    expect(result?.marketScope, 'FNO');
+    expect(result?.focus, 'Swing');
+    expect(result?.riskPreference, 'Cautious');
+    expect(result?.paperBudget, 45000);
+    expect(result?.mode, 'PAPER');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('LIVE rooms save compatible Equity Long-term plan in one screen',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    TradingRoomDraft? result;
+
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: Builder(builder: (context) => Scaffold(
+        body: FilledButton(
+          onPressed: () async {
+            result = await Navigator.of(context).push<TradingRoomDraft>(
+              MaterialPageRoute(builder: (_) => const MintTickRoomCreationPage()),
+            );
+          },
+          child: const Text('New Trading Room'),
+        ),
+      )),
+    ));
+    await tester.tap(find.text('New Trading Room'));
     await tester.pumpAndSettle();
-    await tester.tap(ack);
+    await tester.tap(find.text('Live'));
     await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('room-name-input')),
+        'Live long term');
+    final menu = find.byKey(const ValueKey('room-type-dropdown'));
+    await tester.ensureVisible(menu);
+    await tester.tap(menu);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Equity · Long-term').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('LIVE execution requires separate'),
+        findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
     await tester.pumpAndSettle();
+
     expect(result?.mode, 'LIVE');
-    expect(result?.name, 'Live morning');
+    expect(result?.name, 'Live long term');
+    expect(result?.marketScope, 'EQUITY');
+    expect(result?.focus, 'Long-term');
+    expect(result?.riskPreference, 'Balanced');
+    expect(result?.paperBudget, 20000);
     expect(tester.takeException(), isNull);
   });
 }
