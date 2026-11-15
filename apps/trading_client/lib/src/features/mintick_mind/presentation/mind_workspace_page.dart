@@ -6,6 +6,7 @@ import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_evidence_repository.dart';
 import '../data/mind_decision_history_repository.dart';
+import '../data/mind_decision_outcomes_repository.dart';
 import '../data/mind_strategy_replay_repository.dart';
 import '../data/mind_ma_walkforward_repository.dart';
 import '../data/mind_prospective_cohort_repository.dart';
@@ -25,6 +26,7 @@ import '../../trading_rooms/data/customer_home_summary_repository.dart';
 import 'mind_evidence_ledger_panel.dart';
 import 'mind_ma_walkforward_panel.dart';
 import 'mind_decision_history_panel.dart';
+import 'mind_decision_outcomes_panel.dart';
 import 'mind_strategy_replay_panel.dart';
 import 'mind_prospective_cohort_panel.dart';
 import 'mind_prospective_signals_panel.dart';
@@ -107,6 +109,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.evidenceRepository,
     this.strategyReplayRepository,
     this.decisionHistoryRepository,
+    this.decisionOutcomesRepository,
     this.walkForwardRepository,
     this.prospectiveRepository,
     this.prospectiveSignalsRepository,
@@ -133,6 +136,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   final MindEvidenceRepository? evidenceRepository;
   final MindStrategyReplayRepository? strategyReplayRepository;
   final MindDecisionHistoryRepository? decisionHistoryRepository;
+  final MindDecisionOutcomesRepository? decisionOutcomesRepository;
   final MindMaWalkForwardRepository? walkForwardRepository;
   final MindProspectiveCohortRepository? prospectiveRepository;
   final MindProspectiveSignalsRepository? prospectiveSignalsRepository;
