@@ -157,9 +157,14 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
                               style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                             const SizedBox(height: 3),
                             Text(
-                              room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
+                              '${switch (room.marketScope) {
+                                'FNO' => 'F&O',
+                                'ALL' => 'All markets',
+                                _ => 'Equity',
+                              }} · ' +
+                              (room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
                                 ? 'Virtual cash ${_formatPaise(metrics[room.id]!.availableCashPaise!)} · ${metrics[room.id]!.positionCount} positions'
-                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
+                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned'),
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
                           ])),
