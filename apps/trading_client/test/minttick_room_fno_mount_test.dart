@@ -10,6 +10,16 @@ import 'package:trading_client/src/features/trading_rooms/presentation/minttick_
 /// mounted section renders its blocker without any network or quote data.
 class _BlockedRepo implements CustomerPaperFnoRepository {
   @override
+  Future<CustomerFnoCapability> capability(String roomId) async =>
+      CustomerFnoCapability.decode({
+        'status': 'SOURCE_CHECK_REQUIRED',
+        'readOnlyConfigured': true,
+        'paperConfigured': true,
+        'liveExecutionAuthorized': false,
+        'blockerCodes': <String>[],
+      });
+
+  @override
   Future<CustomerFnoExpiries> expiries(String roomId) async => CustomerFnoExpiries.decode({
         'underlyingKey': 'NSE_INDEX|Nifty 50',
         'status': 'VERIFIED',

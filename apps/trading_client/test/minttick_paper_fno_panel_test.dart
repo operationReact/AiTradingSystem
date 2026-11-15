@@ -105,7 +105,26 @@ CustomerFnoFill buyFill({String side = 'BUY'}) => CustomerFnoFill.decode({
 class _FakeRepo implements CustomerPaperFnoRepository {
   _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure,
       this.positionResult = const [], this.positionsFailure, this.expiriesResult,
-      this.ordersResult = const [], this.submitResult, this.receiptResult, this.receiptFails = false});
+      this.ordersResult = const [], this.submitResult, this.receiptResult, this.receiptFails = false,
+      this.capabilityResult, this.capabilityFailure});
+  final CustomerFnoCapability? capabilityResult;
+  final ApiFailure? capabilityFailure;
+  int expiryCalls = 0;
+  int inventoryCalls = 0;
+  int marketCalls = 0;
+
+  @override
+  Future<CustomerFnoCapability> capability(String roomId) async {
+    if (capabilityFailure != null) throw capabilityFailure!;
+    return capabilityResult ?? CustomerFnoCapability.decode({
+      'status': 'SOURCE_CHECK_REQUIRED',
+      'readOnlyConfigured': true,
+      'paperConfigured': true,
+      'liveExecutionAuthorized': false,
+      'blockerCodes': <String>[],
+    });
+  }
+
   final CustomerFnoReceipt? receiptResult;
   final bool receiptFails;
   final CustomerFnoExpiries? expiriesResult;
@@ -126,6 +145,7 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 
   @override
   Future<CustomerFnoMarket> market(String roomId, DateTime expiry) async {
+    marketCalls++;
     if (failure != null) throw failure!;
     if (markets != null) {
       final i = _marketCalls < markets!.length ? _marketCalls : markets!.length - 1;
@@ -136,8 +156,10 @@ class _FakeRepo implements CustomerPaperFnoRepository {
   }
 
   @override
-  Future<CustomerFnoExpiries> expiries(String roomId) async =>
-      expiriesResult ?? verifiedExpiries();
+  Future<CustomerFnoExpiries> expiries(String roomId) async {
+    expiryCalls++;
+    return expiriesResult ?? verifiedExpiries();
+  }
 
   @override
   Future<List<CustomerFnoFill>> orders(String roomId) async => ordersResult;
@@ -150,6 +172,7 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 
   @override
   Future<List<CustomerFnoPosition>> positions(String roomId) async {
+    inventoryCalls++;
     if (positionsFailure != null) throw positionsFailure!;
     return positionResult;
   }
@@ -184,6 +207,69 @@ Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
 }
 
 void main() {
+  testWidgets('server F&O disabled shows one compact status and makes no conditional requests',
+      (tester) async {
+    final repo = _FakeRepo(capabilityResult: CustomerFnoCapability.decode({
+      'status': 'FNO_PAPER_DISABLED',
+      'readOnlyConfigured': false,
+      'paperConfigured': false,
+      'liveExecutionAuthorized': false,
+      'blockerCodes': [
+        'FNO_PAPER_DISABLED', 'FNO_V3_FEED_DISABLED',
+        'DISPLAY_RIGHTS_NOT_VERIFIED', 'PAPER_USE_RIGHTS_NOT_VERIFIED',
+      ],
+    }));
+    await pump(tester, repo, withExpiry: false);
+    expect(find.byKey(const ValueKey('paper-fno-capability-blocked')), findsOneWidget);
+    expect(find.textContaining('not enabled on the server'), findsOneWidget);
+    expect(find.textContaining('Existing option positions and orders are unverified'), findsOneWidget);
+    expect(find.text('No virtual F&O orders.'), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+    expect(repo.expiryCalls, 0);
+    expect(repo.inventoryCalls, 0);
+    expect(repo.marketCalls, 0);
+    expect(repo.submits, isEmpty);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-capability-retry')));
+    await tester.pumpAndSettle();
+    expect(repo.expiryCalls, 0);
+    expect(repo.inventoryCalls, 0);
+  });
+
+  testWidgets('capability HTTP 500 fails closed without probing F&O order routes',
+      (tester) async {
+    final repo = _FakeRepo(
+      capabilityFailure: const ApiHttpFailure('UNAVAILABLE', null, 500),
+    );
+    await pump(tester, repo);
+    expect(find.textContaining('availability could not be verified'), findsOneWidget);
+    expect(find.text('No virtual F&O orders.'), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+    expect(repo.marketCalls, 0);
+    expect(repo.expiryCalls, 0);
+    expect(repo.inventoryCalls, 0);
+  });
+
+  testWidgets('configured market with missing PAPER use rights keeps quote ticket blocked',
+      (tester) async {
+    final repo = _FakeRepo(
+      marketResult: market(),
+      capabilityResult: CustomerFnoCapability.decode({
+        'status': 'PAPER_USE_RIGHTS_NOT_VERIFIED',
+        'readOnlyConfigured': true,
+        'paperConfigured': false,
+        'liveExecutionAuthorized': false,
+        'blockerCodes': ['PAPER_USE_RIGHTS_NOT_VERIFIED'],
+      }),
+    );
+    await pump(tester, repo);
+    expect(find.byKey(const ValueKey('paper-fno-order-rights-blocked')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(
+      find.byKey(const ValueKey('paper-fno-submit'))).onPressed, isNull);
+    expect(repo.submits, isEmpty);
+  });
+
   testWidgets('without an entered expiry no request is made and the user is asked for one', (tester) async {
     final repo = _FakeRepo(failure: const ApiHttpFailure('CONFLICT', null, 409));
     await pump(tester, repo, withExpiry: false);

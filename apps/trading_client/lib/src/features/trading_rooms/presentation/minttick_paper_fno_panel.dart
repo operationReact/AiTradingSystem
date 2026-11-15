@@ -37,6 +37,10 @@ class MintTickPaperFnoPanel extends StatefulWidget {
 }
 
 class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
+  CustomerFnoCapability? _capability;
+  bool _checkingCapability = true;
+  String? _capabilityError;
+  int _capabilityRequest = 0;
   CustomerFnoMarket? _market;
   List<CustomerFnoPosition> _positions = const [];
   List<CustomerFnoFill> _orders = const [];
@@ -66,13 +70,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   void initState() {
     super.initState();
     _expiry = widget.initialExpiry;
-    if (_expiry != null) {
-      _load();
-    } else {
-      _loading = false;
-      _loadPositions();
-    }
-    _loadExpiries();
+    _loadCapability();
   }
 
   @override
@@ -81,6 +79,78 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     _price.dispose();
     super.dispose();
   }
+
+  /// Queries only the unconditional, owner-scoped capability route. When the
+  /// backend disables F&O, never call its conditionally absent market, expiry,
+  /// positions, orders, or reconciliation routes. Unknown inventory stays
+  /// UNKNOWN and the virtual wallet is not changed.
+  Future<void> _loadCapability() async {
+    final request = ++_capabilityRequest;
+    if (!mounted) return;
+    _ageTimer?.cancel();
+    setState(() {
+      _checkingCapability = true;
+      _capabilityError = null;
+      _capability = null;
+      _selected = null;
+      _market = null;
+      _price.text = '';
+    });
+    try {
+      final capability = await widget.repository.capability(widget.roomId);
+      if (!mounted || request != _capabilityRequest) return;
+      setState(() {
+        _capability = capability;
+        _checkingCapability = false;
+        _loading = false;
+        if (!capability.readOnlyConfigured) {
+          _positionsLoading = false;
+          _positionsError = 'Virtual F&O positions and orders are not verified.';
+          _receipt = null;
+          _receiptError = 'Bookkeeping not verified.';
+          _orders = const [];
+          _positions = const [];
+          _expiries = const [];
+          _expiry = null;
+        }
+      });
+      if (capability.readOnlyConfigured) {
+        _loadExpiries();
+        if (_expiry != null) {
+          _load();
+        } else {
+          _loadPositions();
+        }
+      }
+    } catch (_) {
+      if (!mounted || request != _capabilityRequest) return;
+      setState(() {
+        _checkingCapability = false;
+        _capabilityError = 'F&O availability could not be verified.';
+        _loading = false;
+        _positionsLoading = false;
+        _positionsError = 'Virtual F&O positions and orders are not verified.';
+        _receipt = null;
+        _receiptError = 'Bookkeeping not verified.';
+        _orders = const [];
+        _positions = const [];
+        _expiries = const [];
+        _expiry = null;
+      });
+    }
+  }
+
+  static String _capabilityStatusLabel(String status) => switch (status) {
+    'FNO_PAPER_DISABLED' || 'FNO_V3_FEED_DISABLED' =>
+      'F&O PAPER trading is not enabled on the server.',
+    'DISPLAY_RIGHTS_NOT_VERIFIED' =>
+      'F&O market display permission is not verified.',
+    'PAPER_USE_RIGHTS_NOT_VERIFIED' =>
+      'F&O PAPER usage permission is not verified.',
+    'ROOM_HORIZON_UNSUPPORTED' =>
+      'This room type cannot trade F&O options. Use an F&O Intraday or Positional room.',
+    _ => 'F&O data is unavailable.',
+  };
 
   /// Reads the server's listed expiries. Nothing is inferred on the client, and a
   /// blocked or failed list shows its reason and offers no dates.
@@ -231,7 +301,10 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     final market = _market;
     // The position/order inventory must be verified before any new virtual
     // order. An unavailable read is not equivalent to an empty portfolio.
-    if (_positionsLoading || _positionsError != null) return false;
+    if (_capability?.paperConfigured != true ||
+        _positionsLoading || _positionsError != null) {
+      return false;
+    }
     if (_submitting || market == null || leg == null) return false;
     return _quotesWithinAge && market.hasFreshQuotes &&
         market.displayRightsVerified && leg.quoteFresh && leg.paperEligible &&
@@ -350,6 +423,41 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
+    if (_checkingCapability || _capability?.readOnlyConfigured != true) {
+      return Container(
+        key: const ValueKey('paper-fno-panel'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('NIFTY options · PAPER', style: type.titleSmall),
+          const SizedBox(height: 8),
+          if (_checkingCapability)
+            const Text('Checking F&O availability…')
+          else
+            Text(_capabilityError ??
+                _capabilityStatusLabel(_capability?.status ?? ''),
+              key: const ValueKey('paper-fno-capability-blocked'),
+              style: type.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+          if (!_checkingCapability) ...[
+            const SizedBox(height: 6),
+            Text('Existing option positions and orders are unverified. '
+                'No new orders can be placed.',
+              style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            const SizedBox(height: 9),
+            TextButton.icon(
+              key: const ValueKey('paper-fno-capability-retry'),
+              onPressed: _loadCapability,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Recheck F&O'),
+            ),
+          ],
+        ]),
+      );
+    }
     return Container(
       key: const ValueKey('paper-fno-panel'),
       padding: const EdgeInsets.all(14),
@@ -365,6 +473,12 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
             Text('VIRTUAL · NO LIVE ORDERS',
               style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
           ]),
+          if (_capability?.paperConfigured == false) ...[
+            const SizedBox(height: 6),
+            Text(_capabilityStatusLabel(_capability!.status),
+              key: const ValueKey('paper-fno-order-rights-blocked'),
+              style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+          ],
           const SizedBox(height: 4),
           if (_expiryBlocker != null)
             Text(_expiryBlocker!, key: const ValueKey('paper-fno-expiry-blocked'),
