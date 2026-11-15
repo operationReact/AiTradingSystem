@@ -15,6 +15,18 @@ import 'minttick_room_production_workspace.dart';
 import 'minttick_room_rename_dialog.dart';
 
 
+/// Stable user-facing room type, including existing legacy ALL rooms.
+String _roomTypeLabel(TradingRoomDraft room) => switch (
+    (room.marketScope, room.focus)) {
+  ('EQUITY', 'Intraday') => 'Equity · Intraday',
+  ('EQUITY', 'Swing') => 'Equity · Swing',
+  ('EQUITY', 'Long-term') => 'Equity · Long-term',
+  ('FNO', 'Intraday') => 'F&O · Intraday',
+  ('FNO', 'Swing') => 'F&O · Positional',
+  ('ALL', _) => 'All markets · ${room.focus}',
+  _ => '${room.marketScope} · ${room.focus}',
+};
+
 class MintTickTradingRoomsPage extends StatefulWidget {
   const MintTickTradingRoomsPage({
     required this.store, required this.mode, required this.onCreate,
@@ -157,13 +169,9 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
                               style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                             const SizedBox(height: 3),
                             Text(
-                              '${switch (room.marketScope) {
-                                'FNO' => 'F&O',
-                                'ALL' => 'All markets',
-                                _ => 'Equity',
-                              }} · ${room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
+                              '${_roomTypeLabel(room)} · ${room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
                                 ? 'Virtual cash ${_formatPaise(metrics[room.id]!.availableCashPaise!)} · ${metrics[room.id]!.positionCount} positions'
-                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned'}',
+                                : '${formatPaperRupees(room.paperBudget)} planned'}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
                           ])),
