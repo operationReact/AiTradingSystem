@@ -95,6 +95,7 @@ public class CustomerPaperOrderService {
                   ON r.id = a.room_id AND r.user_id = a.user_id
                 WHERE a.room_id = :room AND a.user_id = :owner
                   AND r.mode = 'PAPER' AND r.status = 'PAPER_FUNDED'
+                  AND r.market_scope IN ('EQUITY', 'ALL')
                 FOR UPDATE OF a
                 """)
             .param("room", roomId).param("owner", owner)

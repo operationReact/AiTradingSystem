@@ -58,6 +58,73 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
     }
 
     @Test
+    void distinctEquityFnoAndAllPaperRoomsKeepScopeAcrossCreateListAndRename() {
+        UUID owner = customer();
+        var controller = controller(owner);
+        var auth = authentication();
+        var equity = controller.create(new CustomerTradingRoomController.CreateRoomRequest(
+            "Cash Portfolio", "SWING", 20000L, "BALANCED", "PAPER", "EQUITY"), auth)
+            .getBody();
+        var fno = controller.create(new CustomerTradingRoomController.CreateRoomRequest(
+            "NIFTY Options Room", "INTRADAY", 20000L, "BALANCED", "PAPER", "FNO"), auth)
+            .getBody();
+        var all = controller.create(new CustomerTradingRoomController.CreateRoomRequest(
+            "All Markets Room", "SWING", 20000L, "BALANCED", "PAPER", "ALL"), auth)
+            .getBody();
+
+        assertThat(equity).isNotNull();
+        assertThat(fno).isNotNull();
+        assertThat(all).isNotNull();
+        assertThat(controller.get(equity.id(), auth).marketScope()).isEqualTo("EQUITY");
+        assertThat(controller.get(fno.id(), auth).marketScope()).isEqualTo("FNO");
+        assertThat(controller.get(all.id(), auth).marketScope()).isEqualTo("ALL");
+        assertThat(controller.list(auth)).extracting(
+            CustomerTradingRoomController.RoomView::marketScope)
+            .contains("EQUITY", "FNO", "ALL");
+        assertThat(jdbc.sql("""
+            SELECT market_scope FROM customer_trading_room WHERE id=:id
+            """).param("id", fno.id()).query(String.class).single()).isEqualTo("FNO");
+        var renamed = controller.rename(fno.id(),
+            new CustomerTradingRoomController.RenameRoomRequest("NIFTY Only"),
+            auth);
+        assertThat(renamed.marketScope()).isEqualTo("FNO");
+        assertThat(renamed.id()).isEqualTo(fno.id());
+    }
+
+    @Test
+    void liveFnoAndAllRoomPlansArePersistedButCannotGrantExecution() {
+        UUID owner = customer();
+        var controller = controller(owner);
+        var auth = authentication();
+
+        for (String scope : List.of("EQUITY", "FNO", "ALL")) {
+            var saved = controller.create(
+                new CustomerTradingRoomController.CreateRoomRequest(
+                    "LIVE PLAN " + scope, "SWING", 20000L, "BALANCED", "LIVE", scope),
+                auth).getBody();
+            assertThat(saved).isNotNull();
+            assertThat(saved.mode()).isEqualTo("LIVE");
+            assertThat(saved.marketScope()).isEqualTo(scope);
+            assertThat(saved.status()).isEqualTo("DRAFT");
+            assertThat(controller.get(saved.id(), auth).marketScope()).isEqualTo(scope);
+            assertThat(jdbc.sql("""
+                SELECT COUNT(*) FROM customer_paper_account WHERE room_id=:id
+                """).param("id", saved.id()).query(Integer.class).single()).isZero();
+        }
+        assertThatThrownBy(() -> controller.create(
+            new CustomerTradingRoomController.CreateRoomRequest(
+                "INVALID LIVE", "SWING", 20000L, "BALANCED", "LIVE", "INVALID"), auth))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(err -> assertThat(((ResponseStatusException) err)
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        var legacy = controller.create(new CustomerTradingRoomController.CreateRoomRequest(
+            "Old Client", "SWING", 20000L, "BALANCED", "PAPER"), auth).getBody();
+        assertThat(legacy).isNotNull();
+        assertThat(legacy.marketScope()).isEqualTo("EQUITY");
+        assertThat(controller.get(legacy.id(), auth).marketScope()).isEqualTo("EQUITY");
+    }
+
+    @Test
     void liveRoomRenameKeepsIdModeAndBudget() {
         UUID owner = customer();
         UUID id = room(owner, "LIVE");

@@ -157,9 +157,13 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
                               style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
                             const SizedBox(height: 3),
                             Text(
-                              room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
+                              '${switch (room.marketScope) {
+                                'FNO' => 'F&O',
+                                'ALL' => 'All markets',
+                                _ => 'Equity',
+                              }} · ${room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
                                 ? 'Virtual cash ${_formatPaise(metrics[room.id]!.availableCashPaise!)} · ${metrics[room.id]!.positionCount} positions'
-                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned',
+                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned'}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
                           ])),
@@ -236,6 +240,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   final _scroll = ScrollController();
   String _focus = 'Intraday';
   String _risk = 'Balanced';
+  String _marketScope = 'EQUITY';
   late String _mode;
   int _step = 0;
   bool _acknowledged = false;
@@ -268,6 +273,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
     paperBudget: int.tryParse(_paperBudget.text.trim()) ?? 0,
     riskPreference: _risk,
     mode: _mode,
+    marketScope: _marketScope,
   );
 
   void _top() {
@@ -410,7 +416,10 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 icon: Icon(Icons.candlestick_chart_rounded)),
             ],
             selected: {_mode},
-            onSelectionChanged: (choices) => setState(() => _mode = choices.first),
+            onSelectionChanged: (choices) => setState(() {
+              _mode = choices.first;
+              // Room market is independent from mode; this is a plan only.
+            }),
           ),
           const SizedBox(height: 8),
           Text(_mode == 'PAPER'
@@ -431,15 +440,50 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 ? 'Give your room a name' : null,
           ),
           const SizedBox(height: 18),
-          const _FieldLabel('Asset class'),
+          const _FieldLabel('Room market'),
           const SizedBox(height: 8),
           MintTickSurface(child: Row(children: [
             const Icon(Icons.stacked_line_chart_rounded),
             const SizedBox(width: 10),
-            const Expanded(child: Text('Equity · Cash market')),
-            Text('Current scope',
-              style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+            Expanded(child: DropdownButton<String>(
+              key: const ValueKey('room-market-scope-dropdown'),
+              isExpanded: true,
+              value: _marketScope,
+              underline: const SizedBox.shrink(),
+              items: [
+                const DropdownMenuItem(value: 'EQUITY',
+                  child: Text('Equity · NSE/BSE stocks')),
+                DropdownMenuItem(value: 'FNO',
+                  child: Text(_mode == 'LIVE'
+                    ? 'F&O · LIVE plan' : 'F&O · NIFTY options (PAPER)')),
+                DropdownMenuItem(value: 'ALL',
+                  child: Text(_mode == 'LIVE'
+                    ? 'All · Equity + F&O LIVE plan'
+                    : 'All · Stocks + NIFTY options')),
+              ],
+              onChanged: (scope) {
+                if (scope != null) setState(() => _marketScope = scope);
+              },
+            )),
           ])),
+          const SizedBox(height: 8),
+          Text(
+            switch (_marketScope) {
+              'FNO' => _mode == 'LIVE'
+                  ? 'LIVE F&O plan only. Orders disabled until broker account, '
+                    'segment permissions and execution safeguards pass.'
+                  : 'Supported instruments: NIFTY long options (PAPER pilot). '
+                    'Futures and stock options are not available.',
+              'ALL' => _mode == 'LIVE'
+                  ? 'LIVE Equity + F&O plan only. F&O orders remain disabled '
+                    'until independently approved and verified.'
+                  : 'Supported instruments: cash equities and NIFTY long '
+                    'options (PAPER pilot). One virtual wallet per room.',
+              _ => 'Supported instruments: NSE/BSE cash equities.',
+            },
+            key: const ValueKey('room-supported-instruments'),
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 18),
           const _FieldLabel('Planned capital allocation (₹)'),
           const SizedBox(height: 8),
@@ -476,7 +520,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 14),
           const MintTickInfoText(
             'Intraday and delivery describe trade holding styles. Equity is '
-            'the supported asset class. Strategy configuration is a separate step.'),
+            'the trading horizon, not the market scope. Each room can have a '
+            'different Equity, F&O or All selection.'),
         ],
         if (_step == 2) ...[
           const _FieldLabel('How do you approach risk?'),
@@ -528,6 +573,15 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           _Pair('Room', draft.name),
           _Pair('Approach', draft.focus),
           _Pair('Mode', draft.mode),
+          _Pair('Market', switch (draft.marketScope) {
+            'FNO' => draft.mode == 'LIVE'
+                ? 'F&O · LIVE plan (not authorized)'
+                : 'F&O · NIFTY options (PAPER)',
+            'ALL' => draft.mode == 'LIVE'
+                ? 'Equity + F&O · LIVE plan (not authorized)'
+                : 'Equity + NIFTY options (PAPER)',
+            _ => 'Equity · NSE/BSE cash',
+          }),
           _Pair('Planned budget', formatPaperRupees(draft.paperBudget)),
           _Pair('Risk preference', draft.riskPreference),
         ],

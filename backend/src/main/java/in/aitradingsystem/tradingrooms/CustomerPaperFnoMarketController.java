@@ -229,6 +229,7 @@ public class CustomerPaperFnoMarketController {
         return jdbc.sql("""
             SELECT TRUE FROM customer_trading_room
             WHERE id=:room AND user_id=:owner AND mode='PAPER' AND status='PAPER_FUNDED'
+              AND market_scope IN ('FNO','ALL')
             """).param("room",room).param("owner",owner)
             .query(Boolean.class).optional().orElse(false);
     }
