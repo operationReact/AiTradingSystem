@@ -74,6 +74,7 @@ EXACT = {
     ("GET", "/api/customer/mind/v1/prospective-outcomes"),
     ("GET", "/api/customer/mind/v1/prospective-evidence-completeness"),
     ("GET", "/api/customer/mind/v1/progress"),
+    ("GET", "/api/customer/mind/v1/progress/inventory"),
     ("GET", "/api/customer/mind/v1/paper-portfolio"),
     ("GET", "/api/customer/mind/v1/paper-journal"),
     ("GET", "/api/customer/mind/v1/research-engines"),

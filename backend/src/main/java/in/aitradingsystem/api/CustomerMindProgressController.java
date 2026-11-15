@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -43,9 +44,25 @@ public class CustomerMindProgressController {
         @NotNull @Pattern(regexp = "NOTE|RECHECK_REQUESTED") String type,
         @Size(max = 500) String text) {}
 
+    /** Lightweight summary: overall totals from the full inventory, per-kind counts, PAPER stage and revision. */
     @GetMapping
-    public ResponseEntity<MindCapabilityProgressService.Progress> inspect(Authentication auth) {
-        return noStore(progress.inspect(customer(auth)));
+    public ResponseEntity<MindCapabilityProgressService.Summary> summary(Authentication auth) {
+        return noStore(progress.summary(customer(auth)));
+    }
+
+    /** One bounded page of full inventory items in deterministic manifest order. Byte-budgeted. */
+    @GetMapping("/inventory")
+    public ResponseEntity<MindCapabilityProgressService.InventoryPage> inventory(
+            @RequestParam(name = "kind", required = false) String kind,
+            @RequestParam(name = "status", required = false) String status,
+            @RequestParam(name = "offset", defaultValue = "0") int offset,
+            @RequestParam(name = "limit", defaultValue = "25") int limit,
+            Authentication auth) {
+        try {
+            return noStore(progress.inventoryPage(customer(auth), kind, status, offset, limit));
+        } catch (IllegalArgumentException invalid) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid inventory request");
+        }
     }
 
     @GetMapping("/items/{capabilityId}")

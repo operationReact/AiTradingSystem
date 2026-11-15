@@ -135,6 +135,118 @@ public class MindCapabilityProgressService {
             summaries(items), List.copyOf(items));
     }
 
+    // ---- Lightweight summary and paged inventory (issue #998) --------------------------------
+
+    /** Hard byte budget for one inventory page. The account edge refuses responses above 131,072 bytes. */
+    public static final int PAGE_BYTE_BUDGET = 96 * 1024;
+    public static final int MAX_PAGE_ITEMS = 50;
+    public static final int DEFAULT_PAGE_ITEMS = 25;
+    private static final int MAX_OFFSET = 1_000_000;
+    public static final String SUMMARY_CONTRACT = "mind.progress.v2";
+    public static final String INVENTORY_CONTRACT = "mind.progress-inventory.v1";
+    private static final com.fasterxml.jackson.databind.ObjectMapper SIZER =
+        new com.fasterxml.jackson.databind.ObjectMapper()
+            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
+
+    /** Overall totals are computed from the full authoritative inventory, never from a page. */
+    public record Overall(int total, int done, int pending, int blocked, double percentDone) {}
+
+    public record Summary(String contractVersion, Instant generatedAt, String manifestVersion,
+                          String auditedAt, String backendRevision, boolean revisionKnown,
+                          List<String> sourceIssues, PaperStage paperStage, Overall overall,
+                          List<KindSummary> summaries, List<String> kinds, String inventoryPath) {}
+
+    public record InventoryPage(String contractVersion, Instant generatedAt, String manifestVersion,
+                                String backendRevision, String kind, String status, int offset,
+                                int limit, int total, Integer nextOffset, boolean byteBudgetApplied,
+                                List<Item> items) {}
+
+    @Transactional(readOnly = true)
+    public Summary summary(UUID viewer) {
+        return summary(viewer, eventsByCapability(null), clock.instant());
+    }
+
+    Summary summary(UUID viewer, Map<String, List<Event>> events, Instant now) {
+        List<Item> items = evaluateAll(viewer, events, now);
+        Map<String, Item> evaluated = new LinkedHashMap<>();
+        for (Item item : items) evaluated.put(item.id(), item);
+        int total = items.size();
+        int done = (int) items.stream().filter(Item::done).count();
+        int blocked = (int) items.stream().filter(i -> !i.done() && i.blockerCode() != null).count();
+        double percent = total == 0 ? 0.0 : Math.round(done * 1000.0 / total) / 10.0;
+        List<String> kinds = items.stream().map(Item::kind).distinct().sorted().toList();
+        return new Summary(SUMMARY_CONTRACT, now, manifest.manifestVersion(), manifest.auditedAt(),
+            backendRevision, revisionKnown(), manifest.sourceIssues(), paperStage(evaluated),
+            new Overall(total, done, total - done, blocked, percent), summaries(items), kinds,
+            "/api/customer/mind/v1/progress/inventory");
+    }
+
+    @Transactional(readOnly = true)
+    public InventoryPage inventoryPage(UUID viewer, String kind, String status, int offset, int limit) {
+        return inventoryPage(viewer, eventsByCapability(null), clock.instant(), kind, status, offset, limit);
+    }
+
+    InventoryPage inventoryPage(UUID viewer, Map<String, List<Event>> events, Instant now,
+                                String kind, String status, int offset, int limit) {
+        if (offset < 0 || offset > MAX_OFFSET) throw new IllegalArgumentException("offset is out of range");
+        if (limit < 1 || limit > MAX_PAGE_ITEMS) throw new IllegalArgumentException("limit must be 1-" + MAX_PAGE_ITEMS);
+        if (kind != null && manifest.items().stream().noneMatch(i -> i.kind().equals(kind))) {
+            throw new IllegalArgumentException("Unknown inventory kind");
+        }
+        Status wanted = null;
+        if (status != null) {
+            try {
+                wanted = Status.valueOf(status);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException("Unknown inventory status");
+            }
+        }
+        // Filter and order over the full inventory first, in manifest order, so paging is deterministic.
+        List<Item> filtered = new ArrayList<>();
+        for (Item item : evaluateAll(viewer, events, now)) {
+            if (kind != null && !kind.equals(item.kind())) continue;
+            if (wanted != null && item.status() != wanted) continue;
+            filtered.add(item);
+        }
+        List<Item> page = new ArrayList<>();
+        long bytes = 1024; // envelope allowance
+        int index = offset;
+        boolean budgetApplied = false;
+        while (index < filtered.size() && page.size() < limit) {
+            Item item = filtered.get(index);
+            long size = itemBytes(item);
+            if (size > PAGE_BYTE_BUDGET - 1024) {
+                throw new IllegalStateException("A single inventory item exceeds the page byte budget");
+            }
+            if (!page.isEmpty() && bytes + size > PAGE_BYTE_BUDGET) {
+                budgetApplied = true;
+                break;
+            }
+            page.add(item);
+            bytes += size;
+            index++;
+        }
+        Integer next = index < filtered.size() ? index : null;
+        return new InventoryPage(INVENTORY_CONTRACT, now, manifest.manifestVersion(), backendRevision,
+            kind, status, offset, limit, filtered.size(), next, budgetApplied, List.copyOf(page));
+    }
+
+    private List<Item> evaluateAll(UUID viewer, Map<String, List<Event>> events, Instant now) {
+        List<Item> items = new ArrayList<>(manifest.items().size());
+        for (ManifestItem declared : manifest.items()) {
+            items.add(evaluate(declared, events.getOrDefault(declared.id(), List.of()), viewer, now));
+        }
+        return items;
+    }
+
+    private static long itemBytes(Item item) {
+        try {
+            return SIZER.writeValueAsBytes(item).length + 1;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("Inventory item cannot be serialized", e);
+        }
+    }
+
     @Transactional(readOnly = true)
     public Detail detail(UUID viewer, String capabilityId) {
         ManifestItem declared = requireItem(capabilityId);
