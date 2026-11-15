@@ -140,6 +140,10 @@ public class MindPaperCycleService {
             return result(owner, roomId, prior.get());
         }
         requirePaperRoom(owner, roomId);
+        // The configured room is authoritative. Never run a cash-equity Mind
+        // strategy inside an F&O-only room, or an intraday candle strategy in
+        // a Swing room (and vice versa). No client-supplied style can override it.
+        requireMatchingRoomFocus(owner, roomId, interval);
         Draft d = new Draft();
         Instant now = clock.instant();
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
@@ -495,6 +499,47 @@ public class MindPaperCycleService {
                     WHERE id=:room AND user_id=:owner AND mode='PAPER' AND status='PAPER_FUNDED')
                 """).param("room", roomId).param("owner", owner).query(Boolean.class).single();
         if (!Boolean.TRUE.equals(ok)) throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Funded Paper Room not found");
+    }
+
+    /**
+     * Strict market + holding-horizon boundary for the currently implemented
+     * SMA_TREND_VOLUME_V1 cash-equity PAPER strategy. Other strategy families
+     * must add their own tested room-focus compatibility before execution.
+     *
+     * A daily candle is research input for Swing; this does NOT force any
+     * minimum holding period or authorize leveraged/intraday products.
+     */
+    private void requireMatchingRoomFocus(UUID owner, UUID roomId,
+                                          HistoricalCandleInterval interval) {
+        record Scope(String marketScope, String focus) {}
+        Scope room = jdbc.sql("""
+                SELECT market_scope, focus FROM customer_trading_room
+                WHERE id=:room AND user_id=:owner AND mode='PAPER'
+                  AND status='PAPER_FUNDED'
+                """)
+            .param("room", roomId).param("owner", owner)
+            .query((rs, n) -> new Scope(
+                rs.getString("market_scope"), rs.getString("focus")))
+            .optional().orElseThrow(() -> new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "Funded Paper Room not found"));
+
+        if (!("EQUITY".equals(room.marketScope()) || "ALL".equals(room.marketScope()))) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Cash-equity Mind strategy is not allowed in an F&O-only room");
+        }
+        boolean compatible = switch (room.focus()) {
+            case "SWING" -> interval == HistoricalCandleInterval.ONE_DAY;
+            case "INTRADAY" -> interval == HistoricalCandleInterval.FIVE_MINUTE
+                    || interval == HistoricalCandleInterval.FIFTEEN_MINUTE
+                    || interval == HistoricalCandleInterval.ONE_HOUR;
+            // The current intraday/swing evaluator is not validated for
+            // position investing or an undecided strategy preference.
+            default -> false;
+        };
+        if (!compatible) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Mind strategy and candle interval are not allowed by room focus");
+        }
     }
 
     private Optional<Cycle> byKey(UUID owner, UUID roomId, String key) {
