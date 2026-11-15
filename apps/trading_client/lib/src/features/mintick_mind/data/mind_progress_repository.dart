@@ -326,9 +326,63 @@ class HttpMindProgressRepository implements MindProgressRepository {
   final AuthenticatedApiClient api;
   static const _base = '/api/customer/mind/v1/progress';
 
+  static const _inventory = '$_base/inventory';
+  static const _pageSize = 50;
+  // Bounds the walk: at most 200 pages of 50 items, far above the current inventory.
+  static const _maxPages = 200;
+
+  /// Reads the lightweight summary, then every inventory page, and assembles the
+  /// snapshot. Overall totals come from the server summary and must reconcile with
+  /// the collected items, so a partial or changing inventory fails closed.
   @override
-  Future<MindProgressSnapshot> load() async =>
-      MindProgressSnapshot.fromJson(await api.getJson(_base));
+  Future<MindProgressSnapshot> load() async {
+    final summary = await api.getJson(_base);
+    if (summary is! Map<String, dynamic> || summary['contractVersion'] != 'mind.progress.v2') {
+      throw const FormatException('Unsupported Mind progress summary');
+    }
+    final overall = summary['overall'];
+    if (overall is! Map<String, dynamic>) throw const FormatException('Missing overall progress');
+    final total = _int(overall['total']);
+    final overallDone = _int(overall['done']);
+    final manifest = _string(summary['manifestVersion']);
+    final revision = _string(summary['backendRevision']);
+
+    final items = <Object?>[];
+    final seen = <String>{};
+    int offset = 0;
+    for (var page = 0; ; page++) {
+      if (page >= _maxPages) throw const FormatException('Inventory exceeds the page limit');
+      final raw = await api.getJson(_inventory, query: {'offset': '$offset', 'limit': '$_pageSize'});
+      if (raw is! Map<String, dynamic> || raw['contractVersion'] != 'mind.progress-inventory.v1') {
+        throw const FormatException('Unsupported inventory page');
+      }
+      // A manifest or revision change mid-load means the pages are not one inventory.
+      if (raw['manifestVersion'] != manifest || raw['backendRevision'] != revision) {
+        throw const FormatException('Inventory changed while loading');
+      }
+      final rows = raw['items'];
+      if (rows is! List) throw const FormatException('Invalid inventory page');
+      for (final row in rows) {
+        final id = row is Map<String, dynamic> ? row['id'] : null;
+        if (id is! String || !seen.add(id)) {
+          throw const FormatException('Duplicate or invalid inventory item');
+        }
+        items.add(row);
+      }
+      final next = raw['nextOffset'];
+      if (next == null) break;
+      if (next is! int || next <= offset) throw const FormatException('Invalid inventory cursor');
+      offset = next;
+    }
+    if (items.length != total) throw const FormatException('Inventory is incomplete');
+    final doneCount = items.where((row) => (row as Map<String, dynamic>)['done'] == true).length;
+    if (doneCount != overallDone) throw const FormatException('Overall progress does not reconcile');
+    return MindProgressSnapshot.fromJson({
+      ...summary,
+      'contractVersion': 'mind.progress.v1',
+      'items': items,
+    });
+  }
 
   @override
   Future<MindProgressDetail> detail(String capabilityId) async {
