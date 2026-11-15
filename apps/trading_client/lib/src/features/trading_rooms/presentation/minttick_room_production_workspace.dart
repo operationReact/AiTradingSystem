@@ -68,6 +68,11 @@ class _MintTickRoomProductionWorkspaceState
     extends State<MintTickRoomProductionWorkspace> {
   String _tab = 'Trade';
   String _tradeMarket = 'EQUITY';
+  String get _roomScopeLabel => switch (widget.room.marketScope) {
+    'FNO' => 'NIFTY Options',
+    'ALL' => 'Equity + F&O',
+    _ => 'NSE/BSE equities',
+  };
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
@@ -307,11 +312,7 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      '${widget.room.focus} · ${switch (widget.room.marketScope) {'
-                      'FNO' => 'NIFTY Options','
-                      'ALL' => 'Equity + F&O','
-                      _ => 'NSE/BSE equities','
-                    }} · MY ROOM',
+                      '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
