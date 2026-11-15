@@ -75,6 +75,19 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
         assertThat(equity).isNotNull();
         assertThat(fno).isNotNull();
         assertThat(all).isNotNull();
+        // Creating a PAPER room now allocates the owner-only virtual wallet
+        // exactly once and unpauses it. No F&O quotes or broker orders are
+        // fabricated by this purely virtual-cash lifecycle.
+        for (var room : List.of(equity, fno, all)) {
+            assertThat(room.status()).isEqualTo("PAPER_FUNDED");
+            var wallet = wallets.get(owner, room.id());
+            assertThat(wallet.initialCashPaise()).isEqualTo(2_000_000L);
+            assertThat(wallet.availableCashPaise()).isEqualTo(2_000_000L);
+            assertThat(wallet.halted()).isFalse();
+            assertThat(wallets.ledger(owner, room.id())).hasSize(1);
+            assertThat(wallets.ledger(owner, room.id()).getFirst().eventKind())
+                .isEqualTo("INITIAL_PAPER_ALLOCATION");
+        }
         assertThat(controller.get(equity.id(), auth).marketScope()).isEqualTo("EQUITY");
         assertThat(controller.get(fno.id(), auth).marketScope()).isEqualTo("FNO");
         assertThat(controller.get(all.id(), auth).marketScope()).isEqualTo("ALL");
@@ -121,6 +134,8 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
             "Old Client", "SWING", 20000L, "BALANCED", "PAPER"), auth).getBody();
         assertThat(legacy).isNotNull();
         assertThat(legacy.marketScope()).isEqualTo("EQUITY");
+        assertThat(legacy.status()).isEqualTo("PAPER_FUNDED");
+        assertThat(wallets.get(owner, legacy.id()).halted()).isFalse();
         assertThat(controller.get(legacy.id(), auth).marketScope()).isEqualTo("EQUITY");
     }
 
@@ -190,7 +205,7 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
         when(identities.find("cognito", ISSUER, "test-subject"))
             .thenReturn(Optional.of(new CustomerIdentityStore.CustomerAccount(
                 owner, "ACTIVE", "CUSTOMER", "Test User", "test@example.test")));
-        return new CustomerTradingRoomController(jdbc, identities);
+        return new CustomerTradingRoomController(jdbc, identities, wallets);
     }
 
     private static Authentication authentication() {
