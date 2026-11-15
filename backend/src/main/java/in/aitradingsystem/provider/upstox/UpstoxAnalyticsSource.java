@@ -266,15 +266,23 @@ public final class UpstoxAnalyticsSource {
         }
         List<FnoOptionContract> result = new ArrayList<>();
         Set<String> seenKeys = new HashSet<>();
+        // A provider identity must match the underlying exchange all the way
+        // through to the instrument key. A syntactically valid BSE_FO key is
+        // not an NSE_FO contract and must never enter NSE PAPER selection.
+        String expectedExchange = underlyingKey.startsWith("NSE_") ? "NSE" : "BSE";
+        String expectedSegment = expectedExchange + "_FO";
         for (JsonNode row : rows) {
             try {
                 if (!underlyingKey.equals(fnoText(row, "underlying_key"))
+                        || !expectedExchange.equals(fnoText(row, "exchange"))
+                        || !expectedSegment.equals(fnoText(row, "segment"))
                         || !expiry.equals(LocalDate.parse(fnoText(row, "expiry")))) {
                     throw new IllegalArgumentException();
                 }
                 String side = fnoText(row, "instrument_type");
                 if (!"CE".equals(side) && !"PE".equals(side)) throw new IllegalArgumentException();
                 String key = fnoContractKey(row, "instrument_key");
+                if (!key.startsWith(expectedSegment + "|")) throw new IllegalArgumentException();
                 BigDecimal strike = fnoNumber(row, "strike_price", true);
                 BigDecimal tick = fnoOptionPriceTickInRupees(row);
                 long lot = fnoLong(row, "lot_size");
