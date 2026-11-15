@@ -101,6 +101,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
         "/api/customer/mind/v1/evidence",
         "/api/customer/mind/v1/strategy-replay",
         "/api/customer/mind/v1/decision-history",
+        "/api/customer/mind/v1/decision-outcomes",
         "/api/customer/mind/v1/ma-walkforward",
         "/api/customer/mind/v1/prospective-cohort",
         "/api/customer/mind/v1/prospective-signals",
