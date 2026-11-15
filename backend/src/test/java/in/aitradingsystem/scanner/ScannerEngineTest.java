@@ -59,7 +59,7 @@ class ScannerEngineTest {
         assertTrue(engine.scan(context).isEmpty());
     }
 
-    private static List<MarketCandle> breakoutCandles(Instant latestTime) {
+    static List<MarketCandle> breakoutCandles(Instant latestTime) {
         List<MarketCandle> candles = new ArrayList<>();
         Instant first = latestTime.minusSeconds(20L * 300L);
         for (int i = 0; i < 20; i++) {

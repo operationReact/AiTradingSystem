@@ -113,20 +113,28 @@ public class ResearchScanService {
                                 "INSUFFICIENT_CANDLE_HISTORY",
                                 "Fewer than 64 stored candles; full strategy coverage unavailable");
                         if (candles.isEmpty()) {
+                            recordNotEvaluated(runId, instrument.id(), "NO_CANDLES", null);
                             scannedCount++;
                             continue;
                         }
                     }
                     if (quality != null && (candles.isEmpty()
                             || !quality.eligibleForResearch(quality.evaluateBars(instrument.id(), interval, candles)))) {
+                        recordNotEvaluated(runId, instrument.id(), "QUALITY_GATE_REJECTED", null);
                         scannedCount++;
                         continue;
                     }
                     ScanContext context = new ScanContext(
                             instrument.id(), instrument.tradingSymbol(), instrument.exchange(), interval.name(),
                             evaluatedAt, candles);
-                    List<ScanCandidate> candidates = engine.scan(context);
+                    List<ScannerEngine.StrategyEvaluation> evaluations = engine.evaluate(context);
+                    List<ScanCandidate> candidates = ScannerEngine.candidates(evaluations);
                     Instant dataCutoffAt = candles.isEmpty() ? null : candles.getLast().candleTime();
+                    // Every registered strategy's outcome is recorded: candidate, no signal, or not evaluated.
+                    for (ScannerEngine.StrategyEvaluation evaluation : evaluations) {
+                        scans.saveOutcome(runId, instrument.id(), evaluation.strategy(), evaluation.outcome(),
+                                evaluation.reasonCode(), dataCutoffAt);
+                    }
                     for (ScanCandidate candidate : candidates) {
                         ScannerStrategy strategy = registry.require(candidate.strategy())
                                 .orElseThrow(() -> new IllegalStateException("Candidate references unknown strategy: " + candidate.strategy()));
@@ -170,6 +178,12 @@ public class ResearchScanService {
             scans.failRun(runId, scannedCount, candidateCount, "SCAN_FAILED", "Research scan failed before completion");
         }
         return scans.requireRun(runId);
+    }
+
+    private void recordNotEvaluated(UUID runId, long instrumentId, String reasonCode, Instant dataCutoffAt) {
+        for (String strategy : engine.strategyCodes()) {
+            scans.saveOutcome(runId, instrumentId, strategy, ScannerEngine.NOT_EVALUATED, reasonCode, dataCutoffAt);
+        }
     }
 
     private static StrategyRegistry defaultRegistry() {
