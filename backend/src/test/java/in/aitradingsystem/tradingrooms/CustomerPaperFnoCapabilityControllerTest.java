@@ -2,7 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mockNoInteractions;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.mock;
 
 import in.aitradingsystem.user.CustomerIdentityStore;
@@ -73,6 +73,6 @@ class CustomerPaperFnoCapabilityControllerTest {
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
                 .isEqualTo(HttpStatus.UNAUTHORIZED));
-        mockNoInteractions(jdbc, identities);
+        verifyNoInteractions(jdbc, identities);
     }
 }
