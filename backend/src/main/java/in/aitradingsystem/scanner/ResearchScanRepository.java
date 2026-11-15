@@ -252,6 +252,21 @@ public class ResearchScanRepository {
                 instant(rs.getObject("data_cutoff_at", OffsetDateTime.class)), rs.getLong("id")), runId, limit);
     }
 
+    /**
+     * Records one strategy outcome for one instrument in one run. Idempotent for a repeated
+     * key; the table is append-only, so an existing outcome is never rewritten.
+     */
+    public void saveOutcome(UUID runId, long instrumentId, String strategy, String outcome,
+                            String reasonCode, Instant dataCutoffAt) {
+        jdbc.update("""
+                INSERT INTO research_scan_outcome(scan_run_id, instrument_id, strategy, outcome, reason_code,
+                    data_cutoff_at, recorded_at)
+                VALUES (?, ?, ?, ?, ?, ?, now())
+                ON CONFLICT (scan_run_id, instrument_id, strategy) DO NOTHING
+                """, runId, instrumentId, strategy, outcome, reasonCode,
+                dataCutoffAt == null ? null : java.sql.Timestamp.from(dataCutoffAt));
+    }
+
     public void finishRun(UUID id, int scannedCount, int candidateCount) {
         completeRun(id, "SUCCEEDED", scannedCount, candidateCount, null, null);
     }
