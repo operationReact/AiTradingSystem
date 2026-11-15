@@ -62,6 +62,32 @@ void main() {
     expect(store.drafts, isEmpty);
   });
 
+  testWidgets('PAPER rooms offer Equity, F&O and All as separate market scopes',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: const MintTickRoomCreationPage(),
+    ));
+
+    final market = find.byKey(const ValueKey('room-market-scope-dropdown'));
+    await tester.ensureVisible(market);
+    await tester.pumpAndSettle();
+    await tester.tap(market);
+    await tester.pumpAndSettle();
+    expect(find.text('Equity · NSE/BSE stocks'), findsWidgets);
+    expect(find.text('F&O · NIFTY options (PAPER)'), findsWidgets);
+    expect(find.text('All · Stocks + NIFTY options'), findsWidgets);
+    await tester.tap(find.text('F&O · NIFTY options (PAPER)').last);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Futures and stock options are not available.'),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Create Room offers LIVE and PAPER before reviewing a plan',
       (tester) async {
     tester.view.devicePixelRatio = 1;
