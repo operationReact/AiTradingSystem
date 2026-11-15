@@ -13,10 +13,12 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 class MindDecisionHistoryServiceIT extends AbstractPostgresIT {
+    // The database is shared with other integration tests, which also write candidates, so every
+    // fingerprint here is unique to this run and results are scoped to the scan runs created here.
     // Scanner fingerprints are 64 lowercase hex characters (database check constraint).
-    private static final String VALID = "a".repeat(64);
-    private static final String FUTURE = "b".repeat(64);
-    private static final String PARTIAL = "c".repeat(64);
+    private static final String VALID = hex64();
+    private static final String FUTURE = hex64();
+    private static final String PARTIAL = hex64();
     private static final Instant SIGNAL = Instant.parse("2026-11-13T09:30:00Z");
 
     @Autowired JdbcClient jdbc;
@@ -42,8 +44,9 @@ class MindDecisionHistoryServiceIT extends AbstractPostgresIT {
         // A PARTIAL run is never candidate approval, even with valid lineage.
         candidate(partial, 3, PARTIAL, SIGNAL, SIGNAL);
 
+        var ownRuns = List.of(ok.toString(), partial.toString());
         var rows = history.inspect().decisions().stream()
-            .filter(d -> List.of(VALID, FUTURE, PARTIAL).contains(d.candidateFingerprint()))
+            .filter(d -> ownRuns.contains(d.scanRunId()))
             .toList();
 
         assertThat(rows).extracting(MindDecisionHistoryService.Decision::candidateFingerprint)
@@ -54,6 +57,11 @@ class MindDecisionHistoryServiceIT extends AbstractPostgresIT {
         assertThat(row.executionEnabled()).isFalse();
         assertThat(row.liveMoney()).isFalse();
         assertThat(row.reasons()).containsExactly("TREND", "VOLUME");
+    }
+
+    private static String hex64() {
+        return (UUID.randomUUID().toString() + UUID.randomUUID().toString())
+            .replace("-", "").substring(0, 64);
     }
 
     private UUID run(String status, Instant completedAt) {
