@@ -49,6 +49,7 @@ class UpstoxFnoAnalyticsSourceTest {
                 .andRespond(withSuccess("""
                     {"status":"success","data":[
                       {"underlying_key":"NSE_INDEX|Nifty 50","expiry":"2026-11-19",
+                       "exchange":"NSE","segment":"NSE_FO",
                        "instrument_key":"NSE_FO|61001","instrument_type":"CE",
                        "trading_symbol":"NIFTY 25000 CE 19 NOV 26",
                        "strike_price":25000,"lot_size":65,"tick_size":0.05}
@@ -71,6 +72,7 @@ class UpstoxFnoAnalyticsSourceTest {
                 .andRespond(withSuccess("""
                     {"status":"success","data":[
                       {"underlying_key":"NSE_INDEX|Nifty 50","expiry":"2026-11-19",
+                       "exchange":"NSE","segment":"NSE_FO",
                        "instrument_key":"NSE_FO|61001","instrument_type":"CE",
                        "trading_symbol":"NIFTY 25000 CE 19 NOV 26",
                        "strike_price":25000,"lot_size":65,"tick_size":5.0}
@@ -84,6 +86,62 @@ class UpstoxFnoAnalyticsSourceTest {
                 .remainder(contracts.getFirst().tickSize())).isEqualByComparingTo("0");
         assertThat(new java.math.BigDecimal("100.01")
                 .remainder(contracts.getFirst().tickSize())).isNotZero();
+        server.verify();
+    }
+
+    @Test
+    void rejectsValidLookingNseContractWithBseInstrumentKey() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"underlying_key":"NSE_INDEX|Nifty 50","expiry":"2026-11-19",
+                       "exchange":"NSE","segment":"NSE_FO",
+                       "instrument_key":"BSE_FO|61001","instrument_type":"CE",
+                       "trading_symbol":"NIFTY 25000 CE 19 NOV 26",
+                       "strike_price":25000,"lot_size":65,"tick_size":5}
+                    ]}
+                    """, MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .hasMessage("UPSTOX_FNO_INVALID_CONTRACTS");
+        server.verify();
+    }
+
+    @Test
+    void rejectsNseContractWhenProviderSegmentOrExchangeDisagrees() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"underlying_key":"NSE_INDEX|Nifty 50","expiry":"2026-11-19",
+                       "exchange":"BSE","segment":"BSE_FO",
+                       "instrument_key":"NSE_FO|61001","instrument_type":"CE",
+                       "trading_symbol":"NIFTY 25000 CE 19 NOV 26",
+                       "strike_price":25000,"lot_size":65,"tick_size":5}
+                    ]}
+                    """, MediaType.APPLICATION_JSON));
+        assertThatThrownBy(() -> source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .hasMessage("UPSTOX_FNO_INVALID_CONTRACTS");
+        server.verify();
+    }
+
+    @Test
+    void preservesValidBseFnoContractsWhenUnderlyingIsBse() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"underlying_key":"BSE_INDEX|SENSEX","expiry":"2026-11-19",
+                       "exchange":"BSE","segment":"BSE_FO",
+                       "instrument_key":"BSE_FO|91001","instrument_type":"PE",
+                       "trading_symbol":"SENSEX 80000 PE 19 NOV 26",
+                       "strike_price":80000,"lot_size":20,"tick_size":5}
+                    ]}
+                    """, MediaType.APPLICATION_JSON));
+        var contracts = source.currentFnoOptionContracts("BSE_INDEX|SENSEX", EXPIRY);
+        assertThat(contracts).hasSize(1);
+        assertThat(contracts.getFirst().instrumentKey()).isEqualTo("BSE_FO|91001");
+        assertThat(contracts.getFirst().tickSize()).isEqualByComparingTo("0.05");
         server.verify();
     }
 
