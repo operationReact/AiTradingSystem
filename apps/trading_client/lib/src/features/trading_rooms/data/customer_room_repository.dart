@@ -102,7 +102,6 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
     if (id is! String || id.isEmpty || name is! String || name.isEmpty ||
         !(mode == 'PAPER' || mode == 'LIVE') ||
         !(scope == 'EQUITY' || scope == 'FNO' || scope == 'ALL') ||
-        (mode == 'LIVE' && scope != 'EQUITY') ||
         budget is! int || budget < 1000 ||
         risk is! String ||
         !(status == 'DRAFT' ||
