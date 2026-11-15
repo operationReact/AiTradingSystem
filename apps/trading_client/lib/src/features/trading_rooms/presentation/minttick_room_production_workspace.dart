@@ -517,6 +517,28 @@ class _MintTickRoomProductionWorkspaceState
   }
 
   Widget _positionsPage(BuildContext context) {
+    // Strict F&O room: never display an equity holdings desk or its generic
+    // cash-equity BUY/SELL shortcuts. Existing recorded F&O positions remain
+    // reachable through the dedicated options panel.
+    if (widget.room.marketScope == 'FNO') {
+      if (widget.room.mode != 'PAPER') {
+        return const Center(child: Text(
+          'LIVE F&O positions require verified broker access and execution readiness.'));
+      }
+      if (widget.fno == null) {
+        return const Center(child: Text(
+          'F&O position service unavailable. No equity orders are permitted.'));
+      }
+      return SingleChildScrollView(child: MintTickPaperFnoPanel(
+        key: ValueKey('paper-fno-${widget.room.id}'),
+        roomId: widget.room.id,
+        repository: widget.fno!,
+        onFilled: () async {
+          await _loadHistory();
+          await widget.onRefresh();
+        },
+      ));
+    }
     final type = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final live = widget.room.mode == 'LIVE';
@@ -618,6 +640,22 @@ class _MintTickRoomProductionWorkspaceState
   }
 
   Widget _ordersPage(BuildContext context) {
+    if (widget.room.marketScope == 'FNO') {
+      if (widget.room.mode != 'PAPER' || widget.fno == null) {
+        return const Center(child: Text(
+          'F&O order history is unavailable until the verified broker or PAPER '
+          'service is connected.'));
+      }
+      return SingleChildScrollView(child: MintTickPaperFnoPanel(
+        key: ValueKey('fno-order-history-${widget.room.id}'),
+        roomId: widget.room.id,
+        repository: widget.fno!,
+        onFilled: () async {
+          await _loadHistory();
+          await widget.onRefresh();
+        },
+      ));
+    }
     final isPaper = widget.room.mode == 'PAPER';
     final rows = isPaper ? _paperOrders.length : _liveIntents.length;
     return Column(children: [
@@ -741,7 +779,9 @@ class _MintTickRoomProductionWorkspaceState
     ]);
   }
 
-  Widget _actions() => SizedBox(height: 57, child: Row(children: [
+  Widget _actions() => widget.room.marketScope == 'FNO'
+      ? const SizedBox.shrink() // only the options-specific ticket can trade
+      : SizedBox(height: 57, child: Row(children: [
     Expanded(child: _TradeAction(label: 'New Buy',
       filled: true, onPressed: () => _order('BUY'))),
     const SizedBox(width: 9),
