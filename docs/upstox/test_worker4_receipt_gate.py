@@ -1,0 +1,43 @@
+"""Synthetic-only fail-closed checks for Worker 4 receipt diagnostic."""
+import importlib.util
+from pathlib import Path
+import unittest
+
+spec = importlib.util.spec_from_file_location("gate", Path(__file__).with_name("worker4_receipt_gate.py"))
+gate = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gate)
+
+T = "2026-11-14T10:00:00Z"
+def receipt(**overrides):
+    r = dict(sourceId="fixture", authorizationReference="fixture-only", dataFamily="RATIO",
+             listingEpisode="fixture-episode", partitionKey="fixture-partition",
+             sourceRecordId="fixture-record", revision="v1", receiptId="fixture-receipt",
+             publishedAt=T, availableAt=T, observedAt=T, committedAt=T,
+             useAuthorized=True, persistenceVerified=True)
+    r.update(overrides)
+    return r
+
+class GateTest(unittest.TestCase):
+    def test_unknown_rights_fail_closed(self):
+        self.assertEqual(gate.evaluate([receipt(useAuthorized=None)], T)["eligibleUniqueUnits"], 0)
+
+    def test_unknown_persistence_fail_closed(self):
+        self.assertEqual(gate.evaluate([receipt(persistenceVerified=False)], T)["rejectedByReason"]["PERSISTENCE_UNKNOWN"], 1)
+
+    def test_late_revision_abstains(self):
+        self.assertEqual(gate.evaluate([receipt(availableAt="2026-11-15T10:00:00Z")], T)["eligibleUniqueUnits"], 0)
+
+    def test_duplicate_retry_does_not_inflate(self):
+        self.assertEqual(gate.evaluate([receipt(), receipt(receiptId="retry")], T)["eligibleUniqueUnits"], 1)
+
+    def test_revision_is_distinct(self):
+        self.assertEqual(gate.evaluate([receipt(), receipt(revision="v2")], T)["eligibleUniqueUnits"], 2)
+
+    def test_missing_timestamp_abstains(self):
+        self.assertEqual(gate.evaluate([receipt(publishedAt=None)], T)["eligibleUniqueUnits"], 0)
+
+    def test_invalid_cutoff_unknown(self):
+        self.assertIsNone(gate.evaluate([receipt()], "not-a-date")["eligibleUniqueUnits"])
+
+if __name__ == "__main__":
+    unittest.main()
