@@ -60,6 +60,11 @@ jobs:
           check GET /api/customer/mind/v1/orders
           exit $fail
 
+      - name: Check out the reviewed verification script
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Authenticated Mind reads and denials (per-run token, never printed)
         # The token is minted for this run only (Cognito access/ID tokens last 15 minutes). No long-lived
         # JWT is stored. The owner provisions the test customer, the password secret and the client id
@@ -82,29 +87,11 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          # Mint a fresh ID token for this run. The password is passed through a file, never argv or logs.
+          # Mint a fresh ACCESS token for this run (token_use=access is what the edge and backend require).
+          # The password goes through a file, never argv or logs; the token is masked before use.
           umask 077
           printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
-          python3 - "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" "$RUNNER_TEMP/verify_password" > "$RUNNER_TEMP/verify_token" <<'PY'
-          import json, sys, urllib.request
-          client_id, username, pw_file = sys.argv[1], sys.argv[2], sys.argv[3]
-          password = open(pw_file).read()
-          body = json.dumps({"AuthFlow": "USER_PASSWORD_AUTH", "ClientId": client_id,
-                             "AuthParameters": {"USERNAME": username, "PASSWORD": password}}).encode()
-          req = urllib.request.Request("https://cognito-idp.ap-south-1.amazonaws.com/", data=body, method="POST",
-                                       headers={"X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
-                                                "Content-Type": "application/x-amz-json-1.1"})
-          try:
-              with urllib.request.urlopen(req, timeout=20) as resp:
-                  result = json.load(resp)
-          except Exception:
-              print("", end="")
-              sys.exit(2)
-          token = result.get("AuthenticationResult", {}).get("IdToken", "")
-          if not token:
-              sys.exit(3)
-          print(token, end="")
-          PY
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_token"
           rm -f "$RUNNER_TEMP/verify_password"
           token="$(cat "$RUNNER_TEMP/verify_token")"
           rm -f "$RUNNER_TEMP/verify_token"
