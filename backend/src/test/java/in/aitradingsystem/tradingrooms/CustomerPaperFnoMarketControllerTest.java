@@ -121,6 +121,32 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
+    void providerContractSourceFailureIsControlled503WithoutLeakingDetails() {
+        var error=org.assertj.core.api.Assertions.catchThrowable(
+            () -> CustomerPaperFnoMarketController.providerRead(
+                () -> { throw new IllegalStateException(
+                    "UPSTOX_FNO_TRANSPORT_FAILURE secret-bearer-should-not-leak"); }));
+        assertThat(error).isInstanceOf(ResponseStatusException.class);
+        var response=(ResponseStatusException)error;
+        assertThat(response.getStatusCode().value()).isEqualTo(503);
+        assertThat(response.getReason()).isEqualTo(
+            "F&O provider contracts or chain unavailable");
+        assertThat(response.getMessage()).doesNotContain("secret-bearer-should-not-leak");
+        assertThat(response.getCause()).isNull();
+    }
+
+    @Test
+    void malformedProviderContractFailsClosedWhileValidResultPasses() {
+        assertThatThrownBy(() -> CustomerPaperFnoMarketController.providerRead(
+            () -> { throw new IllegalArgumentException("raw upstream JSON"); }))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("503 SERVICE_UNAVAILABLE")
+            .hasMessageNotContaining("raw upstream JSON");
+        assertThat(CustomerPaperFnoMarketController.providerRead(
+            () -> List.of("safe-contract-key"))).containsExactly("safe-contract-key");
+    }
+
+    @Test
     void requiresIndependentPaperAndV3Flags() {
         var flag=CustomerPaperFnoMarketController.class.getAnnotation(
             ConditionalOnProperty.class);
