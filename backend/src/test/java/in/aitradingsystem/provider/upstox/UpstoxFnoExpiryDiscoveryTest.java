@@ -87,13 +87,14 @@ class UpstoxFnoExpiryDiscoveryTest {
                           "current_month","next_month","far_month"};
         // Actual provider data is required. A CE-only expiry is not listed.
         for(String p:periods){
-            String onlyCe=rows("2026-11-17").replaceFirst(
-                ",\\s*\\{\"underlying_key\":\"NSE_INDEX\\|Nifty 50\"[\\s\\S]*", "]}");
-            // Use fully-formed but one-sided source sample.
-            onlyCe="{\"status\":\"success\",\"data\":[{\"underlying_key\":\"NSE_INDEX|Nifty 50\","
-                +"\"segment\":\"NSE_FO\",\"exchange\":\"NSE\",\"instrument_key\":\"NSE_FO|61001\","
-                +"\"expiry\":\"2026-11-17\",\"instrument_type\":\"CE\","
-                +"\"strike_price\":26000,\"tick_size\":5,\"lot_size\":65}]}";
+            String onlyCe="""
+                {"status":"success","data":[
+                  {"underlying_key":"NSE_INDEX|Nifty 50","segment":"NSE_FO",
+                   "exchange":"NSE","instrument_key":"NSE_FO|61001",
+                   "expiry":"2026-11-17","instrument_type":"CE",
+                   "strike_price":26000,"tick_size":5,"lot_size":65}
+                ]}
+                """;
             expect(p,onlyCe);
         }
         assertThat(source.currentNiftyOptionExpiries(NOW)).isEmpty();
