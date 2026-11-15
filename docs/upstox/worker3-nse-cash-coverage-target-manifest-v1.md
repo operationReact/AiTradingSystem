@@ -44,3 +44,35 @@ This NSE_EQ historical target contract is **not** an NSE_FO executable quote sou
 ## Current evidence limitations (2026-11-15)
 
 Prior owner-provided audit: UPSTOX EXTERNAL registry identity exists; zero rights receipts and zero backfill jobs were reported at that time. **No fresh production V77–V79 database observation is included in this proposal.** Planned denominator UNKNOWN; authorized verified partitions UNKNOWN; acceptance change +0.0pp. This document must not be used as evidence of ingestion.
+
+## Executable schema-discovery preflight (read-only; no market-data calls)
+
+Run with a **read-only PostgreSQL role** against the explicitly approved environment. These queries inspect metadata only and make no assumptions about whether migrations V77–V79 were applied. Record a sanitized result digest, not raw source rows or credentials. The transaction must be rolled back even on success.
+
+```sql
+BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
+SELECT current_database() AS database_name,
+       current_setting('transaction_read_only') AS transaction_read_only,
+       current_setting('server_version_num') AS server_version_num;
+SELECT installed_rank, version, success, installed_on
+FROM flyway_schema_history
+WHERE version IN ('77', '78', '79')
+ORDER BY installed_rank;
+SELECT table_schema, table_name, column_name, data_type, is_nullable
+FROM information_schema.columns
+WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+  AND table_name IN ('golden_source_rights_receipt', 'golden_dataset_backfill_job')
+ORDER BY table_schema, table_name, ordinal_position;
+ROLLBACK;
+```
+
+If `flyway_schema_history` is absent, permissions deny metadata, or the actual migration version names differ, stop and report `SCHEMA_UNVERIFIED` rather than treating empty output as zero. Do not construct receipt joins or a denominator until the actual deployed columns and keys have been independently reviewed. A successful metadata query is **not** a verified partition or a rights grant.
+
+### Required regression cases for the eventual persisted query
+
+- Two receipts for one partition count as one; an unauthorized earlier receipt must not shadow an authorized later one.
+- Rights valid at acquisition but expired for the requested current use must fail closed; source login alone never qualifies.
+- Renamed symbol within one listing episode must not double the denominator; distinct listing episodes must remain distinct.
+- A missing universe snapshot or rights scope returns null denominator/percentage, never a fabricated zero.
+- A cursor from another manifest hash or observation snapshot must be rejected; stable ordering must survive pagination.
+- A 429 attempt/cooldown or incomplete month is reported as retry candidate or gap, not VERIFIED.
