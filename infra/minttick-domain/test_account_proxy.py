@@ -666,7 +666,7 @@ class AccountProxyTest(unittest.TestCase):
 
     def test_fno_paper_reconciliation_routes_are_authenticated_get_only(self):
         room="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
-        for suffix in ("reconciliation", "wallet-reconciliation"):
+        for suffix in ("capability", "reconciliation", "wallet-reconciliation"):
             endpoint=room+suffix
             self.assertTrue(proxy.allowed("GET", endpoint))
             for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
