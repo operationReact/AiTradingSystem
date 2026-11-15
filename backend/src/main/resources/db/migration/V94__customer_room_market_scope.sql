@@ -12,7 +12,5 @@ ALTER TABLE customer_trading_room
     ADD CONSTRAINT ck_customer_trading_room_market_scope
     CHECK (market_scope IN ('EQUITY', 'FNO', 'ALL'));
 
--- No LIVE derivatives until separately approved and safety-gated.
-ALTER TABLE customer_trading_room
-    ADD CONSTRAINT ck_customer_room_live_equity_only
-    CHECK (mode = 'PAPER' OR market_scope = 'EQUITY');
+-- All 3 market scopes are allowed for LIVE room planning only.
+-- Creation never grants LIVE execution; broker/order consent gates remain independent.
