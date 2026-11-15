@@ -554,6 +554,11 @@ extension _MindAnalyticsScreens on _MindWorkspaceState {
     return _surface('Decision Lab',replay!=null
         ? 'Server replay of recorded research · research only'
         : 'Local simulation · no server decision recorded',[
+      if(widget.decisionOutcomesRepository!=null) ...[
+        MindDecisionOutcomesPanel(key:const ValueKey('mind-decision-outcomes-panel'),
+          repository:widget.decisionOutcomesRepository!),
+        const SizedBox(height:12),
+      ],
       if(widget.decisionHistoryRepository!=null) ...[
         MindDecisionHistoryPanel(key:const ValueKey('mind-decision-history-panel'),
           repository:widget.decisionHistoryRepository!),
