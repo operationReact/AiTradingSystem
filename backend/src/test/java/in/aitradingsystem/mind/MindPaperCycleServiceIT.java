@@ -154,6 +154,57 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void swingFocusBlocksIntradayMindAndFnoScopeBlocksEveryCashMindCycle() {
+        long instrument = instrument("RELIANCE-EQ", "2885");
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+        var service = service(progress(), SOURCE);
+
+        jdbc.sql("UPDATE customer_trading_room SET focus='SWING' WHERE id=:room")
+            .param("room", room).update();
+        assertThatThrownBy(() -> service.run(owner, room, "swing_15min_001",
+                instrument, HistoricalCandleInterval.FIFTEEN_MINUTE))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed by room focus");
+        assertThat(countOrders(room)).isZero();
+
+        // A daily Swing evaluation can proceed through its normal data gate;
+        // absence of candles does not produce any trade or fake signal.
+        var daily = service.run(owner, room, "swing_daily_01",
+                instrument, HistoricalCandleInterval.ONE_DAY);
+        assertThat(daily.cycle().outcome()).isEqualTo(Outcome.DATA_BLOCKED);
+        assertThat(countOrders(room)).isZero();
+
+        jdbc.sql("UPDATE customer_trading_room SET market_scope='FNO' WHERE id=:room")
+            .param("room", room).update();
+        assertThatThrownBy(() -> service.run(owner, room, "fno_cash_mind_01",
+                instrument, HistoricalCandleInterval.ONE_DAY))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed in an F&O-only room");
+        assertThat(countOrders(room)).isZero();
+        assertThat(wallets.get(owner, room).availableCashPaise()).isEqualTo(2_000_000L);
+    }
+
+    @Test
+    void intradayFocusRejectsDailyAndUndecidedFocusCannotExecuteMind() {
+        long instrument = instrument("RELIANCE-EQ", "2885");
+        UUID owner = customer();
+        UUID room = fundedRoom(owner);
+        var service = service(progress(), SOURCE);
+        assertThatThrownBy(() -> service.run(owner, room, "intraday_daily_01",
+                instrument, HistoricalCandleInterval.ONE_DAY))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed by room focus");
+        jdbc.sql("UPDATE customer_trading_room SET focus='HELP_ME_CHOOSE' WHERE id=:room")
+            .param("room", room).update();
+        assertThatThrownBy(() -> service.run(owner, room, "undecided_cycle_01",
+                instrument, HistoricalCandleInterval.FIFTEEN_MINUTE))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("not allowed by room focus");
+        assertThat(countOrders(room)).isZero();
+    }
+
+    @Test
     void strategyCandidateBecomesOneVirtualFillWithPositionsPnlAndRuntimeEvidence() {
         long instrument = instrument("RELIANCE-EQ", "2885");
         seedRisingCandles(instrument, "RELIANCE-EQ", "2885", SOURCE);
