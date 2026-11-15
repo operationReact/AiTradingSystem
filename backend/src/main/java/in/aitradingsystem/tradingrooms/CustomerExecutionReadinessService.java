@@ -47,7 +47,7 @@ public class CustomerExecutionReadinessService {
                             BigDecimal limitPrice, boolean executable,
                             List<String> blockers) {}
 
-    private record Room(String mode, String status) {}
+    private record Room(String mode, String status, String marketScope) {}
 
     public Readiness readiness(UUID owner, UUID roomId) {
         Room room = ownedRoom(owner, roomId);
@@ -86,6 +86,14 @@ public class CustomerExecutionReadinessService {
             blockers.add("REGISTERED_STATIC_IP_NOT_VERIFIED");
             blockers.add("ACCOUNT_WIDE_RISK_AND_RECONCILIATION_NOT_ENABLED");
             blockers.add("EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED");
+            if (!"EQUITY".equals(room.marketScope())) {
+                // LIVE room creation is an intent, never a permission grant.
+                // F&O requires a segment-authorized account and separate
+                // F&O order adapter/margin controls before any broker action.
+                blockers.add("FNO_BROKER_SEGMENT_PERMISSION_NOT_VERIFIED");
+                blockers.add("FNO_CONTRACT_MARGIN_AND_RISK_NOT_VERIFIED");
+                blockers.add("FNO_LIVE_ORDER_ADAPTER_NOT_ENABLED");
+            }
         }
         // The customer trading execution engine is unavailable in this stage.
         // All mode-specific order submissions fail closed, regardless of
@@ -107,11 +115,11 @@ public class CustomerExecutionReadinessService {
                 "Choose Angel One or Upstox");
         }
         Room room = jdbc.sql("""
-                SELECT mode, status FROM customer_trading_room
+                SELECT mode, status, market_scope FROM customer_trading_room
                 WHERE id=:room AND user_id=:owner FOR UPDATE
                 """)
             .param("room", roomId).param("owner", owner)
-            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status")))
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"), rs.getString("market_scope")))
             .optional().orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "Trading Room not found"));
         if (!"LIVE".equals(room.mode())) {
@@ -156,6 +164,10 @@ public class CustomerExecutionReadinessService {
     public Preflight preflight(UUID owner, UUID roomId, long instrumentId,
                               String side, int quantity, BigDecimal limitPrice) {
         Readiness readiness = readiness(owner, roomId);
+        if ("FNO".equals(ownedRoom(owner, roomId).marketScope())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Cash equity order preflight is unavailable in an F&O-only room");
+        }
         Instrument instrument = instruments.requireActiveInstrument(instrumentId);
         if (!("NSE".equals(instrument.exchange()) || "BSE".equals(instrument.exchange()))
                 || !("EQ".equalsIgnoreCase(instrument.instrumentType())
@@ -184,12 +196,12 @@ public class CustomerExecutionReadinessService {
 
     private Room ownedRoom(UUID owner, UUID roomId) {
         return jdbc.sql("""
-                SELECT mode, status
+                SELECT mode, status, market_scope
                 FROM customer_trading_room
                 WHERE id = :id AND user_id = :user
                 """)
             .param("id", roomId).param("user", owner)
-            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status")))
+            .query((rs, row) -> new Room(rs.getString("mode"), rs.getString("status"), rs.getString("market_scope")))
             .optional()
             .orElseThrow(() -> new ResponseStatusException(
                 HttpStatus.NOT_FOUND, "Trading Room not found"));
