@@ -19,6 +19,12 @@ class CustomerPaperFnoRepository {
     return CustomerFnoMarket.decode(raw);
   }
 
+  /// Always-on, owner-scoped capability endpoint. It must be checked before
+  /// loading conditional F&O routes or showing any simulated order ticket.
+  Future<CustomerFnoCapability> capability(String roomId) async =>
+      CustomerFnoCapability.decode(
+        await api.getJson('$_path/$roomId/paper/fno/capability'));
+
   /// Read-only bookkeeping receipt. It never authorizes trading by itself.
   Future<CustomerFnoReceipt> reconciliation(String roomId) async =>
       CustomerFnoReceipt.decode(await api.getJson('$_path/$roomId/paper/fno/reconciliation'));
@@ -76,6 +82,56 @@ class CustomerPaperFnoRepository {
 
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+}
+
+/// Configuration preflight, not proof of exchange quotes or trade permission.
+/// LIVE execution can never be enabled by this PAPER response.
+class CustomerFnoCapability {
+  const CustomerFnoCapability({
+    required this.status,
+    required this.readOnlyConfigured,
+    required this.paperConfigured,
+    required this.blockerCodes,
+  });
+
+  final String status;
+  final bool readOnlyConfigured;
+  final bool paperConfigured;
+  final List<String> blockerCodes;
+
+  static const _statuses = {
+    'ROOM_HORIZON_UNSUPPORTED', 'FNO_PAPER_DISABLED',
+    'FNO_V3_FEED_DISABLED', 'DISPLAY_RIGHTS_NOT_VERIFIED',
+    'PAPER_USE_RIGHTS_NOT_VERIFIED', 'SOURCE_CHECK_REQUIRED',
+  };
+
+  static CustomerFnoCapability decode(Object? value) {
+    if (value is! Map<String, dynamic>) {
+      throw const FormatException('Invalid F&O capability response');
+    }
+    final status = value['status'];
+    final readOnly = value['readOnlyConfigured'];
+    final paper = value['paperConfigured'];
+    final live = value['liveExecutionAuthorized'];
+    final rawCodes = value['blockerCodes'];
+    if (status is! String || !_statuses.contains(status) ||
+        readOnly is! bool || paper is! bool || live != false ||
+        rawCodes is! List || rawCodes.any((x) => x is! String ||
+            !_statuses.contains(x) || x == 'SOURCE_CHECK_REQUIRED') ||
+        (paper && !readOnly) ||
+        (status == 'SOURCE_CHECK_REQUIRED' && rawCodes.isNotEmpty) ||
+        (status != 'SOURCE_CHECK_REQUIRED' &&
+            (rawCodes.isEmpty || rawCodes.first != status)) ||
+        (status == 'SOURCE_CHECK_REQUIRED' && (!readOnly || !paper))) {
+      throw const FormatException('Untrustworthy F&O capability');
+    }
+    return CustomerFnoCapability(
+      status: status,
+      readOnlyConfigured: readOnly,
+      paperConfigured: paper,
+      blockerCodes: List.unmodifiable(rawCodes.cast<String>()),
+    );
+  }
 }
 
 /// Bookkeeping consistency (walletReconciled, realized P&L) kept separate from
