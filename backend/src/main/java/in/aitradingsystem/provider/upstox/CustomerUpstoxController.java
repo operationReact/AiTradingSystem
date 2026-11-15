@@ -180,6 +180,18 @@ public class CustomerUpstoxController {
         return secure(broker.staticIps(customer(authentication)));
     }
 
+    /**
+     * Uses the customer's existing OAuth session; no token refresh, API key,
+     * broker IP mutation, account funds mutation or LIVE order is attempted.
+     * Registration match is NOT an order-execution authorization.
+     */
+    @GetMapping("/registered-ip-check")
+    public ResponseEntity<UpstoxRegisteredIpAssessment.Result> registeredIpCheck(
+            Authentication authentication) {
+        var registered = broker.staticIps(customer(authentication));
+        return secure(UpstoxRegisteredIpAssessment.assess(registered.data()));
+    }
+
     @ExceptionHandler(UpstoxProviderException.class)
     public ProblemDetail failClosed(UpstoxProviderException exception) {
         HttpStatus status = switch (exception.code()) {
