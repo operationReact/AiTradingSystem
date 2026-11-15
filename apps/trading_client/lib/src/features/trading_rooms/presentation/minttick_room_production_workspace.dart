@@ -67,6 +67,12 @@ class MintTickRoomProductionWorkspace extends StatefulWidget {
 class _MintTickRoomProductionWorkspaceState
     extends State<MintTickRoomProductionWorkspace> {
   String _tab = 'Trade';
+  String _tradeMarket = 'EQUITY';
+  String get _roomScopeLabel => switch (widget.room.marketScope) {
+    'FNO' => 'NIFTY Options',
+    'ALL' => 'Equity + F&O',
+    _ => 'NSE/BSE equities',
+  };
   InstrumentRecord? _selected;
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
@@ -306,7 +312,7 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      '${widget.room.focus} · NSE/BSE equities · MY ROOM',
+                      '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
@@ -408,6 +414,47 @@ class _MintTickRoomProductionWorkspaceState
   }
 
   Widget _trade(BuildContext context) {
+    final scope = widget.room.marketScope;
+    if (scope == 'FNO') return _fnoTrade(context);
+    if (scope != 'ALL') {
+      return _equityTrade(context);
+    }
+    return Column(children: [
+      SizedBox(height: 45, child: SegmentedButton<String>(
+        key: const ValueKey('room-trade-market-switch'),
+        segments: const [
+          ButtonSegment(value: 'EQUITY', label: Text('Equity')),
+          ButtonSegment(value: 'FNO', label: Text('F&O · Options')),
+        ],
+        selected: {_tradeMarket},
+        onSelectionChanged: (value) =>
+            setState(() => _tradeMarket = value.first),
+      )),
+      Expanded(child: _tradeMarket == 'FNO'
+          ? _fnoTrade(context) : _equityTrade(context)),
+    ]);
+  }
+
+  Widget _fnoTrade(BuildContext context) {
+    if (widget.room.mode != 'PAPER' || widget.fno == null) {
+      return const Center(child: Text(
+        'F&O LIVE order execution is not authorized. Broker permissions, '
+        'risk limits and explicit LIVE room consent are required.'));
+    }
+    return SingleChildScrollView(
+      child: MintTickPaperFnoPanel(
+        key: ValueKey('room-fno-trade-${widget.room.id}'),
+        roomId: widget.room.id,
+        repository: widget.fno!,
+        onFilled: () async {
+          await _loadHistory();
+          await widget.onRefresh();
+        },
+      ),
+    );
+  }
+
+  Widget _equityTrade(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final styles = Theme.of(context).textTheme;
     final count = _positions.where((p) => p.quantity > 0).length;
@@ -491,7 +538,8 @@ class _MintTickRoomProductionWorkspaceState
       _PageTitle(live ? 'Live positions' : 'Paper portfolio',
         trailing: live ? '—' : '${rows.length} holdings',
         onRefresh: _loadHistory),
-      if (!live && widget.room.mode == 'PAPER' && widget.fno != null) ...[
+      if (!live && widget.room.mode == 'PAPER' &&
+          widget.room.marketScope != 'EQUITY' && widget.fno != null) ...[
         MintTickPaperFnoPanel(
           key: ValueKey('paper-fno-${widget.room.id}'),
           roomId: widget.room.id,

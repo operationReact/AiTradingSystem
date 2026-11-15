@@ -84,6 +84,24 @@ class CustomerPaperOrderServiceIT extends AbstractPostgresIT {
     }
 
     @Test
+    void fnoOnlyPaperRoomCannotRouteCashEquityBuy() {
+        long instrument = instrument();
+        UUID owner = customer();
+        UUID room = room(owner, "PAPER");
+        jdbc.sql("UPDATE customer_trading_room SET market_scope='FNO' WHERE id=:id")
+            .param("id", room).update();
+        wallets.activate(owner, room);
+        wallets.setPaused(owner, room, false);
+        recordTick(instrument, "100.00", NOW.minusSeconds(2));
+
+        assertThatThrownBy(() -> engine().submit(owner, room, "fno_cash_block_01",
+                instrument, "BUY", 1, new BigDecimal("100.00")))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThat(engine().orders(owner, room)).isEmpty();
+        assertThat(wallets.get(owner, room).availableCashPaise()).isEqualTo(2_000_000L);
+    }
+
+    @Test
     void staleQuoteAndPausedWalletCannotGenerateFills() {
         long instrument = instrument();
         UUID owner = customer();

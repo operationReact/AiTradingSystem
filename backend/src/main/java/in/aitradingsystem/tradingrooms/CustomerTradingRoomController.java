@@ -46,7 +46,7 @@ public class CustomerTradingRoomController {
     }
 
     public record RoomView(UUID id, String name, String focus, long plannedBudgetInr,
-                           String riskPreference, String mode, String status, Instant createdAt) {}
+                           String riskPreference, String mode, String marketScope, String status, Instant createdAt) {}
 
     public record RenameRoomRequest(@NotBlank @Size(max = 80) String name) {}
 
@@ -55,13 +55,20 @@ public class CustomerTradingRoomController {
             @NotBlank @Pattern(regexp = "INTRADAY|SWING|LONG_TERM|HELP_ME_CHOOSE") String focus,
             @NotNull @Min(1000) @Max(10000000) Long plannedBudgetInr,
             @NotBlank @Pattern(regexp = "CAUTIOUS|BALANCED|AGGRESSIVE") String riskPreference,
-            @NotBlank @Pattern(regexp = "PAPER|LIVE") String mode) {}
+            @NotBlank @Pattern(regexp = "PAPER|LIVE") String mode,
+            @Pattern(regexp = "EQUITY|FNO|ALL") String marketScope) {
+        // Old clients remain equity-only.
+        public CreateRoomRequest(String name, String focus, Long plannedBudgetInr,
+                String riskPreference, String mode) {
+            this(name, focus, plannedBudgetInr, riskPreference, mode, "EQUITY");
+        }
+    }
 
     @GetMapping
     public List<RoomView> list(org.springframework.security.core.Authentication authentication) {
         UUID owner = customer(authentication);
         return jdbc.sql("""
-                SELECT id, name, focus, planned_budget_inr, risk_preference, mode, status, created_at
+                SELECT id, name, focus, planned_budget_inr, risk_preference, mode, market_scope, status, created_at
                 FROM customer_trading_room WHERE user_id = :user
                 ORDER BY created_at DESC, id DESC
                 LIMIT 100
@@ -76,7 +83,7 @@ public class CustomerTradingRoomController {
                         org.springframework.security.core.Authentication authentication) {
         UUID owner = customer(authentication);
         return jdbc.sql("""
-                SELECT id, name, focus, planned_budget_inr, risk_preference, mode, status, created_at
+                SELECT id, name, focus, planned_budget_inr, risk_preference, mode, market_scope, status, created_at
                 FROM customer_trading_room WHERE id = :id AND user_id = :user
                 """)
             .param("id", roomId).param("user", owner)
@@ -94,17 +101,22 @@ public class CustomerTradingRoomController {
         if (name.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room name is required");
         }
+        String marketScope = request.marketScope() == null ? "EQUITY" : request.marketScope();
+        // Room scope is planning metadata, not LIVE order authorization.
+        if (!java.util.Set.of("EQUITY", "FNO", "ALL").contains(marketScope)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown market scope");
+        }
         UUID id = UUID.randomUUID();
         try {
             jdbc.sql("""
                     INSERT INTO customer_trading_room
-                        (id, user_id, name, focus, planned_budget_inr, risk_preference, mode, status)
-                    VALUES (:id, :user, :name, :focus, :budget, :risk, :mode, 'DRAFT')
+                        (id, user_id, name, focus, planned_budget_inr, risk_preference, mode, market_scope, status)
+                    VALUES (:id, :user, :name, :focus, :budget, :risk, :mode, :scope, 'DRAFT')
                     """)
                 .param("id", id).param("user", owner).param("name", name)
                 .param("focus", request.focus()).param("budget", request.plannedBudgetInr())
                 .param("risk", request.riskPreference()).param("mode", request.mode())
-                .update();
+                .param("scope", marketScope).update();
         } catch (DataIntegrityViolationException conflict) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "A room with this name already exists or its settings are invalid");
@@ -184,6 +196,7 @@ public class CustomerTradingRoomController {
             rs.getLong("planned_budget_inr"),
             rs.getString("risk_preference"),
             rs.getString("mode"),
+            rs.getString("market_scope"),
             rs.getString("status"),
             rs.getTimestamp("created_at").toInstant()
         );

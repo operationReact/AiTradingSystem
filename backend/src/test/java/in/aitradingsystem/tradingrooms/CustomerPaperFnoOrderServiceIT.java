@@ -77,12 +77,27 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         UUID id=UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO customer_trading_room
-                (id,user_id,name,focus,planned_budget_inr,risk_preference,mode,status)
-                VALUES (:id,:owner,:name,'INTRADAY',20000,'BALANCED',:mode,'DRAFT')
+                (id,user_id,name,focus,planned_budget_inr,risk_preference,mode,market_scope,status)
+                VALUES (:id,:owner,:name,'INTRADAY',20000,'BALANCED',:mode,
+                        CASE WHEN :mode='PAPER' THEN 'FNO' ELSE 'EQUITY' END,'DRAFT')
                 """).param("id",id).param("owner",owner)
                 .param("name","FNO test "+id).param("mode",mode).update();
         return id;
     }
+    @Test
+    void equityOnlyPaperRoomCannotSubmitFnoBuy() {
+        UUID owner = customer();
+        UUID paper = room(owner, "PAPER");
+        jdbc.sql("UPDATE customer_trading_room SET market_scope='EQUITY' WHERE id=:id")
+            .param("id", paper).update();
+        wallets.activate(owner, paper);
+        assertThatThrownBy(() -> engine(true).submit(owner, paper, "equity_fno_block_01",
+                CONTRACT, EXPIRY, "BUY", 1, new BigDecimal("110.00")))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThat(engine(true).orders(owner, paper)).isEmpty();
+        assertThat(wallets.get(owner, paper).availableCashPaise()).isEqualTo(2_000_000L);
+    }
+
     @Test
     void boughtAndSoldOneLotWithExactCashAndRetryIsolation() {
         UUID owner=customer(), stranger=customer();

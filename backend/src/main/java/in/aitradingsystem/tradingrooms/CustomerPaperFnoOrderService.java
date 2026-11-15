@@ -95,6 +95,7 @@ public class CustomerPaperFnoOrderService {
               ON r.id=a.room_id AND r.user_id=a.user_id
             WHERE a.room_id=:room AND a.user_id=:owner
               AND r.mode='PAPER' AND r.status='PAPER_FUNDED'
+              AND r.market_scope IN ('FNO','ALL')
             FOR UPDATE OF a
             """).param("room",room).param("owner",owner)
             .query((rs,n)->new Wallet(rs.getLong("initial_cash_paise"),
