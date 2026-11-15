@@ -701,6 +701,96 @@ class AccountProxyTest(unittest.TestCase):
         self.assertFalse(proxy.allowed("GET",room+"wallet-reconciliation/live"))
         self.assertFalse(proxy.allowed("GET",room+"reconciliation/orders"))
 
+    def test_fno_paper_post_order_idempotency_reaches_backend_without_live_trade(self):
+        route = ("/api/customer/trading-rooms/"
+                 "12345678-1234-1234-1234-123456789012/paper/fno/orders")
+        payload = {"instrumentKey": "NSE_FO|61001", "expiry": "2026-11-17",
+                   "side": "BUY", "lots": 1, "limitPrice": 100.05}
+        request = event("POST", route, body=json.dumps(payload))
+        request["headers"]["Idempotency-Key"] = "fno_buy_synthetic_001"
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as send:
+            ok = proxy.handler(request, None)
+        self.assertEqual(ok["statusCode"], 200)
+        self.assertEqual(ok["headers"]["cache-control"], "no-store")
+        send.assert_called_once()
+        outgoing = send.call_args.args[0]
+        self.assertEqual(outgoing.get_method(), "POST")
+        self.assertEqual(outgoing.full_url, proxy.BACKEND + route)
+        self.assertEqual(outgoing.get_header("Authorization"), "Bearer public-test-token")
+        self.assertEqual(outgoing.get_header("Idempotency-key"), "fno_buy_synthetic_001")
+        self.assertEqual(json.loads(outgoing.data), payload)
+
+        sell = event("POST", route, body=json.dumps({**payload, "side": "SELL",
+                     "limitPrice": 99.95}))
+        sell["headers"]["idempotency-key"] = "fno_sell_synthetic_01"
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as send:
+            result = proxy.handler(sell, None)
+        self.assertEqual(result["statusCode"], 200)
+        self.assertEqual(send.call_args.args[0].get_header("Idempotency-key"),
+                         "fno_sell_synthetic_01")
+        self.assertEqual(json.loads(send.call_args.args[0].data)["side"], "SELL")
+
+        # Fail-closed before the proxy opens the private connection.
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            rejected = proxy.handler(event("POST",route,body=json.dumps(payload)),None)
+        self.assertEqual(rejected["statusCode"], 400)
+        self.assertIn("INVALID_FNO_PAPER_ORDER_KEY", rejected["body"])
+        send.assert_not_called()
+        for key in ("short", "unsafe input", "a"*65, "foo\\r\\nInjected:1"):
+            bad = event("POST",route,body=json.dumps(payload))
+            bad["headers"]["idempotency-key"]=key
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                denied=proxy.handler(bad,None)
+            self.assertEqual(denied["statusCode"],400,key)
+            send.assert_not_called()
+
+        invalid = (
+            {},
+            {**payload, "side": "SHORT"},
+            {**payload, "instrumentKey": "NSE_EQ|61001"},
+            {**payload, "instrumentKey": "NSE_FO|bad/other"},
+            {**payload, "expiry": "2026-11-31"},
+            {**payload, "expiry": "2026-11-17T09:15:00"},
+            {**payload, "lots": 0},
+            {**payload, "lots": 21},
+            {**payload, "lots": True},
+            {**payload, "lots": "1"},
+            {**payload, "limitPrice": -1},
+            {**payload, "limitPrice": 100.00001},
+            {**payload, "limitPrice": 1000001},
+            {**payload, "limitPrice": None},
+            {**payload, "limitPrice": True},
+            {**payload, "limitPrice": "100.00"},
+            {**payload, "strategyId": "unauthorized"},
+        )
+        for order in invalid:
+            malformed=event("POST",route,body=json.dumps(order))
+            malformed["headers"]["idempotency-key"]="fno_bad_request_01"
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                denied=proxy.handler(malformed,None)
+            self.assertEqual(denied["statusCode"],400,order)
+            send.assert_not_called()
+        for malformed_body in ("", "[]", "null", "{missing-json", "NaN"):
+            malformed=event("POST",route,body=malformed_body)
+            malformed["headers"]["idempotency-key"]="fno_bad_request_02"
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                denied=proxy.handler(malformed,None)
+            self.assertEqual(denied["statusCode"],400,malformed_body)
+            send.assert_not_called()
+
+        unauthorized=event("POST",route,body=json.dumps(payload),jwt={"claims":{}})
+        unauthorized["headers"]["idempotency-key"]="fno_access_denied"
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            denied=proxy.handler(unauthorized,None)
+        self.assertEqual(denied["statusCode"],401)
+        send.assert_not_called()
+        for method,path in (
+            ("POST",route.replace("/paper/fno/","/live/")),
+            ("POST",route.replace("/paper/fno/","/paper/fno/live/")),
+            ("POST",route.replace("/paper/fno/","/paper/fno/execute/")),
+            ("PUT",route),("DELETE",route),("POST",route+"/execute")):
+            self.assertFalse(proxy.allowed(method,path), (method,path))
+
     def test_fno_paper_order_routes_never_enable_live_or_admin(self):
         route="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
         for method, suffix in (("POST","orders"),("GET","orders"),("GET","positions"),("GET","market"),("GET","expiries")):
