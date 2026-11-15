@@ -1,6 +1,6 @@
 {
   "operation": "build-connected-android",
-  "authorization": "USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
+  "authorization": "USER_APPROVED_MINTTICK_CONNECTED_APK_PENDING_OWNER_APPROVAL",
   "application": "MintTick",
   "environment": "dev",
   "cognito_pool": "ap-south-1_jz2T8qbiY",
