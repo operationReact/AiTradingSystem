@@ -92,19 +92,31 @@ class CustomerTradingRoomRenameIT extends AbstractPostgresIT {
     }
 
     @Test
-    void liveDerivativeScopeCannotBeCreatedAndOldClientDefaultsToEquity() {
+    void liveFnoAndAllRoomPlansArePersistedButCannotGrantExecution() {
         UUID owner = customer();
         var controller = controller(owner);
         var auth = authentication();
 
-        for (String scope : List.of("FNO", "ALL", "INVALID")) {
-            assertThatThrownBy(() -> controller.create(
+        for (String scope : List.of("EQUITY", "FNO", "ALL")) {
+            var saved = controller.create(
                 new CustomerTradingRoomController.CreateRoomRequest(
-                    "Invalid " + scope, "SWING", 20000L, "BALANCED", "LIVE", scope), auth))
-                .isInstanceOf(ResponseStatusException.class)
-                .satisfies(err -> assertThat(((ResponseStatusException) err)
-                    .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+                    "LIVE PLAN " + scope, "SWING", 20000L, "BALANCED", "LIVE", scope),
+                auth).getBody();
+            assertThat(saved).isNotNull();
+            assertThat(saved.mode()).isEqualTo("LIVE");
+            assertThat(saved.marketScope()).isEqualTo(scope);
+            assertThat(saved.status()).isEqualTo("DRAFT");
+            assertThat(controller.get(saved.id(), auth).marketScope()).isEqualTo(scope);
+            assertThat(jdbc.sql("""
+                SELECT COUNT(*) FROM customer_paper_account WHERE room_id=:id
+                """).param("id", saved.id()).query(Integer.class).single()).isZero();
         }
+        assertThatThrownBy(() -> controller.create(
+            new CustomerTradingRoomController.CreateRoomRequest(
+                "INVALID LIVE", "SWING", 20000L, "BALANCED", "LIVE", "INVALID"), auth))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(err -> assertThat(((ResponseStatusException) err)
+                .getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
         var legacy = controller.create(new CustomerTradingRoomController.CreateRoomRequest(
             "Old Client", "SWING", 20000L, "BALANCED", "PAPER"), auth).getBody();
         assertThat(legacy).isNotNull();
