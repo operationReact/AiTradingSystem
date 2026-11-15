@@ -28,8 +28,12 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
       'marketScope': draft.marketScope,
     });
     final saved = _decode(data);
-    if (saved.marketScope != draft.marketScope) {
-      throw const FormatException('Server did not persist selected room market scope');
+    if (saved.marketScope != draft.marketScope ||
+        saved.focus != draft.focus ||
+        saved.riskPreference != draft.riskPreference ||
+        saved.mode != draft.mode ||
+        saved.paperBudget != draft.paperBudget) {
+      throw const FormatException('Server did not persist selected room configuration');
     }
     return saved;
   }
