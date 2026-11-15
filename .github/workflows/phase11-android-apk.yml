@@ -123,7 +123,7 @@ jobs:
                   "api_base_url":"https://api.minttick.com",
                   "public_api_ready":True,
                   "cognito_pool":"ap-south-1_jz2T8qbiY",
-                  "authorization":"USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
+                  "authorization":"USER_APPROVED_MINTTICK_CONNECTED_APK_PENDING_OWNER_APPROVAL",
               }
               with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
                   stream.write('connected=true\n')
