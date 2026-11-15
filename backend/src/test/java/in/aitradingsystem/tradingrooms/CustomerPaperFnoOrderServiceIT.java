@@ -77,8 +77,9 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         UUID id=UUID.randomUUID();
         jdbc.sql("""
                 INSERT INTO customer_trading_room
-                (id,user_id,name,focus,planned_budget_inr,risk_preference,mode,status)
-                VALUES (:id,:owner,:name,'INTRADAY',20000,'BALANCED',:mode,'DRAFT')
+                (id,user_id,name,focus,planned_budget_inr,risk_preference,mode,market_scope,status)
+                VALUES (:id,:owner,:name,'INTRADAY',20000,'BALANCED',:mode,
+                        CASE WHEN :mode='PAPER' THEN 'FNO' ELSE 'EQUITY' END,'DRAFT')
                 """).param("id",id).param("owner",owner)
                 .param("name","FNO test "+id).param("mode",mode).update();
         return id;
