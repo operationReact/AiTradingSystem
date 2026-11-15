@@ -143,8 +143,8 @@ public class CustomerPaperFnoMarketController {
 
         // Bound metadata to the requested near-term date. REST chain values
         // have NO verified exchange last-traded timestamp and are NEVER quoted.
-        var contracts=source.currentFnoOptionContracts(UNDERLYING,expiry);
-        var chain=source.currentFnoOptionChain(UNDERLYING,expiry);
+        var contracts=providerRead(() -> source.currentFnoOptionContracts(UNDERLYING,expiry));
+        var chain=providerRead(() -> source.currentFnoOptionChain(UNDERLYING,expiry));
         if (chain==null || !"UPSTOX_ANALYTICS".equals(chain.source())
                 || chain.retrievedAt()==null || chain.exchangeQuoteTimeVerified())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
@@ -157,6 +157,22 @@ public class CustomerPaperFnoMarketController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
             .body(new Market(UNDERLYING,expiry,"UPSTOX_ANALYTICS",status,
                 chain.retrievedAt(),false,true,false,false,strikes));
+    }
+
+    /**
+     * Upstox's strict parser returns sanitized IllegalStateException or
+     * IllegalArgumentException on transport, entitlement and schema failures.
+     * Those are upstream availability problems, not an internal 500. Keep
+     * authentication, room ownership and display-rights checks outside this
+     * boundary; do not expose provider payload, URLs or token-bearing causes.
+     */
+    static <T> T providerRead(java.util.function.Supplier<T> read) {
+        try {
+            return read.get();
+        } catch (IllegalArgumentException | IllegalStateException unavailable) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "F&O provider contracts or chain unavailable");
+        }
     }
 
     /** Future expiries within the 90-day window the market endpoint accepts; deduped and sorted. */
