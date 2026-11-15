@@ -31,17 +31,17 @@ def audit(m):
         rights_until = dt.date.fromisoformat(m["rights_valid_until"])
         if start > end or asof < start or rights_from > start or rights_until < end:
             raise ValueError("window or rights invalid")
-        if not m["rights_receipt_id"] or not m["source_domains"] or not m["revision_policy"]:
+        if (not isinstance(m["rights_receipt_id"], str) or not m["rights_receipt_id"].strip()\n                or not isinstance(m["source_domains"], list) or not m["source_domains"]\n                or any(not isinstance(x, str) or not x.strip() for x in m["source_domains"])\n                or not isinstance(m["revision_policy"], str) or not m["revision_policy"].strip()):
             raise ValueError("rights provenance missing")
         frames = m["timeframes"]
         listings = m["listings"]
-        if not isinstance(frames, list) or not frames or len(set(frames)) != len(frames):
+        if (not isinstance(frames, list) or not frames\n                or any(not isinstance(x, str) or not x.strip() for x in frames)\n                or len(set(frames)) != len(frames)):
             raise ValueError("timeframes invalid")
         if not isinstance(listings, list) or not listings:
             raise ValueError("listings missing")
         keys = []
         for item in listings:
-            if not all(item.get(k) for k in ("instrument_id", "listing_id", "symbol")):
+            if (not isinstance(item, dict) or any(\n                    not isinstance(item.get(k), str) or not item[k].strip()\n                    for k in ("instrument_id", "listing_id", "symbol"))):
                 raise ValueError("identity missing")
             keys.append((item["instrument_id"], item["listing_id"]))
         if len(keys) != len(set(keys)):
@@ -76,7 +76,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(audit(m)["state"], "UNKNOWN")
     def test_never_claim_verified_from_manifest(self):
         self.assertIsNone(audit(self.fixture())["verified_partitions"])
-    def test_rights_window_fails_closed(self):
+    def test_malformed_timeframe_fails_closed(self):\n        m = self.fixture(); m["timeframes"] = [["day"]]\n        self.assertEqual(audit(m)["state"], "UNKNOWN")\n    def test_malformed_listing_fails_closed(self):\n        m = self.fixture(); m["listings"] = [None]\n        self.assertEqual(audit(m)["state"], "UNKNOWN")\n    def test_malformed_rights_domain_fails_closed(self):\n        m = self.fixture(); m["source_domains"] = ["historical", None]\n        self.assertEqual(audit(m)["state"], "UNKNOWN")\n    def test_rights_window_fails_closed(self):
         m = self.fixture(); m["rights_valid_until"] = "2026-01-31"
         self.assertEqual(audit(m)["state"], "UNKNOWN")
 
