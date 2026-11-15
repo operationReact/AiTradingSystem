@@ -22,6 +22,7 @@ class _SavedRoomRepository implements RoomDraftPersistence {
       paperBudget: room.paperBudget,
       riskPreference: room.riskPreference,
       mode: room.mode,
+      marketScope: room.marketScope,
     );
     rooms.add(saved);
     return saved;
