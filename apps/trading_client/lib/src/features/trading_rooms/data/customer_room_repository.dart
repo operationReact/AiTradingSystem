@@ -25,8 +25,13 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
       'plannedBudgetInr': draft.paperBudget,
       'riskPreference': draft.riskPreference.toUpperCase(),
       'mode': draft.mode,
+      'marketScope': draft.marketScope,
     });
-    return _decode(data);
+    final saved = _decode(data);
+    if (saved.marketScope != draft.marketScope) {
+      throw const FormatException('Server did not persist selected room market scope');
+    }
+    return saved;
   }
 
   @override
@@ -91,8 +96,13 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
     final budget = data['plannedBudgetInr'];
     final risk = data['riskPreference'];
     final status = data['status'];
+    // Legacy responses/fixtures are equity-only. F&O or ALL is trusted only
+    // after the authenticated server returns the persisted scope.
+    final scope = data['marketScope'] ?? 'EQUITY';
     if (id is! String || id.isEmpty || name is! String || name.isEmpty ||
         !(mode == 'PAPER' || mode == 'LIVE') ||
+        !(scope == 'EQUITY' || scope == 'FNO' || scope == 'ALL') ||
+        (mode == 'LIVE' && scope != 'EQUITY') ||
         budget is! int || budget < 1000 ||
         risk is! String ||
         !(status == 'DRAFT' ||
@@ -116,6 +126,7 @@ class HttpCustomerRoomRepository implements RoomDraftPersistence, RoomDraftRenam
         _ => throw const FormatException('Unrecognized risk preference'),
       },
       mode: mode,
+      marketScope: scope as String,
       status: status as String,
     );
   }
