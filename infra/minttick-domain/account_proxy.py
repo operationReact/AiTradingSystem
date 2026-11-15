@@ -7,6 +7,8 @@ No management, research, admin, LIVE trading, or broker credentials exposed.
 import base64
 import binascii
 import json
+from datetime import date
+from decimal import Decimal, InvalidOperation
 import re
 import urllib.parse
 import urllib.error
@@ -295,6 +297,35 @@ def handler(event, context):
                 valid = False
             if not valid:
                 return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
+    # NSE_FO PAPER orders require an explicit idempotency key at the customer
+    # edge. Previously this route was allowlisted, but silently DROPPED the
+    # header, so Spring rejected it. Keep the existing provider/session/rights
+    # checks downstream and do not admit LIVE, shorts or futures here.
+    if method == "POST" and PAPER_FNO.fullmatch(path) and path.endswith("/orders"):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_FNO_PAPER_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict
+                and set(order) == {"instrumentKey", "expiry", "side", "lots", "limitPrice"}
+                and isinstance(order["instrumentKey"], str)
+                and re.fullmatch(r"NSE_FO\\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
+                and isinstance(order["expiry"], str)
+                and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", order["expiry"])
+                and date.fromisoformat(order["expiry"]).isoformat() == order["expiry"]
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and 1 <= order["lots"] <= 20
+                and type(order["limitPrice"]) in (int, float))
+            if valid:
+                price = Decimal(str(order["limitPrice"]))
+                valid = (price.is_finite() and Decimal("0.01") <= price <= Decimal("1000000")
+                         and price.as_tuple().exponent >= -4)
+        except (ValueError, TypeError, KeyError, OverflowError, InvalidOperation):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_FNO_PAPER_ORDER_INPUT"})
     # Mind PAPER strategy cycle: owner-initiated, virtual money only; exact payload.
     if method == "POST" and MIND_PAPER_CYCLES.fullmatch(path):
         paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
