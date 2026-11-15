@@ -70,6 +70,33 @@ class UpstoxFnoExpiryDiscoveryTest {
     }
 
     @Test
+    void emptyRelativeBucketDoesNotSuppressOtherListedExpiries() {
+        token();
+        String empty="{\"status\":\"success\",\"data\":[]}";
+        expect("current_week",empty);
+        expect("next_week",rows("2026-11-24"));
+        expect("far_week",empty);
+        expect("current_month",rows("2026-11-24"));
+        expect("next_month",empty);
+        expect("far_month",empty);
+        assertThat(source.currentNiftyOptionExpiries(NOW))
+            .containsExactly(LocalDate.parse("2026-11-24"));
+        http.verify();
+    }
+
+    @Test
+    void allEmptyValidBucketsReturnNoListedExpiriesRatherThanSourceFailure() {
+        token();
+        String empty="{\"status\":\"success\",\"data\":[]}";
+        for(String period:new String[]{"current_week","next_week","far_week",
+                                       "current_month","next_month","far_month"}) {
+            expect(period,empty);
+        }
+        assertThat(source.currentNiftyOptionExpiries(NOW)).isEmpty();
+        http.verify();
+    }
+
+    @Test
     void rejectsMalformedContractInsteadOfShowingInferredExpiries() {
         token();
         expect("current_week",rows("2026-11-17").replace("NSE_FO|61002","NSE_EQ|61002"));
