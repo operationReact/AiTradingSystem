@@ -45,7 +45,7 @@ public final class UpstoxFnoLimitOrderPayload {
         if (x == null || !NIFTY.equals(x.underlyingKey())
             || x.instrumentKey() == null
             || !x.instrumentKey().matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
-            || !Set.of("CE", "PE").contains(x.optionType())
+            || x.optionType() == null || !Set.of("CE", "PE").contains(x.optionType())
             || x.tradingDate() == null || x.expiry() == null
             || x.expiry().isBefore(x.tradingDate())
             || ChronoUnit.DAYS.between(x.tradingDate(), x.expiry()) > 90) {
@@ -61,7 +61,7 @@ public final class UpstoxFnoLimitOrderPayload {
         } catch (ArithmeticException ex) {
             throw new IllegalArgumentException("Option quantity overflow");
         }
-        if (units > 100000 || !Set.of("BUY", "SELL").contains(x.side())) {
+        if (units > 100000 || x.side() == null || !Set.of("BUY", "SELL").contains(x.side())) {
             throw new IllegalArgumentException("Unsupported option quantity or side");
         }
         // No uncovered option selling. A separate transactional coordinator
@@ -69,6 +69,9 @@ public final class UpstoxFnoLimitOrderPayload {
         if ("SELL".equals(x.side()) && (x.ownedLongQuantity() < units
             || x.ownedLongQuantity() < 0)) {
             throw new IllegalArgumentException("Uncovered F&O selling prohibited");
+        }
+        if (x.focus() == null) {
+            throw new IllegalArgumentException("Room holding focus required");
         }
         final String product = switch (x.focus()) {
             case "INTRADAY" -> "I";
