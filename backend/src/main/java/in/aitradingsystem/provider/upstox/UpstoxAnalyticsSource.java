@@ -274,7 +274,7 @@ public final class UpstoxAnalyticsSource {
                 if (!"CE".equals(side) && !"PE".equals(side)) throw new IllegalArgumentException();
                 String key = fnoContractKey(row, "instrument_key");
                 BigDecimal strike = fnoNumber(row, "strike_price", true);
-                BigDecimal tick = fnoNumber(row, "tick_size", true);
+                BigDecimal tick = fnoOptionPriceTickInRupees(row);
                 long lot = fnoLong(row, "lot_size");
                 if (lot < 1 || lot > 1_000_000 || !seenKeys.add(key)) {
                     throw new IllegalArgumentException();
@@ -346,6 +346,25 @@ public final class UpstoxAnalyticsSource {
                 fnoOptionalNumber(greeks, "gamma"),
                 fnoOptionalNumber(greeks, "theta"),
                 fnoOptionalNumber(greeks, "vega"));
+    }
+
+    /**
+     * The live Upstox Option Contracts REST payload reports integer tick_size
+     * in paise (e.g. 5 means INR 0.05), whereas the PAPER order limit and V3
+     * bid/ask are in INR. Some normalized contract fixtures use decimal INR
+     * ticks (0.05); preserve those. Without this conversion, legitimate
+     * option prices can fail the `limit.remainder(tickSize)` check.
+     *
+     * Keep the source tick explicit and validated rather than guessing a
+     * price increment from the current market price.
+     */
+    private static BigDecimal fnoOptionPriceTickInRupees(JsonNode row) {
+        BigDecimal raw = fnoNumber(row, "tick_size", true);
+        BigDecimal stripped = raw.stripTrailingZeros();
+        BigDecimal inr = stripped.scale() <= 0 ? raw.movePointLeft(2) : raw;
+        if (inr.signum() <= 0 || inr.scale() > 4)
+            throw new IllegalArgumentException("UPSTOX_FNO_INVALID_TICK_SIZE");
+        return inr.stripTrailingZeros();
     }
 
     private static String fnoContractKey(JsonNode row, String field) {
