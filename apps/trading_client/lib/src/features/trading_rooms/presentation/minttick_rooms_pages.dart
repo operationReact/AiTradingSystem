@@ -443,23 +443,27 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 18),
           const _FieldLabel('Room market'),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            key: const ValueKey('room-market-scope-dropdown'),
-            initialValue: _marketScope,
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.stacked_line_chart_rounded)),
-            items: [
-              const DropdownMenuItem(value: 'EQUITY',
-                child: Text('Equity · NSE/BSE stocks')),
-              DropdownMenuItem(value: 'FNO', enabled: _mode == 'PAPER',
-                child: const Text('F&O · NIFTY options (PAPER)')),
-              DropdownMenuItem(value: 'ALL', enabled: _mode == 'PAPER',
-                child: const Text('All · Stocks + NIFTY options')),
-            ],
-            onChanged: (scope) {
-              if (scope != null) setState(() => _marketScope = scope);
-            },
-          ),
+          MintTickSurface(child: Row(children: [
+            const Icon(Icons.stacked_line_chart_rounded),
+            const SizedBox(width: 10),
+            Expanded(child: DropdownButton<String>(
+              key: const ValueKey('room-market-scope-dropdown'),
+              isExpanded: true,
+              value: _marketScope,
+              underline: const SizedBox.shrink(),
+              items: [
+                const DropdownMenuItem(value: 'EQUITY',
+                  child: Text('Equity · NSE/BSE stocks')),
+                DropdownMenuItem(value: 'FNO', enabled: _mode == 'PAPER',
+                  child: const Text('F&O · NIFTY options (PAPER)')),
+                DropdownMenuItem(value: 'ALL', enabled: _mode == 'PAPER',
+                  child: const Text('All · Stocks + NIFTY options')),
+              ],
+              onChanged: (scope) {
+                if (scope != null) setState(() => _marketScope = scope);
+              },
+            )),
+          ])),
           const SizedBox(height: 8),
           Text(
             switch (_marketScope) {
