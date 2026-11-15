@@ -102,10 +102,9 @@ public class CustomerTradingRoomController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Room name is required");
         }
         String marketScope = request.marketScope() == null ? "EQUITY" : request.marketScope();
-        if (!java.util.Set.of("EQUITY", "FNO", "ALL").contains(marketScope)
-                || (!"PAPER".equals(request.mode()) && !"EQUITY".equals(marketScope))) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                "Selected market scope is not supported for this trading mode");
+        // Room scope is planning metadata, not LIVE order authorization.
+        if (!java.util.Set.of("EQUITY", "FNO", "ALL").contains(marketScope)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown market scope");
         }
         UUID id = UUID.randomUUID();
         try {
