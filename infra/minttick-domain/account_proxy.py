@@ -67,6 +67,7 @@ EXACT = {
     ("GET", "/api/customer/mind/v1/evidence"),
     ("GET", "/api/customer/mind/v1/strategy-replay"),
     ("GET", "/api/customer/mind/v1/decision-history"),
+    ("GET", "/api/customer/mind/v1/decision-outcomes"),
     ("GET", "/api/customer/mind/v1/ma-walkforward"),
     ("GET", "/api/customer/mind/v1/prospective-cohort"),
     ("GET", "/api/customer/mind/v1/prospective-signals"),
