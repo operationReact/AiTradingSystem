@@ -116,6 +116,7 @@ jobs:
                        "MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED",
                        "MINTTICK_UPSTOX_ANALYTICS_ENABLED"]:
             allow["FNO_CONFIG_"+name]={"ENABLED","DISABLED","UNKNOWN"}
+            allow["FNO_EFFECTIVE_"+name]={"ENABLED","DISABLED","UNKNOWN"}
           found={}
           for line in data.get("StandardOutputContent","").splitlines():
             key,separator,value=line.partition(": ")
