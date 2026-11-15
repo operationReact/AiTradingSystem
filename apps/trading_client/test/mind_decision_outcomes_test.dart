@@ -37,14 +37,10 @@ Map<String, dynamic> payload(List<Map<String, dynamic>> rows) => {
     };
 
 class _OutcomesRepo implements MindDecisionOutcomesRepository {
-  _OutcomesRepo(this.data, {this.fail = false});
+  _OutcomesRepo(this.data);
   final Map<String, dynamic> data;
-  final bool fail;
   @override
-  Future<MindDecisionOutcomes> load() async {
-    if (fail) throw StateError('network');
-    return MindDecisionOutcomes.decode(data);
-  }
+  Future<MindDecisionOutcomes> load() async => MindDecisionOutcomes.decode(data);
 }
 
 void main() {
