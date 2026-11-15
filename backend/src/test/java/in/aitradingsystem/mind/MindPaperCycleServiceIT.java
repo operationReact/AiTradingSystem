@@ -79,20 +79,32 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             .andReturn().getResponse();
         assertThat(progressBody.getStatus()).isEqualTo(200);
         var progressJson = json.readTree(progressBody.getContentAsString());
-        assertThat(progressJson.get("contractVersion").asText()).isEqualTo("mind.progress.v1");
+        // Summary contract (issue #998): totals from the full inventory, never a page.
+        assertThat(progressJson.get("contractVersion").asText()).isEqualTo("mind.progress.v2");
         assertThat(Instant.parse(progressJson.get("generatedAt").asText())).isNotNull();
         assertThat(progressJson.get("revisionKnown").isBoolean()).isTrue();
         assertThat(progressJson.get("paperStage").get("status").isTextual()).isTrue();
-        var firstItem = progressJson.get("items").get(0);
-        for (String field : List.of("id", "kind", "name", "owner", "status", "declaredStatus", "done", "runtime")) {
-            assertThat(firstItem.has(field)).as(field).isTrue();
-        }
-        assertThat(firstItem.get("done").isBoolean()).isTrue();
+        var overall = progressJson.get("overall");
+        assertThat(overall.get("total").asInt()).isPositive();
+        assertThat(overall.get("done").asInt() + overall.get("pending").asInt()).isEqualTo(overall.get("total").asInt());
+        assertThat(progressJson.get("inventoryPath").asText()).isEqualTo("/api/customer/mind/v1/progress/inventory");
         var summary = progressJson.get("summaries").get(0);
         for (String field : List.of("kind", "denominator", "done", "tested", "inProgress", "blocked", "mock",
                 "notStarted", "failed")) {
             assertThat(summary.has(field)).as(field).isTrue();
         }
+        // Inventory page contract: full items, bounded page size, flutter-required fields present.
+        var pageResponse = mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .get("/api/customer/mind/v1/progress/inventory?offset=0&limit=5").with(customerJwt))
+            .andReturn().getResponse();
+        assertThat(pageResponse.getStatus()).isEqualTo(200);
+        var pageJson = json.readTree(pageResponse.getContentAsString());
+        assertThat(pageJson.get("contractVersion").asText()).isEqualTo("mind.progress-inventory.v1");
+        var firstItem = pageJson.get("items").get(0);
+        for (String field : List.of("id", "kind", "name", "owner", "status", "declaredStatus", "done", "runtime")) {
+            assertThat(firstItem.has(field)).as(field).isTrue();
+        }
+        assertThat(firstItem.get("done").isBoolean()).isTrue();
 
         // POST through the production-wired service (system clock): whatever the market state, the
         // response is a well-formed, explicitly non-LIVE cycle result.
