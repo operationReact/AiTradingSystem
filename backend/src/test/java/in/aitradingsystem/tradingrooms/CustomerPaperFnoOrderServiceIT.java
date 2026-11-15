@@ -85,6 +85,20 @@ class CustomerPaperFnoOrderServiceIT extends AbstractPostgresIT {
         return id;
     }
     @Test
+    void equityOnlyPaperRoomCannotSubmitFnoBuy() {
+        UUID owner = customer();
+        UUID paper = room(owner, "PAPER");
+        jdbc.sql("UPDATE customer_trading_room SET market_scope='EQUITY' WHERE id=:id")
+            .param("id", paper).update();
+        wallets.activate(owner, paper);
+        assertThatThrownBy(() -> engine(true).submit(owner, paper, "equity_fno_block_01",
+                CONTRACT, EXPIRY, "BUY", 1, new BigDecimal("110.00")))
+            .isInstanceOf(ResponseStatusException.class);
+        assertThat(engine(true).orders(owner, paper)).isEmpty();
+        assertThat(wallets.get(owner, paper).availableCashPaise()).isEqualTo(2_000_000L);
+    }
+
+    @Test
     void boughtAndSoldOneLotWithExactCashAndRetryIsolation() {
         UUID owner=customer(), stranger=customer();
         UUID paper=room(owner,"PAPER");
