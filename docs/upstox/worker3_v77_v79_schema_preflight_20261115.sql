@@ -50,6 +50,25 @@ SELECT relation_name,
             WHEN has_table_privilege(relation_oid,'SELECT') THEN 'READ_PERMISSION_PRESENT_RIGHTS_UNVERIFIED'
             ELSE 'READ_PERMISSION_BLOCKED' END AS read_preflight
 FROM permission_check ORDER BY relation_name;
+
+-- Single-row fail-closed gate for consumers; rights and actual coverage remain UNKNOWN.
+WITH required(relation_name) AS (
+ VALUES ('golden_data_provider'),('golden_source_rights_receipt'),
+        ('golden_dataset_backfill_job'),('golden_dataset_backfill_chunk')
+), inspected AS (
+ SELECT relation_name, to_regclass(format('%I.%I','public',relation_name)) AS oid FROM required
+), totals AS (
+ SELECT count(*) FILTER (WHERE oid IS NULL) AS missing_relations,
+        count(*) FILTER (WHERE oid IS NOT NULL AND NOT has_table_privilege(oid,'SELECT')) AS denied_relations
+ FROM inspected
+)
+SELECT CASE WHEN missing_relations > 0 THEN 'SCHEMA_BLOCKED'
+            WHEN denied_relations > 0 THEN 'READ_PERMISSION_BLOCKED'
+            ELSE 'READ_METADATA_READY_RIGHTS_UNVERIFIED' END AS audit_gate,
+       missing_relations, denied_relations,
+       'UNKNOWN'::text AS authorized_verified_partitions,
+       'UNKNOWN'::text AS historical_target_denominator
+FROM totals;
 -- Independently inspect Flyway migration history using approved metadata access.
 -- Column presence is not migration proof. No rights receipt => no authorized coverage credit.
 ROLLBACK;
