@@ -10,6 +10,7 @@ class TradingRoomDraft {
     required this.paperBudget,
     required this.riskPreference,
     this.mode = 'PAPER',
+    this.marketScope = 'EQUITY',
     this.status = 'DRAFT',
   });
 
@@ -21,6 +22,8 @@ class TradingRoomDraft {
   final int paperBudget;
   final String riskPreference;
   final String mode;
+  /// EQUITY, FNO or ALL. Never a market-data or broker-rights grant.
+  final String marketScope;
   final String status;
 }
 
@@ -97,7 +100,8 @@ class TradingRoomDraftStore extends ChangeNotifier {
         renamed.status != old.status ||
         renamed.focus != old.focus ||
         renamed.riskPreference != old.riskPreference ||
-        renamed.paperBudget != old.paperBudget) {
+        renamed.paperBudget != old.paperBudget ||
+        renamed.marketScope != old.marketScope) {
       throw const FormatException('Unexpected room rename response');
     }
     // Concurrent list refreshes may replace the collection during the write.
