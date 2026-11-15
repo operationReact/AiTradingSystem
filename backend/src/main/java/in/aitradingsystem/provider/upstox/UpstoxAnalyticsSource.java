@@ -219,7 +219,9 @@ public final class UpstoxAnalyticsSource {
             JsonNode rows = get(
                 "/v2/option/contract?instrument_key={underlying}&expiry_date={period}",
                 "NSE_INDEX|Nifty 50", period).path("data");
-            if (!rows.isArray() || rows.isEmpty() || rows.size() > 1024)
+            // An empty relative bucket is valid: other listed expiries may exist.
+            // Malformed and oversized provider responses still fail closed.
+            if (!rows.isArray() || rows.size() > 1024)
                 throw unavailable("UPSTOX_FNO_EXPIRY_SOURCE_UNAVAILABLE");
             Set<String> seen = new HashSet<>();
             for (JsonNode row : rows) {
