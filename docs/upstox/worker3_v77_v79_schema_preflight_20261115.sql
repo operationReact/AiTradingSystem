@@ -29,6 +29,30 @@ FROM expected e
 LEFT JOIN actual a ON a.table_name=e.relation_name
                   AND a.column_name=e.column_name
 ORDER BY e.relation_name,e.column_name;
+-- Aggregate machine-readable gate: missing required columns block the coverage audit.
+-- The summary is schema evidence only; it cannot authorize data use.
+WITH expected(relation_name, column_name) AS (
+  VALUES ('golden_data_provider','provider_id'),
+         ('golden_data_provider','provider_code'),
+         ('golden_source_rights_receipt','provider_id'),
+         ('golden_dataset_backfill_job','provider_id'),
+         ('golden_dataset_backfill_job','job_id'),
+         ('golden_dataset_backfill_chunk','job_id'),
+         ('golden_dataset_backfill_chunk','status'),
+         ('golden_dataset_backfill_chunk','attempts'),
+         ('golden_dataset_backfill_chunk','valid_records'),
+         ('golden_dataset_backfill_chunk','updated_at')
+), missing AS (
+  SELECT e.relation_name, e.column_name FROM expected e
+  LEFT JOIN information_schema.columns a
+    ON a.table_schema = current_schema()
+   AND a.table_name = e.relation_name AND a.column_name = e.column_name
+  WHERE a.column_name IS NULL
+)
+SELECT CASE WHEN count(*) = 0 THEN 'SCHEMA_COLUMNS_PRESENT_RIGHTS_UNVERIFIED'
+            ELSE 'SCHEMA_BLOCKED' END AS preflight_status,
+       count(*) AS missing_required_columns
+FROM missing;
 -- Verify Flyway version metadata separately; never assume a successful migration
 -- merely because a similarly named table exists. Do not query rights contents
 -- until schema, approved domain/use and time-valid receipt columns are reviewed.
