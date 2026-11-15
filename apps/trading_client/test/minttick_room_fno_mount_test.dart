@@ -44,7 +44,7 @@ Future<void> pumpRoom(WidgetTester tester, TradingRoomDraft room, {CustomerPaper
 }
 
 const _paperRoom = TradingRoomDraft(id: 'room-1', name: 'Paper room', focus: 'F&O',
-    paperBudget: 100000, riskPreference: 'MODERATE', mode: 'PAPER');
+    paperBudget: 100000, riskPreference: 'MODERATE', mode: 'PAPER', marketScope: 'FNO');
 const _liveRoom = TradingRoomDraft(id: 'room-2', name: 'Live room', focus: 'F&O',
     paperBudget: 100000, riskPreference: 'MODERATE', mode: 'LIVE');
 
