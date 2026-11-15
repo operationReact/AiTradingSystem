@@ -87,7 +87,9 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
             data, broker: 'UPSTOX', position: true) != null,
         'funds' => portfolioAmount(data, broker: 'UPSTOX') != null,
         'orders' => data is List || portfolioRecords(data, 'data') != null,
-        'IP status' => data is Map,
+        'IP status' => data is Map &&
+            data['liveExecutionAuthorized'] == false &&
+            data['registrationMatchesEc2'] is bool,
         _ => false,
       };
       setState(() {
@@ -425,7 +427,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
           icon: const Icon(Icons.more_vert_rounded, size: 21),
           onSelected: (option) {
             if (option == 'ip') {
-              _load('IP status', widget.repository.registeredIps);
+              _load('IP status', widget.repository.registeredIpCheck);
             } else {
               _showAccountDetails(context);
             }
@@ -570,7 +572,7 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
       'positions' => widget.repository.positions,
       'funds' => widget.repository.funds,
       'orders' => widget.repository.orders,
-      'IP status' => widget.repository.registeredIps,
+      'IP status' => widget.repository.registeredIpCheck,
       _ => null,
     };
     if (_section != null && fetch != null) {
@@ -628,11 +630,36 @@ class _MintTickUpstoxPageState extends State<MintTickUpstoxPage>
     }
     if (value is Map) {
       if (_section == 'IP status') {
-        final primary = value['primary_ip'];
-        return [Text(primary is String && primary.isNotEmpty
-            ? 'Primary static IP registered with Upstox'
-            : 'No primary static IP reported by broker',
-          style: text.bodySmall)];
+        final state = value['status'];
+        final expected = value['expectedEc2Ip'];
+        final registered = value['registrationMatchesEc2'] == true &&
+            value['liveExecutionAuthorized'] == false;
+        final summary = switch (state) {
+          'REGISTERED_MATCH' when registered =>
+            'Broker registered IP matches MintTick EC2',
+          'REGISTERED_MISMATCH' =>
+            'Broker registered IP does not match MintTick EC2',
+          'NOT_REGISTERED' => 'No registered broker IP was confirmed',
+          _ => 'Broker registered IP could not be verified',
+        };
+        return [
+          Row(children: [
+            Icon(registered ? Icons.verified_outlined
+                : Icons.info_outline_rounded,
+              size: 18, color: registered ? scheme.primary
+                  : scheme.onSurfaceVariant),
+            const SizedBox(width: 9),
+            Expanded(child: Text(summary, key: const ValueKey('upstox-ip-match'),
+              style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+          ]),
+          const SizedBox(height: 8),
+          Text('MintTick EC2: ${expected is String ? expected : '—'}',
+            style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          const SizedBox(height: 7),
+          Text('IP matching checks registration only. LIVE order execution '
+              'still needs broker permissions, funds and server risk approval.',
+            style: text.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ];
       }
       if (_section == 'funds') {
         final amount = portfolioAmount(value, broker: 'UPSTOX');
