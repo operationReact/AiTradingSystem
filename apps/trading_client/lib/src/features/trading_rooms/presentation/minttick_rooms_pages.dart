@@ -161,10 +161,9 @@ class _MintTickTradingRoomsPageState extends State<MintTickTradingRoomsPage> {
                                 'FNO' => 'F&O',
                                 'ALL' => 'All markets',
                                 _ => 'Equity',
-                              }} · ' +
-                              (room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
+                              }} · ${room.mode == 'PAPER' && metrics[room.id]?.availableCashPaise != null
                                 ? 'Virtual cash ${_formatPaise(metrics[room.id]!.availableCashPaise!)} · ${metrics[room.id]!.positionCount} positions'
-                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned'),
+                                : '${room.focus} · ${formatPaperRupees(room.paperBudget)} planned'}',
                               maxLines: 1, overflow: TextOverflow.ellipsis,
                               style: type.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
                           ])),
@@ -446,7 +445,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             key: const ValueKey('room-market-scope-dropdown'),
-            value: _marketScope,
+            initialValue: _marketScope,
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.stacked_line_chart_rounded)),
             items: [
