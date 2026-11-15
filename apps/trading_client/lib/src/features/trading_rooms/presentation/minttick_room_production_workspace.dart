@@ -416,7 +416,7 @@ class _MintTickRoomProductionWorkspaceState
   Widget _trade(BuildContext context) {
     final scope = widget.room.marketScope;
     if (scope == 'FNO') return _fnoTrade(context);
-    if (scope != 'ALL' || widget.room.mode != 'PAPER') {
+    if (scope != 'ALL') {
       return _equityTrade(context);
     }
     return Column(children: [
@@ -438,7 +438,8 @@ class _MintTickRoomProductionWorkspaceState
   Widget _fnoTrade(BuildContext context) {
     if (widget.room.mode != 'PAPER' || widget.fno == null) {
       return const Center(child: Text(
-        'F&O PAPER is not available. No live orders are enabled.'));
+        'F&O LIVE order execution is not authorized. Broker permissions, '
+        'risk limits and explicit LIVE room consent are required.'));
     }
     return SingleChildScrollView(
       child: MintTickPaperFnoPanel(
