@@ -109,12 +109,21 @@ jobs:
           # and creates the CUSTOMER identity that the Mind routes need.
           pcode="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST "${auth[@]}" "https://api.minttick.com/api/auth/cognito/provision")"
           if [ "$pcode" = 200 ] || [ "$pcode" = 201 ]; then echo "PASS provision customer identity -> $pcode"; else echo "FAIL provision customer identity -> $pcode"; exit 1; fi
-          for path in /api/customer/mind/v1/progress /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines /api/customer/mind/v1/decision-history; do
+          # Plain reads: each must return a JSON object.
+          for path in /api/customer/mind/v1/paper-portfolio /api/customer/mind/v1/paper-journal /api/customer/mind/v1/research-engines /api/customer/mind/v1/decision-history /api/customer/mind/v1/decision-outcomes; do
             code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
             if [ "$code" != 200 ] || ! python3 -c "import json;d=json.load(open('/tmp/body.json'));assert isinstance(d,dict)"; then
               echo "FAIL authenticated $path -> $code"; fail=1; continue
             fi
             echo "PASS authenticated $path -> 200 JSON object"
+          done
+          # Progress contracts: the summary totals must be non-empty, an inventory page must fit the
+          # 131,072-byte edge cap, and one item detail must resolve. Checked by a reviewed script.
+          for path in /api/customer/mind/v1/progress "/api/customer/mind/v1/progress/inventory?offset=0&limit=50" /api/customer/mind/v1/progress/items/screen.coverage; do
+            code="$(curl -sS -o /tmp/body.json -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
+            if [ "$code" != 200 ]; then echo "FAIL authenticated $path -> $code"; fail=1; continue; fi
+            if ! python3 scripts/mind/check_progress_contract.py "$path" /tmp/body.json; then echo "FAIL contract $path"; fail=1; continue; fi
+            echo "PASS authenticated $path -> 200 contract ok"
           done
           for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
