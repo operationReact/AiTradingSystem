@@ -58,6 +58,23 @@ CustomerFnoExpiries blockedExpiries() => CustomerFnoExpiries.decode({
       'expiries': <String>[],
     });
 
+CustomerFnoReceipt receiptFixture({bool reconciled = true, bool approved = false}) => CustomerFnoReceipt.decode({
+      'status': reconciled ? 'RECONCILED' : 'MISMATCH',
+      'checkedAt': '2026-11-16T04:31:00Z',
+      'recordedFills': 2,
+      'buyFills': 1,
+      'sellFills': 1,
+      'completedRoundTrips': 1,
+      'openContracts': 0,
+      'computedRealizedPnlPaise': 4500,
+      'recordedRealizedPnlPaise': 4500,
+      'walletReconciled': reconciled,
+      'marketDataVerified': false,
+      'providerRightsVerified': false,
+      'tradingApproved': approved,
+      'blockerCodes': ['PROVIDER_RIGHTS_NOT_VERIFIED'],
+    });
+
 CustomerFnoPosition heldCe(int quantity) => CustomerFnoPosition.decode({
       'instrumentKey': 'NSE_FO|NIFTY24CE',
       'optionType': 'CE',
@@ -88,7 +105,9 @@ CustomerFnoFill buyFill({String side = 'BUY'}) => CustomerFnoFill.decode({
 class _FakeRepo implements CustomerPaperFnoRepository {
   _FakeRepo({this.marketResult, this.markets, this.failure, this.submitFailure,
       this.positionResult = const [], this.positionsFailure, this.expiriesResult,
-      this.ordersResult = const [], this.submitResult});
+      this.ordersResult = const [], this.submitResult, this.receiptResult, this.receiptFails = false});
+  final CustomerFnoReceipt? receiptResult;
+  final bool receiptFails;
   final CustomerFnoExpiries? expiriesResult;
   final List<CustomerFnoFill> ordersResult;
   final CustomerFnoFill? submitResult;
@@ -122,6 +141,12 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 
   @override
   Future<List<CustomerFnoFill>> orders(String roomId) async => ordersResult;
+
+  @override
+  Future<CustomerFnoReceipt> reconciliation(String roomId) async {
+    if (receiptFails) throw const ApiHttpFailure('UNAVAILABLE', null, 503);
+    return receiptResult ?? receiptFixture();
+  }
 
   @override
   Future<List<CustomerFnoPosition>> positions(String roomId) async {
@@ -419,7 +444,8 @@ void main() {
     await pump(tester, _FakeRepo(marketResult: market(), ordersResult: [buyFill(), buyFill(side: 'SELL')]));
     expect(find.byKey(const ValueKey('paper-fno-orders')), findsOneWidget);
     expect(find.textContaining('BUY 1 lot(s)'), findsOneWidget);
-    expect(find.textContaining('realized ₹45.00'), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const ValueKey('paper-fno-orders')),
+      matching: find.textContaining('realized ₹45.00')), findsOneWidget);
   });
 
   testWidgets('a successful BUY refreshes positions, orders and the room wallet via onFilled', (tester) async {
@@ -440,5 +466,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(refreshed, 1);
     expect(find.textContaining('BUY 75 filled'), findsOneWidget);
+  });
+
+  testWidgets('a reconciled ledger is shown as bookkeeping only, never as trading approval', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(), receiptResult: receiptFixture()));
+    expect(find.byKey(const ValueKey('paper-fno-receipt')), findsOneWidget);
+    expect(find.textContaining('Ledger reconciled'), findsOneWidget);
+    expect(find.textContaining('Approved for trading: no'), findsOneWidget);
+    expect(find.textContaining('PROVIDER_RIGHTS_NOT_VERIFIED'), findsOneWidget);
+    expect(find.textContaining('does not approve trading'), findsOneWidget);
+  });
+
+  testWidgets('a failed bookkeeping read shows unknown readiness and keeps orders visible', (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(), receiptFails: true, ordersResult: [buyFill()]));
+    expect(find.byKey(const ValueKey('paper-fno-receipt-unknown')), findsOneWidget);
+    expect(find.textContaining('Trading readiness is unknown'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-orders')), findsOneWidget);
   });
 }
