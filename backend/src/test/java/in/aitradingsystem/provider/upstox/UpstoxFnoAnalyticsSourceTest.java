@@ -63,6 +63,31 @@ class UpstoxFnoAnalyticsSourceTest {
     }
 
     @Test
+    void normalizesDocumentedIntegerOptionTickFivePaiseToInrWithoutFakingQuote() {
+        validSsm();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/contract?")))
+                .andExpect(method(org.springframework.http.HttpMethod.GET))
+                .andExpect(header("Authorization", "Bearer test-token-never-log"))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":[
+                      {"underlying_key":"NSE_INDEX|Nifty 50","expiry":"2026-11-19",
+                       "instrument_key":"NSE_FO|61001","instrument_type":"CE",
+                       "trading_symbol":"NIFTY 25000 CE 19 NOV 26",
+                       "strike_price":25000,"lot_size":65,"tick_size":5.0}
+                    ]}
+                    """, MediaType.APPLICATION_JSON));
+        var contracts=source.currentFnoOptionContracts(UNDERLYING,EXPIRY);
+        assertThat(contracts).hasSize(1);
+        assertThat(contracts.getFirst().lotSize()).isEqualTo(65);
+        assertThat(contracts.getFirst().tickSize()).isEqualByComparingTo("0.05");
+        assertThat(new java.math.BigDecimal("100.05")
+                .remainder(contracts.getFirst().tickSize())).isEqualByComparingTo("0");
+        assertThat(new java.math.BigDecimal("100.01")
+                .remainder(contracts.getFirst().tickSize())).isNotZero();
+        server.verify();
+    }
+
+    @Test
     void readsChainWithoutInventingAnExchangeQuoteTimestamp() {
         validSsm();
         server.expect(requestTo(org.hamcrest.Matchers.containsString("/v2/option/chain?")))
