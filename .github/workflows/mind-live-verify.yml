@@ -72,6 +72,7 @@ jobs:
         env:
           VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
           VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+          VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
           VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
         run: |
           set -euo pipefail
@@ -91,8 +92,10 @@ jobs:
           # The password goes through a file, never argv or logs; the token is masked before use.
           umask 077
           printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
-          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_token"
-          rm -f "$RUNNER_TEMP/verify_password"
+          # The new-password secret is optional. It is used only if Cognito requires a password change.
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" "$RUNNER_TEMP/verify_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
           token="$(cat "$RUNNER_TEMP/verify_token")"
           rm -f "$RUNNER_TEMP/verify_token"
           if [ -z "$token" ]; then
