@@ -104,7 +104,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('room wizard reviews quantified examples before local draft', (tester) async {
+  testWidgets('room setup saves room-level intent without illustrative risks',
+      (tester) async {
     TradingRoomDraft? saved;
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
@@ -121,28 +122,19 @@ void main() {
     ));
     await tester.tap(find.text('Open room builder'));
     await tester.pumpAndSettle();
+    expect(find.text('Room setup'), findsOneWidget);
+    expect(find.text('Room risk preference'), findsOneWidget);
+    expect(find.text('Illustrative risk boundaries'), findsNothing);
+    expect(find.text('Your proposed plan.'), findsNothing);
     await tester.enterText(
       find.byKey(const ValueKey('room-name-input')), 'Morning focus');
-    await tester.tap(find.byKey(const ValueKey('room-creation-next')));
-    await tester.pumpAndSettle();
-    // The approved wizard has four steps: Details → Strategy → Risk → Review.
-    for (var next = 0; next < 2; next++) {
-      await tester.tap(find.byKey(const ValueKey('room-creation-next')));
-      await tester.pumpAndSettle();
-    }
-    expect(find.text('Your proposed plan.'), findsOneWidget);
-    expect(find.text('Morning focus'), findsOneWidget);
-    expect(find.text('₹200'), findsOneWidget);
-    final acknowledgment = find.byKey(const ValueKey('room-draft-acknowledge'));
-    await tester.ensureVisible(acknowledgment);
-    await tester.pumpAndSettle();
-    await tester.tap(acknowledgment);
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('room-creation-next')));
     await tester.pumpAndSettle();
     expect(saved?.name, 'Morning focus');
     expect(saved?.paperBudget, 20000);
     expect(saved?.riskPreference, 'Balanced');
+    expect(saved?.marketScope, 'EQUITY');
+    expect(saved?.focus, 'Intraday');
     expect(tester.takeException(), isNull);
   });
 
