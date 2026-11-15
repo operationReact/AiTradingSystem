@@ -236,6 +236,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
   final _scroll = ScrollController();
   String _focus = 'Intraday';
   String _risk = 'Balanced';
+  String _marketScope = 'EQUITY';
   late String _mode;
   int _step = 0;
   bool _acknowledged = false;
@@ -268,6 +269,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
     paperBudget: int.tryParse(_paperBudget.text.trim()) ?? 0,
     riskPreference: _risk,
     mode: _mode,
+    marketScope: _marketScope,
   );
 
   void _top() {
@@ -410,7 +412,11 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 icon: Icon(Icons.candlestick_chart_rounded)),
             ],
             selected: {_mode},
-            onSelectionChanged: (choices) => setState(() => _mode = choices.first),
+            onSelectionChanged: (choices) => setState(() {
+              _mode = choices.first;
+              // Derivatives and combined execution remain PAPER-only.
+              if (_mode == 'LIVE') _marketScope = 'EQUITY';
+            }),
           ),
           const SizedBox(height: 8),
           Text(_mode == 'PAPER'
@@ -431,15 +437,37 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 ? 'Give your room a name' : null,
           ),
           const SizedBox(height: 18),
-          const _FieldLabel('Asset class'),
+          const _FieldLabel('Room market'),
           const SizedBox(height: 8),
-          MintTickSurface(child: Row(children: [
-            const Icon(Icons.stacked_line_chart_rounded),
-            const SizedBox(width: 10),
-            const Expanded(child: Text('Equity · Cash market')),
-            Text('Current scope',
-              style: style.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
-          ])),
+          DropdownButtonFormField<String>(
+            key: const ValueKey('room-market-scope-dropdown'),
+            value: _marketScope,
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.stacked_line_chart_rounded)),
+            items: [
+              const DropdownMenuItem(value: 'EQUITY',
+                child: Text('Equity · NSE/BSE stocks')),
+              DropdownMenuItem(value: 'FNO', enabled: _mode == 'PAPER',
+                child: const Text('F&O · NIFTY options (PAPER)')),
+              DropdownMenuItem(value: 'ALL', enabled: _mode == 'PAPER',
+                child: const Text('All · Stocks + NIFTY options')),
+            ],
+            onChanged: (scope) {
+              if (scope != null) setState(() => _marketScope = scope);
+            },
+          ),
+          const SizedBox(height: 8),
+          Text(
+            switch (_marketScope) {
+              'FNO' => 'Supported instruments: NIFTY long options (PAPER pilot). '
+                  'Futures and stock options are not available.',
+              'ALL' => 'Supported instruments: cash equities and NIFTY long '
+                  'options (PAPER pilot). One virtual wallet per room.',
+              _ => 'Supported instruments: NSE/BSE cash equities.',
+            },
+            key: const ValueKey('room-supported-instruments'),
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
           const SizedBox(height: 18),
           const _FieldLabel('Planned capital allocation (₹)'),
           const SizedBox(height: 8),
@@ -476,7 +504,8 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 14),
           const MintTickInfoText(
             'Intraday and delivery describe trade holding styles. Equity is '
-            'the supported asset class. Strategy configuration is a separate step.'),
+            'the trading horizon, not the market scope. Each room can have a '
+            'different Equity, F&O or All selection.'),
         ],
         if (_step == 2) ...[
           const _FieldLabel('How do you approach risk?'),
@@ -528,6 +557,11 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           _Pair('Room', draft.name),
           _Pair('Approach', draft.focus),
           _Pair('Mode', draft.mode),
+          _Pair('Market', switch (draft.marketScope) {
+            'FNO' => 'F&O · NIFTY options (PAPER)',
+            'ALL' => 'Equity + NIFTY options (PAPER)',
+            _ => 'Equity · NSE/BSE cash',
+          }),
           _Pair('Planned budget', formatPaperRupees(draft.paperBudget)),
           _Pair('Risk preference', draft.riskPreference),
         ],
