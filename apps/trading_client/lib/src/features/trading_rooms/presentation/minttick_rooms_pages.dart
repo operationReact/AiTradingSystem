@@ -454,9 +454,12 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
                 const DropdownMenuItem(value: 'EQUITY',
                   child: Text('Equity · NSE/BSE stocks')),
                 DropdownMenuItem(value: 'FNO',
-                  child: const Text('F&O · NIFTY options (PAPER)')),
+                  child: Text(_mode == 'LIVE'
+                    ? 'F&O · LIVE plan' : 'F&O · NIFTY options (PAPER)')),
                 DropdownMenuItem(value: 'ALL',
-                  child: const Text('All · Stocks + NIFTY options')),
+                  child: Text(_mode == 'LIVE'
+                    ? 'All · Equity + F&O LIVE plan'
+                    : 'All · Stocks + NIFTY options')),
               ],
               onChanged: (scope) {
                 if (scope != null) setState(() => _marketScope = scope);
