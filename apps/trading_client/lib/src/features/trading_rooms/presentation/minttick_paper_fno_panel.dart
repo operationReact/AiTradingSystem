@@ -302,7 +302,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     // The position/order inventory must be verified before any new virtual
     // order. An unavailable read is not equivalent to an empty portfolio.
     if (_capability?.paperConfigured != true ||
-        _positionsLoading || _positionsError != null) return false;
+        _positionsLoading || _positionsError != null) {
+      return false;
+    }
     if (_submitting || market == null || leg == null) return false;
     return _quotesWithinAge && market.hasFreshQuotes &&
         market.displayRightsVerified && leg.quoteFresh && leg.paperEligible &&
