@@ -383,6 +383,24 @@ void main() {
     expect(find.text('No virtual F&O positions.'), findsNothing);
   });
 
+  testWidgets('HTTP 500 inventory does not become zero orders or enable BUY',
+      (tester) async {
+    final repo = _FakeRepo(
+      marketResult: market(),
+      positionsFailure: const ApiHttpFailure('INTERNAL_ERROR', null, 500),
+    );
+    await pump(tester, repo);
+    expect(find.textContaining('Virtual F&O positions unavailable'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-orders-unavailable')), findsOneWidget);
+    expect(find.text('No virtual F&O orders.'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(
+      find.byKey(const ValueKey('paper-fno-submit'))).onPressed, isNull);
+    expect(repo.submits, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('fresh quotes without display rights never enable a PAPER order', (tester) async {
     final repo = _FakeRepo(marketResult: market(rights: false));
     await pump(tester, repo);
