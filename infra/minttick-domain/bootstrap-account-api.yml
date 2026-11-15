@@ -392,7 +392,7 @@ Resources:
                       valid = (type(order) is dict
                           and set(order) == {"instrumentKey", "expiry", "side", "lots", "limitPrice"}
                           and isinstance(order["instrumentKey"], str)
-                          and re.fullmatch(r"NSE_FO\\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
+                          and re.fullmatch(r"NSE_FO\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
                           and isinstance(order["expiry"], str)
                           and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", order["expiry"])
                           and date.fromisoformat(order["expiry"]).isoformat() == order["expiry"]
