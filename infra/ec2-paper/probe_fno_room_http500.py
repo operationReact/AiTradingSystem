@@ -109,6 +109,35 @@ def config_state():
     return result
 
 
+def effective_flags(backend):
+    """Inspect only allowlisted boolean flags from running container env.
+
+    Docker inspect may contain sensitive configuration; parse in process memory
+    and emit no environment values, unknown names or raw JSON.
+    """
+    result = {k: "UNKNOWN" for k in FLAG_KEYS}
+    if not backend:
+        return result
+    proc = run(["docker", "inspect", "--format", "{{json .Config.Env}}", backend], 6)
+    if proc is None or proc.returncode:
+        return result
+    try:
+        import json
+        rows = json.loads(proc.stdout)
+        if not isinstance(rows, list):
+            return result
+        for value in rows:
+            if not isinstance(value, str):
+                continue
+            key, sep, val = value.partition("=")
+            if sep and key in result:
+                result[key] = "ENABLED" if val.lower() == "true" else (
+                    "DISABLED" if val.lower() == "false" else "UNKNOWN")
+    except (TypeError, ValueError):
+        return {k: "UNKNOWN" for k in FLAG_KEYS}
+    return result
+
+
 def backend_errors(backend):
     """Classify limited recent logs, discard every original line."""
     if not backend:
@@ -155,6 +184,8 @@ def main():
         print("FNO_MIGRATION_" + version + ": " + migration_state(pg, version))
     for key, state in sorted(config_state().items()):
         print("FNO_CONFIG_" + key + ": " + state)
+    for key, state in sorted(effective_flags(backend).items()):
+        print("FNO_EFFECTIVE_" + key + ": " + state)
     print("FNO_ERROR_CLASS: " + backend_errors(backend))
 
 
