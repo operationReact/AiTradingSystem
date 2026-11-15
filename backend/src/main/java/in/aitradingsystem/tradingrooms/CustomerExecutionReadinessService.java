@@ -51,18 +51,19 @@ public class CustomerExecutionReadinessService {
 
     public Readiness readiness(UUID owner, UUID roomId) {
         Room room = ownedRoom(owner, roomId);
-        boolean paperFunded = false;
+        // A resumed PAPER wallet remains funded. The halted bit controls
+        // manual execution, not the existence of the virtual allocation.
+        Boolean paperHalted = null;
         if ("PAPER".equals(room.mode())) {
-            paperFunded = jdbc.sql("""
-                    SELECT EXISTS (
-                      SELECT 1 FROM customer_paper_account a
-                      WHERE a.room_id = :id AND a.user_id = :user
-                      AND a.halted = TRUE AND a.available_cash_paise >= 0
-                    )
+            paperHalted = jdbc.sql("""
+                    SELECT a.halted FROM customer_paper_account a
+                    WHERE a.room_id = :id AND a.user_id = :user
+                      AND a.available_cash_paise >= 0
                     """)
                 .param("id", roomId).param("user", owner)
-                .query(Boolean.class).single();
+                .query(Boolean.class).optional().orElse(null);
         }
+        boolean paperFunded = paperHalted != null;
         // A connection to some OTHER broker must not satisfy this room.
         // A LIVE Room has exactly one persisted owner-chosen broker.
         String selected = "LIVE".equals(room.mode())
@@ -73,7 +74,11 @@ public class CustomerExecutionReadinessService {
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
                 blockers.add("PAPER_WALLET_NOT_FUNDED");
+            } else if (paperHalted) {
+                blockers.add("PAPER_ROOM_PAUSED");
             }
+            // The generic cash-equity execution preflight is separate from
+            // the purpose-built rights/quote-gated F&O PAPER order engine.
             blockers.add("CUSTOMER_PAPER_ORDER_ENGINE_NOT_ENABLED");
         } else {
             if (selected == null) {

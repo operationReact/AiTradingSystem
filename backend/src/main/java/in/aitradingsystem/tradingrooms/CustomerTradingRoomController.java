@@ -39,10 +39,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class CustomerTradingRoomController {
     private final JdbcClient jdbc;
     private final CustomerIdentityStore identities;
+    private final CustomerPaperWalletService paperWallets;
 
-    public CustomerTradingRoomController(JdbcClient jdbc, CustomerIdentityStore identities) {
+    public CustomerTradingRoomController(JdbcClient jdbc, CustomerIdentityStore identities,
+                                         CustomerPaperWalletService paperWallets) {
         this.jdbc = jdbc;
         this.identities = identities;
+        this.paperWallets = paperWallets;
     }
 
     public record RoomView(UUID id, String name, String focus, long plannedBudgetInr,
@@ -120,6 +123,13 @@ public class CustomerTradingRoomController {
         } catch (DataIntegrityViolationException conflict) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "A room with this name already exists or its settings are invalid");
+        }
+        // PAPER means virtual funds only. Activate and unpause the customer-owned
+        // wallet in the same transaction as room creation so the user does not
+        // need a second funding step. Never touch a LIVE room or broker account.
+        if ("PAPER".equals(request.mode())) {
+            paperWallets.activate(owner, id);
+            paperWallets.setPaused(owner, id, false);
         }
         return ResponseEntity.status(HttpStatus.CREATED).body(get(id, authentication));
     }

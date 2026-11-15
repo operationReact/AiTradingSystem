@@ -21,6 +21,7 @@ import org.springframework.web.server.ResponseStatusException;
 class CustomerFnoLiveRoomReadinessIT extends AbstractPostgresIT {
     @Autowired JdbcClient jdbc;
     @Autowired UserAccountStore users;
+    @Autowired CustomerPaperWalletService wallets;
 
     private record Fixture(CustomerExecutionReadinessService service,
                            InstrumentMasterService instruments) {}
@@ -50,6 +51,31 @@ class CustomerFnoLiveRoomReadinessIT extends AbstractPostgresIT {
             .param("room", room).param("owner", owner).param("name", "Scope " + room)
             .param("mode", mode).param("scope", scope).update();
         return room;
+    }
+
+    @Test
+    void resumedPaperWalletRemainsFundedAndPausedStateIsReportedAccurately() {
+        var setup = fixture();
+        UUID owner = customer();
+        UUID id = room(owner, "PAPER", "FNO");
+        var inactive = setup.service.readiness(owner, id);
+        assertThat(inactive.virtualCashReady()).isFalse();
+        assertThat(inactive.blockers()).contains("PAPER_WALLET_NOT_FUNDED");
+
+        wallets.activate(owner, id);
+        var paused = setup.service.readiness(owner, id);
+        assertThat(paused.virtualCashReady()).isTrue();
+        assertThat(paused.blockers()).contains("PAPER_ROOM_PAUSED");
+        assertThat(paused.blockers()).doesNotContain("PAPER_WALLET_NOT_FUNDED");
+
+        wallets.setPaused(owner, id, false);
+        var resumed = setup.service.readiness(owner, id);
+        assertThat(resumed.virtualCashReady()).isTrue();
+        assertThat(resumed.blockers()).doesNotContain(
+            "PAPER_ROOM_PAUSED", "PAPER_WALLET_NOT_FUNDED");
+        assertThat(resumed.executionEnabled()).isFalse();
+        // F&O PAPER execution is separately gated by live-feed/rights checks.
+        assertThat(resumed.blockers()).contains("EXECUTION_DISABLED");
     }
 
     @Test
