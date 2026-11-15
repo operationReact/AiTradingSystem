@@ -36,6 +36,11 @@ def audit(m):
                 or any(not isinstance(x, str) or not x.strip() for x in m["source_domains"])
                 or not isinstance(m["revision_policy"], str) or not m["revision_policy"].strip()):
             raise ValueError("rights provenance missing")
+        # Receipt identity alone does not establish permission for this use.
+        if (m.get("rights_review_status") != "VERIFIED"
+                or m.get("rights_permitted_use") != "HISTORICAL_COVERAGE_PLANNING"
+                or "historical" not in m["source_domains"]):
+            raise ValueError("rights review or permitted use missing")
         frames = m["timeframes"]
         listings = m["listings"]
         if (not isinstance(frames, list) or not frames
@@ -83,7 +88,8 @@ class Tests(unittest.TestCase):
                         dict(instrument_id="i1", listing_id="l1", symbol="EXAMPLE", active_from="2025-01-01", active_until="2027-01-01")],
                     rights_receipt_id="reviewed-receipt", rights_valid_from="2025-01-01",
                     rights_valid_until="2027-01-01", source_domains=["historical"],
-                    revision_policy="immutable-versioned")
+                    revision_policy="immutable-versioned", rights_review_status="VERIFIED",
+                    rights_permitted_use="HISTORICAL_COVERAGE_PLANNING")
     def test_fixed_monthly_denominator(self):
         self.assertEqual(audit(self.fixture())["planned_partitions"], 4)
     def test_missing_rights_fails_closed(self):
@@ -114,6 +120,15 @@ class Tests(unittest.TestCase):
     def test_malformed_episode_fails_closed(self):
         m = self.fixture()
         m["listings"][0]["active_until"] = "invalid"
+        self.assertEqual(audit(m)["state"], "UNKNOWN")
+    def test_receipt_id_without_review_is_not_authorization(self):
+        m = self.fixture(); m.pop("rights_review_status")
+        self.assertEqual(audit(m)["state"], "UNKNOWN")
+    def test_wrong_rights_use_fails_closed(self):
+        m = self.fixture(); m["rights_permitted_use"] = "MODEL_TRAINING"
+        self.assertIsNone(audit(m)["planned_partitions"])
+    def test_unrelated_source_domain_fails_closed(self):
+        m = self.fixture(); m["source_domains"] = ["quotes"]
         self.assertEqual(audit(m)["state"], "UNKNOWN")
     def test_rights_window_fails_closed(self):
         m = self.fixture(); m["rights_valid_until"] = "2026-01-31"
