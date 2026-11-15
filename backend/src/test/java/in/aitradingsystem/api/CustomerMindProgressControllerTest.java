@@ -38,14 +38,14 @@ class CustomerMindProgressControllerTest {
 
     @Test
     void progressRequiresLinkedCustomerAndPassesViewerForNoteScoping() {
-        assertThatThrownBy(() -> controller.inspect(new UsernamePasswordAuthenticationToken("op", "x")))
+        assertThatThrownBy(() -> controller.summary(new UsernamePasswordAuthenticationToken("op", "x")))
             .isInstanceOfSatisfying(ResponseStatusException.class,
                 ex -> assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
         verifyNoInteractions(service);
 
         UUID owner = UUID.randomUUID();
-        controller.inspect(principal("sub-1", owner));
-        verify(service).inspect(owner);
+        controller.summary(principal("sub-1", owner));
+        verify(service).summary(owner);
         controller.note("screen.coverage", "recheck-0001",
             new CustomerMindProgressController.NoteRequest("RECHECK_REQUESTED", null), principal("sub-1", owner));
         verify(service).addNote(eq(owner), eq("screen.coverage"),
