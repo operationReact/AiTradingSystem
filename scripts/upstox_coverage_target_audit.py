@@ -48,14 +48,25 @@ def audit(m):
         for item in listings:
             if (not isinstance(item, dict) or any(
                     not isinstance(item.get(k), str) or not item[k].strip()
-                    for k in ("instrument_id", "listing_id", "symbol"))):
+                    for k in ("instrument_id", "listing_id", "symbol", "active_from", "active_until"))):
                 raise ValueError("identity missing")
+            active_from = dt.date.fromisoformat(item["active_from"])
+            active_until = dt.date.fromisoformat(item["active_until"])
+            if active_from > active_until:
+                raise ValueError("listing episode reversed")
             keys.append((item["instrument_id"], item["listing_id"]))
         if len(keys) != len(set(keys)):
             raise ValueError("duplicate listing")
         # Monthly partition denominator is independent of candle counts and PR counts.
         months = (end.year - start.year) * 12 + end.month - start.month + 1
-        planned = len(keys) * len(frames) * months
+        planned = 0
+        for item in listings:
+            active_from = max(start, dt.date.fromisoformat(item["active_from"]))
+            active_until = min(end, dt.date.fromisoformat(item["active_until"]))
+            if active_from <= active_until:
+                episode_months = ((active_until.year - active_from.year) * 12
+                                  + active_until.month - active_from.month + 1)
+                planned += episode_months * len(frames)
         return {"state": "PLANNED_ONLY", "reason": "PERSISTED_RECEIPTS_NOT_AUDITED",
                 "planned_partitions": planned, "verified_partitions": None,
                 "listing_count": len(keys), "month_count": months}
@@ -69,7 +80,7 @@ class Tests(unittest.TestCase):
         return dict(provider="UPSTOX", exchange="NSE_EQ", universe_as_of="2026-01-01",
                     window_start="2026-01-01", window_end="2026-02-28",
                     timeframes=["day", "hour"], listings=[
-                        dict(instrument_id="i1", listing_id="l1", symbol="EXAMPLE")],
+                        dict(instrument_id="i1", listing_id="l1", symbol="EXAMPLE", active_from="2025-01-01", active_until="2027-01-01")],
                     rights_receipt_id="reviewed-receipt", rights_valid_from="2025-01-01",
                     rights_valid_until="2027-01-01", source_domains=["historical"],
                     revision_policy="immutable-versioned")
@@ -91,6 +102,18 @@ class Tests(unittest.TestCase):
         self.assertEqual(audit(m)["state"], "UNKNOWN")
     def test_malformed_rights_domain_fails_closed(self):
         m = self.fixture(); m["source_domains"] = ["historical", None]
+        self.assertEqual(audit(m)["state"], "UNKNOWN")
+    def test_listing_episode_restricts_months(self):
+        m = self.fixture()
+        m["listings"][0]["active_from"] = "2026-02-01"
+        self.assertEqual(audit(m)["planned_partitions"], 2)
+    def test_listing_episode_outside_window_zero_planned(self):
+        m = self.fixture()
+        m["listings"][0]["active_from"] = "2027-01-01"
+        self.assertEqual(audit(m)["planned_partitions"], 0)
+    def test_malformed_episode_fails_closed(self):
+        m = self.fixture()
+        m["listings"][0]["active_until"] = "invalid"
         self.assertEqual(audit(m)["state"], "UNKNOWN")
     def test_rights_window_fails_closed(self):
         m = self.fixture(); m["rights_valid_until"] = "2026-01-31"
