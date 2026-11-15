@@ -418,8 +418,7 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
             selected: {_mode},
             onSelectionChanged: (choices) => setState(() {
               _mode = choices.first;
-              // Derivatives and combined execution remain PAPER-only.
-              if (_mode == 'LIVE') _marketScope = 'EQUITY';
+              // Room market is independent from mode; this is a plan only.
             }),
           ),
           const SizedBox(height: 8),
@@ -454,9 +453,9 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
               items: [
                 const DropdownMenuItem(value: 'EQUITY',
                   child: Text('Equity · NSE/BSE stocks')),
-                DropdownMenuItem(value: 'FNO', enabled: _mode == 'PAPER',
+                DropdownMenuItem(value: 'FNO',
                   child: const Text('F&O · NIFTY options (PAPER)')),
-                DropdownMenuItem(value: 'ALL', enabled: _mode == 'PAPER',
+                DropdownMenuItem(value: 'ALL',
                   child: const Text('All · Stocks + NIFTY options')),
               ],
               onChanged: (scope) {
@@ -467,10 +466,16 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           const SizedBox(height: 8),
           Text(
             switch (_marketScope) {
-              'FNO' => 'Supported instruments: NIFTY long options (PAPER pilot). '
-                  'Futures and stock options are not available.',
-              'ALL' => 'Supported instruments: cash equities and NIFTY long '
-                  'options (PAPER pilot). One virtual wallet per room.',
+              'FNO' => _mode == 'LIVE'
+                  ? 'LIVE F&O plan only. Orders disabled until broker account, '
+                    'segment permissions and execution safeguards pass.'
+                  : 'Supported instruments: NIFTY long options (PAPER pilot). '
+                    'Futures and stock options are not available.',
+              'ALL' => _mode == 'LIVE'
+                  ? 'LIVE Equity + F&O plan only. F&O orders remain disabled '
+                    'until independently approved and verified.'
+                  : 'Supported instruments: cash equities and NIFTY long '
+                    'options (PAPER pilot). One virtual wallet per room.',
               _ => 'Supported instruments: NSE/BSE cash equities.',
             },
             key: const ValueKey('room-supported-instruments'),
@@ -566,8 +571,12 @@ class _MintTickRoomCreationPageState extends State<MintTickRoomCreationPage> {
           _Pair('Approach', draft.focus),
           _Pair('Mode', draft.mode),
           _Pair('Market', switch (draft.marketScope) {
-            'FNO' => 'F&O · NIFTY options (PAPER)',
-            'ALL' => 'Equity + NIFTY options (PAPER)',
+            'FNO' => draft.mode == 'LIVE'
+                ? 'F&O · LIVE plan (not authorized)'
+                : 'F&O · NIFTY options (PAPER)',
+            'ALL' => draft.mode == 'LIVE'
+                ? 'Equity + F&O · LIVE plan (not authorized)'
+                : 'Equity + NIFTY options (PAPER)',
             _ => 'Equity · NSE/BSE cash',
           }),
           _Pair('Planned budget', formatPaperRupees(draft.paperBudget)),
