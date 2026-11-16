@@ -254,8 +254,14 @@ public class CustomerUpstoxOAuthService {
             return new FnoSubmission("REJECTED", java.util.List.of(),
                 "UPSTOX_SESSION_MISSING");
         }
+        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
+            new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        // Keep one-shot broker execution within the account Lambda's 7s limit.
+        // A timeout is UNKNOWN, not permission to retry.
+        factory.setConnectTimeout(2000);
+        factory.setReadTimeout(4000);
         var transport = new UpstoxFnoLiveOrderTransport(
-            org.springframework.web.client.RestClient.builder());
+            org.springframework.web.client.RestClient.builder().requestFactory(factory));
         var response = transport.submitOnce(session.accessToken(), payload);
         if ("UPSTOX_SESSION_EXPIRED".equals(response.code())) {
             sessions.remove(owner, session);
