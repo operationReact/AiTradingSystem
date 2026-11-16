@@ -844,6 +844,70 @@ class AccountProxyTest(unittest.TestCase):
             self.assertEqual(proxy.handler(unauth, None)["statusCode"], 401)
             send.assert_not_called()
 
+    def test_live_fno_requires_owner_jwt_explicit_confirmation_and_one_lot(self):
+        base = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/live/fno"
+        self.assertTrue(proxy.allowed("GET", base + "/capability"))
+        self.assertTrue(proxy.allowed("GET", base + "/orders"))
+        self.assertTrue(proxy.allowed("POST", base + "/orders"))
+        self.assertTrue(proxy.allowed("POST", base + "/orders/12345678-1234-1234-1234-123456789012/reconcile"))
+        for method, path in (
+            ("POST", base + "/capability"),
+            ("PUT", base + "/orders"),
+            ("DELETE", base + "/orders"),
+            ("GET", base + "/orders/12345678-1234-1234-1234-123456789012/reconcile"),
+            ("POST", base + "/orders/execute"),
+            ("POST", "/api/customer/brokers/upstox/orders"),
+            ("POST", "/api/admin/market-data/upstox-analytics/fno/live/start"),
+        ):
+            self.assertFalse(proxy.allowed(method, path))
+        payload = {"instrumentKey": "NSE_FO|12345", "expiry": "2026-11-17",
+                   "side": "BUY", "lots": 1, "limitPrice": 120.05}
+        attempt = event("POST", base + "/orders", body=json.dumps(payload))
+        attempt["headers"]["idempotency-key"] = "real_live_0001"
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            denied = proxy.handler(attempt, None)
+        self.assertEqual(denied["statusCode"], 428)
+        send.assert_not_called()
+
+        attempt["headers"]["x-confirm-live-order"] = "CONFIRM_LIVE_UPSTOX_NFO"
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as send:
+            accepted = proxy.handler(attempt, None)
+        self.assertEqual(accepted["statusCode"], 200)
+        sent = send.call_args.args[0]
+        self.assertEqual(sent.get_header("Idempotency-key"), "real_live_0001")
+        self.assertEqual(sent.get_header("X-confirm-live-order"), "CONFIRM_LIVE_UPSTOX_NFO")
+        self.assertTrue(sent.full_url.endswith(base + "/orders"))
+        self.assertEqual(sent.get_method(), "POST")
+
+        malformed = ({**payload, "lots": 2}, {**payload, "side": "SHORT"},
+                     {**payload, "limitPrice": "120.05"},
+                     {**payload, "instrumentKey": "SIM_FNO_CE"},
+                     {**payload, "expiry": "2026-02-31"},
+                     {**payload, "extra": "broker-execute"})
+        for order in malformed:
+            bad = event("POST", base + "/orders", body=json.dumps(order))
+            bad["headers"].update(attempt["headers"])
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                response = proxy.handler(bad, None)
+            self.assertEqual(response["statusCode"], 400, order)
+            send.assert_not_called()
+
+        unauthorized = event("POST", base + "/orders", jwt={"claims": {}},
+                             body=json.dumps(payload))
+        unauthorized["headers"].update(attempt["headers"])
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            self.assertEqual(proxy.handler(unauthorized, None)["statusCode"], 401)
+            send.assert_not_called()
+
+        reconcile = event("POST", base + "/orders/12345678-1234-1234-1234-123456789012/reconcile")
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as send:
+            self.assertEqual(proxy.handler(reconcile, None)["statusCode"], 200)
+        send.assert_called_once()
+        reconcile["body"] = '{"retry":true}'
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            self.assertEqual(proxy.handler(reconcile, None)["statusCode"], 400)
+            send.assert_not_called()
+
     def test_template_embeds_identical_reviewed_python_source(self):
         text=Path(__file__).with_name("bootstrap-account-api.yml").read_text()
         anchor="        ZipFile: |\n"
