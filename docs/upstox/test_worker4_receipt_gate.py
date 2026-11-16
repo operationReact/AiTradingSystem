@@ -30,6 +30,15 @@ class GateTest(unittest.TestCase):
     def test_duplicate_retry_does_not_inflate(self):
         self.assertEqual(gate.evaluate([receipt(), receipt(receiptId="retry")], T)["eligibleUniqueUnits"], 1)
 
+    def test_receipt_id_conflict_cannot_inflate_units(self):
+        result = gate.evaluate([receipt(), receipt(sourceRecordId="other-record")], T)
+        self.assertEqual(result["eligibleUniqueUnits"], 1)
+        self.assertEqual(result["rejectedByReason"]["RECEIPT_ID_CONFLICT"], 1)
+
+    def test_distinct_receipts_for_distinct_records(self):
+        result = gate.evaluate([receipt(), receipt(sourceRecordId="other-record", receiptId="other-receipt")], T)
+        self.assertEqual(result["eligibleUniqueUnits"], 2)
+
     def test_revision_is_distinct(self):
         self.assertEqual(gate.evaluate([receipt(), receipt(revision="v2")], T)["eligibleUniqueUnits"], 2)
 
