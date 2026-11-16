@@ -122,7 +122,7 @@ public final class CustomerFnoSyntheticSandboxController {
             .query((rs,n)->{
                 if (!fingerprint.equals(rs.getString("payload_hash")))
                     throw reject(HttpStatus.CONFLICT,"Synthetic order idempotency conflict");
-                return mapFill(rs);
+                return mapFill(rs,n);
             }).optional().orElse(null);
         if (previous != null) return noStore(previous);
 
