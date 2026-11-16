@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/customer_paper_fno_repository.dart';
-import 'minttick_synthetic_fno_sandbox_panel.dart';
 
 /// PAPER-only NIFTY long options: contract selection, BUY/SELL ticket and
 /// virtual positions. Every value comes from the server. Anything the server
@@ -147,8 +146,10 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   }
 
   static String _capabilityStatusLabel(String status) => switch (status) {
-    'FNO_PAPER_DISABLED' || 'FNO_V3_FEED_DISABLED' =>
-      'F&O PAPER trading is not enabled on the server.',
+    'FNO_PAPER_DISABLED' =>
+      'Real NSE options PAPER orders are disabled. Only authorized real-market quotes may be shown.',
+    'FNO_V3_FEED_DISABLED' =>
+      'Real Upstox V3 options feed is not active. No verified live prices available.',
     'DISPLAY_RIGHTS_NOT_VERIFIED' =>
       'F&O market display permission is not verified.',
     'PAPER_USE_RIGHTS_NOT_VERIFIED' =>
@@ -467,8 +468,12 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
                 style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
             ],
             const SizedBox(height: 4),
-            Text('New F&O orders remain disabled.',
+            Text('No simulated or broker order can be placed until real Upstox quotes and required permissions are verified.',
               style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            const SizedBox(height: 7),
+            Text('Real NSE contracts only · No synthetic option prices',
+              key: const ValueKey('paper-fno-real-only'),
+              style: type.labelSmall?.copyWith(color: colors.primary)),
             const SizedBox(height: 9),
             TextButton.icon(
               key: const ValueKey('paper-fno-capability-retry'),
@@ -477,12 +482,6 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               label: const Text('Recheck F&O'),
             ),
           ],
-          if (!_checkingCapability && _capability != null)
-            MintTickSyntheticFnoSandboxPanel(
-              roomId: widget.roomId,
-              repository: widget.repository,
-              onFilled: widget.onFilled,
-            ),
         ]),
       );
     }
@@ -561,11 +560,6 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           _ordersView(colors, type),
           const SizedBox(height: 12),
           _bookkeepingView(colors, type),
-          MintTickSyntheticFnoSandboxPanel(
-            roomId: widget.roomId,
-            repository: widget.repository,
-            onFilled: widget.onFilled,
-          ),
         ],
       ),
     );
