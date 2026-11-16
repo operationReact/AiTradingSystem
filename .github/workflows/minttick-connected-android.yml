@@ -85,9 +85,9 @@ jobs:
       actions: read
       id-token: write
     env:
-      GH_TOKEN: $${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
       WEB_BUCKET: minttick-web-098859530205-us-east-1
-      CERT_SHA256: $${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
+      CERT_SHA256: ${{ vars.MINTTICK_ANDROID_CERT_SHA256 }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,7 +132,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::098859530205:role/minttick-web-github-publish
           aws-region: us-east-1
-          role-session-name: minttick-new-apk-$${{ github.run_id }}
+          role-session-name: minttick-new-apk-${{ github.run_id }}
       - name: Publish and independently download immutable HTTPS APK
         shell: bash
         run: |
