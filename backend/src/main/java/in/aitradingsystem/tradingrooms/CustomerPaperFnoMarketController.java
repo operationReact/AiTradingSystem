@@ -76,7 +76,12 @@ public class CustomerPaperFnoMarketController {
             CustomerFnoExpiryCatalog expiryCatalog, Environment env) {
         this(jdbc, identities, source, live, calendar, expiryCatalog, Clock.systemUTC(),
             env.getProperty("minttick.upstox-fno.display-rights-verified", Boolean.class, false),
-            env.getProperty("minttick.upstox-fno.paper-usage-rights-verified", Boolean.class, false));
+            // Receiving permitted real quotes never implies PAPER eligibility.
+            // Keep paperEligible false when the PAPER engine is disabled,
+            // even if PAPER-use rights were separately verified.
+            env.getProperty("minttick.upstox-fno.paper-enabled", Boolean.class, false)
+                && env.getProperty("minttick.upstox-fno.paper-usage-rights-verified",
+                    Boolean.class, false));
     }
 
     CustomerPaperFnoMarketController(JdbcClient jdbc,
