@@ -2,13 +2,13 @@
   "application": "MintTick",
   "environment": "dev",
   "operation": "publish-stable-signed-android-cloudfront",
-  "source_run_id": 43822672920,
-  "source_artifact_id": 14205751562,
-  "source_sha": "d7db1f9467073df54c3dca7689665fb1fb17eb46",
-  "expected_apk_sha256": "09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda",
+  "source_run_id": 43981767136,
+  "source_artifact_id": 14284181318,
+  "source_sha": "4feb32d67e55c6a74d7a93531d40859aaab4dcf6",
+  "expected_apk_sha256": "fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb",
   "expected_signer_sha256": "7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
-  "authorization": "USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-16",
   "bucket": "minttick-web-098859530205-us-east-1",
-  "object_key": "downloads/MintTick-dev-synthetic-options-2026-11-16.apk",
-  "publication_attempt": 2
+  "object_key": "downloads/MintTick-dev-4feb32d67e55.apk",
+  "authorization": "USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-17",
+  "publication_attempt": 1
 }
