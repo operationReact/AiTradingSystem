@@ -29,14 +29,9 @@ final class UpstoxFnoLiveOrderTransport {
     private final RestClient http;
 
     UpstoxFnoLiveOrderTransport(RestClient.Builder builder) {
-        org.springframework.http.client.SimpleClientHttpRequestFactory factory =
-            new org.springframework.http.client.SimpleClientHttpRequestFactory();
-        // Keep the one-shot provider call within the account Lambda's 7s
-        // upstream limit, while classifying ALL transport timeouts as UNKNOWN.
-        factory.setConnectTimeout(2000);
-        factory.setReadTimeout(4000);
-        this.http = builder.baseUrl("https://api-hft.upstox.com")
-            .requestFactory(factory).build();
+        // Caller supplies its bounded production HTTP transport. A separate
+        // mock RestClient.Builder is permitted for never-live contract tests.
+        this.http = builder.baseUrl("https://api-hft.upstox.com").build();
     }
 
     enum Outcome { ACKNOWLEDGED, REJECTED, UNKNOWN }
