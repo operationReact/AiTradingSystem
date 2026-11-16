@@ -117,10 +117,15 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       // Local virtual order/position and ledger reads require only room
       // ownership, not licensed market quotes or an enabled order engine.
       // Keep viewing old PAPER history possible while trading stays blocked.
-      _loadPositions();
       if (capability.readOnlyConfigured) {
         _loadExpiries();
-        if (_expiry != null) _load();
+        if (_expiry != null) {
+          _load();
+        } else {
+          _loadPositions();
+        }
+      } else {
+        _loadPositions();
       }
     } catch (_) {
       if (!mounted || request != _capabilityRequest) return;
