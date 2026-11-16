@@ -59,15 +59,31 @@ class CustomerPaperFnoReconciliationRouteTest {
     }
 
     @Test
-    void endpointRemainsFeatureGatedAndUsesOnlyGet() throws Exception {
-        var feature=CustomerPaperFnoReconciliationController.class
-                .getAnnotation(ConditionalOnProperty.class);
-        assertThat(feature.name()).containsExactly(
-                "minttick.upstox-fno.paper-enabled",
-                "minttick.upstox-fno.v3-feed-enabled");
+    void readOnlyLedgerEndpointsDoNotDependOnFnoTradingFlags() throws Exception {
+        for (var type : new Class<?>[]{
+                CustomerPaperFnoReconciliationController.class,
+                CustomerPaperFnoReconciliationService.class,
+                CustomerPaperSharedWalletAuditService.class,
+                CustomerPaperFnoHistoryController.class}) {
+            assertThat(type.getAnnotation(ConditionalOnProperty.class))
+                .as(type.getSimpleName()).isNull();
+        }
         var method=CustomerPaperFnoReconciliationController.class.getMethod(
                 "receipt",UUID.class,org.springframework.security.core.Authentication.class);
         assertThat(method.getAnnotation(GetMapping.class).value())
                 .containsExactly("/reconciliation");
+        for (var name : new String[]{"orders","positions"}) {
+            var view=CustomerPaperFnoHistoryController.class.getMethod(
+                name,UUID.class,org.springframework.security.core.Authentication.class);
+            assertThat(view.getAnnotation(GetMapping.class).value())
+                .containsExactly("/"+name);
+        }
+        // Trading remains independently feature gated. No duplicate GET
+        // handler is registered on the manual-order controller.
+        assertThat(CustomerPaperFnoOrderController.class
+            .getAnnotation(ConditionalOnProperty.class)).isNotNull();
+        for (var methodOnTrading : CustomerPaperFnoOrderController.class.getMethods()) {
+            assertThat(methodOnTrading.getAnnotation(GetMapping.class)).isNull();
+        }
     }
 }
