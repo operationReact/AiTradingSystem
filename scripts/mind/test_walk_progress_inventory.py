@@ -128,5 +128,46 @@ class WalkTests(unittest.TestCase):
         self.assertEqual(sample[1], "item.312")
 
 
+class LayerTests(unittest.TestCase):
+    def _items(self):
+        return [
+            {"id": "a", "kind": "SCREEN", "done": True, "declaredStatus": "TESTED",
+             "evidence": [{"kind": "SOURCE"}, {"kind": "TEST"}],
+             "runtime": {"lastVerifiedAt": "2026-11-16T00:00:00Z"}},
+            {"id": "b", "kind": "SCREEN", "done": False, "declaredStatus": "NOT_STARTED",
+             "evidence": [], "runtime": {"lastVerifiedAt": None}},
+            {"id": "c", "kind": "SCREEN", "done": False, "declaredStatus": "IMPLEMENTING",
+             "evidence": [{"kind": "SOURCE"}], "runtime": {"lastVerifiedAt": None}},
+            {"id": "d", "kind": "SCREEN", "done": False, "declaredStatus": "MOCK",
+             "evidence": [{"kind": "TEST"}], "runtime": {"lastVerifiedAt": None}},
+        ]
+
+    def _overall(self, counts, total=4):
+        def layer(count):
+            return {"count": count, "total": total, "percent": w.percent_done(count, total)}
+        return {"done": counts["runtimeVerified"], "layers": {k: layer(v) for k, v in counts.items()}}
+
+    def test_layers_recomputed_from_evidence(self):
+        items = self._items()
+        expected = w.layer_counts(items)
+        self.assertEqual(expected, {"implemented": 2, "ciTested": 1, "deployed": 1, "runtimeVerified": 1})
+        self.assertEqual(w.verify_layers(items, self._overall(expected)), expected)
+
+    def test_inflated_layer_fails(self):
+        items = self._items()
+        counts = w.layer_counts(items)
+        counts["implemented"] = 4
+        with self.assertRaisesRegex(w.WalkError, "implemented"):
+            w.verify_layers(items, self._overall(counts))
+
+    def test_runtime_layer_must_equal_strict_done(self):
+        items = self._items()
+        counts = w.layer_counts(items)
+        overall = self._overall(counts)
+        overall["done"] = 2
+        with self.assertRaisesRegex(w.WalkError, "strict done"):
+            w.verify_layers(items, overall)
+
+
 if __name__ == "__main__":
     unittest.main()

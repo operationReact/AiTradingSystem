@@ -149,7 +149,40 @@ public class MindCapabilityProgressService {
             .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
 
     /** Overall totals are computed from the full authoritative inventory, never from a page. */
-    public record Overall(int total, int done, int pending, int blocked, double percentDone) {}
+    public record Overall(int total, int done, int pending, int blocked, double percentDone, Layers layers) {}
+
+    /**
+     * Four separately evidenced layers. Each count is derived from recorded evidence, never from a
+     * catalog name or a declared label alone. runtimeVerified is the strict existing completion rule.
+     */
+    public record Layers(Layer implemented, Layer ciTested, Layer deployed, Layer runtimeVerified) {}
+
+    public record Layer(int count, int total, double percent) {}
+
+    static Layers layers(List<Item> items) {
+        int total = items.size();
+        int implemented = 0, ciTested = 0, deployed = 0, runtime = 0;
+        for (Item item : items) {
+            boolean hasSource = item.evidence().stream().anyMatch(e -> "SOURCE".equals(e.kind()));
+            boolean hasTest = item.evidence().stream().anyMatch(e -> "TEST".equals(e.kind()));
+            Status declared = item.declaredStatus();
+            // Implemented: code evidence exists and the item is past catalog-only states.
+            if (hasSource && declared != Status.NOT_STARTED && declared != Status.MOCK) implemented++;
+            // CI-tested: test evidence exists and the declared status claims tests passed.
+            if (hasTest && (declared == Status.TESTED || declared == Status.DEPLOYED
+                    || declared == Status.RUNTIME_VERIFIED)) ciTested++;
+            // Deployed: a runtime event was recorded for the item on any backend revision.
+            if (item.runtime() != null && item.runtime().lastVerifiedAt() != null) deployed++;
+            // Runtime-verified: the strict completion rule (current revision, within TTL).
+            if (item.done()) runtime++;
+        }
+        return new Layers(layer(implemented, total), layer(ciTested, total),
+            layer(deployed, total), layer(runtime, total));
+    }
+
+    private static Layer layer(int count, int total) {
+        return new Layer(count, total, total == 0 ? 0.0 : Math.round(count * 1000.0 / total) / 10.0);
+    }
 
     public record Summary(String contractVersion, Instant generatedAt, String manifestVersion,
                           String auditedAt, String backendRevision, boolean revisionKnown,
@@ -177,7 +210,7 @@ public class MindCapabilityProgressService {
         List<String> kinds = items.stream().map(Item::kind).distinct().sorted().toList();
         return new Summary(SUMMARY_CONTRACT, now, manifest.manifestVersion(), manifest.auditedAt(),
             backendRevision, revisionKnown(), manifest.sourceIssues(), paperStage(evaluated),
-            new Overall(total, done, total - done, blocked, percent), summaries(items), kinds,
+            new Overall(total, done, total - done, blocked, percent, layers(items)), summaries(items), kinds,
             "/api/customer/mind/v1/progress/inventory");
     }
 

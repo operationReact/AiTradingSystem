@@ -105,6 +105,43 @@ def verify_percentages(items, overall):
             "percentDone": overall["percentDone"]}
 
 
+def layer_counts(items):
+    """Recompute the four evidence layers from walked items, mirroring MindCapabilityProgressService."""
+    implemented = ci_tested = deployed = runtime = 0
+    for item in items:
+        kinds = {e.get("kind") for e in (item.get("evidence") or [])}
+        declared = item.get("declaredStatus")
+        if "SOURCE" in kinds and declared not in ("NOT_STARTED", "MOCK"):
+            implemented += 1
+        if "TEST" in kinds and declared in ("TESTED", "DEPLOYED", "RUNTIME_VERIFIED"):
+            ci_tested += 1
+        runtime_info = item.get("runtime") or {}
+        if runtime_info.get("lastVerifiedAt") is not None:
+            deployed += 1
+        if item.get("done") is True:
+            runtime += 1
+    return {"implemented": implemented, "ciTested": ci_tested, "deployed": deployed, "runtimeVerified": runtime}
+
+
+def verify_layers(items, overall):
+    layers = overall.get("layers")
+    if not isinstance(layers, dict):
+        raise WalkError("summary layers missing")
+    expected = layer_counts(items)
+    total = len(items)
+    for name, count in expected.items():
+        layer = layers.get(name) or {}
+        if layer.get("count") != count:
+            raise WalkError(f"layer {name} count does not match walked evidence")
+        if layer.get("total") != total:
+            raise WalkError(f"layer {name} total does not match inventory")
+        if layer.get("percent") != percent_done(count, total):
+            raise WalkError(f"layer {name} percent does not match walked evidence")
+    if layers["runtimeVerified"]["count"] != overall["done"]:
+        raise WalkError("runtimeVerified layer does not equal the strict done count")
+    return expected
+
+
 def detail_sample(items):
     """First, last and one item per kind, so the sample stays bounded."""
     chosen = []
@@ -157,6 +194,8 @@ def walk(base, token, expected_total=None):
 
     items = verify_pages(pages, summary, overall)
     counts = verify_percentages(items, overall)
+    layer_result = verify_layers(items, overall)
+    print("layers " + " ".join(f"{k}={v}/{len(items)}" for k, v in layer_result.items()))
     print(f"walked items={len(items)} summary_total={overall['total']} pages={len(pages)}")
     print(f"counts done={counts['done']} pending={counts['pending']} blocked={counts['blocked']} "
           f"percentDone={counts['percentDone']}")
