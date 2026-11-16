@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/customer_paper_fno_repository.dart';
+import 'minttick_synthetic_fno_sandbox_panel.dart';
 
 /// PAPER-only NIFTY long options: contract selection, BUY/SELL ticket and
 /// virtual positions. Every value comes from the server. Anything the server
@@ -476,6 +477,12 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               label: const Text('Recheck F&O'),
             ),
           ],
+          if (!_checkingCapability && _capability != null)
+            MintTickSyntheticFnoSandboxPanel(
+              roomId: widget.roomId,
+              repository: widget.repository,
+              onFilled: widget.onFilled,
+            ),
         ]),
       );
     }
@@ -554,6 +561,11 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           _ordersView(colors, type),
           const SizedBox(height: 12),
           _bookkeepingView(colors, type),
+          MintTickSyntheticFnoSandboxPanel(
+            roomId: widget.roomId,
+            repository: widget.repository,
+            onFilled: widget.onFilled,
+          ),
         ],
       ),
     );
