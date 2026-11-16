@@ -3,6 +3,7 @@ package in.aitradingsystem.tradingrooms;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import in.aitradingsystem.instrument.InstrumentMasterService;
@@ -11,6 +12,7 @@ import in.aitradingsystem.provider.upstox.CustomerUpstoxOAuthService;
 import in.aitradingsystem.support.AbstractPostgresIT;
 import in.aitradingsystem.user.UserAccountStore;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,13 +26,15 @@ class CustomerFnoLiveRoomReadinessIT extends AbstractPostgresIT {
     @Autowired CustomerPaperWalletService wallets;
 
     private record Fixture(CustomerExecutionReadinessService service,
-                           InstrumentMasterService instruments) {}
+                           InstrumentMasterService instruments,
+                           CustomerUpstoxOAuthService upstox) {}
 
     private Fixture fixture() {
         var instruments = mock(InstrumentMasterService.class);
+        var upstox = mock(CustomerUpstoxOAuthService.class);
         return new Fixture(new CustomerExecutionReadinessService(jdbc,
             mock(CustomerAngelOneSessionService.class),
-            mock(CustomerUpstoxOAuthService.class), instruments), instruments);
+            upstox, instruments), instruments, upstox);
     }
 
     private UUID customer() {
@@ -103,6 +107,39 @@ class CustomerFnoLiveRoomReadinessIT extends AbstractPostgresIT {
                 "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED",
                 "EXECUTION_DISABLED");
         }
+    }
+
+    @Test
+    void ownerVerifiedNfoProfileClearsOnlySegmentBlockerNotLiveExecution() {
+        var setup = fixture();
+        UUID owner = customer();
+        UUID id = room(owner, "LIVE", "FNO");
+        when(setup.upstox.status(owner)).thenReturn(
+            new CustomerUpstoxOAuthService.Status(true, true, "UPSTOX",
+                "***456", Instant.parse("2026-11-17T22:00:00Z"), false));
+        when(setup.upstox.fnoEntitlement(owner)).thenReturn(
+            new CustomerUpstoxOAuthService.FnoEntitlement(
+                true, true, true, true, true, "UPSTOX_NFO_PROFILE_VERIFIED"));
+
+        var readiness = setup.service.selectLiveBroker(owner, id, "UPSTOX");
+        assertThat(readiness.brokerConnected()).isTrue();
+        assertThat(readiness.blockers())
+            .doesNotContain("FNO_BROKER_SEGMENT_PERMISSION_NOT_VERIFIED");
+        assertThat(readiness.blockers()).contains(
+            "FNO_LIVE_ORDER_ADAPTER_NOT_ENABLED",
+            "EXPLICIT_LIVE_EXECUTION_CONSENT_NOT_CONFIGURED",
+            "FNO_CONTRACT_MARGIN_AND_RISK_NOT_VERIFIED",
+            "EXECUTION_DISABLED");
+        assertThat(readiness.executionEnabled()).isFalse();
+        assertThat(readiness.brokerExecutionApproved()).isFalse();
+
+        when(setup.upstox.fnoEntitlement(owner)).thenReturn(
+            new CustomerUpstoxOAuthService.FnoEntitlement(
+                true, false, true, true, true, "UPSTOX_NFO_NOT_ENABLED"));
+        var rejected = setup.service.readiness(owner, id);
+        assertThat(rejected.blockers()).contains(
+            "FNO_BROKER_SEGMENT_PERMISSION_NOT_VERIFIED",
+            "UPSTOX_NFO_NOT_ENABLED");
     }
 
     @Test
