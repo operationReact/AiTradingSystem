@@ -91,7 +91,13 @@ class CustomerExecutionReadinessServiceIT extends AbstractPostgresIT {
             .isInstanceOf(ResponseStatusException.class)
             .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST));
-        Long count = jdbc.sql("SELECT COUNT(*) FROM customer_live_room_broker")
+        // Other test cases may persist valid broker assignments in the shared
+        // PostgreSQL fixture. Assert ONLY these unauthorized target rooms.
+        Long count = jdbc.sql("""
+                SELECT COUNT(*) FROM customer_live_room_broker
+                WHERE room_id IN (:paper, :live)
+                """)
+            .param("paper", paper).param("live", live)
             .query(Long.class).single();
         assertThat(count).isZero();
     }
