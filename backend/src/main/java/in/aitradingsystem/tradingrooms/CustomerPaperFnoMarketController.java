@@ -41,9 +41,10 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno")
-@ConditionalOnProperty(
-    name={"minttick.upstox-fno.paper-enabled", "minttick.upstox-fno.v3-feed-enabled"},
-    havingValue="true")
+// Read-only real listed expiries and exchange-LTT V3 quotes are separate from
+// PAPER trading; display permission is checked on every customer request.
+// This controller offers no order placement and cannot enable LIVE brokerage.
+@ConditionalOnProperty(name="minttick.upstox-fno.v3-feed-enabled", havingValue="true")
 public class CustomerPaperFnoMarketController {
     static final String UNDERLYING = "NSE_INDEX|Nifty 50";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
