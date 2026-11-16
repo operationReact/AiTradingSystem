@@ -45,7 +45,12 @@ class GateTest(unittest.TestCase):
         self.assertEqual(result["eligibleUniqueUnits"], 2)
 
     def test_revision_is_distinct(self):
-        self.assertEqual(gate.evaluate([receipt(), receipt(revision="v2")], T)["eligibleUniqueUnits"], 2)
+        self.assertEqual(gate.evaluate([receipt(), receipt(revision="v2", receiptId="revision-v2")], T)["eligibleUniqueUnits"], 2)
+
+    def test_revision_reusing_receipt_id_is_rejected(self):
+        result = gate.evaluate([receipt(), receipt(revision="v2")], T)
+        self.assertEqual(result["eligibleUniqueUnits"], 1)
+        self.assertEqual(result["rejectedByReason"]["RECEIPT_ID_CONFLICT"], 1)
 
     def test_missing_timestamp_abstains(self):
         self.assertEqual(gate.evaluate([receipt(publishedAt=None)], T)["eligibleUniqueUnits"], 0)
