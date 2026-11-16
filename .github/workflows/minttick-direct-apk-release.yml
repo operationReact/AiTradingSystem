@@ -19,13 +19,13 @@ jobs:
     timeout-minutes: 25
     env:
       GH_TOKEN: ${{ github.token }}
-      SOURCE_RUN: '43822672920'
-      ARTIFACT_NAME: MintTick-Connected-Android-Test-d7db1f9467073df54c3dca7689665fb1fb17eb46
-      EXPECTED_APK_SHA: 09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda
+      SOURCE_RUN: '43981767136'
+      ARTIFACT_NAME: MintTick-Connected-Android-Test-4feb32d67e55c6a74d7a93531d40859aaab4dcf6
+      EXPECTED_APK_SHA: fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb
       EXPECTED_SIGNER: 7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B
       WEB_BUCKET: minttick-web-098859530205-us-east-1
-      OBJECT_KEY: downloads/MintTick-dev-synthetic-options-2026-11-16.apk
-      DIRECT_URL: https://www.minttick.com/downloads/MintTick-dev-synthetic-options-2026-11-16.apk
+      OBJECT_KEY: downloads/MintTick-dev-4feb32d67e55.apk
+      DIRECT_URL: https://www.minttick.com/downloads/MintTick-dev-4feb32d67e55.apk
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,15 +53,15 @@ jobs:
             "application":"MintTick",
             "environment":"dev",
             "operation":"publish-stable-signed-android-cloudfront",
-            "source_run_id":43822672920,
-            "source_artifact_id":14205751562,
-            "source_sha":"d7db1f9467073df54c3dca7689665fb1fb17eb46",
-            "expected_apk_sha256":"09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda",
+            "source_run_id":43981767136,
+            "source_artifact_id":14284181318,
+            "source_sha":"4feb32d67e55c6a74d7a93531d40859aaab4dcf6",
+            "expected_apk_sha256":"fedea96374ac6bcb26b410a0ea23ef787a0fd6faa693098c242c4707de1895fb",
             "expected_signer_sha256":"7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
             "bucket":"minttick-web-098859530205-us-east-1",
-            "object_key":"downloads/MintTick-dev-synthetic-options-2026-11-16.apk",
-            "authorization":"USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-16",
-            "publication_attempt":2,
+            "object_key":"downloads/MintTick-dev-4feb32d67e55.apk",
+            "authorization":"USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-17",
+            "publication_attempt":1,
           }
           if data != expected:
             raise SystemExit("DENIED: request is not the reviewed exact APK publication")
@@ -84,7 +84,7 @@ jobs:
           test "$actual" = "$EXPECTED_APK_SHA"
           test "$(cut -d' ' -f1 source/app-release.apk.sha256)" = "$actual"
           test "$(tr -d '\r\n' < source/app-release.apk.signer.sha256)" = "$EXPECTED_SIGNER"
-          test "$(stat -c '%s' source/app-release.apk)" -eq 75423551
+          test "$(stat -c '%s' source/app-release.apk)" -eq 75308863
           echo "PASS: exact stable-signed Android file fingerprint and size"
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -111,10 +111,10 @@ jobs:
           set -euo pipefail
           aws s3 cp source/app-release.apk "s3://$WEB_BUCKET/$OBJECT_KEY" \
             --content-type "application/vnd.android.package-archive" \
-            --content-disposition "attachment; filename=MintTick-dev-synthetic-options-2026-11-16.apk" \
+            --content-disposition "attachment; filename=MintTick-dev-4feb32d67e55.apk" \
             --cache-control "public, max-age=300" --only-show-errors
           test "$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$OBJECT_KEY" \
-            --query ContentLength --output text)" = '75423551'
+            --query ContentLength --output text)" = '75308863'
       - name: Invalidate and independently verify actual public APK bytes
         shell: bash
         run: |
@@ -127,7 +127,7 @@ jobs:
           curl --fail --location --silent --show-error --retry 4 --retry-delay 4 \
             --max-time 180 --output /tmp/minttick-public.apk \
             "$DIRECT_URL?verify=$GITHUB_RUN_ID"
-          test "$(stat -c '%s' /tmp/minttick-public.apk)" -eq 75423551
+          test "$(stat -c '%s' /tmp/minttick-public.apk)" -eq 75308863
           test "$(sha256sum /tmp/minttick-public.apk | cut -d' ' -f1)" = "$EXPECTED_APK_SHA"
-          echo "PASS: downloaded 75,423,551 bytes over public HTTPS; SHA256 matches official signed APK"
+          echo "PASS: downloaded 75,308,863 bytes over public HTTPS; SHA256 matches official signed APK"
           echo "DIRECT VERIFIED APK: $DIRECT_URL" >> "$GITHUB_STEP_SUMMARY"
