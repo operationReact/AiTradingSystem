@@ -27,6 +27,11 @@ class GateTest(unittest.TestCase):
     def test_late_revision_abstains(self):
         self.assertEqual(gate.evaluate([receipt(availableAt="2026-11-15T10:00:00Z")], T)["eligibleUniqueUnits"], 0)
 
+    def test_future_commit_not_persisted_at_cutoff(self):
+        result = gate.evaluate([receipt(committedAt="2026-11-15T10:00:00Z")], T)
+        self.assertEqual(result["eligibleUniqueUnits"], 0)
+        self.assertEqual(result["rejectedByReason"]["FUTURE_KNOWLEDGE"], 1)
+
     def test_duplicate_retry_does_not_inflate(self):
         self.assertEqual(gate.evaluate([receipt(), receipt(receiptId="retry")], T)["eligibleUniqueUnits"], 1)
 
