@@ -83,7 +83,7 @@ class CustomerTradeIntentServiceIT extends AbstractPostgresIT {
         when(readiness.readiness(any(), any()))
             .thenReturn(new CustomerExecutionReadinessService.Readiness(
                 room, mode, "DRAFT", null, false, false, false, false,
-                false, false, List.of("EXECUTION_DISABLED")));
+                false, false, List.of("EXECUTION_DISABLED"), null));
         return new CustomerTradeIntentService(jdbc, new ObjectMapper(), readiness);
     }
 

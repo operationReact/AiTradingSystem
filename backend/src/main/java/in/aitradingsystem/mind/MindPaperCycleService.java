@@ -66,6 +66,8 @@ public class MindPaperCycleService {
     static final BigDecimal RISK_BUDGET_FRACTION = new BigDecimal("0.01");
     static final BigDecimal MAX_EXPOSURE_FRACTION = new BigDecimal("0.20");
     static final BigDecimal MAX_QUOTE_DIVERGENCE = new BigDecimal("0.03");
+    /** Cumulative realized PAPER loss, as a fraction of initial cash, after which new entries stop. */
+    static final BigDecimal MAX_DRAWDOWN_FRACTION = new BigDecimal("0.03");
     private static final Duration MAX_TICK_AGE = Duration.ofSeconds(15);
     private static final List<String> FILL_CAPABILITIES = List.of("engine.data-gate",
         "engine.strategy-eval", "engine.risk-gates", "engine.strategy-to-paper",
@@ -219,6 +221,18 @@ public class MindPaperCycleService {
             d.reasons.add("MARKET_SESSION_CLOSED");
             return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.QUOTE_UNAVAILABLE, null);
         }
+
+        // 3a. Kill switch: the global PAPER emergency stop and a cumulative drawdown limit block NEW entries.
+        // Exits are never blocked by this gate, so a halted account can still close positions.
+        if ("BUY".equals(side)) {
+            String halt = killSwitchReason(owner, roomId);
+            if (halt != null) {
+                d.stage("KILL_SWITCH", "BLOCKED", halt);
+                d.reasons.add(halt.startsWith("GLOBAL_EMERGENCY_STOP") ? "GLOBAL_EMERGENCY_STOP" : "DRAWDOWN_KILL_SWITCH");
+                return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
+            }
+            d.stage("KILL_SWITCH", "PASSED", "No global emergency stop; drawdown within limit");
+        }
         MarketLastTickStore.LastTick tick = freshTick(instrumentId, now);
         if (tick == null) {
             d.stage("QUOTE", "BLOCKED", "No verified tick within 15s");
@@ -342,6 +356,27 @@ public class MindPaperCycleService {
     }
 
     // ------------------------------------------------------------------ policy
+
+    /** Returns the blocking reason for new entries, or null when entries may proceed. Fails closed on read errors. */
+    String killSwitchReason(UUID owner, UUID roomId) {
+        Boolean halted = jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1")
+            .query(Boolean.class).single();
+        if (Boolean.TRUE.equals(halted)) {
+            return "GLOBAL_EMERGENCY_STOP: new PAPER orders are halted";
+        }
+        CustomerPaperWalletService.PaperWallet wallet = wallets.get(owner, roomId);
+        return drawdownReason(wallet.initialCashPaise(), wallet.realizedPnlPaise());
+    }
+
+    /** Pure drawdown rule: a realized loss at or beyond MAX_DRAWDOWN_FRACTION of initial cash blocks entries. */
+    static String drawdownReason(long initialCashPaise, long realizedPnlPaise) {
+        BigDecimal floor = BigDecimal.valueOf(initialCashPaise).multiply(MAX_DRAWDOWN_FRACTION).negate();
+        if (BigDecimal.valueOf(realizedPnlPaise).compareTo(floor) <= 0) {
+            return "DRAWDOWN_KILL_SWITCH: realized PAPER loss reached the "
+                + MAX_DRAWDOWN_FRACTION.movePointRight(2).stripTrailingZeros().toPlainString() + "% drawdown limit";
+        }
+        return null;
+    }
 
     static int size(long initialCashPaise, long availableCashPaise, BigDecimal limit, BigDecimal stop) {
         if (limit == null || limit.signum() <= 0) return 0;

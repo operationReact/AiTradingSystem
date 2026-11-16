@@ -1,5 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
+import in.aitradingsystem.execution.TradingExecutionAuthority;
+import org.springframework.beans.factory.annotation.Autowired;
 import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.provider.angelone.CustomerAngelOneSessionService;
@@ -22,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class CustomerExecutionReadinessService {
     private final JdbcClient jdbc;
+    private final TradingExecutionAuthority authority;
     private final CustomerAngelOneSessionService broker;
     private final CustomerUpstoxOAuthService upstox;
     private final InstrumentMasterService instruments;
@@ -29,6 +32,15 @@ public class CustomerExecutionReadinessService {
     public CustomerExecutionReadinessService(
             JdbcClient jdbc, CustomerAngelOneSessionService broker,
             CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments) {
+        this(jdbc, broker, upstox, instruments, new TradingExecutionAuthority(jdbc));
+    }
+
+    @Autowired
+    public CustomerExecutionReadinessService(
+            JdbcClient jdbc, CustomerAngelOneSessionService broker,
+            CustomerUpstoxOAuthService upstox, InstrumentMasterService instruments,
+            TradingExecutionAuthority authority) {
+        this.authority = authority;
         this.jdbc = jdbc;
         this.broker = broker;
         this.upstox = upstox;
@@ -39,7 +51,11 @@ public class CustomerExecutionReadinessService {
                             String selectedBroker, boolean brokerConnected, boolean virtualCashReady,
                             boolean accountWideRiskReady, boolean brokerExecutionApproved,
                             boolean marketDataVerified, boolean executionEnabled,
-                            List<String> blockers) {}
+                            List<String> blockers, GlobalAutomation globalAutomation) {
+
+        /** Read-only global PAPER automation state. Customers can see it; nothing here changes it. */
+        public record GlobalAutomation(String tradingMode, String orderExecutionMode, boolean automatedPaper) {}
+    }
 
     public record Preflight(UUID roomId, String mode, long instrumentId,
                             String tradingSymbol, String exchange, String side,
@@ -114,7 +130,14 @@ public class CustomerExecutionReadinessService {
         // application flags, UI state, or client-supplied claims.
         blockers.add("EXECUTION_DISABLED");
         return new Readiness(roomId, room.mode(), room.status(), selected, connected, paperFunded,
-                false, false, false, false, List.copyOf(blockers));
+                false, false, false, false, List.copyOf(blockers), globalAutomation());
+    }
+
+    private Readiness.GlobalAutomation globalAutomation() {
+        TradingExecutionAuthority.Snapshot snapshot = authority.current();
+        return new Readiness.GlobalAutomation(snapshot.tradingMode(),
+                snapshot.orderExecutionMode() == null ? null : snapshot.orderExecutionMode().name(),
+                snapshot.automatedPaper());
     }
 
     /**
