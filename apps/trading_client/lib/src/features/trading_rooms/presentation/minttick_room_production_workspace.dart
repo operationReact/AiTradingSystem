@@ -738,6 +738,22 @@ class _MintTickRoomProductionWorkspaceState
         'come from authorized server decisions; nothing is inferred here.'),
       Text('Preflight blockers: ${read?.blockers.length ?? 'not verified'}',
         style: type.labelSmall),
+      // The server already provides the exact reasons. Never show only a
+      // count or turn an unverified broker/risk state into a green indicator.
+      for (final blocker in read?.blockers ?? const <String>[])
+        Padding(
+          padding: const EdgeInsets.only(top: 7),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              blocker.replaceAll('_', ' '),
+              key: ValueKey('mind-preflight-blocker-$blocker'),
+              style: type.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
       const SizedBox(height: 8),
       OutlinedButton(
         onPressed: widget.onRefresh,

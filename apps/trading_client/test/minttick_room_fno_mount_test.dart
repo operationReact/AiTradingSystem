@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/data/authenticated_api_client.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_paper_fno_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_execution_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/domain/trading_room_draft.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_paper_fno_panel.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_room_production_workspace.dart';
@@ -94,5 +95,38 @@ void main() {
   testWidgets('without a repository the PAPER room shows no F&O section', (tester) async {
     await pumpRoom(tester, _paperRoom);
     expect(find.byType(MintTickPaperFnoPanel), findsNothing);
+  });
+
+  testWidgets('Mind lists actual backend preflight reasons rather than only a count',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(900, 2600);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const readiness = CustomerExecutionReadiness(
+      roomId: 'room-1',
+      mode: 'PAPER',
+      roomStatus: 'PAPER_FUNDED',
+      brokerConnected: false,
+      virtualCashReady: true,
+      executionEnabled: false,
+      blockers: ['BROKER_AUTH_REQUIRED', 'QUOTE_NOT_FRESH'],
+    );
+    await tester.pumpWidget(MaterialApp(home: MintTickRoomProductionWorkspace(
+      room: _paperRoom,
+      readiness: readiness,
+      onBack: () {},
+      onRefresh: () async {},
+      onFundPaper: () async {},
+      onSelectBroker: (_) async {},
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mind').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Preflight blockers: 2'), findsOneWidget);
+    expect(find.text('BROKER AUTH REQUIRED'), findsOneWidget);
+    expect(find.text('QUOTE NOT FRESH'), findsOneWidget);
+    expect(find.text('READY'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 }
