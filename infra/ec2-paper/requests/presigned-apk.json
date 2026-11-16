@@ -11,5 +11,6 @@
   "bucket": "aitrading-paper-releases-098859530205",
   "object": "releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk",
   "expiry_seconds": 2700,
-  "authorization": "USER_REQUESTED_DIRECT_APK_2026-11-16"
+  "authorization": "USER_REQUESTED_DIRECT_APK_2026-11-16",
+  "attempt": 2
 }
