@@ -35,7 +35,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno/sandbox")
-public final class CustomerFnoSyntheticSandboxController {
+public class CustomerFnoSyntheticSandboxController {
     private static final int LOT_SIZE = 10;
     private static final List<Contract> CONTRACTS = List.of(
         new Contract("SIM_FNO_CE", "Synthetic CALL (practice)", "CE", LOT_SIZE,
