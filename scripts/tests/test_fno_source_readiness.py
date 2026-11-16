@@ -28,7 +28,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
         self.assertEqual(d["environment"],"PAPER")
         self.assertEqual(d["operation"],"probe-upstox-nifty-options-read-only")
         self.assertEqual(d["backend_release"],
-                         "4084238ffac0206a8acfbdaa24f9ad06d0a67554")
+                         "7d1fd416b12e8d73438a4eab3cc09f3065ae7efc")
         self.assertEqual(len(d),10)
 
     def test_counts_are_accepted_without_any_quote_values(self):
