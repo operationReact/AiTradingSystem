@@ -14,6 +14,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
     private final JdbcTemplate jdbc;
     private final Clock clock;
 
+    @Autowired
     public UpstoxGoldenHistoricalProvider(UpstoxAnalyticsSource source,
             GoldenSourceRightsRepository rights, JdbcTemplate jdbc) {
         this(source, rights, jdbc, Clock.systemUTC());
