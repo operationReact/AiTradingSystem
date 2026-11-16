@@ -7,11 +7,25 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 class CustomerPaperFnoFeatureGateTest {
     @Test
-    void ordersAreNotConstructedWithoutBothPaperAndV3Feed() {
+    void realOptionsReadOnlyV3FeedIsIndependentOfPaperExecution() {
+        var market = CustomerPaperFnoMarketController.class
+            .getAnnotation(ConditionalOnProperty.class);
+        assertThat(market).isNotNull();
+        assertThat(market.name()).containsExactly("minttick.upstox-fno.v3-feed-enabled");
+        assertThat(market.havingValue()).isEqualTo("true");
+        // This controller is read-only; never route orders or mark
+        // nonexistent exchange entitlements as verified.
+        assertThat(java.util.Arrays.stream(
+                CustomerPaperFnoMarketController.class.getDeclaredMethods())
+            .noneMatch(m -> m.isAnnotationPresent(
+                org.springframework.web.bind.annotation.PostMapping.class))).isTrue();
+    }
+
+    @Test
+    void ordersStillRequireBothPaperAndRealV3Feed() {
         for (var type : new Class<?>[]{
                 CustomerPaperFnoOrderService.class,
-                CustomerPaperFnoOrderController.class,
-                CustomerPaperFnoMarketController.class}) {
+                CustomerPaperFnoOrderController.class}) {
             var annotation = type.getAnnotation(ConditionalOnProperty.class);
             assertThat(annotation).as(type.getSimpleName()).isNotNull();
             assertThat(annotation.name()).containsExactlyInAnyOrder(
