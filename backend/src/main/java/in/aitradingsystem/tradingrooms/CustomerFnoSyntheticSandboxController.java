@@ -94,7 +94,8 @@ public class CustomerFnoSyntheticSandboxController {
         // Serializes all sandbox submissions for this room on the funded room's
         // existing wallet row. We NEVER modify that normal PAPER wallet.
         Funded funded = requireFunded(owner, roomId, true);
-        if (funded.halted()) throw reject(HttpStatus.CONFLICT, "PAPER room is paused");
+        // Practice balance is completely separate from the exchange-backed
+        // PAPER wallet; its default halted flag does not control training.
 
         jdbc.sql("""
             INSERT INTO customer_fno_sandbox_account
