@@ -58,6 +58,9 @@ public class CanonicalManifestReceiptSummary {
                    AND c.status = 'VERIFIED'
                    AND c.expected_records > 0
                    AND c.valid_records = c.expected_records
+                   AND c.first_available_at IS NOT NULL
+                   AND c.last_available_at IS NOT NULL
+                   AND c.first_available_at <= c.last_available_at
                    AND c.last_available_at <= ?
                    AND EXISTS (
                        SELECT 1 FROM golden_dataset_object_manifest m
@@ -65,6 +68,8 @@ public class CanonicalManifestReceiptSummary {
                           AND m.layer = 'BRONZE'
                           AND m.object_sha256 = c.dataset_digest
                           AND m.object_uri = c.archive_uri
+                          AND m.published_at IS NOT NULL
+                          AND m.published_at >= c.last_available_at
                           AND m.published_at <= ?
                    )
                  GROUP BY p.provider_code, j.source_domain
