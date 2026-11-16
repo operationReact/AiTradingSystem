@@ -25,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
  * NOT claim that its balance can be reconciled from F&O fills alone.
  */
 @Service
-public final class CustomerPaperFnoReconciliationService {
+public class CustomerPaperFnoReconciliationService {
     private static final int MAX_ROWS=5000;
     private static final BigDecimal PAISA=BigDecimal.valueOf(100);
 
