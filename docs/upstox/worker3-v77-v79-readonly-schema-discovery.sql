@@ -20,11 +20,20 @@ WHERE table_schema='public'
   AND table_name IN ('golden_data_provider','golden_source_rights_receipt',
                      'golden_dataset_backfill_job','golden_dataset_backfill_chunk')
 ORDER BY table_name, ordinal_position;
--- Migration evidence is separate from table presence; output is metadata only.
-SELECT installed_rank, version, description, success
-FROM flyway_schema_history
-WHERE version IN ('77','78','79')
-ORDER BY installed_rank;
+-- Migration evidence is separate from table presence. Fail closed without
+-- assuming Flyway history is in public or even installed. This query never
+-- references an absent relation and therefore cannot abort the audit.
+SELECT n.nspname AS history_schema, c.relname AS history_table,
+       CASE WHEN c.oid IS NULL THEN 'MIGRATION_HISTORY_MISSING'
+            ELSE 'MIGRATION_HISTORY_PRESENT_REQUIRES_REVIEW' END AS migration_state
+FROM (SELECT 1) anchor
+LEFT JOIN pg_catalog.pg_class c
+  ON c.relname = 'flyway_schema_history' AND c.relkind IN ('r','p')
+LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace;
+-- Only after reviewing the actual history schema, separately inspect
+-- V77-V79 success rows using the approved read-only role. Absence or failure
+-- of any migration means UNKNOWN, never VERIFIED. Do not infer migration
+-- success from table presence or from this preflight alone.
 -- STOP if any expected table or migration is absent/failed.
 -- Rights review must confirm domain, permitted use and valid-at timestamps
 -- before counting any status=VERIFIED partition. A job count is not coverage.
