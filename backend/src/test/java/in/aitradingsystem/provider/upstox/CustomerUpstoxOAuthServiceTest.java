@@ -257,6 +257,58 @@ class CustomerUpstoxOAuthServiceTest {
     }
 
     @Test
+    void verifiedOwnerProfileReportsOnlyNfoEntitlementNotTradingApproval() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\","
+            + "\"is_active\":true,\"exchanges\":[\"NSE\",\"NFO\"],"
+            + "\"products\":[\"D\",\"I\"],\"order_types\":[\"LIMIT\",\"MARKET\"]}"));
+        var result = service.fnoEntitlement(owner);
+        assertThat(result.supportsLongOptionLimits()).isTrue();
+        assertThat(result.nfoEnabled()).isTrue();
+        assertThat(result.status()).isEqualTo("UPSTOX_NFO_PROFILE_VERIFIED");
+        assertThat(service.status(owner).orderExecutionEnabled()).isFalse();
+        assertThat(result.toString()).doesNotContain("private-token");
+        verify(api, times(1)).profile("private-token");
+    }
+
+    @Test
+    void missingNfoOrMismatchedOwnerCannotClaimSegmentPermission() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"UP123456\",\"is_active\":true,"
+            + "\"exchanges\":[\"NSE\"],\"products\":[\"D\"],\"order_types\":[\"LIMIT\"]}"));
+        assertThat(service.fnoEntitlement(owner).supportsLongOptionLimits()).isFalse();
+        assertThat(service.fnoEntitlement(owner).status()).isEqualTo("UPSTOX_NFO_NOT_ENABLED");
+        when(api.profile("private-token")).thenReturn(mapper.readTree(
+            "{\"broker\":\"UPSTOX\",\"user_id\":\"OTHER\",\"is_active\":true,"
+            + "\"exchanges\":[\"NFO\"],\"products\":[\"I\"],\"order_types\":[\"LIMIT\"]}"));
+        assertThat(service.fnoEntitlement(owner).status()).isEqualTo("UPSTOX_PROFILE_UNVERIFIED");
+        assertThat(service.fnoEntitlement(UUID.randomUUID()).connected()).isFalse();
+    }
+
+    @Test
+    void expiredBrokerProfileRevokesSessionAndFailCloses() throws Exception {
+        UUID owner = UUID.randomUUID();
+        var service = service();
+        service.connectOwnerTotp(owner, mapper.readTree(
+            "{\"access_token\":\"private-token\",\"broker\":\"UPSTOX\","
+            + "\"user_id\":\"UP123456\",\"is_active\":true}"));
+        when(api.profile("private-token"))
+            .thenThrow(new UpstoxProviderException("UPSTOX_SESSION_EXPIRED"));
+        assertThat(service.fnoEntitlement(owner).supportsLongOptionLimits()).isFalse();
+        assertThat(service.status(owner).connected()).isFalse();
+    }
+
+    @Test
     void newOAuthAttemptInvalidatesAnOlderPendingState() {
         UUID customer = UUID.randomUUID();
         var service = service();

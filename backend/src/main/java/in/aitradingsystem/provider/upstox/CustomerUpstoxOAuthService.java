@@ -77,6 +77,20 @@ public class CustomerUpstoxOAuthService {
     }
     public record AccountData(String provider, Instant fetchedAt, JsonNode data) {}
 
+    /**
+     * Broker-reported NFO entitlement only. A positive result is NOT an
+     * authorization to execute a trade: fixed egress IP, available margin,
+     * contract freshness, owner consent and reconciliation remain separate.
+     */
+    public record FnoEntitlement(boolean connected, boolean nfoEnabled,
+            boolean limitEnabled, boolean intradayEnabled,
+            boolean carryforwardEnabled, String status) {
+        public boolean supportsLongOptionLimits() {
+            return connected && nfoEnabled && limitEnabled
+                && (intradayEnabled || carryforwardEnabled);
+        }
+    }
+
     public StartResponse start(UUID customerId) {
         if (!props.configured()) {
             throw new UpstoxProviderException("UPSTOX_APP_NOT_CONFIGURED");
@@ -215,6 +229,54 @@ public class CustomerUpstoxOAuthService {
     public AccountData positions(UUID user) { return read(user, api::positions); }
     public AccountData orders(UUID user) { return read(user, api::orders); }
     public AccountData staticIps(UUID user) { return read(user, api::staticIps); }
+
+    /**
+     * Read the authenticated Upstox profile on demand, never from app-level
+     * Analytics credentials or a caller-provided account claim. Only sanitized
+     * booleans are returned; tokens and raw profile data are never exposed.
+     */
+    public FnoEntitlement fnoEntitlement(UUID customerId) {
+        BrokerSession session = validSession(customerId);
+        if (session == null) {
+            return new FnoEntitlement(false, false, false, false, false,
+                "UPSTOX_NOT_CONNECTED");
+        }
+        try {
+            JsonNode profile = api.profile(session.accessToken());
+            if (profile == null || !profile.isObject()
+                    || !"UPSTOX".equalsIgnoreCase(profile.path("broker").asText(""))
+                    || !session.brokerUserId().equals(profile.path("user_id").asText(""))
+                    || !profile.path("is_active").asBoolean(false)) {
+                return new FnoEntitlement(true, false, false, false, false,
+                    "UPSTOX_PROFILE_UNVERIFIED");
+            }
+            boolean nfo = hasProfilePermission(profile, "exchanges", "NFO");
+            boolean limit = hasProfilePermission(profile, "order_types", "LIMIT");
+            boolean intraday = hasProfilePermission(profile, "products", "I");
+            boolean carryforward = hasProfilePermission(profile, "products", "D");
+            String status = !nfo ? "UPSTOX_NFO_NOT_ENABLED"
+                : !limit ? "UPSTOX_LIMIT_NOT_ENABLED"
+                : !intraday && !carryforward ? "UPSTOX_FNO_PRODUCT_NOT_ENABLED"
+                : "UPSTOX_NFO_PROFILE_VERIFIED";
+            return new FnoEntitlement(true, nfo, limit, intraday, carryforward, status);
+        } catch (UpstoxProviderException unavailable) {
+            if ("UPSTOX_SESSION_EXPIRED".equals(unavailable.code())) {
+                sessions.remove(customerId, session);
+            }
+            return new FnoEntitlement(false, false, false, false, false,
+                "UPSTOX_PROFILE_UNAVAILABLE");
+        }
+    }
+
+    private static boolean hasProfilePermission(JsonNode profile, String field,
+            String expected) {
+        JsonNode values = profile.path(field);
+        if (!values.isArray() || values.size() > 64) return false;
+        for (JsonNode value : values) {
+            if (value.isTextual() && expected.equals(value.asText())) return true;
+        }
+        return false;
+    }
 
     private AccountData read(UUID customerId, BrokerRead operation) {
         BrokerSession session = validSession(customerId);

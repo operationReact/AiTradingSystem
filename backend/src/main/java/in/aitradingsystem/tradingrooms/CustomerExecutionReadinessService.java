@@ -70,6 +70,12 @@ public class CustomerExecutionReadinessService {
             ? selectedLiveBroker(owner, roomId) : null;
         boolean connected = "LIVE".equals(room.mode())
             && selected != null && brokerConnected(owner, selected);
+        // Profile exchanges/products/order_types are verified with the owner's
+        // active OAuth session. The platform Analytics token is not a trading
+        // authorization, and profile permission is not permission to dispatch.
+        CustomerUpstoxOAuthService.FnoEntitlement fnoProfile =
+            connected && "UPSTOX".equals(selected) && !"EQUITY".equals(room.marketScope())
+                ? upstox.fnoEntitlement(owner) : null;
         List<String> blockers = new ArrayList<>();
         if ("PAPER".equals(room.mode())) {
             if (!paperFunded || !"PAPER_FUNDED".equals(room.status())) {
@@ -95,7 +101,10 @@ public class CustomerExecutionReadinessService {
                 // LIVE room creation is an intent, never a permission grant.
                 // F&O requires a segment-authorized account and separate
                 // F&O order adapter/margin controls before any broker action.
-                blockers.add("FNO_BROKER_SEGMENT_PERMISSION_NOT_VERIFIED");
+                if (fnoProfile == null || !fnoProfile.supportsLongOptionLimits()) {
+                    blockers.add("FNO_BROKER_SEGMENT_PERMISSION_NOT_VERIFIED");
+                    if (fnoProfile != null) blockers.add(fnoProfile.status());
+                }
                 blockers.add("FNO_CONTRACT_MARGIN_AND_RISK_NOT_VERIFIED");
                 blockers.add("FNO_LIVE_ORDER_ADAPTER_NOT_ENABLED");
             }
