@@ -10,6 +10,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -56,7 +57,9 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
                 GoldenSourceRightsRepository.Use.RAW_RETENTION, clock.instant())) {
             throw new IllegalStateException("UPSTOX_HISTORICAL_RIGHTS_OR_SOURCE_DISABLED");
         }
-        if (request.listingId() == null || request.fromDate() == null
+        if (request.jobId() == null || request.chunkId() == null
+                || request.listingId() == null || request.intervalName() == null
+                || request.fromDate() == null
                 || request.throughDate() == null || request.fromDate().isAfter(request.throughDate())
                 || request.maxBytes() < 1 || request.maxBytes() > 32 * 1024 * 1024) {
             throw new IllegalArgumentException("INVALID_UPSTOX_GOLDEN_WINDOW");
@@ -79,9 +82,10 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
 
         // A provider token is only an episode-bounded alias. Both ends of the
         // requested window must be covered, with no ambiguity or future evidence.
-        Instant start = request.fromDate().atStartOfDay(ZoneOffset.UTC).toInstant();
+        ZoneId exchangeZone = ZoneId.of("Asia/Kolkata");
+        Instant start = request.fromDate().atStartOfDay(exchangeZone).toInstant();
         Instant endExclusive = request.throughDate().plusDays(1)
-                .atStartOfDay(ZoneOffset.UTC).toInstant();
+                .atStartOfDay(exchangeZone).toInstant();
         List<String> aliases = jdbc.query("""
                 SELECT a.provider_token
                   FROM golden_provider_symbol_alias a
