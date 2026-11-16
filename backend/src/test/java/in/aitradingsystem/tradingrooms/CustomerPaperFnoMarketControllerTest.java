@@ -147,6 +147,25 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
+    void marketResponseReflectsVerifiedPaperUsePermissionWithoutGrantingLive() {
+        var time = Instant.parse("2026-11-17T04:01:00Z");
+        var rows = CustomerPaperFnoMarketController.select(
+            List.of(contract(CE, "CE", "25000"), contract(PE, "PE", "25000")),
+            chain(), live, false, true);
+        var permitted = CustomerPaperFnoMarketController.marketResponse(
+            EXPIRY, time, "MARKET_CLOSED", true, true, rows);
+        assertThat(permitted.displayRightsVerified()).isTrue();
+        assertThat(permitted.trainingRightsVerified()).isTrue();
+        assertThat(permitted.liveOrderEnabled()).isFalse();
+        assertThat(permitted.strikes().getFirst().call().paperEligible()).isFalse();
+
+        var denied = CustomerPaperFnoMarketController.marketResponse(
+            EXPIRY, time, "MARKET_CLOSED", true, false, rows);
+        assertThat(denied.trainingRightsVerified()).isFalse();
+        assertThat(denied.liveOrderEnabled()).isFalse();
+    }
+
+    @Test
     void realNseOptionsReadOnlyRequiresV3WithoutRequiringPaperOrders() {
         var flag=CustomerPaperFnoMarketController.class.getAnnotation(
             ConditionalOnProperty.class);
