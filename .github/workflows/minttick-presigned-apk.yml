@@ -60,7 +60,7 @@ jobs:
             "object":"releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk",
             "expiry_seconds":2700,
             "authorization":"USER_REQUESTED_DIRECT_APK_2026-11-16",
-            "attempt":2,
+            "attempt":3,
           }
           if actual!=expected:
             raise SystemExit("Denied: unreviewed direct APK approval")
@@ -106,7 +106,10 @@ jobs:
           mkdir -p result
           # AWS CLI may otherwise sign S3 URLs with a legacy signature variant.
           aws configure set default.s3.signature_version s3v4
-          url="$(aws s3 presign "s3://$BUCKET/$OBJECT" --region ap-south-1 --expires-in 2700)"
+          # Release bucket was created by the us-east-1 bootstrap stack;
+          # a Mumbai-signed URL yields S3 HTTP 301 PermanentRedirect XML.
+          url="$(aws s3 presign "s3://$BUCKET/$OBJECT" --region us-east-1 \
+            --endpoint-url https://s3.us-east-1.amazonaws.com --expires-in 2700)"
           export URL_CHECK="$url"
           python3 - <<'PY'
           import os
