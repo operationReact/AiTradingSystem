@@ -1,8 +1,8 @@
 {
-  "instance_id": "i-09c01b470fb39b85a",
-  "region": "ap-south-1",
+  "application": "MintTick",
   "aws_account": "098859530205",
   "environment": "paper",
+  "instance_id": "i-09c01b470fb39b85a",
   "operation": "read-only-broker-readiness",
-  "application": "MintTick"
+  "region": "ap-south-1"
 }
