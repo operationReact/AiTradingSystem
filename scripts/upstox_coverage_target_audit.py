@@ -52,7 +52,7 @@ def audit(m):
         keys = []
         # A listing episode must be observable by the reviewed universe snapshot.
         # Future-starting episodes cannot enter an as-of denominator.
-        if any(dt.date.fromisoformat(item["active_from"]) > asof for item in listings):
+        if any(start <= dt.date.fromisoformat(item["active_from"]) <= end\n               and dt.date.fromisoformat(item["active_from"]) > asof for item in listings):
             raise ValueError("future listing relative to universe snapshot")
         for item in listings:
             if (not isinstance(item, dict) or any(
