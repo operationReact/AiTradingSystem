@@ -25,6 +25,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
@@ -67,6 +68,7 @@ public final class CustomerUpstoxFnoLiveOrderService {
     private record Room(String focus, long plannedBudgetInr, String broker) {}
     private record Claimed(boolean created, Receipt receipt) {}
 
+    @Autowired
     public CustomerUpstoxFnoLiveOrderService(JdbcClient jdbc,
             CustomerUpstoxOAuthService broker, UpstoxAnalyticsSource source,
             ObjectProvider<UpstoxFnoV3LiveFeedService> feeds,
@@ -106,6 +108,54 @@ public final class CustomerUpstoxFnoLiveOrderService {
             """)
             .param("owner", owner).param("room", roomId)
             .query((rs,n) -> receipt(rs)).list();
+    }
+
+    /** Safe server-derived capability, independent of any PAPER order rights. */
+    public record Capability(boolean configured, boolean brokerConnected,
+            boolean nfoPermissionVerified, boolean registeredIpMatches,
+            boolean contractSourceReady, boolean sessionOpen,
+            int freshExchangeTimedQuotes, boolean eligibleForOrderPreflight,
+            List<String> reasons) {
+        public Capability { reasons = List.copyOf(reasons); }
+    }
+
+    public Capability capability(UUID owner, UUID roomId) {
+        Room room = requireRoom(owner, roomId);
+        boolean flag = environment.getProperty(
+            "minttick.upstox-fno.live-order-enabled", Boolean.class, false);
+        boolean connected = false, nfo = false, ip = false;
+        try {
+            connected = "UPSTOX".equals(room.broker()) && broker.status(owner).connected();
+            if (connected) {
+                var entitlement = broker.fnoEntitlement(owner);
+                nfo = entitlement.supportsLongOptionLimits()
+                    && ("INTRADAY".equals(room.focus())
+                        ? entitlement.intradayEnabled()
+                        : "SWING".equals(room.focus())
+                            && entitlement.carryforwardEnabled());
+                ip = UpstoxRegisteredIpAssessment.assess(
+                    broker.staticIps(owner).data()).registrationMatchesEc2();
+            }
+        } catch (RuntimeException unavailable) {
+            // Customer sees only fixed booleans. No provider details or tokens.
+        }
+        boolean sourceReady = source.enabled();
+        var feed = feeds.getIfAvailable();
+        int fresh = feed == null ? 0 : Math.max(0,
+            feed.status().freshExchangeTimedQuotes());
+        boolean sessionOpen = calendar.isInsideCashSession(clock.instant());
+        boolean eligible = flag && connected && nfo && ip
+            && sourceReady && fresh > 0 && sessionOpen;
+        java.util.ArrayList<String> reasons = new java.util.ArrayList<>();
+        if (!flag) reasons.add("LIVE_ORDER_POLICY_NOT_ACTIVATED");
+        if (!connected) reasons.add("OWNER_UPSTOX_SESSION_NOT_CONNECTED");
+        if (!nfo) reasons.add("OWNER_NFO_LIMIT_PRODUCT_NOT_VERIFIED");
+        if (!ip) reasons.add("BROKER_STATIC_IP_NOT_MATCHED");
+        if (!sourceReady) reasons.add("NFO_LISTING_SOURCE_UNAVAILABLE");
+        if (fresh == 0) reasons.add("NO_FRESH_EXCHANGE_TIMED_OPTION_QUOTES");
+        if (!sessionOpen) reasons.add("NFO_SESSION_CLOSED");
+        return new Capability(flag, connected, nfo, ip, sourceReady,
+            sessionOpen, fresh, eligible, reasons);
     }
 
     /**
@@ -209,11 +259,9 @@ public final class CustomerUpstoxFnoLiveOrderService {
                 throw error(HttpStatus.CONFLICT, "Broker has no sufficient long option units");
             }
         } else {
-            BigDecimal margin = broker.funds(owner).data()
-                    .path("equity").path("available_margin").isNumber()
-                ? broker.funds(owner).data().path("equity")
-                    .path("available_margin").decimalValue()
-                : null;
+            JsonNode marginNode = broker.funds(owner).data()
+                .path("equity").path("available_margin");
+            BigDecimal margin = marginNode.isNumber() ? marginNode.decimalValue() : null;
             // Hard <= one-third room budget, <= Rs 25k pilot premium, and
             // <= 80% of actual broker-reported margin. No client cash claims.
             BigDecimal budget = BigDecimal.valueOf(room.plannedBudgetInr())
