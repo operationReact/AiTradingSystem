@@ -9,5 +9,6 @@
   "expected_signer_sha256": "7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
   "authorization": "USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-16",
   "bucket": "minttick-web-098859530205-us-east-1",
-  "object_key": "downloads/MintTick-dev-synthetic-options-2026-11-16.apk"
+  "object_key": "downloads/MintTick-dev-synthetic-options-2026-11-16.apk",
+  "publication_attempt": 2
 }
