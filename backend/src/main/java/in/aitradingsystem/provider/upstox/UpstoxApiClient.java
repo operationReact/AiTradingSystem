@@ -206,6 +206,18 @@ public class UpstoxApiClient {
         return get(token, "/v2/user/ip");
     }
 
+    /**
+     * Provider-authoritative one-day order history. The unique tag is
+     * allowlisted before becoming a URI query parameter; no arbitrary broker
+     * URL is ever accepted. An empty broker result is NOT proof of rejection.
+     */
+    public JsonNode orderHistoryByTag(String token, String tag) {
+        if (tag == null || !tag.matches("[A-Za-z0-9_-]{8,20}")) {
+            throw new UpstoxProviderException("UPSTOX_ORDER_TAG_INVALID");
+        }
+        return get(token, "/v2/order/history?tag=" + tag);
+    }
+
     private JsonNode get(String token, String fixedPath) {
         if (token == null || token.isBlank()) {
             throw new UpstoxProviderException("UPSTOX_NOT_CONNECTED");
