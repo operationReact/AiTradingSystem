@@ -161,8 +161,23 @@ public class CustomerPaperFnoMarketController {
                 s.call().quoteFresh()||s.put().quoteFresh());
         String status=!marketOpen?"MARKET_CLOSED":hasFresh?"FRESH_QUOTES":"NO_FRESH_QUOTES";
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-            .body(new Market(UNDERLYING,expiry,"UPSTOX_ANALYTICS",status,
-                chain.retrievedAt(),false,true,false,false,strikes));
+            .body(marketResponse(expiry, chain.retrievedAt(), status,
+                displayAllowed, paperAllowed, strikes));
+    }
+
+    /**
+     * Surface the independently verified customer permission state, not a
+     * hard-coded false that hides available PAPER trading once rights and
+     * server-side execution have actually been enabled. This never grants
+     * permission: the real order controller and service still enforce their
+     * own feature, ownership, quote freshness and risk gates.
+     */
+    static Market marketResponse(LocalDate expiry, Instant snapshotAt,
+            String status, boolean displayAllowed, boolean paperAllowed,
+            List<Strike> strikes) {
+        return new Market(UNDERLYING, expiry, "UPSTOX_ANALYTICS",
+            status, snapshotAt, false, displayAllowed, paperAllowed, false,
+            List.copyOf(strikes));
     }
 
     /**
