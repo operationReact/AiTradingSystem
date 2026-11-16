@@ -2,7 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.user.CustomerIdentityStore;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -20,28 +20,27 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno")
-@ConditionalOnProperty(
-    name={"minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled"},
-    havingValue="true")
 public class CustomerPaperFnoReconciliationController {
     private final CustomerPaperFnoReconciliationService reconciliation;
     private final CustomerPaperSharedWalletAuditService walletAudit;
     private final CustomerIdentityStore identities;
+    private final JdbcClient jdbc;
 
     public CustomerPaperFnoReconciliationController(
             CustomerPaperFnoReconciliationService reconciliation,
             CustomerPaperSharedWalletAuditService walletAudit,
-            CustomerIdentityStore identities) {
+            CustomerIdentityStore identities, JdbcClient jdbc) {
         this.reconciliation=reconciliation;
         this.walletAudit=walletAudit;
         this.identities=identities;
+        this.jdbc=jdbc;
     }
 
     @GetMapping("/reconciliation")
     public ResponseEntity<CustomerPaperFnoReconciliationService.Receipt> receipt(
             @PathVariable UUID roomId, Authentication authentication) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(reconciliation.inspect(owner(authentication),roomId));
+                .body(reconciliation.inspect(verifiedOwner(authentication, roomId),roomId));
     }
 
     /** Cash/P&L only; stock and option positions need separate verification. */
@@ -49,7 +48,20 @@ public class CustomerPaperFnoReconciliationController {
     public ResponseEntity<CustomerPaperSharedWalletAuditService.Audit> walletReconciliation(
             @PathVariable UUID roomId, Authentication authentication) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(walletAudit.inspect(owner(authentication),roomId));
+                .body(walletAudit.inspect(verifiedOwner(authentication, roomId),roomId));
+    }
+
+    private UUID verifiedOwner(Authentication authentication, UUID roomId) {
+        UUID owner = owner(authentication);
+        boolean allowed = jdbc.sql("""
+            SELECT EXISTS(SELECT 1 FROM customer_trading_room
+                WHERE id=:room AND user_id=:owner AND mode='PAPER'
+                  AND status='PAPER_FUNDED' AND market_scope IN ('FNO','ALL'))
+            """).param("room", roomId).param("owner", owner)
+            .query(Boolean.class).single();
+        if (!allowed) throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+            "Funded PAPER F&O room not found");
+        return owner;
     }
 
     private UUID owner(Authentication authentication) {

@@ -666,7 +666,7 @@ class AccountProxyTest(unittest.TestCase):
 
     def test_fno_paper_reconciliation_routes_are_authenticated_get_only(self):
         room="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/"
-        for suffix in ("reconciliation", "wallet-reconciliation"):
+        for suffix in ("capability", "reconciliation", "wallet-reconciliation"):
             endpoint=room+suffix
             self.assertTrue(proxy.allowed("GET", endpoint))
             for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
@@ -802,6 +802,47 @@ class AccountProxyTest(unittest.TestCase):
             "/api/admin/market-data/upstox-analytics/fno/live/start"))
         self.assertFalse(proxy.allowed("POST",
             "/api/customer/brokers/upstox/orders"))
+
+    def test_synthetic_sandbox_is_jwt_scoped_and_rejects_live_or_nse_inputs(self):
+        route = ("/api/customer/trading-rooms/"
+                 "12345678-1234-1234-1234-123456789012/paper/fno/sandbox/")
+        self.assertTrue(proxy.allowed("GET", route + "state"))
+        self.assertTrue(proxy.allowed("POST", route + "orders"))
+        for method, suffix in (("POST", "state"), ("GET", "orders"),
+                               ("PUT", "orders"), ("DELETE", "orders"),
+                               ("POST", "live"), ("GET", "market")):
+            self.assertFalse(proxy.allowed(method, route + suffix))
+        valid = {"contractCode": "SIM_FNO_CE", "side": "BUY", "lots": 1}
+        order = event("POST", route + "orders", body=json.dumps(valid))
+        order["headers"]["idempotency-key"] = "synth_safe_0001"
+        with mock.patch.object(proxy.urllib.request, "urlopen", return_value=Reply()) as send:
+            result = proxy.handler(order, None)
+        self.assertEqual(result["statusCode"], 200)
+        send.assert_called_once()
+        sent = send.call_args.args[0]
+        self.assertEqual(sent.get_header("Idempotency-key"), "synth_safe_0001")
+        self.assertNotIn("upstox", sent.full_url.lower())
+        for invalid in (
+            {**valid, "contractCode": "NSE_FO|NIFTY"},
+            {**valid, "contractCode": "SIM_FNO_BAD"},
+            {**valid, "side": "SHORT"},
+            {**valid, "lots": 0},
+            {**valid, "lots": True},
+            {**valid, "lots": 21},
+            {**valid, "expiry": "2026-11-17"},
+        ):
+            attempt = event("POST", route + "orders", body=json.dumps(invalid))
+            attempt["headers"]["idempotency-key"] = "synth_safe_0001"
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                result = proxy.handler(attempt, None)
+            self.assertEqual(result["statusCode"], 400, invalid)
+            send.assert_not_called()
+        unauth = event("POST", route + "orders", jwt={"claims": {}},
+                       body=json.dumps(valid))
+        unauth["headers"]["idempotency-key"] = "synth_safe_0001"
+        with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+            self.assertEqual(proxy.handler(unauth, None)["statusCode"], 401)
+            send.assert_not_called()
 
     def test_template_embeds_identical_reviewed_python_source(self):
         text=Path(__file__).with_name("bootstrap-account-api.yml").read_text()

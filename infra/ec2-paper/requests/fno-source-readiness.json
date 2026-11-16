@@ -5,7 +5,7 @@
   "account": "098859530205",
   "region": "ap-south-1",
   "instance_id": "i-09c01b470fb39b85a",
-  "backend_release": "4084238ffac0206a8acfbdaa24f9ad06d0a67554",
+  "backend_release": "7d1fd416b12e8d73438a4eab3cc09f3065ae7efc",
   "underlying": "NSE_INDEX|Nifty 50",
   "expiry": "2026-11-17",
   "authorization": "OWNER_APPROVED_READ_ONLY_FNO_CHECK_2026_11_14"

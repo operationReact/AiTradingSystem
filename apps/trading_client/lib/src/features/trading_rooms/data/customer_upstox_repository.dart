@@ -89,6 +89,21 @@ class HttpCustomerUpstoxRepository {
   Future<Object?> positions() => _read('positions');
   Future<Object?> orders() => _read('orders');
   Future<Object?> registeredIps() => _read('registered-ips');
+  /// Read-only server-verified comparison. This never changes broker IPs,
+  /// refreshes OAuth or authorizes an order.
+  Future<Object?> registeredIpCheck() async {
+    final data = await api.getJson('$_root/registered-ip-check');
+    if (data is! Map<String, dynamic> ||
+        data['expectedEc2Ip'] != '3.108.130.17' ||
+        !{'REGISTERED_MATCH', 'REGISTERED_MISMATCH',
+          'NOT_REGISTERED', 'UNVERIFIED'}.contains(data['status']) ||
+        data['registrationMatchesEc2'] is! bool ||
+        data['liveExecutionAuthorized'] != false) {
+      throw const FormatException('Invalid broker IP verification response');
+    }
+    return data;
+  }
+
 
   Future<Object?> _read(String endpoint) async {
     final raw = await api.getJson('$_root/$endpoint');

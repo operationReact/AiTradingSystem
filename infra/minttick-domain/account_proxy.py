@@ -85,7 +85,9 @@ UPSTOX_CALLBACK = "/api/customer/brokers/upstox/callback"
 ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
 ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
-PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
+PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
+# Synthetic-only, no NSE_FO keys or broker/provider routes. Separate ledger.
+FNO_SANDBOX = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/sandbox/(state|orders)$")
 READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
 LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/broker-selection$")
 MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
@@ -113,7 +115,7 @@ def paper_fno_allowed(method, path):
     if not PAPER_FNO.fullmatch(path):
         return False
     action = path.rsplit("/", 1)[-1]
-    return ((method == "GET" and action in {"orders", "positions", "market", "expiries", "reconciliation", "wallet-reconciliation"})
+    return ((method == "GET" and action in {"capability", "orders", "positions", "market", "expiries", "reconciliation", "wallet-reconciliation"})
             or (method == "POST" and action == "orders"))
 
 def allowed(method, path):
@@ -129,6 +131,8 @@ def allowed(method, path):
             or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
             or (method == "POST" and path == MIND_ASSISTANT_QUERY)
             or paper_fno_allowed(method, path)
+            or ((method == "GET" and path.endswith("/state")) or
+                (method == "POST" and path.endswith("/orders"))) and bool(FNO_SANDBOX.fullmatch(path))
             or paper_allowed(method, path))
 
 def callback_query_safe(query):
@@ -299,6 +303,22 @@ def handler(event, context):
                 valid = False
             if not valid:
                 return reply(400, {"error": "INVALID_PAPER_ORDER_INPUT"})
+    # Synthetic training orders never accept exchange symbols, real quotes or
+    # LIVE routing. Strictly validate the exact request before forwarding.
+    if method == "POST" and FNO_SANDBOX.fullmatch(path):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        if not isinstance(paper_order_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_SYNTHETIC_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict and set(order) == {"contractCode", "side", "lots"}
+                and order["contractCode"] in ("SIM_FNO_CE", "SIM_FNO_PE")
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and 1 <= order["lots"] <= 20)
+        except (ValueError, TypeError, KeyError, UnicodeError):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_SYNTHETIC_ORDER_INPUT"})
     # NSE_FO PAPER orders require an explicit idempotency key at the customer
     # edge. Previously this route was allowlisted, but silently DROPPED the
     # header, so Spring rejected it. Keep the existing provider/session/rights

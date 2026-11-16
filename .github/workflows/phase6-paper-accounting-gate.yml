@@ -71,7 +71,8 @@ jobs:
 
   browser-e2e:
     name: E2E-P6 fills → positions → ledger → reconciliation — Pro + Clear
-    runs-on: ubuntu-latest
+    # Playwright 1.55 Chromium install does not support ubuntu26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:

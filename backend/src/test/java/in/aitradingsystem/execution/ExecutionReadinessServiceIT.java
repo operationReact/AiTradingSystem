@@ -179,7 +179,7 @@ class ExecutionReadinessServiceIT extends AbstractPostgresIT {
                     id, idempotency_key, request_hash, symbol, side, quantity, reference_price,
                     stop_loss, target_price, signal_generated_at, status, created_at, updated_at,
                     submitted_quantity, filled_quantity, order_type, product_type, instrument_id, exchange, strategy)
-                VALUES (:id, :key, :hash, :symbol, 'BUY', 1, 100, 95, 110, :signal, 'READY', :created, :created,
+                VALUES (:id, :key, :hash, :symbol, 'BUY', 1, 100, 95, 120, :signal, 'READY', :created, :created,
                         1, 0, 'MARKET', 'DELIVERY', :instrumentId, 'NSE', 'PAPER_MANUAL')
                 """)
             .param("id", orderId)

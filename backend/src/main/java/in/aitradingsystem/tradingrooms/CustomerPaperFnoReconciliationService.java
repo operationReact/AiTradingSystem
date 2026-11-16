@@ -10,7 +10,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -26,10 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
  * NOT claim that its balance can be reconciled from F&O fills alone.
  */
 @Service
-@ConditionalOnProperty(
-    name={"minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled"},
-    havingValue="true")
-public final class CustomerPaperFnoReconciliationService {
+public class CustomerPaperFnoReconciliationService {
     private static final int MAX_ROWS=5000;
     private static final BigDecimal PAISA=BigDecimal.valueOf(100);
 
