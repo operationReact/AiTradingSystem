@@ -18,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
  * holdings, fresh quotes, source rights or broker execution.
  */
 @Service
-public final class CustomerPaperSharedWalletAuditService {
+public class CustomerPaperSharedWalletAuditService {
     private static final int MAX_ROWS=5000;
     public record Audit(String status, String scope, Instant checkedAt,
             int equityFills, int optionFills, int initialAllocations,
