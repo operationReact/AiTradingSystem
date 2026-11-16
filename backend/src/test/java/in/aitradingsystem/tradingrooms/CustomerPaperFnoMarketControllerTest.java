@@ -147,11 +147,13 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
-    void requiresIndependentPaperAndV3Flags() {
+    void realNseOptionsReadOnlyRequiresV3WithoutRequiringPaperOrders() {
         var flag=CustomerPaperFnoMarketController.class.getAnnotation(
             ConditionalOnProperty.class);
-        assertThat(flag.name()).containsExactlyInAnyOrder(
-            "minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled");
+        assertThat(flag.name()).containsExactly(
+            "minttick.upstox-fno.v3-feed-enabled");
         assertThat(flag.havingValue()).isEqualTo("true");
+        // Permission to display quotes is checked per authenticated request;
+        // it does not authorize PAPER fills or actual LIVE broker orders.
     }
 }

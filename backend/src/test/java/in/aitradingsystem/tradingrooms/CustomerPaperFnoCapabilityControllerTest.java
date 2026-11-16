@@ -41,6 +41,21 @@ class CustomerPaperFnoCapabilityControllerTest {
     }
 
     @Test
+    void realExchangeQuotesCanBeViewedWithoutEnablingVirtualOrders() {
+        var result = CustomerPaperFnoCapabilityController.assess(
+            "SWING", false, true, true, false);
+        assertThat(result.readOnlyConfigured()).isTrue();
+        assertThat(result.paperConfigured()).isFalse();
+        assertThat(result.liveExecutionAuthorized()).isFalse();
+        assertThat(result.blockerCodes()).containsExactly(
+            "FNO_PAPER_DISABLED", "PAPER_USE_RIGHTS_NOT_VERIFIED");
+        // Without separately verified display rights, even read-only live
+        // NSE data must remain locked.
+        assertThat(CustomerPaperFnoCapabilityController.assess(
+            "SWING", false, true, false, false).readOnlyConfigured()).isFalse();
+    }
+
+    @Test
     void longTermAndUndefinedHorizonNeverAdmitOptionTrading() {
         for (var focus : new String[]{"LONG_TERM", "HELP_ME_CHOOSE", ""}) {
             var result = CustomerPaperFnoCapabilityController.assess(

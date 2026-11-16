@@ -41,9 +41,10 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno")
-@ConditionalOnProperty(
-    name={"minttick.upstox-fno.paper-enabled", "minttick.upstox-fno.v3-feed-enabled"},
-    havingValue="true")
+// Read-only real listed expiries and exchange-LTT V3 quotes are separate from
+// PAPER trading; display permission is checked on every customer request.
+// This controller offers no order placement and cannot enable LIVE brokerage.
+@ConditionalOnProperty(name="minttick.upstox-fno.v3-feed-enabled", havingValue="true")
 public class CustomerPaperFnoMarketController {
     static final String UNDERLYING = "NSE_INDEX|Nifty 50";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
@@ -75,7 +76,12 @@ public class CustomerPaperFnoMarketController {
             CustomerFnoExpiryCatalog expiryCatalog, Environment env) {
         this(jdbc, identities, source, live, calendar, expiryCatalog, Clock.systemUTC(),
             env.getProperty("minttick.upstox-fno.display-rights-verified", Boolean.class, false),
-            env.getProperty("minttick.upstox-fno.paper-usage-rights-verified", Boolean.class, false));
+            // Receiving permitted real quotes never implies PAPER eligibility.
+            // Keep paperEligible false when the PAPER engine is disabled,
+            // even if PAPER-use rights were separately verified.
+            env.getProperty("minttick.upstox-fno.paper-enabled", Boolean.class, false)
+                && env.getProperty("minttick.upstox-fno.paper-usage-rights-verified",
+                    Boolean.class, false));
     }
 
     CustomerPaperFnoMarketController(JdbcClient jdbc,

@@ -224,11 +224,14 @@ void main() {
     }));
     await pump(tester, repo, withExpiry: false);
     expect(find.byKey(const ValueKey('paper-fno-capability-blocked')), findsOneWidget);
-    expect(find.textContaining('not enabled on the server'), findsOneWidget);
+    expect(find.textContaining('Real NSE options PAPER orders are disabled'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-real-only')), findsOneWidget);
+    expect(find.byKey(const ValueKey('synthetic-fno-sandbox')), findsNothing);
+    expect(find.textContaining('Synthetic CALL'), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-historical-counts')), findsOneWidget);
     expect(find.textContaining('1 open positions · 1 recent orders'), findsOneWidget);
     expect(find.textContaining('Bookkeeping: RECONCILED'), findsOneWidget);
-    expect(find.textContaining('New F&O orders remain disabled'), findsOneWidget);
+    expect(find.textContaining('No simulated or broker order can be placed'), findsOneWidget);
     expect(find.text('No virtual F&O orders.'), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
     expect(repo.expiryCalls, 0);
