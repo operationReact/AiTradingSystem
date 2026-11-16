@@ -1,0 +1,101 @@
+name: MintTick - direct signed Android APK download
+on:
+  push:
+    branches: [dev]
+    paths:
+      - infra/minttick-domain/requests/publish-direct-apk.json
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  signed-apk-github-release:
+    name: Verify trusted APK artifact and publish direct download
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    concurrency:
+      group: minttick-direct-apk-release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      TAG: minttick-dev-synthetic-2026-11-16-d7db1f9
+      BUILD_SHA: d7db1f9467073df54c3dca7689665fb1fb17eb46
+      SOURCE_RUN: "43822672920"
+      ARTIFACT_NAME: MintTick-Connected-Android-Test-d7db1f9467073df54c3dca7689665fb1fb17eb46
+      EXPECTED_APK_SHA: 09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda
+      EXPECTED_SIGNER: 7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Guard single approved release request and source metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "operationReact/AiTradingSystem"
+          test "$GITHUB_REF_NAME" = dev
+          python3 - <<'PY'
+          import json, pathlib, subprocess
+          request = json.loads(pathlib.Path('infra/minttick-domain/requests/publish-direct-apk.json').read_text())
+          expected = {
+              "application": "MintTick",
+              "environment": "dev",
+              "operation": "publish-stable-signed-android-github-release",
+              "source_run_id": 43822672920,
+              "source_artifact_id": 14205751562,
+              "source_sha": "d7db1f9467073df54c3dca7689665fb1fb17eb46",
+              "expected_apk_sha256": "09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda",
+              "expected_signer_sha256": "7C65E750C0D1BEB0E700051CCDEB2796F9EF600CF38B29B90BEB94304883904B",
+              "release_tag": "minttick-dev-synthetic-2026-11-16-d7db1f9",
+              "authorization": "USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-16",
+          }
+          if request != expected:
+              raise SystemExit("Denied: unauthorized or changed release request")
+          diff = set(subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+              text=True).splitlines())
+          allowed = {"infra/minttick-domain/requests/publish-direct-apk.json",
+                     ".github/workflows/minttick-direct-apk-release.yml"}
+          if "infra/minttick-domain/requests/publish-direct-apk.json" not in diff or not diff <= allowed:
+              raise SystemExit("Denied: unexpected release diff " + repr(diff))
+          PY
+      - name: Download exact successful stable-signed APK artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$ARTIFACT_NAME" --dir source
+          test -s source/app-release.apk
+          test -f source/app-release.apk.sha256
+          test -f source/app-release.apk.signer.sha256
+      - name: Prove artifact byte-for-byte and pinned signer receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(sha256sum source/app-release.apk | cut -d' ' -f1)"
+          test "$actual" = "$EXPECTED_APK_SHA"
+          test "$(cut -d' ' -f1 source/app-release.apk.sha256)" = "$actual"
+          test "$(tr -d '\r\n' < source/app-release.apk.signer.sha256)" = "$EXPECTED_SIGNER"
+          test "$(stat -c '%s' source/app-release.apk)" = 75423551
+          mkdir -p release
+          cp source/app-release.apk release/MintTick-dev-synthetic-options-2026-11-16.apk
+          echo "Verified signed APK checksum, expected signer receipt and expected size"
+      - name: Publish permanent direct APK link as GitHub prerelease
+        shell: bash
+        run: |
+          set -euo pipefail
+          ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || {
+            echo "Release already exists; refusing to overwrite asset"
+            exit 1
+          }
+          gh release create "$TAG" \
+            "release/MintTick-dev-synthetic-options-2026-11-16.apk" \
+            --repo "$GITHUB_REPOSITORY" --target "$BUILD_SHA" \
+            --title "MintTick dev - synthetic F&O practice APK (16 Nov 2026)" \
+            --notes "Development/testing APK, stable-signed, built from dev SHA d7db1f9. Contains isolated synthetic F&O practice. No real NSE/Upstox PAPER data rights or LIVE broker orders are enabled. Do not treat as live trading readiness. Source release workflow 43822672920, independent APK SHA256 09bbdf22caa297ebc88ba9ab12985cdbd8e8db5e159b46ca2b20c6079681beda." \
+            --prerelease --latest=false
+          echo "DIRECT_APK=https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/MintTick-dev-synthetic-options-2026-11-16.apk" >> "$GITHUB_STEP_SUMMARY"
