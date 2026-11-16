@@ -87,15 +87,19 @@ class CustomerFnoSyntheticSandboxIT extends AbstractPostgresIT {
     }
 
     @Test
-    void rejectsUnknownContractOversellAndPausedRoom() {
+    void rejectsUnknownContractOversellAndDoesNotChangeRealPaperPause() {
         UUID user=customer(),room=room(user,"FNO");
         wallets.activate(user,room);
         var app=controller(user);
         reject(app,room,"SIM_FNO_FAKE","BUY",1,HttpStatus.BAD_REQUEST);
         reject(app,room,"SIM_FNO_CE","SELL",1,HttpStatus.CONFLICT);
         wallets.setPaused(user,room,true);
-        reject(app,room,"SIM_FNO_CE","BUY",1,HttpStatus.CONFLICT);
-        assertThat(app.state(room,auth()).getBody().recordedFills()).isZero();
+        var practice = app.submit(room,"synth_buy_paused_01",
+            new CustomerFnoSyntheticSandboxController.OrderRequest("SIM_FNO_CE","BUY",1),
+            auth()).getBody();
+        assertThat(practice.quantity()).isEqualTo(10);
+        assertThat(wallets.get(user,room).halted()).isTrue();
+        assertThat(app.state(room,auth()).getBody().recordedFills()).isEqualTo(1);
     }
 
     @Test
