@@ -27,7 +27,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @RestController
 @RequestMapping("/api/customer/trading-rooms/{roomId}/paper/fno")
-public final class CustomerPaperFnoHistoryController {
+public class CustomerPaperFnoHistoryController {
     private final JdbcClient jdbc;
     private final CustomerIdentityStore identities;
 
