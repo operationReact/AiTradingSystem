@@ -86,6 +86,8 @@ ROOM = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}$")
 ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
+LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders)$")
+LIVE_FNO_RECONCILE = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/orders/[0-9a-fA-F-]{36}/reconcile$")
 # Synthetic-only, no NSE_FO keys or broker/provider routes. Separate ledger.
 FNO_SANDBOX = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/sandbox/(state|orders)$")
 READINESS = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/execution/readiness$")
@@ -94,7 +96,7 @@ MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.
 MIND_PROGRESS_NOTES = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*/notes$")
 MIND_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/paper-cycles$")
 MIND_CYCLE_INTERVALS = {"FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR", "ONE_DAY"}
-ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 429, 500, 502, 503}
+ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 428, 429, 500, 502, 503}
 MAX_BODY = 65536
 
 def reply(status, obj):
@@ -118,6 +120,14 @@ def paper_fno_allowed(method, path):
     return ((method == "GET" and action in {"capability", "orders", "positions", "market", "expiries", "reconciliation", "wallet-reconciliation"})
             or (method == "POST" and action == "orders"))
 
+def live_fno_allowed(method, path):
+    if LIVE_FNO_RECONCILE.fullmatch(path):
+        return method == "POST"
+    if not LIVE_FNO.fullmatch(path):
+        return False
+    action = path.rsplit("/", 1)[-1]
+    return (method == "GET" and action in {"orders", "capability"}) or (method == "POST" and action == "orders")
+
 def allowed(method, path):
     return ((method, path) in EXACT
             or (method == "DELETE" and WATCHLIST_ITEM.fullmatch(path))
@@ -131,6 +141,7 @@ def allowed(method, path):
             or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
             or (method == "POST" and path == MIND_ASSISTANT_QUERY)
             or paper_fno_allowed(method, path)
+            or live_fno_allowed(method, path)
             or ((method == "GET" and path.endswith("/state")) or
                 (method == "POST" and path.endswith("/orders"))) and bool(FNO_SANDBOX.fullmatch(path))
             or paper_allowed(method, path))
@@ -282,6 +293,7 @@ def handler(event, context):
         if not valid:
             return reply(400, {"error": "INVALID_LIVE_BROKER_SELECTION"})
     paper_order_key = None
+    live_fno_confirmed = False
     if method == "POST" and PAPER.fullmatch(path):
         action = path.rsplit("/", 1)[-1]
         if action in {"activate", "resume", "pause"} and body:
@@ -348,6 +360,42 @@ def handler(event, context):
             valid = False
         if not valid:
             return reply(400, {"error": "INVALID_FNO_PAPER_ORDER_INPUT"})
+    # Owner-confirmed LIVE Upstox NFO is a separate, narrowly admitted route.
+    # Exact confirmation is forwarded only after verifying the request body;
+    # the Java service still enforces owner, feature, broker, risk and custody.
+    live_fno_confirmed = False
+    if method == "POST" and LIVE_FNO.fullmatch(path) and path.endswith("/orders"):
+        paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
+        confirm = headers.get("x-confirm-live-order") or headers.get("X-Confirm-Live-Order")
+        live_fno_confirmed = confirm == "CONFIRM_LIVE_UPSTOX_NFO"
+        if not live_fno_confirmed:
+            return reply(428, {"error": "LIVE_ORDER_EXPLICIT_CONFIRMATION_REQUIRED"})
+        if not isinstance(paper_order_key, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]{8,64}", paper_order_key):
+            return reply(400, {"error": "INVALID_FNO_LIVE_ORDER_KEY"})
+        try:
+            order = json.loads(body)
+            valid = (type(order) is dict
+                and set(order) == {"instrumentKey", "expiry", "side", "lots", "limitPrice"}
+                and isinstance(order["instrumentKey"], str)
+                and re.fullmatch(r"NSE_FO\|[A-Za-z0-9._-]{1,64}", order["instrumentKey"])
+                and isinstance(order["expiry"], str)
+                and re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", order["expiry"])
+                and date.fromisoformat(order["expiry"]).isoformat() == order["expiry"]
+                and order["side"] in ("BUY", "SELL")
+                and type(order["lots"]) is int and order["lots"] == 1
+                and type(order["limitPrice"]) in (int, float))
+            if valid:
+                price = Decimal(str(order["limitPrice"]))
+                valid = (price.is_finite() and Decimal("0.01") <= price <= Decimal("1000000")
+                        and price.as_tuple().exponent >= -4)
+        except (ValueError, TypeError, KeyError, OverflowError, InvalidOperation):
+            valid = False
+        if not valid:
+            return reply(400, {"error": "INVALID_FNO_LIVE_ORDER_INPUT"})
+    if method == "POST" and LIVE_FNO_RECONCILE.fullmatch(path) and body:
+        return reply(400, {"error": "INVALID_LIVE_RECONCILE_BODY"})
+
     # Mind PAPER strategy cycle: owner-initiated, virtual money only; exact payload.
     if method == "POST" and MIND_PAPER_CYCLES.fullmatch(path):
         paper_order_key = headers.get("idempotency-key") or headers.get("Idempotency-Key")
@@ -413,6 +461,8 @@ def handler(event, context):
         upstream_headers["Content-Type"] = "application/json"
     if paper_order_key is not None:
         upstream_headers["Idempotency-Key"] = paper_order_key
+    if live_fno_confirmed:
+        upstream_headers["X-Confirm-Live-Order"] = "CONFIRM_LIVE_UPSTOX_NFO"
     request = urllib.request.Request(
         BACKEND + internal_path,
         data=body if method in {"POST", "PUT"} else None,

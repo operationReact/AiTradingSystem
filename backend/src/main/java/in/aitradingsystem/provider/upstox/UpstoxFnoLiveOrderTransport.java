@@ -29,6 +29,8 @@ final class UpstoxFnoLiveOrderTransport {
     private final RestClient http;
 
     UpstoxFnoLiveOrderTransport(RestClient.Builder builder) {
+        // Caller supplies its bounded production HTTP transport. A separate
+        // mock RestClient.Builder is permitted for never-live contract tests.
         this.http = builder.baseUrl("https://api-hft.upstox.com").build();
     }
 
