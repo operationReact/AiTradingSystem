@@ -62,18 +62,6 @@ public class CustomerPaperFnoOrderController {
                 order.lots(),order.limitPrice()));
     }
 
-    @GetMapping("/orders")
-    public ResponseEntity<List<CustomerPaperFnoOrderService.Fill>> orders(
-            @PathVariable UUID roomId, Authentication authentication) {
-        return noStore(orders.orders(owner(authentication),roomId));
-    }
-
-    @GetMapping("/positions")
-    public ResponseEntity<List<CustomerPaperFnoOrderService.Position>> positions(
-            @PathVariable UUID roomId, Authentication authentication) {
-        return noStore(orders.positions(owner(authentication),roomId));
-    }
-
     private UUID owner(Authentication authentication) {
         if(!(authentication instanceof JwtAuthenticationToken token)
                 || token.getAuthorities().stream()

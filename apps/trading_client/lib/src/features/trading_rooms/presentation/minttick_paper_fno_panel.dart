@@ -114,6 +114,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
           _expiry = null;
         }
       });
+      // Local virtual order/position and ledger reads require only room
+      // ownership, not licensed market quotes or an enabled order engine.
+      // Keep viewing old PAPER history possible while trading stays blocked.
       if (capability.readOnlyConfigured) {
         _loadExpiries();
         if (_expiry != null) {
@@ -121,6 +124,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         } else {
           _loadPositions();
         }
+      } else {
+        _loadPositions();
       }
     } catch (_) {
       if (!mounted || request != _capabilityRequest) return;
@@ -444,8 +449,24 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               style: type.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
           if (!_checkingCapability) ...[
             const SizedBox(height: 6),
-            Text('Existing option positions and orders are unverified. '
-                'No new orders can be placed.',
+            if (_positionsLoading)
+              Text('Loading saved virtual F&O history…',
+                style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant))
+            else if (_positionsError != null)
+              Text('Saved positions and orders could not be verified.',
+                style: type.bodySmall?.copyWith(color: colors.error))
+            else ...[
+              Text('Saved PAPER: ${_positions.length} open positions · '
+                  '${_orders.length} recent orders',
+                key: const ValueKey('paper-fno-historical-counts'),
+                style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+              const SizedBox(height: 4),
+              Text('Bookkeeping: ${_receipt?.status ?? 'UNVERIFIED'}',
+                key: const ValueKey('paper-fno-historical-reconciliation'),
+                style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+            ],
+            const SizedBox(height: 4),
+            Text('New F&O orders remain disabled.',
               style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
             const SizedBox(height: 9),
             TextButton.icon(

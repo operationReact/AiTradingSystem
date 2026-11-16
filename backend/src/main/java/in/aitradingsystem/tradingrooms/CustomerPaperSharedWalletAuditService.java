@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -19,10 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
  * holdings, fresh quotes, source rights or broker execution.
  */
 @Service
-@ConditionalOnProperty(
-    name={"minttick.upstox-fno.paper-enabled","minttick.upstox-fno.v3-feed-enabled"},
-    havingValue="true")
-public final class CustomerPaperSharedWalletAuditService {
+public class CustomerPaperSharedWalletAuditService {
     private static final int MAX_ROWS=5000;
     public record Audit(String status, String scope, Instant checkedAt,
             int equityFills, int optionFills, int initialAllocations,

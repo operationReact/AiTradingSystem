@@ -207,9 +207,12 @@ Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
 }
 
 void main() {
-  testWidgets('server F&O disabled shows one compact status and makes no conditional requests',
+  testWidgets('server F&O disabled shows saved private history without market requests',
       (tester) async {
-    final repo = _FakeRepo(capabilityResult: CustomerFnoCapability.decode({
+    final repo = _FakeRepo(
+      positionResult: [heldPosition()],
+      ordersResult: [buyFill()],
+      capabilityResult: CustomerFnoCapability.decode({
       'status': 'FNO_PAPER_DISABLED',
       'readOnlyConfigured': false,
       'paperConfigured': false,
@@ -222,17 +225,43 @@ void main() {
     await pump(tester, repo, withExpiry: false);
     expect(find.byKey(const ValueKey('paper-fno-capability-blocked')), findsOneWidget);
     expect(find.textContaining('not enabled on the server'), findsOneWidget);
-    expect(find.textContaining('Existing option positions and orders are unverified'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-historical-counts')), findsOneWidget);
+    expect(find.textContaining('1 open positions · 1 recent orders'), findsOneWidget);
+    expect(find.textContaining('Bookkeeping: RECONCILED'), findsOneWidget);
+    expect(find.textContaining('New F&O orders remain disabled'), findsOneWidget);
     expect(find.text('No virtual F&O orders.'), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
     expect(repo.expiryCalls, 0);
-    expect(repo.inventoryCalls, 0);
+    expect(repo.inventoryCalls, 1);
     expect(repo.marketCalls, 0);
     expect(repo.submits, isEmpty);
     await tester.tap(find.byKey(const ValueKey('paper-fno-capability-retry')));
     await tester.pumpAndSettle();
     expect(repo.expiryCalls, 0);
-    expect(repo.inventoryCalls, 0);
+    expect(repo.inventoryCalls, 2);
+  });
+
+  testWidgets('disabled feed never invents zero holdings if history read fails',
+      (tester) async {
+    final repo = _FakeRepo(
+      capabilityResult: CustomerFnoCapability.decode({
+        'status': 'FNO_PAPER_DISABLED',
+        'readOnlyConfigured': false,
+        'paperConfigured': false,
+        'liveExecutionAuthorized': false,
+        'blockerCodes': ['FNO_PAPER_DISABLED'],
+      }),
+      positionsFailure: const ApiHttpFailure('UNAVAILABLE', null, 503),
+    );
+    await pump(tester, repo, withExpiry: false);
+    expect(find.textContaining('Saved positions and orders could not be verified'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-historical-counts')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+    expect(repo.inventoryCalls, 1);
+    expect(repo.marketCalls, 0);
+    expect(repo.expiryCalls, 0);
+    expect(repo.submits, isEmpty);
   });
 
   testWidgets('capability HTTP 500 fails closed without probing F&O order routes',
