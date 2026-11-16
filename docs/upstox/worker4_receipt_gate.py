@@ -48,7 +48,7 @@ def evaluate(receipts, cutoff):
             times = [_instant(r[k]) for k in ("publishedAt", "availableAt", "observedAt", "committedAt")]
             if any(t is None for t in times):
                 reason = "TIMESTAMP_UNKNOWN"
-            elif any(t > limit for t in times[:3]):
+            elif any(t > limit for t in times):
                 reason = "FUTURE_KNOWLEDGE"
         if reason:
             rejected[reason] = rejected.get(reason, 0) + 1
