@@ -54,7 +54,9 @@ jobs:
 
   browser-approval-evidence:
     name: P7 Pro + Clear confirmation, expiry, retry and blocked-execution UI
-    runs-on: ubuntu-latest
+    # Playwright 1.55 does not support the ubuntu26.04 image currently selected
+    # by ubuntu-latest; pin the supported runner so browser tests actually run.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
