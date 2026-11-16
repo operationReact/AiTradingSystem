@@ -138,7 +138,7 @@ void main() {
     await tester.tap(find.text('Coverage'));
     await tester.pumpAndSettle();
     expect(find.text('Evidence tracking'), findsOneWidget);
-    expect(find.text('Receipt API unobserved'), findsOneWidget);
+    expect(find.text('Receipt API unobserved · counts UNKNOWN'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Historical coverage'), 150,
       scrollable: find.byType(Scrollable).first);
     await tester.pumpAndSettle();
@@ -376,7 +376,7 @@ void main() {
     expect(find.text('5/5'), findsOneWidget);
     expect(find.text('0/5'), findsOneWidget);
     expect(find.text('8/15'), findsOneWidget);
-    expect(find.text('Receipt API unobserved'), findsOneWidget);
+    expect(find.text('Receipt API unobserved · counts UNKNOWN'), findsOneWidget);
     expect(find.text('5%'), findsOneWidget);
     await tester.tap(find.text('Coverage'));
     await tester.pumpAndSettle();
