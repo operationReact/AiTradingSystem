@@ -31,6 +31,7 @@ def evaluate(receipts, cutoff):
     if limit is None:
         return {"status": "TIMESTAMP_UNKNOWN", "eligibleUniqueUnits": None}
     seen = set()
+    receipt_ids = {}
     count = 0
     rejected = {}
     for r in receipts:
@@ -54,10 +55,15 @@ def evaluate(receipts, cutoff):
             continue
         identity = tuple(r[k] for k in ("sourceId", "dataFamily", "listingEpisode",
                                         "partitionKey", "sourceRecordId", "revision"))
+        receipt_key = (r["sourceId"], r["receiptId"])
+        if receipt_key in receipt_ids and receipt_ids[receipt_key] != identity:
+            rejected["RECEIPT_ID_CONFLICT"] = rejected.get("RECEIPT_ID_CONFLICT", 0) + 1
+            continue
         if identity in seen:
             rejected["DUPLICATE"] = rejected.get("DUPLICATE", 0) + 1
             continue
         seen.add(identity)
+        receipt_ids[receipt_key] = identity
         count += 1
     return {"status": "DIAGNOSTIC_ONLY", "eligibleUniqueUnits": count,
             "rejectedByReason": rejected}
