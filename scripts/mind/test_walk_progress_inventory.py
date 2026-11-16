@@ -15,6 +15,7 @@ def make(items_per_page, total, overall_done=None):
     summary = {
         "contractVersion": "mind.progress.v2",
         "manifestVersion": "m1",
+        "backendRevision": "r1",
         "overall": {"total": total, "done": done, "pending": total - done, "blocked": blocked,
                     "percentDone": w.percent_done(done, total)},
     }
@@ -23,7 +24,7 @@ def make(items_per_page, total, overall_done=None):
     while offset < total:
         chunk = all_items[offset:offset + items_per_page]
         nxt = offset + len(chunk)
-        page = {"contractVersion": "mind.progress-inventory.v1", "manifestVersion": "m1",
+        page = {"contractVersion": "mind.progress-inventory.v1", "manifestVersion": "m1", "backendRevision": "r1",
                 "total": total, "offset": offset, "items": chunk,
                 "nextOffset": nxt if nxt < total else None}
         pages.append((1000, page))
@@ -79,6 +80,13 @@ class WalkTests(unittest.TestCase):
         pages[1][1]["manifestVersion"] = "m2"
         overall = w.verify_summary(summary)
         with self.assertRaisesRegex(w.WalkError, "manifest"):
+            w.verify_pages(pages, summary, overall)
+
+    def test_revision_change_mid_walk_fails(self):
+        summary, pages, _ = make(50, 120)
+        pages[2][1]["backendRevision"] = "r2"
+        overall = w.verify_summary(summary)
+        with self.assertRaisesRegex(w.WalkError, "revision"):
             w.verify_pages(pages, summary, overall)
 
     def test_percent_mismatch_fails(self):
