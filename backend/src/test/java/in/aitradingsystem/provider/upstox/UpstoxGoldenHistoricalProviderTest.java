@@ -63,4 +63,21 @@ class UpstoxGoldenHistoricalProviderTest {
         verify(source, never()).historicalEquityCandles(
                 anyString(), anyString(), anyInt(), any(), any());
     }
+    @Test
+    void missingDurableChunkIdentityRejectedBeforeDatabaseOrProviderRead() {
+        when(source.enabled()).thenReturn(true);
+        when(rights.isPermitted(eq("UPSTOX"), eq("historical_equity"),
+                eq(GoldenSourceRightsRepository.Use.RAW_RETENTION), any()))
+                .thenReturn(true);
+        var missingJob = new GoldenHistoricalDatasetProvider.ChunkRequest(
+                null, UUID.randomUUID(), UUID.randomUUID(), "DAY_1",
+                LocalDate.of(2026, 11, 10), LocalDate.of(2026, 11, 10), 8192);
+        assertThatThrownBy(() -> provider.fetch(missingJob))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("INVALID_UPSTOX_GOLDEN_WINDOW");
+        verifyNoInteractions(jdbc);
+        verify(source, never()).historicalEquityCandles(
+                anyString(), anyString(), anyInt(), any(), any());
+    }
+
 }
