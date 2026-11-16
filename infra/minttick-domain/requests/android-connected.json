@@ -1,9 +1,9 @@
 {
-  "api_base_url": "https://api.minttick.com",
-  "application": "MintTick",
-  "authorization": "USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
-  "cognito_pool": "ap-south-1_jz2T8qbiY",
-  "environment": "dev",
-  "operation": "build-connected-android",
-  "public_api_ready": true
+    "api_base_url": "https://api.minttick.com",
+    "application": "MintTick",
+    "authorization": "USER_APPROVED_MINTTICK_CONNECTED_APK_2026-11-07",
+    "cognito_pool": "ap-south-1_jz2T8qbiY",
+    "environment": "dev",
+    "operation": "build-connected-android",
+    "public_api_ready": true
 }
