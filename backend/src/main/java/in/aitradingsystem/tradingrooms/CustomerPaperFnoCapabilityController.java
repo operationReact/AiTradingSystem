@@ -85,11 +85,14 @@ public final class CustomerPaperFnoCapabilityController {
         if (!displayRights) blockers.add("DISPLAY_RIGHTS_NOT_VERIFIED");
         if (!paperRights) blockers.add("PAPER_USE_RIGHTS_NOT_VERIFIED");
 
-        boolean readOnly = supportedFocus && paper && v3 && displayRights;
+        // Market data is a distinct entitlement from virtual order execution.
+        // A permitted read-only real exchange display must not be coupled to
+        // PAPER use rights; unverified display rights still block all quotes.
+        boolean readOnly = supportedFocus && v3 && displayRights;
         // This only means the local configuration permits a PAPER attempt.
         // It is NEVER evidence of a listed contract, fresh quote, broker
         // entitlement, sufficient cash, or approval to execute an order.
-        boolean paperConfigured = readOnly && paperRights;
+        boolean paperConfigured = readOnly && paper && paperRights;
         String status = blockers.isEmpty() ? "SOURCE_CHECK_REQUIRED" : blockers.getFirst();
         return new Capability(status, readOnly, paperConfigured, false, blockers);
     }
