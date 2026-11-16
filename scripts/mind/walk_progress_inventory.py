@@ -60,6 +60,8 @@ def verify_pages(pages, summary, overall):
             raise WalkError(f"page {index} inventory contract mismatch")
         if page.get("manifestVersion") != manifest:
             raise WalkError(f"page {index} manifest changed during walk")
+        if page.get("backendRevision") != summary.get("backendRevision"):
+            raise WalkError(f"page {index} backend revision changed during walk")
         if page.get("total") != total:
             raise WalkError(f"page {index} total does not match summary")
         if page.get("offset") != expected_offset:
@@ -131,6 +133,8 @@ def walk(base, token, expected_total=None):
         raise WalkError(f"summary failed or too large (status {status})")
     summary = json.loads(body)
     print(f"summary bytes={len(body)}")
+    print(f"backendRevision={summary.get('backendRevision')} revisionKnown={summary.get('revisionKnown')} "
+          f"manifestVersion={summary.get('manifestVersion')}")
     overall = verify_summary(summary)
     if expected_total is not None and overall["total"] != expected_total:
         raise WalkError(f"summary total {overall['total']} != expected {expected_total}")
