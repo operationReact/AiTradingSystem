@@ -125,6 +125,16 @@ jobs:
             if ! python3 scripts/mind/check_progress_contract.py "$path" /tmp/body.json; then echo "FAIL contract $path"; fail=1; continue; fi
             echo "PASS authenticated $path -> 200 contract ok"
           done
+          # Full inventory walk: every page below the edge cap, no duplicates or omissions, and
+          # summary percentages recomputed from the walked items. Prints counts and bytes only.
+          umask 077
+          printf '%s' "$token" > "$RUNNER_TEMP/verify_walk_token"
+          if python3 scripts/mind/walk_progress_inventory.py "https://api.minttick.com" "$RUNNER_TEMP/verify_walk_token" 313; then
+            echo "PASS authenticated full progress inventory walk"
+          else
+            echo "FAIL authenticated full progress inventory walk"; fail=1
+          fi
+          rm -f "$RUNNER_TEMP/verify_walk_token"
           for path in /api/customer/mind/v1/admin /api/customer/mind/v1/orders; do
             code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "${auth[@]}" "https://api.minttick.com$path")"
             if [ "$code" = 404 ]; then echo "PASS authenticated $path -> 404"; else echo "FAIL authenticated $path -> $code"; fail=1; fi
