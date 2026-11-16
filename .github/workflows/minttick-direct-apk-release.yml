@@ -35,9 +35,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = "infra/minttick-domain/requests/publish-direct-apk.json"
           python3 - <<'PY'
           import json
+          import subprocess
+          changed = set(subprocess.check_output(
+              ["git", "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+              text=True).splitlines())
+          approved = {
+              "infra/minttick-domain/requests/publish-direct-apk.json",
+              ".github/workflows/minttick-direct-apk-release.yml",
+          }
+          if "infra/minttick-domain/requests/publish-direct-apk.json" not in changed or not changed.issubset(approved):
+              raise SystemExit("DENIED: unauthorized APK release paths " + repr(changed))
           from pathlib import Path
           data=json.loads(Path('infra/minttick-domain/requests/publish-direct-apk.json').read_text())
           expected={
@@ -52,6 +61,7 @@ jobs:
             "bucket":"minttick-web-098859530205-us-east-1",
             "object_key":"downloads/MintTick-dev-synthetic-options-2026-11-16.apk",
             "authorization":"USER_REQUESTED_DIRECT_INSTALLABLE_SIGNED_APK_2026-11-16",
+            "publication_attempt":2,
           }
           if data != expected:
             raise SystemExit("DENIED: request is not the reviewed exact APK publication")
