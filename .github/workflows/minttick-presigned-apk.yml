@@ -60,6 +60,7 @@ jobs:
             "object":"releases/owner-apk/d7db1f9467073df54c3dca7689665fb1fb17eb46/MintTick-dev-synthetic-options-2026-11-16.apk",
             "expiry_seconds":2700,
             "authorization":"USER_REQUESTED_DIRECT_APK_2026-11-16",
+            "attempt":2,
           }
           if actual!=expected:
             raise SystemExit("Denied: unreviewed direct APK approval")
@@ -103,6 +104,8 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p result
+          # AWS CLI may otherwise sign S3 URLs with a legacy signature variant.
+          aws configure set default.s3.signature_version s3v4
           url="$(aws s3 presign "s3://$BUCKET/$OBJECT" --region ap-south-1 --expires-in 2700)"
           export URL_CHECK="$url"
           python3 - <<'PY'
@@ -114,10 +117,19 @@ jobs:
           if "X-Amz-Signature=" not in url.query:
             raise SystemExit("Denied: signed URL missing v4 signature")
           PY
+          echo "Verifying GET from presigned S3, without printing bearer URL"
           curl --fail --location --silent --show-error --retry 2 --retry-delay 2 \
-            --max-time 150 --output /tmp/owner-minttick-apk "$url"
-          test "$(stat -c '%s' /tmp/owner-minttick-apk)" -eq 75423551
-          test "$(sha256sum /tmp/owner-minttick-apk | cut -d' ' -f1)" = "$EXPECTED_APK_SHA"
+            --max-time 150 --write-out 'HTTP %{http_code}; bytes %{size_download}\n' \
+            --output /tmp/owner-minttick-apk "$url"
+          actual_size="$(stat -c '%s' /tmp/owner-minttick-apk)"
+          echo "Downloaded bytes: $actual_size"
+          if [ "$actual_size" != 75423551 ]; then
+            echo "FAIL: presigned URL returned wrong size"; exit 2
+          fi
+          actual_sha="$(sha256sum /tmp/owner-minttick-apk | cut -d' ' -f1)"
+          if [ "$actual_sha" != "$EXPECTED_APK_SHA" ]; then
+            echo "FAIL: presigned URL returned incorrect APK SHA256"; exit 2
+          fi
           printf '%s\n' "$url" > result/OWNER_DIRECT_APK_URL.txt
           printf 'expires_after_seconds=2700\nsha256=%s\n' "$EXPECTED_APK_SHA" \
             > result/VERIFY.txt
