@@ -80,6 +80,32 @@ class CustomerPaperFnoRepository {
     return CustomerFnoFill.decode(raw);
   }
 
+  /// Independent synthetic-only training sandbox. Never NSE or Upstox quotes.
+  Future<CustomerFnoSandboxState> sandboxState(String roomId) async =>
+      CustomerFnoSandboxState.decode(await api.getJson(
+        '$_path/$roomId/paper/fno/sandbox/state'));
+
+  /// Unknown outcomes are checked via sandboxState, never blindly resubmitted.
+  Future<CustomerFnoSandboxFill> sandboxSubmit({
+    required String roomId,
+    required String idempotencyKey,
+    required String contractCode,
+    required String side,
+    required int lots,
+  }) async {
+    if (!const {'SIM_FNO_CE', 'SIM_FNO_PE'}.contains(contractCode) ||
+        !const {'BUY', 'SELL'}.contains(side) ||
+        lots < 1 || lots > 20 ||
+        !RegExp(r'^[A-Za-z0-9_-]{8,64}$').hasMatch(idempotencyKey)) {
+      throw const FormatException('Invalid synthetic practice order');
+    }
+    return CustomerFnoSandboxFill.decode(await api.postJson(
+      '$_path/$roomId/paper/fno/sandbox/orders',
+      headers: {'Idempotency-Key': idempotencyKey},
+      body: {'contractCode': contractCode, 'side': side, 'lots': lots},
+    ));
+  }
+
   static String _ymd(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }
@@ -520,4 +546,150 @@ DateTime? _optionalTime(Object? value) {
   final parsed = DateTime.tryParse(value.toString());
   if (parsed == null) throw const FormatException('Invalid timestamp');
   return parsed.toUtc();
+}
+
+/// This is *only* a synthetic learning market, never a quotation of real NSE
+/// F&O instruments. The backend must certify zero exchange data and orders.
+class CustomerFnoSandboxContract {
+  const CustomerFnoSandboxContract({
+    required this.code, required this.label, required this.optionType,
+    required this.lotSize, required this.buyPrice, required this.sellPrice,
+  });
+  final String code;
+  final String label;
+  final String optionType;
+  final int lotSize;
+  final num buyPrice;
+  final num sellPrice;
+
+  static CustomerFnoSandboxContract decode(Object? raw) {
+    if (raw is! Map<String, dynamic>) throw const FormatException('Invalid practice contract');
+    final code = raw['code'];
+    final label = raw['label'];
+    final type = raw['optionType'];
+    final lot = raw['lotSize'];
+    final buy = raw['buyPrice'];
+    final sell = raw['sellPrice'];
+    if (!const {'SIM_FNO_CE', 'SIM_FNO_PE'}.contains(code) ||
+        !const {'CE', 'PE'}.contains(type) ||
+        label is! String || !label.contains('Synthetic') ||
+        lot != 10 || buy is! num || sell is! num ||
+        !buy.isFinite || !sell.isFinite || buy <= 0 || sell <= 0 ||
+        sell > buy) {
+      throw const FormatException('Untrustworthy practice contract');
+    }
+    return CustomerFnoSandboxContract(
+      code: code as String, label: label, optionType: type as String,
+      lotSize: lot as int, buyPrice: buy, sellPrice: sell);
+  }
+}
+
+class CustomerFnoSandboxPosition {
+  const CustomerFnoSandboxPosition(this.contractCode, this.quantity, this.costBasisPaise);
+  final String contractCode;
+  final int quantity;
+  final int costBasisPaise;
+
+  static CustomerFnoSandboxPosition decode(Object? raw) {
+    if (raw is! Map<String, dynamic> ||
+        !const {'SIM_FNO_CE', 'SIM_FNO_PE'}.contains(raw['contractCode']) ||
+        raw['quantity'] is! int || (raw['quantity'] as int) <= 0 ||
+        raw['costBasisPaise'] is! int || (raw['costBasisPaise'] as int) < 0) {
+      throw const FormatException('Invalid synthetic position');
+    }
+    return CustomerFnoSandboxPosition(
+      raw['contractCode'] as String, raw['quantity'] as int,
+      raw['costBasisPaise'] as int);
+  }
+}
+
+class CustomerFnoSandboxFill {
+  const CustomerFnoSandboxFill({
+    required this.id, required this.contractCode, required this.side,
+    required this.lots, required this.quantity, required this.fillPrice,
+    required this.cashAfterPaise, required this.realizedPnlDeltaPaise,
+  });
+  final String id;
+  final String contractCode;
+  final String side;
+  final int lots;
+  final int quantity;
+  final num fillPrice;
+  final int cashAfterPaise;
+  final int realizedPnlDeltaPaise;
+
+  static CustomerFnoSandboxFill decode(Object? raw) {
+    if (raw is! Map<String, dynamic> ||
+        raw['id'] is! String ||
+        !const {'SIM_FNO_CE', 'SIM_FNO_PE'}.contains(raw['contractCode']) ||
+        !const {'BUY', 'SELL'}.contains(raw['side']) ||
+        raw['lots'] is! int || raw['lots'] < 1 || raw['lots'] > 20 ||
+        raw['quantity'] is! int || raw['quantity'] != raw['lots'] * 10 ||
+        raw['fillPrice'] is! num || raw['fillPrice'] <= 0 ||
+        raw['cashAfterPaise'] is! int || raw['cashAfterPaise'] < 0 ||
+        raw['realizedPnlDeltaPaise'] is! int) {
+      throw const FormatException('Invalid synthetic fill');
+    }
+    return CustomerFnoSandboxFill(
+      id: raw['id'] as String,
+      contractCode: raw['contractCode'] as String,
+      side: raw['side'] as String,
+      lots: raw['lots'] as int,
+      quantity: raw['quantity'] as int,
+      fillPrice: raw['fillPrice'] as num,
+      cashAfterPaise: raw['cashAfterPaise'] as int,
+      realizedPnlDeltaPaise: raw['realizedPnlDeltaPaise'] as int);
+  }
+}
+
+class CustomerFnoSandboxState {
+  const CustomerFnoSandboxState({
+    required this.initialCashPaise, required this.availableCashPaise,
+    required this.realizedPnlPaise, required this.ledgerReconciled,
+    required this.recordedFills, required this.contracts, required this.positions,
+    required this.orders,
+  });
+  final int initialCashPaise;
+  final int availableCashPaise;
+  final int realizedPnlPaise;
+  final bool ledgerReconciled;
+  final int recordedFills;
+  final List<CustomerFnoSandboxContract> contracts;
+  final List<CustomerFnoSandboxPosition> positions;
+  final List<CustomerFnoSandboxFill> orders;
+
+  static CustomerFnoSandboxState decode(Object? raw) {
+    if (raw is! Map<String, dynamic> || raw['mode'] != 'SYNTHETIC_PRACTICE' ||
+        raw['synthetic'] != true || raw['exchangeDataUsed'] != false ||
+        raw['brokerOrdersEnabled'] != false ||
+        raw['initialCashPaise'] is! int || raw['initialCashPaise'] <= 0 ||
+        raw['availableCashPaise'] is! int || raw['availableCashPaise'] < 0 ||
+        raw['realizedPnlPaise'] is! int ||
+        raw['ledgerReconciled'] is! bool ||
+        raw['recordedFills'] is! int || raw['recordedFills'] < 0 ||
+        raw['contracts'] is! List || raw['positions'] is! List ||
+        raw['orders'] is! List) {
+      throw const FormatException('Untrustworthy synthetic sandbox response');
+    }
+    final contracts = (raw['contracts'] as List)
+        .map(CustomerFnoSandboxContract.decode).toList(growable: false);
+    final positions = (raw['positions'] as List)
+        .map(CustomerFnoSandboxPosition.decode).toList(growable: false);
+    final orders = (raw['orders'] as List)
+        .map(CustomerFnoSandboxFill.decode).toList(growable: false);
+    if (contracts.length != 2 ||
+        contracts.map((c) => c.code).toSet().length != 2) {
+      throw const FormatException('Unexpected synthetic contract list');
+    }
+    return CustomerFnoSandboxState(
+      initialCashPaise: raw['initialCashPaise'] as int,
+      availableCashPaise: raw['availableCashPaise'] as int,
+      realizedPnlPaise: raw['realizedPnlPaise'] as int,
+      ledgerReconciled: raw['ledgerReconciled'] as bool,
+      recordedFills: raw['recordedFills'] as int,
+      contracts: List.unmodifiable(contracts),
+      positions: List.unmodifiable(positions),
+      orders: List.unmodifiable(orders),
+    );
+  }
 }
