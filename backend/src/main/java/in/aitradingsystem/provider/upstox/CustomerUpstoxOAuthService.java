@@ -1,6 +1,7 @@
 package in.aitradingsystem.provider.upstox;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import in.aitradingsystem.provider.upstox.UpstoxApiClient.UpstoxProviderException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -229,6 +230,40 @@ public class CustomerUpstoxOAuthService {
     public AccountData positions(UUID user) { return read(user, api::positions); }
     public AccountData orders(UUID user) { return read(user, api::orders); }
     public AccountData staticIps(UUID user) { return read(user, api::staticIps); }
+
+    public AccountData orderHistoryByTag(UUID owner, String tag) {
+        if (tag == null || !tag.matches("[A-Za-z0-9_-]{8,20}")) {
+            throw new UpstoxProviderException("UPSTOX_ORDER_TAG_INVALID");
+        }
+        return read(owner, token -> api.orderHistoryByTag(token, tag));
+    }
+
+    /** Authenticated owner session only; never accepts the SSM Analytics token. */
+    public record FnoSubmission(String outcome, java.util.List<String> orderIds, String code) {
+        public FnoSubmission { orderIds = java.util.List.copyOf(orderIds); }
+    }
+
+    /**
+     * Exactly one broker POST, no retry. This method is only callable by a
+     * coordinator after it has committed a durable owner-bound SUBMITTING row
+     * and verified the NFO contract, session, egress IP, cash and user consent.
+     */
+    public FnoSubmission submitVerifiedFnoOnce(UUID owner, ObjectNode payload) {
+        BrokerSession session = validSession(owner);
+        if (session == null) {
+            return new FnoSubmission("REJECTED", java.util.List.of(),
+                "UPSTOX_SESSION_MISSING");
+        }
+        var transport = new UpstoxFnoLiveOrderTransport(
+            org.springframework.web.client.RestClient.builder());
+        var response = transport.submitOnce(session.accessToken(), payload);
+        if ("UPSTOX_SESSION_EXPIRED".equals(response.code())) {
+            sessions.remove(owner, session);
+        }
+        return new FnoSubmission(response.outcome().name(),
+            response.orderIds(), response.code());
+    }
+
 
     /**
      * Read the authenticated Upstox profile on demand, never from app-level
