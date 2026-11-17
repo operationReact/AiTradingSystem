@@ -1,0 +1,9 @@
+{
+  "kind": "minttick-operator-only-v3-read-probe-v1",
+  "operation": "activate-private-upstox-v3-operator-source-only",
+  "aws_account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "backend_release": "4ecc90348b56f5aa696d23b68ed32950eb82fa38",
+  "authorization": "OWNER_APPROVED_PRIVATE_FNO_V3_READ_ONLY_2026_11_18"
+}
