@@ -253,6 +253,11 @@ void main() {
     expect(find.byKey(const ValueKey('paper-fno-capability-blocked')), findsOneWidget);
     expect(find.textContaining('Real NSE options PAPER orders are disabled'), findsOneWidget);
     expect(find.byKey(const ValueKey('paper-fno-real-only')), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-premium-unavailable-overview')),
+      findsOneWidget);
+    expect(tester.widget<FilledButton>(
+      find.byKey(const ValueKey('fno-premium-blocked-call'))).onPressed,
+      isNull);
     expect(find.byKey(const ValueKey('synthetic-fno-sandbox')), findsNothing);
     expect(find.textContaining('Synthetic CALL'), findsNothing);
     expect(find.byKey(const ValueKey('paper-fno-historical-counts')), findsOneWidget);
