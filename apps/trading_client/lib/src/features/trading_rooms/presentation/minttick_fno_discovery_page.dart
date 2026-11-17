@@ -114,10 +114,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     _quoteTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!_appActive || !mounted || _loading || _polling) return;
       ++_tickCount;
-      if (_readOnlyConfigured && _expiry != null) {
-        unawaited(_loadMarket(_expiry!, quiet: true));
-      } else if (_tickCount % 6 == 0) {
+      // Refresh capability/connection metrics every 30 seconds too;
+      // a previously connected socket must never remain labelled active.
+      if (_tickCount % 6 == 0) {
         unawaited(_refresh());
+      } else if (_readOnlyConfigured && _expiry != null) {
+        unawaited(_loadMarket(_expiry!, quiet: true));
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
