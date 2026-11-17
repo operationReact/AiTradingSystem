@@ -9,6 +9,9 @@ on:
     paths:
       - 'scripts/mind/walk_progress_inventory.py'
       - 'scripts/mind/test_walk_progress_inventory.py'
+      - 'scripts/mind/paper_verification_cycle.py'
+      - 'scripts/mind/test_paper_verification_cycle.py'
+      - '.github/workflows/mind-paper-verification-cycle.yml'
       - '.github/workflows/mind-live-verify.yml'
       - '.github/workflows/mind-progress-walker-check.yml'
 
@@ -31,12 +34,13 @@ jobs:
       - name: Compile the walker and its tests
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/mind/walk_progress_inventory.py scripts/mind/test_walk_progress_inventory.py
+          python3 -m py_compile scripts/mind/walk_progress_inventory.py scripts/mind/test_walk_progress_inventory.py scripts/mind/paper_verification_cycle.py scripts/mind/test_paper_verification_cycle.py
 
       - name: Run walker unit tests (offline, no network, no credentials)
         run: |
           set -euo pipefail
           python3 -m unittest discover -s scripts/mind -p test_walk_progress_inventory.py -v
+          python3 -m unittest discover -s scripts/mind -p test_paper_verification_cycle.py -v
 
       - name: Validate workflow YAML syntax and walker wiring
         run: |
@@ -48,6 +52,7 @@ jobs:
           for name in (
               ".github/workflows/mind-live-verify.yml",
               ".github/workflows/mind-progress-walker-check.yml",
+              ".github/workflows/mind-paper-verification-cycle.yml",
           ):
               doc = yaml.safe_load(Path(name).read_text())
               assert isinstance(doc, dict) and doc.get("jobs"), f"invalid workflow: {name}"
