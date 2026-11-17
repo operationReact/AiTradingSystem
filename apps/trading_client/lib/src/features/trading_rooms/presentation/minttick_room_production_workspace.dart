@@ -383,34 +383,75 @@ class _MintTickRoomProductionWorkspaceState
               ),
             ]),
           )),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-            child: Container(
-              height: 63,
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerLow,
-                border: Border.all(color: colors.outlineVariant),
-                borderRadius: BorderRadius.circular(8)),
-              child: Row(children: [
-                Expanded(flex: 11, child: _CompactMetric(
-                  key: isPaper && cash != null
-                    ? const ValueKey('paper-wallet-cash') : null,
-                  label: isPaper ? 'VIRTUAL CASH' : 'PLANNED CAPITAL',
-                  value: isPaper ? cash == null ? '—' : _moneyPaise(cash)
-                      : formatPaperRupees(widget.room.paperBudget))),
-                _MetricDivider(color: colors.outlineVariant),
-                Expanded(flex: 9, child: _CompactMetric(
-                  label: 'REALIZED P&L',
-                  value: isPaper && pnl != null ? _moneyPaise(pnl) : '—',
-                  green: isPaper && pnl != null && pnl >= 0)),
-                _MetricDivider(color: colors.outlineVariant),
-                Expanded(flex: 6, child: _CompactMetric(
-                  label: 'POSITIONS',
-                  value: isPaper
-                    ? _historyError != null ? '—' : '$count' : '—')),
-              ]),
+          if (widget.room.marketScope == 'FNO' && isPaper)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Container(
+                height: 76,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLow,
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(12)),
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  SizedBox(width: 136, child: _CompactMetric(
+                    key: cash != null ? const ValueKey('paper-wallet-cash') : null,
+                    label: 'VIRTUAL CASH',
+                    value: cash == null ? '—' : _moneyPaise(cash))),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 155, child: _CompactMetric(
+                    label: 'OPTIONS P&L',
+                    value: fnoPnl == null ? '—' : _moneyPaise(fnoPnl),
+                    secondary: fnoReturn == null ? 'Not valued'
+                      : (fnoReturn >= 0 ? '+' : '') +
+                        fnoReturn.toStringAsFixed(2) + '% indicative',
+                    green: fnoPnl != null && fnoPnl >= 0)),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 100, child: _CompactMetric(
+                    label: 'POSITIONS',
+                    value: !_fnoInventoryVerified ? '—'
+                        : _fnoPositions.where((p) => p.quantity > 0)
+                            .length.toString())),
+                  _MetricDivider(color: colors.outlineVariant),
+                  const SizedBox(width: 123, child: _CompactMetric(
+                    label: 'MARGIN USED', value: '—',
+                    secondary: 'Not provided')),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 137, child: _CompactMetric(
+                    label: 'REALIZED P&L',
+                    value: pnl == null ? '—' : _moneyPaise(pnl),
+                    green: pnl != null && pnl >= 0)),
+                ]),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Container(
+                height: 63,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLow,
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(8)),
+                child: Row(children: [
+                  Expanded(flex: 11, child: _CompactMetric(
+                    key: isPaper && cash != null
+                      ? const ValueKey('paper-wallet-cash') : null,
+                    label: isPaper ? 'VIRTUAL CASH' : 'PLANNED CAPITAL',
+                    value: isPaper ? cash == null ? '—' : _moneyPaise(cash)
+                        : formatPaperRupees(widget.room.paperBudget))),
+                  _MetricDivider(color: colors.outlineVariant),
+                  Expanded(flex: 9, child: _CompactMetric(
+                    label: 'REALIZED P&L',
+                    value: isPaper && pnl != null ? _moneyPaise(pnl) : '—',
+                    green: isPaper && pnl != null && pnl >= 0)),
+                  _MetricDivider(color: colors.outlineVariant),
+                  Expanded(flex: 6, child: _CompactMetric(
+                    label: 'POSITIONS',
+                    value: isPaper
+                      ? _historyError != null ? '—' : '$count' : '—')),
+                ]),
+              ),
             ),
-          ),
           Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: SizedBox(height: 39, child: Row(children: [
               for (final tab in const [
@@ -866,8 +907,9 @@ String _moneyPaise(int paise) {
 
 class _CompactMetric extends StatelessWidget {
   const _CompactMetric({required this.label, required this.value,
-    this.green = false, super.key});
+    this.secondary, this.green = false, super.key});
   final String label, value;
+  final String? secondary;
   final bool green;
 
   @override
@@ -886,6 +928,11 @@ class _CompactMetric extends StatelessWidget {
           style: type.titleMedium?.copyWith(
             fontSize: 17, fontWeight: FontWeight.w800,
             color: green ? scheme.primary : scheme.onSurface)),
+        if (secondary != null) Text(secondary!, maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(
+            color: green ? scheme.primary : scheme.onSurfaceVariant,
+            fontSize: 10)),
       ]),
     );
   }
