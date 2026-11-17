@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
+import '../data/customer_fno_discovery_repository.dart';
+import '../domain/trading_room_draft.dart';
+import 'minttick_fno_discovery_page.dart';
 import 'minttick_customer_widgets.dart';
 import 'minttick_equity_avatar.dart';
 import 'minttick_market_components.dart';
@@ -33,10 +36,16 @@ const _moverSortLabels = ['Gainers', 'Losers', 'Most active', 'Volume', '52W hig
 /// labelled as such and are never presented as live; stale index values stay hidden.
 class MintTickCustomerMarketPage extends StatefulWidget {
   const MintTickCustomerMarketPage({
-    required this.repository, this.onConnectBroker, super.key,
+    required this.repository, this.onConnectBroker,
+    this.rooms, this.fnoDiscovery, this.onOpenFnoRoom,
+    this.onCreateFnoRoom, super.key,
   });
   final CustomerMarketRepository repository;
   final VoidCallback? onConnectBroker;
+  final TradingRoomDraftStore? rooms;
+  final CustomerFnoDiscoveryRepository? fnoDiscovery;
+  final ValueChanged<TradingRoomDraft>? onOpenFnoRoom;
+  final VoidCallback? onCreateFnoRoom;
 
   @override
   State<MintTickCustomerMarketPage> createState() => _MintTickCustomerMarketPageState();
@@ -46,6 +55,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final TextEditingController _query = TextEditingController();
+  bool _showFno = false;
   bool _appActive = true;
 
   // Nifty 50 overview: index strip, fallback movers/sectors and rule screens.
@@ -521,17 +531,21 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     final scheme = theme.colorScheme;
     return PopScope<void>(
       // Within Markets, the first back gesture returns to Explore.
-      canPop: _tabs.index == 0,
+      canPop: !_showFno && _tabs.index == 0,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _tabs.index != 0) _tabs.animateTo(0);
+        if (!didPop && _showFno) {
+          setState(() => _showFno = false);
+        } else if (!didPop && _tabs.index != 0) {
+          _tabs.animateTo(0);
+        }
       },
       child: MintTickCustomerScaffold(showHeader: false, children: [
         const SizedBox(height: 2),
         Row(children: [
           Expanded(child: Semantics(header: true, child: Text('Markets',
               style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w800)))),
-          if (_summary != null) _SessionChip(status: _summary!.market),
-          IconButton(
+          if (!_showFno && _summary != null) _SessionChip(status: _summary!.market),
+          if (!_showFno) IconButton(
             key: const ValueKey('market-search-open'),
             tooltip: 'Search NSE stocks',
             onPressed: _openSearch,
@@ -539,11 +553,37 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
           IconButton(
             key: const ValueKey('market-universe-refresh'),
-            tooltip: 'Refresh markets',
-            onPressed: () => unawaited(_refreshAll()),
+            tooltip: _showFno ? 'Refresh F&O contracts in the discovery tab' : 'Refresh markets',
+            onPressed: _showFno ? null : () => unawaited(_refreshAll()),
             icon: const Icon(Icons.refresh_rounded),
           ),
         ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          for (final product in const [('Stocks', false), ('F&O', true)])
+            Padding(padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                key: ValueKey('market-product-${product.$2 ? 'fno' : 'stocks'}'),
+                label: Text(product.$1),
+                selected: _showFno == product.$2,
+                onSelected: (_) => setState(() => _showFno = product.$2),
+              )),
+        ]),
+        if (_showFno) ...[
+          const SizedBox(height: 7),
+          if (widget.rooms != null && widget.fnoDiscovery != null &&
+              widget.onOpenFnoRoom != null &&
+              widget.onCreateFnoRoom != null)
+            MintTickFnoDiscoveryPage(
+              key: const ValueKey('customer-fno-discovery'),
+              rooms: widget.rooms!, discovery: widget.fnoDiscovery!,
+              onOpenRoom: widget.onOpenFnoRoom!,
+              onCreateRoom: widget.onCreateFnoRoom!,
+            )
+          else const MintTickInfoText(
+            'F&O discovery needs an authenticated Trading Room.',
+            icon: Icons.lock_outline_rounded),
+        ] else ...[
         ..._indexStrip(),
         const SizedBox(height: 6),
         TabBar(
@@ -562,6 +602,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           2 => _sectorsTab(),
           _ => _stocksTab(),
         },
+        ],
       ]),
     );
   }
