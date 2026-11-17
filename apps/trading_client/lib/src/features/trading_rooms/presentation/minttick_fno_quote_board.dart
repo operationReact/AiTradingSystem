@@ -161,11 +161,11 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
         const SizedBox(height: 8),
-        Text(show ? 'Ask ${value(leg!.ask)}' : 'LTP —',
+        Text(show ? 'Ask ${value(leg.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 6),
-        Text(show ? 'Bid ${value(leg!.bid)}' : 'Quote not fresh',
+        Text(show ? 'Bid ${value(leg.bid)}' : 'Quote not fresh',
           style: t.labelSmall?.copyWith(
             color: show ? accent : c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
