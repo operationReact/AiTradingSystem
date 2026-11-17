@@ -1,0 +1,206 @@
+import 'package:flutter/material.dart';
+import '../data/customer_paper_fno_repository.dart';
+
+/// Real server-backed option quote panel. The customer F&O market API currently
+/// exposes bid/ask, listed strikes and expiries only: NOT index LTP, OI,
+/// volume, historical candles, Greeks or IV. Never manufacture these fields.
+class MintTickFnoQuoteBoard extends StatelessWidget {
+  const MintTickFnoQuoteBoard({
+    required this.market, required this.fresh, required this.strike,
+    required this.selected, required this.onStrike, required this.onLeg,
+    required this.onTicket, super.key,
+  });
+  final CustomerFnoMarket market;
+  final bool fresh;
+  final num? strike;
+  final CustomerFnoLeg? selected;
+  final ValueChanged<num> onStrike;
+  final ValueChanged<CustomerFnoLeg> onLeg;
+  /// Opens a ticket. Submission still requires explicit confirmation.
+  final void Function(CustomerFnoLeg leg, String side) onTicket;
+
+  CustomerFnoStrike? get active {
+    if (market.strikes.isEmpty) return null;
+    for (final s in market.strikes) {
+      if (s.strikePrice == strike) return s;
+    }
+    return market.strikes.first;
+  }
+
+  bool get verified => fresh && market.displayRightsVerified &&
+      market.hasFreshQuotes;
+
+  static String value(num? v) => v == null || !v.isFinite || v <= 0
+      ? '—' : '₹${v.toStringAsFixed(2)}';
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final s = active;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 8),
+      Row(children: [
+        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+          children: [Text('NIFTY 50', style: TextStyle(fontSize: 21,
+            fontWeight: FontWeight.w800)),
+            Text('NSE · Index', style: TextStyle(fontSize: 11))])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          const Text('—', key: ValueKey('fno-index-unavailable'),
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22)),
+          Text(verified ? 'OPTIONS BID/ASK VERIFIED' : 'QUOTE NOT VERIFIED LIVE',
+            style: t.labelSmall?.copyWith(
+              color: verified ? c.primary : c.onSurfaceVariant, fontSize: 9)),
+        ]),
+      ]),
+      Text('Index LTP unavailable from current F&O API',
+        style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+      Divider(color: c.outlineVariant, height: 20),
+      Row(children: [
+        const Text('Strike', style: TextStyle(fontWeight: FontWeight.w700)),
+        const SizedBox(width: 12),
+        Expanded(child: Container(
+          height: 44, padding: const EdgeInsets.symmetric(horizontal: 10),
+          decoration: _box(c),
+          child: DropdownButtonHideUnderline(child: DropdownButton<num>(
+            key: const ValueKey('fno-premium-strike-picker'),
+            isExpanded: true, value: s?.strikePrice,
+            hint: const Text('No listed strikes'),
+            items: [
+              for (final row in market.strikes)
+                DropdownMenuItem(value: row.strikePrice,
+                  child: Text(row.strikePrice.toString())),
+            ],
+            onChanged: s == null ? null :
+              (v) { if (v != null) onStrike(v); },
+          )),
+        )),
+      ]),
+      const SizedBox(height: 10),
+      if (s != null) Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Expanded(child: _card(context, s.call, s.strikePrice, 'CE', c.primary)),
+        const SizedBox(width: 8),
+        Expanded(child: _card(context, s.put, s.strikePrice, 'PE', c.error)),
+      ]) else const Text('No verified CE/PE contracts for this expiry.'),
+      const SizedBox(height: 12),
+      Container(
+        key: const ValueKey('fno-premium-candle-placeholder'),
+        height: 166, padding: const EdgeInsets.all(12), decoration: _box(c),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.candlestick_chart_outlined, color: c.primary, size: 18),
+            const SizedBox(width: 6),
+            Expanded(child: Text(selected?.tradingSymbol ?? 'NIFTY options',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: t.titleSmall?.copyWith(fontWeight: FontWeight.w700))),
+            Text('5m', style: t.labelMedium),
+          ]),
+          const Spacer(),
+          Center(child: Column(children: [
+            Icon(Icons.show_chart, size: 23, color: c.onSurfaceVariant),
+            const SizedBox(height: 5),
+            Text('Verified option candles unavailable',
+              textAlign: TextAlign.center,
+              style: t.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+            Text('OHLCV history endpoint not yet connected',
+              textAlign: TextAlign.center,
+              style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          ])),
+          const Spacer(),
+        ]),
+      ),
+      const SizedBox(height: 10),
+      _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega']),
+      const SizedBox(height: 10),
+      _strip(context, 'Market Insight', ['PCR', 'Max Pain', 'IV Rank']),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: FilledButton(
+          key: const ValueKey('fno-premium-buy-call'),
+          onPressed: s?.call == null ? null : () => onTicket(s!.call!, 'BUY'),
+          child: const FittedBox(child: Text('BUY CALL')))),
+        const SizedBox(width: 6),
+        Expanded(child: OutlinedButton(
+          key: const ValueKey('fno-premium-buy-put'),
+          onPressed: s?.put == null ? null : () => onTicket(s!.put!, 'BUY'),
+          child: const FittedBox(child: Text('BUY PUT')))),
+        const SizedBox(width: 6),
+        Expanded(child: OutlinedButton(
+          key: const ValueKey('fno-premium-sell-close'),
+          onPressed: selected == null ? null : () => onTicket(selected!, 'SELL'),
+          child: const Text('SELL'))),
+      ]),
+      Text('Buttons select a PAPER contract; the guarded limit-price ticket '
+          'below still controls all order submission.',
+        style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+    ]);
+  }
+
+  Widget _card(BuildContext context, CustomerFnoLeg? leg,
+      num strike, String side, Color accent) {
+    final c = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    final show = verified && leg != null && leg.quoteFresh;
+    final selectedLeg = leg != null && selected?.instrumentKey == leg.instrumentKey;
+    return OutlinedButton(
+      key: leg == null ? ValueKey('fno-premium-$side-unlisted') :
+        ValueKey('paper-fno-leg-${leg.instrumentKey}'),
+      onPressed: leg == null ? null : () => onLeg(leg),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 10),
+        alignment: Alignment.topLeft,
+        side: BorderSide(color: selectedLeg ? accent : c.outlineVariant),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('$side ${strike.toStringAsFixed(0)}',
+          maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
+        const SizedBox(height: 8),
+        Text(show ? 'Ask ${value(leg.ask)}' : 'LTP —',
+          style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 6),
+        Text(show ? 'Bid ${value(leg.bid)}' : 'Quote not fresh',
+          style: t.labelSmall?.copyWith(
+            color: show ? accent : c.onSurfaceVariant),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 9),
+        Divider(color: c.outlineVariant, height: 1),
+        const SizedBox(height: 8),
+        Text('OI —  ·  Volume —',
+          style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        const SizedBox(height: 4),
+        Text(leg == null ? 'Not listed' : '${leg.lotSize} units / lot',
+          style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+      ]),
+    );
+  }
+
+  Widget _strip(BuildContext context, String label, List<String> fields) {
+    final c = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    return Container(
+      decoration: _box(c),
+      padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 8),
+      child: Row(children: [
+        Expanded(flex: 3, child: Text(label, maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: t.labelMedium?.copyWith(fontWeight: FontWeight.bold))),
+        for (final f in fields) Expanded(flex: 2, child: Column(children: [
+          Text(f, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: t.labelSmall?.copyWith(
+              color: c.onSurfaceVariant, fontSize: 9)),
+          const Text('—', style: TextStyle(fontWeight: FontWeight.bold)),
+        ])),
+      ]),
+    );
+  }
+
+  static BoxDecoration _box(ColorScheme c) => BoxDecoration(
+    color: c.surfaceContainerLow,
+    border: Border.all(color: c.outlineVariant),
+    borderRadius: BorderRadius.circular(12),
+  );
+}
