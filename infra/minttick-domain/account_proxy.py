@@ -87,6 +87,7 @@ ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
 PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
 PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
 LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders|market|expiries)$")
+FNO_DISCOVERY = re.compile(r"^/api/customer/markets/fno/(capability|expiries|market)$")
 LIVE_FNO_RECONCILE = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/orders/[0-9a-fA-F-]{36}/reconcile$")
 # Synthetic-only, no NSE_FO keys or broker/provider routes. Separate ledger.
 FNO_SANDBOX = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/sandbox/(state|orders)$")
@@ -142,6 +143,7 @@ def allowed(method, path):
             or (method == "POST" and path == MIND_ASSISTANT_QUERY)
             or paper_fno_allowed(method, path)
             or live_fno_allowed(method, path)
+            or (method == "GET" and FNO_DISCOVERY.fullmatch(path))
             or ((method == "GET" and path.endswith("/state")) or
                 (method == "POST" and path.endswith("/orders"))) and bool(FNO_SANDBOX.fullmatch(path))
             or paper_allowed(method, path))
