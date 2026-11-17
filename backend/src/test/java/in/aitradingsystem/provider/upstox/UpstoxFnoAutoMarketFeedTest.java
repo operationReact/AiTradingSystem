@@ -138,6 +138,8 @@ class UpstoxFnoAutoMarketFeedTest {
         assertThat(auto.status().status()).isEqualTo("STALE_SOCKET_BACKOFF");
         assertThat(auto.status().autoOwned()).isFalse();
         verify(service).stop();
+        // Real feed.stop() returns the socket to STOPPED; model that reset.
+        when(service.status()).thenReturn(status("STOPPED"));
         clock.value = MARKET.plusSeconds(120);
         auto.reconcile();
         assertThat(auto.status().status()).isEqualTo("BACKOFF");
