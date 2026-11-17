@@ -126,6 +126,13 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
         if (candles.isEmpty() || bytes.length > request.maxBytes()) {
             throw new IllegalStateException("UPSTOX_EMPTY_OR_OVERSIZE_WINDOW");
         }
+        // Revalidate immediately before handing bytes to the archive coordinator:
+        // rights may have expired or been revoked during the upstream request.
+        // The initial check alone must never authorize subsequent persistence.
+        if (!rights.isPermitted(providerCode(), DOMAIN,
+                GoldenSourceRightsRepository.Use.RAW_RETENTION, clock.instant())) {
+            throw new IllegalStateException("UPSTOX_HISTORICAL_RIGHTS_REVOKED_DURING_FETCH");
+        }
         // This digest identifies normalized source-observation bytes, not an
         // independently attested exchange file or permission to train/display.
         try {
