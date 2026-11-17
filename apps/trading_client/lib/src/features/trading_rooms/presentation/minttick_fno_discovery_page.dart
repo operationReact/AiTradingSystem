@@ -43,6 +43,22 @@ class MintTickFnoDiscoveryFacts {
     ]);
   }
 
+  static bool recentTick(CustomerFnoLeg leg, DateTime now) {
+    final exchange = leg.exchangeAt?.toUtc();
+    final observed = leg.observedAt?.toUtc();
+    final current = now.toUtc();
+    if (!leg.quoteFresh || exchange == null || observed == null ||
+        exchange.isAfter(current.add(const Duration(seconds: 2))) ||
+        observed.isAfter(current.add(const Duration(seconds: 2)))) {
+      return false;
+    }
+    final exchangeAge = current.difference(exchange);
+    final observedAge = current.difference(observed);
+    return !exchangeAge.isNegative && !observedAge.isNegative &&
+        exchangeAge <= const Duration(seconds: 15) &&
+        observedAge <= const Duration(seconds: 15);
+  }
+
   /// Previous-close changes are not an intraday momentum/volume ranking.
   static List<CustomerFnoLeg> previousCloseMovers(CustomerFnoMarket market) {
     final all = [
@@ -58,7 +74,8 @@ class MintTickFnoDiscoveryFacts {
   }
 }
 
-class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
+class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
+    with WidgetsBindingObserver {
   String? _roomId;
   String _section = 'Explore';
   String _side = 'CE';
@@ -70,6 +87,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   CustomerFnoMarket? _market;
   bool _readOnlyConfigured = false;
   String? _rightsStatus;
+  Timer? _quoteTimer;
+  bool _appActive = true;
+  bool _polling = false;
+  int _tickCount = 0;
+  CustomerFnoDiscoveryCapability? _source;
 
   List<TradingRoomDraft> get _availableRooms => widget.rooms.drafts
       .where((r) => (r.marketScope == 'FNO' || r.marketScope == 'ALL') &&
@@ -88,6 +110,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   void initState() {
     super.initState();
     widget.rooms.addListener(_onRoomsChanged);
+    WidgetsBinding.instance.addObserver(this);
+    _quoteTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_appActive || !mounted || _loading || _polling) return;
+      ++_tickCount;
+      if (_readOnlyConfigured && _expiry != null) {
+        unawaited(_loadMarket(_expiry!, quiet: true));
+      } else if (_tickCount % 6 == 0) {
+        unawaited(_refresh());
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -104,8 +136,18 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   @override
   void dispose() {
     _generation++;
+    _quoteTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     widget.rooms.removeListener(_onRoomsChanged);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appActive = state == AppLifecycleState.resumed;
+    if (_appActive && !_loading && !_polling) {
+      unawaited(_refresh());
+    }
   }
 
   void _onRoomsChanged() {
@@ -136,6 +178,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       _expiry = null;
       _expiries = const [];
       _readOnlyConfigured = false;
+      _source = null;
     });
     try {
       final capability = await widget.discovery.capability();
@@ -145,6 +188,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       final readEnabled = capability.displayRightsVerified &&
           capability.feedConfigured && capability.sourceReady;
       setState(() {
+        _source = capability;
         _rightsStatus = capability.status;
         _readOnlyConfigured = readEnabled;
       });
@@ -181,16 +225,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     }
   }
 
-  Future<void> _loadMarket(DateTime expiry, {int? expected}) async {
+  Future<void> _loadMarket(DateTime expiry, {int? expected, bool quiet = false}) async {
     if (!_expiries.contains(expiry)) {
       return;
     }
     final request = expected ?? ++_generation;
     if (expected == null) {
       setState(() {
-        _loading = true;
+        if (quiet) {
+          _polling = true;
+        } else {
+          _loading = true;
+          _market = null;
+        }
         _error = null;
-        _market = null;
         _expiry = expiry;
       });
     }
@@ -207,12 +255,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       setState(() => _market = next);
     } catch (_) {
       if (mounted && request == _generation) {
-        setState(() => _error =
-            'Unable to verify listed options or exchange-timed quotes.');
+        setState(() {
+          _market = null; // Never retain a stale LIVE label on read failure.
+          _error = 'Unable to verify listed options or exchange-timed quotes.';
+        });
       }
     } finally {
       if (mounted && request == _generation) {
-        setState(() => _loading = false);
+        setState(() {
+          if (quiet) {
+            _polling = false;
+          } else {
+            _loading = false;
+          }
+        });
       }
     }
   }
@@ -224,7 +280,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     final room = _room;
     final market = _market;
     final fresh = market != null && market.hasFreshQuotes &&
-        market.displayRightsVerified;
+        market.displayRightsVerified &&
+        market.strikes.any((strike) =>
+          (strike.call != null && MintTickFnoDiscoveryFacts.recentTick(
+            strike.call!, DateTime.now().toUtc())) ||
+          (strike.put != null && MintTickFnoDiscoveryFacts.recentTick(
+            strike.put!, DateTime.now().toUtc())));
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
       const SizedBox(height: 7),
       Row(children: [
@@ -242,6 +303,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       ]),
       Text('Real NSE contracts · no indicative or synthetic prices',
         style: theme.textTheme.bodySmall?.copyWith(color: c.onSurfaceVariant)),
+      const SizedBox(height: 5),
+      Text('Stream: ${_source?.streamState ?? 'UNVERIFIED'} · '
+          'fresh contracts: ${_source?.freshExchangeTimedQuotes ?? 0} · '
+          'last exchange tick: ${_time(_source?.latestFreshExchangeTradeAt)}',
+        style: theme.textTheme.labelSmall?.copyWith(color: c.onSurfaceVariant)),
       const SizedBox(height: 16),
       _roomPicker(context, room),
       const SizedBox(height: 14),
@@ -435,7 +501,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     final c = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final verified = _market?.hasFreshQuotes == true &&
-        leg.quoteFresh && leg.exchangeAt != null && leg.observedAt != null;
+        MintTickFnoDiscoveryFacts.recentTick(leg, DateTime.now().toUtc());
     final pct = verified ? leg.priceChangePct : null;
     final price = verified ? leg.ltp : null;
     return Padding(padding: const EdgeInsets.symmetric(vertical: 7),
@@ -473,7 +539,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
 
   Widget _movers(BuildContext context, CustomerFnoMarket? market) {
     final top = market == null ? <CustomerFnoLeg>[] :
-        MintTickFnoDiscoveryFacts.previousCloseMovers(market).take(4).toList();
+        MintTickFnoDiscoveryFacts.previousCloseMovers(market)
+          .where((leg) => MintTickFnoDiscoveryFacts.recentTick(
+              leg, DateTime.now().toUtc())).take(4).toList();
     return Padding(padding: const EdgeInsets.only(bottom: 14),
       child: MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -588,6 +656,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   ][m - 1];
 
   static String _time(DateTime? date) =>
-      date == null ? 'unknown' : '${date.toLocal().hour.toString().padLeft(2, '0')}:'
-          '${date.toLocal().minute.toString().padLeft(2, '0')} local';
+      date == null ? 'unknown' : '${date.toUtc().hour.toString().padLeft(2, '0')}:'
+          '${date.toUtc().minute.toString().padLeft(2, '0')} UTC';
 }
