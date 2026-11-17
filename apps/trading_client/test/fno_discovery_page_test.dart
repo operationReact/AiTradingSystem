@@ -59,6 +59,44 @@ void main() {
         _market(fresh: false)), isEmpty);
   });
 
+  test('a real exchange timestamp expires after 15 seconds', () {
+    final leg = CustomerFnoLeg.decode(_leg('CE'));
+    expect(MintTickFnoDiscoveryFacts.recentTick(leg,
+        DateTime.parse('2026-11-17T08:00:08Z')), isTrue);
+    expect(MintTickFnoDiscoveryFacts.recentTick(leg,
+        DateTime.parse('2026-11-17T08:00:17Z')), isFalse);
+    expect(MintTickFnoDiscoveryFacts.recentTick(leg,
+        DateTime.parse('2026-11-17T07:59:59Z')), isFalse);
+    final stale = CustomerFnoLeg.decode(_leg('CE', fresh: false));
+    expect(MintTickFnoDiscoveryFacts.recentTick(stale,
+        DateTime.parse('2026-11-17T08:00:02Z')), isFalse);
+  });
+
+  test('source capability requires exchange-timed proof, not socket alone', () {
+    final parsed = CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': true,
+      'feedConfigured': true,
+      'sourceReady': true,
+      'marketOpen': true,
+      'status': 'LIVE_QUOTES',
+      'streamState': 'CONNECTED',
+      'freshExchangeTimedQuotes': 2,
+      'latestFreshExchangeTradeAt': '2026-11-17T08:00:00Z',
+    });
+    expect(parsed.live, isTrue);
+    expect(parsed.freshExchangeTimedQuotes, 2);
+    expect(() => CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': true,
+      'feedConfigured': true,
+      'sourceReady': true,
+      'marketOpen': true,
+      'status': 'LIVE_QUOTES',
+      'streamState': 'CONNECTED',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+    }), throwsFormatException);
+  });
+
   testWidgets('empty F&O discover offers room creation, not invented prices',
       (tester) async {
     final rooms = TradingRoomDraftStore();
