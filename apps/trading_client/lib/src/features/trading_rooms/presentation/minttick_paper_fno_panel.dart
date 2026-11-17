@@ -582,7 +582,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       Text(statusLabel, key: const ValueKey('paper-fno-status'),
         style: type.labelMedium?.copyWith(color: colors.primary)),
       if (market.snapshotAt != null)
-        Text('Snapshot ' + market.snapshotAt!.toIso8601String(),
+        Text('Snapshot ${market.snapshotAt!.toIso8601String()}',
           style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       const SizedBox(height: 8),
       MintTickFnoQuoteBoard(
