@@ -58,7 +58,7 @@ class UpstoxFnoPaperPreflightControllerTest {
     @Test
     void staleHistoricalTradeTimestampCanNeverPassPreflight() {
         when(source.enabled()).thenReturn(true);
-        when(calendar.isInsideCashSession(MONDAY)).thenReturn(true);
+        when(calendar.isInsideFnoSession(MONDAY)).thenReturn(true);
         var feed = mock(UpstoxFnoV3LiveFeedService.class);
         when(provider.getIfAvailable()).thenReturn(feed);
         when(feed.status()).thenReturn(new UpstoxFnoV3LiveFeedService.Status(
@@ -77,7 +77,7 @@ class UpstoxFnoPaperPreflightControllerTest {
     @Test
     void freshSyntheticFeedPassesOnlyTechnicalPreflightNeverTradingApproval() {
         when(source.enabled()).thenReturn(true);
-        when(calendar.isInsideCashSession(MONDAY)).thenReturn(true);
+        when(calendar.isInsideFnoSession(MONDAY)).thenReturn(true);
         var feed = mock(UpstoxFnoV3LiveFeedService.class);
         when(provider.getIfAvailable()).thenReturn(feed);
         when(feed.status()).thenReturn(new UpstoxFnoV3LiveFeedService.Status(
