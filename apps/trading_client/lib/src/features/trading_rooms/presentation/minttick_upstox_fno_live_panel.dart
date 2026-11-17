@@ -152,7 +152,7 @@ class _MintTickUpstoxFnoLivePanelState
       ),
     );
     if (confirmed != true || !mounted || !_canOrder(leg, side) ||
-        _expiry != expiry) return;
+        _expiry != expiry) { return; }
     // A unique secure key exists for this exact submission. Ambiguous network
     // failures NEVER generate an automatic second broker request.
     final key = HttpCustomerTradeIntentRepository.newKey();
@@ -200,8 +200,10 @@ class _MintTickUpstoxFnoLivePanelState
         _orders = [for (final row in _orders) row.id == updated.id ? updated : row];
       });
     } catch (_) {
-      if (mounted) setState(() => _error =
-          'Broker reconciliation unavailable. Do not place another order.');
+      if (mounted) {
+        setState(() => _error =
+            'Broker reconciliation unavailable. Do not place another order.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -249,7 +251,7 @@ class _MintTickUpstoxFnoLivePanelState
           const SizedBox(height: 12),
           DropdownButtonFormField<DateTime>(
             key: const ValueKey('live-fno-expiry'),
-            value: _expiries.contains(_expiry) ? _expiry : null,
+            initialValue: _expiries.contains(_expiry) ? _expiry : null,
             decoration: const InputDecoration(labelText: 'Verified NIFTY expiry'),
             items: [for (final date in _expiries)
               DropdownMenuItem(value: date, child: Text(_ymd(date)))],
