@@ -591,6 +591,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         fresh: _quotesWithinAge,
         strike: _dashboardStrike,
         selected: _selected,
+        canClose: _selected != null && _heldLots(_selected!) > 0,
         onStrike: (value) => setState(() {
           _dashboardStrike = value;
           _selected = null;
