@@ -402,8 +402,7 @@ class _MintTickRoomProductionWorkspaceState
                     label: 'OPTIONS P&L',
                     value: fnoPnl == null ? '—' : _moneyPaise(fnoPnl),
                     secondary: fnoReturn == null ? 'Not valued'
-                      : (fnoReturn >= 0 ? '+' : '') +
-                        fnoReturn.toStringAsFixed(2) + '% indicative',
+                      : '${fnoReturn >= 0 ? '+' : ''}${fnoReturn.toStringAsFixed(2)}% indicative',
                     green: fnoPnl != null && fnoPnl >= 0)),
                   _MetricDivider(color: colors.outlineVariant),
                   SizedBox(width: 100, child: _CompactMetric(
