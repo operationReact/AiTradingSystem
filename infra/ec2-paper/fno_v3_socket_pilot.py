@@ -44,8 +44,12 @@ def api(method, route, key):
     req = urllib.request.Request("http://127.0.0.1:8080"+route,
         headers={"X-API-Key":key,"Accept":"application/json"},
         data=b"" if method=="POST" else None, method=method)
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, fp, code, msg, headers, newurl):
+            return None
+    opener = urllib.request.build_opener(NoRedirect())
     try:
-        with urllib.request.urlopen(req, timeout=45 if method=="POST" else 8) as resp:
+        with opener.open(req, timeout=45 if method=="POST" else 8) as resp:
             if (resp.status != 202 if route.startswith(PREFIX+"start")
                     else resp.status != 200):
                 return None
