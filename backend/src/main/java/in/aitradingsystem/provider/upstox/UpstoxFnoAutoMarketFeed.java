@@ -40,6 +40,7 @@ public final class UpstoxFnoAutoMarketFeed {
     private final boolean displayRightsVerified;
     private boolean owned;
     private LocalDate activeExpiry;
+    private Instant sessionStartedAt;
     private Instant nextAttempt = Instant.EPOCH;
     private String state = "WAITING_FOR_SESSION";
 
@@ -93,7 +94,8 @@ public final class UpstoxFnoAutoMarketFeed {
             return;
         }
         // Never preempt or shut down a different explicit operator session.
-        String socketState = feed.status().state();
+        var socket = feed.status();
+        String socketState = socket.state();
         boolean active = List.of("CONNECTING", "SUBSCRIBING",
                 "CONNECTED_AWAITING_TICKS", "CONNECTED", "RECONNECTING")
             .contains(socketState);
@@ -103,6 +105,17 @@ public final class UpstoxFnoAutoMarketFeed {
         }
         if (owned && active && activeExpiry != null &&
                 !activeExpiry.isBefore(now.atZone(IST).toLocalDate())) {
+            // Watchdog: a connected-but-silent socket is not live market data.
+            // Allow up to 90 seconds for initial subscribe and market bursts.
+            Instant lastFrame = socket.lastFrameObservedAt();
+            Instant reference = lastFrame == null ? sessionStartedAt : lastFrame;
+            if (reference != null &&
+                    !now.isBefore(reference.plusSeconds(90))) {
+                stopOwned();
+                nextAttempt = now.plus(RETRY_DELAY);
+                state = "STALE_SOCKET_BACKOFF";
+                return;
+            }
             state = "AUTO_" + socketState;
             return;
         }
@@ -141,6 +154,7 @@ public final class UpstoxFnoAutoMarketFeed {
             }
             feed.start(keys);
             activeExpiry = expiry;
+            sessionStartedAt = now;
             owned = true;
             state = "AUTO_CONNECTING";
         } catch (RuntimeException ignored) {
@@ -156,6 +170,7 @@ public final class UpstoxFnoAutoMarketFeed {
             } finally {
                 owned = false;
                 activeExpiry = null;
+                sessionStartedAt = null;
             }
         }
     }
