@@ -113,8 +113,23 @@ def run(base, token, symbol, exchange, room_id):
         cycles = _get(base, f"/api/customer/trading-rooms/{room_id}/mind/paper-cycles", token)
         rows = cycles if isinstance(cycles, list) else cycles.get("content", [])
         cycle = next((c for c in rows if c.get("instrumentId") == instrument_id), None)
+    identity = []
+    for other in instruments.get("content", [])[:10]:
+        if not str(other.get("tradingSymbol", "")).upper().startswith(symbol.split("-")[0].upper()):
+            continue
+        for interval in (INTERVAL, "ONE_DAY"):
+            page = _get(base, "/api/customer/market-data/candles?" + urllib.parse.urlencode(
+                {"instrumentId": int(other["id"]), "interval": interval, "fromDate": since, "toDate": until,
+                 "page": 0, "size": 200}), token)
+            rows = page.get("items", [])
+            latest = max((parse_time(r.get("candleTime")) for r in rows if parse_time(r.get("candleTime"))),
+                         default=None)
+            identity.append({"instrumentId": int(other["id"]), "tradingSymbol": other.get("tradingSymbol"),
+                             "exchange": other.get("exchange"), "interval": interval, "count": len(rows),
+                             "latestCandleTime": latest.isoformat() if latest else None})
     return {
         "provider": "ANGEL_ONE_SMARTAPI",
+        "identityCandidates": identity,
         "instrument": {"id": instrument_id, "tradingSymbol": symbol, "exchange": exchange},
         "interval": INTERVAL,
         "expectedFreshnessMinutes": MAX_CANDLE_AGE_MINUTES,
