@@ -194,7 +194,8 @@ class _FakeRepo implements CustomerPaperFnoRepository {
 }
 
 Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
-    {bool withExpiry = true, DateTime Function()? clock}) async {
+    {bool withExpiry = true, DateTime Function()? clock,
+     String view = 'trade'}) async {
   tester.view.devicePixelRatio = 1;
   tester.view.physicalSize = const Size(900, 2400);
   addTearDown(tester.view.resetPhysicalSize);
@@ -202,11 +203,37 @@ Future<void> pump(WidgetTester tester, CustomerPaperFnoRepository repo,
   await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
     child: MintTickPaperFnoPanel(roomId: 'room', repository: repo,
       initialExpiry: withExpiry ? DateTime(2026, 11, 20) : null,
+      view: view,
       clock: clock ?? DateTime.now)))));
   await tester.pumpAndSettle();
 }
 
 void main() {
+  testWidgets('F&O positions tab does not load market data or a buy ticket',
+      (tester) async {
+    final repo = _FakeRepo(
+      positionResult: [heldPosition()], ordersResult: [buyFill()]);
+    await pump(tester, repo, view: 'positions');
+    expect(find.text('F&O Positions'), findsOneWidget);
+    expect(find.textContaining('75 qty'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-premium-quote-board')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
+    expect(repo.expiryCalls, 0);
+    expect(repo.marketCalls, 0);
+  });
+
+  testWidgets('F&O orders tab reads only owner-scoped virtual fills',
+      (tester) async {
+    final repo = _FakeRepo(
+      positionResult: [heldPosition()], ordersResult: [buyFill()]);
+    await pump(tester, repo, view: 'orders');
+    expect(find.text('F&O Orders'), findsOneWidget);
+    expect(find.textContaining('BUY 1 lot(s)'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-premium-quote-board')), findsNothing);
+    expect(repo.marketCalls, 0);
+    expect(repo.expiryCalls, 0);
+  });
+
   testWidgets('server F&O disabled shows saved private history without market requests',
       (tester) async {
     final repo = _FakeRepo(
