@@ -328,7 +328,57 @@ void main() {
     await tester.pumpAndSettle();
     final submit = find.byKey(const ValueKey('paper-fno-submit'));
     expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
-    expect(find.text('102.0'), findsOneWidget);
+    expect(find.text('Ask ₹102.00'), findsOneWidget);
+  });
+
+  testWidgets('premium NIFTY options shows only actual quote fields and guarded actions',
+      (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market()));
+    expect(find.byKey(const ValueKey('fno-premium-quote-board')), findsOneWidget);
+    expect(find.text('NIFTY 50'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-index-unavailable')), findsOneWidget);
+    expect(find.text('Index LTP unavailable from current F&O API'), findsOneWidget);
+    expect(find.text('Ask ₹102.00'), findsOneWidget);
+    expect(find.text('Bid ₹101.50'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-premium-strike-picker')), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-premium-candle-placeholder')), findsOneWidget);
+    expect(find.text('Verified option candles unavailable'), findsOneWidget);
+    expect(find.text('Greeks'), findsOneWidget);
+    expect(find.text('Market Insight'), findsOneWidget);
+    expect(find.text('Delta'), findsOneWidget);
+    expect(find.text('PCR'), findsOneWidget);
+    expect(tester.widget<FilledButton>(
+      find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed, isNotNull);
+    expect(tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('fno-premium-buy-put'))).onPressed, isNull);
+    expect(tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('fno-premium-sell-close'))).onPressed, isNull);
+  });
+
+  testWidgets('option quote panel does not leak prices without display permission',
+      (tester) async {
+    await pump(tester, _FakeRepo(marketResult: market(rights: false)));
+    expect(find.textContaining('Ask ₹'), findsNothing);
+    expect(find.textContaining('Bid ₹'), findsNothing);
+    expect(tester.widget<FilledButton>(
+      find.byKey(const ValueKey('fno-premium-buy-call'))).onPressed, isNull);
+  });
+
+  testWidgets('option positions display actual percentage return from cost basis',
+      (tester) async {
+    final p = CustomerFnoPosition.decode({
+      'instrumentKey': 'NSE_FO|NIFTY24CE',
+      'optionType': 'CE', 'expiry': '2026-11-20',
+      'lotSize': 75, 'quantity': 75,
+      'costBasisPaise': 765000,
+      'indicativeUnrealizedPnlPaise': 76500,
+      'priceFresh': true,
+    });
+    await pump(tester, _FakeRepo(
+      marketResult: market(), positionResult: [p]));
+    expect(find.byKey(const ValueKey('fno-return-percent-NSE_FO|NIFTY24CE')),
+      findsOneWidget);
+    expect(find.text('+10.00%'), findsOneWidget);
   });
 
   testWidgets('a stale quote keeps submit disabled even when the leg is selected', (tester) async {
