@@ -189,9 +189,13 @@ class _UpstoxAnalyticsProgressPageState extends State<UpstoxAnalyticsProgressPag
     final hasDb = stored?.evidenceState == 'PERSISTED_CHECKPOINTS_ONLY';
     final archived = hasDb ? stored!.archivedVerifiedChunks?.toString() ?? '—' : '—';
     final attested = hasDb ? stored!.attestedRetentionChunks?.toString() ?? '—' : '—';
-    final dbState = stored == null ? 'Receipt API unobserved'
-        : !hasDb ? 'No UPSTOX source registered'
-        : 'Archived $archived · rights-attested $attested';
+    // Only an explicit provider-absence receipt proves absence. Other states
+    // (including malformed/unavailable evidence) must never imply zero.
+    final dbState = stored == null ? 'Receipt API unobserved · counts UNKNOWN'
+        : hasDb ? 'Archived $archived · rights-attested $attested'
+        : stored.evidenceState == 'NO_PROVIDER_RECEIPT'
+            ? 'No UPSTOX provider receipt (observed response)'
+            : 'Receipt state: ${stored.evidenceState} · counts UNKNOWN';
     return panel(Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
         const Expanded(child: Text('Evidence tracking',
