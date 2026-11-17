@@ -513,6 +513,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Recheck F&O'),
             ),
+            const SizedBox(height: 12),
+            const MintTickFnoUnavailableOverview(),
           ],
         ]),
       );
