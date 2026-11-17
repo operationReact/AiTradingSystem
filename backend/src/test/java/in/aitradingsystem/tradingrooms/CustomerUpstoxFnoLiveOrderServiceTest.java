@@ -9,6 +9,20 @@ class CustomerUpstoxFnoLiveOrderServiceTest {
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Test
+    void globalEmergencyStopBlocksNewLiveBuysButNotClosingLongPositions() {
+        assertThat(CustomerUpstoxFnoLiveOrderService
+            .blocksNewLiveEntry("BUY", true)).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService
+            .blocksNewLiveEntry("BUY", null)).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService
+            .blocksNewLiveEntry("BUY", false)).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService
+            .blocksNewLiveEntry("SELL", true)).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService
+            .blocksNewLiveEntry("SELL", null)).isFalse();
+    }
+
+    @Test
     void brokerBookRejectsSameContractPendingAndMalformedResponses() throws Exception {
         var book = mapper.readTree("""
             [{"instrument_token":"NSE_FO|123","status":"open"},
