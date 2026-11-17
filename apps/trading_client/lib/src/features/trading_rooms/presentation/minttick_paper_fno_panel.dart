@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/customer_paper_fno_repository.dart';
+import 'minttick_fno_quote_board.dart';
 
 /// PAPER-only NIFTY long options: contract selection, BUY/SELL ticket and
 /// virtual positions. Every value comes from the server. Anything the server
@@ -54,6 +55,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   bool _submitting = false;
   String? _message;
   CustomerFnoLeg? _selected;
+  num? _dashboardStrike;
   String _side = 'BUY';
   int _lots = 1;
   final _price = TextEditingController();
@@ -198,6 +200,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   void _selectExpiry(DateTime expiry) {
     setState(() {
       _expiry = expiry;
+      _dashboardStrike = null;
       _selected = null;
       _message = null;
       _price.text = '';
@@ -262,6 +265,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         // A refresh replaces every leg. Clear the old selection and price so an
         // earlier quote can never gate a new order; the user re-selects a leg.
         _selected = null;
+        _dashboardStrike = null;
         _price.text = '';
         _loading = false;
       });
