@@ -25,8 +25,8 @@ import org.springframework.stereotype.Service;
  * Explicit opt-in and independently reviewed display rights are BOTH required.
  */
 @Service
-@ConditionalOnProperty(name = "minttick.upstox-fno.auto-market-feed-enabled",
-                       havingValue = "true")
+@ConditionalOnProperty(name = {"minttick.upstox-fno.auto-market-feed-enabled",
+        "minttick.upstox-fno.v3-feed-enabled"}, havingValue = "true")
 public final class UpstoxFnoAutoMarketFeed {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final Duration RETRY_DELAY = Duration.ofMinutes(3);
