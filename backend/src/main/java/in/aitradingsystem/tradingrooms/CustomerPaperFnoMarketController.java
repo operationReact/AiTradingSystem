@@ -52,7 +52,10 @@ public class CustomerPaperFnoMarketController {
     public record Leg(String instrumentKey, String tradingSymbol, String side,
                       int lotSize, BigDecimal tickSize, BigDecimal bid, BigDecimal ask,
                       Instant exchangeAt, Instant observedAt,
-                      boolean quoteFresh, boolean paperEligible) {}
+                      boolean quoteFresh, boolean paperEligible,
+                      BigDecimal ltp, BigDecimal previousClose, Long openInterest,
+                      BigDecimal iv, BigDecimal delta, BigDecimal theta,
+                      BigDecimal gamma, BigDecimal vega) {}
     public record Strike(BigDecimal strikePrice, Leg call, Leg put) {}
     public record Market(String underlyingKey, LocalDate expiry, String source,
                          String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
@@ -248,16 +251,38 @@ public class CustomerPaperFnoMarketController {
     }
 
     private static Leg leg(UpstoxAnalyticsSource.FnoOptionContract c,
-            UpstoxFnoV3LiveFeedService live,boolean marketOpen,boolean paperAllowed) {
-        var quote=marketOpen ? live.eligiblePaperQuote(c.instrumentKey())
-            : java.util.Optional.<UpstoxFnoV3LiveFeedService.PaperQuote>empty();
-        return new Leg(c.instrumentKey(),c.tradingSymbol(),c.side(),
-                c.lotSize(),c.tickSize(),
+            UpstoxFnoV3LiveFeedService live, boolean marketOpen, boolean paperAllowed) {
+        var quote = marketOpen ? live.eligiblePaperQuote(c.instrumentKey())
+                : java.util.Optional.<UpstoxFnoV3LiveFeedService.PaperQuote>empty();
+        // V3's optional analytics values are only from the SAME fresh
+        // exchange-timed observation used for the executable bid/ask.
+        // REST option-chain Greeks/LTP are never substituted.
+        var details = quote.isPresent()
+                ? live.eligibleDisplayQuote(c.instrumentKey())
+                : java.util.Optional.<UpstoxFnoV3LiveFeedService.DisplayQuote>empty();
+        if (quote.isPresent() && details.isPresent()
+                && (!quote.get().exchangeAt().equals(details.get().exchangeAt())
+                    || !quote.get().observedAt().equals(details.get().observedAt())
+                    || quote.get().bid().compareTo(details.get().bid()) != 0
+                    || quote.get().ask().compareTo(details.get().ask()) != 0)) {
+            details = java.util.Optional.empty();
+        }
+        var d = details.orElse(null);
+        return new Leg(c.instrumentKey(), c.tradingSymbol(), c.side(),
+                c.lotSize(), c.tickSize(),
                 quote.map(UpstoxFnoV3LiveFeedService.PaperQuote::bid).orElse(null),
                 quote.map(UpstoxFnoV3LiveFeedService.PaperQuote::ask).orElse(null),
                 quote.map(UpstoxFnoV3LiveFeedService.PaperQuote::exchangeAt).orElse(null),
                 quote.map(UpstoxFnoV3LiveFeedService.PaperQuote::observedAt).orElse(null),
-                quote.isPresent(),quote.isPresent()&&paperAllowed);
+                quote.isPresent(), quote.isPresent() && paperAllowed,
+                d == null ? null : d.ltp(),
+                d == null ? null : d.previousClose(),
+                d == null ? null : d.openInterest(),
+                d == null ? null : d.iv(),
+                d == null ? null : d.delta(),
+                d == null ? null : d.theta(),
+                d == null ? null : d.gamma(),
+                d == null ? null : d.vega());
     }
 
     private boolean ownedPaperRoom(UUID owner,UUID room) {
