@@ -25,7 +25,9 @@ class UpstoxFnoV3LiveFeedServiceTest {
     private final AtomicReference<WebSocket.Listener> listener = new AtomicReference<>();
     private final Clock clock = Clock.fixed(Instant.parse("2026-11-14T10:00:00Z"), ZoneOffset.UTC);
 
-    private UpstoxFnoV3LiveFeedService service() {
+    private UpstoxFnoV3LiveFeedService service() { return service(clock); }
+
+    private UpstoxFnoV3LiveFeedService service(Clock sourceClock) {
         when(source.enabled()).thenReturn(true);
         when(source.authorizeFnoMarketFeedV3()).thenReturn(URI.create(
                 "wss://prod-feed.upstox.com/market-data-feeder/v3/feeds?code=test-one-use"));
@@ -33,7 +35,7 @@ class UpstoxFnoV3LiveFeedServiceTest {
                 .thenReturn(CompletableFuture.completedFuture(socket));
         when(socket.sendClose(anyInt(), anyString()))
                 .thenReturn(CompletableFuture.completedFuture(socket));
-        return new UpstoxFnoV3LiveFeedService(source, clock, (uri, capture) -> {
+        return new UpstoxFnoV3LiveFeedService(source, sourceClock, (uri, capture) -> {
             listener.set(capture);
             return CompletableFuture.completedFuture(socket);
         }, executor);
@@ -66,6 +68,31 @@ class UpstoxFnoV3LiveFeedServiceTest {
             assertThat(status.trainingRightsVerified()).isFalse();
             assertThat(status.liveTradingEnabled()).isFalse();
             verify(source, times(1)).authorizeFnoMarketFeedV3();
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
+    void freshExchangeLttCanSafelyDisplayV3LtpOiGreeksAndPriorClose() {
+        var closeTime = Clock.fixed(
+            Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var s = service(closeTime);
+        try {
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            var latest = s.eligibleDisplayQuote("NSE_FO|61001");
+            assertThat(latest).isPresent();
+            assertThat(latest.orElseThrow().ltp()).isEqualByComparingTo("120.5");
+            assertThat(latest.orElseThrow().previousClose())
+                .isEqualByComparingTo("130");
+            assertThat(latest.orElseThrow().openInterest()).isEqualTo(5000L);
+            assertThat(latest.orElseThrow().delta()).isEqualByComparingTo("-0.52");
+            assertThat(latest.orElseThrow().iv()).isEqualByComparingTo(".21");
+            s.stop();
+            assertThat(s.eligibleDisplayQuote("NSE_FO|61001")).isEmpty();
         } finally {
             s.shutdown();
         }
