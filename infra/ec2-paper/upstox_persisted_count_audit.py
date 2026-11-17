@@ -118,6 +118,27 @@ def sanitized_receipt(raw: str) -> dict:
     return safe_counts(json.loads(matches[0]))
 
 
+# Only predeclared, nonsecret host failure labels may cross the SSM boundary.
+# Never relay arbitrary stdout/stderr or any environment/database contents.
+HOST_FAILURE_CODES = frozenset({
+    "UPSTOX_AUDIT_HOST_IDENTITY_INVALID",
+    "UPSTOX_AUDIT_RUNTIME_IDENTITY_INVALID",
+    "UPSTOX_AUDIT_RUNTIME_PERMISSIONS_INVALID",
+    "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH",
+    "UPSTOX_AUDIT_DATABASE_UNAVAILABLE",
+})
+
+
+def sanitized_host_failure(stdout: str, stderr: str) -> str:
+    for stream in (stderr, stdout):
+        if not isinstance(stream, str) or len(stream) > 16000:
+            continue
+        lines = stream.strip().splitlines()
+        if len(lines) == 1 and lines[0] in HOST_FAILURE_CODES:
+            return lines[0]
+    return "UPSTOX_AUDIT_HOST_CHECK_FAILED"
+
+
 def host() -> None:
     if os.geteuid() != 0 or os.uname().machine != "aarch64":
         raise SystemExit("UPSTOX_AUDIT_HOST_IDENTITY_INVALID")
@@ -209,7 +230,9 @@ def runner() -> None:
             return
         if status in {"Failed", "Cancelled", "TimedOut", "Cancelling"}:
             # This failure code is fixed locally; never reflect remote output.
-            raise SystemExit("UPSTOX_AUDIT_HOST_CHECK_FAILED")
+            raise SystemExit(sanitized_host_failure(
+                result.get("StandardOutputContent") or "",
+                result.get("StandardErrorContent") or ""))
         if status not in {"Pending", "InProgress", "Delayed"}:
             raise SystemExit("UPSTOX_AUDIT_SSM_UNEXPECTED_STATE")
     raise SystemExit("UPSTOX_AUDIT_TIMEOUT")
