@@ -24,6 +24,7 @@ class UpstoxFnoV3FeedCodecTest {
         assertThat(x.instrumentKey()).isEqualTo(KEY);
         assertThat(x.tradedAt()).isEqualTo(Instant.ofEpochMilli(TRADE_MS));
         assertThat(x.ltp()).isEqualByComparingTo("120.5");
+        assertThat(x.previousClose()).isEqualByComparingTo("130");
         assertThat(x.bid()).isEqualByComparingTo("119.5");
         assertThat(x.ask()).isEqualByComparingTo("121");
         assertThat(x.openInterest()).isEqualTo(5000L);
