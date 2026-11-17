@@ -314,7 +314,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
     if (!mounted || widget.view != 'trade' ||
         _capability?.readOnlyConfigured != true ||
         _expiry == null || _market == null ||
-        _market!.status == 'MARKET_CLOSED') return;
+        _market!.status == 'MARKET_CLOSED') {
+      return;
+    }
     _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!_polling && !_submitting && !_loading) _pollMarket();
     });
@@ -323,7 +325,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
   Future<void> _pollMarket() async {
     final expiry = _expiry;
     if (_polling || expiry == null || _capability?.readOnlyConfigured != true ||
-        !mounted) return;
+        !mounted) {
+      return;
+    }
     _polling = true;
     final request = ++_request;
     try {
