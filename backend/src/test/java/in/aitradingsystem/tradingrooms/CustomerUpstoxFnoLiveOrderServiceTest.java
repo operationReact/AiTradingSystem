@@ -30,6 +30,16 @@ class CustomerUpstoxFnoLiveOrderServiceTest {
     }
 
     @Test
+    void brokerIntradayOrderCutoffIsConservativeBeforeAutoSquareOff() {
+        assertThat(CustomerUpstoxFnoLiveOrderService.insideUpstoxIntradayCutoff(
+            java.time.Instant.parse("2026-11-17T09:49:59Z"), "INTRADAY")).isTrue();
+        assertThat(CustomerUpstoxFnoLiveOrderService.insideUpstoxIntradayCutoff(
+            java.time.Instant.parse("2026-11-17T09:50:00Z"), "INTRADAY")).isFalse();
+        assertThat(CustomerUpstoxFnoLiveOrderService.insideUpstoxIntradayCutoff(
+            java.time.Instant.parse("2026-11-17T10:05:00Z"), "SWING")).isTrue();
+    }
+
+    @Test
     void onlyOwnerBrokerActualPositiveNfoPositionQualifiesForSellToClose() throws Exception {
         var positions = mapper.readTree("""
             [{"instrument_token":"NSE_FO|123","exchange":"NFO","product":"I","quantity":65},
