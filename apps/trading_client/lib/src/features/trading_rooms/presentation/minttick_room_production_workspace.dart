@@ -11,6 +11,8 @@ import '../data/customer_room_repository.dart';
 import '../data/customer_trade_intent_repository.dart';
 import '../domain/trading_room_draft.dart';
 import 'minttick_customer_widgets.dart';
+import '../data/customer_upstox_fno_live_repository.dart';
+import 'minttick_upstox_fno_live_panel.dart';
 import 'minttick_paper_fno_panel.dart';
 import 'minttick_room_candlestick_desk.dart';
 import 'minttick_room_order_sheet.dart';
@@ -527,10 +529,24 @@ class _MintTickRoomProductionWorkspaceState
   }
 
   Widget _fnoTrade(BuildContext context) {
+    if (widget.room.mode == 'LIVE') {
+      if (widget.readiness?.selectedBroker != 'UPSTOX') {
+        return const Center(child: Text(
+          'Select Upstox for this LIVE F&O room in the Mind tab to '
+          'inspect real broker permissions and order readiness.'));
+      }
+      if (widget.execution == null) {
+        return const Center(child: Text(
+          'Authenticated LIVE F&O connection is unavailable.'));
+      }
+      return MintTickUpstoxFnoLivePanel(
+        key: ValueKey('room-live-fno-${widget.room.id}'),
+        roomId: widget.room.id,
+        repository: CustomerUpstoxFnoLiveRepository(widget.execution!.api),
+      );
+    }
     if (widget.room.mode != 'PAPER' || widget.fno == null) {
-      return const Center(child: Text(
-        'F&O LIVE order execution is not authorized. Broker permissions, '
-        'risk limits and explicit LIVE room consent are required.'));
+      return const Center(child: Text('F&O PAPER account unavailable.'));
     }
     return SingleChildScrollView(
       child: MintTickPaperFnoPanel(
