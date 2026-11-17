@@ -582,53 +582,31 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       Text(statusLabel, key: const ValueKey('paper-fno-status'),
         style: type.labelMedium?.copyWith(color: colors.primary)),
       if (market.snapshotAt != null)
-        Text('Snapshot ${market.snapshotAt!.toIso8601String()}',
+        Text('Snapshot ' + market.snapshotAt!.toIso8601String(),
           style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       const SizedBox(height: 8),
-      if (market.strikes.isEmpty)
-        const Text('No verified strikes for this expiry.')
-      else
-        for (final strike in market.strikes) _strikeRow(strike, colors, type),
+      MintTickFnoQuoteBoard(
+        key: const ValueKey('fno-premium-quote-board'),
+        market: market,
+        fresh: _quotesWithinAge,
+        strike: _dashboardStrike,
+        selected: _selected,
+        onStrike: (value) => setState(() {
+          _dashboardStrike = value;
+          _selected = null;
+          _price.clear();
+          _message = null;
+        }),
+        onLeg: _select,
+        // Selection is separate from submitting a virtual order.
+        onTicket: (leg, side) {
+          _select(leg);
+          _setSide(side);
+        },
+      ),
       const SizedBox(height: 10),
       _ticket(colors, type),
     ];
-  }
-
-  Widget _strikeRow(CustomerFnoStrike strike, ColorScheme colors, TextTheme type) =>
-    Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(children: [
-        SizedBox(width: 70, child: Text(strike.strikePrice.toString(),
-          style: type.labelLarge)),
-        Expanded(child: _legChip(strike.call, 'CE', colors, type)),
-        const SizedBox(width: 6),
-        Expanded(child: _legChip(strike.put, 'PE', colors, type)),
-      ]),
-    );
-
-  Widget _legChip(CustomerFnoLeg? leg, String label, ColorScheme colors, TextTheme type) {
-    if (leg == null) {
-      return Text('$label not listed', style: type.labelSmall);
-    }
-    final usable = _quotesWithinAge && _market?.hasFreshQuotes == true &&
-        _market?.displayRightsVerified == true && leg.quoteFresh && leg.paperEligible;
-    final selected = identical(_selected, leg) ||
-        _selected?.instrumentKey == leg.instrumentKey;
-    return OutlinedButton(
-      key: ValueKey('paper-fno-leg-${leg.instrumentKey}'),
-      onPressed: () => _select(leg),
-      style: OutlinedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        side: BorderSide(color: selected ? colors.primary : colors.outlineVariant)),
-      child: Column(children: [
-        Text('$label ${leg.lotSize}/lot', style: type.labelSmall),
-        Text(usable
-            ? 'Bid ${leg.bid ?? '—'} · Ask ${leg.ask ?? '—'}'
-            : 'Quote not fresh',
-          style: type.labelSmall?.copyWith(
-            color: usable ? colors.onSurface : colors.onSurfaceVariant)),
-      ]),
-    );
   }
 
   Widget _ticket(ColorScheme colors, TextTheme type) {
