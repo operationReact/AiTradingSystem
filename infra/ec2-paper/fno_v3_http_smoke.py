@@ -30,7 +30,7 @@ EXPECTED = {
 }
 
 def http_get(path: str, key: str | None = None) -> tuple[int, object | None]:
-    if not path.startswith("/") or "://" in path or "?" in path:
+    if not path.startswith("/") or path.startswith("//") or "://" in path or "?" in path:
         raise ValueError("INVALID_PATH")
     url = "http://127.0.0.1:8080" + path
     headers = {"Accept": "application/json"}
