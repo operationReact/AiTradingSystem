@@ -235,6 +235,15 @@ public class MindPaperCycleService {
         // 3a. Kill switch: the global PAPER emergency stop and a cumulative drawdown limit block NEW entries.
         // Exits are never blocked by this gate, so a halted account can still close positions.
         if ("BUY".equals(side)) {
+            String mismatch = ledgerReconciliationReason(owner, roomId);
+            if (mismatch != null) {
+                d.stage("RECONCILIATION", "BLOCKED", mismatch);
+                d.reasons.add(mismatch.split(":", 2)[0]);
+                return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
+            }
+            d.stage("RECONCILIATION", "PASSED", "Virtual wallet agrees with its full PAPER cash ledger");
+        }
+        if ("BUY".equals(side)) {
             String halt = killSwitchReason(owner, roomId);
             if (halt != null) {
                 d.stage("KILL_SWITCH", "BLOCKED", halt);
@@ -366,6 +375,51 @@ public class MindPaperCycleService {
     }
 
     // ------------------------------------------------------------------ policy
+
+    /**
+     * STR-232 PAPER ledger reconciliation (no LIVE broker exists to reconcile against). Reads the full
+     * cash-event history, not the truncated customer view, and fails closed when the wallet and ledger disagree.
+     */
+    String ledgerReconciliationReason(UUID owner, UUID roomId) {
+        CustomerPaperWalletService.PaperWallet wallet = wallets.get(owner, roomId);
+        List<long[]> events = jdbc.sql("""
+                SELECT cash_delta_paise, cash_after_paise
+                FROM customer_paper_cash_event
+                WHERE user_id = :owner AND room_id = :room
+                ORDER BY created_at ASC, id ASC
+                """)
+            .param("owner", owner).param("room", roomId)
+            .query((rs, row) -> new long[] {rs.getLong("cash_delta_paise"), rs.getLong("cash_after_paise")})
+            .list();
+        return ledgerMismatch(wallet.initialCashPaise(), wallet.availableCashPaise(), events);
+    }
+
+    /**
+     * Pure ledger rule. events are {deltaPaise, cashAfterPaise} in chronological order, starting from zero.
+     * Returns null when every step adds its delta, the first allocation equals the initial cash, and the last
+     * balance equals available cash.
+     */
+    static String ledgerMismatch(long initialCashPaise, long availableCashPaise, List<long[]> events) {
+        // An activated PAPER account always has its INITIAL_PAPER_ALLOCATION event (delta = cash_after = initial).
+        // An empty ledger therefore cannot reconcile against a funded wallet and fails closed.
+        if (events.isEmpty()) {
+            return "LEDGER_MISMATCH: no cash events recorded for this PAPER room";
+        }
+        long previous = 0L;
+        for (long[] event : events) {
+            if (previous + event[0] != event[1]) {
+                return "LEDGER_MISMATCH: a cash event does not follow the previous balance";
+            }
+            previous = event[1];
+        }
+        if (previous != availableCashPaise) {
+            return "LEDGER_MISMATCH: ledger balance differs from the wallet balance";
+        }
+        if (events.get(0)[1] != initialCashPaise) {
+            return "LEDGER_MISMATCH: the allocation does not equal the initial PAPER cash";
+        }
+        return null;
+    }
 
     /** Returns the blocking reason for new entries, or null when entries may proceed. Fails closed on read errors. */
     String killSwitchReason(UUID owner, UUID roomId) {
