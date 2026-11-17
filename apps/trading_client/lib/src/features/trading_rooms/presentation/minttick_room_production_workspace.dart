@@ -387,7 +387,7 @@ class _MintTickRoomProductionWorkspaceState
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
               child: Container(
-                height: 76,
+                height: 84,
                 decoration: BoxDecoration(
                   color: colors.surfaceContainerLow,
                   border: Border.all(color: colors.outlineVariant),
@@ -918,7 +918,7 @@ class _CompactMetric extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Column(mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
