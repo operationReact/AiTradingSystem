@@ -297,7 +297,7 @@ class _TradingAppState extends State<TradingApp> {
                 paperFno: CustomerPaperFnoRepository(_api),
                 liveFno: CustomerUpstoxFnoLiveRepository(_api),
                 onOpenFnoRoom: _openRoom,
-                onCreateFnoRoom: _createRoom,
+                onCreateFnoRoom: _openCreateRoom,
               )
             : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/market-data': (_) => widget.session.isCustomerAuthenticated
@@ -307,7 +307,7 @@ class _TradingAppState extends State<TradingApp> {
                 paperFno: CustomerPaperFnoRepository(_api),
                 liveFno: CustomerUpstoxFnoLiveRepository(_api),
                 onOpenFnoRoom: _openRoom,
-                onCreateFnoRoom: _createRoom,
+                onCreateFnoRoom: _openCreateRoom,
               )
             : MarketDataPage(repository: HttpMarketDataRepository(_api), isAuthenticated: widget.session.isAuthenticated),
         '/backtests': (_) => BacktestsPage(repository: HttpBacktestRepository(_api)),
