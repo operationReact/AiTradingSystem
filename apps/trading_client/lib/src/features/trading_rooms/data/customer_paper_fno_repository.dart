@@ -297,7 +297,22 @@ class CustomerFnoLeg {
     required this.observedAt,
     required this.quoteFresh,
     required this.paperEligible,
+    this.ltp, this.previousClose, this.openInterest,
+    this.iv, this.delta, this.theta, this.gamma, this.vega,
   });
+
+  /// Broker V3 LTPC, open-interest and Greeks. May be absent; REST
+  /// option-chain values must never silently fill these fields.
+  final num? ltp;
+  final num? previousClose;
+  final int? openInterest;
+  final num? iv, delta, theta, gamma, vega;
+
+  /// Only populated by a fresh exchange-timed authorised V3 observation.
+  bool get priceChangeVerified => quoteFresh &&
+      ltp != null && previousClose != null && previousClose! > 0;
+  num? get priceChangePct => priceChangeVerified
+      ? ((ltp! - previousClose!) * 100 / previousClose!) : null;
 
   final String instrumentKey;
   final String tradingSymbol;
@@ -333,6 +348,25 @@ class CustomerFnoLeg {
     if ((bid != null && bid is! num) || (ask != null && ask is! num)) {
       throw const FormatException('Invalid F&O quote');
     }
+    final ltp = value['ltp'];
+    final previousClose = value['previousClose'];
+    final openInterest = value['openInterest'];
+    final iv = value['iv'];
+    final delta = value['delta'];
+    final theta = value['theta'];
+    final gamma = value['gamma'];
+    final vega = value['vega'];
+    for (final metric in [ltp, previousClose, iv, delta, theta, gamma, vega]) {
+      if (metric != null && (metric is! num || !metric.isFinite)) {
+        throw const FormatException('Invalid V3 option metric');
+      }
+    }
+    if ((ltp != null && ltp <= 0) ||
+        (previousClose != null && previousClose <= 0) ||
+        (iv != null && iv < 0) ||
+        (openInterest != null && (openInterest is! int || openInterest < 0))) {
+      throw const FormatException('Invalid V3 option metric range');
+    }
     // A quote is only usable when fresh and paper eligible; the server says so.
     return CustomerFnoLeg(
       instrumentKey: key,
@@ -346,6 +380,10 @@ class CustomerFnoLeg {
       observedAt: _optionalTime(value['observedAt']),
       quoteFresh: fresh,
       paperEligible: eligible,
+      ltp: ltp as num?, previousClose: previousClose as num?,
+      openInterest: openInterest as int?,
+      iv: iv as num?, delta: delta as num?, theta: theta as num?,
+      gamma: gamma as num?, vega: vega as num?,
     );
   }
 }
