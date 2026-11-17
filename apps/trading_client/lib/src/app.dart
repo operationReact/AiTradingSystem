@@ -48,7 +48,7 @@ import 'features/trading_rooms/data/customer_execution_repository.dart';
 import 'features/trading_rooms/presentation/minttick_customer_portfolio.dart';
 import 'features/trading_rooms/data/customer_room_repository.dart';
 import 'features/trading_rooms/data/customer_paper_fno_repository.dart';
-import 'features/trading_rooms/data/customer_upstox_fno_live_repository.dart';
+import 'features/trading_rooms/data/customer_fno_discovery_repository.dart';
 import 'features/trading_rooms/data/customer_paper_trading_repository.dart';
 import 'features/trading_rooms/data/customer_trade_intent_repository.dart';
 import 'features/trading_rooms/data/customer_angel_one_repository.dart';
@@ -294,8 +294,7 @@ class _TradingAppState extends State<TradingApp> {
                 repository: HttpCustomerMarketRepository(_api),
                 onConnectBroker: () => _navigate('/broker/angel-one'),
                 rooms: _roomDrafts,
-                paperFno: CustomerPaperFnoRepository(_api),
-                liveFno: CustomerUpstoxFnoLiveRepository(_api),
+                fnoDiscovery: CustomerFnoDiscoveryRepository(_api),
                 onOpenFnoRoom: _openRoom,
                 onCreateFnoRoom: _openCreateRoom,
               )
@@ -304,8 +303,7 @@ class _TradingAppState extends State<TradingApp> {
             ? MintTickCustomerMarketPage(
                 repository: HttpCustomerMarketRepository(_api),
                 rooms: _roomDrafts,
-                paperFno: CustomerPaperFnoRepository(_api),
-                liveFno: CustomerUpstoxFnoLiveRepository(_api),
+                fnoDiscovery: CustomerFnoDiscoveryRepository(_api),
                 onOpenFnoRoom: _openRoom,
                 onCreateFnoRoom: _openCreateRoom,
               )
