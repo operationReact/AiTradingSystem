@@ -143,7 +143,8 @@ public final class CustomerUpstoxFnoLiveOrderService {
         var feed = feeds.getIfAvailable();
         int fresh = feed == null ? 0 : Math.max(0,
             feed.status().freshExchangeTimedQuotes());
-        boolean sessionOpen = calendar.isInsideCashSession(clock.instant());
+        boolean sessionOpen = calendar.isInsideFnoSession(clock.instant())
+            && insideUpstoxIntradayCutoff(clock.instant(), room.focus());
         boolean eligible = flag && connected && nfo && ip
             && sourceReady && fresh > 0 && sessionOpen;
         java.util.ArrayList<String> reasons = new java.util.ArrayList<>();
@@ -199,7 +200,9 @@ public final class CustomerUpstoxFnoLiveOrderService {
         }
         Instant now = clock.instant();
         LocalDate today = now.atZone(IST).toLocalDate();
-        if (!calendar.isInsideCashSession(now) || request.expiry().isBefore(today)
+        if (!calendar.isInsideFnoSession(now)
+                || !insideUpstoxIntradayCutoff(now, room.focus())
+                || request.expiry().isBefore(today)
                 || request.expiry().isAfter(today.plusDays(90))) {
             throw error(HttpStatus.CONFLICT, "NFO trading session or listed expiry unavailable");
         }
@@ -228,7 +231,7 @@ public final class CustomerUpstoxFnoLiveOrderService {
         var quote = feed.eligiblePaperQuote(request.instrumentKey())
             .orElseThrow(() -> error(HttpStatus.CONFLICT,
                 "Current exchange-timed NFO bid and ask not verified"));
-        if (!calendar.isInsideCashSession(quote.exchangeAt())
+        if (!calendar.isInsideFnoSession(quote.exchangeAt())
                 || quote.exchangeAt().isAfter(now.plusSeconds(2))) {
             throw error(HttpStatus.CONFLICT, "Exchange-timed NFO quote outside session");
         }
@@ -559,6 +562,16 @@ public final class CustomerUpstoxFnoLiveOrderService {
 
     private static long toPaise(BigDecimal value) {
         return value.multiply(HUNDRED).setScale(0,RoundingMode.UP).longValueExact();
+    }
+
+    /** Broker intraday auto-squareoff is earlier than the F&O session close.
+     * Prevent new I-product orders at/after 15:20 even though NSE_FO
+     * NORMAL_CLOSE is 15:40; carry-forward D uses the actual segment close. */
+    static boolean insideUpstoxIntradayCutoff(Instant when, String roomFocus) {
+        if (when == null) return false;
+        return !"INTRADAY".equals(roomFocus)
+            || when.atZone(IST).toLocalTime().isBefore(
+                java.time.LocalTime.of(15, 20));
     }
 
     private static ResponseStatusException error(HttpStatus status, String message) {
