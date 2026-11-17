@@ -202,6 +202,8 @@ class _MindProgressCoverageViewState extends State<MindProgressCoverageView> {
                     onTap: () => setState(() { _section = kind; _status = null; _limit = 60; })),
           ]),
           const SizedBox(height: 10),
+          MindProgressLayerRow(layers: data.layers),
+          const SizedBox(height: 8),
           Text('PAPER stage: ${data.paperStage.name} (${data.paperStage.status.label}) · '
               'manifest ${data.manifestVersion} · audited ${data.auditedAt} · '
               'backend ${data.revisionKnown ? _rev(data.backendRevision) : 'revision unknown — nothing can be verified'} · '
@@ -454,6 +456,58 @@ class _MindProgressDetailSheetState extends State<_MindProgressDetailSheet> {
         if (_message != null)
           Text(_message!, key: const ValueKey('mind-progress-message'),
               style: const TextStyle(color: MindPalette.muted, fontSize: 11)),
+      ],
+    );
+  }
+}
+
+/// Shows the four evidence layers separately. Missing layers are stated as unavailable, never as zero.
+class MindProgressLayerRow extends StatelessWidget {
+  const MindProgressLayerRow({super.key, required this.layers});
+
+  final MindProgressLayers? layers;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = layers;
+    if (current == null) {
+      return const Text('Layer evidence unavailable from the server · nothing is shown as verified',
+          key: ValueKey('mind-progress-layers-unavailable'),
+          style: TextStyle(color: MindPalette.red, fontSize: 10.5));
+    }
+    final cells = <(String, String, MindProgressLayer)>[
+      ('Implemented', 'code evidence', current.implemented),
+      ('CI-tested', 'test evidence', current.ciTested),
+      ('Deployed', 'runtime seen', current.deployed),
+      ('Runtime-verified', 'strict done', current.runtimeVerified),
+    ];
+    return Wrap(
+      key: const ValueKey('mind-progress-layers'),
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final (label, hint, layer) in cells)
+          Container(
+            key: ValueKey('mind-progress-layer-$label'),
+            constraints: const BoxConstraints(minWidth: 120),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: MindPalette.panel,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: MindPalette.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(label, style: const TextStyle(color: MindPalette.muted, fontSize: 10.5)),
+                Text('${layer.count}/${layer.total}',
+                    style: const TextStyle(color: MindPalette.text, fontSize: 16, fontWeight: FontWeight.w800)),
+                Text('${layer.percent.toStringAsFixed(1)}% · $hint',
+                    style: const TextStyle(color: MindPalette.muted, fontSize: 9.5)),
+              ],
+            ),
+          ),
       ],
     );
   }

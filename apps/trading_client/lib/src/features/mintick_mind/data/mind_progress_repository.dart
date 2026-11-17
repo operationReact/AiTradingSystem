@@ -193,8 +193,57 @@ class MindPaperStage {
   final MindProgressStatus status;
 }
 
+/// One evidence layer over the full inventory. Counts and percent come from the server.
+class MindProgressLayer {
+  const MindProgressLayer({required this.count, required this.total, required this.percent});
+  final int count;
+  final int total;
+  final double percent;
+}
+
+/// Implemented, CI-tested, deployed and runtime-verified layers, kept separate. Nothing here is inferred.
+class MindProgressLayers {
+  const MindProgressLayers({
+    required this.implemented,
+    required this.ciTested,
+    required this.deployed,
+    required this.runtimeVerified,
+  });
+  final MindProgressLayer implemented;
+  final MindProgressLayer ciTested;
+  final MindProgressLayer deployed;
+  final MindProgressLayer runtimeVerified;
+
+  /// Returns null unless every layer is present and internally consistent. Invalid numbers are never shown.
+  static MindProgressLayers? fromOverall(Object? overall) {
+    if (overall is! Map<String, dynamic>) return null;
+    final layers = overall['layers'];
+    if (layers is! Map<String, dynamic>) return null;
+    final implemented = _layer(layers['implemented']);
+    final ciTested = _layer(layers['ciTested']);
+    final deployed = _layer(layers['deployed']);
+    final runtimeVerified = _layer(layers['runtimeVerified']);
+    if (implemented == null || ciTested == null || deployed == null || runtimeVerified == null) return null;
+    return MindProgressLayers(implemented: implemented, ciTested: ciTested,
+        deployed: deployed, runtimeVerified: runtimeVerified);
+  }
+
+  static MindProgressLayer? _layer(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final count = raw['count'];
+    final total = raw['total'];
+    final percent = raw['percent'];
+    if (count is! int || total is! int || percent is! num) return null;
+    if (count < 0 || total < 0 || count > total) return null;
+    final value = percent.toDouble();
+    if (!value.isFinite || value < 0 || value > 100) return null;
+    return MindProgressLayer(count: count, total: total, percent: value);
+  }
+}
+
 class MindProgressSnapshot {
   const MindProgressSnapshot({
+    this.layers,
     required this.manifestVersion,
     required this.auditedAt,
     required this.generatedAt,
@@ -213,6 +262,9 @@ class MindProgressSnapshot {
   final MindPaperStage paperStage;
   final Map<String, MindProgressSummary> summaries;
   final List<MindProgressItem> items;
+
+  /// Four evidence layers from the server overall block. Null when the server omits or malformats them.
+  final MindProgressLayers? layers;
 
   MindProgressSummary? summary(String kind) => summaries[kind];
 
@@ -258,6 +310,7 @@ class MindProgressSnapshot {
     final stage = decoded['paperStage'];
     if (stage is! Map<String, dynamic>) throw const FormatException('Missing PAPER stage');
     return MindProgressSnapshot(
+      layers: MindProgressLayers.fromOverall(decoded['overall']),
       manifestVersion: _string(decoded['manifestVersion']),
       auditedAt: _string(decoded['auditedAt']),
       generatedAt: generatedAt,
