@@ -33,6 +33,8 @@ class _BlockedRepo implements CustomerPaperFnoRepository {
   @override
   Future<List<CustomerFnoPosition>> positions(String roomId) async => const [];
   @override
+  Future<List<CustomerFnoFill>> orders(String roomId) async => const [];
+  @override
   dynamic noSuchMethod(Invocation invocation) => throw UnimplementedError('${invocation.memberName}');
 }
 
@@ -60,17 +62,14 @@ const _liveRoom = TradingRoomDraft(id: 'room-2', name: 'Live room', focus: 'Swin
     paperBudget: 100000, riskPreference: 'MODERATE', mode: 'LIVE', marketScope: 'FNO');
 
 void main() {
-  testWidgets('a PAPER room mounts the F&O section on Positions and shows the server blocker', (tester) async {
+  testWidgets('a PAPER F&O room mounts its own verified inventory without loading quotes', (tester) async {
     await pumpRoom(tester, _paperRoom, fno: _BlockedRepo());
     expect(find.byKey(const ValueKey('paper-fno-room-1')), findsOneWidget);
     expect(find.byType(MintTickPaperFnoPanel), findsOneWidget);
-    // Nothing is requested until the user enters a verified expiry.
-    expect(find.textContaining('display rights are not verified'), findsNothing);
-    await tester.tap(find.byKey(const ValueKey('paper-fno-expiry-dropdown')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('2026-11-20').last);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('display rights are not verified'), findsOneWidget);
+    expect(find.text('F&O Positions'), findsOneWidget);
+    expect(find.text('No virtual F&O positions.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('paper-fno-expiry-dropdown')), findsNothing);
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsNothing);
   });
 
   testWidgets('F&O-only room cannot expose equity order shortcuts in Positions or Orders',
