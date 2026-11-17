@@ -43,11 +43,11 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     final observed = selected ?? s?.call;
     final metrics = verified && observed?.quoteFresh == true ? observed : null;
     String decimal(num? v) => v == null ? '—' : v.toStringAsFixed(2);
+    final iv = metrics?.iv;
     final greeks = <String, String>{
       'Delta': decimal(metrics?.delta),
       'Theta': decimal(metrics?.theta),
-      'IV': metrics?.iv == null ? '—' :
-          '${(metrics!.iv! * 100).toStringAsFixed(2)}%',
+      'IV': iv == null ? '—' : '${(iv * 100).toStringAsFixed(2)}%',
       'Vega': decimal(metrics?.vega),
     };
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
