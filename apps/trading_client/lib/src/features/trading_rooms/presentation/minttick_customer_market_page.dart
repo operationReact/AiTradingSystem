@@ -6,8 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../../data/instrument_repository.dart';
 import '../data/customer_market_repository.dart';
-import '../data/customer_paper_fno_repository.dart';
-import '../data/customer_upstox_fno_live_repository.dart';
+import '../data/customer_fno_discovery_repository.dart';
 import '../domain/trading_room_draft.dart';
 import 'minttick_fno_discovery_page.dart';
 import 'minttick_customer_widgets.dart';
@@ -38,14 +37,13 @@ const _moverSortLabels = ['Gainers', 'Losers', 'Most active', 'Volume', '52W hig
 class MintTickCustomerMarketPage extends StatefulWidget {
   const MintTickCustomerMarketPage({
     required this.repository, this.onConnectBroker,
-    this.rooms, this.paperFno, this.liveFno, this.onOpenFnoRoom,
+    this.rooms, this.fnoDiscovery, this.onOpenFnoRoom,
     this.onCreateFnoRoom, super.key,
   });
   final CustomerMarketRepository repository;
   final VoidCallback? onConnectBroker;
   final TradingRoomDraftStore? rooms;
-  final CustomerPaperFnoRepository? paperFno;
-  final CustomerUpstoxFnoLiveRepository? liveFno;
+  final CustomerFnoDiscoveryRepository? fnoDiscovery;
   final ValueChanged<TradingRoomDraft>? onOpenFnoRoom;
   final VoidCallback? onCreateFnoRoom;
 
@@ -573,13 +571,13 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
         ]),
         if (_showFno) ...[
           const SizedBox(height: 7),
-          if (widget.rooms != null && widget.paperFno != null &&
-              widget.liveFno != null && widget.onOpenFnoRoom != null &&
+          if (widget.rooms != null && widget.fnoDiscovery != null &&
+              widget.onOpenFnoRoom != null &&
               widget.onCreateFnoRoom != null)
             MintTickFnoDiscoveryPage(
               key: const ValueKey('customer-fno-discovery'),
-              rooms: widget.rooms!, paper: widget.paperFno!,
-              live: widget.liveFno!, onOpenRoom: widget.onOpenFnoRoom!,
+              rooms: widget.rooms!, discovery: widget.fnoDiscovery!,
+              onOpenRoom: widget.onOpenFnoRoom!,
               onCreateRoom: widget.onCreateFnoRoom!,
             )
           else const MintTickInfoText(
