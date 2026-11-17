@@ -209,3 +209,98 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     borderRadius: BorderRadius.circular(12),
   );
 }
+
+
+/// The same premium room information architecture even while the provider is
+/// disabled or permissions are unverified. All price fields are explicitly
+/// unavailable; disabled controls never invoke any trading or market API.
+class MintTickFnoUnavailableOverview extends StatelessWidget {
+  const MintTickFnoUnavailableOverview({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final t = Theme.of(context).textTheme;
+    BoxDecoration card() => BoxDecoration(
+      color: c.surfaceContainerLow,
+      border: Border.all(color: c.outlineVariant),
+      borderRadius: BorderRadius.circular(12));
+    Widget quote(String kind) => Expanded(child: Container(
+      padding: const EdgeInsets.all(11), decoration: card(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('NIFTY · $kind',
+          style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800)),
+        const SizedBox(height: 6),
+        const Text('LTP —', style: TextStyle(
+          fontSize: 18, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 7),
+        Text('Bid —   Ask —', style: t.labelSmall),
+        Text('OI —   Volume —', style: t.labelSmall?.copyWith(
+          color: c.onSurfaceVariant)),
+      ]),
+    ));
+    return Column(
+      key: const ValueKey('fno-premium-unavailable-overview'),
+      crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const SizedBox(height: 12),
+      Row(children: [
+        const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+          children: [Text('NIFTY 50', style: TextStyle(
+            fontWeight: FontWeight.w800, fontSize: 21)),
+            Text('NSE · Index')])),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          const Text('—', style: TextStyle(
+            fontWeight: FontWeight.w800, fontSize: 22)),
+          Text('NOT VERIFIED LIVE', style: t.labelSmall?.copyWith(
+            color: c.onSurfaceVariant)),
+        ]),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        const Expanded(child: Text('Expiry —')),
+        const Expanded(child: Text('Strike —')),
+        const Text('CE  /  PE'),
+        const SizedBox(width: 8),
+        const Text('Lot —'),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        quote('CE'), const SizedBox(width: 8), quote('PE'),
+      ]),
+      const SizedBox(height: 10),
+      Container(
+        height: 140, width: double.infinity,
+        padding: const EdgeInsets.all(13), decoration: card(),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('NIFTY options · 5m', style: t.titleSmall),
+          const Spacer(),
+          Center(child: Text('No verified option candles available',
+            style: t.bodySmall?.copyWith(color: c.onSurfaceVariant))),
+          const Spacer(),
+        ]),
+      ),
+      const SizedBox(height: 9),
+      Container(padding: const EdgeInsets.all(10), decoration: card(),
+        child: const Text('Greeks    Delta —    Theta —    IV —    Vega —',
+          maxLines: 1, overflow: TextOverflow.ellipsis)),
+      const SizedBox(height: 9),
+      Container(padding: const EdgeInsets.all(10), decoration: card(),
+        child: const Text('Market Insight    PCR —    Max Pain —    IV Rank —',
+          maxLines: 1, overflow: TextOverflow.ellipsis)),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: FilledButton(
+          key: const ValueKey('fno-premium-blocked-call'),
+          onPressed: null, child: const FittedBox(child: Text('BUY CALL')))),
+        const SizedBox(width: 6),
+        Expanded(child: OutlinedButton(
+          key: const ValueKey('fno-premium-blocked-put'),
+          onPressed: null, child: const FittedBox(child: Text('BUY PUT')))),
+        const SizedBox(width: 6),
+        Expanded(child: OutlinedButton(
+          key: const ValueKey('fno-premium-blocked-sell'),
+          onPressed: null, child: const Text('SELL'))),
+      ]),
+    ]);
+  }
+}
