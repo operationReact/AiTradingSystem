@@ -65,6 +65,16 @@ public class UpstoxFnoV3LiveOperatorController {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_EXPIRY");
         }
         if (!source.enabled()) throw new IllegalStateException("UPSTOX_ANALYTICS_DISABLED");
+        List<String> keys = listedNearAtmKeys(source, expiry);
+        return ResponseEntity.status(HttpStatus.ACCEPTED)
+                .cacheControl(CacheControl.noStore()).body(service.start(keys));
+    }
+
+    /**
+     * Same provider-verified bounded CE/PE selection for manual and opt-in
+     * automatic market-hours subscription. No untrusted contract keys.
+     */
+    static List<String> listedNearAtmKeys(UpstoxAnalyticsSource source, LocalDate expiry) {
         List<UpstoxAnalyticsSource.FnoOptionContract> contracts =
                 source.currentFnoOptionContracts(UNDERLYING, expiry);
         UpstoxAnalyticsSource.OptionChainSnapshot chain =
@@ -100,8 +110,7 @@ public class UpstoxFnoV3LiveOperatorController {
         if (keys.isEmpty() || Set.copyOf(keys).size() != keys.size()) {
             throw new IllegalStateException("UPSTOX_FNO_NO_MATCHING_CONTRACTS");
         }
-        return ResponseEntity.status(HttpStatus.ACCEPTED)
-                .cacheControl(CacheControl.noStore()).body(service.start(keys));
+        return List.copyOf(keys);
     }
 
     @GetMapping("/status")

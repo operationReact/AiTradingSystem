@@ -7,6 +7,7 @@ import in.aitradingsystem.user.CustomerIdentityStore;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
@@ -44,6 +45,12 @@ public final class CustomerFnoDiscoveryController {
     private final Clock clock;
     private final boolean feedConfigured;
     private final boolean displayRightsVerified;
+    private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
+    private volatile ContractMetadata cachedMetadata;
+
+    private record ContractMetadata(LocalDate expiry, Instant receivedAt,
+        List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
+        UpstoxAnalyticsSource.OptionChainSnapshot chain) {}
 
     public CustomerFnoDiscoveryController(CustomerIdentityStore identities,
             UpstoxAnalyticsSource source,
@@ -64,20 +71,31 @@ public final class CustomerFnoDiscoveryController {
 
     public record Capability(boolean displayRightsVerified, boolean feedConfigured,
                              boolean sourceReady, boolean marketOpen,
-                             String status) {}
+                             String status, String streamState,
+                             int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt) {}
 
     @GetMapping("/capability")
     public ResponseEntity<Capability> capability(Authentication auth) {
         requireCustomer(auth);
         boolean sourceReady = source.enabled();
         boolean open = sessionCalendar.isInsideFnoSession(clock.instant());
+        var stream = feed.getIfAvailable();
+        var liveStatus = feedConfigured && stream != null ? stream.status() : null;
+        int fresh = open && liveStatus != null ? liveStatus.freshExchangeTimedQuotes() : 0;
         String status = !displayRightsVerified ? "DISPLAY_RIGHTS_NOT_VERIFIED"
-            : !feedConfigured || feed.getIfAvailable() == null
-                ? "FNO_V3_FEED_UNAVAILABLE"
+            : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
             : !sourceReady ? "FNO_CONTRACT_SOURCE_UNAVAILABLE"
-            : !open ? "MARKET_CLOSED" : "SOURCE_CONFIGURED";
+            : !open ? "MARKET_CLOSED"
+            : fresh > 0 ? "LIVE_QUOTES"
+            : "CONNECTED".equals(liveStatus.state())
+                 || "CONNECTED_AWAITING_TICKS".equals(liveStatus.state())
+                    ? "WAITING_FOR_QUOTES" : "FEED_DISCONNECTED";
         return noStore(new Capability(displayRightsVerified, feedConfigured,
-            sourceReady, open, status));
+            sourceReady, open, status,
+            liveStatus == null ? "UNAVAILABLE" : liveStatus.state(),
+            displayRightsVerified ? fresh : 0,
+            displayRightsVerified && open && fresh > 0
+                ? liveStatus.latestFreshExchangeTradeAt() : null));
     }
 
     @GetMapping("/expiries")
@@ -122,10 +140,11 @@ public final class CustomerFnoDiscoveryController {
         }
         // REST chain is a contract-identity source only; NEVER use its
         // prices, timestamps, Greeks or OI as executable V3 observations.
-        var contracts = CustomerPaperFnoMarketController.providerRead(
-            () -> source.currentFnoOptionContracts(UNDERLYING, expiry));
-        var chain = CustomerPaperFnoMarketController.providerRead(
-            () -> source.currentFnoOptionChain(UNDERLYING, expiry));
+        // Repeated 5-second customer polling only reads fresh V3 observations.
+        // Contract identity is held in memory for <=60 seconds, never prices.
+        var metadata = metadataFor(expiry, now);
+        var contracts = metadata.contracts();
+        var chain = metadata.chain();
         if (chain == null || !"UPSTOX_ANALYTICS".equals(chain.source()) ||
                 chain.retrievedAt() == null || chain.exchangeQuoteTimeVerified()) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
@@ -141,6 +160,36 @@ public final class CustomerFnoDiscoveryController {
         // This market board has NO execution capability and NO paper rights.
         return noStore(CustomerPaperFnoMarketController.marketResponse(
             expiry, chain.retrievedAt(), status, true, false, strikes));
+    }
+
+    /**
+     * Provider REST identity cache prevents unbounded option-contract API
+     * calls under customer polling. Immutable metadata only, no quote/rights
+     * cache and never any return of stale verified market prices.
+     */
+    private synchronized ContractMetadata metadataFor(LocalDate expiry, Instant now) {
+        var existing = cachedMetadata;
+        if (existing != null && existing.expiry().equals(expiry) &&
+                !now.isBefore(existing.receivedAt()) &&
+                now.isBefore(existing.receivedAt().plus(CONTRACT_CACHE_TTL))) {
+            return existing;
+        }
+        cachedMetadata = null;
+        var contracts = CustomerPaperFnoMarketController.providerRead(
+            () -> source.currentFnoOptionContracts(UNDERLYING, expiry));
+        var chain = CustomerPaperFnoMarketController.providerRead(
+            () -> source.currentFnoOptionChain(UNDERLYING, expiry));
+        if (contracts == null || contracts.isEmpty() || contracts.size() > 1024 ||
+                chain == null || !"UPSTOX_ANALYTICS".equals(chain.source()) ||
+                chain.retrievedAt() == null || chain.exchangeQuoteTimeVerified() ||
+                chain.strikes() == null || chain.strikes().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                "Verified listed F&O contract metadata unavailable");
+        }
+        var result = new ContractMetadata(expiry, now,
+            List.copyOf(contracts), chain);
+        cachedMetadata = result;
+        return result;
     }
 
     private void requireDisplay(Authentication auth) {

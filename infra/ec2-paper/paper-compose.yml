@@ -78,6 +78,9 @@ services:
       # F&O WebSocket and PAPER option premium engine are independently OFF by default.
       # A source read does not authorize data retention, PAPER use or real orders.
       MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED: ${MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED:-false}
+      # Optional bounded market-hours V3 subscribe; server requires source and
+      # verified customer display rights before any automatic connection.
+      MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED: ${MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED:-false}
       MINTTICK_UPSTOX_FNO_PAPER_ENABLED: ${MINTTICK_UPSTOX_FNO_PAPER_ENABLED:-false}
       # Separate real-money execution switch. No merge/deploy ever grants LIVE
       # trading implicitly; each order additionally requires broker and owner gates.

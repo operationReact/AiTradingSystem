@@ -35,10 +35,19 @@ class CustomerFnoDiscoveryCapability {
     required this.sourceReady,
     required this.marketOpen,
     required this.status,
+    required this.streamState,
+    required this.freshExchangeTimedQuotes,
+    this.latestFreshExchangeTradeAt,
   });
 
   final bool displayRightsVerified, feedConfigured, sourceReady, marketOpen;
-  final String status;
+  final String status, streamState;
+  final int freshExchangeTimedQuotes;
+  final DateTime? latestFreshExchangeTradeAt;
+
+  bool get live => status == 'LIVE_QUOTES' &&
+      displayRightsVerified && feedConfigured && sourceReady &&
+      marketOpen && freshExchangeTimedQuotes > 0;
 
   factory CustomerFnoDiscoveryCapability.decode(Object? raw) {
     if (raw is! Map<String, dynamic> ||
@@ -49,16 +58,38 @@ class CustomerFnoDiscoveryCapability {
         !const {
           'DISPLAY_RIGHTS_NOT_VERIFIED', 'FNO_V3_FEED_UNAVAILABLE',
           'FNO_CONTRACT_SOURCE_UNAVAILABLE', 'MARKET_CLOSED',
-          'SOURCE_CONFIGURED',
+          'SOURCE_CONFIGURED', 'LIVE_QUOTES', 'WAITING_FOR_QUOTES',
+          'FEED_DISCONNECTED',
         }.contains(raw['status'])) {
       throw const FormatException('Unverified F&O source capability');
     }
     final status = raw['status'] as String;
-    if (status == 'SOURCE_CONFIGURED' &&
-        (raw['displayRightsVerified'] != true ||
-         raw['feedConfigured'] != true ||
-         raw['sourceReady'] != true || raw['marketOpen'] != true)) {
-      throw const FormatException('Inconsistent market readiness');
+    final hasStream = raw.containsKey('streamState');
+    if (hasStream && raw['streamState'] is! String) {
+      throw const FormatException('Malformed F&O stream status');
+    }
+    final hasFresh = raw.containsKey('freshExchangeTimedQuotes');
+    if (hasFresh && (raw['freshExchangeTimedQuotes'] is! int ||
+        (raw['freshExchangeTimedQuotes'] as int) < 0 ||
+        (raw['freshExchangeTimedQuotes'] as int) > 2000)) {
+      throw const FormatException('Malformed F&O quote count');
+    }
+    final count = hasFresh ? raw['freshExchangeTimedQuotes'] as int : 0;
+    final atRaw = raw['latestFreshExchangeTradeAt'];
+    if (atRaw != null && atRaw is! String) {
+      throw const FormatException('Malformed F&O exchange timestamp');
+    }
+    final at = atRaw == null ? null : DateTime.tryParse(atRaw);
+    if (atRaw != null && at == null) {
+      throw const FormatException('Unverified F&O exchange timestamp');
+    }
+    final ready = raw['displayRightsVerified'] == true &&
+        raw['feedConfigured'] == true && raw['sourceReady'] == true &&
+        raw['marketOpen'] == true;
+    if ((status == 'SOURCE_CONFIGURED' && !ready) ||
+        (status == 'LIVE_QUOTES' && (!ready || count == 0 || at == null)) ||
+        (!ready && (count > 0 || at != null))) {
+      throw const FormatException('Inconsistent F&O source readiness');
     }
     return CustomerFnoDiscoveryCapability(
       displayRightsVerified: raw['displayRightsVerified'] as bool,
@@ -66,6 +97,9 @@ class CustomerFnoDiscoveryCapability {
       sourceReady: raw['sourceReady'] as bool,
       marketOpen: raw['marketOpen'] as bool,
       status: status,
+      streamState: hasStream ? raw['streamState'] as String : 'UNVERIFIED',
+      freshExchangeTimedQuotes: count,
+      latestFreshExchangeTradeAt: at?.toUtc(),
     );
   }
 }
