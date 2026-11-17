@@ -77,6 +77,8 @@ class _MintTickRoomProductionWorkspaceState
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
   List<CustomerPaperPosition> _positions = const [];
+  List<CustomerFnoPosition> _fnoPositions = const [];
+  bool _fnoInventoryVerified = false;
   Map<int, CustomerLiveQuote> _positionQuotes = const {};
   int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
@@ -138,6 +140,37 @@ class _MintTickRoomProductionWorkspaceState
 
   Future<void> _loadHistory() async {
     final request = ++_historyGeneration;
+    // F&O has a separate owner-scoped positions ledger. Never count cash
+    // equities in the option KPI ribbon, and never present failed reads as 0.
+    if (widget.room.marketScope == 'FNO' &&
+        widget.room.mode == 'PAPER' && widget.fno != null) {
+      setState(() {
+        _historyLoading = true;
+        _historyError = null;
+        _fnoInventoryVerified = false;
+      });
+      try {
+        final rows = await widget.fno!.positions(widget.room.id);
+        if (!mounted || request != _historyGeneration) return;
+        setState(() {
+          _fnoPositions = rows;
+          _fnoInventoryVerified = true;
+        });
+      } catch (_) {
+        if (mounted && request == _historyGeneration) {
+          setState(() {
+            _fnoPositions = const [];
+            _fnoInventoryVerified = false;
+            _historyError = 'F&O positions could not be verified.';
+          });
+        }
+      } finally {
+        if (mounted && request == _historyGeneration) {
+          setState(() => _historyLoading = false);
+        }
+      }
+      return;
+    }
     if (widget.room.mode == 'PAPER' && widget.paper != null &&
         (widget.room.status == 'PAPER_FUNDED' || widget.wallet != null)) {
       setState(() { _historyLoading = true; _historyError = null;
