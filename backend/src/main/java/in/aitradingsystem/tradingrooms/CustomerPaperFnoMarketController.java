@@ -158,7 +158,7 @@ public class CustomerPaperFnoMarketController {
                 || chain.retrievedAt()==null || chain.exchangeQuoteTimeVerified())
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Upstox F&O provenance not verified");
-        boolean marketOpen=calendar.isInsideCashSession(now);
+        boolean marketOpen=calendar.isInsideFnoSession(now);
         List<Strike> strikes=select(contracts,chain,live,marketOpen,paperAllowed);
         boolean hasFresh=strikes.stream().anyMatch(s ->
                 s.call().quoteFresh()||s.put().quoteFresh());
