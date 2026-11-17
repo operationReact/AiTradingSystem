@@ -81,7 +81,7 @@ public class UpstoxFnoPaperPreflightController {
         boolean paperFlag = flag("minttick.upstox-fno.paper-enabled");
         boolean displayFlag = flag("minttick.upstox-fno.display-rights-verified");
         boolean paperUseFlag = flag("minttick.upstox-fno.paper-usage-rights-verified");
-        boolean open = calendar.isInsideCashSession(now);
+        boolean open = calendar.isInsideFnoSession(now);
 
         UpstoxFnoV3LiveFeedService.Status status = null;
         if (v3Flag) {
