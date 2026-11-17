@@ -1,0 +1,96 @@
+name: Mind isolated PAPER verification room (one-shot)
+
+# Creates exactly one PAPER room and activates Rs 1,00,000 of simulated cash, once per reviewed
+# one-file request commit on dev. Never runs on pull requests or a schedule. No LIVE broker,
+# broker credential, F&O permission, IAM or trading-mode change is made.
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/minttick-domain/requests/mind-paper-verification-room.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mind-paper-verification-room-dev
+  cancel-in-progress: false
+
+jobs:
+  create-room:
+    if: github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      BASE: https://api.minttick.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Require exact one-file, owner-approved room request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/minttick-domain/requests/mind-paper-verification-room.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          actual = json.loads(Path("infra/minttick-domain/requests/mind-paper-verification-room.json").read_text())
+          expected = {
+            "application": "MintTick",
+            "environment": "dev",
+            "operation": "create-one-isolated-paper-verification-room",
+            "account_scope": "dedicated-verification-customer",
+            "name": "Mind PAPER verification",
+            "focus": "INTRADAY",
+            "plannedBudgetInr": 100000,
+            "riskPreference": "CAUTIOUS",
+            "mode": "PAPER",
+            "marketScope": "EQUITY",
+            "authorization": "USER_APPROVED_PAPER_VERIFICATION_ROOM_2026-11-17",
+          }
+          assert actual == expected, "Unexpected room request"
+          print("PASS: exact owner-approved PAPER room request")
+          PY
+
+      - name: Mint per-run verification token (never printed)
+        env:
+          VERIFY_USERNAME: ${{ secrets.MINDTICK_VERIFY_USERNAME }}
+          VERIFY_PASSWORD: ${{ secrets.MINDTICK_VERIFY_PASSWORD }}
+          VERIFY_NEW_PASSWORD: ${{ secrets.MINDTICK_VERIFY_NEW_PASSWORD }}
+          VERIFY_CLIENT_ID: ${{ vars.MINDTICK_VERIFY_COGNITO_CLIENT_ID }}
+        run: |
+          set -euo pipefail
+          set +x
+          if [ -z "$VERIFY_USERNAME" ] || [ -z "$VERIFY_PASSWORD" ] || [ -z "$VERIFY_CLIENT_ID" ]; then
+            echo "AUTHENTICATED_RUNTIME_NOT_VERIFIED: verification secrets are not configured."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$VERIFY_PASSWORD" > "$RUNNER_TEMP/verify_password"
+          printf '%s' "$VERIFY_NEW_PASSWORD" > "$RUNNER_TEMP/verify_new_password"
+          python3 scripts/mind/mint_verify_token.py "$VERIFY_CLIENT_ID" "$VERIFY_USERNAME" \
+            "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password" "$RUNNER_TEMP/room_token"
+          rm -f "$RUNNER_TEMP/verify_password" "$RUNNER_TEMP/verify_new_password"
+          test -s "$RUNNER_TEMP/room_token" || { echo "FAIL: no token minted"; exit 1; }
+          echo "PASS: per-run access token minted"
+
+      - name: Provision verification customer (idempotent)
+        run: |
+          set -euo pipefail
+          token="$(cat "$RUNNER_TEMP/room_token")"
+          echo "::add-mask::$token"
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 -X POST \
+            -H "Authorization: Bearer $token" "$BASE/api/auth/cognito/provision")"
+          if [ "$code" = 200 ] || [ "$code" = 201 ]; then echo "PASS provision -> $code"; else echo "FAIL provision -> $code"; exit 1; fi
+
+      - name: Create one PAPER room and activate Rs 1,00,000 simulated cash (single attempt)
+        run: |
+          set -euo pipefail
+          umask 077
+          python3 scripts/mind/paper_verification_room.py "$BASE" "$RUNNER_TEMP/room_token" \
+            infra/minttick-domain/requests/mind-paper-verification-room.json "$RUNNER_TEMP/room_summary.json"
+          rm -f "$RUNNER_TEMP/room_token"
+          echo "### Isolated PAPER verification room" >> "$GITHUB_STEP_SUMMARY"
+          python3 -c "import json;d=json.load(open('$RUNNER_TEMP/room_summary.json'));print('- mode:',d['mode']);print('- initial simulated cash (Rs):',d['initialCashRupees'])" >> "$GITHUB_STEP_SUMMARY"
