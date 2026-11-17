@@ -263,6 +263,17 @@ class _MintTickRoomProductionWorkspaceState
     );
   }
 
+  int? get _fnoIndicativePnlPaise {
+    if (!_fnoInventoryVerified) return null;
+    var total = 0;
+    for (final p in _fnoPositions) {
+      if (p.quantity == 0) continue;
+      if (!p.priceFresh || p.indicativeUnrealizedPnlPaise == null) return null;
+      total += p.indicativeUnrealizedPnlPaise!;
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -271,6 +282,11 @@ class _MintTickRoomProductionWorkspaceState
     final cash = widget.wallet?.availableCashPaise;
     final pnl = widget.wallet?.realizedPnlPaise;
     final count = _positions.where((item) => item.quantity > 0).length;
+    final fnoPnl = _fnoIndicativePnlPaise;
+    final fnoBasis = _fnoPositions.fold<int>(0,
+        (sum, p) => sum + (p.quantity > 0 ? p.costBasisPaise : 0));
+    final fnoReturn = fnoPnl != null && fnoBasis > 0
+        ? fnoPnl * 100 / fnoBasis : null;
     final readyNote = isPaper
       ? 'PAPER · Virtual cash · manual simulated orders only'
       : 'LIVE · Broker authorization required · order execution locked';
@@ -345,7 +361,9 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
+                      widget.room.marketScope == 'FNO'
+                          ? 'F&O · Options · NIFTY · MY ROOM'
+                          : '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
