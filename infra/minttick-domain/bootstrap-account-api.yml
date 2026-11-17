@@ -167,7 +167,7 @@ Resources:
           ROOM_RENAME = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/name$")
           PAPER = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/(activate|account|ledger|resume|pause|orders|positions)$")
           PAPER_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/(capability|orders|positions|market|expiries|reconciliation|wallet-reconciliation)$")
-          LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders)$")
+          LIVE_FNO = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|orders|market|expiries)$")
           LIVE_FNO_RECONCILE = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/orders/[0-9a-fA-F-]{36}/reconcile$")
           # Synthetic-only, no NSE_FO keys or broker/provider routes. Separate ledger.
           FNO_SANDBOX = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/paper/fno/sandbox/(state|orders)$")
@@ -207,7 +207,7 @@ Resources:
               if not LIVE_FNO.fullmatch(path):
                   return False
               action = path.rsplit("/", 1)[-1]
-              return (method == "GET" and action in {"orders", "capability"}) or (method == "POST" and action == "orders")
+              return (method == "GET" and action in {"orders", "capability", "market", "expiries"}) or (method == "POST" and action == "orders")
           
           def allowed(method, path):
               return ((method, path) in EXACT
