@@ -19,6 +19,7 @@ class MintTickPaperFnoPanel extends StatefulWidget {
     required this.roomId,
     required this.repository,
     this.initialExpiry,
+    this.view = 'trade',
     this.onFilled,
     this.clock = DateTime.now,
     super.key,
@@ -28,6 +29,8 @@ class MintTickPaperFnoPanel extends StatefulWidget {
   final DateTime Function() clock;
 
   final String roomId;
+  /// Trade shows market and ticket; other tabs load only owner-bound history.
+  final String view;
   final CustomerPaperFnoRepository repository;
   /// Optional starting expiry. Never inferred: the user enters the verified one.
   final DateTime? initialExpiry;
@@ -119,7 +122,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       // Local virtual order/position and ledger reads require only room
       // ownership, not licensed market quotes or an enabled order engine.
       // Keep viewing old PAPER history possible while trading stays blocked.
-      if (capability.readOnlyConfigured) {
+      if (capability.readOnlyConfigured && widget.view == 'trade') {
         _loadExpiries();
         if (_expiry != null) {
           _load();
@@ -434,6 +437,31 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
+    if (widget.view == 'positions' || widget.view == 'orders') {
+      return Container(
+        key: const ValueKey('paper-fno-panel'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(
+              widget.view == 'positions' ? 'F&O Positions' : 'F&O Orders',
+              style: type.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+            IconButton(onPressed: _loadPositions,
+              tooltip: 'Refresh F&O history',
+              icon: const Icon(Icons.refresh_rounded)),
+          ]),
+          const SizedBox(height: 12),
+          if (widget.view == 'positions') _positionsView(colors, type)
+          else _ordersView(colors, type),
+          const SizedBox(height: 12),
+          _bookkeepingView(colors, type),
+        ]),
+      );
+    }
     if (_checkingCapability || _capability?.readOnlyConfigured != true) {
       return Container(
         key: const ValueKey('paper-fno-panel'),
