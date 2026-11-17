@@ -183,6 +183,9 @@ public final class CustomerUpstoxFnoLiveOrderService {
         if (!"UPSTOX".equals(room.broker())) {
             throw error(HttpStatus.CONFLICT, "Select Upstox for this LIVE room");
         }
+        // Global emergency stop is independent of a room's selected broker.
+        // Block opening new LIVE exposure, but allow a verified SELL-to-close.
+        requireLiveEntryNotHalted(request.side(), false);
         String product = switch (room.focus()) {
             case "INTRADAY" -> "I";
             case "SWING" -> "D";
@@ -298,6 +301,8 @@ public final class CustomerUpstoxFnoLiveOrderService {
             if (!room.equals(latest)) {
                 throw error(HttpStatus.CONFLICT, "LIVE room changed during order preflight");
             }
+            // Recheck under the transaction before reserving a real-money BUY.
+            requireLiveEntryNotHalted(request.side(), true);
             long pending = jdbc.sql("""
                 SELECT COUNT(*) FROM customer_upstox_fno_live_order
                 WHERE user_id=:owner
@@ -442,6 +447,24 @@ public final class CustomerUpstoxFnoLiveOrderService {
             return byId(owner, roomId, orderId);
         });
         return refreshed == null ? original : refreshed;
+    }
+
+    /** Global emergency stop has no authority to prevent closing a long. */
+    static boolean blocksNewLiveEntry(String side, Boolean globalHalted) {
+        return "BUY".equals(side) && !Boolean.FALSE.equals(globalHalted);
+    }
+
+    private void requireLiveEntryNotHalted(String side, boolean insideTransaction) {
+        if (!"BUY".equals(side)) return;
+        // Absent/unreadable global control is fail-closed for fresh exposure.
+        Boolean halted = jdbc.sql(
+                "SELECT new_orders_halted FROM trading_control WHERE id=1"
+                    + (insideTransaction ? " FOR SHARE" : ""))
+            .query(Boolean.class).optional().orElse(null);
+        if (blocksNewLiveEntry(side, halted)) {
+            throw error(HttpStatus.CONFLICT,
+                "Global emergency stop blocks new LIVE option purchases");
+        }
     }
 
     private Room requireRoom(UUID owner, UUID room) {
