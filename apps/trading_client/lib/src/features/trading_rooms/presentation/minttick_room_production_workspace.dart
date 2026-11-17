@@ -77,6 +77,8 @@ class _MintTickRoomProductionWorkspaceState
   int _chartVersion = 0;
   List<CustomerPaperOrder> _paperOrders = const [];
   List<CustomerPaperPosition> _positions = const [];
+  List<CustomerFnoPosition> _fnoPositions = const [];
+  bool _fnoInventoryVerified = false;
   Map<int, CustomerLiveQuote> _positionQuotes = const {};
   int _historyGeneration = 0;
   List<CustomerBlockedOrderIntent> _liveIntents = const [];
@@ -138,6 +140,37 @@ class _MintTickRoomProductionWorkspaceState
 
   Future<void> _loadHistory() async {
     final request = ++_historyGeneration;
+    // F&O has a separate owner-scoped positions ledger. Never count cash
+    // equities in the option KPI ribbon, and never present failed reads as 0.
+    if (widget.room.marketScope == 'FNO' &&
+        widget.room.mode == 'PAPER' && widget.fno != null) {
+      setState(() {
+        _historyLoading = true;
+        _historyError = null;
+        _fnoInventoryVerified = false;
+      });
+      try {
+        final rows = await widget.fno!.positions(widget.room.id);
+        if (!mounted || request != _historyGeneration) return;
+        setState(() {
+          _fnoPositions = rows;
+          _fnoInventoryVerified = true;
+        });
+      } catch (_) {
+        if (mounted && request == _historyGeneration) {
+          setState(() {
+            _fnoPositions = const [];
+            _fnoInventoryVerified = false;
+            _historyError = 'F&O positions could not be verified.';
+          });
+        }
+      } finally {
+        if (mounted && request == _historyGeneration) {
+          setState(() => _historyLoading = false);
+        }
+      }
+      return;
+    }
     if (widget.room.mode == 'PAPER' && widget.paper != null &&
         (widget.room.status == 'PAPER_FUNDED' || widget.wallet != null)) {
       setState(() { _historyLoading = true; _historyError = null;
@@ -230,6 +263,17 @@ class _MintTickRoomProductionWorkspaceState
     );
   }
 
+  int? get _fnoIndicativePnlPaise {
+    if (!_fnoInventoryVerified) return null;
+    var total = 0;
+    for (final p in _fnoPositions) {
+      if (p.quantity == 0) continue;
+      if (!p.priceFresh || p.indicativeUnrealizedPnlPaise == null) return null;
+      total += p.indicativeUnrealizedPnlPaise!;
+    }
+    return total;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
@@ -238,6 +282,11 @@ class _MintTickRoomProductionWorkspaceState
     final cash = widget.wallet?.availableCashPaise;
     final pnl = widget.wallet?.realizedPnlPaise;
     final count = _positions.where((item) => item.quantity > 0).length;
+    final fnoPnl = _fnoIndicativePnlPaise;
+    final fnoBasis = _fnoPositions.fold<int>(0,
+        (sum, p) => sum + (p.quantity > 0 ? p.costBasisPaise : 0));
+    final fnoReturn = fnoPnl != null && fnoBasis > 0
+        ? fnoPnl * 100 / fnoBasis : null;
     final readyNote = isPaper
       ? 'PAPER · Virtual cash · manual simulated orders only'
       : 'LIVE · Broker authorization required · order execution locked';
@@ -312,7 +361,9 @@ class _MintTickRoomProductionWorkspaceState
                       ],
                     ]),
                     Text(
-                      '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
+                      widget.room.marketScope == 'FNO'
+                          ? 'F&O · Options · NIFTY · MY ROOM'
+                          : '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
                         fontSize: 10, color: colors.onSurfaceVariant)),
@@ -332,34 +383,74 @@ class _MintTickRoomProductionWorkspaceState
               ),
             ]),
           )),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
-            child: Container(
-              height: 63,
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerLow,
-                border: Border.all(color: colors.outlineVariant),
-                borderRadius: BorderRadius.circular(8)),
-              child: Row(children: [
-                Expanded(flex: 11, child: _CompactMetric(
-                  key: isPaper && cash != null
-                    ? const ValueKey('paper-wallet-cash') : null,
-                  label: isPaper ? 'VIRTUAL CASH' : 'PLANNED CAPITAL',
-                  value: isPaper ? cash == null ? '—' : _moneyPaise(cash)
-                      : formatPaperRupees(widget.room.paperBudget))),
-                _MetricDivider(color: colors.outlineVariant),
-                Expanded(flex: 9, child: _CompactMetric(
-                  label: 'REALIZED P&L',
-                  value: isPaper && pnl != null ? _moneyPaise(pnl) : '—',
-                  green: isPaper && pnl != null && pnl >= 0)),
-                _MetricDivider(color: colors.outlineVariant),
-                Expanded(flex: 6, child: _CompactMetric(
-                  label: 'POSITIONS',
-                  value: isPaper
-                    ? _historyError != null ? '—' : '$count' : '—')),
-              ]),
+          if (widget.room.marketScope == 'FNO' && isPaper)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Container(
+                height: 84,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLow,
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(12)),
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  SizedBox(width: 136, child: _CompactMetric(
+                    key: cash != null ? const ValueKey('paper-wallet-cash') : null,
+                    label: 'VIRTUAL CASH',
+                    value: cash == null ? '—' : _moneyPaise(cash))),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 155, child: _CompactMetric(
+                    label: 'OPTIONS P&L',
+                    value: fnoPnl == null ? '—' : _moneyPaise(fnoPnl),
+                    secondary: fnoReturn == null ? 'Not valued'
+                      : '${fnoReturn >= 0 ? '+' : ''}${fnoReturn.toStringAsFixed(2)}% indicative',
+                    green: fnoPnl != null && fnoPnl >= 0)),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 100, child: _CompactMetric(
+                    label: 'POSITIONS',
+                    value: !_fnoInventoryVerified ? '—'
+                        : _fnoPositions.where((p) => p.quantity > 0)
+                            .length.toString())),
+                  _MetricDivider(color: colors.outlineVariant),
+                  const SizedBox(width: 123, child: _CompactMetric(
+                    label: 'MARGIN USED', value: '—',
+                    secondary: 'Not provided')),
+                  _MetricDivider(color: colors.outlineVariant),
+                  SizedBox(width: 137, child: _CompactMetric(
+                    label: 'REALIZED P&L',
+                    value: pnl == null ? '—' : _moneyPaise(pnl),
+                    green: pnl != null && pnl >= 0)),
+                ]),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 6, 14, 0),
+              child: Container(
+                height: 63,
+                decoration: BoxDecoration(
+                  color: colors.surfaceContainerLow,
+                  border: Border.all(color: colors.outlineVariant),
+                  borderRadius: BorderRadius.circular(8)),
+                child: Row(children: [
+                  Expanded(flex: 11, child: _CompactMetric(
+                    key: isPaper && cash != null
+                      ? const ValueKey('paper-wallet-cash') : null,
+                    label: isPaper ? 'VIRTUAL CASH' : 'PLANNED CAPITAL',
+                    value: isPaper ? cash == null ? '—' : _moneyPaise(cash)
+                        : formatPaperRupees(widget.room.paperBudget))),
+                  _MetricDivider(color: colors.outlineVariant),
+                  Expanded(flex: 9, child: _CompactMetric(
+                    label: 'REALIZED P&L',
+                    value: isPaper && pnl != null ? _moneyPaise(pnl) : '—',
+                    green: isPaper && pnl != null && pnl >= 0)),
+                  _MetricDivider(color: colors.outlineVariant),
+                  Expanded(flex: 6, child: _CompactMetric(
+                    label: 'POSITIONS',
+                    value: isPaper
+                      ? _historyError != null ? '—' : '$count' : '—')),
+                ]),
+              ),
             ),
-          ),
           Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: SizedBox(height: 39, child: Row(children: [
               for (final tab in const [
@@ -533,6 +624,7 @@ class _MintTickRoomProductionWorkspaceState
         key: ValueKey('paper-fno-${widget.room.id}'),
         roomId: widget.room.id,
         repository: widget.fno!,
+        view: 'positions',
         onFilled: () async {
           await _loadHistory();
           await widget.onRefresh();
@@ -650,6 +742,7 @@ class _MintTickRoomProductionWorkspaceState
         key: ValueKey('fno-order-history-${widget.room.id}'),
         roomId: widget.room.id,
         repository: widget.fno!,
+        view: 'orders',
         onFilled: () async {
           await _loadHistory();
           await widget.onRefresh();
@@ -815,8 +908,9 @@ String _moneyPaise(int paise) {
 
 class _CompactMetric extends StatelessWidget {
   const _CompactMetric({required this.label, required this.value,
-    this.green = false, super.key});
+    this.secondary, this.green = false, super.key});
   final String label, value;
+  final String? secondary;
   final bool green;
 
   @override
@@ -824,7 +918,7 @@ class _CompactMetric extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       child: Column(mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
@@ -835,6 +929,11 @@ class _CompactMetric extends StatelessWidget {
           style: type.titleMedium?.copyWith(
             fontSize: 17, fontWeight: FontWeight.w800,
             color: green ? scheme.primary : scheme.onSurface)),
+        if (secondary != null) Text(secondary!, maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: type.labelSmall?.copyWith(
+            color: green ? scheme.primary : scheme.onSurfaceVariant,
+            fontSize: 10)),
       ]),
     );
   }

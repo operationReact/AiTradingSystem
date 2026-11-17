@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../data/authenticated_api_client.dart';
 import '../data/customer_paper_fno_repository.dart';
+import 'minttick_fno_quote_board.dart';
 
 /// PAPER-only NIFTY long options: contract selection, BUY/SELL ticket and
 /// virtual positions. Every value comes from the server. Anything the server
@@ -18,6 +19,7 @@ class MintTickPaperFnoPanel extends StatefulWidget {
     required this.roomId,
     required this.repository,
     this.initialExpiry,
+    this.view = 'trade',
     this.onFilled,
     this.clock = DateTime.now,
     super.key,
@@ -27,6 +29,8 @@ class MintTickPaperFnoPanel extends StatefulWidget {
   final DateTime Function() clock;
 
   final String roomId;
+  /// Trade shows market and ticket; other tabs load only owner-bound history.
+  final String view;
   final CustomerPaperFnoRepository repository;
   /// Optional starting expiry. Never inferred: the user enters the verified one.
   final DateTime? initialExpiry;
@@ -54,6 +58,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   bool _submitting = false;
   String? _message;
   CustomerFnoLeg? _selected;
+  num? _dashboardStrike;
   String _side = 'BUY';
   int _lots = 1;
   final _price = TextEditingController();
@@ -117,7 +122,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       // Local virtual order/position and ledger reads require only room
       // ownership, not licensed market quotes or an enabled order engine.
       // Keep viewing old PAPER history possible while trading stays blocked.
-      if (capability.readOnlyConfigured) {
+      if (capability.readOnlyConfigured && widget.view == 'trade') {
         _loadExpiries();
         if (_expiry != null) {
           _load();
@@ -198,6 +203,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   void _selectExpiry(DateTime expiry) {
     setState(() {
       _expiry = expiry;
+      _dashboardStrike = null;
       _selected = null;
       _message = null;
       _price.text = '';
@@ -262,6 +268,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         // A refresh replaces every leg. Clear the old selection and price so an
         // earlier quote can never gate a new order; the user re-selects a leg.
         _selected = null;
+        _dashboardStrike = null;
         _price.text = '';
         _loading = false;
       });
@@ -430,6 +437,31 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
+    if (widget.view == 'positions' || widget.view == 'orders') {
+      return Container(
+        key: const ValueKey('paper-fno-panel'),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerLow,
+          border: Border.all(color: colors.outlineVariant),
+          borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Expanded(child: Text(
+              widget.view == 'positions' ? 'F&O Positions' : 'F&O Orders',
+              style: type.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+            IconButton(onPressed: _loadPositions,
+              tooltip: 'Refresh F&O history',
+              icon: const Icon(Icons.refresh_rounded)),
+          ]),
+          const SizedBox(height: 12),
+          if (widget.view == 'positions') _positionsView(colors, type)
+          else _ordersView(colors, type),
+          const SizedBox(height: 12),
+          _bookkeepingView(colors, type),
+        ]),
+      );
+    }
     if (_checkingCapability || _capability?.readOnlyConfigured != true) {
       return Container(
         key: const ValueKey('paper-fno-panel'),
@@ -481,6 +513,8 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Recheck F&O'),
             ),
+            const SizedBox(height: 12),
+            const MintTickFnoUnavailableOverview(),
           ],
         ]),
       );
@@ -581,50 +615,29 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         Text('Snapshot ${market.snapshotAt!.toIso8601String()}',
           style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       const SizedBox(height: 8),
-      if (market.strikes.isEmpty)
-        const Text('No verified strikes for this expiry.')
-      else
-        for (final strike in market.strikes) _strikeRow(strike, colors, type),
+      MintTickFnoQuoteBoard(
+        key: const ValueKey('fno-premium-quote-board'),
+        market: market,
+        fresh: _quotesWithinAge,
+        strike: _dashboardStrike,
+        selected: _selected,
+        canClose: _selected != null && _heldLots(_selected!) > 0,
+        onStrike: (value) => setState(() {
+          _dashboardStrike = value;
+          _selected = null;
+          _price.clear();
+          _message = null;
+        }),
+        onLeg: _select,
+        // Selection is separate from submitting a virtual order.
+        onTicket: (leg, side) {
+          _select(leg);
+          _setSide(side);
+        },
+      ),
       const SizedBox(height: 10),
       _ticket(colors, type),
     ];
-  }
-
-  Widget _strikeRow(CustomerFnoStrike strike, ColorScheme colors, TextTheme type) =>
-    Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(children: [
-        SizedBox(width: 70, child: Text(strike.strikePrice.toString(),
-          style: type.labelLarge)),
-        Expanded(child: _legChip(strike.call, 'CE', colors, type)),
-        const SizedBox(width: 6),
-        Expanded(child: _legChip(strike.put, 'PE', colors, type)),
-      ]),
-    );
-
-  Widget _legChip(CustomerFnoLeg? leg, String label, ColorScheme colors, TextTheme type) {
-    if (leg == null) {
-      return Text('$label not listed', style: type.labelSmall);
-    }
-    final usable = _quotesWithinAge && _market?.hasFreshQuotes == true &&
-        _market?.displayRightsVerified == true && leg.quoteFresh && leg.paperEligible;
-    final selected = identical(_selected, leg) ||
-        _selected?.instrumentKey == leg.instrumentKey;
-    return OutlinedButton(
-      key: ValueKey('paper-fno-leg-${leg.instrumentKey}'),
-      onPressed: () => _select(leg),
-      style: OutlinedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        side: BorderSide(color: selected ? colors.primary : colors.outlineVariant)),
-      child: Column(children: [
-        Text('$label ${leg.lotSize}/lot', style: type.labelSmall),
-        Text(usable
-            ? 'Bid ${leg.bid ?? '—'} · Ask ${leg.ask ?? '—'}'
-            : 'Quote not fresh',
-          style: type.labelSmall?.copyWith(
-            color: usable ? colors.onSurface : colors.onSurfaceVariant)),
-      ]),
-    );
   }
 
   Widget _ticket(ColorScheme colors, TextTheme type) {
@@ -715,14 +728,38 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final p in _positions)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              '${p.optionType} ${p.expiry.toIso8601String().substring(0, 10)} · '
-              '${p.quantity} qty · cost ${_rupees(p.costBasisPaise)} · '
-              '${p.indicativeUnrealizedPnlPaise == null || !p.priceFresh
-                  ? 'P&L not valued' : 'P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}'}',
-              style: type.bodySmall),
+          Container(
+            key: ValueKey('fno-position-${p.instrumentKey}'),
+            margin: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              border: Border.all(color: colors.outlineVariant),
+              borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${p.optionType} ${_ymd(p.expiry)} · ${p.quantity} qty',
+                style: type.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Cost basis ${_rupees(p.costBasisPaise)}',
+                style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+              if (p.indicativeUnrealizedPnlPaise == null || !p.priceFresh)
+                Text('P&L not valued · return % unavailable',
+                  key: ValueKey('fno-return-unverified-${p.instrumentKey}'),
+                  style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant))
+              else
+                Row(children: [
+                  Expanded(child: Text(
+                    'Indicative P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}',
+                    style: type.bodySmall?.copyWith(
+                      color: p.indicativeUnrealizedPnlPaise! >= 0
+                        ? colors.primary : colors.error))),
+                  Text(p.costBasisPaise <= 0 ? '—' :
+                    '${p.indicativeUnrealizedPnlPaise! >= 0 ? '+' : ''}${(p.indicativeUnrealizedPnlPaise! * 100 / p.costBasisPaise).toStringAsFixed(2)}%',
+                    key: ValueKey('fno-return-percent-${p.instrumentKey}'),
+                    style: type.titleSmall?.copyWith(fontWeight: FontWeight.w800,
+                      color: p.indicativeUnrealizedPnlPaise! >= 0
+                        ? colors.primary : colors.error)),
+                ]),
+            ]),
           ),
       ],
     );
