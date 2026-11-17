@@ -487,7 +487,13 @@ public final class UpstoxAnalyticsSource {
                         ex.getStatusCode().value(), null).code();
                 throw unavailable("UPSTOX_FNO_" + status.name());
             }
-            // Preserve HTTP 429 as a safe, machine-readable retry class for the\n            // future rights-gated Golden checkpoint coordinator. Never expose\n            // upstream headers, payloads, URL or tokens. No retry here.\n            if (ex.getStatusCode().value() == 429) {\n                throw unavailable("UPSTOX_RATE_LIMITED");\n            }\n            throw unavailable("UPSTOX_READ_UNAVAILABLE");\n        } catch (org.springframework.web.client.ResourceAccessException ex) {
+            // Preserve HTTP 429 as a safe, machine-readable retry class for the
+            // future rights-gated Golden checkpoint coordinator. Never expose
+            // upstream headers, payloads, URL or tokens. No retry here.
+            if (ex.getStatusCode().value() == 429) {
+                throw unavailable("UPSTOX_RATE_LIMITED");
+            }
+            throw unavailable("UPSTOX_READ_UNAVAILABLE");\n        } catch (org.springframework.web.client.ResourceAccessException ex) {
             // Never emit the transport exception: it may embed a signed URL.
             throw unavailable(fno ? "UPSTOX_FNO_TRANSPORT_FAILURE"
                     : "UPSTOX_READ_UNAVAILABLE");
