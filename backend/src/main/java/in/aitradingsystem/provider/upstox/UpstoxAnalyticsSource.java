@@ -493,10 +493,15 @@ public final class UpstoxAnalyticsSource {
             if (ex.getStatusCode().value() == 429) {
                 throw unavailable("UPSTOX_RATE_LIMITED");
             }
-            throw unavailable("UPSTOX_READ_UNAVAILABLE");\n        } catch (org.springframework.web.client.ResourceAccessException ex) {
+            throw unavailable("UPSTOX_READ_UNAVAILABLE");
+        } catch (org.springframework.web.client.ResourceAccessException ex) {
             // Never emit the transport exception: it may embed a signed URL.
             throw unavailable(fno ? "UPSTOX_FNO_TRANSPORT_FAILURE"
                     : "UPSTOX_READ_UNAVAILABLE");
+        } catch (IllegalStateException ex) {
+            // Preserve safe retry/disabled classifications without exposing source data.
+            if ("UPSTOX_RATE_LIMITED".equals(ex.getMessage())) throw ex;
+            throw unavailable(fno ? "UPSTOX_FNO_UNKNOWN_FAILURE" : "UPSTOX_READ_UNAVAILABLE");
         } catch (Exception ex) {
             // The upstream response and token never escape this source.
             // Recognize only our own strict payload error, not arbitrary strings.
