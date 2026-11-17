@@ -233,7 +233,7 @@ public class UpstoxFnoV3LiveFeedService {
             return false;
         var time = ist.toLocalTime();
         return !time.isBefore(java.time.LocalTime.of(9, 15))
-                && time.isBefore(java.time.LocalTime.of(15, 30));
+                && time.isBefore(java.time.LocalTime.of(15, 40));
     }
 
     public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
