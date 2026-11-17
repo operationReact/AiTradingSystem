@@ -697,14 +697,38 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (final p in _positions)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Text(
-              '${p.optionType} ${p.expiry.toIso8601String().substring(0, 10)} · '
-              '${p.quantity} qty · cost ${_rupees(p.costBasisPaise)} · '
-              '${p.indicativeUnrealizedPnlPaise == null || !p.priceFresh
-                  ? 'P&L not valued' : 'P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}'}',
-              style: type.bodySmall),
+          Container(
+            key: ValueKey('fno-position-${p.instrumentKey}'),
+            margin: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: colors.surfaceContainerLow,
+              border: Border.all(color: colors.outlineVariant),
+              borderRadius: BorderRadius.circular(12)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${p.optionType} ${_ymd(p.expiry)} · ${p.quantity} qty',
+                style: type.titleSmall?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Cost basis ${_rupees(p.costBasisPaise)}',
+                style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant)),
+              if (p.indicativeUnrealizedPnlPaise == null || !p.priceFresh)
+                Text('P&L not valued · return % unavailable',
+                  key: ValueKey('fno-return-unverified-${p.instrumentKey}'),
+                  style: type.bodySmall?.copyWith(color: colors.onSurfaceVariant))
+              else
+                Row(children: [
+                  Expanded(child: Text(
+                    'Indicative P&L ${_rupees(p.indicativeUnrealizedPnlPaise!)}',
+                    style: type.bodySmall?.copyWith(
+                      color: p.indicativeUnrealizedPnlPaise! >= 0
+                        ? colors.primary : colors.error))),
+                  Text(p.costBasisPaise <= 0 ? '—' :
+                    '${p.indicativeUnrealizedPnlPaise! >= 0 ? '+' : ''}${(p.indicativeUnrealizedPnlPaise! * 100 / p.costBasisPaise).toStringAsFixed(2)}%',
+                    key: ValueKey('fno-return-percent-${p.instrumentKey}'),
+                    style: type.titleSmall?.copyWith(fontWeight: FontWeight.w800,
+                      color: p.indicativeUnrealizedPnlPaise! >= 0
+                        ? colors.primary : colors.error)),
+                ]),
+            ]),
           ),
       ],
     );
