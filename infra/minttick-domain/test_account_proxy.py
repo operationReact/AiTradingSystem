@@ -848,8 +848,17 @@ class AccountProxyTest(unittest.TestCase):
         base = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/live/fno"
         self.assertTrue(proxy.allowed("GET", base + "/capability"))
         self.assertTrue(proxy.allowed("GET", base + "/orders"))
+        self.assertTrue(proxy.allowed("GET", base + "/expiries"))
+        self.assertTrue(proxy.allowed("GET", base + "/market"))
+        self.assertFalse(proxy.allowed("POST", base + "/market"))
+        self.assertFalse(proxy.allowed("POST", base + "/expiries"))
         self.assertTrue(proxy.allowed("POST", base + "/orders"))
         self.assertTrue(proxy.allowed("POST", base + "/orders/12345678-1234-1234-1234-123456789012/reconcile"))
+        for suffix in ("/market", "/expiries"):
+            no_jwt = event("GET", base + suffix, jwt={"claims": {}})
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                self.assertEqual(proxy.handler(no_jwt, None)["statusCode"], 401)
+                send.assert_not_called()
         for method, path in (
             ("POST", base + "/capability"),
             ("PUT", base + "/orders"),
