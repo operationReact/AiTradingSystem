@@ -1,0 +1,82 @@
+name: MintTick F&O - private operator-only Upstox V3 source enablement
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/ec2-paper-fno-private-v3-activate.yml'
+      - 'infra/ec2-paper/fno_private_v3_activate.py'
+      - 'scripts/tests/test_fno_private_v3_activate.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-v3-activate.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify fixed source-only activation and rollback
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_v3_activate.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_v3_activate.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/fno_private_v3_activate.py').read_text()
+          assert 8000 < len(s) < 15000
+          for marker in ("SOURCE_BEAN_ENABLED", "ACTIVATION_FAILED_ROLLED_BACK",
+                         "PRIVATE_OPERATOR_API_UNVERIFIED", "DISPLAY_PAPER_LIVE_ORDER_UNCHANGED_DISABLED",
+                         'EXPECTED_RELEASE = "4ecc90348b56f5aa696d23b68ed32950eb82fa38"'):
+              assert marker in s, marker
+          for forbidden in ("--with-decryption", "submitOrder", "placeOrder",
+                            "docker compose down", 'FLAG+"=false"'):
+              assert forbidden not in s
+          PY
+
+  activate:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require EXACT owner-approved one-file source activation request
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-v3-activate.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"infra/ec2-paper")
+          from fno_private_v3_activate import EXACT_REQUEST
+          p=Path("infra/ec2-paper/requests/fno-private-v3-activate.json")
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1500
+          assert json.loads(p.read_text())==EXACT_REQUEST
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: fno-private-v3-source-activation
+      - name: Activate ONLY the private ephemeral source bean and verify exact host
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno_private_v3_activate.py runner
