@@ -355,7 +355,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
         const SizedBox(height: 8),
         Text(market?.snapshotAt == null
             ? 'No exchange-timed option snapshot verified'
-            : 'Contract snapshot: ${_time(market.snapshotAt)} · '
+            : 'Contract snapshot: ${_time(market!.snapshotAt)} · '
               'Upstox V3 quotes are independently checked',
           style: Theme.of(context).textTheme.bodySmall),
         if (room != null) Align(alignment: Alignment.centerRight,
