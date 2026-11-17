@@ -80,8 +80,8 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
             throw new IllegalArgumentException("UNBOUNDED_UPSTOX_GOLDEN_WINDOW");
         }
 
-        // Alias validity is half-open [valid_from, valid_to); an alias ending exactly
-        // at the requested endExclusive must still cover the entire window.
+        // Alias validity uses an exclusive end: an alias ending exactly at
+        // endExclusive covers every instant in [start, endExclusive).
         // A provider token is only an episode-bounded alias. Both ends of the
         // requested window must be covered, with no ambiguity or future evidence.
         ZoneId exchangeZone = ZoneId.of("Asia/Kolkata");
@@ -95,7 +95,7 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
                  WHERE a.listing_id = ? AND a.provider = 'UPSTOX'
                    AND a.exchange = 'NSE' AND l.exchange = 'NSE'
                    AND a.valid_from <= ?
-                   AND (a.valid_to IS NULL OR a.valid_to > ?)
+                   AND (a.valid_to IS NULL OR a.valid_to >= ?)
                    AND a.first_available_at <= ?
                    AND a.source_published_at <= ?
                 """, (rs, row) -> rs.getString(1), request.listingId(),
