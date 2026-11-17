@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/customer_paper_fno_repository.dart';
-import '../data/customer_upstox_fno_live_repository.dart';
+import '../data/customer_fno_discovery_repository.dart';
 import '../domain/trading_room_draft.dart';
 import 'minttick_customer_widgets.dart';
 
@@ -13,16 +13,14 @@ import 'minttick_customer_widgets.dart';
 class MintTickFnoDiscoveryPage extends StatefulWidget {
   const MintTickFnoDiscoveryPage({
     required this.rooms,
-    required this.paper,
-    required this.live,
+    required this.discovery,
     required this.onOpenRoom,
     required this.onCreateRoom,
     super.key,
   });
 
   final TradingRoomDraftStore rooms;
-  final CustomerPaperFnoRepository paper;
-  final CustomerUpstoxFnoLiveRepository live;
+  final CustomerFnoDiscoveryRepository discovery;
   final ValueChanged<TradingRoomDraft> onOpenRoom;
   final VoidCallback onCreateRoom;
 
@@ -94,6 +92,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       if (!mounted) {
         return;
       }
+      unawaited(_refresh());
       if (!widget.rooms.loaded) {
         unawaited(widget.rooms.load());
       } else {
@@ -125,27 +124,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   }
 
   void _selectRoom(String? roomId) {
-    _generation++;
-    setState(() {
-      _roomId = roomId;
-      _expiries = const [];
-      _expiry = null;
-      _market = null;
-      _error = null;
-      _rightsStatus = null;
-      _readOnlyConfigured = false;
-      _loading = false;
-    });
-    if (roomId != null) {
-      unawaited(_refresh());
-    }
+    setState(() => _roomId = roomId);
   }
 
   Future<void> _refresh() async {
-    final room = _room;
-    if (room == null) {
-      return;
-    }
     final request = ++_generation;
     setState(() {
       _loading = true;
@@ -156,29 +138,20 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       _readOnlyConfigured = false;
     });
     try {
-      bool readEnabled;
-      if (room.mode == 'PAPER') {
-        final cap = await widget.paper.capability(room.id);
-        readEnabled = cap.readOnlyConfigured;
-        _rightsStatus = cap.status;
-      } else {
-        final cap = await widget.live.capability(room.id);
-        // Capability is execution preflight, NOT a display entitlement.
-        // The owner/rights-scoped expiry GET independently controls visibility.
-        readEnabled = cap.contractSourceReady;
-        _rightsStatus = cap.reasons.isEmpty ?
-            'BROKER_PREFLIGHT_AVAILABLE' : cap.reasons.first;
-      }
+      final capability = await widget.discovery.capability();
       if (!mounted || request != _generation) {
         return;
       }
-      setState(() => _readOnlyConfigured = readEnabled);
+      final readEnabled = capability.displayRightsVerified &&
+          capability.feedConfigured && capability.sourceReady;
+      setState(() {
+        _rightsStatus = capability.status;
+        _readOnlyConfigured = readEnabled;
+      });
       if (!readEnabled) {
         return;
       }
-      final listed = room.mode == 'PAPER'
-          ? await widget.paper.expiries(room.id)
-          : await widget.live.expiries(room.id);
+      final listed = await widget.discovery.expiries();
       if (!mounted || request != _generation) {
         return;
       }
@@ -186,9 +159,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
         setState(() => _rightsStatus = listed.status);
         return;
       }
-      final dates = listed.expiries.where((d) =>
-          !d.isBefore(DateTime(DateTime.now().year,
-              DateTime.now().month, DateTime.now().day))).toList();
+      final dates = listed.expiries;
       if (dates.isEmpty) {
         setState(() => _rightsStatus = 'NO_CURRENT_LISTED_EXPIRIES');
         return;
@@ -201,7 +172,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     } catch (_) {
       if (mounted && request == _generation) {
         setState(() => _error =
-            'Verified NSE option data is not available for this room.');
+            'Authenticated NSE option discovery is unavailable.');
       }
     } finally {
       if (mounted && request == _generation) {
@@ -211,8 +182,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
   }
 
   Future<void> _loadMarket(DateTime expiry, {int? expected}) async {
-    final room = _room;
-    if (room == null || !_expiries.contains(expiry)) {
+    if (!_expiries.contains(expiry)) {
       return;
     }
     final request = expected ?? ++_generation;
@@ -225,10 +195,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       });
     }
     try {
-      final next = room.mode == 'PAPER'
-          ? await widget.paper.market(room.id, expiry)
-          : await widget.live.market(room.id, expiry);
-      if (!mounted || request != _generation || _roomId != room.id) {
+      final next = await widget.discovery.market(expiry);
+      if (!mounted || request != _generation) {
         return;
       }
       if (!next.displayRightsVerified || next.liveOrderEnabled ||
@@ -240,7 +208,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     } catch (_) {
       if (mounted && request == _generation) {
         setState(() => _error =
-            'Unable to verify listed options or fresh exchange quotes.');
+            'Unable to verify listed options or exchange-timed quotes.');
       }
     } finally {
       if (mounted && request == _generation) {
@@ -283,17 +251,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
       if (_error != null) Padding(
         padding: const EdgeInsets.only(top: 7, bottom: 9),
         child: Text(_error!, style: TextStyle(color: c.error))),
-      if (room == null) _unavailable(context,
-          'Select a dedicated F&O Trading Room',
-          'Create a Paper or Live F&O room to discover its authorized listed '
-          'contracts, expiries and exchange-timed quotes.',
-          action: 'Create F&O room', onTap: widget.onCreateRoom)
-      else if (!_readOnlyConfigured || market == null) _unavailable(context,
+      if (!_readOnlyConfigured || market == null) _unavailable(context,
           'NIFTY options data',
-          'Available from the verified Upstox F&O source when the room and '
-          'display entitlement are ready. '
+          'Market discovery uses the independent Upstox source. '
           '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.',
-          action: 'Open room', onTap: () => widget.onOpenRoom(room)),
+          action: room == null ? null : 'Open terminal',
+          onTap: room == null ? null : () => widget.onOpenRoom(room)),
       if (_section == 'Explore') ...[
         _marketIntro(context, room, market),
         _expirySection(context),
@@ -325,10 +288,14 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
     return MintTickSurface(
       padding: const EdgeInsets.all(12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('BROKER-AUTHORIZED MARKET', style: type.labelSmall),
+        Text('TRADING TERMINAL · OPTIONAL', style: type.labelSmall),
         const SizedBox(height: 7),
         if (_availableRooms.isEmpty)
-          const Text('No F&O rooms yet')
+          Row(children: [
+            const Expanded(child: Text('Market discovery works without a room.')),
+            TextButton(onPressed: widget.onCreateRoom,
+              child: const Text('New room')),
+          ])
         else
           DropdownButtonHideUnderline(child: DropdownButton<String>(
             key: const ValueKey('fno-discovery-room'),
@@ -341,8 +308,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
             onChanged: _loading ? null : _selectRoom,
           )),
         if (room != null)
-          Text('Selected source is scoped to your ${room.mode} room. '
-              'Browsing never submits broker orders.',
+          Text('Open your ${room.mode} terminal for order entry. '
+              'This market feed does not require a broker connection.',
             style: type.bodySmall),
       ]),
     );
