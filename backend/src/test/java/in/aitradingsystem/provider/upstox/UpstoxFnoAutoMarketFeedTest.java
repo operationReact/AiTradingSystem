@@ -128,6 +128,23 @@ class UpstoxFnoAutoMarketFeedTest {
     }
 
     @Test
+    void aSilentConnectedSocketIsStoppedWithThreeMinuteBackoff() {
+        eligibleSource();
+        var auto = manager(true);
+        auto.reconcile();
+        when(service.status()).thenReturn(status("CONNECTED"));
+        clock.value = MARKET.plusSeconds(91);
+        auto.reconcile();
+        assertThat(auto.status().status()).isEqualTo("STALE_SOCKET_BACKOFF");
+        assertThat(auto.status().autoOwned()).isFalse();
+        verify(service).stop();
+        clock.value = MARKET.plusSeconds(120);
+        auto.reconcile();
+        assertThat(auto.status().status()).isEqualTo("BACKOFF");
+        verify(service, times(1)).start(anyList());
+    }
+
+    @Test
     void deniedListingBacksOffAndCannotLoopProviderRequests() {
         eligibleSource();
         when(catalog.listing(any(Instant.class))).thenReturn(
