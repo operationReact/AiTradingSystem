@@ -448,6 +448,21 @@ void main() {
     expect(() => CustomerFnoLeg.decode(negativeOi), throwsFormatException);
   });
 
+  testWidgets('live options quote refresh preserves listed contract without auto ordering',
+      (tester) async {
+    final repo = _FakeRepo(marketResult: market());
+    await pump(tester, repo);
+    final firstReads = repo.marketCalls;
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(repo.marketCalls, greaterThan(firstReads));
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsOneWidget);
+    expect(repo.submits, isEmpty);
+  });
+
   testWidgets('a stale quote keeps submit disabled even when the leg is selected', (tester) async {
     await pump(tester, _FakeRepo(marketResult: market(fresh: false)));
     expect(find.text('Quote not fresh'), findsWidgets);
