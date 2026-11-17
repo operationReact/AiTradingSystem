@@ -68,6 +68,8 @@ public class MindPaperCycleService {
     static final BigDecimal MAX_QUOTE_DIVERGENCE = new BigDecimal("0.03");
     /** Cumulative realized PAPER loss, as a fraction of initial cash, after which new entries stop. */
     static final BigDecimal MAX_DRAWDOWN_FRACTION = new BigDecimal("0.03");
+    /** Trailing-exit give-back from the highest stored quote since entry (STR-222). */
+    static final BigDecimal TRAIL_FRACTION = new BigDecimal("0.02");
     private static final Duration MAX_TICK_AGE = Duration.ofSeconds(15);
     private static final List<String> FILL_CAPABILITIES = List.of("engine.data-gate",
         "engine.strategy-eval", "engine.risk-gates", "engine.strategy-to-paper",
@@ -195,13 +197,21 @@ public class MindPaperCycleService {
                 && preview.ltp().compareTo(protective.stop()) <= 0;
             boolean targetHit = preview != null && protective != null && protective.target() != null
                 && protective.target().signum() > 0 && preview.ltp().compareTo(protective.target()) >= 0;
-            if (!(trendBroken || stopHit || targetHit)) {
+            // STR-222 trailing exit: once the position is in profit, exit if the price gives back
+            // TRAIL_FRACTION from its highest recorded quote since entry. Uses only stored cycle quotes.
+            BigDecimal highWater = preview == null ? null
+                : highWaterSinceEntry(owner, roomId, instrumentId, preview.ltp());
+            boolean trailingHit = preview != null && highWater != null
+                && trailingExitHit(BigDecimal.valueOf(held.avgCostPaise(), 2).movePointLeft(2), highWater, preview.ltp(),
+                    TRAIL_FRACTION);
+            if (!(trendBroken || stopHit || targetHit || trailingHit)) {
                 d.stage("POSITION", "HOLD", "Open position kept; no exit condition");
                 d.reasons.add("POSITION_ALREADY_OPEN");
                 return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
             }
             side = "SELL";
-            d.reasons.add(stopHit ? "EXIT_STOP_HIT" : targetHit ? "EXIT_TARGET_HIT" : "EXIT_TREND_BROKEN");
+            d.reasons.add(stopHit ? "EXIT_STOP_HIT" : targetHit ? "EXIT_TARGET_HIT"
+                : trailingHit ? "EXIT_TRAILING_STOP" : "EXIT_TREND_BROKEN");
             d.quantity = held.quantity();
             d.stage("POSITION", "EXIT", d.reasons.getLast());
         } else {
@@ -366,6 +376,32 @@ public class MindPaperCycleService {
         }
         CustomerPaperWalletService.PaperWallet wallet = wallets.get(owner, roomId);
         return drawdownReason(wallet.initialCashPaise(), wallet.realizedPnlPaise());
+    }
+
+    /** Highest stored cycle quote for this instrument since its last filled BUY, including the current quote. */
+    BigDecimal highWaterSinceEntry(UUID owner, UUID roomId, long instrumentId, BigDecimal currentLtp) {
+        BigDecimal stored = jdbc.sql("""
+                SELECT MAX(quote_ltp) FROM mind_paper_cycle
+                WHERE user_id = :owner AND room_id = :room AND instrument_id = :instrument
+                  AND created_at >= COALESCE((
+                        SELECT MAX(created_at) FROM mind_paper_cycle
+                        WHERE user_id = :owner AND room_id = :room AND instrument_id = :instrument
+                          AND outcome = 'FILLED' AND side = 'BUY'), TIMESTAMPTZ '-infinity')
+                """)
+            .param("owner", owner).param("room", roomId).param("instrument", instrumentId)
+            .query(BigDecimal.class).optional().orElse(null);
+        return stored == null ? currentLtp : stored.max(currentLtp);
+    }
+
+    /**
+     * Pure trailing-exit rule. Active only once the price is above average cost; fires when the
+     * current price is at or below highWater * (1 - trailFraction). Never fires on a loss.
+     */
+    static boolean trailingExitHit(BigDecimal avgCost, BigDecimal highWater, BigDecimal ltp, BigDecimal trailFraction) {
+        if (avgCost == null || highWater == null || ltp == null || trailFraction == null) return false;
+        if (avgCost.signum() <= 0 || highWater.compareTo(avgCost) <= 0) return false;
+        BigDecimal trailStop = highWater.multiply(BigDecimal.ONE.subtract(trailFraction));
+        return ltp.compareTo(trailStop) <= 0 && ltp.compareTo(avgCost) > 0;
     }
 
     /** Pure drawdown rule: a realized loss at or beyond MAX_DRAWDOWN_FRACTION of initial cash blocks entries. */
