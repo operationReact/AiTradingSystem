@@ -917,6 +917,28 @@ class AccountProxyTest(unittest.TestCase):
             self.assertEqual(proxy.handler(reconcile, None)["statusCode"], 400)
             send.assert_not_called()
 
+    def test_fno_market_discovery_is_read_only_and_requires_owner_jwt(self):
+        root = "/api/customer/markets/fno/"
+        for route in ("capability", "expiries", "market"):
+            path = root + route
+            self.assertTrue(proxy.allowed("GET", path))
+            for forbidden in ("POST", "PUT", "PATCH", "DELETE"):
+                self.assertFalse(proxy.allowed(forbidden, path))
+            attempt = event("GET", path, jwt={"claims": {}})
+            with mock.patch.object(proxy.urllib.request, "urlopen") as send:
+                result = proxy.handler(attempt, None)
+            self.assertEqual(result["statusCode"], 401)
+            send.assert_not_called()
+            normal = event("GET", path)
+            with mock.patch.object(proxy.urllib.request, "urlopen",
+                                   return_value=Reply()) as send:
+                result = proxy.handler(normal, None)
+            self.assertEqual(result["statusCode"], 200)
+            self.assertEqual(send.call_args.args[0].get_method(), "GET")
+        # There is deliberately no broker order path beneath global discovery.
+        self.assertFalse(proxy.allowed("POST", root + "orders"))
+        self.assertFalse(proxy.allowed("GET", root + "orders"))
+
     def test_template_embeds_identical_reviewed_python_source(self):
         text=Path(__file__).with_name("bootstrap-account-api.yml").read_text()
         anchor="        ZipFile: |\n"
