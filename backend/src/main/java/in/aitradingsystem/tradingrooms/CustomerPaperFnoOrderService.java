@@ -120,7 +120,7 @@ public class CustomerPaperFnoOrderService {
         Instant now=clock.instant();
         LocalDate today=now.atZone(IST).toLocalDate();
         if(expiry.isBefore(today) || expiry.isAfter(today.plusDays(90))
-                || !calendar.isInsideCashSession(now))
+                || !calendar.isInsideFnoSession(now))
             throw reject(HttpStatus.CONFLICT,"F&O PAPER session closed or contract expired");
         if(!source.enabled())
             throw reject(HttpStatus.SERVICE_UNAVAILABLE,"F&O source disabled");
@@ -149,7 +149,7 @@ public class CustomerPaperFnoOrderService {
         // Defense in depth: executable PAPER fill requires both observation
         // and provider exchange time fresh INSIDE the active Indian session.
         if (quote.exchangeAt()==null || quote.observedAt()==null
-                || !calendar.isInsideCashSession(quote.exchangeAt())
+                || !calendar.isInsideFnoSession(quote.exchangeAt())
                 || quote.exchangeAt().isAfter(now.plusSeconds(2))
                 || quote.observedAt().isAfter(now.plusSeconds(2))
                 || java.time.Duration.between(quote.exchangeAt(),now).isNegative()
