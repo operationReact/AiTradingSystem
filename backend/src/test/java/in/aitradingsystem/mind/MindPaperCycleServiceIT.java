@@ -369,7 +369,7 @@ class MindPaperCycleServiceIT extends AbstractPostgresIT {
             5, 20, new BigDecimal("2"), new BigDecimal("0.5"), 1440);
         var orders = new CustomerPaperOrderService(jdbc, instruments, lastTicks, calendar, clock);
         return new MindPaperCycleService(jdbc, instruments, strategy, orders, wallets, lastTicks, calendar,
-            progress, clock, permitted);
+            progress, clock, null, permitted);
     }
 
     private void seedRisingCandles(long instrumentId, String symbol, String token, String source) {

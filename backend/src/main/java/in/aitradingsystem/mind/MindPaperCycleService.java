@@ -6,6 +6,7 @@ import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.mind.MindCapabilityProgressService.EventType;
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
 import in.aitradingsystem.strategy.StrategyEvaluation;
 import in.aitradingsystem.strategy.StrategyService;
 import in.aitradingsystem.strategy.StrategySignal;
@@ -105,6 +106,7 @@ public class MindPaperCycleService {
     private final MarketLastTickStore ticks;
     private final MarketSessionCalendar calendar;
     private final MindCapabilityProgressService progress;
+    private final AppAngelOneMarketFeedService liveFeed;
     private final Clock clock;
     private final Set<String> permittedSources;
 
@@ -113,7 +115,9 @@ public class MindPaperCycleService {
             StrategyService strategies, CustomerPaperOrderService orders,
             CustomerPaperWalletService wallets, MarketLastTickStore ticks,
             MarketSessionCalendar calendar, MindCapabilityProgressService progress, Clock clock,
+            AppAngelOneMarketFeedService liveFeed,
             @Value("${app.mind.paper.permitted-candle-sources:ANGEL_ONE_SMARTAPI}") String permittedSources) {
+        this.liveFeed = liveFeed;
         this.jdbc = jdbc;
         this.instruments = instruments;
         this.strategies = strategies;
@@ -189,7 +193,7 @@ public class MindPaperCycleService {
         String side;
         if (held != null && held.quantity() > 0) {
             Protective protective = lastEntryProtection(owner, roomId, instrumentId);
-            MarketLastTickStore.LastTick preview = freshTick(instrumentId, now);
+            MarketLastTickStore.LastTick preview = freshTick(instrument, now);
             boolean trendBroken = !"BUY".equals(signal.action())
                 && (signal.reasonCodes().contains("CLOSE_NOT_ABOVE_SLOW_SMA")
                     || signal.reasonCodes().contains("TREND_NOT_BULLISH"));
@@ -243,7 +247,7 @@ public class MindPaperCycleService {
             }
             d.stage("KILL_SWITCH", "PASSED", "No global emergency stop; drawdown within limit");
         }
-        MarketLastTickStore.LastTick tick = freshTick(instrumentId, now);
+        MarketLastTickStore.LastTick tick = freshTick(instrument, now);
         if (tick == null) {
             d.stage("QUOTE", "BLOCKED", "No verified tick within 15s");
             d.reasons.add("FRESH_QUOTE_UNAVAILABLE");
@@ -447,7 +451,17 @@ public class MindPaperCycleService {
         return price.divide(tick, 0, RoundingMode.FLOOR).multiply(tick).setScale(Math.min(4, tick.scale()), RoundingMode.UNNECESSARY);
     }
 
-    private MarketLastTickStore.LastTick freshTick(long instrumentId, Instant now) {
+    MarketLastTickStore.LastTick freshTick(Instrument instrument, Instant now) {
+        MarketLastTickStore.LastTick tick = storedFreshTick(instrument.id(), now);
+        if (tick != null) return tick;
+        // The Mind quote gate uses the authorized application-owned live feed (SSM-backed SmartAPI session),
+        // never a customer broker session. Any verified LIVE quote is recorded through the SAME store and
+        // then judged by the SAME freshness rules below, so there is one quote path and no synthetic price.
+        recordApplicationLiveQuote(instrument);
+        return storedFreshTick(instrument.id(), now);
+    }
+
+    private MarketLastTickStore.LastTick storedFreshTick(long instrumentId, Instant now) {
         MarketLastTickStore.LastTick tick = ticks.lastFor(List.of(instrumentId)).get(instrumentId);
         if (tick == null || tick.ltp() == null || tick.ltp().signum() <= 0 || tick.exchangeAt() == null
                 || tick.exchangeAt().isAfter(now.plusSeconds(2))
@@ -456,6 +470,20 @@ public class MindPaperCycleService {
             return null;
         }
         return tick;
+    }
+
+    private void recordApplicationLiveQuote(Instrument instrument) {
+        if (liveFeed == null || !liveFeed.available()) return;
+        try {
+            var quote = liveFeed.live(instrument);
+            if (quote != null && "LIVE".equals(quote.status())) {
+                ticks.recordLive(List.of(quote));
+            }
+        } catch (RuntimeException ex) {
+            // Provider or session failure is not a price. The cycle stays blocked with FRESH_QUOTE_UNAVAILABLE.
+            log.warn("Mind PAPER quote unavailable from the application feed: {} {}", instrument.tradingSymbol(),
+                ex.getClass().getSimpleName());
+        }
     }
 
     private record Protective(BigDecimal stop, BigDecimal target) {}
