@@ -501,6 +501,9 @@ public final class UpstoxAnalyticsSource {
         } catch (IllegalStateException ex) {
             // Preserve safe retry/disabled classifications without exposing source data.
             if ("UPSTOX_RATE_LIMITED".equals(ex.getMessage())) throw ex;
+            if (fno && "UPSTOX_INVALID_RESPONSE".equals(ex.getMessage())) {
+                throw unavailable("UPSTOX_FNO_INVALID_PAYLOAD");
+            }
             throw unavailable(fno ? "UPSTOX_FNO_UNKNOWN_FAILURE" : "UPSTOX_READ_UNAVAILABLE");
         } catch (Exception ex) {
             // The upstream response and token never escape this source.
