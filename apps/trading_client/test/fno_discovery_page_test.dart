@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_paper_fno_repository.dart';
-import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_fno_live_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_fno_discovery_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/domain/trading_room_draft.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_fno_discovery_page.dart';
 
-class _NoPaper extends Fake implements CustomerPaperFnoRepository {}
-class _NoLive extends Fake implements CustomerUpstoxFnoLiveRepository {}
+class _NoDiscovery extends Fake implements CustomerFnoDiscoveryRepository {}
 
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
@@ -69,8 +68,7 @@ void main() {
       home: Scaffold(body: SingleChildScrollView(
         child: MintTickFnoDiscoveryPage(
           rooms: rooms,
-          paper: _NoPaper(),
-          live: _NoLive(),
+          discovery: _NoDiscovery(),
           onOpenRoom: (_) {},
           onCreateRoom: () => createCount++,
         ),
@@ -78,7 +76,7 @@ void main() {
     ));
     await tester.pump();
     expect(find.text('F&O · Discover'), findsOneWidget);
-    expect(find.text('No F&O rooms yet'), findsOneWidget);
+    expect(find.textContaining('Market discovery works without a room.'), findsOneWidget);
     expect(find.textContaining('No verified'), findsWidgets);
     expect(find.text('Create F&O room'), findsWidgets);
     final create = find.text('Create F&O room').first;
