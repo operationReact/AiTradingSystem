@@ -8,7 +8,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
   const MintTickFnoQuoteBoard({
     required this.market, required this.fresh, required this.strike,
     required this.selected, required this.onStrike, required this.onLeg,
-    required this.onTicket, super.key,
+    required this.onTicket, required this.canClose, super.key,
   });
   final CustomerFnoMarket market;
   final bool fresh;
@@ -16,6 +16,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
   final CustomerFnoLeg? selected;
   final ValueChanged<num> onStrike;
   final ValueChanged<CustomerFnoLeg> onLeg;
+  final bool canClose;
   /// Opens a ticket. Submission still requires explicit confirmation.
   final void Function(CustomerFnoLeg leg, String side) onTicket;
 
@@ -117,17 +118,21 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       Row(children: [
         Expanded(child: FilledButton(
           key: const ValueKey('fno-premium-buy-call'),
-          onPressed: s?.call == null ? null : () => onTicket(s!.call!, 'BUY'),
+          onPressed: !verified || s?.call?.paperEligible != true ||
+              s?.call?.quoteFresh != true ? null : () => onTicket(s!.call!, 'BUY'),
           child: const FittedBox(child: Text('BUY CALL')))),
         const SizedBox(width: 6),
         Expanded(child: OutlinedButton(
           key: const ValueKey('fno-premium-buy-put'),
-          onPressed: s?.put == null ? null : () => onTicket(s!.put!, 'BUY'),
+          onPressed: !verified || s?.put?.paperEligible != true ||
+              s?.put?.quoteFresh != true ? null : () => onTicket(s!.put!, 'BUY'),
           child: const FittedBox(child: Text('BUY PUT')))),
         const SizedBox(width: 6),
         Expanded(child: OutlinedButton(
           key: const ValueKey('fno-premium-sell-close'),
-          onPressed: selected == null ? null : () => onTicket(selected!, 'SELL'),
+          onPressed: !verified || !canClose || selected == null ||
+              !selected!.quoteFresh || !selected!.paperEligible
+                ? null : () => onTicket(selected!, 'SELL'),
           child: const Text('SELL'))),
       ]),
       Text('Buttons select a PAPER contract; the guarded limit-price ticket '
@@ -156,11 +161,11 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
         const SizedBox(height: 8),
-        Text(show ? 'Ask ${value(leg.ask)}' : 'LTP —',
+        Text(show ? 'Ask ${value(leg!.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 6),
-        Text(show ? 'Bid ${value(leg.bid)}' : 'Quote not fresh',
+        Text(show ? 'Bid ${value(leg!.bid)}' : 'Quote not fresh',
           style: t.labelSmall?.copyWith(
             color: show ? accent : c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
