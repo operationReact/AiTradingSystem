@@ -13,9 +13,9 @@ class UpstoxFnoV3NseSessionGuardTest {
         assertThat(UpstoxFnoV3LiveFeedService.regularNseSession(
                 Instant.parse("2026-11-16T03:45:00Z"))).isTrue();
         assertThat(UpstoxFnoV3LiveFeedService.regularNseSession(
-                Instant.parse("2026-11-16T09:59:59Z"))).isTrue();
+                Instant.parse("2026-11-16T10:09:59Z"))).isTrue();
         assertThat(UpstoxFnoV3LiveFeedService.regularNseSession(
-                Instant.parse("2026-11-16T10:00:00Z"))).isFalse();
+                Instant.parse("2026-11-16T10:10:00Z"))).isFalse();
     }
 
     @Test

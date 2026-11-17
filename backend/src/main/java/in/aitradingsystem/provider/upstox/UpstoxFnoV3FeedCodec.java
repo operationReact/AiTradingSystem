@@ -22,7 +22,7 @@ final class UpstoxFnoV3FeedCodec {
     record Tick(String instrumentKey, Instant tradedAt, Instant feedAt,
                 BigDecimal ltp, BigDecimal bid, BigDecimal ask, Long openInterest,
                 BigDecimal iv, BigDecimal delta, BigDecimal theta,
-                BigDecimal gamma, BigDecimal vega) {}
+                BigDecimal gamma, BigDecimal vega, BigDecimal previousClose) {}
 
     record FeedFrame(Instant feedAt, List<Tick> ticks) {}
 
@@ -84,7 +84,7 @@ final class UpstoxFnoV3FeedCodec {
                 if (validKey(f.key) && f.quote != null) {
                     Quote q = f.quote;
                     ticks.add(new Tick(f.key, q.tradedAt, feedAt, q.ltp, q.bid, q.ask,
-                            q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega));
+                            q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega, q.previousClose));
                 }
             }
             return new FeedFrame(feedAt, List.copyOf(ticks));
@@ -165,6 +165,7 @@ final class UpstoxFnoV3FeedCodec {
             switch (t >>> 3) {
                 case 1 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.ltp = nonnegative(w.decimal()); }
                 case 2 -> { if ((t & 7) != 0) throw new IllegalArgumentException(); q.tradedAt = epochMillis(w.varint()); }
+                case 4 -> { if ((t & 7) != 1) throw new IllegalArgumentException(); q.previousClose = nonnegative(w.decimal()); }
                 default -> w.skip(t);
             }
         }
@@ -225,7 +226,7 @@ final class UpstoxFnoV3FeedCodec {
 
     private static final class Quote {
         Instant tradedAt;
-        BigDecimal ltp, bid, ask, iv, delta, theta, gamma, vega;
+        BigDecimal ltp, bid, ask, iv, delta, theta, gamma, vega, previousClose;
         Long oi;
     }
 

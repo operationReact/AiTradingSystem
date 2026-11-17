@@ -233,7 +233,7 @@ public class UpstoxFnoV3LiveFeedService {
             return false;
         var time = ist.toLocalTime();
         return !time.isBefore(java.time.LocalTime.of(9, 15))
-                && time.isBefore(java.time.LocalTime.of(15, 30));
+                && time.isBefore(java.time.LocalTime.of(15, 40));
     }
 
     public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
@@ -261,6 +261,43 @@ public class UpstoxFnoV3LiveFeedService {
         }
         return java.util.Optional.of(new PaperQuote(
                 key, tick.bid(), tick.ask(), trade, observed.observedAt()));
+    }
+
+    /**
+     * Enriches a FRESH exchange-timed option bid/ask with decoded Upstox V3
+     * LTPC, prior close, open interest and Greeks. This is technical evidence,
+     * NOT customer-facing rights authorization. Calling controllers must verify
+     * explicit display rights and ownership before using these values.
+     *
+     * An absent or stale exchange LTT returns empty; no invented values and
+     * no historical snapshots survive a disconnect or session close.
+     */
+    public record DisplayQuote(String instrumentKey, java.math.BigDecimal ltp,
+            java.math.BigDecimal previousClose, Long openInterest,
+            java.math.BigDecimal iv, java.math.BigDecimal delta,
+            java.math.BigDecimal theta, java.math.BigDecimal gamma,
+            java.math.BigDecimal vega, java.math.BigDecimal bid,
+            java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt) {}
+
+    public java.util.Optional<DisplayQuote> eligibleDisplayQuote(String key) {
+        var permitted = eligiblePaperQuote(key);
+        if (permitted.isEmpty()) return java.util.Optional.empty();
+        Observation observation = latest.get(key);
+        if (observation == null) return java.util.Optional.empty();
+        var paper = permitted.get();
+        var tick = observation.tick();
+        // Reject a raced replacement: never mix the side/price from one frame
+        // with Greeks/interest from a different observation.
+        if (!paper.exchangeAt().equals(tick.tradedAt())
+                || !paper.observedAt().equals(observation.observedAt())
+                || paper.bid().compareTo(tick.bid()) != 0
+                || paper.ask().compareTo(tick.ask()) != 0) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(new DisplayQuote(
+                key, tick.ltp(), tick.previousClose(), tick.openInterest(),
+                tick.iv(), tick.delta(), tick.theta(), tick.gamma(), tick.vega(),
+                paper.bid(), paper.ask(), paper.exchangeAt(), paper.observedAt()));
     }
 
     /** A frame is observation evidence only; never a trade or permission grant. */

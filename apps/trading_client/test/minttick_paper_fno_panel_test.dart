@@ -413,6 +413,56 @@ void main() {
     expect(find.text('+10.00%'), findsOneWidget);
   });
 
+  testWidgets('premium dashboard shows V3 LTP return OI IV and Greeks only when verified',
+      (tester) async {
+    final enriched = leg()..addAll({
+      'ltp': 125.0, 'previousClose': 100.0, 'openInterest': 5000,
+      'iv': 0.18, 'delta': 0.56, 'theta': -2.84,
+      'gamma': 0.001, 'vega': 0.09,
+    });
+    final real = CustomerFnoMarket.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'expiry': '2026-11-20',
+      'status': 'FRESH_QUOTES',
+      'snapshotAt': '2026-11-16T04:30:00Z',
+      'displayRightsVerified': true,
+      'liveOrderEnabled': false,
+      'strikes': [
+        {'strikePrice': 24000, 'call': enriched, 'put': null},
+      ],
+    });
+    await pump(tester, _FakeRepo(marketResult: real));
+    expect(find.text('LTP ₹125.00'), findsOneWidget);
+    expect(find.text('+25.00% vs close'), findsOneWidget);
+    expect(find.textContaining('OI 5000'), findsOneWidget);
+    expect(find.text('0.56'), findsOneWidget);
+    expect(find.text('-2.84'), findsOneWidget);
+    expect(find.text('18.00%'), findsOneWidget);
+    expect(find.text('0.09'), findsOneWidget);
+  });
+
+  test('malformed broker metrics cannot produce numeric UI quotes', () {
+    final bad = leg()..['ltp'] = double.nan;
+    expect(() => CustomerFnoLeg.decode(bad), throwsFormatException);
+    final negativeOi = leg()..['openInterest'] = -1;
+    expect(() => CustomerFnoLeg.decode(negativeOi), throwsFormatException);
+  });
+
+  testWidgets('live options quote refresh preserves listed contract without auto ordering',
+      (tester) async {
+    final repo = _FakeRepo(marketResult: market());
+    await pump(tester, repo);
+    final firstReads = repo.marketCalls;
+    await tester.tap(find.byKey(const ValueKey('paper-fno-leg-NSE_FO|NIFTY24CE')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pump();
+    expect(repo.marketCalls, greaterThan(firstReads));
+    expect(find.byKey(const ValueKey('paper-fno-submit')), findsOneWidget);
+    expect(repo.submits, isEmpty);
+  });
+
   testWidgets('a stale quote keeps submit disabled even when the leg is selected', (tester) async {
     await pump(tester, _FakeRepo(marketResult: market(fresh: false)));
     expect(find.text('Quote not fresh'), findsWidgets);

@@ -40,7 +40,8 @@ class MintTickPaperFnoPanel extends StatefulWidget {
   State<MintTickPaperFnoPanel> createState() => _MintTickPaperFnoPanelState();
 }
 
-class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
+class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
+    with WidgetsBindingObserver {
   CustomerFnoCapability? _capability;
   bool _checkingCapability = true;
   String? _capabilityError;
@@ -69,17 +70,22 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   bool _expiriesLoading = false;
   DateTime? _quotesReceivedAt;
   Timer? _ageTimer;
+  Timer? _pollTimer;
+  bool _polling = false;
   int _request = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _expiry = widget.initialExpiry;
     _loadCapability();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     _ageTimer?.cancel();
     _price.dispose();
     super.dispose();
@@ -93,6 +99,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     final request = ++_capabilityRequest;
     if (!mounted) return;
     _ageTimer?.cancel();
+    _pollTimer?.cancel();
     setState(() {
       _checkingCapability = true;
       _capabilityError = null;
@@ -201,6 +208,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   }
 
   void _selectExpiry(DateTime expiry) {
+    _pollTimer?.cancel();
     setState(() {
       _expiry = expiry;
       _dashboardStrike = null;
@@ -272,9 +280,11 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         _price.text = '';
         _loading = false;
       });
+      _schedulePoll();
     } catch (error) {
       if (!mounted || request != _request) return;
       _ageTimer?.cancel();
+      _pollTimer?.cancel();
       setState(() {
         _market = null;
         _quotesReceivedAt = null;
@@ -283,6 +293,85 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
         _blocker = _describe(error);
         _loading = false;
       });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Reverify current owner rights after returning from the background.
+      if (widget.view == 'trade') _loadCapability();
+    } else {
+      _pollTimer?.cancel();
+    }
+  }
+
+  /// Technical 10-second HTTP refresh of the latest *rights-gated* V3 quotes.
+  /// This never starts a broker WebSocket, does not place an order, and never
+  /// preserves a contract selection if the server no longer lists it.
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    if (!mounted || widget.view != 'trade' ||
+        _capability?.readOnlyConfigured != true ||
+        _expiry == null || _market == null ||
+        _market!.status == 'MARKET_CLOSED') {
+      return;
+    }
+    _pollTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!_polling && !_submitting && !_loading) _pollMarket();
+    });
+  }
+
+  Future<void> _pollMarket() async {
+    final expiry = _expiry;
+    if (_polling || expiry == null || _capability?.readOnlyConfigured != true ||
+        !mounted) {
+      return;
+    }
+    _polling = true;
+    final request = ++_request;
+    try {
+      final next = await widget.repository.market(widget.roomId, expiry);
+      if (!mounted || request != _request || _expiry != expiry) return;
+      final previousKey = _selected?.instrumentKey;
+      CustomerFnoLeg? replacement;
+      for (final strike in next.strikes) {
+        for (final leg in [strike.call, strike.put]) {
+          if (leg != null && leg.instrumentKey == previousKey) {
+            replacement = leg;
+          }
+        }
+      }
+      // Preserve a user-typed LIMIT price only while the same listed contract
+      // remains selected; submission still checks current server-side risk.
+      setState(() {
+        _market = next;
+        _quotesReceivedAt = widget.clock();
+        _selected = replacement;
+        _blocker = null;
+        if (previousKey != null && replacement == null) {
+          _price.clear();
+          _message = 'The selected option is no longer listed. Select again.';
+        }
+      });
+      if (next.status == 'MARKET_CLOSED') _pollTimer?.cancel();
+    } catch (error) {
+      if (!mounted || request != _request || _expiry != expiry) return;
+      // A rights loss, expired login or malformed feed immediately clears
+      // every price and ticket. Never keep old V3 quotes labelled as live.
+      setState(() {
+        _market = null;
+        _quotesReceivedAt = null;
+        _selected = null;
+        _price.clear();
+        _blocker = _describe(error);
+      });
+      if (error is ApiHttpFailure &&
+          const {401, 403, 404, 409}.contains(error.statusCode)) {
+        _pollTimer?.cancel();
+      }
+    } finally {
+      _polling = false;
     }
   }
 

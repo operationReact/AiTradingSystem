@@ -75,6 +75,54 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
+    void authorizedFreshV3ExposesLtpPriorCloseOiGreeksButNeverRestValues() {
+        var ts=Instant.parse("2026-11-16T04:01:00Z");
+        when(live.eligiblePaperQuote(CE)).thenReturn(Optional.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CE,new BigDecimal("110"),new BigDecimal("112"),ts,ts.plusSeconds(1))));
+        when(live.eligibleDisplayQuote(CE)).thenReturn(Optional.of(
+            new UpstoxFnoV3LiveFeedService.DisplayQuote(
+                CE,new BigDecimal("111"),new BigDecimal("105"),4001L,
+                new BigDecimal(".18"),new BigDecimal(".4"),new BigDecimal("-3.5"),
+                new BigDecimal(".002"),new BigDecimal("5.1"),
+                new BigDecimal("110"),new BigDecimal("112"),ts,ts.plusSeconds(1))));
+        var rows=CustomerPaperFnoMarketController.select(
+            List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
+            chain(),live,true,false);
+        var call=rows.getFirst().call();
+        assertThat(call.ltp()).isEqualByComparingTo("111");
+        assertThat(call.previousClose()).isEqualByComparingTo("105");
+        assertThat(call.openInterest()).isEqualTo(4001L);
+        assertThat(call.delta()).isEqualByComparingTo(".4");
+        assertThat(call.theta()).isEqualByComparingTo("-3.5");
+        assertThat(call.iv()).isEqualByComparingTo(".18");
+        assertThat(call.paperEligible()).isFalse();
+        assertThat(rows.getFirst().put().ltp()).isNull();
+        assertThat(rows.getFirst().put().openInterest()).isNull();
+    }
+
+    @Test
+    void mismatchedPriceObservationNeverMixesPricesAndGreeks() {
+        var ts=Instant.parse("2026-11-16T04:01:00Z");
+        when(live.eligiblePaperQuote(CE)).thenReturn(Optional.of(
+            new UpstoxFnoV3LiveFeedService.PaperQuote(
+                CE,new BigDecimal("110"),new BigDecimal("112"),ts,ts)));
+        when(live.eligibleDisplayQuote(CE)).thenReturn(Optional.of(
+            new UpstoxFnoV3LiveFeedService.DisplayQuote(
+                CE,new BigDecimal("111"),new BigDecimal("105"),4001L,
+                new BigDecimal(".18"),new BigDecimal(".4"),new BigDecimal("-3.5"),
+                new BigDecimal(".002"),new BigDecimal("5.1"),
+                new BigDecimal("109"),new BigDecimal("112"),ts,ts)));
+        var rows=CustomerPaperFnoMarketController.select(
+            List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
+            chain(),live,true,false);
+        assertThat(rows.getFirst().call().bid()).isEqualByComparingTo("110");
+        assertThat(rows.getFirst().call().ltp()).isNull();
+        assertThat(rows.getFirst().call().openInterest()).isNull();
+        assertThat(rows.getFirst().call().delta()).isNull();
+    }
+
+    @Test
     void closedMarketNeverLeaksProviderSnapshotPricesAsExecutable() {
         var rows=CustomerPaperFnoMarketController.select(
             List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
