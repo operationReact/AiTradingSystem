@@ -39,6 +39,17 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     final c = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     final s = active;
+    // First strike's CE is a display-only choice, never an implicit trade.
+    final observed = selected ?? s?.call;
+    final metrics = verified && observed?.quoteFresh == true ? observed : null;
+    String decimal(num? v) => v == null ? '—' : v.toStringAsFixed(2);
+    final greeks = <String, String>{
+      'Delta': decimal(metrics?.delta),
+      'Theta': decimal(metrics?.theta),
+      'IV': metrics?.iv == null ? '—' :
+          '${(metrics!.iv! * 100).toStringAsFixed(2)}%',
+      'Vega': decimal(metrics?.vega),
+    };
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 8),
       Row(children: [
@@ -111,7 +122,7 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         ]),
       ),
       const SizedBox(height: 10),
-      _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega']),
+      _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega'], greeks),
       const SizedBox(height: 10),
       _strip(context, 'Market Insight', ['PCR', 'Max Pain', 'IV Rank']),
       const SizedBox(height: 10),
@@ -147,6 +158,8 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final show = verified && leg != null && leg.quoteFresh;
     final selectedLeg = leg != null && selected?.instrumentKey == leg.instrumentKey;
+    final validLtp = show ? leg.ltp : null;
+    final pct = show ? leg.priceChangePct : null;
     return OutlinedButton(
       key: leg == null ? ValueKey('fno-premium-$side-unlisted') :
         ValueKey('paper-fno-leg-${leg.instrumentKey}'),
@@ -161,7 +174,8 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           maxLines: 1, overflow: TextOverflow.ellipsis,
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800, color: accent)),
         const SizedBox(height: 8),
-        Text(show ? 'Ask ${value(leg.ask)}' : 'LTP —',
+        Text(validLtp != null ? 'LTP ${value(validLtp)}' :
+             show ? 'Ask ${value(leg.ask)}' : 'LTP —',
           style: t.titleSmall?.copyWith(fontWeight: FontWeight.w800),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 6),
@@ -172,7 +186,13 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
         const SizedBox(height: 9),
         Divider(color: c.outlineVariant, height: 1),
         const SizedBox(height: 8),
-        Text('OI —  ·  Volume —',
+        if (pct != null) Text(
+          '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}% vs close',
+          style: t.labelSmall?.copyWith(
+            color: pct >= 0 ? c.primary : c.error),
+          maxLines: 1, overflow: TextOverflow.ellipsis),
+        Text('OI ${show && leg.openInterest != null ? leg.openInterest : '—'}'
+             '  ·  Volume —',
           style: t.labelSmall?.copyWith(color: c.onSurfaceVariant),
           maxLines: 1, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 4),
@@ -183,7 +203,8 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
     );
   }
 
-  Widget _strip(BuildContext context, String label, List<String> fields) {
+  Widget _strip(BuildContext context, String label, List<String> fields,
+      [Map<String, String> values = const {}]) {
     final c = Theme.of(context).colorScheme;
     final t = Theme.of(context).textTheme;
     return Container(
@@ -197,7 +218,9 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           Text(f, maxLines: 1, overflow: TextOverflow.ellipsis,
             style: t.labelSmall?.copyWith(
               color: c.onSurfaceVariant, fontSize: 9)),
-          const Text('—', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(values[f] ?? '—', maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         ])),
       ]),
     );
