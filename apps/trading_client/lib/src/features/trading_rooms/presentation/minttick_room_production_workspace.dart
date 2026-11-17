@@ -624,6 +624,7 @@ class _MintTickRoomProductionWorkspaceState
         key: ValueKey('paper-fno-${widget.room.id}'),
         roomId: widget.room.id,
         repository: widget.fno!,
+        view: 'positions',
         onFilled: () async {
           await _loadHistory();
           await widget.onRefresh();
@@ -741,6 +742,7 @@ class _MintTickRoomProductionWorkspaceState
         key: ValueKey('fno-order-history-${widget.room.id}'),
         roomId: widget.room.id,
         repository: widget.fno!,
+        view: 'orders',
         onFilled: () async {
           await _loadHistory();
           await widget.onRefresh();
