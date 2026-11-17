@@ -294,7 +294,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
           Row(children: [
             const Expanded(child: Text('Market discovery works without a room.')),
             TextButton(onPressed: widget.onCreateRoom,
-              child: const Text('New room')),
+              child: const Text('Create F&O room')),
           ])
         else
           DropdownButtonHideUnderline(child: DropdownButton<String>(
