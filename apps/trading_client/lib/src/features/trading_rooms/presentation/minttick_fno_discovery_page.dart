@@ -349,13 +349,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
           const SizedBox(width: 8),
           const Expanded(child: Text('NIFTY 50 · NSE options',
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800))),
-          Text(market == null ? '—' : market!.status.replaceAll('_', ' '),
+          Text(market == null ? '—' : market.status.replaceAll('_', ' '),
             style: const TextStyle(fontSize: 10)),
         ]),
         const SizedBox(height: 8),
         Text(market?.snapshotAt == null
             ? 'No exchange-timed option snapshot verified'
-            : 'Contract snapshot: ${_time(market!.snapshotAt)} · '
+            : 'Contract snapshot: ${_time(market.snapshotAt)} · '
               'Upstox V3 quotes are independently checked',
           style: Theme.of(context).textTheme.bodySmall),
         if (room != null) Align(alignment: Alignment.centerRight,
@@ -386,8 +386,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
             ),
         ]),
       ]),
-    )),
-  );
+    ));
 
   Widget _watchlist(BuildContext context, CustomerFnoMarket? market,
       {required bool compact}) {
@@ -429,8 +428,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
             Text('Market closed · no stale contract is labeled LIVE.',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
         ]),
-      )),
-    );
+      ));
   }
 
   Widget _optionRow(BuildContext context, CustomerFnoLeg leg) {
@@ -521,7 +519,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
         const Text('Historical charts and intraday momentum stay unavailable '
             'until independently verified candle feeds are integrated.'),
       ]),
-    ));
+    );
   }
 
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>
@@ -554,7 +552,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage> {
               Align(alignment: Alignment.centerRight,
                 child: TextButton(onPressed: onTap, child: Text(action))),
           ]),
-        )));
+        ));
 
   Widget _heading(String title, String detail) => Column(
     crossAxisAlignment: CrossAxisAlignment.start, children: [
