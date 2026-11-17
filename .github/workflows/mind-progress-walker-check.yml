@@ -12,6 +12,9 @@ on:
       - 'scripts/mind/paper_verification_cycle.py'
       - 'scripts/mind/test_paper_verification_cycle.py'
       - 'scripts/mind/paper_verification_room.py'
+      - 'scripts/mind/market_data_diagnostic.py'
+      - 'scripts/mind/test_market_data_diagnostic.py'
+      - '.github/workflows/mind-market-data-diagnostic.yml'
       - 'scripts/mind/test_paper_verification_room.py'
       - '.github/workflows/mind-paper-verification-room.yml'
       - '.github/workflows/mind-paper-verification-cycle.yml'
@@ -45,6 +48,7 @@ jobs:
           python3 -m unittest discover -s scripts/mind -p test_walk_progress_inventory.py -v
           python3 -m unittest discover -s scripts/mind -p test_paper_verification_cycle.py -v
           python3 -m unittest discover -s scripts/mind -p test_paper_verification_room.py -v
+          python3 -m unittest discover -s scripts/mind -p test_market_data_diagnostic.py -v
 
       - name: Validate workflow YAML syntax and walker wiring
         run: |
@@ -58,6 +62,7 @@ jobs:
               ".github/workflows/mind-progress-walker-check.yml",
               ".github/workflows/mind-paper-verification-cycle.yml",
               ".github/workflows/mind-paper-verification-room.yml",
+              ".github/workflows/mind-market-data-diagnostic.yml",
           ):
               doc = yaml.safe_load(Path(name).read_text())
               assert isinstance(doc, dict) and doc.get("jobs"), f"invalid workflow: {name}"
