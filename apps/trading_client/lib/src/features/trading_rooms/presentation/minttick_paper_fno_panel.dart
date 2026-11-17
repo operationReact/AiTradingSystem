@@ -40,7 +40,8 @@ class MintTickPaperFnoPanel extends StatefulWidget {
   State<MintTickPaperFnoPanel> createState() => _MintTickPaperFnoPanelState();
 }
 
-class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
+class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
+    with WidgetsBindingObserver {
   CustomerFnoCapability? _capability;
   bool _checkingCapability = true;
   String? _capabilityError;
@@ -69,17 +70,22 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   bool _expiriesLoading = false;
   DateTime? _quotesReceivedAt;
   Timer? _ageTimer;
+  Timer? _pollTimer;
+  bool _polling = false;
   int _request = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _expiry = widget.initialExpiry;
     _loadCapability();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _pollTimer?.cancel();
     _ageTimer?.cancel();
     _price.dispose();
     super.dispose();
@@ -93,6 +99,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
     final request = ++_capabilityRequest;
     if (!mounted) return;
     _ageTimer?.cancel();
+    _pollTimer?.cancel();
     setState(() {
       _checkingCapability = true;
       _capabilityError = null;
@@ -201,6 +208,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel> {
   }
 
   void _selectExpiry(DateTime expiry) {
+    _pollTimer?.cancel();
     setState(() {
       _expiry = expiry;
       _dashboardStrike = null;
