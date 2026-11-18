@@ -74,6 +74,26 @@ def valid_status(payload):
         return None
     return payload
 
+# Sanitized failure tokens only; the host's stderr is never echoed verbatim.
+VALID_ERRORS = {"WRONG_HOST","WRONG_HOST_ENV","DUPLICATE_FLAG",
+    "SOURCE_NOT_READY","UNREVIEWED_RIGHTS_FLAG",
+    "OPERATOR_AUTH_UNAVAILABLE","BUSY_OPERATOR_SOCKET",
+    "SOURCE_OR_EXPIRY_REJECTED","V3_STATUS_UNVERIFIED",
+    "SOCKET_STOP_UNVERIFIED","UNAPPROVED_API_ROUTE",
+    "REQUEST_INVALID","REQUEST_CONTRACT_MISMATCH",
+    "SCRIPT_TOO_LARGE","SSM_UNAVAILABLE","SSM_BAD_COMMAND_ID",
+    "V3_PRIVATE_PROBE_UNVERIFIED","V3_PRIVATE_INVALID_SSM_STATE",
+    "V3_PRIVATE_TIMEOUT","INVALID_MODE"}
+
+def host_error_token(stderr):
+    """Return the whitelisted host failure token from SSM stderr, else None."""
+    found=None
+    for line in (stderr or "").splitlines():
+        k,sep,v=line.partition(":")
+        if sep and k=="V3_PRIVATE_ERROR" and v in VALID_ERRORS:
+            found=v
+    return found
+
 def host():
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise ValueError("WRONG_HOST")
@@ -181,6 +201,9 @@ def runner():
             if state=="Success" and len(seen)==len(approved):
                 print("V3_PRIVATE_RESULT:PROBE_COMPLETE_NO_ORDERS",flush=True)
                 return
+            token=host_error_token(response.get("StandardErrorContent") or "")
+            if token:
+                print("V3_PRIVATE_HOST_ERROR:"+token,flush=True)
             raise ValueError("V3_PRIVATE_PROBE_UNVERIFIED")
         if state not in ("Pending","InProgress","Delayed"):
             raise ValueError("V3_PRIVATE_INVALID_SSM_STATE")
@@ -192,15 +215,7 @@ if __name__=="__main__":
             raise ValueError("INVALID_MODE")
         host() if sys.argv[1]=="host" else runner()
     except (ValueError,OSError,subprocess.TimeoutExpired) as err:
-        valid={"WRONG_HOST","WRONG_HOST_ENV","DUPLICATE_FLAG",
-               "SOURCE_NOT_READY","UNREVIEWED_RIGHTS_FLAG",
-               "OPERATOR_AUTH_UNAVAILABLE","BUSY_OPERATOR_SOCKET",
-               "SOURCE_OR_EXPIRY_REJECTED","V3_STATUS_UNVERIFIED",
-               "SOCKET_STOP_UNVERIFIED","UNAPPROVED_API_ROUTE",
-               "REQUEST_INVALID","REQUEST_CONTRACT_MISMATCH",
-               "SCRIPT_TOO_LARGE","SSM_UNAVAILABLE","SSM_BAD_COMMAND_ID",
-               "V3_PRIVATE_PROBE_UNVERIFIED","V3_PRIVATE_INVALID_SSM_STATE",
-               "V3_PRIVATE_TIMEOUT","INVALID_MODE"}
+        valid=VALID_ERRORS
         msg=str(err)
         print("V3_PRIVATE_ERROR:"+(msg if msg in valid else "UNAVAILABLE"),
               file=sys.stderr)
