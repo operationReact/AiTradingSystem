@@ -32,14 +32,16 @@ class MintTickFnoDiscoveryPage extends StatefulWidget {
 class MintTickFnoDiscoveryFacts {
   static List<CustomerFnoLeg> optionLegs(
       CustomerFnoMarket market, String side) {
-    if (side != 'CE' && side != 'PE') {
+    if (side != 'ALL' && side != 'CE' && side != 'PE') {
       return const [];
     }
     return List.unmodifiable([
-      for (final strike in market.strikes)
-        if (side == 'CE' && strike.call != null) strike.call!,
-      for (final strike in market.strikes)
-        if (side == 'PE' && strike.put != null) strike.put!,
+      for (final strike in market.strikes) ...[
+        if ((side == 'ALL' || side == 'CE') && strike.call != null)
+          strike.call!,
+        if ((side == 'ALL' || side == 'PE') && strike.put != null)
+          strike.put!,
+      ],
     ]);
   }
 
@@ -57,6 +59,16 @@ class MintTickFnoDiscoveryFacts {
     return !exchangeAge.isNegative && !observedAge.isNegative &&
         exchangeAge <= const Duration(seconds: 15) &&
         observedAge <= const Duration(seconds: 15);
+  }
+
+  /// Never label stale or missing exchange observations as a live quote.
+  static List<CustomerFnoLeg> freshLegs(
+      CustomerFnoMarket market, DateTime now) {
+    if (!market.hasFreshQuotes || !market.displayRightsVerified) {
+      return const [];
+    }
+    return List.unmodifiable(optionLegs(market, 'ALL')
+        .where((leg) => recentTick(leg, now)));
   }
 
   /// Previous-close changes are not an intraday momentum/volume ranking.
@@ -78,7 +90,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
   String _section = 'Explore';
-  String _side = 'CE';
+  String _side = 'ALL';
   bool _loading = false;
   String? _error;
   int _generation = 0;
@@ -310,6 +322,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           'fresh contracts: ${_source?.freshExchangeTimedQuotes ?? 0} · '
           'last exchange tick: ${_time(_source?.latestFreshExchangeTradeAt)}',
         style: theme.textTheme.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+      const SizedBox(height: 6),
+      Text('Listed contracts: ${market == null ? 'unavailable' : market.strikes.length * 2} · '
+          'Exchange-fresh: ${market == null ? 0 : MintTickFnoDiscoveryFacts.freshLegs(
+            market, DateTime.now().toUtc()).length} · '
+          'Display authorization: ${_source?.displayRightsVerified == true ? 'verified' : 'not verified'}',
+        style: theme.textTheme.labelSmall?.copyWith(color: c.onSurfaceVariant)),
       const SizedBox(height: 16),
       _roomPicker(context, room),
       const SizedBox(height: 14),
@@ -332,7 +350,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         _movers(context, market),
         _unavailable(context, 'Futures chain',
           'Futures prices and volumes require a verified NSE F&O futures feed. '
-          'Only supported NIFTY options are shown above.'),
+          'Only currently supported, source-listed NIFTY options are shown above.'),
         _unavailable(context, 'Event-driven stock options',
           'No verified corporate-event-to-options feed is connected. '
           'Events and dividend prices will not be estimated.'),
@@ -422,9 +440,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         ]),
         const SizedBox(height: 8),
         Text(market?.snapshotAt == null
-            ? 'No exchange-timed option snapshot verified'
-            : 'Contract snapshot: ${_time(market!.snapshotAt)} · '
-              'Upstox V3 quotes are independently checked',
+            ? 'No verified contract metadata retrieval timestamp'
+            : 'Contract metadata retrieved: ${_time(market!.snapshotAt)} · '
+              'exchange-timed quotes validated separately',
           style: Theme.of(context).textTheme.bodySmall),
         if (room != null) Align(alignment: Alignment.centerRight,
           child: TextButton.icon(
@@ -467,9 +485,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       child: MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
           _heading(compact ? 'Options watchlist' : 'NIFTY option chain',
-              'Source-listed · ${list.length} ${_side == 'CE' ? 'calls' : 'puts'}'),
+              'Source-listed · ${list.length} ${_side == 'ALL' ? 'contracts' : _side == 'CE' ? 'calls' : 'puts'}'),
           const SizedBox(height: 9),
           Wrap(spacing: 8, children: [
+            ChoiceChip(
+              key: const ValueKey('fno-discovery-all'),
+              selected: _side == 'ALL', label: const Text('All CE + PE'),
+              onSelected: (_) => setState(() => _side = 'ALL')),
             ChoiceChip(
               key: const ValueKey('fno-discovery-call'),
               selected: _side == 'CE', label: const Text('Call'),
@@ -484,7 +506,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             child: Text('No verified option contracts available.')),
           for (final leg in visible) ...[
             Divider(color: c.outlineVariant),
-            _optionRow(context, leg),
+            _optionRow(context, leg, details: !compact),
           ],
           if (compact && list.length > visible.length)
             Align(alignment: Alignment.centerRight,
@@ -499,45 +521,80 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       ));
   }
 
-  Widget _optionRow(BuildContext context, CustomerFnoLeg leg) {
+  Widget _optionRow(BuildContext context, CustomerFnoLeg leg,
+      {bool details = false}) {
     final c = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
     final verified = _market?.hasFreshQuotes == true &&
+        _market?.displayRightsVerified == true &&
         MintTickFnoDiscoveryFacts.recentTick(leg, DateTime.now().toUtc());
     final pct = verified ? leg.priceChangePct : null;
     final price = verified ? leg.ltp : null;
     return Padding(padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(children: [
-        Container(width: 38, height: 38,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(color: c.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(12)),
-          child: Text(leg.side, style: TextStyle(color: c.primary,
-              fontWeight: FontWeight.w800, fontSize: 12))),
-        const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('NIFTY  ${leg.tradingSymbol}', maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-            Text('Bid ${_price(verified ? leg.bid : null)}  ·  '
-                'Ask ${_price(verified ? leg.ask : null)}',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(width: 38, height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12)),
+            child: Text(leg.side, style: TextStyle(color: c.primary,
+                fontWeight: FontWeight.w800, fontSize: 12))),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(leg.tradingSymbol, maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+              Text('Bid ${_price(verified ? leg.bid : null)}  ·  '
+                  'Ask ${_price(verified ? leg.ask : null)}',
+                style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+              Text(verified
+                  ? 'Exchange ${_time(leg.exchangeAt)} · V3 verified'
+                  : 'No fresh exchange-timed quote',
+                style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+            ])),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text(_price(price), style: type.titleSmall?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: pct == null ? c.onSurface :
+                  pct >= 0 ? c.primary : c.error)),
+            Text(pct == null ? 'Change unavailable'
+                  : '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-            if (verified) Text('Exchange ${_time(leg.exchangeAt)}',
-              style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-          ])),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(_price(price), style: type.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: pct == null ? c.onSurface :
-                pct >= 0 ? c.primary : c.error)),
-          Text(pct == null ? 'No verified change'
-                : '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
-            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          ]),
         ]),
+        if (details) ...[
+          const SizedBox(height: 7),
+          Text('Contract ${leg.instrumentKey} · Lot ${leg.lotSize} · '
+              'Tick ${leg.tickSize}',
+            maxLines: 2,
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Wrap(spacing: 12, runSpacing: 5, children: [
+            _metric(context, 'Previous close',
+                verified ? _price(leg.previousClose) : '—'),
+            _metric(context, 'Open interest',
+                verified ? (leg.openInterest?.toString() ?? '—') : '—'),
+            _metric(context, 'IV', verified ? _decimal(leg.iv) : '—'),
+            _metric(context, 'Delta', verified ? _decimal(leg.delta) : '—'),
+            _metric(context, 'Gamma', verified ? _decimal(leg.gamma) : '—'),
+            _metric(context, 'Theta', verified ? _decimal(leg.theta) : '—'),
+            _metric(context, 'Vega', verified ? _decimal(leg.vega) : '—'),
+          ]),
+          const SizedBox(height: 4),
+          Text(verified
+              ? 'Observed ${_time(leg.observedAt)} · exchange ${_time(leg.exchangeAt)}'
+              : 'Market fields hidden until a valid exchange-time V3 observation',
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        ],
       ]),
     );
   }
+
+  Widget _metric(BuildContext context, String name, String value) =>
+      Text('$name: $value',
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Theme.of(context).colorScheme.onSurfaceVariant));
 
   Widget _movers(BuildContext context, CustomerFnoMarket? market) {
     final top = market == null ? <CustomerFnoLeg>[] :
@@ -562,34 +619,50 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   }
 
   Widget _analytics(BuildContext context, CustomerFnoMarket? market) {
-    final legs = market == null ? <CustomerFnoLeg>[] : [
-      ...MintTickFnoDiscoveryFacts.optionLegs(market, 'CE'),
-      ...MintTickFnoDiscoveryFacts.optionLegs(market, 'PE'),
-    ];
-    final valid = legs.where((l) => market?.hasFreshQuotes == true &&
-        l.quoteFresh && l.exchangeAt != null && l.observedAt != null &&
-        l.openInterest != null).toList();
-    return MintTickSurface(child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start, children: [
-        _heading('Open interest & Greeks', 'Verified same-frame V3 only'),
-        const SizedBox(height: 10),
-        if (valid.isEmpty)
-          const Text('No verified OI/Greeks observations available.')
-        else for (final leg in valid.take(20)) ...[
-          Text(leg.tradingSymbol,
-            style: Theme.of(context).textTheme.bodyMedium
-                ?.copyWith(fontWeight: FontWeight.w800)),
-          Text('OI ${leg.openInterest}   ·   Delta ${_decimal(leg.delta)}   '
-              '·   Theta ${_decimal(leg.theta)}   '
-              '·   IV ${leg.iv == null ? '—' : (leg.iv! * 100).toStringAsFixed(2)}%',
-            style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 12),
-        ],
-        const Divider(),
-        const Text('Historical charts and intraday momentum stay unavailable '
-            'until independently verified candle feeds are integrated.'),
-      ]),
-    );
+    final all = market == null ? <CustomerFnoLeg>[] :
+        MintTickFnoDiscoveryFacts.optionLegs(market, 'ALL');
+    final fresh = market == null ? <CustomerFnoLeg>[] :
+        MintTickFnoDiscoveryFacts.freshLegs(market, DateTime.now().toUtc());
+    return Padding(padding: const EdgeInsets.only(bottom: 14),
+      child: MintTickSurface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+          _heading('Full NIFTY contract metrics',
+              '${all.length} listed · ${fresh.length} currently exchange-fresh · V3 only'),
+          const SizedBox(height: 10),
+          if (all.isEmpty) const Text('No verified source-listed contracts.')
+          else if (fresh.isEmpty) const Text(
+              'No current V3 exchange-timed metrics. Listed contracts '
+              'are still visible under Chain, without invented prices.')
+          else for (final leg in fresh) ...[
+            Text('${leg.tradingSymbol} · ${leg.side}',
+              style: Theme.of(context).textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Wrap(spacing: 12, runSpacing: 6, children: [
+              _metric(context, 'LTP', _price(leg.ltp)),
+              _metric(context, 'Bid', _price(leg.bid)),
+              _metric(context, 'Ask', _price(leg.ask)),
+              _metric(context, 'Prev close', _price(leg.previousClose)),
+              _metric(context, 'OI', leg.openInterest?.toString() ?? '—'),
+              _metric(context, 'IV', _decimal(leg.iv)),
+              _metric(context, 'Delta', _decimal(leg.delta)),
+              _metric(context, 'Gamma', _decimal(leg.gamma)),
+              _metric(context, 'Theta', _decimal(leg.theta)),
+              _metric(context, 'Vega', _decimal(leg.vega)),
+            ]),
+            Text('Exchange: ${_time(leg.exchangeAt)} · '
+                'Observed: ${_time(leg.observedAt)}',
+              style: Theme.of(context).textTheme.labelSmall),
+            const SizedBox(height: 12),
+          ],
+          const Divider(),
+          const Text('All available V3 fields are shown for the supported '
+              'NIFTY pilot. Volume rankings, historical charts, broader '
+              'indices, stock F&O and commodities require separate '
+              'verified feeds and usage permissions. IV retains the '
+              'provider numeric value; no unverified unit conversion.'),
+        ]),
+      ));
   }
 
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>

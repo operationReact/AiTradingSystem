@@ -54,6 +54,38 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
+    void customerDiscoveryDisplaysAllProviderListedPairsBeyondTradeTerminalLimit() {
+        var contracts = new java.util.ArrayList<UpstoxAnalyticsSource.FnoOptionContract>();
+        var strikes = new java.util.ArrayList<UpstoxAnalyticsSource.FnoOptionStrike>();
+        for (int i = 0; i < 30; i++) {
+            String price = Integer.toString(25000 + 50 * i);
+            String call = "NSE_FO|" + (61000 + 2 * i);
+            String put = "NSE_FO|" + (61001 + 2 * i);
+            contracts.add(contract(call, "CE", price));
+            contracts.add(contract(put, "PE", price));
+            strikes.add(new UpstoxAnalyticsSource.FnoOptionStrike(EXPIRY, NIFTY,
+                new BigDecimal(price), new BigDecimal("25012"),
+                option(call), option(put)));
+        }
+        var chain = new UpstoxAnalyticsSource.OptionChainSnapshot(
+            "UPSTOX_ANALYTICS", Instant.parse("2026-11-14T08:00:00Z"),
+            false, List.copyOf(strikes));
+        var selected = CustomerPaperFnoMarketController.select(
+            contracts, chain, live, false, true);
+        var discovery = CustomerPaperFnoMarketController.selectDiscovery(
+            contracts, chain, live, false);
+        assertThat(selected).hasSize(24);
+        assertThat(discovery).hasSize(30);
+        assertThat(discovery).allSatisfy(row -> {
+            assertThat(row.call().ltp()).isNull();
+            assertThat(row.put().bid()).isNull();
+            assertThat(row.call().paperEligible()).isFalse();
+            assertThat(row.put().paperEligible()).isFalse();
+        });
+        verifyNoInteractions(live);
+    }
+
+    @Test
     void usesOnlyLiveV3EvidenceForCustomerPricesAndNoRestChainBidAsk() {
         var ts=Instant.parse("2026-11-16T04:01:00Z");
         when(live.eligiblePaperQuote(CE)).thenReturn(Optional.of(

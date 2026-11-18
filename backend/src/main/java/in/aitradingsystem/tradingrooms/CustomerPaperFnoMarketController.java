@@ -208,6 +208,26 @@ public class CustomerPaperFnoMarketController {
     static List<Strike> select(List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
             UpstoxAnalyticsSource.OptionChainSnapshot chain,
             UpstoxFnoV3LiveFeedService live, boolean marketOpen, boolean paperAllowed) {
+        // Trade terminal stays deliberately bounded at 24 near-ATM strikes.
+        return selectBounded(contracts, chain, live, marketOpen, paperAllowed, 24);
+    }
+
+    /** Read-only discovery may display all listed rows in the current NIFTY
+     * pilot (up to 256), without expanding subscriptions or order authority.
+     * Non-subscribed strikes keep missing prices rather than using REST quotes.
+     */
+    static List<Strike> selectDiscovery(
+            List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
+            UpstoxAnalyticsSource.OptionChainSnapshot chain,
+            UpstoxFnoV3LiveFeedService live, boolean marketOpen) {
+        return selectBounded(contracts, chain, live, marketOpen, false, 256);
+    }
+
+    private static List<Strike> selectBounded(
+            List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
+            UpstoxAnalyticsSource.OptionChainSnapshot chain,
+            UpstoxFnoV3LiveFeedService live, boolean marketOpen,
+            boolean paperAllowed, int maximumStrikes) {
         if (contracts==null || chain==null || chain.strikes()==null
                 || chain.strikes().isEmpty() || chain.strikes().size()>1024
                 || contracts.size()>1024) return List.of();
@@ -234,7 +254,7 @@ public class CustomerPaperFnoMarketController {
         nearest.sort(Comparator.comparing(s->s.strikePrice().subtract(spot).abs()));
         List<Strike> rows=new ArrayList<>();
         for (var strike:nearest) {
-            if (rows.size()>=24) break;
+            if (rows.size() >= maximumStrikes) break;
             var call=byKey.get(strike.call().instrumentKey());
             var put=byKey.get(strike.put().instrumentKey());
             if (call==null || put==null || !"CE".equals(call.side())
