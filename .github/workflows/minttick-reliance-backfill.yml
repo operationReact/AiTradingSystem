@@ -78,7 +78,7 @@ jobs:
               "operation":"bounded-reliance-candle-backfill",
               "instrument_id":417378, "symbol":"RELIANCE-EQ", "exchange":"NSE",
               "intervals":["FIVE_MINUTE","ONE_DAY"],
-              "from_date":"2026-11-03", "to_date":"2026-11-17", "attempt":2,
+              "from_date":"2026-11-03", "to_date":"2026-11-17", "attempt":3,
               "authorization":"USER_APPROVED_RELIANCE_CANDLE_BACKFILL_2026-11-18",
           }, "Unapproved backfill request"
           print("PASS: exact owner-approved bounded backfill request")
