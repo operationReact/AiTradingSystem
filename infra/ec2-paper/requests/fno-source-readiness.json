@@ -1,12 +1,11 @@
 {
-  "kind": "minttick-private-fno-source-readiness-v1",
-  "operation": "probe-upstox-nifty-options-read-only",
+  "kind": "minttick-private-fno-source-readiness-v2",
+  "operation": "probe-upstox-nifty-nearest-listed-expiry-read-only",
   "environment": "PAPER",
   "account": "098859530205",
   "region": "ap-south-1",
   "instance_id": "i-09c01b470fb39b85a",
-  "backend_release": "7d1fd416b12e8d73438a4eab3cc09f3065ae7efc",
+  "backend_release": "203e2ccf08ee14333369bab18ef6470dff27986b",
   "underlying": "NSE_INDEX|Nifty 50",
-  "expiry": "2026-11-17",
   "authorization": "OWNER_APPROVED_READ_ONLY_FNO_CHECK_2026_11_14"
 }
