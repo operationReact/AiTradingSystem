@@ -662,7 +662,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               'verified feeds and usage permissions. IV retains the '
               'provider numeric value; no unverified unit conversion.'),
         ]),
-      )));
+      ));
   }
 
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>
