@@ -60,6 +60,27 @@ void main() {
       '/api/customer/owner-history/v1/candles']);
   });
 
+  test('one stored daily candle recovers usable chart series from owner archive', () async {
+    final paths = <String>[];
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    final repo = HttpCustomerMarketRepository(AuthenticatedApiClient(
+      session: session,
+      client: MockClient((request) async {
+        paths.add(request.url.path);
+        if (request.url.path == '/api/customer/market-data/candles') {
+          return http.Response(jsonEncode(candlePage(rows: [bar('2026-11-10', 108)])), 200);
+        }
+        return http.Response(jsonEncode(candlePage(rows: [
+          bar('2026-11-09', 105), bar('2026-11-10', 108),
+        ])), 200);
+      }), baseUri: Uri.parse('https://example.test'),
+    ));
+    final page = await repo.candles(instrumentId: 42, interval: 'ONE_DAY',
+      fromDate: '2026-11-01', toDate: '2026-11-18');
+    expect(page.items, hasLength(2));
+    expect(paths.last, '/api/customer/owner-history/v1/candles');
+  });
+
   test('private archive access denied does not expose candles to other customers', () async {
     final session = OperatorSession()..setOperatorKey('test-operator-key');
     final repo = HttpCustomerMarketRepository(AuthenticatedApiClient(
@@ -88,7 +109,9 @@ void main() {
       session: session,
       client: MockClient((request) async {
         paths.add(request.url.path);
-        return http.Response(jsonEncode(candlePage(rows: [bar('2026-11-10', 108)])), 200);
+        return http.Response(jsonEncode(candlePage(rows: [
+          bar('2026-11-09', 105), bar('2026-11-10', 108),
+        ])), 200);
       }),
       baseUri: Uri.parse('https://example.test'),
     ));
@@ -98,7 +121,7 @@ void main() {
       fromDate: '2026-11-01',
       toDate: '2026-11-18',
     );
-    expect(page.items, hasLength(1));
+    expect(page.items, hasLength(2));
     expect(paths, ['/api/customer/market-data/candles']);
   });
 }
