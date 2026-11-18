@@ -22,10 +22,10 @@ import urllib.request
 ACCOUNT = "098859530205"
 REGION = "ap-south-1"
 INSTANCE = "i-09c01b470fb39b85a"
-EXPECTED_RELEASE = "7d1fd416b12e8d73438a4eab3cc09f3065ae7efc"
-EXPIRY = "2026-11-17"
+EXPECTED_RELEASE = "203e2ccf08ee14333369bab18ef6470dff27986b"
 STATUS = {"READS_VERIFIED", "PARTIAL_DATA", "INVALID_PROVENANCE",
-          "PROVIDER_UNAVAILABLE", "DISABLED", "INVALID_EXPIRY", "COOLDOWN"}
+          "PROVIDER_UNAVAILABLE", "DISABLED", "INVALID_EXPIRY", "COOLDOWN",
+          "NO_LISTED_EXPIRIES"}
 # Only the server-owned, sanitized F&O failure enum is printable; never errors
 # sourced from provider text, URLs, token material or JSON body fields.
 SOURCE_FAILURES = {
@@ -35,32 +35,41 @@ SOURCE_FAILURES = {
     "SCHEMA_INVALID", "ENVELOPE_INVALID"
 }
 STATUS |= {stage + "_" + failure
-           for stage in ("CONTRACTS", "CHAIN")
+           for stage in ("EXPIRIES", "CONTRACTS", "CHAIN")
            for failure in SOURCE_FAILURES}
 REQUEST_PATH = "infra/ec2-paper/requests/fno-source-readiness.json"
 
 
 def expected_request() -> dict:
     return {
-        "kind": "minttick-private-fno-source-readiness-v1",
-        "operation": "probe-upstox-nifty-options-read-only",
+        "kind": "minttick-private-fno-source-readiness-v2",
+        "operation": "probe-upstox-nifty-nearest-listed-expiry-read-only",
         "environment": "PAPER",
         "account": ACCOUNT,
         "region": REGION,
         "instance_id": INSTANCE,
         "backend_release": EXPECTED_RELEASE,
         "underlying": "NSE_INDEX|Nifty 50",
-        "expiry": EXPIRY,
         "authorization": "OWNER_APPROVED_READ_ONLY_FNO_CHECK_2026_11_14",
     }
 
 
 def validate_response(body: object) -> tuple[str, int, int, int, int, int]:
     """Strict output contract; counts are safe telemetry, not a quote entitlement."""
-    if not isinstance(body, dict) or body.get("underlyingKey") != "NSE_INDEX|Nifty 50" \
-            or body.get("expiry") != EXPIRY:
+    if not isinstance(body, dict) or body.get("underlyingKey") != "NSE_INDEX|Nifty 50":
         raise ValueError("FNO_INVALID_PROVIDER_IDENTITY")
     state = body.get("status")
+    expiry = body.get("expiry")
+    if expiry is not None:
+        import datetime
+        try:
+            parsed = datetime.date.fromisoformat(expiry)
+        except (TypeError, ValueError):
+            raise ValueError("FNO_INVALID_PROVIDER_EXPIRY")
+        if parsed < datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30))).date() or parsed > (datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5, minutes=30))).date() + datetime.timedelta(days=90)):
+            raise ValueError("FNO_INVALID_PROVIDER_EXPIRY")
+    elif state == "READS_VERIFIED":
+        raise ValueError("FNO_INVALID_PROVIDER_EXPIRY")
     if state not in STATUS:
         raise ValueError("FNO_INVALID_PROVIDER_STATUS")
     names = ["validatedContracts", "validatedStrikes", "callsWithContract",
@@ -79,7 +88,7 @@ def validate_response(body: object) -> tuple[str, int, int, int, int, int]:
         contracts >= 2 and strikes >= 1 and calls == strikes and puts == strikes
     ):
         raise ValueError("FNO_FALSE_VERIFIED_STATUS")
-    return state, contracts, strikes, calls, puts, greeks
+    return state, contracts, strikes, calls, puts, greeks, expiry
 
 
 def host() -> None:
@@ -121,7 +130,7 @@ def host() -> None:
     if not re.fullmatch("[0-9a-f]{64}", operator):
         raise SystemExit("FNO_OPERATOR_KEY_UNAVAILABLE")
     url = ("http://127.0.0.1:8080"
-           "/api/admin/market-data/upstox-analytics/fno/probe?expiry=" + EXPIRY)
+           "/api/admin/market-data/upstox-analytics/fno/probe-nearest")
     req = urllib.request.Request(url, data=b"", method="POST",
                                  headers={"X-API-Key": operator, "Accept": "application/json"})
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -136,10 +145,10 @@ def host() -> None:
             if len(raw) > 4096:
                 raise ValueError("FNO_PROBE_RESPONSE_TOO_LARGE")
             received = json.loads(raw)
-        state, contracts, strikes, calls, puts, greeks = validate_response(received)
+        state, contracts, strikes, calls, puts, greeks, expiry = validate_response(received)
         print(f"MINTTICK_FNO_SOURCE:status={state} contracts={contracts} "
               f"strikes={strikes} calls={calls} puts={puts} greeks={greeks} "
-              f"expiry={EXPIRY} stored=false rights=false", flush=True)
+              f"expiry={expiry or 'none'} stored=false rights=false", flush=True)
         if state != "READS_VERIFIED":
             raise SystemExit("FNO_PRIVATE_SOURCE_NOT_VERIFIED")
     except (urllib.error.URLError, TimeoutError):
@@ -158,18 +167,20 @@ def sanitized_source_receipt(output: str) -> str | None:
     found = re.findall(
         r"MINTTICK_FNO_SOURCE:status=([A-Z_]+) contracts=(\d+) "
         r"strikes=(\d+) calls=(\d+) puts=(\d+) greeks=(\d+) "
-        r"expiry=2026-11-17 stored=false rights=false", output)
+        r"expiry=(\d{4}-\d{2}-\d{2}|none) stored=false rights=false", output)
     if len(found) != 1 or found[0][0] not in STATUS:
         return None
-    state, *values = found[0]
+    state, *values, expiry = found[0]
     counts = [int(n) for n in values]
     if any(n > 1024 for n in counts):
         return None
     contracts, strikes, calls, puts, greeks = counts
     if calls > strikes or puts > strikes or greeks > strikes:
         return None
+    if state == "READS_VERIFIED" and (expiry == "none" or contracts < 2 or strikes < 1 or calls != strikes or puts != strikes):
+        return None
     return (f"status={state} contracts={contracts} strikes={strikes} "
-            f"calls={calls} puts={puts} greeks={greeks} expiry={EXPIRY} "
+            f"calls={calls} puts={puts} greeks={greeks} expiry={expiry} "
             "stored=false rights=false")
 
 def runner() -> None:
@@ -216,12 +227,12 @@ def runner() -> None:
             matches = re.findall(
                 r"MINTTICK_FNO_SOURCE:status=([A-Z_]+) contracts=(\d+) "
                 r"strikes=(\d+) calls=(\d+) puts=(\d+) greeks=(\d+) "
-                r"expiry=2026-11-17 stored=false rights=false", stdout)
+                r"expiry=(\d{4}-\d{2}-\d{2}|none) stored=false rights=false", stdout)
             if len(matches) != 1 or matches[0][0] != "READS_VERIFIED":
                 raise SystemExit("FNO_SOURCE_MISSING_VERIFIED_RECEIPT")
             match = matches[0]
             print("FNO SOURCE READ VERIFIED via protected SSM: "
-                  f"expiry={EXPIRY} contracts={match[1]} strikes={match[2]} "
+                  f"expiry={match[6]} contracts={match[1]} strikes={match[2]} "
                   f"calls={match[3]} puts={match[4]} greeks={match[5]} "
                   "rights=NOT_VERIFIED; no orders", flush=True)
             return
