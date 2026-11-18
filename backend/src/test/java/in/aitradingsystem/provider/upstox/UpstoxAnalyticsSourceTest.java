@@ -62,6 +62,44 @@ class UpstoxAnalyticsSourceTest {
     }
 
     @Test
+    void acceptsProviderNewestFirstAndNormalizesForGoldenValidation() {
+        token();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v3/historical-candle/")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":{"candles":[
+                      ["2026-11-09T09:17:00+05:30",100,102,99,101,42,0],
+                      ["2026-11-09T09:16:00+05:30",100,102,99,101,42,0],
+                      ["2026-11-09T09:15:00+05:30",100,102,99,101,42,0]
+                    ]}}
+                    """, MediaType.APPLICATION_JSON));
+        var day = java.time.LocalDate.parse("2026-11-09");
+        var rows = source.historicalEquityCandles("NSE_EQ|INE002A01018",
+                "minutes", 1, day, day);
+        assertThat(rows).hasSize(3);
+        assertThat(rows.get(0).time()).isBefore(rows.get(1).time());
+        assertThat(rows.get(1).time()).isBefore(rows.get(2).time());
+        server.verify();
+    }
+
+    @Test
+    void rejectsMixedProviderTimestampOrderBeforeSorting() {
+        token();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v3/historical-candle/")))
+                .andRespond(withSuccess("""
+                    {"status":"success","data":{"candles":[
+                      ["2026-11-09T09:17:00+05:30",100,102,99,101,42,0],
+                      ["2026-11-09T09:15:00+05:30",100,102,99,101,42,0],
+                      ["2026-11-09T09:16:00+05:30",100,102,99,101,42,0]
+                    ]}}
+                    """, MediaType.APPLICATION_JSON));
+        var day = java.time.LocalDate.parse("2026-11-09");
+        assertThatThrownBy(() -> source.historicalEquityCandles(
+                "NSE_EQ|INE002A01018", "minutes", 1, day, day))
+                .hasMessage("UPSTOX_INVALID_CANDLES");
+        server.verify();
+    }
+
+    @Test
     void readsCurrentRatiosButNeverGrantsPointInTimeHistory() {
         token();
         server.expect(requestTo("https://api.upstox.com/v2/fundamentals/INE002A01018/key-ratios"))
