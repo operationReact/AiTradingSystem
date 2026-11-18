@@ -56,7 +56,7 @@ public class UpstoxFnoReadinessProbeController {
         this.clock = clock;
     }
 
-    /** POST-only. Caller selects a real near-term expiry; no guessed expiry rollover. */
+    /** Existing explicit-expiry probe retained for reviewed, bounded requests. */
     @PostMapping("/probe")
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public synchronized ResponseEntity<Probe> probe(
@@ -73,8 +73,49 @@ public class UpstoxFnoReadinessProbeController {
         if (now.isBefore(retryAfter)) {
             return result("COOLDOWN", expiry, 0, 0, 0, 0, 0, now);
         }
-        // Reserve budget before the first provider read, including failures.
+        // Reserve rate-limit budget before contacting the Upstox provider.
         retryAfter = now.plus(COOLDOWN);
+        return readContractsAndChain(expiry, now);
+    }
+
+    /**
+     * Resolve the nearest real provider-listed NIFTY expiry first, then prove
+     * actual CE/PE contracts and chain identities on that very same expiry.
+     * No guessed dates, quotes, user data, persistence or entitlement changes.
+     */
+    @PostMapping("/probe-nearest")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public synchronized ResponseEntity<Probe> probeNearest() {
+        Instant now = clock.instant();
+        if (!source.enabled()) {
+            return result("DISABLED", null, 0, 0, 0, 0, 0, now);
+        }
+        if (now.isBefore(retryAfter)) {
+            return result("COOLDOWN", null, 0, 0, 0, 0, 0, now);
+        }
+        // Book the whole source+contracts+chain operation under one cooldown.
+        retryAfter = now.plus(COOLDOWN);
+        try {
+            LocalDate today = now.atZone(MARKET).toLocalDate();
+            var expiries = source.currentNiftyOptionExpiries(now);
+            if (expiries == null) {
+                return result("PROVIDER_UNAVAILABLE", null, 0, 0, 0, 0, 0, now);
+            }
+            LocalDate expiry = expiries.stream()
+                .filter(date -> date != null && !date.isBefore(today)
+                    && !date.isAfter(today.plusDays(90)))
+                .distinct().sorted().findFirst().orElse(null);
+            if (expiry == null) {
+                return result("NO_LISTED_EXPIRIES", null, 0, 0, 0, 0, 0, now);
+            }
+            return readContractsAndChain(expiry, now);
+        } catch (RuntimeException ex) {
+            return result(safeFailure("EXPIRIES", ex), null, 0, 0, 0, 0, 0, now);
+        }
+    }
+
+    /** Executed only after the shared probe cooldown is reserved. */
+    private ResponseEntity<Probe> readContractsAndChain(LocalDate expiry, Instant now) {
         try {
             // Split contract metadata vs chain failures without exposing
             // upstream response bodies, signed URLs or SSM credentials.
@@ -140,7 +181,8 @@ public class UpstoxFnoReadinessProbeController {
             case "UPSTOX_FNO_UPSTREAM_REJECTED" -> "UPSTREAM_REJECTED";
             case "UPSTOX_FNO_TRANSPORT_FAILURE" -> "TRANSPORT_FAILURE";
             case "UPSTOX_SSM_UNAVAILABLE" -> "CREDENTIAL_UNAVAILABLE";
-            case "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN"
+            case "UPSTOX_FNO_INVALID_EXPIRY_CONTRACTS",
+                 "UPSTOX_FNO_INVALID_CONTRACTS", "UPSTOX_FNO_INVALID_CHAIN"
                     -> "SCHEMA_INVALID";
             case "UPSTOX_FNO_INVALID_PAYLOAD" -> "ENVELOPE_INVALID";
             default -> null; // Do not reveal arbitrary upstream exception text.
