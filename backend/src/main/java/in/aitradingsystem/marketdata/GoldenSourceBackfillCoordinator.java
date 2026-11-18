@@ -173,7 +173,7 @@ public class GoldenSourceBackfillCoordinator {
             checkpoint(lease, validated, raw.sourceEvidenceDigest(), computedHash,
                     stored.objectUri());
         } catch (GoldenHistoricalDatasetProvider.RetryableSourceException e) {
-            retry(lease);
+            retry(lease, e);
         } catch (RuntimeException e) {
             // Never include provider credentials, raw responses or exception
             // messages in persisted diagnostic fields.
@@ -305,28 +305,32 @@ public class GoldenSourceBackfillCoordinator {
                      WHERE provider_id = (SELECT provider_id
                                             FROM golden_dataset_backfill_job
                                            WHERE job_id = ?)
-                    """, lease.claimed().jobId());
+                       AND retry_after <= ?
+                    """, lease.claimed().jobId(), utc(now));
             refreshJob(lease.claimed().jobId(), now);
         });
     }
 
-    private void retry(Lease lease) {
+    private void retry(Lease lease, GoldenHistoricalDatasetProvider.RetryableSourceException failure) {
         Instant now = clock.instant();
         long backoffSeconds = Math.min(1800L, 30L <<
                 Math.min(6, Math.max(0, lease.claimed().attempts() - 1)));
         // Stable bounded jitter: avoid simultaneous retries without relying
         // on a nondeterministic global clock/random number source.
         backoffSeconds += Math.floorMod(lease.claimed().chunkId().hashCode(), 17);
-        final long seconds = backoffSeconds;
+        // Persist only a fixed allowlisted reason, never upstream exception text.
+        final boolean rateLimited = "UPSTOX_RATE_LIMITED".equals(failure.getMessage());
+        final String errorCode = rateLimited ? "UPSTOX_RATE_LIMITED" : "TRANSIENT_SOURCE_ERROR";
+        final long seconds = rateLimited ? Math.max(60L, backoffSeconds) : backoffSeconds;
         transactions.executeWithoutResult(ignored -> {
             int changed = jdbc.update("""
                     UPDATE golden_dataset_backfill_chunk
                        SET status = CASE WHEN attempts >= ? THEN 'FAILED' ELSE 'RETRY' END,
                            lease_token = NULL, lease_until = NULL, next_attempt_at = ?,
-                           error_code = 'TRANSIENT_SOURCE_ERROR', updated_at = ?
+                           error_code = ?, updated_at = ?
                      WHERE chunk_id = ? AND status = 'LEASED' AND lease_token = ?
                        AND lease_until > ?
-                    """, MAX_ATTEMPTS, utc(now.plusSeconds(seconds)), utc(now),
+                    """, MAX_ATTEMPTS, utc(now.plusSeconds(seconds)), errorCode, utc(now),
                     lease.claimed().chunkId(), lease.token(), utc(now));
             if (changed != 1) return;
             jdbc.update("""
