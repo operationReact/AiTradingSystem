@@ -1276,6 +1276,30 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     if (page.instrumentId != instrumentId || page.interval != interval) {
       throw const FormatException('Stored candle identity mismatch');
     }
+    // Owner-private Angel One history lives in a separately secured EC2
+    // archive, not in the shared market_candle PostgreSQL table. When the
+    // normal daily chart store is empty, try the owner-only bounded archive
+    // export. A different customer receives 403 and remains on normal data.
+    if (interval == 'ONE_DAY' && page.items.isEmpty) {
+      try {
+        final archived = await api.getJson('/api/customer/owner-history/v1/candles',
+          query: {
+            'instrumentId': '$instrumentId',
+            'fromDate': fromDate,
+            'toDate': toDate,
+          }, timeout: const Duration(seconds: 8));
+        if (archived is Map<String, dynamic>) {
+          final ownerPage = CustomerCandlePage.fromJson(archived);
+          if (ownerPage.instrumentId == instrumentId &&
+              ownerPage.interval == interval && ownerPage.items.isNotEmpty) {
+            return ownerPage;
+          }
+        }
+      } catch (_) {
+        // Not all customers have access to the owner's personal research
+        // archive; never replace their normal stock history or leak identity.
+      }
+    }
     return page;
   }
 
