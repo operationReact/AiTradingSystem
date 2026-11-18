@@ -1280,7 +1280,7 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     // archive, not in the shared market_candle PostgreSQL table. When the
     // normal daily chart store is empty, try the owner-only bounded archive
     // export. A different customer receives 403 and remains on normal data.
-    if (interval == 'ONE_DAY' && page.items.isEmpty) {
+    if (interval == 'ONE_DAY' && page.items.length < 2) {
       try {
         final archived = await api.getJson('/api/customer/owner-history/v1/candles',
           query: {
