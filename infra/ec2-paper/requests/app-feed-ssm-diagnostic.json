@@ -6,5 +6,6 @@
   "instance_id": "i-09c01b470fb39b85a",
   "operation": "read-only-app-feed-ssm-format-diagnostic",
   "read_only": true,
-  "authorization": "USER_APPROVED_READ_ONLY_DIAGNOSTIC_2026-11-18"
+  "authorization": "USER_APPROVED_READ_ONLY_DIAGNOSTIC_2026-11-18",
+  "run": 2
 }
