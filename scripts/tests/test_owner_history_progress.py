@@ -79,6 +79,50 @@ class ProgressSnapshotTests(unittest.TestCase):
             self.assertNotIn("2885", serialized)
             self.assertNotIn("12345", serialized)
 
+    def test_owner_chart_export_uses_sha_checked_archive_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "archive"
+            root.mkdir()
+            fixture(root)
+            output = Path(tmp) / "monitor"
+            output.mkdir()
+            now = dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc)
+            sink = progress._OwnerChartSink(output, now)
+            try:
+                with patch.object(progress, "_private_archive", return_value=None):
+                    report = progress.build_snapshot(root, now, "IDLE", {},
+                                                      chart_sink=sink)
+                sink.complete()
+            finally:
+                sink.discard()
+            chart = json.loads((output / "charts" / "2885.json").read_text())
+            self.assertEqual(report["task"]["candles"], 2)
+            self.assertEqual(chart["schema"], "minttick.owner.chart.v1")
+            self.assertEqual(chart["symbol"], "RELIANCE-EQ")
+            self.assertEqual(chart["interval"], "ONE_DAY")
+            self.assertEqual(len(chart["rows"]), 2)
+            self.assertEqual(chart["rows"][1][4], 108)
+            self.assertNotIn("password", json.dumps(chart).lower())
+
+    def test_tamper_never_promotes_owner_chart_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "archive"
+            root.mkdir()
+            fixture(root, tamper=True)
+            output = Path(tmp) / "monitor"
+            output.mkdir()
+            sink = progress._OwnerChartSink(output,
+                dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc))
+            try:
+                with patch.object(progress, "_private_archive", return_value=None):
+                    with self.assertRaises(progress.ProgressUnavailable):
+                        progress.build_snapshot(root,
+                            dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc),
+                            "IDLE", {}, chart_sink=sink)
+            finally:
+                sink.discard()
+            self.assertFalse((output / "charts").exists())
+
     def test_two_minute_cadence_includes_market_hours(self):
         in_window = dt.datetime.fromisoformat("2026-11-11T16:00:15+05:30")
         self.assertEqual(progress._next_scheduled_at(in_window),
