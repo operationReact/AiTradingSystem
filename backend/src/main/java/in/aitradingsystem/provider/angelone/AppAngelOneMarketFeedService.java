@@ -31,6 +31,8 @@ public final class AppAngelOneMarketFeedService {
     private final CustomerAngelOneSessionService sessions;
     private final CustomerAngelOneLiveQuoteService liveQuotes;
     private Instant retryAfter = Instant.EPOCH;
+    // The last stable failure code, so callers inside the backoff window still see the real reason.
+    private String lastReasonCode = "PROVIDER_UNAVAILABLE";
 
     public AppAngelOneMarketFeedService(OwnerAngelOneSsmService ssm,
             CustomerAngelOneSessionService sessions,
@@ -108,21 +110,21 @@ public final class AppAngelOneMarketFeedService {
         if (sessions.status(APPLICATION_FEED_ID).connected()) return;
         Instant now = Instant.now();
         if (now.isBefore(retryAfter)) {
-            throw new MarketDataException("PROVIDER_UNAVAILABLE",
-                "Application market feed is reconnecting");
+            throw new MarketDataException(lastReasonCode, "Application market feed is reconnecting");
         }
         try {
             var connection = ssm.connect(APPLICATION_FEED_ID);
             if (connection == null || !connection.connected()) {
-                throw new MarketDataException("PROVIDER_UNAVAILABLE",
-                    "Application market feed could not authenticate");
+                lastReasonCode = "PROVIDER_LOGIN_REJECTED";
+                throw new MarketDataException(lastReasonCode, "Application market feed could not authenticate");
             }
             retryAfter = Instant.EPOCH;
         } catch (RuntimeException error) {
             // Keep AWS and broker credential material out of exception messages. The stable reason CODE
             // (for example OWNER_SSM_ACCESS_UNAVAILABLE or a login code) is kept so operators can act on it.
             retryAfter = now.plus(RETRY_BACKOFF);
-            throw new MarketDataException(reasonCode(error), "Application market feed is unavailable");
+            lastReasonCode = reasonCode(error);
+            throw new MarketDataException(lastReasonCode, "Application market feed is unavailable");
         }
     }
 
