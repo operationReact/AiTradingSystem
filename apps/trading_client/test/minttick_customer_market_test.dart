@@ -740,7 +740,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('Markets keeps four fixed tabs', (tester) async {
+  testWidgets('Markets exposes a dedicated fifth F&O tab', (tester) async {
     await tester.pumpWidget(MaterialApp(
       theme: buildTheme(Brightness.dark),
       home: MintTickCustomerMarketPage(repository: _CustomerMarketFake()),
@@ -748,7 +748,15 @@ void main() {
     await tester.pumpAndSettle();
     final tabs = tester.widget<TabBar>(find.byKey(const ValueKey('customer-market-tabs')));
     expect(tabs.isScrollable, isFalse);
-    expect(tabs.tabs, hasLength(4));
+    expect(tabs.tabs, hasLength(5));
+    expect(find.text('F&O'), findsOneWidget);
+    await tester.tap(find.text('F&O'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Sign in to view F&O source status'), findsOneWidget);
+    expect(find.text('Market cap'), findsNothing);
+    await tester.tap(find.text('Explore'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Sign in to view F&O source status'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
