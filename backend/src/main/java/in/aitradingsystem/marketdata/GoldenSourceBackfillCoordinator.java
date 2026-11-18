@@ -173,7 +173,7 @@ public class GoldenSourceBackfillCoordinator {
             checkpoint(lease, validated, raw.sourceEvidenceDigest(), computedHash,
                     stored.objectUri());
         } catch (GoldenHistoricalDatasetProvider.RetryableSourceException e) {
-            retry(lease);
+            retry(lease, e);
         } catch (RuntimeException e) {
             // Never include provider credentials, raw responses or exception
             // messages in persisted diagnostic fields.
@@ -305,28 +305,32 @@ public class GoldenSourceBackfillCoordinator {
                      WHERE provider_id = (SELECT provider_id
                                             FROM golden_dataset_backfill_job
                                            WHERE job_id = ?)
-                    """, lease.claimed().jobId());
+                       AND retry_after <= ?
+                    """, lease.claimed().jobId(), utc(now));
             refreshJob(lease.claimed().jobId(), now);
         });
     }
 
-    private void retry(Lease lease) {
+    private void retry(Lease lease, GoldenHistoricalDatasetProvider.RetryableSourceException failure) {
         Instant now = clock.instant();
         long backoffSeconds = Math.min(1800L, 30L <<
                 Math.min(6, Math.max(0, lease.claimed().attempts() - 1)));
         // Stable bounded jitter: avoid simultaneous retries without relying
         // on a nondeterministic global clock/random number source.
         backoffSeconds += Math.floorMod(lease.claimed().chunkId().hashCode(), 17);
-        final long seconds = backoffSeconds;
+        // Persist only a fixed allowlisted reason, never upstream exception text.
+        final boolean rateLimited = "UPSTOX_RATE_LIMITED".equals(failure.getMessage());
+        final String errorCode = rateLimited ? "UPSTOX_RATE_LIMITED" : "TRANSIENT_SOURCE_ERROR";
+        final long seconds = rateLimited ? Math.max(60L, backoffSeconds) : backoffSeconds;
         transactions.executeWithoutResult(ignored -> {
             int changed = jdbc.update("""
                     UPDATE golden_dataset_backfill_chunk
                        SET status = CASE WHEN attempts >= ? THEN 'FAILED' ELSE 'RETRY' END,
                            lease_token = NULL, lease_until = NULL, next_attempt_at = ?,
-                           error_code = 'TRANSIENT_SOURCE_ERROR', updated_at = ?
+                           error_code = ?, updated_at = ?
                      WHERE chunk_id = ? AND status = 'LEASED' AND lease_token = ?
                        AND lease_until > ?
-                    """, MAX_ATTEMPTS, utc(now.plusSeconds(seconds)), utc(now),
+                    """, MAX_ATTEMPTS, utc(now.plusSeconds(seconds)), errorCode, utc(now),
                     lease.claimed().chunkId(), lease.token(), utc(now));
             if (changed != 1) return;
             jdbc.update("""
@@ -401,6 +405,43 @@ public class GoldenSourceBackfillCoordinator {
                         rs.getLong("quarantined"), rs.getLong("failed"),
                         rs.getLong("expected"), rs.getLong("valid")), jobId);
     }
+
+    /**
+     * Read persisted checkpoint state for one exact job, not a count of unique
+     * candles or year windows. Unknown jobs return empty rather than zero.
+     * No source calls, rights changes, or archive writes are performed.
+     */
+    public Optional<CheckpointReadback> checkpointReadback(UUID jobId) {
+        if (jobId == null) throw new IllegalArgumentException("job ID required");
+        return jdbc.query("""
+                SELECT p.provider_code, j.source_domain, j.listing_id,
+                       j.interval_name, j.dataset_revision,
+                       count(c.chunk_id) AS planned,
+                       count(c.chunk_id) FILTER (WHERE c.attempts > 0) AS attempted,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'RETRY') AS retry_pending,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'FAILED') AS failed,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'VERIFIED'
+                           AND c.archive_uri IS NOT NULL AND c.dataset_digest IS NOT NULL
+                           AND c.source_evidence_digest IS NOT NULL) AS verified_receipts
+                  FROM golden_dataset_backfill_job j
+                  JOIN golden_data_provider p ON p.provider_id = j.provider_id
+                  LEFT JOIN golden_dataset_backfill_chunk c ON c.job_id = j.job_id
+                 WHERE j.job_id = ?
+                 GROUP BY p.provider_code, j.source_domain, j.listing_id,
+                          j.interval_name, j.dataset_revision
+                """, (rs, ignored) -> new CheckpointReadback(
+                        rs.getString("provider_code"), rs.getString("source_domain"),
+                        rs.getObject("listing_id", UUID.class), rs.getString("interval_name"),
+                        rs.getInt("dataset_revision"), rs.getLong("planned"),
+                        rs.getLong("attempted"), rs.getLong("retry_pending"),
+                        rs.getLong("failed"), rs.getLong("verified_receipts")), jobId)
+                .stream().findFirst();
+    }
+
+    public record CheckpointReadback(String providerCode, String sourceDomain,
+            UUID listingId, String intervalName, int revision, long plannedChunks,
+            long attemptedChunks, long retryPendingChunks, long failedChunks,
+            long verifiedCheckpointReceipts) {}
 
     public record Progress(String status, long chunks, long verified,
                            long incomplete, long quarantined, long failed,

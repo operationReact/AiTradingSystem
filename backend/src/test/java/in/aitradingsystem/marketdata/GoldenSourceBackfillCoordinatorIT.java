@@ -38,6 +38,12 @@ class GoldenSourceBackfillCoordinatorIT extends AbstractPostgresIT {
         assertThat(c.plan(f.provider(), SOURCE, f.listing(), "ONE_DAY",
                 FROM, FROM.plusDays(4), 1, 2)).isEqualTo(job);
         assertThat(c.progress(job).chunks()).isEqualTo(3);
+        assertThat(c.checkpointReadback(UUID.randomUUID())).isEmpty();
+        var initial = c.checkpointReadback(job).orElseThrow();
+        assertThat(initial.providerCode()).isEqualTo(f.provider());
+        assertThat(initial.plannedChunks()).isEqualTo(3);
+        assertThat(initial.attemptedChunks()).isZero();
+        assertThat(initial.verifiedCheckpointReceipts()).isZero();
         AtomicInteger calls = new AtomicInteger();
         assertThat(c.processNext(source(f.provider(), calls, false), validator(2, 2),
                 archive(false))).isFalse();
@@ -110,11 +116,47 @@ class GoldenSourceBackfillCoordinatorIT extends AbstractPostgresIT {
                 archive(false))).isFalse();
         assertThat(calls).hasValue(1);
         assertThat(c.progress(job).status()).isEqualTo("RUNNING");
+        var pending = c.checkpointReadback(job).orElseThrow();
+        assertThat(pending.attemptedChunks()).isEqualTo(1);
+        assertThat(pending.retryPendingChunks()).isEqualTo(1);
+        assertThat(pending.verifiedCheckpointReceipts()).isZero();
         GoldenSourceBackfillCoordinator resumed = coordinator(Duration.ofMinutes(3));
         assertThat(resumed.processNext(source(f.provider(), calls, false),
                 validator(1, 1), archive(false))).isTrue();
         assertThat(calls).hasValue(2);
         assertThat(resumed.progress(job).status()).isEqualTo("COMPLETE");
+        var complete = resumed.checkpointReadback(job).orElseThrow();
+        assertThat(complete.retryPendingChunks()).isZero();
+        assertThat(complete.verifiedCheckpointReceipts()).isEqualTo(1);
+    }
+
+    @Test
+    void rateLimitPersistsSafeReasonAndBlocksOtherChunksUntilCooldown() {
+        Fixture f = fixture();
+        grant(f, "RAW_RETENTION");
+        var c = coordinator(Duration.ZERO);
+        UUID job = c.plan(f.provider(), SOURCE, f.listing(), "ONE_DAY",
+                FROM, FROM.plusDays(1), 1, 1);
+        var throttled = new GoldenHistoricalDatasetProvider() {
+            @Override public String providerCode() { return f.provider(); }
+            @Override public String sourceDomain() { return SOURCE; }
+            @Override public SourcePayload fetch(ChunkRequest request) {
+                throw new RetryableSourceException("UPSTOX_RATE_LIMITED");
+            }
+        };
+        assertThat(c.processNext(throttled, validator(1, 1), archive(false))).isTrue();
+        assertThat(c.checkpointReadback(job).orElseThrow().retryPendingChunks()).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT error_code FROM golden_dataset_backfill_chunk
+                 WHERE job_id = ? AND status = 'RETRY'
+                """, String.class, job)).isEqualTo("UPSTOX_RATE_LIMITED");
+        AtomicInteger calls = new AtomicInteger();
+        assertThat(coordinator(Duration.ofSeconds(59)).processNext(
+                source(f.provider(), calls, false), validator(1, 1), archive(false))).isFalse();
+        assertThat(calls).hasValue(0);
+        assertThat(coordinator(Duration.ofMinutes(3)).processNext(
+                source(f.provider(), calls, false), validator(1, 1), archive(false))).isTrue();
+        assertThat(calls).hasValue(1);
     }
 
     @Test
