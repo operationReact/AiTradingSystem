@@ -16,8 +16,10 @@ import org.springframework.http.HttpStatus;
 public class MfResearchController {
     private final MfResearchStore store;
     private final MfResearchRefreshService refresh;
-    public MfResearchController(MfResearchStore store,MfResearchRefreshService refresh) {
-        this.store = store; this.refresh = refresh;
+    private final MfResearchHistoryService history;
+    public MfResearchController(MfResearchStore store,MfResearchRefreshService refresh,
+                                MfResearchHistoryService history) {
+        this.store = store; this.refresh = refresh; this.history = history;
     }
 
     @GetMapping("/api/customer/mutual-funds/v1/board")
@@ -29,6 +31,17 @@ public class MfResearchController {
                 "Verified customer sign-in required");
         }
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(store.board());
+    }
+
+
+    @GetMapping("/api/admin/mutual-funds/backfill")
+    public ResponseEntity<MfResearchStore.Backfill> backfill() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(store.backfill());
+    }
+
+    @PostMapping("/api/admin/mutual-funds/backfill/step")
+    public ResponseEntity<MfResearchStore.Backfill> backfillStep() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(history.step());
     }
 
     @PostMapping("/api/admin/mutual-funds/refresh")
