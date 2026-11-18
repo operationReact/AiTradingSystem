@@ -99,6 +99,29 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void initialBinaryBeforeSubscriptionAckIsConsumedAndCannotBeDowngraded() {
+        var s = service();
+        CompletableFuture<WebSocket> delayedAck = new CompletableFuture<>();
+        when(socket.sendBinary(any(ByteBuffer.class), eq(true))).thenReturn(delayedAck);
+        try {
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            assertThat(s.status().state()).isEqualTo("SUBSCRIBING");
+            // Upstox can send initial_feed before sendBinary's future completes.
+            listener.get().onBinary(socket,
+                    ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.validFirstLevel()), true);
+            assertThat(s.status().state()).isEqualTo("CONNECTED");
+            assertThat(s.status().decodedFrames()).isEqualTo(1);
+            assertThat(s.status().observedInstruments()).isEqualTo(1);
+            delayedAck.complete(socket);
+            assertThat(s.status().state()).isEqualTo("CONNECTED");
+            assertThat(s.status().observedInstruments()).isEqualTo(1);
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
     void cannotStartTwoConnectionsOrSubscribeArbitraryKeys() {
         var s = service();
         try {
