@@ -402,6 +402,43 @@ public class GoldenSourceBackfillCoordinator {
                         rs.getLong("expected"), rs.getLong("valid")), jobId);
     }
 
+    /**
+     * Read persisted checkpoint state for one exact job, not a count of unique
+     * candles or year windows. Unknown jobs return empty rather than zero.
+     * No source calls, rights changes, or archive writes are performed.
+     */
+    public Optional<CheckpointReadback> checkpointReadback(UUID jobId) {
+        if (jobId == null) throw new IllegalArgumentException("job ID required");
+        return jdbc.query("""
+                SELECT p.provider_code, j.source_domain, j.listing_id,
+                       j.interval_name, j.dataset_revision,
+                       count(c.chunk_id) AS planned,
+                       count(c.chunk_id) FILTER (WHERE c.attempts > 0) AS attempted,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'RETRY') AS retry_pending,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'FAILED') AS failed,
+                       count(c.chunk_id) FILTER (WHERE c.status = 'VERIFIED'
+                           AND c.archive_uri IS NOT NULL AND c.dataset_digest IS NOT NULL
+                           AND c.source_evidence_digest IS NOT NULL) AS verified_receipts
+                  FROM golden_dataset_backfill_job j
+                  JOIN golden_data_provider p ON p.provider_id = j.provider_id
+                  LEFT JOIN golden_dataset_backfill_chunk c ON c.job_id = j.job_id
+                 WHERE j.job_id = ?
+                 GROUP BY p.provider_code, j.source_domain, j.listing_id,
+                          j.interval_name, j.dataset_revision
+                """, (rs, ignored) -> new CheckpointReadback(
+                        rs.getString("provider_code"), rs.getString("source_domain"),
+                        rs.getObject("listing_id", UUID.class), rs.getString("interval_name"),
+                        rs.getInt("dataset_revision"), rs.getLong("planned"),
+                        rs.getLong("attempted"), rs.getLong("retry_pending"),
+                        rs.getLong("failed"), rs.getLong("verified_receipts")), jobId)
+                .stream().findFirst();
+    }
+
+    public record CheckpointReadback(String providerCode, String sourceDomain,
+            UUID listingId, String intervalName, int revision, long plannedChunks,
+            long attemptedChunks, long retryPendingChunks, long failedChunks,
+            long verifiedCheckpointReceipts) {}
+
     public record Progress(String status, long chunks, long verified,
                            long incomplete, long quarantined, long failed,
                            long expectedRecords, long validRecords) {}
