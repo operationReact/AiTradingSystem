@@ -227,6 +227,84 @@ class UpstoxFnoReadinessProbeControllerTest {
     }
 
     @Test
+    void nearestSourceListedExpiryProvesRealContractsWithoutGuessingDate() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentNiftyOptionExpiries(NOW)).thenReturn(
+                List.of(EXPIRY.plusDays(7), EXPIRY));
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY))
+                .thenReturn(List.of(contract("NSE_FO|61001", "CE"),
+                        contract("NSE_FO|61002", "PE")));
+        when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                .thenReturn(chain("NSE_FO|61001", "NSE_FO|61002", false));
+
+        var response = controller().probeNearest();
+        var receipt = response.getBody();
+        assertThat(receipt.status()).isEqualTo("READS_VERIFIED");
+        assertThat(receipt.expiry()).isEqualTo(EXPIRY);
+        assertThat(receipt.validatedContracts()).isEqualTo(2);
+        assertThat(receipt.callsWithContract()).isEqualTo(1);
+        assertThat(receipt.putsWithContract()).isEqualTo(1);
+        assertThat(receipt.displayRightsVerified()).isFalse();
+        assertThat(receipt.modelTrainingRightsVerified()).isFalse();
+        assertThat(receipt.liveTradingEnabled()).isFalse();
+        assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        verify(source).currentNiftyOptionExpiries(NOW);
+        verify(source).currentFnoOptionContracts(UNDERLYING, EXPIRY);
+        verify(source).currentFnoOptionChain(UNDERLYING, EXPIRY);
+        verifyNoMoreInteractions(source);
+    }
+
+    @Test
+    void nearestExpiryProbeNeverInventsExpiredOrMissingContractDates() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentNiftyOptionExpiries(NOW))
+                .thenReturn(List.of(EXPIRY.minusDays(10)));
+        var result = controller().probeNearest().getBody();
+        assertThat(result.status()).isEqualTo("NO_LISTED_EXPIRIES");
+        assertThat(result.expiry()).isNull();
+        assertThat(result.validatedContracts()).isZero();
+        verify(source, never()).currentFnoOptionContracts(any(), any());
+        verify(source, never()).currentFnoOptionChain(any(), any());
+    }
+
+    @Test
+    void nearestExpiryProviderDeniedRemainsDistinctAndConsumesOneCooldown() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentNiftyOptionExpiries(NOW))
+                .thenThrow(new IllegalStateException("UPSTOX_FNO_FORBIDDEN"));
+        var probe = controller();
+        var failed = probe.probeNearest().getBody();
+        assertThat(failed.status()).isEqualTo("EXPIRIES_FORBIDDEN");
+        assertThat(failed.expiry()).isNull();
+        assertThat(failed.displayRightsVerified()).isFalse();
+        assertThat(probe.probeNearest().getBody().status()).isEqualTo("COOLDOWN");
+        verify(source, times(1)).currentNiftyOptionExpiries(NOW);
+        verify(source, never()).currentFnoOptionContracts(any(), any());
+        verify(source, never()).currentFnoOptionChain(any(), any());
+    }
+
+    @Test
+    void nearestExpiryEndpointRemainsPostOnlyAdminOperatorRestricted() throws Exception {
+        var method = UpstoxFnoReadinessProbeController.class
+                .getMethod("probeNearest");
+        assertThat(method.getAnnotation(PostMapping.class)).isNotNull();
+        assertThat(method.getAnnotation(PostMapping.class).value())
+                .containsExactly("/probe-nearest");
+        var roles = method.getAnnotation(PreAuthorize.class);
+        assertThat(roles).isNotNull();
+        assertThat(roles.value()).contains("ADMIN", "OPERATOR");
+
+        var request = new MockHttpServletRequest("POST",
+                "/api/admin/market-data/upstox-analytics/fno/probe-nearest");
+        var response = new MockHttpServletResponse();
+        var filter = new AccountApiOnlyFilter();
+        var chain = new MockFilterChain();
+        filter.doFilter(request, response, chain);
+        assertThat(response.getStatus()).isEqualTo(404);
+        assertThat(chain.getRequest()).isNull();
+    }
+
+    @Test
     void endpointIsPostOnlyPreauthorizedAndFeatureGated() throws Exception {
         assertThat(UpstoxFnoReadinessProbeController.class
                 .isAnnotationPresent(ConditionalOnProperty.class)).isTrue();
