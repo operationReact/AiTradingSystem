@@ -135,6 +135,77 @@ public class MfResearchStore {
             feed, List.copyOf(watchlist), List.copyOf(alerts));
     }
 
+    public record Backfill(LocalDate nextFromDate, String status,
+                           LocalDate lastWindowEnd, int acceptedRows, String failureCode) {}
+
+    public Backfill backfill() {
+        return jdbc.sql("""
+                SELECT next_from_date,status,last_window_end,accepted_rows,failure_code
+                FROM mf_research_history_cursor WHERE id=1
+                """).query((rs,row)->new Backfill(
+                    rs.getDate("next_from_date").toLocalDate(),
+                    rs.getString("status"),
+                    rs.getDate("last_window_end")==null ? null : rs.getDate("last_window_end").toLocalDate(),
+                    rs.getInt("accepted_rows"),rs.getString("failure_code"))).single();
+    }
+
+    @Transactional
+    public Backfill acceptHistory(List<AmfiHistoricalNavSource.Nav> items,
+                                  LocalDate from, LocalDate through) {
+        if (!backfill().nextFromDate().equals(from) || through.isBefore(from)
+            || through.isAfter(from.plusDays(6))
+            || items == null || items.size() < MfResearchCatalogue.FUNDS.size()) {
+            throw new IllegalArgumentException("AMFI_HISTORY_WINDOW_CONFLICT");
+        }
+        for (AmfiHistoricalNavSource.Nav point : items) {
+            if (MfResearchCatalogue.BY_CODE.get(point.schemeCode()) == null
+                || point.navDate().isBefore(from) || point.navDate().isAfter(through)
+                || point.nav().signum() <= 0) {
+                throw new IllegalArgumentException("AMFI_HISTORY_UNTRUSTED_NAV");
+            }
+            BigDecimal earlier = jdbc.sql("""
+                    SELECT nav FROM mf_research_nav
+                    WHERE scheme_code=:code AND nav_date=:date
+                    """).param("code",point.schemeCode())
+                .param("date",point.navDate()).query(BigDecimal.class).optional().orElse(null);
+            if (earlier != null && earlier.compareTo(point.nav()) != 0)
+                throw new IllegalArgumentException("AMFI_HISTORY_NAV_REVISION");
+            jdbc.sql("""
+                    INSERT INTO mf_research_nav(scheme_code,nav_date,nav,source)
+                    VALUES (:code,:date,:nav,'AMFI')
+                    ON CONFLICT (scheme_code,nav_date) DO NOTHING
+                    """).param("code",point.schemeCode())
+                .param("date",point.navDate()).param("nav",point.nav()).update();
+        }
+        int updated = jdbc.sql("""
+                UPDATE mf_research_history_cursor
+                SET next_from_date=:next,status='RUNNING',last_window_end=:through,
+                    accepted_rows=accepted_rows+:count,last_imported_at=NOW(),
+                    failure_code=NULL
+                WHERE id=1 AND next_from_date=:from
+                """).param("next",through.plusDays(1)).param("through",through)
+            .param("count",items.size()).param("from",from).update();
+        if (updated != 1) throw new IllegalStateException("AMFI_HISTORY_CURSOR_RACE");
+        return backfill();
+    }
+
+    public void backfillFailed(String cause) {
+        String code = cause != null && cause.matches("[A-Z0-9_]{3,60}")
+            ? cause : "AMFI_HISTORY_REFRESH_FAILED";
+        jdbc.sql("""
+                UPDATE mf_research_history_cursor SET status='FAILED',
+                    failure_code=:code WHERE id=1
+                """).param("code",code).update();
+    }
+
+    public Backfill backfillComplete() {
+        jdbc.sql("""
+                UPDATE mf_research_history_cursor SET status='COMPLETE',
+                    failure_code=NULL WHERE id=1
+                """).update();
+        return backfill();
+    }
+
     private List<MfResearchSignalRules.Observation> history(int code) {
         List<MfResearchSignalRules.Observation> newest = jdbc.sql("""
                 SELECT nav_date,nav FROM mf_research_nav
