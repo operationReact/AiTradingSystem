@@ -151,8 +151,8 @@ public final class CustomerFnoDiscoveryController {
                 "F&O source provenance unavailable");
         }
         boolean open = sessionCalendar.isInsideFnoSession(now);
-        var strikes = CustomerPaperFnoMarketController.select(
-            contracts, chain, stream, open, false);
+        var strikes = CustomerPaperFnoMarketController.selectDiscovery(
+            contracts, chain, stream, open);
         boolean fresh = strikes.stream().anyMatch(s ->
             s.call().quoteFresh() || s.put().quoteFresh());
         String status = !open ? "MARKET_CLOSED" :
