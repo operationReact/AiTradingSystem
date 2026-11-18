@@ -23,21 +23,34 @@ public final class UpstoxCustomerFnoExpiryCatalog implements CustomerFnoExpiryCa
     private static final Duration FAILURE_COOLDOWN = Duration.ofSeconds(30);
 
     private final UpstoxAnalyticsSource source;
-    private final boolean displayRightsVerified;
+    /**
+     * Expiry listing is permitted by EITHER the explicit contract-discovery
+     * permission OR the display permission (which implies it). Expiry dates
+     * carry no prices, so they are gated separately from live-price display.
+     */
+    private final boolean discoveryPermitted;
     private Listing cached;
     private Instant refreshAfter;
 
     @Autowired
     public UpstoxCustomerFnoExpiryCatalog(UpstoxAnalyticsSource source,
             @Value("${minttick.upstox-fno.display-rights-verified:false}")
-            boolean displayRightsVerified) {
+            boolean displayRightsVerified,
+            @Value("${minttick.upstox-fno.contract-discovery-verified:false}")
+            boolean contractDiscoveryVerified) {
         this.source = source;
-        this.displayRightsVerified = displayRightsVerified;
+        this.discoveryPermitted = displayRightsVerified || contractDiscoveryVerified;
+    }
+
+    /** Display-rights-only form; contract discovery follows display rights. */
+    public UpstoxCustomerFnoExpiryCatalog(UpstoxAnalyticsSource source,
+            boolean displayRightsVerified) {
+        this(source, displayRightsVerified, false);
     }
 
     @Override
     public synchronized Listing listing(Instant now) {
-        if (now == null || !displayRightsVerified || !source.enabled())
+        if (now == null || !discoveryPermitted || !source.enabled())
             return blocked("BLOCKED_NO_PERMITTED_SOURCE");
         if (cached != null && refreshAfter != null
                 && !now.isBefore(refreshAfter.minus(SUCCESS_TTL))

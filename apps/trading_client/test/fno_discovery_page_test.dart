@@ -95,6 +95,48 @@ void main() {
         DateTime.parse('2026-11-17T08:00:02Z')), isFalse);
   });
 
+  test('contract discovery is decoded separately from live-price display', () {
+    final discoveryOnly = CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': false,
+      'contractDiscoveryVerified': true,
+      'feedConfigured': false,
+      'sourceReady': true,
+      'marketOpen': false,
+      'status': 'CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED',
+      'streamState': 'UNAVAILABLE',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+    });
+    expect(discoveryOnly.contractDiscoveryVerified, isTrue);
+    expect(discoveryOnly.displayRightsVerified, isFalse);
+    expect(discoveryOnly.live, isFalse);
+
+    // Older payloads without the field keep the display-rights meaning.
+    final legacy = CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': false,
+      'feedConfigured': false,
+      'sourceReady': true,
+      'marketOpen': false,
+      'status': 'DISPLAY_RIGHTS_NOT_VERIFIED',
+      'streamState': 'UNAVAILABLE',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+    });
+    expect(legacy.contractDiscoveryVerified, isFalse);
+
+    expect(() => CustomerFnoDiscoveryCapability.decode({
+      'displayRightsVerified': false,
+      'contractDiscoveryVerified': 'yes',
+      'feedConfigured': false,
+      'sourceReady': true,
+      'marketOpen': false,
+      'status': 'DISPLAY_RIGHTS_NOT_VERIFIED',
+      'streamState': 'UNAVAILABLE',
+      'freshExchangeTimedQuotes': 0,
+      'latestFreshExchangeTradeAt': null,
+    }), throwsFormatException);
+  });
+
   test('source capability requires exchange-timed proof, not socket alone', () {
     final parsed = CustomerFnoDiscoveryCapability.decode({
       'displayRightsVerified': true,

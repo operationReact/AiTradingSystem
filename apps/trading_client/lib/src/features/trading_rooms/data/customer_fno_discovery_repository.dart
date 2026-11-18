@@ -38,9 +38,13 @@ class CustomerFnoDiscoveryCapability {
     required this.streamState,
     required this.freshExchangeTimedQuotes,
     this.latestFreshExchangeTradeAt,
+    this.contractDiscoveryVerified = false,
   });
 
   final bool displayRightsVerified, feedConfigured, sourceReady, marketOpen;
+  /// Expiry and contract-identity listing permission. Display rights imply it.
+  /// Prices, OI, IV and Greeks still require [displayRightsVerified].
+  final bool contractDiscoveryVerified;
   final String status, streamState;
   final int freshExchangeTimedQuotes;
   final DateTime? latestFreshExchangeTradeAt;
@@ -59,11 +63,16 @@ class CustomerFnoDiscoveryCapability {
           'DISPLAY_RIGHTS_NOT_VERIFIED', 'FNO_V3_FEED_UNAVAILABLE',
           'FNO_CONTRACT_SOURCE_UNAVAILABLE', 'MARKET_CLOSED',
           'SOURCE_CONFIGURED', 'LIVE_QUOTES', 'WAITING_FOR_QUOTES',
-          'FEED_DISCONNECTED',
+          'FEED_DISCONNECTED', 'CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED',
         }.contains(raw['status'])) {
       throw const FormatException('Unverified F&O source capability');
     }
     final status = raw['status'] as String;
+    final hasDiscovery = raw.containsKey('contractDiscoveryVerified');
+    if (hasDiscovery && raw['contractDiscoveryVerified'] is! bool) {
+      throw const FormatException('Malformed F&O contract discovery flag');
+    }
+    final displayRights = raw['displayRightsVerified'] == true;
     final hasStream = raw.containsKey('streamState');
     if (hasStream && raw['streamState'] is! String) {
       throw const FormatException('Malformed F&O stream status');
@@ -100,6 +109,9 @@ class CustomerFnoDiscoveryCapability {
       streamState: hasStream ? raw['streamState'] as String : 'UNVERIFIED',
       freshExchangeTimedQuotes: count,
       latestFreshExchangeTradeAt: at?.toUtc(),
+      contractDiscoveryVerified: hasDiscovery
+          ? raw['contractDiscoveryVerified'] as bool
+          : displayRights,
     );
   }
 }

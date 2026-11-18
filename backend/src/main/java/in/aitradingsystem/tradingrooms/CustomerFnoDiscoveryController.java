@@ -45,6 +45,7 @@ public final class CustomerFnoDiscoveryController {
     private final Clock clock;
     private final boolean feedConfigured;
     private final boolean displayRightsVerified;
+    private final boolean contractDiscoveryVerified;
     private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
     private volatile ContractMetadata cachedMetadata;
 
@@ -67,12 +68,17 @@ public final class CustomerFnoDiscoveryController {
             "minttick.upstox-fno.v3-feed-enabled", Boolean.class, false);
         this.displayRightsVerified = env.getProperty(
             "minttick.upstox-fno.display-rights-verified", Boolean.class, false);
+        // Expiry/contract-identity listing has its own permission. Display rights
+        // imply it; prices, OI, IV and Greeks still require displayRightsVerified.
+        this.contractDiscoveryVerified = displayRightsVerified || env.getProperty(
+            "minttick.upstox-fno.contract-discovery-verified", Boolean.class, false);
     }
 
     public record Capability(boolean displayRightsVerified, boolean feedConfigured,
                              boolean sourceReady, boolean marketOpen,
                              String status, String streamState,
-                             int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt) {}
+                             int freshExchangeTimedQuotes, Instant latestFreshExchangeTradeAt,
+                             boolean contractDiscoveryVerified) {}
 
     @GetMapping("/capability")
     public ResponseEntity<Capability> capability(Authentication auth) {
@@ -82,7 +88,10 @@ public final class CustomerFnoDiscoveryController {
         var stream = feed.getIfAvailable();
         var liveStatus = feedConfigured && stream != null ? stream.status() : null;
         int fresh = open && liveStatus != null ? liveStatus.freshExchangeTimedQuotes() : 0;
-        String status = !displayRightsVerified ? "DISPLAY_RIGHTS_NOT_VERIFIED"
+        String status = !displayRightsVerified
+                ? (contractDiscoveryVerified
+                    ? "CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED"
+                    : "DISPLAY_RIGHTS_NOT_VERIFIED")
             : !feedConfigured || stream == null ? "FNO_V3_FEED_UNAVAILABLE"
             : !sourceReady ? "FNO_CONTRACT_SOURCE_UNAVAILABLE"
             : !open ? "MARKET_CLOSED"
@@ -95,13 +104,15 @@ public final class CustomerFnoDiscoveryController {
             liveStatus == null ? "UNAVAILABLE" : liveStatus.state(),
             displayRightsVerified ? fresh : 0,
             displayRightsVerified && open && fresh > 0
-                ? liveStatus.latestFreshExchangeTradeAt() : null));
+                ? liveStatus.latestFreshExchangeTradeAt() : null,
+            contractDiscoveryVerified));
     }
 
     @GetMapping("/expiries")
     public ResponseEntity<CustomerPaperFnoMarketController.Expiries> expiries(
             Authentication auth) {
-        requireDisplay(auth);
+        // Expiry dates only: no prices, OI, IV or Greeks, so discovery permission suffices.
+        requireDiscovery(auth);
         CustomerFnoExpiryCatalog.Listing listing =
             expiryCatalog.listing(clock.instant());
         if (listing == null || !listing.usable()) {
@@ -197,6 +208,14 @@ public final class CustomerFnoDiscoveryController {
         if (!displayRightsVerified) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Customer F&O display rights not verified");
+        }
+    }
+
+    private void requireDiscovery(Authentication auth) {
+        requireCustomer(auth);
+        if (!contractDiscoveryVerified) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Customer F&O contract discovery not verified");
         }
     }
 

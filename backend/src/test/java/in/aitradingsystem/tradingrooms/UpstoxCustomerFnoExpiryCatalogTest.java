@@ -26,6 +26,26 @@ class UpstoxCustomerFnoExpiryCatalogTest {
     }
 
     @Test
+    void contractDiscoveryPermissionListsExpiriesWithoutDisplayRights() {
+        when(source.enabled()).thenReturn(true);
+        var date=LocalDate.parse("2026-11-24");
+        when(source.currentNiftyOptionExpiries(NOW)).thenReturn(List.of(date));
+        var catalog=new UpstoxCustomerFnoExpiryCatalog(source,false,true);
+        var listing=catalog.listing(NOW);
+        assertThat(listing.usable()).isTrue();
+        assertThat(listing.expiries()).containsExactly(date);
+        verify(source,times(1)).currentNiftyOptionExpiries(NOW);
+    }
+
+    @Test
+    void neitherPermissionKeepsExpiryListingBlocked() {
+        when(source.enabled()).thenReturn(true);
+        var catalog=new UpstoxCustomerFnoExpiryCatalog(source,false,false);
+        assertThat(catalog.listing(NOW).usable()).isFalse();
+        verify(source,never()).currentNiftyOptionExpiries(any());
+    }
+
+    @Test
     void disabledSourceFailsClosedWithoutAnyOutgoingRead() {
         when(source.enabled()).thenReturn(false);
         var catalog=new UpstoxCustomerFnoExpiryCatalog(source,true);

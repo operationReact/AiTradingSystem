@@ -204,12 +204,15 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       }
       final readEnabled = capability.displayRightsVerified &&
           capability.feedConfigured && capability.sourceReady;
+      final discoveryEnabled = (capability.displayRightsVerified ||
+              capability.contractDiscoveryVerified) &&
+          capability.sourceReady;
       setState(() {
         _source = capability;
         _rightsStatus = capability.status;
         _readOnlyConfigured = readEnabled;
       });
-      if (!readEnabled) {
+      if (!discoveryEnabled) {
         return;
       }
       final listed = await widget.discovery.expiries();
@@ -229,7 +232,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         _expiries = dates;
         _expiry = dates.first;
       });
-      await _loadMarket(dates.first, expected: request);
+      // Discovery-only sessions show listed expiries without requesting prices.
+      if (_readOnlyConfigured) {
+        await _loadMarket(dates.first, expected: request);
+      }
     } catch (_) {
       if (mounted && request == _generation) {
         setState(() => _error =
@@ -343,7 +349,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       if (!_readOnlyConfigured || market == null) _unavailable(context,
           'NIFTY options data',
           'Market discovery uses the independent Upstox source. '
-          '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.',
+          '${_rightsStatus == 'CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED'
+              ? 'Expiries and contract identities are listed from the verified source. '
+                'Live prices, OI and Greeks are not authorized for display.'
+              : '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.'}',
           action: room == null || widget.onOpenRoom == null ? null : 'Open terminal',
           onTap: room == null ? null : () => widget.onOpenRoom?.call(room)),
       if (_section == 'Explore') ...[
