@@ -39,11 +39,31 @@ public class CanonicalManifestReceiptSummary {
      */
     public List<ProviderReceipt> findEligible(UUID listingId, String interval,
                                               Instant asOf, Instant usageAt) {
+        return findEligibleScoped(null, listingId, interval, asOf, usageAt);
+    }
+
+    /**
+     * Exact producer job handoff: prevents counting other jobs or dataset revisions.
+     * Result remains manifest metadata, not physical candle readback.
+     */
+    public List<ProviderReceipt> findEligibleForJob(UUID jobId, UUID listingId, String interval,
+                                                    Instant asOf, Instant usageAt) {
+        Objects.requireNonNull(jobId, "jobId");
+        return findEligibleScoped(jobId, listingId, interval, asOf, usageAt);
+    }
+
+    private List<ProviderReceipt> findEligibleScoped(UUID jobId, UUID listingId, String interval,
+                                                     Instant asOf, Instant usageAt) {
         if (listingId == null || interval == null
                 || !interval.matches("[A-Za-z0-9_]{1,24}")
                 || asOf == null || usageAt == null || asOf.isAfter(usageAt)) {
             throw new IllegalArgumentException("valid listing, interval and as-of times required");
         }
+        String jobPredicate = jobId == null ? "" : " AND j.job_id = ?";
+        var cutoff = OffsetDateTime.ofInstant(asOf, ZoneOffset.UTC);
+        Object[] args = jobId == null
+                ? new Object[] {listingId, interval, cutoff, cutoff}
+                : new Object[] {listingId, interval, cutoff, cutoff, jobId};
         List<ProviderReceipt> receipts = jdbc.query("""
                 SELECT p.provider_code, j.source_domain,
                        COUNT(DISTINCT c.chunk_id) AS verified_manifests,
@@ -72,16 +92,16 @@ public class CanonicalManifestReceiptSummary {
                           AND m.published_at >= c.last_available_at
                           AND m.published_at <= ?
                    )
+                 %s
                  GROUP BY p.provider_code, j.source_domain
                  ORDER BY p.provider_code, j.source_domain
                  LIMIT 100
-                """, (rs, row) -> new ProviderReceipt(
+                """.formatted(jobPredicate), (rs, row) -> new ProviderReceipt(
                         rs.getString("provider_code"), rs.getString("source_domain"),
                         rs.getLong("verified_manifests"), rs.getLong("verified_rows"),
                         rs.getObject("first_available_at", OffsetDateTime.class).toInstant(),
                         rs.getObject("last_available_at", OffsetDateTime.class).toInstant()),
-                listingId, interval, OffsetDateTime.ofInstant(asOf, ZoneOffset.UTC),
-                OffsetDateTime.ofInstant(asOf, ZoneOffset.UTC));
+                args);
         return receipts.stream().filter(r ->
                 rights.isPermitted(r.provider(), r.sourceDomain(),
                         GoldenSourceRightsRepository.Use.RAW_RETENTION, usageAt)
