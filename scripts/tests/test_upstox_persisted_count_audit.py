@@ -100,7 +100,18 @@ class UpstoxPersistedCountAuditTest(unittest.TestCase):
         self.assertEqual(sanitized_host_failure("",
             "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH"),
             "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH")
-        for unsafe in ("Bearer SECRET", "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH\\nsecret",
+        # A safe label in one stream must not mask unexpected content
+        # or a second conflicting label in the other stream.
+        for stdout, stderr in (
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE", "Bearer SECRET"),
+            ("Bearer SECRET", "UPSTOX_AUDIT_DATABASE_UNAVAILABLE"),
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE",
+             "UPSTOX_AUDIT_RUNTIME_IDENTITY_INVALID"),
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE", " " * 16001),
+        ):
+            self.assertEqual(sanitized_host_failure(stdout, stderr),
+                             "UPSTOX_AUDIT_HOST_CHECK_FAILED")
+        for unsafe in ("Bearer SECRET", "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH\nsecret",
                        "prefix UPSTOX_AUDIT_DATABASE_UNAVAILABLE", " " * 16001):
             self.assertEqual(sanitized_host_failure("", unsafe),
                              "UPSTOX_AUDIT_HOST_CHECK_FAILED")
