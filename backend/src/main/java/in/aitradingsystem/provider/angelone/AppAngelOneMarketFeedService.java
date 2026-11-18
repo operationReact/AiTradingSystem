@@ -119,10 +119,18 @@ public final class AppAngelOneMarketFeedService {
             }
             retryAfter = Instant.EPOCH;
         } catch (RuntimeException error) {
-            // Keep AWS and broker credential material out of exception messages.
+            // Keep AWS and broker credential material out of exception messages. The stable reason CODE
+            // (for example OWNER_SSM_ACCESS_UNAVAILABLE or a login code) is kept so operators can act on it.
             retryAfter = now.plus(RETRY_BACKOFF);
-            throw new MarketDataException("PROVIDER_UNAVAILABLE",
-                "Application market feed is unavailable");
+            throw new MarketDataException(reasonCode(error), "Application market feed is unavailable");
         }
+    }
+
+    /** Stable, secret-free reason code only. Messages and credential material are never propagated. */
+    static String reasonCode(RuntimeException error) {
+        String code = null;
+        if (error instanceof MarketDataException marketData) code = marketData.code();
+        if (error instanceof AngelOneException angel) code = angel.code();
+        return code != null && code.matches("[A-Z][A-Z0-9_]{1,59}") ? code : "PROVIDER_UNAVAILABLE";
     }
 }

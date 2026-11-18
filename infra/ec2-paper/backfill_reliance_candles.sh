@@ -113,7 +113,7 @@ for interval in INTERVALS:
     print("MINTTICK_BACKFILL_DB_EARLIEST_IST: "+after["earliest"],flush=True)
     print("MINTTICK_BACKFILL_DB_LATEST_IST: "+after["latest"],flush=True)
     error_code=run.get("errorCode")
-    if isinstance(error_code,str) and re.fullmatch(r"[A-Z_]{1,60}",error_code):
+    if isinstance(error_code,str) and re.fullmatch(r"[A-Z][A-Z0-9_]{1,59}",error_code):
         print("MINTTICK_BACKFILL_ERROR_CODE: "+error_code,flush=True)
     if status!="SUCCEEDED":
         block("BACKFILL_NOT_SUCCEEDED")
