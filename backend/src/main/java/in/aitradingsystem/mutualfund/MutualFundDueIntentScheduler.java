@@ -16,7 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
  * and payment callbacks are intentionally absent until authorization is proven.
  */
 @Component
-public final class MutualFundDueIntentScheduler {
+public class MutualFundDueIntentScheduler {
     private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
     private final JdbcClient jdbc;
     private final boolean enabled;
