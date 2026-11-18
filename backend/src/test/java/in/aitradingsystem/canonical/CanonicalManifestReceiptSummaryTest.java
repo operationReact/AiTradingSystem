@@ -81,6 +81,29 @@ class CanonicalManifestReceiptSummaryTest {
     }
 
     @Test
+    void exactProducerJobUsesBoundJobIdentityAndIndependentRights() {
+        UUID job = UUID.randomUUID();
+        var row = new CanonicalManifestReceiptSummary.ProviderReceipt(
+                "UPSTOX", "historical", 1, 50, asOf.minusSeconds(200), asOf.minusSeconds(10));
+        when(jdbc.query(anyString(),
+                org.mockito.ArgumentMatchers.<RowMapper<CanonicalManifestReceiptSummary.ProviderReceipt>>any(),
+                eq(listing), eq("DAY"), any(), any(), eq(job))).thenReturn(List.of(row));
+        when(rights.isPermitted("UPSTOX", "historical",
+                GoldenSourceRightsRepository.Use.RAW_RETENTION, usageAt)).thenReturn(true);
+        assertEquals(List.of(), summary.findEligibleForJob(job, listing, "DAY", asOf, usageAt));
+        when(rights.isPermitted("UPSTOX", "historical",
+                GoldenSourceRightsRepository.Use.MODEL_INFERENCE, usageAt)).thenReturn(true);
+        assertEquals(List.of(row), summary.findEligibleForJob(job, listing, "DAY", asOf, usageAt));
+        ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+        verify(jdbc, org.mockito.Mockito.times(2)).query(sql.capture(),
+                org.mockito.ArgumentMatchers.<RowMapper<CanonicalManifestReceiptSummary.ProviderReceipt>>any(),
+                eq(listing), eq("DAY"), any(), any(), eq(job));
+        assertTrue(sql.getValue().contains("AND j.job_id = ?"));
+        assertThrows(NullPointerException.class,
+                () -> summary.findEligibleForJob(null, listing, "DAY", asOf, usageAt));
+    }
+
+    @Test
     void invalidScopeAndFutureAsOfFailBeforeQuery() {
         assertThrows(IllegalArgumentException.class,
                 () -> summary.findEligible(listing, "DAY;DROP", asOf, usageAt));
