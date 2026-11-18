@@ -22,7 +22,7 @@ const _failedPoll = Duration(seconds: 15);
 const _overviewPoll = Duration(seconds: 30);
 const _boardPoll = Duration(seconds: 60);
 
-const _tabLabels = ['Explore', 'Movers', 'Sectors', 'Stocks'];
+const _tabLabels = ['Explore', 'Movers', 'Sectors', 'Stocks', 'F&O'];
 const _segments = ['ALL', 'LARGE', 'MID', 'SMALL', 'MICRO'];
 const _segmentChips = ['All NSE', 'Large', 'Mid', 'Small', 'Micro'];
 const _moverSorts = ['GAINERS', 'LOSERS', 'ACTIVE', 'VOLUME', 'HIGH52', 'LOW52', 'GAP_UP', 'GAP_DOWN'];
@@ -55,7 +55,8 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
     with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final TabController _tabs = TabController(length: _tabLabels.length, vsync: this);
   final TextEditingController _query = TextEditingController();
-  bool _showFno = false;
+  // F&O is a first-class Markets tab, never a hidden room-only mode.
+  bool get _showFno => _tabs.index == 4;
   bool _appActive = true;
 
   // Nifty 50 overview: index strip, fallback movers/sectors and rule screens.
@@ -534,7 +535,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
       canPop: !_showFno && _tabs.index == 0,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop && _showFno) {
-          setState(() => _showFno = false);
+          _tabs.animateTo(0);
         } else if (!didPop && _tabs.index != 0) {
           _tabs.animateTo(0);
         }
@@ -559,32 +560,7 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           ),
         ]),
         const SizedBox(height: 10),
-        Row(children: [
-          for (final product in const [('Stocks', false), ('F&O', true)])
-            Padding(padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                key: ValueKey('market-product-${product.$2 ? 'fno' : 'stocks'}'),
-                label: Text(product.$1),
-                selected: _showFno == product.$2,
-                onSelected: (_) => setState(() => _showFno = product.$2),
-              )),
-        ]),
-        if (_showFno) ...[
-          const SizedBox(height: 7),
-          if (widget.rooms != null && widget.fnoDiscovery != null &&
-              widget.onOpenFnoRoom != null &&
-              widget.onCreateFnoRoom != null)
-            MintTickFnoDiscoveryPage(
-              key: const ValueKey('customer-fno-discovery'),
-              rooms: widget.rooms!, discovery: widget.fnoDiscovery!,
-              onOpenRoom: widget.onOpenFnoRoom!,
-              onCreateRoom: widget.onCreateFnoRoom!,
-            )
-          else const MintTickInfoText(
-            'F&O discovery needs an authenticated Trading Room.',
-            icon: Icons.lock_outline_rounded),
-        ] else ...[
-        ..._indexStrip(),
+        if (!_showFno) ..._indexStrip(),
         const SizedBox(height: 6),
         TabBar(
           key: const ValueKey('customer-market-tabs'),
@@ -592,17 +568,32 @@ class _MintTickCustomerMarketPageState extends State<MintTickCustomerMarketPage>
           isScrollable: false,
           dividerColor: scheme.outlineVariant,
           labelPadding: EdgeInsets.zero,
-          labelStyle: theme.textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w800),
-          tabs: [for (final label in _tabLabels) Tab(text: label, height: 40)],
+          labelStyle: theme.textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.w800),
+          tabs: [for (final label in _tabLabels) Tab(text: label, height: 42)],
         ),
-        const SizedBox(height: 4),
-        ...switch (_tabs.index) {
-          0 => _exploreTab(),
-          1 => _moversTab(),
-          2 => _sectorsTab(),
-          _ => _stocksTab(),
-        },
+        const SizedBox(height: 6),
+        if (_showFno) ...[
+          if (widget.fnoDiscovery != null)
+            MintTickFnoDiscoveryPage(
+              key: const ValueKey('customer-fno-discovery'),
+              discovery: widget.fnoDiscovery!,
+              rooms: widget.rooms,
+              onOpenRoom: widget.onOpenFnoRoom,
+              onCreateRoom: widget.onCreateFnoRoom,
+            )
+          else const MintTickInfoText(
+            'Sign in to view F&O source status and verified NSE contracts.',
+            icon: Icons.lock_outline_rounded),
+        ] else ...[
+          ...switch (_tabs.index) {
+            0 => _exploreTab(),
+            1 => _moversTab(),
+            2 => _sectorsTab(),
+            _ => _stocksTab(),
+          },
         ],
+
       ]),
     );
   }

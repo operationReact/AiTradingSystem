@@ -12,17 +12,17 @@ import 'minttick_customer_widgets.dart';
 /// segments never display synthetic prices or recommendations.
 class MintTickFnoDiscoveryPage extends StatefulWidget {
   const MintTickFnoDiscoveryPage({
-    required this.rooms,
     required this.discovery,
-    required this.onOpenRoom,
-    required this.onCreateRoom,
+    this.rooms,
+    this.onOpenRoom,
+    this.onCreateRoom,
     super.key,
   });
 
-  final TradingRoomDraftStore rooms;
+  final TradingRoomDraftStore? rooms;
   final CustomerFnoDiscoveryRepository discovery;
-  final ValueChanged<TradingRoomDraft> onOpenRoom;
-  final VoidCallback onCreateRoom;
+  final ValueChanged<TradingRoomDraft>? onOpenRoom;
+  final VoidCallback? onCreateRoom;
 
   @override
   State<MintTickFnoDiscoveryPage> createState() => _MintTickFnoDiscoveryPageState();
@@ -105,9 +105,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   int _tickCount = 0;
   CustomerFnoDiscoveryCapability? _source;
 
-  List<TradingRoomDraft> get _availableRooms => widget.rooms.drafts
+  List<TradingRoomDraft> get _availableRooms => widget.rooms?.drafts
       .where((r) => (r.marketScope == 'FNO' || r.marketScope == 'ALL') &&
-          (r.mode == 'PAPER' || r.mode == 'LIVE')).toList();
+          (r.mode == 'PAPER' || r.mode == 'LIVE')).toList() ?? const [];
 
   TradingRoomDraft? get _room {
     for (final room in _availableRooms) {
@@ -121,7 +121,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   @override
   void initState() {
     super.initState();
-    widget.rooms.addListener(_onRoomsChanged);
+    widget.rooms?.addListener(_onRoomsChanged);
     WidgetsBinding.instance.addObserver(this);
     _quoteTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!_appActive || !mounted || _loading || _polling) return;
@@ -139,10 +139,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         return;
       }
       unawaited(_refresh());
-      if (!widget.rooms.loaded) {
-        unawaited(widget.rooms.load());
-      } else {
-        _onRoomsChanged();
+      final rooms = widget.rooms;
+      if (rooms != null) {
+        if (!rooms.loaded) {
+          unawaited(rooms.load());
+        } else {
+          _onRoomsChanged();
+        }
       }
     });
   }
@@ -152,7 +155,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     _generation++;
     _quoteTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    widget.rooms.removeListener(_onRoomsChanged);
+    widget.rooms?.removeListener(_onRoomsChanged);
     super.dispose();
   }
 
@@ -341,8 +344,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           'NIFTY options data',
           'Market discovery uses the independent Upstox source. '
           '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.',
-          action: room == null ? null : 'Open terminal',
-          onTap: room == null ? null : () => widget.onOpenRoom(room)),
+          action: room == null || widget.onOpenRoom == null ? null : 'Open terminal',
+          onTap: room == null ? null : () => widget.onOpenRoom?.call(room)),
       if (_section == 'Explore') ...[
         _marketIntro(context, room, market),
         _expirySection(context),
@@ -444,9 +447,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             : 'Contract metadata retrieved: ${_time(market!.snapshotAt)} · '
               'exchange-timed quotes validated separately',
           style: Theme.of(context).textTheme.bodySmall),
-        if (room != null) Align(alignment: Alignment.centerRight,
+        if (room != null && widget.onOpenRoom != null) Align(alignment: Alignment.centerRight,
           child: TextButton.icon(
-            onPressed: () => widget.onOpenRoom(room),
+            onPressed: () => widget.onOpenRoom?.call(room),
             icon: const Icon(Icons.open_in_new, size: 15),
             label: const Text('Open trading terminal'),
           )),
@@ -677,7 +680,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         FilledButton.icon(
           key: const ValueKey('fno-discovery-open-terminal'),
           onPressed: room == null ? widget.onCreateRoom
-              : () => widget.onOpenRoom(room),
+              : widget.onOpenRoom == null ? null
+              : () => widget.onOpenRoom?.call(room),
           icon: const Icon(Icons.candlestick_chart_rounded),
           label: Text(room == null ? 'Create F&O room' : 'Open trading terminal'),
         ),
