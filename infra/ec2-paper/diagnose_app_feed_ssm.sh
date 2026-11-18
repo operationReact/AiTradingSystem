@@ -74,11 +74,12 @@ except Exception:
 compose=pathlib.Path("/opt/aitradingsystem-paper/paper-compose.yml").read_text()
 registered=[l.split(":",1)[1].strip().strip('"') for l in compose.splitlines() if "ANGELONE_CLIENT_PUBLIC_IP" in l]
 marker("HOST_PUBLIC_IP_REGISTERED","PASS" if host_ip and registered and host_ip==registered[0] else "FAIL")
-runtime=pathlib.Path("/opt/aitradingsystem-paper/runtime.env")
+# The compose stack reads .env, which run_paper.sh builds from runtime.env plus the host NIC MAC.
+envfile=pathlib.Path("/opt/aitradingsystem-paper/.env")
 mac_set=False
 try:
     mac_set=any(l.startswith("ANGELONE_CLIENT_MAC_ADDRESS=") and len(l.split("=",1)[1].strip())>0
-                for l in runtime.read_text().splitlines())
+                for l in envfile.read_text().splitlines())
 except OSError:
     pass
 marker("CLIENT_MAC_ADDRESS_CONFIGURED","PASS" if mac_set else "FAIL")
