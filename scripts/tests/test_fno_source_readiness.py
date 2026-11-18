@@ -10,7 +10,7 @@ from fno_source_readiness import validate_response, expected_request, sanitized_
 def valid():
     return {
         "status": "READS_VERIFIED", "underlyingKey": "NSE_INDEX|Nifty 50",
-        "expiry": "2099-11-17", "validatedContracts": 130,
+        "expiry": "2026-11-25", "validatedContracts": 130,
         "validatedStrikes": 65, "callsWithContract": 65,
         "putsWithContract": 65, "rowsWithCompleteGreeks": 57,
         "observedAt": "2026-11-14T10:00:00Z",
@@ -81,12 +81,12 @@ class FnoSourceReadinessTest(unittest.TestCase):
     def test_safe_partial_and_disabled_receipts_are_reported_without_secret(self):
         sample=("some secret Bearer abcdef\n"
                 "MINTTICK_FNO_SOURCE:status=DISABLED contracts=0 strikes=0 "
-                "calls=0 puts=0 greeks=0 expiry=2099-11-17 stored=false rights=false\n"
+                "calls=0 puts=0 greeks=0 expiry=2026-11-25 stored=false rights=false\n"
                 "raw provider secret")
         parsed=sanitized_source_receipt(sample)
         self.assertEqual(parsed,
             "status=DISABLED contracts=0 strikes=0 calls=0 puts=0 greeks=0 "
-            "expiry=2099-11-17 stored=false rights=false")
+            "expiry=2026-11-25 stored=false rights=false")
         self.assertNotIn("secret",parsed)
         self.assertNotIn("Bearer",parsed)
         sample=sample.replace("status=DISABLED","status=PARTIAL_DATA")
@@ -95,7 +95,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
     def test_unsafe_receipts_are_suppressed(self):
         good=("MINTTICK_FNO_SOURCE:status=READS_VERIFIED contracts=130 "
               "strikes=65 calls=65 puts=65 greeks=57 "
-              "expiry=2099-11-17 stored=false rights=false")
+              "expiry=2026-11-25 stored=false rights=false")
         self.assertIsNotNone(sanitized_source_receipt(good))
         for invalid in (good+"\n"+good,
                         good.replace("contracts=130","contracts=99999999"),
@@ -123,7 +123,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
             self.assertEqual(validate_response(v)[0],status)
             line=("Bearer private-secret\n"
                 +f"MINTTICK_FNO_SOURCE:status={status} contracts=0 strikes=0 "
-                "calls=0 puts=0 greeks=0 expiry=2099-11-17 stored=false rights=false\n"
+                "calls=0 puts=0 greeks=0 expiry=2026-11-25 stored=false rights=false\n"
                 "private-secret")
             result=sanitized_source_receipt(line)
             self.assertIn("status="+status,result)
