@@ -24,6 +24,10 @@ import software.amazon.awssdk.services.lambda.model.InvokeResponse;
 @Component
 @ConditionalOnProperty(prefix = "app.market-data", name = "provider", havingValue = "ANGEL_ONE_LAMBDA")
 public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
+
+    /** Stable reason codes the market-feed Lambda returns that the backend may report as-is. */
+    static final java.util.Set<String> PASSTHROUGH_CODES = java.util.Set.of(
+            "PROVIDER_REJECTED", "PROVIDER_INVALID_RESPONSE", "INTERNAL_FAILURE", "PROVIDER_INVALID_REQUEST");
     private final LambdaClient lambda;
     private final ObjectMapper mapper;
     private final HistoricalCandleParser parser;
@@ -74,6 +78,16 @@ public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
         return parser.parse(rows);
     }
 
+    /** Secret-free invoke failure code from the exception CLASS only, never the message. */
+    static String invokeCode(software.amazon.awssdk.services.lambda.model.LambdaException ex) {
+        String name = ex.getClass().getSimpleName();
+        if (name.contains("AccessDenied")) return "PROVIDER_INVOKE_ACCESS_DENIED";
+        if (name.contains("ResourceNotFound")) return "PROVIDER_INVOKE_NOT_FOUND";
+        if (name.contains("TooManyRequests") || name.contains("Throttl")) return "PROVIDER_INVOKE_THROTTLED";
+        if (name.contains("InvalidParameter")) return "PROVIDER_INVOKE_INVALID_REQUEST";
+        return "PROVIDER_INVOKE_FAILED";
+    }
+
     private JsonNode invoke(Map<String, String> request) {
         final byte[] payload;
         try {
@@ -86,12 +100,19 @@ public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
             response = lambda.invoke(InvokeRequest.builder().functionName(functionName)
                     .invocationType(InvocationType.REQUEST_RESPONSE)
                     .payload(SdkBytes.fromByteArray(payload)).build());
+        } catch (software.amazon.awssdk.services.lambda.model.LambdaException ex) {
+            throw new MarketDataException(invokeCode(ex), "Market-data provider invoke failed");
         } catch (SdkException ex) {
-            throw new MarketDataException("PROVIDER_UNAVAILABLE", "Market-data provider is unavailable");
+            throw new MarketDataException("PROVIDER_INVOKE_FAILED", "Market-data provider invoke failed");
         }
-        if (response.statusCode() == null || response.statusCode() != 200
-                || response.functionError() != null || response.payload() == null) {
-            throw new MarketDataException("PROVIDER_UNAVAILABLE", "Market-data provider is unavailable");
+        if (response.statusCode() == null || response.statusCode() != 200) {
+            throw new MarketDataException("PROVIDER_INVOKE_STATUS", "Market-data provider invoke returned a status");
+        }
+        if (response.functionError() != null) {
+            throw new MarketDataException("PROVIDER_FUNCTION_ERROR", "Market-data provider function failed");
+        }
+        if (response.payload() == null) {
+            throw new MarketDataException("PROVIDER_INVALID_RESPONSE", "Market-data provider returned no payload");
         }
         try {
             JsonNode root = mapper.readTree(response.payload().asByteArray());
@@ -105,6 +126,11 @@ public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
                         || "INVALID_TOTP_CONFIGURATION".equals(code)
                         || "SSM_UNAVAILABLE".equals(code)) {
                     throw new MarketDataException("PROVIDER_NOT_CONFIGURED", "Market-data configuration is unavailable");
+                }
+                // Known, secret-free Lambda reason codes are kept so the operator can see the failing layer.
+                // Anything unrecognised stays the generic code. The Lambda's messages are never propagated.
+                if (PASSTHROUGH_CODES.contains(code)) {
+                    throw new MarketDataException(code, "Market-data provider reported " + code);
                 }
                 throw new MarketDataException("PROVIDER_UNAVAILABLE", "Market-data provider is unavailable");
             }
