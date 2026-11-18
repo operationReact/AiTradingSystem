@@ -15,21 +15,21 @@ Official sources:
 - https://www.nseindia.in/static/products-services/about-nmf-platform-key-benefits
 - https://www.nseindia.in/static/products-services/about-nmf-getting-on-to
 - https://www.bsestarmf.in/APIFileStructure.pdf (historical version 3.5; revalidate current scheme before integration)
-- https://docs.fintechprimitives.com/mf-transactions/recurring-purchases/
+- https://docs.fintechprimitives.com/mf-transactions/purchase-plans/create-monthly-sip/
 - https://docs.fintechprimitives.com/mf-transactions/onetime-purchases/
 - https://docs.fintechprimitives.com/payments/overview
 - https://upstox.com/developer/api-documentation/announcements/mutual-fund-apis/
 
-**Payment detail:** FP's generic payment overview lists UPI AutoPay/eNACH. Its recurring SIP guide currently specifically describes the provider-managed NACH flow. Confirm UPI AutoPay availability with the actual contracted SIP API, not just the generic payment page. Never claim Razorpay subscription payment is a settled mutual-fund purchase.
+**Payment detail:** FP V2 documents `POST /v2/mf_purchase_plans` (monthly/systematic, `payment_method=mandate`, `payment_source=<approved mandate ID>`), `GET /v2/mf_purchases?plan=<planId>` for installments, and `POST /v2/mf_purchase_plans/<planId>/skip_instructions` for supported pause cases. The older V1 SIP guide specifies NACH-only payments; V2 mandate/UPI-AutoPay eligibility depends on the actual contracted gateway and scheme. FP specifically notes pause is not supported for BSE SIPs. Never claim a Razorpay subscription payment alone is a settled mutual-fund purchase.
 
 ## Real, end-to-end recurring SIP (future provider integration)
 
 1. Customer explicitly chooses an available fund scheme and amount. Validate provider's scheme eligibility, scheme ID/ISIN, minimum SIP, direct/regular plan, growth/distribution option, NAV/holiday rules.
 2. Complete investor KYC and provider investor/investment-account registration. Verify ownership of investor bank account using the approved provider's TPV and other controls. Store tokenized references only.
 3. Customer authorizes a mandate in provider's hosted/authenticated flow. Verify provider status using signed webhook or server-to-server fetch. Do **not** treat browser redirect as success.
-4. Create the recurring SIP with the provider's SIP create API using registered investor, scheme, schedule, mandate and explicit consent. Record immutable provider SIP ID, consent receipt and current state. Provider-managed SIP execution is authoritative; **do not** independently create a second monthly debit/order.
+4. For FP V2, call `POST /v2/mf_purchase_plans` with verified `mf_investment_account`, `scheme`, amount, installment day, `frequency=monthly`, `systematic=true`, `payment_method=mandate`, `payment_source` and consent; use the exchange partner's corresponding API when applicable. Record immutable provider SIP ID, consent receipt and current state. Provider-managed SIP execution is authoritative; **do not** independently create a second monthly debit/order.
 5. Reconcile individual installment ID, payment ID, purchase order ID, exchange/AMC status, folio, actual units and actual NAV. Record partial, rejected, returned, delayed and refund states separately. Only show ALLOTTED after provider confirms units.
-6. Pause/cancel/resume/change amount MUST call the provider and await acknowledgement. A local PAUSED flag without remote confirmation cannot stop a mandate debit.
+6. Pause/cancel/resume/change amount MUST call the provider and await acknowledgement. FP pause requires a skip instruction, and its public docs say that feature is not supported for BSE SIPs. A local PAUSED flag without remote confirmation cannot stop a mandate debit.
 7. Use broker Upstox holdings only as a separate, read-only reconciliation surface; never claim they are MintTick's executed orders.
 
 ## Additional dip-buy / occasional automatic lumpsum
