@@ -50,6 +50,29 @@ void main() {
     expect(MintTickFnoDiscoveryFacts.optionLegs(market, 'FUT'), isEmpty);
   });
 
+  test('All CE + PE reveals every source-listed contract without filtering', () {
+    final market = _market();
+    final all = MintTickFnoDiscoveryFacts.optionLegs(market, 'ALL');
+    expect(all, hasLength(2));
+    expect(all.map((l) => l.side).toList(), ['CE', 'PE']);
+    expect(all.every((l) => l.instrumentKey.startsWith('NSE_FO|')), isTrue);
+    expect(all.every((l) => l.lotSize == 65), isTrue);
+  });
+
+  test('All metric cards require genuine 15s exchange-time freshness', () {
+    final market = _market();
+    final fresh = MintTickFnoDiscoveryFacts.freshLegs(
+        market, DateTime.parse('2026-11-17T08:00:08Z'));
+    expect(fresh, hasLength(2));
+    expect(fresh.first.openInterest, 1200);
+    expect(fresh.first.previousClose, 100);
+    expect(fresh.first.ltp, 110);
+    expect(MintTickFnoDiscoveryFacts.freshLegs(
+        market, DateTime.parse('2026-11-17T08:00:17Z')), isEmpty);
+    expect(MintTickFnoDiscoveryFacts.freshLegs(
+        _market(fresh: false), DateTime.parse('2026-11-17T08:00:08Z')), isEmpty);
+  });
+
   test('close-to-close changes only appear for fresh verified V3 quotes', () {
     final market = _market();
     final changes = MintTickFnoDiscoveryFacts.previousCloseMovers(market);
