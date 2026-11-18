@@ -2,11 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/data/instrument_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/data/customer_market_repository.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_fno_discovery_repository.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_customer_market_page.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_equity_avatar.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_market_components.dart';
 import 'package:trading_client/src/features/trading_rooms/presentation/minttick_stock_detail_page.dart';
 import 'package:trading_client/src/theme/app_theme.dart';
+
+class _FnoSourceUnavailable extends Fake implements CustomerFnoDiscoveryRepository {
+  @override
+  Future<CustomerFnoDiscoveryCapability> capability() async =>
+      const CustomerFnoDiscoveryCapability(
+        displayRightsVerified: false, feedConfigured: true,
+        sourceReady: true, marketOpen: true,
+        status: 'DISPLAY_RIGHTS_NOT_VERIFIED', streamState: 'STOPPED',
+        freshExchangeTimedQuotes: 0);
+}
 
 Map<String, dynamic> _mover(String symbol, String name, String sector, num ltp, num previousClose,
     num changePct, num gapPct) => {
@@ -757,6 +768,29 @@ void main() {
     await tester.tap(find.text('Explore'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Sign in to view F&O source status'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('F&O source discovery renders with no Trading Room or broker callbacks',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 1400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(
+        repository: _CustomerMarketFake(),
+        fnoDiscovery: _FnoSourceUnavailable(),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('F&O'));
+    await tester.pumpAndSettle();
+    expect(find.text('F&O · Discover'), findsOneWidget);
+    expect(find.textContaining('TRADING TERMINAL · OPTIONAL'), findsOneWidget);
+    expect(find.text('Market discovery works without a room.'), findsOneWidget);
+    expect(find.textContaining('DISPLAY RIGHTS NOT VERIFIED'), findsWidgets);
+    expect(find.textContaining('No verified option contracts available'), findsWidgets);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
