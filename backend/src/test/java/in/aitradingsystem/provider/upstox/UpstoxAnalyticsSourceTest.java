@@ -195,6 +195,21 @@ class UpstoxAnalyticsSourceTest {
     }
 
     @Test
+    void historicalThrottleIsClassifiedWithoutRetryOrProviderDetails() {
+        token();
+        server.expect(requestTo(org.hamcrest.Matchers.containsString("/v3/historical-candle/")))
+                .andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS)
+                        .header("Retry-After", "60")
+                        .body("unit-test-only private upstream response"));
+        var day = java.time.LocalDate.parse("2026-11-09");
+        assertThatThrownBy(() -> source.dailyEquityCandles("NSE_EQ|INE002A01018", day, day))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("UPSTOX_RATE_LIMITED")
+                .hasNoCause();
+        server.verify();
+    }
+
+    @Test
     void probeCooldownAndNonTradingGuarantee() {
         var clock = Clock.fixed(Instant.parse("2026-11-11T08:00:00Z"), ZoneOffset.UTC);
         var unavailable = new UpstoxAnalyticsSource(false, ssm, builder.build());
