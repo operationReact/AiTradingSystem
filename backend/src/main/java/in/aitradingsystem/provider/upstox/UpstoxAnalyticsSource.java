@@ -106,6 +106,8 @@ public final class UpstoxAnalyticsSource {
         }
         List<Candle> candles = new ArrayList<>();
         Set<Instant> times = new HashSet<>();
+        Instant previousProviderTime = null;
+        int providerDirection = 0;
         for (JsonNode row : data) {
             if (!row.isArray() || row.size() != 7) throw unavailable("UPSTOX_INVALID_CANDLES");
             try {
@@ -123,6 +125,15 @@ public final class UpstoxAnalyticsSource {
                         || high.compareTo(low) < 0 || high.compareTo(open) < 0
                         || high.compareTo(close) < 0 || low.compareTo(open) > 0
                         || low.compareTo(close) > 0) throw unavailable("UPSTOX_INVALID_CANDLES");
+                // Upstox may return newest-first. Preserve the original order long
+                // enough to reject a mixed/oscillating response before normalizing.
+                if (previousProviderTime != null) {
+                    int direction = Integer.signum(at.compareTo(previousProviderTime));
+                    if (direction == 0 || (providerDirection != 0 && direction != providerDirection))
+                        throw unavailable("UPSTOX_INVALID_CANDLES");
+                    providerDirection = direction;
+                }
+                previousProviderTime = at;
                 candles.add(new Candle(at, open, high, low, close, volume, oi));
             } catch (RuntimeException ex) {
                 throw unavailable("UPSTOX_INVALID_CANDLES");
