@@ -8,8 +8,12 @@
   "instrument_id": 417378,
   "symbol": "RELIANCE-EQ",
   "exchange": "NSE",
-  "intervals": ["FIVE_MINUTE", "ONE_DAY"],
+  "intervals": [
+    "FIVE_MINUTE",
+    "ONE_DAY"
+  ],
   "from_date": "2026-11-03",
   "to_date": "2026-11-17",
-  "authorization": "USER_APPROVED_RELIANCE_CANDLE_BACKFILL_2026-11-18"
+  "authorization": "USER_APPROVED_RELIANCE_CANDLE_BACKFILL_2026-11-18",
+  "attempt": 2
 }
