@@ -6,6 +6,7 @@ import in.aitradingsystem.marketdata.HistoricalCandleInterval;
 import in.aitradingsystem.marketdata.MarketLastTickStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.mind.MindCapabilityProgressService.EventType;
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
 import in.aitradingsystem.strategy.StrategyEvaluation;
 import in.aitradingsystem.strategy.StrategyService;
 import in.aitradingsystem.strategy.StrategySignal;
@@ -105,6 +106,7 @@ public class MindPaperCycleService {
     private final MarketLastTickStore ticks;
     private final MarketSessionCalendar calendar;
     private final MindCapabilityProgressService progress;
+    private final AppAngelOneMarketFeedService liveFeed;
     private final Clock clock;
     private final Set<String> permittedSources;
 
@@ -113,7 +115,9 @@ public class MindPaperCycleService {
             StrategyService strategies, CustomerPaperOrderService orders,
             CustomerPaperWalletService wallets, MarketLastTickStore ticks,
             MarketSessionCalendar calendar, MindCapabilityProgressService progress, Clock clock,
+            AppAngelOneMarketFeedService liveFeed,
             @Value("${app.mind.paper.permitted-candle-sources:ANGEL_ONE_SMARTAPI}") String permittedSources) {
+        this.liveFeed = liveFeed;
         this.jdbc = jdbc;
         this.instruments = instruments;
         this.strategies = strategies;
@@ -189,7 +193,7 @@ public class MindPaperCycleService {
         String side;
         if (held != null && held.quantity() > 0) {
             Protective protective = lastEntryProtection(owner, roomId, instrumentId);
-            MarketLastTickStore.LastTick preview = freshTick(instrumentId, now);
+            MarketLastTickStore.LastTick preview = freshTick(instrument, now);
             boolean trendBroken = !"BUY".equals(signal.action())
                 && (signal.reasonCodes().contains("CLOSE_NOT_ABOVE_SLOW_SMA")
                     || signal.reasonCodes().contains("TREND_NOT_BULLISH"));
@@ -235,6 +239,15 @@ public class MindPaperCycleService {
         // 3a. Kill switch: the global PAPER emergency stop and a cumulative drawdown limit block NEW entries.
         // Exits are never blocked by this gate, so a halted account can still close positions.
         if ("BUY".equals(side)) {
+            String mismatch = ledgerReconciliationReason(owner, roomId);
+            if (mismatch != null) {
+                d.stage("RECONCILIATION", "BLOCKED", mismatch);
+                d.reasons.add(mismatch.split(":", 2)[0]);
+                return finish(owner, roomId, requestKey, instrumentId, interval, d, Outcome.NO_ENTRY, null);
+            }
+            d.stage("RECONCILIATION", "PASSED", "Virtual wallet agrees with its full PAPER cash ledger");
+        }
+        if ("BUY".equals(side)) {
             String halt = killSwitchReason(owner, roomId);
             if (halt != null) {
                 d.stage("KILL_SWITCH", "BLOCKED", halt);
@@ -243,7 +256,7 @@ public class MindPaperCycleService {
             }
             d.stage("KILL_SWITCH", "PASSED", "No global emergency stop; drawdown within limit");
         }
-        MarketLastTickStore.LastTick tick = freshTick(instrumentId, now);
+        MarketLastTickStore.LastTick tick = freshTick(instrument, now);
         if (tick == null) {
             d.stage("QUOTE", "BLOCKED", "No verified tick within 15s");
             d.reasons.add("FRESH_QUOTE_UNAVAILABLE");
@@ -367,6 +380,51 @@ public class MindPaperCycleService {
 
     // ------------------------------------------------------------------ policy
 
+    /**
+     * STR-232 PAPER ledger reconciliation (no LIVE broker exists to reconcile against). Reads the full
+     * cash-event history, not the truncated customer view, and fails closed when the wallet and ledger disagree.
+     */
+    String ledgerReconciliationReason(UUID owner, UUID roomId) {
+        CustomerPaperWalletService.PaperWallet wallet = wallets.get(owner, roomId);
+        List<long[]> events = jdbc.sql("""
+                SELECT cash_delta_paise, cash_after_paise
+                FROM customer_paper_cash_event
+                WHERE user_id = :owner AND room_id = :room
+                ORDER BY created_at ASC, id ASC
+                """)
+            .param("owner", owner).param("room", roomId)
+            .query((rs, row) -> new long[] {rs.getLong("cash_delta_paise"), rs.getLong("cash_after_paise")})
+            .list();
+        return ledgerMismatch(wallet.initialCashPaise(), wallet.availableCashPaise(), events);
+    }
+
+    /**
+     * Pure ledger rule. events are {deltaPaise, cashAfterPaise} in chronological order, starting from zero.
+     * Returns null when every step adds its delta, the first allocation equals the initial cash, and the last
+     * balance equals available cash.
+     */
+    static String ledgerMismatch(long initialCashPaise, long availableCashPaise, List<long[]> events) {
+        // An activated PAPER account always has its INITIAL_PAPER_ALLOCATION event (delta = cash_after = initial).
+        // An empty ledger therefore cannot reconcile against a funded wallet and fails closed.
+        if (events.isEmpty()) {
+            return "LEDGER_MISMATCH: no cash events recorded for this PAPER room";
+        }
+        long previous = 0L;
+        for (long[] event : events) {
+            if (previous + event[0] != event[1]) {
+                return "LEDGER_MISMATCH: a cash event does not follow the previous balance";
+            }
+            previous = event[1];
+        }
+        if (previous != availableCashPaise) {
+            return "LEDGER_MISMATCH: ledger balance differs from the wallet balance";
+        }
+        if (events.get(0)[1] != initialCashPaise) {
+            return "LEDGER_MISMATCH: the allocation does not equal the initial PAPER cash";
+        }
+        return null;
+    }
+
     /** Returns the blocking reason for new entries, or null when entries may proceed. Fails closed on read errors. */
     String killSwitchReason(UUID owner, UUID roomId) {
         Boolean halted = jdbc.sql("SELECT new_orders_halted FROM trading_control WHERE id = 1")
@@ -447,7 +505,17 @@ public class MindPaperCycleService {
         return price.divide(tick, 0, RoundingMode.FLOOR).multiply(tick).setScale(Math.min(4, tick.scale()), RoundingMode.UNNECESSARY);
     }
 
-    private MarketLastTickStore.LastTick freshTick(long instrumentId, Instant now) {
+    MarketLastTickStore.LastTick freshTick(Instrument instrument, Instant now) {
+        MarketLastTickStore.LastTick tick = storedFreshTick(instrument.id(), now);
+        if (tick != null) return tick;
+        // The Mind quote gate uses the authorized application-owned live feed (SSM-backed SmartAPI session),
+        // never a customer broker session. Any verified LIVE quote is recorded through the SAME store and
+        // then judged by the SAME freshness rules below, so there is one quote path and no synthetic price.
+        recordApplicationLiveQuote(instrument);
+        return storedFreshTick(instrument.id(), now);
+    }
+
+    private MarketLastTickStore.LastTick storedFreshTick(long instrumentId, Instant now) {
         MarketLastTickStore.LastTick tick = ticks.lastFor(List.of(instrumentId)).get(instrumentId);
         if (tick == null || tick.ltp() == null || tick.ltp().signum() <= 0 || tick.exchangeAt() == null
                 || tick.exchangeAt().isAfter(now.plusSeconds(2))
@@ -456,6 +524,20 @@ public class MindPaperCycleService {
             return null;
         }
         return tick;
+    }
+
+    private void recordApplicationLiveQuote(Instrument instrument) {
+        if (liveFeed == null || !liveFeed.available()) return;
+        try {
+            var quote = liveFeed.live(instrument);
+            if (quote != null && "LIVE".equals(quote.status())) {
+                ticks.recordLive(List.of(quote));
+            }
+        } catch (RuntimeException ex) {
+            // Provider or session failure is not a price. The cycle stays blocked with FRESH_QUOTE_UNAVAILABLE.
+            log.warn("Mind PAPER quote unavailable from the application feed: {} {}", instrument.tradingSymbol(),
+                ex.getClass().getSimpleName());
+        }
     }
 
     private record Protective(BigDecimal stop, BigDecimal target) {}
