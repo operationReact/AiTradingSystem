@@ -70,7 +70,7 @@ jobs:
               "application":"MintTick", "environment":"paper",
               "aws_account":"098859530205", "region":"ap-south-1",
               "instance_id":"i-09c01b470fb39b85a",
-              "operation":"read-only-app-feed-ssm-format-diagnostic", "read_only":True,
+              "operation":"read-only-app-feed-ssm-format-diagnostic", "read_only":True, "run":2,
               "authorization":"USER_APPROVED_READ_ONLY_DIAGNOSTIC_2026-11-18",
           }, "Unapproved diagnostic request"
           print("PASS: exact read-only diagnostic request")
