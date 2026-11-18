@@ -10,7 +10,7 @@ from fno_source_readiness import validate_response, expected_request, sanitized_
 def valid():
     return {
         "status": "READS_VERIFIED", "underlyingKey": "NSE_INDEX|Nifty 50",
-        "expiry": "2026-11-17", "validatedContracts": 130,
+        "expiry": "2099-11-17", "validatedContracts": 130,
         "validatedStrikes": 65, "callsWithContract": 65,
         "putsWithContract": 65, "rowsWithCompleteGreeks": 57,
         "observedAt": "2026-11-14T10:00:00Z",
@@ -23,16 +23,16 @@ def valid():
 class FnoSourceReadinessTest(unittest.TestCase):
     def test_only_exact_read_only_owner_request(self):
         d=expected_request()
-        self.assertEqual(d["expiry"],"2026-11-17")
+        self.assertNotIn("expiry",d)
         self.assertEqual(d["underlying"],"NSE_INDEX|Nifty 50")
         self.assertEqual(d["environment"],"PAPER")
-        self.assertEqual(d["operation"],"probe-upstox-nifty-options-read-only")
+        self.assertEqual(d["operation"],"probe-upstox-nifty-nearest-listed-expiry-read-only")
         self.assertEqual(d["backend_release"],
-                         "7d1fd416b12e8d73438a4eab3cc09f3065ae7efc")
-        self.assertEqual(len(d),10)
+                         "203e2ccf08ee14333369bab18ef6470dff27986b")
+        self.assertEqual(len(d),9)
 
     def test_counts_are_accepted_without_any_quote_values(self):
-        status, contracts, strikes, calls, puts, greeks=validate_response(valid())
+        status, contracts, strikes, calls, puts, greeks, expiry=validate_response(valid())
         self.assertEqual(status,"READS_VERIFIED")
         self.assertEqual((contracts,strikes,calls,puts,greeks),(130,65,65,65,57))
 
@@ -49,10 +49,10 @@ class FnoSourceReadinessTest(unittest.TestCase):
             validate_response(v)
 
     def test_missing_expiry_and_unexpected_underlying_rejected(self):
-        for value in ("2026-11-19",None,"2026-11-16"):
+        for value in ("2020-11-19",None,"not-a-date"):
             v=valid()
             v["expiry"]=value
-            with self.assertRaisesRegex(ValueError,"FNO_INVALID_PROVIDER_IDENTITY"):
+            with self.assertRaisesRegex(ValueError,"FNO_INVALID_PROVIDER_EXPIRY"):
                 validate_response(v)
         v=valid()
         v["underlyingKey"]="BSE_INDEX|SENSEX"
@@ -81,12 +81,12 @@ class FnoSourceReadinessTest(unittest.TestCase):
     def test_safe_partial_and_disabled_receipts_are_reported_without_secret(self):
         sample=("some secret Bearer abcdef\n"
                 "MINTTICK_FNO_SOURCE:status=DISABLED contracts=0 strikes=0 "
-                "calls=0 puts=0 greeks=0 expiry=2026-11-17 stored=false rights=false\n"
+                "calls=0 puts=0 greeks=0 expiry=2099-11-17 stored=false rights=false\n"
                 "raw provider secret")
         parsed=sanitized_source_receipt(sample)
         self.assertEqual(parsed,
             "status=DISABLED contracts=0 strikes=0 calls=0 puts=0 greeks=0 "
-            "expiry=2026-11-17 stored=false rights=false")
+            "expiry=2099-11-17 stored=false rights=false")
         self.assertNotIn("secret",parsed)
         self.assertNotIn("Bearer",parsed)
         sample=sample.replace("status=DISABLED","status=PARTIAL_DATA")
@@ -95,7 +95,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
     def test_unsafe_receipts_are_suppressed(self):
         good=("MINTTICK_FNO_SOURCE:status=READS_VERIFIED contracts=130 "
               "strikes=65 calls=65 puts=65 greeks=57 "
-              "expiry=2026-11-17 stored=false rights=false")
+              "expiry=2099-11-17 stored=false rights=false")
         self.assertIsNotNone(sanitized_source_receipt(good))
         for invalid in (good+"\n"+good,
                         good.replace("contracts=130","contracts=99999999"),
@@ -123,7 +123,7 @@ class FnoSourceReadinessTest(unittest.TestCase):
             self.assertEqual(validate_response(v)[0],status)
             line=("Bearer private-secret\n"
                 +f"MINTTICK_FNO_SOURCE:status={status} contracts=0 strikes=0 "
-                "calls=0 puts=0 greeks=0 expiry=2026-11-17 stored=false rights=false\n"
+                "calls=0 puts=0 greeks=0 expiry=2099-11-17 stored=false rights=false\n"
                 "private-secret")
             result=sanitized_source_receipt(line)
             self.assertIn("status="+status,result)
