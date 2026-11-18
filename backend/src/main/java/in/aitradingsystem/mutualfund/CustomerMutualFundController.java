@@ -40,7 +40,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RestController
 @Validated
 @RequestMapping("/api/customer/mutual-funds")
-public final class CustomerMutualFundController {
+public class CustomerMutualFundController {
     private static final ZoneId INDIA = ZoneId.of("Asia/Kolkata");
     private final JdbcClient jdbc;
     private final CustomerIdentityStore identities;
