@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] /
                        "infra" / "ec2-paper"))
 from upstox_persisted_count_audit import (
     expected_request, safe_counts, sanitized_receipt, SQL,
-    MARKER, COUNTS, DEPLOYED_SHA,
+    MARKER, COUNTS, DEPLOYED_SHA, sanitized_host_failure,
 )
 
 def sample(provider="EXTERNAL"):
@@ -95,6 +95,26 @@ class UpstoxPersistedCountAuditTest(unittest.TestCase):
         ):
             with self.assertRaises((ValueError, json.JSONDecodeError)):
                 sanitized_receipt(invalid)
+
+    def test_sanitized_host_failure_only_exposes_exact_safe_codes(self):
+        self.assertEqual(sanitized_host_failure("",
+            "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH"),
+            "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH")
+        # A safe label in one stream must not mask unexpected content
+        # or a second conflicting label in the other stream.
+        for stdout, stderr in (
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE", "Bearer SECRET"),
+            ("Bearer SECRET", "UPSTOX_AUDIT_DATABASE_UNAVAILABLE"),
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE",
+             "UPSTOX_AUDIT_RUNTIME_IDENTITY_INVALID"),
+            ("UPSTOX_AUDIT_DATABASE_UNAVAILABLE", " " * 16001),
+        ):
+            self.assertEqual(sanitized_host_failure(stdout, stderr),
+                             "UPSTOX_AUDIT_HOST_CHECK_FAILED")
+        for unsafe in ("Bearer SECRET", "UPSTOX_AUDIT_DEPLOYMENT_SHA_MISMATCH\nsecret",
+                       "prefix UPSTOX_AUDIT_DATABASE_UNAVAILABLE", " " * 16001):
+            self.assertEqual(sanitized_host_failure("", unsafe),
+                             "UPSTOX_AUDIT_HOST_CHECK_FAILED")
 
     def test_missing_rights_metadata_is_zero_not_permission_approval(self):
         s = sample()
