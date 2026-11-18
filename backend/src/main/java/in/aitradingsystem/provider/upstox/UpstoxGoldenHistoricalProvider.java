@@ -108,6 +108,28 @@ public final class UpstoxGoldenHistoricalProvider implements GoldenHistoricalDat
         }
         // No raw provider payload is logged, exposed to customers or persisted.
         var candles = fetchCandles(request, aliases.get(0), unit, interval);
+        // Fail closed before constructing an archive payload. Provider timestamps are
+        // exchange instants, while requested dates are exchange-local calendar dates.
+        // Reject duplicates and unordered candles rather than silently normalizing them.
+        Instant previous = null;
+        for (var candle : candles) {
+            if (candle == null || candle.time() == null
+                    || candle.time().isBefore(start) || !candle.time().isBefore(endExclusive)
+                    || (previous != null && !candle.time().isAfter(previous))
+                    || candle.open() == null || candle.high() == null
+                    || candle.low() == null || candle.close() == null
+                    || candle.open().signum() <= 0 || candle.high().signum() <= 0
+                    || candle.low().signum() <= 0 || candle.close().signum() <= 0
+                    || candle.low().compareTo(candle.high()) > 0
+                    || candle.open().compareTo(candle.low()) < 0
+                    || candle.open().compareTo(candle.high()) > 0
+                    || candle.close().compareTo(candle.low()) < 0
+                    || candle.close().compareTo(candle.high()) > 0
+                    || candle.volume() < 0 || candle.openInterest() < 0) {
+                throw new IllegalStateException("UPSTOX_INVALID_HISTORICAL_CANDLE");
+            }
+            previous = candle.time();
+        }
         StringBuilder canonical = new StringBuilder();
         canonical.append("UPSTOX|").append(DOMAIN).append('|')
                 .append(request.listingId()).append('|')

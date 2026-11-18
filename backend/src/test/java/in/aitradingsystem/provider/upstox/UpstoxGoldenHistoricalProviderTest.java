@@ -124,4 +124,38 @@ class UpstoxGoldenHistoricalProviderTest {
                 .hasMessage("UPSTOX_RATE_LIMITED");
         verify(source, times(1)).historicalEquityCandles(anyString(), anyString(), anyInt(), any(), any());
     }
+    @Test
+    void duplicateHistoricalTimestampFailsClosedBeforeArchiveHandoff() {
+        when(source.enabled()).thenReturn(true);
+        when(rights.isPermitted(eq("UPSTOX"), eq("historical_equity"),
+                eq(GoldenSourceRightsRepository.Use.RAW_RETENTION), any())).thenReturn(true);
+        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<org.springframework.jdbc.core.RowMapper<String>>any(),
+                any(), any(), any(), any(), any())).thenReturn(java.util.List.of("NSE_EQ|INE002A01018"));
+        var timestamp = Instant.parse("2026-11-10T04:00:00Z");
+        var price = new java.math.BigDecimal("100");
+        var candle = new UpstoxAnalyticsSource.Candle(timestamp, price, price, price, price, 10, 0);
+        when(source.historicalEquityCandles(anyString(), anyString(), anyInt(), any(), any()))
+                .thenReturn(java.util.List.of(candle, candle));
+        assertThatThrownBy(() -> provider.fetch(request("DAY_1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("UPSTOX_INVALID_HISTORICAL_CANDLE");
+    }
+
+    @Test
+    void outOfWindowHistoricalTimestampFailsClosed() {
+        when(source.enabled()).thenReturn(true);
+        when(rights.isPermitted(eq("UPSTOX"), eq("historical_equity"),
+                eq(GoldenSourceRightsRepository.Use.RAW_RETENTION), any())).thenReturn(true);
+        when(jdbc.query(anyString(), org.mockito.ArgumentMatchers.<org.springframework.jdbc.core.RowMapper<String>>any(),
+                any(), any(), any(), any(), any())).thenReturn(java.util.List.of("NSE_EQ|INE002A01018"));
+        var price = new java.math.BigDecimal("100");
+        var candle = new UpstoxAnalyticsSource.Candle(Instant.parse("2026-11-11T04:00:00Z"),
+                price, price, price, price, 10, 0);
+        when(source.historicalEquityCandles(anyString(), anyString(), anyInt(), any(), any()))
+                .thenReturn(java.util.List.of(candle));
+        assertThatThrownBy(() -> provider.fetch(request("DAY_1")))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("UPSTOX_INVALID_HISTORICAL_CANDLE");
+    }
+
 }
