@@ -48,6 +48,17 @@ class LambdaProviderReasonCodeTest {
     }
 
     @Test
+    void invokeFailuresGetClassLevelCodes() {
+        assertThat(LambdaAngelOneMarketDataProvider.invokeCode(
+                software.amazon.awssdk.services.lambda.model.ResourceNotFoundException.builder().message("x").build()))
+            .isEqualTo("PROVIDER_INVOKE_NOT_FOUND");
+        assertThat(LambdaAngelOneMarketDataProvider.invokeCode(
+                (software.amazon.awssdk.services.lambda.model.LambdaException)
+                    software.amazon.awssdk.services.lambda.model.LambdaException.builder().message("x").build()))
+            .isEqualTo("PROVIDER_INVOKE_FAILED");
+    }
+
+    @Test
     void configurationCodesStillMapToNotConfigured() {
         assertThat(codeFromLambda("SSM_UNAVAILABLE")).isEqualTo("PROVIDER_NOT_CONFIGURED");
     }
