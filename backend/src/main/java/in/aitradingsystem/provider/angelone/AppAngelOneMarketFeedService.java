@@ -133,6 +133,11 @@ public final class AppAngelOneMarketFeedService {
         String code = null;
         if (error instanceof MarketDataException marketData) code = marketData.code();
         if (error instanceof AngelOneException angel) code = angel.code();
-        return code != null && code.matches("[A-Z][A-Z0-9_]{1,59}") ? code : "PROVIDER_UNAVAILABLE";
+        if (code != null && code.matches("[A-Z][A-Z0-9_]{1,59}")) return code;
+        // Uncoded failures get a stable CLASS-level code only. Messages are never used.
+        if (error instanceof IllegalArgumentException) return "PROVIDER_INPUT_INVALID";
+        if (error instanceof IllegalStateException) return "PROVIDER_STATE_ERROR";
+        if (error instanceof org.springframework.web.client.RestClientException) return "PROVIDER_HTTP_CLIENT_ERROR";
+        return "PROVIDER_CALL_FAILED";
     }
 }
