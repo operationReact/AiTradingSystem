@@ -40,5 +40,24 @@ class V3SocketPilotTest(unittest.TestCase):
         self.assertEqual(p.PREFIX,
             "/api/admin/market-data/upstox-analytics/fno/live/")
 
+class HostErrorTokenTest(unittest.TestCase):
+    def test_surfaces_only_whitelisted_host_token(self):
+        self.assertEqual(p.host_error_token("V3_PRIVATE_ERROR:SOURCE_NOT_READY\n"),
+                         "SOURCE_NOT_READY")
+        self.assertEqual(p.host_error_token("Traceback...\nV3_PRIVATE_ERROR:BUSY_OPERATOR_SOCKET"),
+                         "BUSY_OPERATOR_SOCKET")
+
+    def test_ignores_unknown_or_unrelated_stderr(self):
+        self.assertIsNone(p.host_error_token(""))
+        self.assertIsNone(p.host_error_token(None))
+        self.assertIsNone(p.host_error_token("V3_PRIVATE_ERROR:Bearer abc123"))
+        self.assertIsNone(p.host_error_token("https://api.upstox.com/x?token=1"))
+
+    def test_runner_prints_token_not_raw_stderr(self):
+        text=pathlib.Path(p.__file__).read_text()
+        self.assertIn("V3_PRIVATE_HOST_ERROR:",text)
+        self.assertIn("host_error_token(response.get(",text)
+        self.assertNotIn("StandardErrorContent\")\n            print",text)
+
 if __name__=="__main__":
     unittest.main()
