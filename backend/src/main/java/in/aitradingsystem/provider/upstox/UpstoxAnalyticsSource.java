@@ -487,11 +487,24 @@ public final class UpstoxAnalyticsSource {
                         ex.getStatusCode().value(), null).code();
                 throw unavailable("UPSTOX_FNO_" + status.name());
             }
+            // Preserve HTTP 429 as a safe, machine-readable retry class for the
+            // future rights-gated Golden checkpoint coordinator. Never expose
+            // upstream headers, payloads, URL or tokens. No retry here.
+            if (ex.getStatusCode().value() == 429) {
+                throw unavailable("UPSTOX_RATE_LIMITED");
+            }
             throw unavailable("UPSTOX_READ_UNAVAILABLE");
         } catch (org.springframework.web.client.ResourceAccessException ex) {
             // Never emit the transport exception: it may embed a signed URL.
             throw unavailable(fno ? "UPSTOX_FNO_TRANSPORT_FAILURE"
                     : "UPSTOX_READ_UNAVAILABLE");
+        } catch (IllegalStateException ex) {
+            // Preserve safe retry/disabled classifications without exposing source data.
+            if ("UPSTOX_RATE_LIMITED".equals(ex.getMessage())) throw ex;
+            if (fno && "UPSTOX_INVALID_RESPONSE".equals(ex.getMessage())) {
+                throw unavailable("UPSTOX_FNO_INVALID_PAYLOAD");
+            }
+            throw unavailable(fno ? "UPSTOX_FNO_UNKNOWN_FAILURE" : "UPSTOX_READ_UNAVAILABLE");
         } catch (Exception ex) {
             // The upstream response and token never escape this source.
             // Recognize only our own strict payload error, not arbitrary strings.
