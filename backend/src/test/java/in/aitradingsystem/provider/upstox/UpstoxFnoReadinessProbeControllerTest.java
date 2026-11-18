@@ -248,6 +248,7 @@ class UpstoxFnoReadinessProbeControllerTest {
         assertThat(receipt.modelTrainingRightsVerified()).isFalse();
         assertThat(receipt.liveTradingEnabled()).isFalse();
         assertThat(response.getHeaders().getCacheControl()).contains("no-store");
+        verify(source).enabled();
         verify(source).currentNiftyOptionExpiries(NOW);
         verify(source).currentFnoOptionContracts(UNDERLYING, EXPIRY);
         verify(source).currentFnoOptionChain(UNDERLYING, EXPIRY);
