@@ -130,13 +130,15 @@ HOST_FAILURE_CODES = frozenset({
 
 
 def sanitized_host_failure(stdout: str, stderr: str) -> str:
-    for stream in (stderr, stdout):
-        if not isinstance(stream, str) or len(stream) > 16000:
-            continue
-        lines = stream.strip().splitlines()
-        if len(lines) == 1 and lines[0] in HOST_FAILURE_CODES:
-            return lines[0]
-    return "UPSTOX_AUDIT_HOST_CHECK_FAILED"
+    # Fail closed across BOTH streams. An allowlisted code in one stream
+    # cannot make arbitrary content in the other stream acceptable.
+    if any(not isinstance(stream, str) or len(stream) > 16000
+           for stream in (stdout, stderr)):
+        return "UPSTOX_AUDIT_HOST_CHECK_FAILED"
+    nonempty = [stream.strip() for stream in (stdout, stderr) if stream.strip()]
+    if len(nonempty) != 1 or nonempty[0] not in HOST_FAILURE_CODES:
+        return "UPSTOX_AUDIT_HOST_CHECK_FAILED"
+    return nonempty[0]
 
 
 def host() -> None:
