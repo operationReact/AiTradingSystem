@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Read-only diagnostic of the application Angel One feed inputs on the PAPER host.
 # Reads the four SSM parameters with the instance role and prints ONLY pass/fail per field.
-# It never prints a value, a length, a digest or any account data. No writes, no broker calls.
+# It never prints a value, a length, a digest or any account data. No writes, no logins.
+# One unauthenticated reachability probe to the broker login endpoint sends no credentials and places no order.
 set -Eeuo pipefail
 umask 077
 test "$(id -u)" -eq 0
@@ -51,5 +52,35 @@ marker("API_KEY_FORMAT","PASS" if api_key_ok else "FAIL")
 marker("CLIENT_CODE_FORMAT","PASS" if client_ok else "FAIL")
 marker("LOGIN_PIN_FORMAT","PASS" if pin_ok else "FAIL")
 marker("TOTP_SECRET_BASE32","PASS" if totp_format else "FAIL")
+# Network and login-prerequisite checks: codes and PASS/FAIL only, never addresses or values.
+import urllib.request,urllib.error,pathlib
+def http_code(url):
+    try:
+        req=urllib.request.Request(url,method="POST",data=b"{}",headers={"Content-Type":"application/json"})
+        with urllib.request.urlopen(req,timeout=15) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return 0
+code=http_code("https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword")
+marker("ANGELONE_HTTPS_REACHABLE","PASS" if code>0 else "FAIL")
+marker("ANGELONE_LOGIN_ENDPOINT_HTTP_CLASS","HTTP_"+str(code//100)+"XX" if code else "NONE")
+try:
+    with urllib.request.urlopen("https://checkip.amazonaws.com",timeout=10) as r:
+        host_ip=r.read(64).decode().strip()
+except Exception:
+    host_ip=""
+compose=pathlib.Path("/opt/aitradingsystem-paper/paper-compose.yml").read_text()
+registered=[l.split(":",1)[1].strip().strip('"') for l in compose.splitlines() if "ANGELONE_CLIENT_PUBLIC_IP" in l]
+marker("HOST_PUBLIC_IP_REGISTERED","PASS" if host_ip and registered and host_ip==registered[0] else "FAIL")
+runtime=pathlib.Path("/opt/aitradingsystem-paper/runtime.env")
+mac_set=False
+try:
+    mac_set=any(l.startswith("ANGELONE_CLIENT_MAC_ADDRESS=") and len(l.split("=",1)[1].strip())>0
+                for l in runtime.read_text().splitlines())
+except OSError:
+    pass
+marker("CLIENT_MAC_ADDRESS_CONFIGURED","PASS" if mac_set else "FAIL")
 marker("RESULT","COMPLETE")
 PY
