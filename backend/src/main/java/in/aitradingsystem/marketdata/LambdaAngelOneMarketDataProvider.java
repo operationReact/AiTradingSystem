@@ -24,6 +24,10 @@ import software.amazon.awssdk.services.lambda.model.InvokeResponse;
 @Component
 @ConditionalOnProperty(prefix = "app.market-data", name = "provider", havingValue = "ANGEL_ONE_LAMBDA")
 public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
+
+    /** Stable reason codes the market-feed Lambda returns that the backend may report as-is. */
+    static final java.util.Set<String> PASSTHROUGH_CODES = java.util.Set.of(
+            "PROVIDER_REJECTED", "PROVIDER_INVALID_RESPONSE", "INTERNAL_FAILURE", "PROVIDER_INVALID_REQUEST");
     private final LambdaClient lambda;
     private final ObjectMapper mapper;
     private final HistoricalCandleParser parser;
@@ -105,6 +109,11 @@ public class LambdaAngelOneMarketDataProvider implements MarketDataProvider {
                         || "INVALID_TOTP_CONFIGURATION".equals(code)
                         || "SSM_UNAVAILABLE".equals(code)) {
                     throw new MarketDataException("PROVIDER_NOT_CONFIGURED", "Market-data configuration is unavailable");
+                }
+                // Known, secret-free Lambda reason codes are kept so the operator can see the failing layer.
+                // Anything unrecognised stays the generic code. The Lambda's messages are never propagated.
+                if (PASSTHROUGH_CODES.contains(code)) {
+                    throw new MarketDataException(code, "Market-data provider reported " + code);
                 }
                 throw new MarketDataException("PROVIDER_UNAVAILABLE", "Market-data provider is unavailable");
             }
