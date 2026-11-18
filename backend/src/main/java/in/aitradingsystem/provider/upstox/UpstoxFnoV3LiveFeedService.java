@@ -349,9 +349,17 @@ public class UpstoxFnoV3LiveFeedService {
                         if (err != null) {
                             scheduleReconnect(attempt);
                             ws.abort();
-                        } else if (wanted && !destroyed && attempt == connectionAttemptId) {
-                            state = "CONNECTED_AWAITING_TICKS";
-                            retryCount = 0;
+                        } else {
+                            synchronized (UpstoxFnoV3LiveFeedService.this) {
+                                // An initial binary frame may arrive before the async
+                                // subscription send completes. Do not downgrade an
+                                // already CONNECTED socket back to AWAITING_TICKS.
+                                if (wanted && !destroyed && attempt == connectionAttemptId
+                                        && socket == ws && "SUBSCRIBING".equals(state)) {
+                                    state = "CONNECTED_AWAITING_TICKS";
+                                    retryCount = 0;
+                                }
+                            }
                         }
                     });
             ws.request(1);
@@ -364,7 +372,8 @@ public class UpstoxFnoV3LiveFeedService {
                 // prior socket must not restore eligibility or mark us CONNECTED.
                 if (attempt != connectionAttemptId || !wanted || destroyed
                         || retryScheduled || socket != ws
-                        || (!"CONNECTED_AWAITING_TICKS".equals(state)
+                        || (!"SUBSCRIBING".equals(state)
+                            && !"CONNECTED_AWAITING_TICKS".equals(state)
                             && !"CONNECTED".equals(state))) {
                     ws.request(1);
                     return CompletableFuture.completedFuture(null);
@@ -382,7 +391,10 @@ public class UpstoxFnoV3LiveFeedService {
                     if (last) {
                         consume(fragments.toByteArray());
                         fragments.reset();
-                        if (wanted) state = "CONNECTED";
+                        if (wanted) {
+                            state = "CONNECTED";
+                            retryCount = 0;
+                        }
                     }
                 }
             } catch (RuntimeException ignored) {
