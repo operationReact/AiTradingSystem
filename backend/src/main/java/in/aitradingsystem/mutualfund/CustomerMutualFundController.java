@@ -51,7 +51,7 @@ public final class CustomerMutualFundController {
     }
 
     public record Capability(boolean livePurchaseEnabled, boolean automaticDebitEnabled,
-                             boolean readOnlyUpstoxAvailable, String recommendedIntegration,
+                             boolean upstoxMfReadApisPublished, String recommendedIntegration,
                              String blocker) {}
     public record CreatePlan(
         @NotBlank @Pattern(regexp = "INF[A-Z0-9]{9}") String isin,
