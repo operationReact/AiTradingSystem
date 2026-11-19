@@ -10,6 +10,8 @@ import java.time.ZoneId;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ public final class UpstoxFnoAutoMarketFeed {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final Duration RETRY_DELAY = Duration.ofMinutes(3);
     private static final String MANUAL_CONTROL = "MANUAL_CONTROL";
+    private static final Logger log = LoggerFactory.getLogger(UpstoxFnoAutoMarketFeed.class);
 
     private final UpstoxAnalyticsSource source;
     private final UpstoxFnoV3LiveFeedService feed;
@@ -157,8 +160,9 @@ public final class UpstoxFnoAutoMarketFeed {
             sessionStartedAt = now;
             owned = true;
             state = "AUTO_CONNECTING";
-        } catch (RuntimeException ignored) {
-            // No secrets, upstream response bodies or one-use URLs in status.
+        } catch (RuntimeException failure) {
+            // Log only the type: messages may carry upstream bodies or one-use URLs.
+            log.warn("Upstox F&O auto feed start failed: {}", failure.getClass().getSimpleName());
             state = "SOURCE_OR_SOCKET_UNAVAILABLE";
         }
     }
