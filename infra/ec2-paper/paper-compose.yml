@@ -85,6 +85,8 @@ services:
       # Separate real-money execution switch. No merge/deploy ever grants LIVE
       # trading implicitly; each order additionally requires broker and owner gates.
       MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED: ${MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED:-false}
+      # Contract identity/expiry metadata is independently gated; never grants quote rights.
+      MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED: ${MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED:-false}
       # Customer F&O display usage rights are a separate source-license gate.
       MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED:-false}
       MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED:-false}
