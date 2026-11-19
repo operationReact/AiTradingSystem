@@ -490,9 +490,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       {required bool compact}) {
     final c = Theme.of(context).colorScheme;
     final type = Theme.of(context).textTheme;
+    final now = DateTime.now().toUtc();
     final list = market == null ? <CustomerFnoLeg>[] :
         MintTickFnoDiscoveryFacts.optionLegs(market, _side);
-    final visible = compact ? list.take(6).toList() : list;
+    // Strikes are listed ascending, so unquoted far-from-ATM rows would
+    // otherwise fill the compact watchlist. Verified ticks come first.
+    final ordered = [
+      ...list.where((leg) => MintTickFnoDiscoveryFacts.recentTick(leg, now)),
+      ...list.where((leg) => !MintTickFnoDiscoveryFacts.recentTick(leg, now)),
+    ];
+    final visible = compact ? ordered.take(6).toList() : ordered;
     return Padding(padding: const EdgeInsets.only(bottom: 14),
       child: MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
