@@ -44,8 +44,7 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
 
     @BeforeEach
     void resetPolicies() {
-        jdbc.update("DELETE FROM audit_event WHERE entity_type = 'RISK_POLICY_CONFIG'");
-        jdbc.update("DELETE FROM risk_policy_config");
+        deletePolicyRows();
         activeId = UUID.randomUUID();
         repository.insert(snapshot(activeId, 1, new BigDecimal("0.25")), "Policy v1", true, "TEST");
     }
@@ -61,8 +60,7 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
      */
     @AfterEach
     void restoreApplicationRiskBaseline() {
-        jdbc.update("DELETE FROM audit_event WHERE entity_type = 'RISK_POLICY_CONFIG'");
-        jdbc.update("DELETE FROM risk_policy_config");
+        deletePolicyRows();
         bootstrap.run(null);
         RiskPolicySnapshot baseline = repository.requireActive();
         assertThat(baseline.riskPerTradePercent())
@@ -199,7 +197,7 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
 
     @Test
     void bootstrapCreatesVersionOneOnlyWhenNoPolicyExists() {
-        jdbc.update("DELETE FROM risk_policy_config");
+        deletePolicyRows();
         bootstrap.run(null);
         RiskPolicyView bootstrapped = repository.requireActiveView();
         assertThat(bootstrapped.version()).isEqualTo(1);
@@ -218,6 +216,26 @@ class RiskPolicyConfigIT extends AbstractPostgresIT {
                         .content(requestJson("Unauthorized", "0.20")))
                 .andExpect(status().isUnauthorized());
         assertThat(repository.count()).isEqualTo(1);
+    }
+
+    /**
+     * Other integration suites in the shared database leave risk_decision rows that
+     * reference policies (FK). Remove that dependent chain first, child to parent.
+     */
+    private void deletePolicyRows() {
+        jdbc.update("DELETE FROM audit_event WHERE entity_type = 'RISK_POLICY_CONFIG'");
+        jdbc.update("""
+                UPDATE paper_order SET approval_id = NULL WHERE approval_id IN (
+                    SELECT a.id FROM order_approval a
+                    JOIN risk_decision d ON d.id = a.risk_decision_id
+                    WHERE d.policy_config_id IS NOT NULL)
+                """);
+        jdbc.update("""
+                DELETE FROM order_approval WHERE risk_decision_id IN (
+                    SELECT id FROM risk_decision WHERE policy_config_id IS NOT NULL)
+                """);
+        jdbc.update("DELETE FROM risk_decision WHERE policy_config_id IS NOT NULL");
+        jdbc.update("DELETE FROM risk_policy_config");
     }
 
     private static CreateRiskPolicyRequest request(String name, String riskPerTrade) {
