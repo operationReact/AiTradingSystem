@@ -7,6 +7,36 @@ import 'package:trading_client/src/features/trading_rooms/presentation/minttick_
 
 class _NoDiscovery extends Fake implements CustomerFnoDiscoveryRepository {}
 
+class _LiveDiscovery extends Fake implements CustomerFnoDiscoveryRepository {
+  @override
+  Future<CustomerFnoDiscoveryCapability> capability() async =>
+      CustomerFnoDiscoveryCapability.decode({
+        'displayRightsVerified': true,
+        'feedConfigured': true,
+        'sourceReady': true,
+        'marketOpen': true,
+        'status': 'LIVE_QUOTES',
+        'streamState': 'CONNECTED',
+        'freshExchangeTimedQuotes': 6,
+        'latestFreshExchangeTradeAt': DateTime.now().toUtc().toIso8601String(),
+        'contractDiscoveryVerified': true,
+      });
+
+  @override
+  Future<CustomerFnoExpiries> expiries() async => CustomerFnoExpiries(
+        status: 'VERIFIED',
+        observedAt: DateTime.now().toUtc(),
+        expiries: [DateTime.parse('2026-11-19')],
+      );
+
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async => _liveMarket([
+        _strike(25200, 300, 100),
+        _strike(25300, 150, 140),
+        _strike(25400, 60, 200),
+      ]);
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -187,4 +217,108 @@ void main() {
     await tester.tap(create);
     expect(createCount, 1);
   });
+
+  testWidgets('live chain renders at 360dp with estimated ATM and no overflow',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _LiveDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(find.text('LIVE'), findsOneWidget);
+    expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
+    expect(find.text('ATM'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Top gainers'), findsOneWidget);
+  });
+
+  group('ATM estimate and freshness', () {
+    test('picks the strike where fresh CE and PE last prices are closest', () {
+      final market = _liveMarket([
+        _strike(25200, 300, 100),
+        _strike(25300, 150, 140),
+        _strike(25400, 60, 200),
+      ]);
+      expect(
+          MintTickFnoDiscoveryFacts.atmStrike(market, DateTime.now().toUtc()),
+          25300);
+    });
+
+    test('withholds ATM when a strike has a stale leg', () {
+      final market = _liveMarket([
+        {
+          'strikePrice': 25300,
+          'call': _staleLeg('CE', 150),
+          'put': _liveLeg('PE', 140),
+        },
+      ]);
+      expect(
+          MintTickFnoDiscoveryFacts.atmStrike(market, DateTime.now().toUtc()),
+          isNull);
+    });
+
+    test('withholds ATM for a closed market', () {
+      final market = _liveMarket([
+        _strike(25300, 150, 140),
+      ], status: 'MARKET_CLOSED');
+      expect(
+          MintTickFnoDiscoveryFacts.atmStrike(market, DateTime.now().toUtc()),
+          isNull);
+      expect(MintTickFnoDiscoveryFacts.freshLegs(market,
+          DateTime.now().toUtc()), isEmpty);
+    });
+  });
 }
+
+Map<String, Object?> _liveLeg(String side, num ltp) => {
+  'instrumentKey': 'NSE_FO|NIFTY_${ltp}_$side',
+  'tradingSymbol': 'NIFTY $ltp $side',
+  'side': side,
+  'lotSize': 65,
+  'tickSize': 0.05,
+  'bid': ltp - 0.5,
+  'ask': ltp + 0.5,
+  'exchangeAt': DateTime.now().toUtc().toIso8601String(),
+  'observedAt': DateTime.now().toUtc().toIso8601String(),
+  'quoteFresh': true,
+  'paperEligible': false,
+  'ltp': ltp,
+  'previousClose': ltp,
+  'openInterest': 1200,
+};
+
+Map<String, Object?> _staleLeg(String side, num ltp) =>
+    _liveLeg(side, ltp)..['quoteFresh'] = false;
+
+Map<String, Object?> _strike(num strike, num call, num put) => {
+  'strikePrice': strike,
+  'call': _liveLeg('CE', call),
+  'put': _liveLeg('PE', put),
+};
+
+CustomerFnoMarket _liveMarket(List<Map<String, Object?>> strikes,
+        {String status = 'FRESH_QUOTES'}) =>
+    CustomerFnoMarket.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'expiry': '2026-11-19',
+      'source': 'UPSTOX_ANALYTICS',
+      'status': status,
+      'snapshotAt': DateTime.now().toUtc().toIso8601String(),
+      'displayRightsVerified': true,
+      'liveOrderEnabled': false,
+      'strikes': strikes,
+    });
