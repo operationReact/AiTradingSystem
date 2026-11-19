@@ -46,6 +46,7 @@ public final class UpstoxFnoAutoMarketFeed {
     private Instant sessionStartedAt;
     private Instant nextAttempt = Instant.EPOCH;
     private String state = "WAITING_FOR_SESSION";
+    private String lastLoggedState;
 
     @Autowired
     public UpstoxFnoAutoMarketFeed(UpstoxAnalyticsSource source,
@@ -80,6 +81,14 @@ public final class UpstoxFnoAutoMarketFeed {
                initialDelayString = "${minttick.upstox-fno.auto-market-feed-initial-ms:5000}")
     public void check() {
         reconcile();
+        logStateChange();
+    }
+
+    private void logStateChange() {
+        if (!state.equals(lastLoggedState)) {
+            lastLoggedState = state;
+            log.info("Upstox F&O auto feed state={}", state);
+        }
     }
 
     /** Safe for single-thread scheduled invocations and explicit test probes. */
