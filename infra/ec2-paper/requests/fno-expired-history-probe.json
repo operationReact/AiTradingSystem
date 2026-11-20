@@ -1,0 +1,12 @@
+{
+  "application": "MintTick",
+  "operation": "read-only-upstox-expired-nifty-future-history-probe",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "environment": "PAPER",
+  "authorization": "OWNER_APPROVED_FNO_HISTORY_DIAGNOSTIC_ONLY",
+  "max_provider_gets": 3,
+  "persist": false,
+  "trading_rights_change": false
+}
