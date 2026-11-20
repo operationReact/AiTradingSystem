@@ -83,6 +83,10 @@ public final class CustomerFnoDiscoveryController {
     @GetMapping("/capability")
     public ResponseEntity<Capability> capability(Authentication auth) {
         requireCustomer(auth);
+        return noStore(internalCapability());
+    }
+
+    Capability internalCapability() {
         boolean sourceReady = source.enabled();
         boolean open = sessionCalendar.isInsideFnoSession(clock.instant());
         var stream = feed.getIfAvailable();
@@ -99,13 +103,13 @@ public final class CustomerFnoDiscoveryController {
             : "CONNECTED".equals(liveStatus.state())
                  || "CONNECTED_AWAITING_TICKS".equals(liveStatus.state())
                     ? "WAITING_FOR_QUOTES" : "FEED_DISCONNECTED";
-        return noStore(new Capability(displayRightsVerified, feedConfigured,
+        return new Capability(displayRightsVerified, feedConfigured,
             sourceReady, open, status,
             liveStatus == null ? "UNAVAILABLE" : liveStatus.state(),
             displayRightsVerified ? fresh : 0,
             displayRightsVerified && open && fresh > 0
                 ? liveStatus.latestFreshExchangeTradeAt() : null,
-            contractDiscoveryVerified));
+            contractDiscoveryVerified);
     }
 
     @GetMapping("/expiries")
@@ -113,19 +117,24 @@ public final class CustomerFnoDiscoveryController {
             Authentication auth) {
         // Expiry dates only: no prices, OI, IV or Greeks, so discovery permission suffices.
         requireDiscovery(auth);
+        return noStore(internalExpiries());
+    }
+
+    CustomerPaperFnoMarketController.Expiries internalExpiries() {
+        if (!contractDiscoveryVerified) throw new ResponseStatusException(HttpStatus.CONFLICT,"F&O discovery permission unverified");
         CustomerFnoExpiryCatalog.Listing listing =
             expiryCatalog.listing(clock.instant());
         if (listing == null || !listing.usable()) {
             String status = listing == null ?
                 CustomerFnoExpiryCatalog.Listing.BLOCKED : listing.status();
-            return noStore(new CustomerPaperFnoMarketController.Expiries(
-                UNDERLYING, status, null, List.of()));
+            return new CustomerPaperFnoMarketController.Expiries(
+                UNDERLYING, status, null, List.of());
         }
         var valid = CustomerPaperFnoMarketController.validExpiries(
             listing.expiries(), clock.instant().atZone(IST).toLocalDate());
-        return noStore(new CustomerPaperFnoMarketController.Expiries(
+        return new CustomerPaperFnoMarketController.Expiries(
             UNDERLYING, valid.isEmpty() ? "NO_LISTED_EXPIRIES" : "VERIFIED",
-            listing.observedAt(), valid));
+            listing.observedAt(), valid);
     }
 
     @GetMapping("/market")
@@ -133,6 +142,11 @@ public final class CustomerFnoDiscoveryController {
             @RequestParam("expiry") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)
             LocalDate expiry, Authentication auth) {
         requireDisplay(auth);
+        return noStore(internalMarket(expiry));
+    }
+
+    CustomerPaperFnoMarketController.Market internalMarket(LocalDate expiry) {
+        if (!displayRightsVerified) throw new ResponseStatusException(HttpStatus.CONFLICT,"F&O quote rights unverified");
         Instant now = clock.instant();
         LocalDate today = now.atZone(IST).toLocalDate();
         if (expiry == null || expiry.isBefore(today) ||
@@ -169,8 +183,8 @@ public final class CustomerFnoDiscoveryController {
         String status = !open ? "MARKET_CLOSED" :
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
-        return noStore(CustomerPaperFnoMarketController.marketResponse(
-            expiry, chain.retrievedAt(), status, true, false, strikes));
+        return CustomerPaperFnoMarketController.marketResponse(
+            expiry, chain.retrievedAt(), status, true, false, strikes);
     }
 
     /**

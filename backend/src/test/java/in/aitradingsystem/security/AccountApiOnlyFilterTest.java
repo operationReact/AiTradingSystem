@@ -138,6 +138,15 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET", "/api/customer/mind/v1/fno-evaluation");
         String mindFnoCycle = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles";
         assertPasses("POST", mindFnoCycle);
+        String autoBase="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-automation";
+        assertPasses("GET",autoBase);
+        assertPasses("GET",autoBase+"/history");
+        assertPasses("POST",autoBase+"/control");
+        assertBlocked("POST",autoBase);
+        assertBlocked("GET",autoBase+"/control");
+        assertBlocked("POST",autoBase+"/history");
+        assertBlocked("POST",autoBase+"/live");
+        assertBlocked("GET","/api/customer/trading-rooms/not-an-id/mind/fno/paper-automation");
         assertBlocked("GET", mindFnoCycle);
         assertBlocked("PUT", mindFnoCycle);
         assertBlocked("POST", mindFnoCycle + "/live");

@@ -50,6 +50,11 @@ public final class CustomerPaperFnoCapabilityController {
     public ResponseEntity<Capability> capability(@PathVariable UUID roomId,
             Authentication authentication) {
         UUID owner = owner(authentication);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+            .body(internalCapability(owner, roomId));
+    }
+
+    Capability internalCapability(UUID owner, UUID roomId) {
         // Ownership is checked BEFORE reporting any configuration. Do not leak
         // that another customer has a room, or admit a LIVE/equity-only room.
         String focus = jdbc.sql("""
@@ -66,7 +71,7 @@ public final class CustomerPaperFnoCapabilityController {
             enabled("minttick.upstox-fno.v3-feed-enabled"),
             enabled("minttick.upstox-fno.display-rights-verified"),
             enabled("minttick.upstox-fno.paper-usage-rights-verified"));
-        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(result);
+        return result;
     }
 
     private boolean enabled(String key) {

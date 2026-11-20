@@ -71,11 +71,21 @@ public class CustomerMindFnoPaperCycleService {
     }
 
     public CycleResult run(UUID owner, UUID room, Authentication auth) {
+        return evaluate(owner,room,auth,false);
+    }
+
+    /** No JWT reconstruction; scheduler calls only after DB-owned room opt-in. */
+    CycleResult runOptedIn(UUID owner,UUID room) {
+        return evaluate(owner,room,null,true);
+    }
+
+    private CycleResult evaluate(UUID owner,UUID room,Authentication auth,boolean worker) {
         if (owner == null || room == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Customer required");
         }
         Instant now=clock.instant();
-        var capability=capabilities.capability(room, auth).getBody();
+        var capability=worker ? capabilities.internalCapability(owner,room)
+            : capabilities.capability(room, auth).getBody();
         if (capability==null || !capability.paperConfigured()) {
             return abstain(now,room,"BLOCKED","FNO_PAPER_CAPABILITY_NOT_READY",null,null,null,null);
         }
@@ -99,7 +109,8 @@ public class CustomerMindFnoPaperCycleService {
         if (!now.atZone(IST).toLocalTime().isBefore(ENTRY_CUTOFF)) {
             return abstain(now,room,"NO_TRADE","PAPER_ENTRY_CUTOFF",null,null,books.status(),audit.status());
         }
-        var decision=research.inspect(auth); // same source-backed evaluator as Mind UI
+        var decision=worker ? research.inspectForOwnedPaperWorker()
+            : research.inspect(auth); // same verified provider source as Mind UI
         if (!"RESEARCH_CANDIDATE".equals(decision.status()) ||
                 !"UPSTOX_V3_EXCHANGE_TIMED".equals(decision.quoteSource()) ||
                 !List.of("strategy.STR-181","strategy.STR-182").contains(decision.strategyId()) ||
@@ -245,9 +256,7 @@ public class CustomerMindFnoPaperCycleService {
     static boolean shouldExit(long basisPaise,long indicativePnlPaise,
             boolean expiryDay,boolean nearClose) {
         if(basisPaise<=0) return true; // invalid book should never stay hidden
-        long basis=BigDecimal.valueOf(basisPaise).multiply(BigDecimal.valueOf(10000)).longValue();
-        long pnl=BigDecimal.valueOf(indicativePnlPaise).multiply(BigDecimal.valueOf(10000)).longValue();
-        // Avoid overflow with BigDecimal, P&L includes estimated sell fees.
+        // Use BigDecimal to avoid integer overflow; estimated P&L includes sell fees.
         BigDecimal bps=BigDecimal.valueOf(indicativePnlPaise)
             .multiply(BigDecimal.valueOf(10000))
             .divide(BigDecimal.valueOf(basisPaise),6,RoundingMode.HALF_UP);
