@@ -22,7 +22,7 @@ import urllib.error
 REGION="ap-south-1"
 ACCOUNT="098859530205"
 INSTANCE="i-09c01b470fb39b85a"
-EXPECTED_RELEASE="8a947dc5f989534f6eb5a82645443fbdb916c2fe"
+EXPECTED_RELEASE="691454e4b7995f54ee0ac5c4e14e44ed53ffbf48"
 REQUEST_FILE="infra/ec2-paper/requests/upstox-fno-live-execution-activate.json"
 FLAG="MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"
 EXACT_REQUEST={
