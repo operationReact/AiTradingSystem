@@ -44,15 +44,18 @@ public final class OwnerHistoryChartController {
     private static final int MAX_BARS = 400;
     private final String ownerSubject;
     private final Path charts;
+    private final Path monthlyCharts;
     private final ObjectMapper mapper;
     private final InstrumentMasterService instruments;
 
     public OwnerHistoryChartController(
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerSubject,
             @Value("${MINTTICK_OWNER_HISTORY_CHART_PATH:/run/minttick-owner-history/charts}") String chartsPath,
+            @Value("${MINTTICK_OWNER_HISTORY_MONTHLY_PATH:/run/minttick-owner-history/monthly}") String monthlyPath,
             ObjectMapper mapper, InstrumentMasterService instruments) {
         this.ownerSubject = ownerSubject;
         this.charts = Path.of(chartsPath);
+        this.monthlyCharts = Path.of(monthlyPath);
         this.mapper = mapper;
         this.instruments = instruments;
     }
@@ -104,7 +107,7 @@ public final class OwnerHistoryChartController {
         }
         // Both directories are sanitized, SHA-source-verified snapshots under
         // the existing private read-only monitor mount, never the raw archive.
-        Path directory = monthly ? charts.getParent().resolve("monthly") : charts;
+        Path directory = monthly ? monthlyCharts : charts;
         Path file = directory.resolve(token + ".json");
         if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
