@@ -169,11 +169,8 @@ def host():
     if before_config.get("TRADING_MODE")!="PAPER":
         raise ValueError("COMPOSE_CONFIGURATION_INVALID")
     # Never modify source/data licenses, broker credentials or emergency stop.
-    if previous.get(FLAG)=="true" and runtime.get(FLAG)=="true":
-        print("UPSTOX_FNO_LIVE_POLICY:ALREADY_ENABLED_VERIFIED",flush=True)
-        print("UPSTOX_FNO_LIVE_RELEASE:"+EXPECTED_RELEASE,flush=True)
-        return
-
+    # Re-verify the running container even if host env already says "true".
+    # An env-file value alone is NOT evidence of activated execution.
     try:
         for name,raw in before.items():
             atomic_write(root,name,replace_flag(raw))
@@ -247,8 +244,13 @@ def runner():
                 print("UPSTOX_FNO_LIVE_ACTIVATION:OWNER_ORDER_CONFIRMATION_STILL_REQUIRED",
                       flush=True)
                 return
-            # Errors and SSM stdout may contain provider data: never print.
+            # Display only one pre-approved fixed blocker code, never raw SSM
+            # stderr, JSON, host environment, broker tokens or provider body.
+            sanitized=re.findall(r"UPSTOX_FNO_LIVE_ERROR:([A-Z_]+)",
+                response.get("StandardErrorContent") or "")
+            blocker=sanitized[-1] if sanitized and sanitized[-1] in ERRORS else "SSM_ACTIVATION_UNVERIFIED"
             print("UPSTOX_FNO_LIVE_ACTIVATION:NOT_VERIFIED",flush=True)
+            print("UPSTOX_FNO_LIVE_BLOCKER:"+blocker,flush=True)
             raise ValueError("SSM_ACTIVATION_UNVERIFIED")
         if state not in ("Pending","InProgress","Delayed"):
             raise ValueError("SSM_UNEXPECTED_STATE")
