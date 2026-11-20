@@ -5537,21 +5537,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "STR-170 approved single-stock NSE_EQ spot and matching NSE_FO futures basis-carry research decision",
+    "Same-provider, source-verified exchange-timed spot ASK / futures BID depth for complete lot",
+    "Broker-verified full cash equity purchase, futures margin, stress variation margin and delivery settlement buffer",
+    "Independently verified incremental fees, slippage, dividends and corporate action uncertainty, with non-duplicated cost model"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CASH_FUTURES_ARBITRAGE_RESEARCH_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCashFuturesArbitrageResearchV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCashFuturesArbitrageResearchV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-175-cash-futures-arbitrage-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authorized source-backed spot and future exchange-time bid/ask and matching depth snapshots",
+    "Verified Indian exchange physical-delivery, actual broker margin/cash ledger, complete statutory fees and uncertainty model",
+    "Historical as-of stock/futures depth, actual dividends/corporate actions and no-lookahead walk-forward research",
+    "Audited PAPER-only feasibility research plus separately approved risk/trading readiness"
+   ],
+   "note": "Research-only feasibility overlay on STR-170 basis carry; validates one-lot cash buy/future short pair for depth, capital, margin, settlement and incremental stress costs. Reuses FNO_FUTURES_BASIS_CARRY_V1 (STR-170) rather than duplicating carry logic, no guaranteed arbitrage, no broker execution. DATA_BLOCKED pending genuine source and backtest evidence.",
    "id": "strategy.STR-175",
    "kind": "STRATEGY",
    "name": "Cash Futures Arbitrage Research",
@@ -5563,21 +5583,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Provider-verified same NSE_FO futures contract, listed-from date, expiry and lot size",
+    "Seven session-complete NSE futures OHLCV bars and final OI in consistent underlying units, with separate original as-of publication timestamps",
+    "Separately verified internal research rights for OHLCV and OI, exchange session provenance and explicit momentum, volume and cost thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MOMENTUM_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-176-futures-momentum.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Verified licensed source adapter for same-futures-contract seven completed OHLCV and OI sessions and actual first-known timestamps",
+    "NSE holiday and session calendar, contract listing/expiry and continuity validation; corporate actions and source latency",
+    "Out-of-sample no-lookahead momentum research with realistic execution costs, slippage and walk-forward/regime evidence",
+    "Deployed read-only strategy evaluation, PAPER lifecycle acceptance and Flutter platform verification"
+   ],
+   "note": "Pure deterministic seven-session same-contract price breakout momentum with volume, OI, OHLCV, expiry, as-of publication-time and estimated cost gates. Research classification only, no broker feed order/PAPER execution or proven profitability. DATA_BLOCKED.",
    "id": "strategy.STR-176",
    "kind": "STRATEGY",
    "name": "Futures Momentum",
@@ -5589,21 +5628,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Same source-listed NSE_FO futures contract, listing/expiry/lot and ten completed trading-session OHLCV closes",
+    "Separately observed and rights-verified finalized OHLCV/OI timestamps, source provenance, normalized volume and OI",
+    "Eight-session baseline volatility, ninth-session extreme, tenth-session partial recovery, liquidity and explicit after-cost research thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MEAN_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-177-futures-mean-reversion.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Source-permitted ten-completed-session same-contract F&O OHLCV and normalized OI feed with original first-observed timestamps",
+    "Official NSE session/holiday calendar, verified expiry/listing chronology and rights to compute retained historical signals",
+    "No-lookahead mean-reversion out-of-sample research, transaction/impact/stop/risk analysis and walk-forward regime evidence",
+    "Runtime source adapter and separately gated audited PAPER strategy lifecycle, Flutter and backend deployment verification"
+   ],
+   "note": "Deterministic research-only futures mean-reversion classifier based on eight-baseline-session mean and std, ninth extreme, tenth partial reversal, volume/OI and illustrative cost gates. Signals are observations, never an order or guaranteed profit. Remains DATA_BLOCKED.",
    "id": "strategy.STR-177",
    "kind": "STRATEGY",
    "name": "Futures Mean Reversion",
