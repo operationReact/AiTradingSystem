@@ -333,7 +333,12 @@ class FnoExpiryBasisReversionV1Test {
 
     @Test
     void originalLatestSessionMustNotBecomeStale() {
-        Decision d = run(CONTRACT, above(), RIGHTS, ASSUMPTIONS,
+        // A later verified expiry keeps the contract in the valid expiry window
+        // while testing the independent last-data freshness gate.
+        Contract laterExpiry = new Contract(SPOT, FUTURE, SPOT,
+            CONTRACT.listedFrom(), LocalDate.of(2026, 12, 4),
+            CONTRACT.lotSize(), true, true);
+        Decision d = run(laterExpiry, above(), RIGHTS, ASSUMPTIONS,
             NOW.plusSeconds(6 * 24 * 3600L));
         assertEquals("EXPIRY_BASIS_LAST_SESSION_STALE", d.reasonCode());
     }
