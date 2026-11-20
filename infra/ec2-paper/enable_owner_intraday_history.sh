@@ -49,10 +49,14 @@ stage=OWNER_ISOLATION
 echo 'INTRADAY_ACTIVATION_STAGE: OWNER_ISOLATION'
 # Bound database probe independently of GitHub/SSM polling. Never print
 # identities, SQL output or credentials. Categorize the guard result only.
+# The script itself arrives on bash stdin via SSM gzip|bash. Docker compose
+# exec otherwise inherits that stream and consumes the remaining script after
+# the database query, falsely finishing as an SSM Success before activation.
+# Give the database process /dev/null so Bash keeps its own script input.
 isolation_result="$(timeout 20 docker compose --env-file .env -f paper-compose.yml exec -T postgres \
   psql -U aitrading -d aitrading -qtAX -v ON_ERROR_STOP=1 \
   -c "SELECT CASE WHEN count(*) > 1 THEN 'MULTIPLE' WHEN count(*) = 1 THEN 'SINGLE' ELSE 'EMPTY' END FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
-  2>/dev/null)" || {
+  </dev/null 2>/dev/null)" || {
   echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE'
   exit 2
 }

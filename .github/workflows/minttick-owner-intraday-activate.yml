@@ -35,6 +35,9 @@ jobs:
           assert 'INTRADAY_ACTIVATION_BLOCKED: MULTIPLE_ACTIVE_CUSTOMERS' in text
           assert 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE' in text
           assert 'INTRADAY_OWNER_ISOLATION: VERIFIED' in text
+          # SSM runs a stdin-streamed bash script: Docker exec must never drain it.
+          assert 'exec -T postgres' in text
+          assert '</dev/null 2>/dev/null)' in text
           assert "TRADING_MODE: PAPER" in text
           assert "rollback" in text
           assert "BACKEND_HEALTH: PASS" in text
