@@ -16,12 +16,15 @@ import urllib.request
 
 REPOSITORY = "operationReact/AiTradingSystem"
 ISSUE = 1504
-SUPPORTED = frozenset({
-    "HISTORY_SOURCE_VERIFIED", "PLUS_ENTITLEMENT_MISSING", "TOKEN_UNAVAILABLE",
-    "AUTH_REJECTED", "RATE_LIMITED", "PROVIDER_UNAVAILABLE", "PROVIDER_REJECTED",
-    "INVALID_PROVIDER_DATA", "NO_EXPIRED_EXPIRIES", "NO_MATCHING_FUTURES",
-    "NO_VALID_CANDLES", "HOST_IDENTITY_INVALID", "HOST_ENV_INVALID",
-})
+# Source-side states are reviewed and finite; never relay arbitrary provider text.
+from fno_expired_history_probe import STATES as SOURCE_STATES
+SUPPORTED = frozenset(SOURCE_STATES)
+HTTP_CODES = {
+    "BAD_REQUEST": 400, "UNAUTHORIZED": 401, "FORBIDDEN": 403,
+    "NOT_FOUND": 404, "UNPROCESSABLE": 422, "RATE_LIMITED": 429,
+    "INTERNAL_ERROR": 500, "BAD_GATEWAY": 502,
+    "SERVICE_UNAVAILABLE": 503, "GATEWAY_TIMEOUT": 504,
+}
 PATTERN = re.compile(
     r"^FNO EXPIRED SOURCE: ([A-Z_]+), expiries=(\d{1,3}), "
     r"futures=(\d{1,3}), dailyBars=(\d{1,3}); "
@@ -56,8 +59,13 @@ def safe_issue_message(receipt: tuple[str, int, int, int] | None,
     else:
         status, expired_dates, futures, daily_bars = receipt
         state = "SOURCE_SAMPLE_VERIFIED" if status == "HISTORY_SOURCE_VERIFIED" else "SOURCE_BLOCKED"
+        detail = ""
+        for stage in ("EXPIRIES", "CONTRACTS", "CANDLES"):
+            for reason, http_code in HTTP_CODES.items():
+                if status == stage + "_" + reason:
+                    detail = f" (HTTP {http_code} at {stage.lower()} endpoint)"
         result = (
-            f"**{state}** — source status \`{status}\`; expired expiries: "
+            f"**{state}** — source status \`{status}\`{detail}; expired expiries: "
             f"{expired_dates}; matching futures contracts: {futures}; "
             f"verified sample daily bars: {daily_bars}."
         )
