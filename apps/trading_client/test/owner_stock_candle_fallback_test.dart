@@ -60,6 +60,31 @@ void main() {
       '/api/customer/owner-history/v1/candles']);
   });
 
+  test('5Y and MAX request only real monthly owner aggregates, never daily fallback', () async {
+    final paths = <String>[];
+    final session = OperatorSession()..setOperatorKey('test-operator-key');
+    final repo = HttpCustomerMarketRepository(AuthenticatedApiClient(
+      session: session,
+      client: MockClient((request) async {
+        paths.add(request.url.path);
+        if (request.url.path == '/api/customer/owner-history/v1/monthly-candles') {
+          expect(request.url.queryParameters['fromDate'], '2021-11-20');
+          return http.Response(jsonEncode({
+            ...candlePage(rows: [bar('2022-01-03', 108), bar('2026-11-02', 120)]),
+            'interval': 'ONE_MONTH',
+          }), 200);
+        }
+        return http.Response('Do not use common daily candle API', 400);
+      }), baseUri: Uri.parse('https://example.test'),
+    ));
+    final page = await repo.candles(
+      instrumentId: 42, interval: 'ONE_MONTH',
+      fromDate: '2021-11-20', toDate: '2026-11-20');
+    expect(page.items, hasLength(2));
+    expect(page.interval, 'ONE_MONTH');
+    expect(paths, ['/api/customer/owner-history/v1/monthly-candles']);
+  });
+
   test('one stored daily candle recovers usable chart series from owner archive', () async {
     final paths = <String>[];
     final session = OperatorSession()..setOperatorKey('test-operator-key');
