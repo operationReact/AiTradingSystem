@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
+import in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.CacheControl;
@@ -37,17 +38,27 @@ public class UpstoxFnoV3LiveOperatorController {
     private final UpstoxFnoV3LiveFeedService service;
     private final Clock clock;
 
+    private final FnoFuturesContractRegistry registry;
+
     @Autowired
     public UpstoxFnoV3LiveOperatorController(UpstoxAnalyticsSource source,
-                                              UpstoxFnoV3LiveFeedService service) {
-        this(source, service, Clock.systemUTC());
+                                              UpstoxFnoV3LiveFeedService service,
+                                              FnoFuturesContractRegistry registry) {
+        this(source, service, Clock.systemUTC(), registry);
     }
 
     UpstoxFnoV3LiveOperatorController(UpstoxAnalyticsSource source,
                                        UpstoxFnoV3LiveFeedService service, Clock clock) {
+        this(source, service, clock, null);
+    }
+
+    UpstoxFnoV3LiveOperatorController(UpstoxAnalyticsSource source,
+                                       UpstoxFnoV3LiveFeedService service, Clock clock,
+                                       FnoFuturesContractRegistry registry) {
         this.source = source;
         this.service = service;
         this.clock = clock;
+        this.registry = registry;
     }
 
     /**
@@ -59,15 +70,42 @@ public class UpstoxFnoV3LiveOperatorController {
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public ResponseEntity<UpstoxFnoV3LiveFeedService.Status> start(
             @RequestParam("expiry") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate expiry) {
+            LocalDate expiry,
+            @RequestParam(value = "includeFutures", defaultValue = "false") boolean includeFutures) {
         LocalDate today = clock.instant().atZone(IST).toLocalDate();
         if (expiry == null || expiry.isBefore(today) || expiry.isAfter(today.plusDays(90))) {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_EXPIRY");
         }
         if (!source.enabled()) throw new IllegalStateException("UPSTOX_ANALYTICS_DISABLED");
-        List<String> keys = listedNearAtmKeys(source, expiry);
+        List<String> keys = includeFutures
+                ? plannedKeysWithFutures(expiry, today)
+                : listedNearAtmKeys(source, expiry);
         return ResponseEntity.status(HttpStatus.ACCEPTED)
                 .cacheControl(CacheControl.noStore()).body(service.start(keys));
+    }
+
+    public ResponseEntity<UpstoxFnoV3LiveFeedService.Status> start(LocalDate expiry) {
+        return start(expiry, false);
+    }
+
+    /**
+     * Shared subscription plan: the verified NIFTY near/far futures pair comes first, so it is never
+     * dropped, and option CE/PE pairs fill the remaining budget under the single-socket cap.
+     */
+    List<String> plannedKeysWithFutures(LocalDate expiry, LocalDate today) {
+        if (registry == null) throw new IllegalStateException("FNO_FUTURES_REGISTRY_UNAVAILABLE");
+        var pair = registry.nearFar(UNDERLYING, today)
+                .orElseThrow(() -> new IllegalStateException("FNO_FUTURES_PAIR_NOT_VERIFIED"));
+        List<String> futures = List.of(pair.near().instrumentKey(), pair.far().instrumentKey());
+        List<String> options = listedNearAtmKeys(source, expiry,
+                UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS - futures.size());
+        List<String> plan = new java.util.ArrayList<>(futures);
+        plan.addAll(options);
+        if (plan.size() > UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS
+                || Set.copyOf(plan).size() != plan.size()) {
+            throw new IllegalStateException("UPSTOX_FNO_NO_MATCHING_CONTRACTS");
+        }
+        return List.copyOf(plan);
     }
 
     /**
@@ -75,6 +113,10 @@ public class UpstoxFnoV3LiveOperatorController {
      * automatic market-hours subscription. No untrusted contract keys.
      */
     static List<String> listedNearAtmKeys(UpstoxAnalyticsSource source, LocalDate expiry) {
+        return listedNearAtmKeys(source, expiry, UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS);
+    }
+
+    static List<String> listedNearAtmKeys(UpstoxAnalyticsSource source, LocalDate expiry, int maxKeys) {
         List<UpstoxAnalyticsSource.FnoOptionContract> contracts =
                 source.currentFnoOptionContracts(UNDERLYING, expiry);
         UpstoxAnalyticsSource.OptionChainSnapshot chain =
@@ -96,7 +138,7 @@ public class UpstoxFnoV3LiveOperatorController {
         closest.sort(Comparator.comparing(x -> x.strikePrice().subtract(spot).abs()));
         List<String> keys = new ArrayList<>();
         for (var strike : closest) {
-            if (keys.size() >= UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS) break;
+            if (keys.size() + 2 > maxKeys) break; // a CE/PE pair is added atomically
             var call = validContracts.get(strike.call().instrumentKey());
             var put = validContracts.get(strike.put().instrumentKey());
             if (call == null || put == null

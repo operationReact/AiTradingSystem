@@ -49,6 +49,70 @@ class UpstoxFnoV3LiveOperatorControllerTest {
                 new BigDecimal(at), new BigDecimal("25010"), quote(ce), quote(pe));
     }
 
+    private static in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract future(
+            String key, String expiry) {
+        return new in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract(
+                key, UNDERLYING, "NIFTY", "NIFTY FUT", LocalDate.parse(expiry), 65);
+    }
+
+    @Test
+    void includeFuturesPlacesVerifiedNearFarPairFirstAndSharesTheSocketBudget() {
+        in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry registry =
+                mock(in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry.class);
+        when(registry.nearFar(eq(UNDERLYING), any())).thenReturn(java.util.Optional.of(
+                new in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry.NearFar(
+                        future("NSE_FO|61471", "2026-11-23"), future("NSE_FO|58875", "2026-12-29"))));
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY)).thenReturn(List.of(
+                contract("NSE_FO|101", "CE", "25000"),
+                contract("NSE_FO|102", "PE", "25000")));
+        when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                .thenReturn(new UpstoxAnalyticsSource.OptionChainSnapshot(
+                        "UPSTOX_ANALYTICS", Instant.now(), false, List.of(
+                                strike("25000", "NSE_FO|101", "NSE_FO|102"))));
+        when(service.start(anyList())).thenReturn(
+                new UpstoxFnoV3LiveFeedService.Status("CONNECTING", 4, 0, 0, 0,
+                        null, null, 0, false, false, false, false, 0, null));
+        var controller = new UpstoxFnoV3LiveOperatorController(source, service,
+                Clock.fixed(Instant.parse("2026-11-14T09:00:00Z"), ZoneOffset.UTC), registry);
+        controller.start(EXPIRY, true);
+        @SuppressWarnings("unchecked")
+        org.mockito.ArgumentCaptor<List<String>> keys = org.mockito.ArgumentCaptor.forClass(List.class);
+        verify(service).start(keys.capture());
+        assertThat(keys.getValue()).containsExactly(
+                "NSE_FO|61471", "NSE_FO|58875", "NSE_FO|101", "NSE_FO|102");
+        assertThat(keys.getValue().size()).isLessThanOrEqualTo(UpstoxFnoV3LiveFeedService.MAX_SUBSCRIPTIONS);
+    }
+
+    @Test
+    void includeFuturesFailsClosedWithoutVerifiedPairAndNeverSubscribes() {
+        in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry registry =
+                mock(in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry.class);
+        when(registry.nearFar(eq(UNDERLYING), any())).thenReturn(java.util.Optional.empty());
+        when(source.enabled()).thenReturn(true);
+        var controller = new UpstoxFnoV3LiveOperatorController(source, service,
+                Clock.fixed(Instant.parse("2026-11-14T09:00:00Z"), ZoneOffset.UTC), registry);
+        assertThatThrownBy(() -> controller.start(EXPIRY, true))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("FNO_FUTURES_PAIR_NOT_VERIFIED");
+        verify(service, never()).start(anyList());
+    }
+
+    @Test
+    void keyBudgetNeverExceedsRequestedLimitForPairedContracts() {
+        when(source.enabled()).thenReturn(true);
+        when(source.currentFnoOptionContracts(UNDERLYING, EXPIRY)).thenReturn(List.of(
+                contract("NSE_FO|101", "CE", "25000"), contract("NSE_FO|102", "PE", "25000"),
+                contract("NSE_FO|103", "CE", "25050"), contract("NSE_FO|104", "PE", "25050")));
+        when(source.currentFnoOptionChain(UNDERLYING, EXPIRY))
+                .thenReturn(new UpstoxAnalyticsSource.OptionChainSnapshot(
+                        "UPSTOX_ANALYTICS", Instant.now(), false, List.of(
+                                strike("25000", "NSE_FO|101", "NSE_FO|102"),
+                                strike("25050", "NSE_FO|103", "NSE_FO|104"))));
+        // An odd budget of 3 must admit one whole pair (2 keys), never 4.
+        assertThat(UpstoxFnoV3LiveOperatorController.listedNearAtmKeys(source, EXPIRY, 3)).hasSize(2);
+    }
+
     @Test
     void startsOnlyProviderVerifiedPairedCePeContractsNearSpot() {
         when(source.enabled()).thenReturn(true);
@@ -114,7 +178,7 @@ class UpstoxFnoV3LiveOperatorControllerTest {
                 .getAnnotation(ConditionalOnProperty.class).havingValue()).isEqualTo("true");
         for (String name : List.of("start", "status", "stop")) {
             var m = name.equals("start")
-                    ? UpstoxFnoV3LiveOperatorController.class.getMethod(name, LocalDate.class)
+                    ? UpstoxFnoV3LiveOperatorController.class.getMethod(name, LocalDate.class, boolean.class)
                     : UpstoxFnoV3LiveOperatorController.class.getMethod(name);
             assertThat(m.getAnnotation(PreAuthorize.class).value())
                     .contains("ADMIN", "OPERATOR");
