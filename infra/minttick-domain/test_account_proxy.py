@@ -149,6 +149,52 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(json.loads(response["body"])["error"], "OWNER_ONLY")
         self.assertEqual(response["headers"]["cache-control"], "no-store")
 
+    def test_owner_history_daily_chart_is_owner_checked_read_only(self):
+        # Lambda authenticates Cognito; backend enforces exact owner subject,
+        # instrument identity, bounded date range and private archive integrity.
+        path = "/api/customer/owner-history/v1/candles"
+        self.assertTrue(proxy.allowed("GET", path))
+        for method, endpoint in (
+            ("POST", path), ("PUT", path), ("DELETE", path),
+            ("GET", path + "/raw"),
+            ("GET", "/api/customer/owner-history/v1/archive"),
+        ):
+            with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+                result = proxy.handler(event(method, endpoint), None)
+            self.assertEqual(result["statusCode"], 404)
+            upstream.assert_not_called()
+
+        with mock.patch.object(proxy.urllib.request, "urlopen") as upstream:
+            denied = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(denied["statusCode"], 401)
+        upstream.assert_not_called()
+
+        query = "instrumentId=123&fromDate=2026-01-01&toDate=2026-11-20"
+        request_event = event("GET", path)
+        request_event["rawQueryString"] = query
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               return_value=Reply()) as upstream:
+            response = proxy.handler(request_event, None)
+        self.assertEqual(response["statusCode"], 200)
+        self.assertEqual(response["headers"]["cache-control"], "no-store")
+        forwarded = upstream.call_args.args[0]
+        self.assertEqual(forwarded.full_url, proxy.BACKEND + path + "?" + query)
+        self.assertEqual(forwarded.get_method(), "GET")
+        self.assertEqual(forwarded.headers.get("Authorization"),
+                         "Bearer public-test-token")
+        self.assertIsNone(forwarded.data)
+
+        # A different customer's token must not be elevated by the edge.
+        rejection = proxy.urllib.error.HTTPError(
+            proxy.BACKEND + path, 403, "Forbidden", {},
+            io.BytesIO(b'{"error":"OWNER_ONLY"}'))
+        with mock.patch.object(proxy.urllib.request, "urlopen",
+                               side_effect=rejection):
+            denied = proxy.handler(request_event, None)
+        self.assertEqual(denied["statusCode"], 403)
+        self.assertEqual(json.loads(denied["body"])["error"], "OWNER_ONLY")
+        self.assertEqual(denied["headers"]["cache-control"], "no-store")
+
     def test_upstox_analytics_monitor_accepts_only_owner_checked_get(self):
         # Route is HTTPS Cognito-authorized and the Spring backend validates
         # exact JWT subject against MINTTICK_ANGEL_ONE_OWNER_SUB.

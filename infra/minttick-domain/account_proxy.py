@@ -47,6 +47,8 @@ EXACT = {
     ("GET", "/api/customer/home/v1/summary"),
     ("GET", "/api/customer/home/v1/activity"),
     ("GET", "/api/customer/owner-history/v1/progress"),
+    # Owner-sub checked in Spring; read-only, 365-day bounded private OHLCV cache.
+    ("GET", "/api/customer/owner-history/v1/candles"),
     ("GET", "/api/customer/owner-upstox-analytics/v1/progress"),
     ("GET", "/api/customer/owner-upstox-analytics/v1/persisted-receipts"),
     ("GET", "/api/customer/market-data/instruments/status"),
