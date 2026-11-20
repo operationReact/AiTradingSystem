@@ -107,6 +107,23 @@ public class UniverseCandleCoverageRepository {
                 .stream().findFirst();
     }
 
+    /** Source-backed hourly counts; no claim of session completeness. */
+    public Coverage hourlyCoverage(Instant fromInclusive, Instant toExclusive) {
+        validateWindow(fromInclusive, toExclusive);
+        return jdbc.query("""
+                SELECT COUNT(*) AS eligible,
+                       COUNT(*) FILTER (WHERE bars.bar_count >= 10) AS covered,
+                       COUNT(*) FILTER (WHERE bars.bar_count < 10) AS incomplete,
+                       COUNT(*) FILTER (WHERE bars.bar_count = 0) AS empty
+                """ + EQUITIES_WITH_HOURLY_BARS,
+                rs -> {
+                    if (!rs.next()) throw new IllegalStateException("Hourly coverage missing");
+                    return new Coverage(fromInclusive, toExclusive,
+                            rs.getLong("eligible"), rs.getLong("covered"),
+                            rs.getLong("incomplete"), rs.getLong("empty"));
+                }, utc(fromInclusive), utc(toExclusive));
+    }
+
     /**
      * Independently choose a genuine ONE_HOUR source window for an active
      * equity. Backfills are persisted and retried using the existing
