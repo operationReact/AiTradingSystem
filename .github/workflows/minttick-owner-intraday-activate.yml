@@ -124,7 +124,10 @@ jobs:
           allowed={
             'OWNER_FEED_NOT_ACTIVE','OWNER_SUB_NOT_CONFIGURED',
             'BACKEND_FEED_NOT_ACTIVE','CUSTOMER_ISOLATION_UNVERIFIED',
-            'CONTAINER_START_FAILED','BACKEND_NOT_READY'}
+            'CONTAINER_START_FAILED','BACKEND_NOT_READY',
+            'HOST_IDENTITY','PRIVATE_FILES','OWNER_FEED','BACKEND_CONTAINER',
+            'OWNER_ISOLATION','HOST_STAGING','RUNTIME_UPDATE',
+            'BACKEND_RECREATE','BACKEND_HEALTH'}
           found=re.search(r'(?m)^INTRADAY_ACTIVATION_BLOCKED: ([A-Z_]+)$',out)
           reason=found.group(1) if found and found.group(1) in allowed else 'UNKNOWN'
           complete=(state=='Success' and
