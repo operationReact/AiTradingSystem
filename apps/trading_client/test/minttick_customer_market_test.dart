@@ -74,6 +74,7 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
   final Set<int> watchedIds = {};
   List<CustomerCandle> bars = const [];
   final List<String> candleIntervals = [];
+  final List<(String, String)> candleDateRanges = [];
   int quoteRequests = 0;
   int snapshotRequests = 0;
   int detailRequests = 0;
@@ -215,6 +216,7 @@ class _CustomerMarketFake implements CustomerMarketRepository, CustomerSnapshotM
     required String toDate,
   }) async {
     candleIntervals.add(interval);
+    candleDateRanges.add((fromDate, toDate));
     if (failCandles) throw StateError('candle store unavailable');
     return CustomerCandlePage(instrumentId: instrumentId, interval: interval,
         items: bars, hasNext: false);
@@ -475,11 +477,41 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('customer-market-stock-101')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('No stored candles for this range yet'), findsOneWidget);
+    expect(find.textContaining('No verified stored candles for this interval and range'), findsOneWidget);
     expect(find.text('No verified price'), findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('stock-detail-timeframe-1H')));
     await tester.pumpAndSettle();
     expect(fake.candleIntervals, ['ONE_DAY', 'ONE_HOUR']);
+  });
+
+  testWidgets('stock detail daily ranges request bounded dates and real OHLCV', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 3200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _CustomerMarketFake()
+      ..bars = [_bar(DateTime.utc(2026, 11, 5, 4), 118),
+                _bar(DateTime.utc(2026, 11, 6, 4), 120)];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await _openExplore(tester);
+    await tester.tap(find.byKey(const ValueKey('customer-market-stock-101')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('stock-detail-chart-ohlc')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-detail-chart-volume')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-detail-range-1Y')), findsOneWidget);
+    final yearly = fake.candleDateRanges.last;
+    expect(DateTime.parse(yearly.$2).difference(DateTime.parse(yearly.$1)).inDays, 365);
+    await tester.tap(find.byKey(const ValueKey('stock-detail-range-1M')));
+    await tester.pumpAndSettle();
+    expect(fake.candleIntervals.last, 'ONE_DAY');
+    final monthly = fake.candleDateRanges.last;
+    expect(DateTime.parse(monthly.$2).difference(DateTime.parse(monthly.$1)).inDays, 30);
+    await tester.tap(find.byKey(const ValueKey('stock-detail-timeframe-5m')));
+    await tester.pumpAndSettle();
+    expect(fake.candleIntervals.last, 'FIVE_MINUTE');
+    expect(find.byKey(const ValueKey('stock-detail-range-1M')), findsNothing);
   });
 
   testWidgets('stock detail shows a retry state when stored candles fail', (tester) async {
