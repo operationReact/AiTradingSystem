@@ -13,6 +13,7 @@ root=/opt/aitradingsystem-paper
 test -d "$root" && test ! -L "$root"
 cd "$root"
 stage=PRIVATE_FILES
+echo 'INTRADAY_ACTIVATION_STAGE: PRIVATE_FILES'
 for name in runtime.env .env paper-compose.yml; do
   test -f "$name" && test ! -L "$name"
 done
@@ -22,6 +23,7 @@ grep -Fq 'TRADING_MODE: PAPER' paper-compose.yml
 grep -Fq 'OWNER_HISTORY_BACKFILL_ENABLED:' paper-compose.yml
 grep -Fq 'OWNER_FEED_ENABLED:' paper-compose.yml
 stage=OWNER_FEED
+echo 'INTRADAY_ACTIVATION_STAGE: OWNER_FEED'
 for file in runtime.env .env; do
   grep -qx 'OWNER_FEED_ENABLED=true' "$file" || {
     echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_FEED_NOT_ACTIVE'; exit 2;
@@ -31,6 +33,7 @@ for file in runtime.env .env; do
   }
 done
 stage=BACKEND_CONTAINER
+echo 'INTRADAY_ACTIVATION_STAGE: BACKEND_CONTAINER'
 backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
 test -n "$backend"
 test "$(docker compose --env-file .env -f paper-compose.yml ps -q backend | wc -l)" -eq 1
@@ -43,6 +46,7 @@ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
 # customers. The broader entitlement / tenant-isolation migration remains
 # a separate prerequisite before exposing these bars to other users.
 stage=OWNER_ISOLATION
+echo 'INTRADAY_ACTIVATION_STAGE: OWNER_ISOLATION'
 customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres \
   psql -U aitrading -d aitrading -qtAX \
     -c "SELECT count(*) FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
@@ -52,6 +56,7 @@ if ! [[ "$customer_count" =~ ^[0-9]+$ ]] || (( customer_count > 1 )); then
   exit 2
 fi
 stage=HOST_STAGING
+echo 'INTRADAY_ACTIVATION_STAGE: HOST_STAGING'
 scratch="$(mktemp -d "$root/.intraday-activation.XXXXXXXX")"
 chmod 0700 "$scratch"
 cleanup() { rm -rf -- "$scratch"; }
@@ -64,6 +69,7 @@ rollback() {
   docker compose --env-file .env -f paper-compose.yml up -d --no-build --no-deps --force-recreate backend >/dev/null 2>&1 || true
 }
 stage=RUNTIME_UPDATE
+echo 'INTRADAY_ACTIVATION_STAGE: RUNTIME_UPDATE'
 for file in runtime.env .env; do
   tmp="$(mktemp "$root/.intraday-env.XXXXXXXX")"
   grep -v '^OWNER_HISTORY_BACKFILL_ENABLED=' "$file" > "$tmp" || true
@@ -72,6 +78,7 @@ for file in runtime.env .env; do
   rm -f "$tmp"
 done
 stage=BACKEND_RECREATE
+echo 'INTRADAY_ACTIVATION_STAGE: BACKEND_RECREATE'
 if ! docker compose --env-file .env -f paper-compose.yml config --quiet ||
    ! docker compose --env-file .env -f paper-compose.yml up -d --no-build --no-deps --force-recreate backend >/dev/null; then
   rollback
@@ -79,6 +86,7 @@ if ! docker compose --env-file .env -f paper-compose.yml config --quiet ||
   exit 2
 fi
 stage=BACKEND_HEALTH
+echo 'INTRADAY_ACTIVATION_STAGE: BACKEND_HEALTH'
 for attempt in $(seq 1 45); do
   backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
   if [[ -n "$backend" ]] &&

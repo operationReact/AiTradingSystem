@@ -137,7 +137,12 @@ jobs:
             started='YES' if 'INTRADAY_ACTIVATION_STAGE: STARTED' in out else 'NO'
             stdout='YES' if out.strip() else 'NO'
             stderr='YES' if str(d.get('StandardErrorContent') or '').strip() else 'NO'
-            reason=f'UNKNOWN_RC{code}_START{started}_OUT{stdout}_ERR{stderr}'
+            markers=re.findall(r'INTRADAY_ACTIVATION_STAGE: ([A-Z_]+)',out)
+            stages={'STARTED','HOST_IDENTITY','PRIVATE_FILES','OWNER_FEED',
+                    'BACKEND_CONTAINER','OWNER_ISOLATION','HOST_STAGING',
+                    'RUNTIME_UPDATE','BACKEND_RECREATE','BACKEND_HEALTH'}
+            last=markers[-1] if markers and markers[-1] in stages else 'UNAVAILABLE'
+            reason=f'UNKNOWN_RC{code}_LAST{last}_START{started}_OUT{stdout}_ERR{stderr}'
           complete=(state=='Success' and
                     'INTRADAY_ACTIVATION: ENABLED' in out and
                     'INTRADAY_BACKEND_HEALTH: PASS' in out and
