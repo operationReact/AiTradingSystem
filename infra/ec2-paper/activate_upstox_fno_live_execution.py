@@ -63,9 +63,9 @@ def entries(raw):
     return result
 
 def replace_flag(raw, flag=FLAG):
-    lines=raw.decode().splitlines()
-    if any("\r" in v for v in lines):
+    if b"\r" in raw or b"\x00" in raw:
         raise ValueError("INVALID_HOST_FILES")
+    lines=raw.decode().splitlines()
     # Preserve everything including opaque host credentials, with one flag.
     lines=[line for line in lines if not line.startswith(flag+"=")]
     lines.append(flag+"=true")
