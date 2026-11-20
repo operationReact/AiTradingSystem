@@ -1293,6 +1293,31 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     if (page.instrumentId != instrumentId || page.interval != interval) {
       throw const FormatException('Stored candle identity mismatch');
     }
+    // Intraday owner research is stored in a separate private table, never
+    // shared market_candle. Only the exact owner JWT can access this endpoint.
+    if ((interval == 'FIVE_MINUTE' || interval == 'ONE_HOUR') &&
+        page.items.isEmpty) {
+      try {
+        final archived = await api.getJson(
+          '/api/customer/owner-history/v1/intraday-candles',
+          query: {
+            'instrumentId': '$instrumentId',
+            'interval': interval,
+            'fromDate': fromDate,
+            'toDate': toDate,
+          }, timeout: const Duration(seconds: 8));
+        if (archived is Map<String, dynamic>) {
+          final ownerPage = CustomerCandlePage.fromJson(archived);
+          if (ownerPage.instrumentId == instrumentId &&
+              ownerPage.interval == interval && ownerPage.items.isNotEmpty) {
+            return ownerPage;
+          }
+        }
+      } catch (_) {
+        // Private data is absent or caller is not the configured owner.
+        // Never broaden access or manufacture candle data.
+      }
+    }
     // Owner-private Angel One history lives in a separately secured EC2
     // archive, not in the shared market_candle PostgreSQL table. When the
     // normal daily chart store is empty, try the owner-only bounded archive
