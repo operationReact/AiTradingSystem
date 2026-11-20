@@ -193,4 +193,41 @@ class CustomerMindFnoPaperCycleServiceTest {
             eq("BUY"),eq(1),eq(new BigDecimal("125")));
     }
 
+
+    @Test
+    void mindOwnedOneLotAtProfitTargetClosesWithVirtualSellAndAuditedPnl() {
+        var position=new CustomerPaperFnoOrderService.Position(
+            "NSE_FO|61001","CE",LocalDate.of(2026,11,26),
+            65,65,100_000L,15_000L,true);
+        when(orders.positions(owner,room)).thenReturn(List.of(position));
+        when(jdbc.sql(anyString()).param(eq("owner"),eq(owner))
+            .param(eq("room"),eq(room)).param(eq("key"),eq(position.instrumentKey()))
+            .query(String.class).optional()).thenReturn(
+                Optional.of("mindfno_entry_12345678901234567890123456789012"));
+        when(feed.eligiblePaperQuote(position.instrumentKey())).thenReturn(
+            Optional.of(new UpstoxFnoV3LiveFeedService.PaperQuote(
+                position.instrumentKey(),new BigDecimal("20.00"),
+                new BigDecimal("21.00"),NOW.minusSeconds(2),NOW.minusSeconds(1))));
+        var fill=mock(CustomerPaperFnoOrderService.Fill.class);
+        when(fill.id()).thenReturn(UUID.randomUUID());
+        when(fill.instrumentKey()).thenReturn(position.instrumentKey());
+        when(fill.realizedPnlDeltaPaise()).thenReturn(15_000L);
+        when(fill.cashAfterPaise()).thenReturn(11_000_000L);
+        when(orders.submit(eq(owner),eq(room),anyString(),
+            eq(position.instrumentKey()),eq(position.expiry()),
+            eq("SELL"),eq(1),eq(new BigDecimal("20.00")))).thenReturn(fill);
+        when(recon.inspect(owner,room)).thenReturn(
+            new CustomerPaperFnoReconciliationService.Receipt(
+                "BOOKKEEPING_MATCHED",NOW,2,1,1,1,0,15_000L,15_000L,
+                List.of(),false,false,false,false));
+        var result=cycle.run(owner,room,auth);
+        assertThat(result.status()).isEqualTo("FILLED_RECONCILED");
+        assertThat(result.action()).isEqualTo("EXIT");
+        assertThat(result.realizedPnlDeltaPaise()).isEqualTo(15_000L);
+        assertThat(result.liveMoney()).isFalse();
+        verify(orders,times(1)).submit(eq(owner),eq(room),anyString(),
+            eq(position.instrumentKey()),eq(position.expiry()),
+            eq("SELL"),eq(1),eq(new BigDecimal("20.00")));
+    }
+
 }
