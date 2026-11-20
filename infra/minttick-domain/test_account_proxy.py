@@ -401,6 +401,21 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_fno_paper_automation_is_room_scoped_and_no_live(self):
+        base="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-automation"
+        self.assertTrue(proxy.allowed("GET",base))
+        self.assertTrue(proxy.allowed("GET",base+"/history"))
+        self.assertTrue(proxy.allowed("POST",base+"/control"))
+        self.assertFalse(proxy.allowed("POST",base))
+        self.assertFalse(proxy.allowed("GET",base+"/control"))
+        self.assertFalse(proxy.allowed("POST",base+"/history"))
+        self.assertFalse(proxy.allowed("POST",base+"/live"))
+        self.assertFalse(proxy.allowed("GET","/api/customer/trading-rooms/bad/mind/fno/paper-automation"))
+        with mock.patch.object(proxy.urllib.request,"urlopen") as remote:
+            denied=proxy.handler(event("POST",base+"/control",jwt={"claims":{}}),None)
+        self.assertEqual(denied["statusCode"],401)
+        remote.assert_not_called()
+
     def test_mind_fno_virtual_cycle_is_post_only_and_jwt_required(self):
         path="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles"
         self.assertTrue(proxy.allowed("POST",path))
