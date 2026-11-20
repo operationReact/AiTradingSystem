@@ -5402,21 +5402,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified near and next NSE_FO futures contract IDs, expiries and identical underlying/lot size",
+    "Three exchange-session-complete, provider-observed near/far OI and daily volume snapshots with as-of timestamps",
+    "Closing bid/ask for both futures, source-use rights, and explicit estimated execution friction thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_ROLLOVER_SIGNAL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesRolloverSignalV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesRolloverSignalV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-172-futures-rollover-signal.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Verified, licensed, session-complete NSE futures near/next OI and traded-volume history adapter",
+    "Actual provider timestamps and exchange-session calendar validation; OI publication latency checks",
+    "Out-of-sample historical rollover events and no-lookahead walk-forward research",
+    "Deployed PAPER-only observation evaluation, cost/liquidity/risk acceptance and audited results"
+   ],
+   "note": "STR-172 is a deterministic research-only two-step OI migration classifier with near/far source and estimated friction gates. OI rollover does NOT imply bullish/bearish price direction or authorize an order. No provider adapter, PAPER action or LIVE order path. Remains DATA_BLOCKED.",
    "id": "strategy.STR-172",
    "kind": "STRATEGY",
    "name": "Rollover Signal",
