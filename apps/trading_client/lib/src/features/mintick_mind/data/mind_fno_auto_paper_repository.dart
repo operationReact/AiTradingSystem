@@ -93,11 +93,11 @@ class HttpMindFnoAutoPaperRepository implements MindFnoAutoPaperRepository {
   @override
   Future<FnoPaperAutomationState> setEnabled(String roomId,bool enabled) async =>
     FnoPaperAutomationState.parse(await api.postJson(
-        path(roomId)+'/control',body:{'enabled':enabled}));
+        '${path(roomId)}/control',body:{'enabled':enabled}));
 
   @override
   Future<List<FnoPaperCycleEvent>> history(String roomId) async {
-    final response=await api.getJson(path(roomId)+'/history');
+    final response=await api.getJson('${path(roomId)}/history');
     if(response is! List)throw const FormatException('Invalid F&O PAPER history');
     return [for(final item in response)FnoPaperCycleEvent.parse(item)];
   }
