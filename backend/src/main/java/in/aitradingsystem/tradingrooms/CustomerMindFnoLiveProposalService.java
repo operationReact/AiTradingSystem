@@ -75,7 +75,7 @@ public final class CustomerMindFnoLiveProposalService {
     public record OutcomeSimulation(String state, boolean needsBrokerReconciliation,
             boolean mayRetryAutomatically, int filledQuantity) {}
 
-    private record Room(String focus, String riskPreference,
+    record Room(String focus, String riskPreference,
             long plannedBudgetInr, String marketScope) {}
 
     public CustomerMindFnoLiveProposalService(CustomerMindFnoResearchController research,
@@ -96,8 +96,9 @@ public final class CustomerMindFnoLiveProposalService {
     public Proposal inspect(UUID owner, UUID roomId, Authentication authentication) {
         Instant now=clock.instant();
         Room room=requireOwnerLiveRoom(owner,roomId);
-        if (!Set.of("INTRADAY","SWING").contains(room.focus())
+        if (room.focus()==null || !Set.of("INTRADAY","SWING").contains(room.focus())
                 || !"FNO".equals(room.marketScope())
+                || room.riskPreference()==null
                 || !Set.of("CAUTIOUS","BALANCED","AGGRESSIVE")
                     .contains(room.riskPreference())
                 || room.plannedBudgetInr()<1000) {
@@ -129,10 +130,11 @@ public final class CustomerMindFnoLiveProposalService {
         }
         String expectedSignal="strategy.STR-181".equals(signal.strategyId())
             ? "BUY_CALL_RESEARCH" : "BUY_PUT_RESEARCH";
-        if (!VALID_STRATEGIES.contains(signal.strategyId())
+        if (signal.strategyId()==null || !VALID_STRATEGIES.contains(signal.strategyId())
                 || !expectedSignal.equals(signal.signal())
                 || !NIFTY.equals(signal.underlyingKey())
                 || !"UPSTOX_V3_EXCHANGE_TIMED".equals(signal.quoteSource())
+                || signal.candleSource()==null
                 || !Set.of("ANGEL_ONE_SMARTAPI","UPSTOX_ANALYTICS")
                     .contains(signal.candleSource())
                 || signal.completedCandles()<35
@@ -159,6 +161,7 @@ public final class CustomerMindFnoLiveProposalService {
                 .filter(c->NIFTY.equals(c.underlyingKey())
                     && signal.instrumentKey().equals(c.instrumentKey())
                     && signal.expiry().equals(c.expiry())
+                    && c.strikePrice()!=null
                     && signal.strike().compareTo(c.strikePrice())==0
                     && (("strategy.STR-181".equals(signal.strategyId())&&"CE".equals(c.side()))
                         || ("strategy.STR-182".equals(signal.strategyId())&&"PE".equals(c.side()))))
