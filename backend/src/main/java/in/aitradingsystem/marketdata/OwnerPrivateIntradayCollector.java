@@ -40,6 +40,7 @@ public class OwnerPrivateIntradayCollector {
     private int providerFailures;
     private int next;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public OwnerPrivateIntradayCollector(InstrumentMasterService instruments,
         AppAngelOneMarketFeedService feed,HistoricalCandleParser parser,
         OwnerPrivateIntradayRepository repository,
