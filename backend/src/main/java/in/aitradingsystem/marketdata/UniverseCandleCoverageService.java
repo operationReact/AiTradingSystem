@@ -44,6 +44,14 @@ public class UniverseCandleCoverageService {
         return repository.coverage(w.fromInclusive(), w.toExclusive());
     }
 
+    /** A separate ONE_HOUR cursor; empty/failed hourly windows cool down on
+     * the hourly run ledger rather than blocking FIVE_MINUTE data collection. */
+    public Optional<Long> nextHourlyDue() {
+        Window w = window();
+        return repository.nextDueHourly(w.fromInclusive(), w.toExclusive(),
+                clock.instant().minus(RETRY_COOLDOWN));
+    }
+
     /** One candidate at a time; failed/empty provider requests get a cooldown. */
     public Optional<Long> nextDue() {
         Window w = window();
