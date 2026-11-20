@@ -97,6 +97,7 @@ LIVE_BROKER_SELECTION = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{3
 MIND_PROGRESS_ITEM = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*$")
 MIND_PROGRESS_NOTES = re.compile(r"^/api/customer/mind/v1/progress/items/[a-z]+\.[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+)*/notes$")
 MIND_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/paper-cycles$")
+MIND_FNO_PAPER_CYCLES = re.compile(r"^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/paper-cycles$")
 MIND_CYCLE_INTERVALS = {"FIVE_MINUTE", "FIFTEEN_MINUTE", "ONE_HOUR", "ONE_DAY"}
 ALLOWED_RESPONSES = {200, 201, 202, 204, 400, 401, 403, 404, 409, 422, 428, 429, 500, 502, 503}
 MAX_BODY = 65536
@@ -141,6 +142,7 @@ def allowed(method, path):
             or (method == "GET" and MIND_PROGRESS_ITEM.fullmatch(path) and len(path) <= 160)
             or (method == "POST" and MIND_PROGRESS_NOTES.fullmatch(path) and len(path) <= 170)
             or (method in {"GET", "POST"} and MIND_PAPER_CYCLES.fullmatch(path))
+            or (method == "POST" and MIND_FNO_PAPER_CYCLES.fullmatch(path))
             or (method == "POST" and path == MIND_ASSISTANT_QUERY)
             or paper_fno_allowed(method, path)
             or live_fno_allowed(method, path)
