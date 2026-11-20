@@ -1,0 +1,52 @@
+package in.aitradingsystem.marketdata;
+
+import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import in.aitradingsystem.instrument.Instrument;
+import in.aitradingsystem.instrument.InstrumentMasterService;
+import in.aitradingsystem.provider.angelone.AppAngelOneMarketFeedService;
+import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.Optional;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+
+class OwnerPrivateIntradayCollectorTest {
+    private final InstrumentMasterService instruments=mock(InstrumentMasterService.class);
+    private final AppAngelOneMarketFeedService feed=mock(AppAngelOneMarketFeedService.class);
+    private final OwnerPrivateIntradayRepository repository=mock(OwnerPrivateIntradayRepository.class);
+    private final Clock clock=Clock.fixed(Instant.parse("2026-11-20T11:00:00Z"),ZoneOffset.UTC);
+
+    @Test void storedProviderCandlesStayInExactOwnerPrivateTableForBothIntervals() throws Exception {
+        when(feed.available()).thenReturn(true);
+        when(instruments.activeInstrumentBySymbol("NSE","RELIANCE-EQ")).thenReturn(
+            Optional.of(new Instrument(42,"NSE_CM","NSE","2885","RELIANCE-EQ",
+                "Reliance","EQ",null,null,1,new BigDecimal("0.05"),UUID.randomUUID())));
+        when(repository.claim(eq("my-owner"),eq("2885"),anyString(),any()))
+            .thenReturn(true);
+        var source=new ObjectMapper().readTree(
+            "[[\\"2026-11-19T09:15:00+05:30\\",100,110,90,105,12345]]");
+        when(feed.historicalCandles(eq("NSE"),eq("2885"),anyString(),
+            anyString(),anyString())).thenReturn(source);
+        var collector=new OwnerPrivateIntradayCollector(instruments,feed,
+            new HistoricalCandleParser(),repository,"my-owner",clock);
+        collector.collectOne();
+        collector.collectOne();
+        verify(repository).save(eq("my-owner"),eq("2885"),eq("RELIANCE-EQ"),
+            eq("FIVE_MINUTE"),any(),any(),argThat(rows->rows.size()==1));
+        verify(repository).save(eq("my-owner"),eq("2885"),eq("RELIANCE-EQ"),
+            eq("ONE_HOUR"),any(),any(),argThat(rows->rows.size()==1));
+        verifyNoMoreInteractions(feed);
+    }
+
+    @Test void noOwnerIdentityNeverCallsProviderOrPersists() {
+        when(feed.available()).thenReturn(true);
+        new OwnerPrivateIntradayCollector(instruments,feed,new HistoricalCandleParser(),
+            repository,"",clock).collectOne();
+        verifyNoInteractions(instruments,repository);
+        verify(feed,never()).historicalCandles(any(),any(),any(),any(),any());
+    }
+}
