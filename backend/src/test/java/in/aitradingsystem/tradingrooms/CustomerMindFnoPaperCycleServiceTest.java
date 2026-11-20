@@ -133,4 +133,64 @@ class CustomerMindFnoPaperCycleServiceTest {
         assertThat(r.reasonCode()).isEqualTo("EXISTING_POSITION_NOT_MIND_MANAGED");
         verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
     }
+
+    @Test
+    void optedInWorkerNeverNeedsUserTokenAndAbstainsOnNoCrossover() {
+        when(capability.internalCapability(owner,room)).thenReturn(
+            new CustomerPaperFnoCapabilityController.Capability(
+                "SOURCE_CHECK_REQUIRED",true,true,false,List.of()));
+        var researchResult=mock(CustomerMindFnoResearchController.FnoResearch.class);
+        when(researchResult.status()).thenReturn("NO_TRADE");
+        when(researchResult.reasonCode()).thenReturn("NO_NEW_DIRECTIONAL_CROSSOVER");
+        when(research.inspectForOwnedPaperWorker()).thenReturn(researchResult);
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.status()).isEqualTo("NO_TRADE");
+        assertThat(result.liveMoney()).isFalse();
+        verify(research,never()).inspect(any());
+        verify(orders,never()).submit(any(),any(),any(),any(),any(),any(),anyInt(),any());
+    }
+
+    @Test
+    void verifiedWorkerCandidateDelegatesOneLotOnlyToVirtualOrderEngine() {
+        when(capability.internalCapability(owner,room)).thenReturn(
+            new CustomerPaperFnoCapabilityController.Capability(
+                "SOURCE_CHECK_REQUIRED",true,true,false,List.of()));
+        var researchResult=mock(CustomerMindFnoResearchController.FnoResearch.class);
+        when(researchResult.status()).thenReturn("RESEARCH_CANDIDATE");
+        when(researchResult.strategyId()).thenReturn("strategy.STR-181");
+        when(researchResult.signal()).thenReturn("BUY_CALL_RESEARCH");
+        when(researchResult.quoteSource()).thenReturn("UPSTOX_V3_EXCHANGE_TIMED");
+        when(researchResult.exchangeAt()).thenReturn(NOW.minusSeconds(2));
+        when(researchResult.observedAt()).thenReturn(NOW.minusSeconds(1));
+        when(researchResult.latestCompletedCloseAt()).thenReturn(NOW.minusSeconds(86400));
+        when(researchResult.ask()).thenReturn(new BigDecimal("125"));
+        when(researchResult.lotSize()).thenReturn(65);
+        when(researchResult.instrumentKey()).thenReturn("NSE_FO|61001");
+        when(researchResult.expiry()).thenReturn(LocalDate.of(2026,11,26));
+        when(research.inspectForOwnedPaperWorker()).thenReturn(researchResult);
+        when(jdbc.sql(anyString()).param(eq("owner"),eq(owner))
+            .param(eq("room"),eq(room)).param(eq("key"),anyString())
+            .query(Boolean.class).single()).thenReturn(false);
+        var fill=mock(CustomerPaperFnoOrderService.Fill.class);
+        when(fill.id()).thenReturn(UUID.randomUUID());
+        when(fill.instrumentKey()).thenReturn("NSE_FO|61001");
+        when(fill.realizedPnlDeltaPaise()).thenReturn(0L);
+        when(fill.cashAfterPaise()).thenReturn(9_000_000L);
+        when(orders.submit(eq(owner),eq(room),anyString(),
+            eq("NSE_FO|61001"),eq(LocalDate.of(2026,11,26)),
+            eq("BUY"),eq(1),eq(new BigDecimal("125")))).thenReturn(fill);
+        when(recon.inspect(owner,room)).thenReturn(
+            new CustomerPaperFnoReconciliationService.Receipt(
+                "BOOKKEEPING_MATCHED",NOW,1,1,0,0,1,0L,0L,
+                List.of(),false,false,false,false));
+        var result=cycle.runOptedIn(owner,room);
+        assertThat(result.status()).isEqualTo("FILLED_RECONCILED");
+        assertThat(result.action()).isEqualTo("ENTER");
+        assertThat(result.fillId()).isEqualTo(fill.id());
+        assertThat(result.liveMoney()).isFalse();
+        verify(orders,times(1)).submit(eq(owner),eq(room),anyString(),
+            eq("NSE_FO|61001"),eq(LocalDate.of(2026,11,26)),
+            eq("BUY"),eq(1),eq(new BigDecimal("125")));
+    }
+
 }
