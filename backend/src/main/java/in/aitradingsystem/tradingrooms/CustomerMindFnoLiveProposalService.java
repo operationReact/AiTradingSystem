@@ -259,7 +259,7 @@ public final class CustomerMindFnoLiveProposalService {
             false,false);
     }
 
-    private Room requireOwnerLiveRoom(UUID owner,UUID roomId) {
+    Room requireOwnerLiveRoom(UUID owner,UUID roomId) {
         if (owner==null || roomId==null) throw new ResponseStatusException(
             HttpStatus.UNAUTHORIZED,"Customer session required");
         return jdbc.sql("""
