@@ -110,6 +110,82 @@ def windows(start=WINDOW_START, end=WINDOW_END):
         start = through + dt.timedelta(days=1)
 
 
+
+
+def last_completed_session(now=None):
+    """Conservative NSE close cutoff. Holidays are diagnosed, not fabricated."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    india = now.astimezone(ZoneInfo("Asia/Kolkata"))
+    day = india.date()
+    if india.time() < dt.time(16, 0):
+        day -= dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= dt.timedelta(days=1)
+    return day
+
+
+def incremental_months(as_of=None):
+    """Non-overlapping windows beyond the immutable original 20-year archive.
+
+    Keys are *calendar-month* bounded, while provider calls stop at the last
+    completed day. This avoids a separate manifest blob for every session.
+    """
+    as_of = as_of or last_completed_session()
+    start = WINDOW_END + dt.timedelta(days=1)
+    while start <= as_of:
+        next_month = (start.replace(day=28) + dt.timedelta(days=4)).replace(day=1)
+        end = next_month - dt.timedelta(days=1)
+        yield start, end, min(as_of, end)
+        start = next_month
+
+
+def select_incremental_batch(conn, catalogue, now=None):
+    """Choose monthly gaps or stale snapshots, bounded to five stock identities."""
+    now = now or dt.datetime.now(dt.timezone.utc)
+    as_of = last_completed_session(now)
+    periods = list(incremental_months(as_of))
+    if not periods:
+        return []
+    today = now.isoformat()
+    mapping = dict(catalogue)
+    order = [s for s in PILOT if s in mapping]
+    order += [s for s in sorted(mapping) if s not in PILOT]
+    selected = []
+    for sym in order:
+        token = mapping[sym]
+        for first, through, request_end in periods:
+            key = (token, first.isoformat(), through.isoformat())
+            failure = conn.execute("""SELECT retry_after, attempts FROM page_failure
+                WHERE exchange='NSE' AND token=? AND from_date=?
+                AND through_date=?""", key).fetchone()
+            if failure and (failure[1] >= 5 or failure[0] > today):
+                continue
+            old = conn.execute("""SELECT latest FROM page WHERE exchange='NSE'
+                AND token=? AND from_date=? AND through_date=?""", key).fetchone()
+            if old and old[0] and old[0] >= request_end.isoformat():
+                continue
+            # One attempt per instrument per partial trading day. A holiday,
+            # empty provider response or unchanged session never becomes a
+            # rapid repeated zero-bar polling loop.
+            attempted = conn.execute("""SELECT max(attempted_at) FROM candle_request
+                WHERE token=? AND from_date>=? AND through_date<=?""",
+                (token, first.isoformat(), through.isoformat())).fetchone()[0]
+            if attempted:
+                try:
+                    last_try = dt.datetime.fromisoformat(attempted)
+                except ValueError:
+                    raise PersonalHistoryBlocked("INVALID_REQUEST_LEDGER") from None
+                if last_try.tzinfo is None:
+                    raise PersonalHistoryBlocked("INVALID_REQUEST_LEDGER")
+                if last_try.astimezone(ZoneInfo("Asia/Kolkata")).date() >= as_of:
+                    continue
+            selected.append((sym, token, first, through, request_end))
+            break
+        if len(selected) >= MAX_STOCKS_PER_RUN:
+            break
+    return selected
+
+
 def ensure_private_store(root=ROOT):
     if os.geteuid() != 0 or not sys.platform.startswith("linux"):
         raise PersonalHistoryBlocked("ROOT_OR_PLATFORM")
@@ -820,22 +896,30 @@ def run():
             catalogue = select_catalogue_symbols()
             recovery = select_recovery_windows(conn, catalogue)
             fresh = select_next_batch(conn, catalogue)
-            mode = choose_collection_mode(conn, fresh, recovery)
+            incremental = select_incremental_batch(conn, catalogue)
+            mode = choose_collection_mode(conn, incremental or fresh, recovery)
             use_recovery = mode == "RECOVERY"
+            use_incremental = not use_recovery and bool(incremental)
             entries = (sorted({(symbol, token) for symbol, token, _, _ in recovery})
-                       if use_recovery else fresh)
-            print("PERSONAL_COLLECTION_MODE: " + mode, flush=True)
+                       if use_recovery else
+                       [(s, t) for s, t, _, _, _ in incremental]
+                       if use_incremental else fresh)
+            print("PERSONAL_COLLECTION_MODE: " + ("INCREMENTAL" if use_incremental else mode), flush=True)
             print("PERSONAL_UNIVERSE_EQUITIES: " + str(len(catalogue)), flush=True)
             if len(entries) > MAX_STOCKS_PER_RUN:
                 raise PersonalHistoryBlocked("RUN_STOCK_LIMIT")
             remaining = recovery.copy() if use_recovery else []
             skipped = 0
             if not use_recovery:
-                planned = [(sym, token, start, end)
-                           for sym, token in entries for start, end in windows()]
+                planned = ([(sym, token, first, through)
+                            for sym, token, first, through, _ in incremental]
+                           if use_incremental else
+                           [(sym, token, start, end)
+                            for sym, token in entries for start, end in windows()])
                 # Validate previous files before making any provider requests.
                 for sym, token, start, end in planned:
-                    if existing_page(conn, root, token, start, end) is None:
+                    prior = existing_page(conn, root, token, start, end)
+                    if use_incremental or prior is None:
                         remaining.append((sym, token, start, end))
                     else:
                         skipped += 1
@@ -871,8 +955,11 @@ def run():
                     print("PERSONAL_DOWNLOAD_PAUSED: RUN_TIME_BUDGET", flush=True)
                     break
                 try:
-                    request_start, request_end = (recovery_slice(conn, token, start, end)
-                                                  if use_recovery else (start, end))
+                    request_start, request_end = (
+                        recovery_slice(conn, token, start, end) if use_recovery else
+                        (start, next(e for s, t, a, b, e in incremental
+                                     if s == sym and t == token and a == start and b == end))
+                        if use_incremental else (start, end))
                     rows, first, last = tracked_fetch(
                         conn, headers, sym, token, request_start, request_end)
                     if use_recovery:
@@ -880,6 +967,12 @@ def run():
                         short_rows += len(rows)
                         gained, _ = recover_page(conn, root, sym, token, start, end, rows)
                         checkpoint_recovery(conn, token, start, end, request_start)
+                    elif use_incremental:
+                        if existing_page(conn, root, token, start, end) is None:
+                            persist_page(conn, root, sym, token, start, end, rows, first, last)
+                            gained = len(rows)
+                        else:
+                            gained, _ = recover_page(conn, root, sym, token, start, end, rows)
                     else:
                         persist_page(conn, root, sym, token, start, end, rows, first, last)
                         gained = len(rows)
