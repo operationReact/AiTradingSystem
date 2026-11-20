@@ -215,6 +215,9 @@ minttick:
     poll-ms: ${OWNER_FEED_POLL_MS:10000}
     # Private historical bootstrap only, off by default until source access is confirmed.
     history-backfill-enabled: ${OWNER_HISTORY_BACKFILL_ENABLED:false}
+    # Separate private table and exact-owner API; not the shared history worker.
+    private-intraday-enabled: ${OWNER_PRIVATE_INTRADAY_ENABLED:false}
+    private-intraday-poll-ms: ${OWNER_PRIVATE_INTRADAY_POLL_MS:20000}
     history-backfill-poll-ms: ${OWNER_HISTORY_BACKFILL_POLL_MS:2000}
 springdoc:
   swagger-ui:

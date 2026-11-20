@@ -155,6 +155,9 @@ class AccountProxyTest(unittest.TestCase):
         path = "/api/customer/owner-history/v1/candles"
         self.assertTrue(proxy.allowed("GET", path))
         self.assertTrue(proxy.allowed("GET", "/api/customer/owner-history/v1/monthly-candles"))
+        self.assertTrue(proxy.allowed("GET", "/api/customer/owner-history/v1/intraday-candles"))
+        self.assertFalse(proxy.allowed("POST", "/api/customer/owner-history/v1/intraday-candles"))
+        self.assertFalse(proxy.allowed("GET", "/api/customer/owner-history/v1/intraday-candles/raw"))
         self.assertFalse(proxy.allowed("POST", "/api/customer/owner-history/v1/monthly-candles"))
         self.assertFalse(proxy.allowed("GET", "/api/customer/owner-history/v1/monthly-candles/raw"))
         for method, endpoint in (
