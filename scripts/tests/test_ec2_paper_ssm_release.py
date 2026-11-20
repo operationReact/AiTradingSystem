@@ -215,7 +215,7 @@ class PaperSsmRelease(unittest.TestCase):
                     self.assertNotIn(forbidden,s)
         deploy=(ROOT/".github/workflows/ec2-paper-ssm-app-deploy.yml").read_text()
         for required in ("docker buildx build --platform linux/arm64 --load",
-                         "--file backend/Dockerfile.ec2-paper-arm64",
+                         "--file backend/Dockerfile.ec2-paper-prebuilt-arm64",
                          "flutter build web --release",
                          "sha256sum", "docker save",
                          "aws s3 cp", "--sse AES256",
