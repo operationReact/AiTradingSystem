@@ -20,7 +20,7 @@ done
 test "$(stat -c '%u:%a' runtime.env)" = '0:600'
 test "$(stat -c '%u:%a' .env)" = '0:600'
 grep -Fq 'TRADING_MODE: PAPER' paper-compose.yml
-grep -Fq 'OWNER_HISTORY_BACKFILL_ENABLED:' paper-compose.yml
+grep -Fq 'OWNER_PRIVATE_INTRADAY_ENABLED:' paper-compose.yml
 grep -Fq 'OWNER_FEED_ENABLED:' paper-compose.yml
 stage=OWNER_FEED
 echo 'INTRADAY_ACTIVATION_STAGE: OWNER_FEED'
@@ -41,39 +41,34 @@ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
   grep -qx 'OWNER_FEED_ENABLED=true' || {
     echo 'INTRADAY_ACTIVATION_BLOCKED: BACKEND_FEED_NOT_ACTIVE'; exit 2;
   }
-# This is one owner-personal research deployment; refuse to enable the
-# shared market_candle writer if the app already serves multiple active
-# customers. The broader entitlement / tenant-isolation migration remains
-# a separate prerequisite before exposing these bars to other users.
-stage=OWNER_ISOLATION
-echo 'INTRADAY_ACTIVATION_STAGE: OWNER_ISOLATION'
-# Bound database probe independently of GitHub/SSM polling. Never print
-# identities, SQL output or credentials. Categorize the guard result only.
-# The script itself arrives on bash stdin via SSM gzip|bash. Docker compose
-# exec otherwise inherits that stream and consumes the remaining script after
-# the database query, falsely finishing as an SSM Success before activation.
-# Give the database process /dev/null so Bash keeps its own script input.
-isolation_result="$(timeout 20 docker compose --env-file .env -f paper-compose.yml exec -T postgres \
-  psql -U aitrading -d aitrading -qtAX -v ON_ERROR_STOP=1 \
-  -c "SELECT CASE WHEN count(*) > 1 THEN 'MULTIPLE' WHEN count(*) = 1 THEN 'SINGLE' ELSE 'EMPTY' END FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
-  </dev/null 2>/dev/null)" || {
-  echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE'
+# The original 5m/1H collector targets shared market_candle and must
+# remain OFF. This activation enables a different owner-private table writer.
+stage=OWNER_PRIVATE_STORAGE
+echo 'INTRADAY_ACTIVATION_STAGE: OWNER_PRIVATE_STORAGE'
+for file in runtime.env .env; do
+  if grep -qx 'OWNER_HISTORY_BACKFILL_ENABLED=true' "$file"; then
+    echo 'INTRADAY_ACTIVATION_BLOCKED: SHARED_COLLECTOR_ACTIVE'
+    exit 2
+  fi
+done
+if docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
+  grep -qx 'OWNER_HISTORY_BACKFILL_ENABLED=true'; then
+  echo 'INTRADAY_ACTIVATION_BLOCKED: SHARED_COLLECTOR_ACTIVE'
   exit 2
-}
-case "$isolation_result" in
-  SINGLE|EMPTY)
-    echo 'INTRADAY_OWNER_ISOLATION: VERIFIED'
-    ;;
-  MULTIPLE)
-    echo 'INTRADAY_ACTIVATION_BLOCKED: MULTIPLE_ACTIVE_CUSTOMERS'
+fi
+# SSM streams this script into bash; Docker exec must not consume its stdin.
+private_tables="$(timeout 20 docker compose --env-file .env -f paper-compose.yml exec -T postgres \
+  psql -U aitrading -d aitrading -qtAX -v ON_ERROR_STOP=1 \
+  -c "SELECT CASE WHEN to_regclass('public.owner_private_intraday_candle') IS NOT NULL AND to_regclass('public.owner_private_intraday_cursor') IS NOT NULL THEN 'READY' ELSE 'MISSING' END" \
+  </dev/null 2>/dev/null)" || {
+    echo 'INTRADAY_ACTIVATION_BLOCKED: PRIVATE_STORAGE_UNAVAILABLE'
     exit 2
-    ;;
-  *)
-    echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE'
-    exit 2
-    ;;
-esac
-
+  }
+if [[ "$private_tables" != READY ]]; then
+  echo 'INTRADAY_ACTIVATION_BLOCKED: PRIVATE_STORAGE_MISSING'
+  exit 2
+fi
+echo 'INTRADAY_PRIVATE_STORAGE: VERIFIED'
 stage=HOST_STAGING
 echo 'INTRADAY_ACTIVATION_STAGE: HOST_STAGING'
 scratch="$(mktemp -d "$root/.intraday-activation.XXXXXXXX")"
@@ -92,7 +87,7 @@ echo 'INTRADAY_ACTIVATION_STAGE: RUNTIME_UPDATE'
 for file in runtime.env .env; do
   tmp="$(mktemp "$root/.intraday-env.XXXXXXXX")"
   grep -v '^OWNER_HISTORY_BACKFILL_ENABLED=' "$file" > "$tmp" || true
-  printf 'OWNER_HISTORY_BACKFILL_ENABLED=true\n' >> "$tmp"
+  printf 'OWNER_PRIVATE_INTRADAY_ENABLED=true\n' >> "$tmp"
   install -o root -g root -m 0600 "$tmp" "$file"
   rm -f "$tmp"
 done
