@@ -130,6 +130,14 @@ jobs:
             'BACKEND_RECREATE','BACKEND_HEALTH'}
           found=re.search(r'(?m)^INTRADAY_ACTIVATION_BLOCKED: ([A-Z_]+)$',out)
           reason=found.group(1) if found and found.group(1) in allowed else 'UNKNOWN'
+          if reason=='UNKNOWN':
+            # No raw stdout/stderr or command bodies may leave SSM.
+            code=d.get('ResponseCode')
+            code=str(code) if type(code) is int and -1 <= code <= 255 else 'NA'
+            started='YES' if 'INTRADAY_ACTIVATION_STAGE: STARTED' in out else 'NO'
+            stdout='YES' if out.strip() else 'NO'
+            stderr='YES' if str(d.get('StandardErrorContent') or '').strip() else 'NO'
+            reason=f'UNKNOWN_RC{code}_START{started}_OUT{stdout}_ERR{stderr}'
           complete=(state=='Success' and
                     'INTRADAY_ACTIVATION: ENABLED' in out and
                     'INTRADAY_BACKEND_HEALTH: PASS' in out and
