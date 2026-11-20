@@ -18,6 +18,15 @@ const _timeframes = [
   (label: '1D', interval: 'ONE_DAY', lookbackDays: 365),
 ];
 
+/// Daily candle interval is distinct from chart lookback; the owner archive
+/// currently exports at most 365 calendar days, not five or twenty years.
+const _dailyRanges = [
+  (label: '1M', days: 30),
+  (label: '3M', days: 90),
+  (label: '6M', days: 180),
+  (label: '1Y', days: 365),
+];
+
 /// Stock detail: a verified live price when available, a stored-candle chart, and
 /// only the statistics the backend serves. Missing values are labelled, never estimated.
 class MintTickStockDetailPage extends StatefulWidget {
@@ -31,6 +40,8 @@ class MintTickStockDetailPage extends StatefulWidget {
 
 class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   int _timeframe = 2;
+  int _dailyRange = 3;
+  int? _selectedCandle;
   List<CustomerCandle>? _candles;
   bool _candlesLoading = false;
   bool _candlesFailed = false;
@@ -89,7 +100,8 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       final page = await repo.candles(
         instrumentId: widget.stock.id,
         interval: timeframe.interval,
-        fromDate: _istDate(now.subtract(Duration(days: timeframe.lookbackDays))),
+        fromDate: _istDate(now.subtract(Duration(
+          days: _timeframe == 2 ? _dailyRanges[_dailyRange].days : timeframe.lookbackDays))),
         toDate: _istDate(now),
       );
       if (!mounted || request != _candleRequest) return;
@@ -97,6 +109,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
         ..sort((a, b) => a.candleTime.compareTo(b.candleTime));
       setState(() {
         _candles = sorted;
+        _selectedCandle = null;
         _candlesLoading = false;
       });
     } catch (_) {
@@ -156,7 +169,21 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
 
   void _selectTimeframe(int index) {
     if (index == _timeframe) return;
-    setState(() => _timeframe = index);
+    setState(() {
+      _timeframe = index;
+      _candles = null;
+      _selectedCandle = null;
+    });
+    _loadCandles();
+  }
+
+  void _selectDailyRange(int index) {
+    if (index == _dailyRange) return;
+    setState(() {
+      _dailyRange = index;
+      _candles = null;
+      _selectedCandle = null;
+    });
     _loadCandles();
   }
 
@@ -242,6 +269,19 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
                 onSelected: (_) => _selectTimeframe(index),
               ),
           ]),
+          if (_timeframe == 2) ...[
+            const SizedBox(height: 6),
+            Wrap(spacing: 5, runSpacing: 0, children: [
+              for (final (index, range) in _dailyRanges.indexed)
+                ChoiceChip(
+                  key: ValueKey('stock-detail-range-${range.label}'),
+                  label: Text(range.label),
+                  selected: index == _dailyRange,
+                  onSelected: (_) => _selectDailyRange(index),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ]),
+          ],
           const SizedBox(height: 12),
           _chartBlock(theme),
           const SizedBox(height: 16),
@@ -387,21 +427,37 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     } else if (candles == null || candles.isEmpty) {
       body = const Center(child: Padding(
         padding: EdgeInsets.all(12),
-        child: Text('No stored candles for this range yet. Historical bars appear after '
-            'MintTick has stored them.', textAlign: TextAlign.center),
+        child: Text('No verified stored candles for this interval and range. '
+            '5m and 1H require separate intraday collection; daily history '
+            'cannot be converted into intraday bars.', textAlign: TextAlign.center),
       ));
     } else if (candles.length < 2) {
       body = Center(child: Text('Only one stored bar for this range. Not enough to draw a line.',
           textAlign: TextAlign.center, style: theme.textTheme.bodySmall));
     } else {
-      body = CustomPaint(
-        painter: _LinePainter(
-          [for (final c in candles) c.close.toDouble()],
-          scheme.primary, scheme.outlineVariant),
-        child: const SizedBox.expand(),
-      );
+      body = LayoutBuilder(builder: (context, constraints) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (tap) {
+          if (candles.isEmpty) return;
+          const leftInset = 8.0;
+          const rightInset = 54.0;
+          final width = math.max(1.0, constraints.maxWidth - leftInset - rightInset);
+          final ratio = ((tap.localPosition.dx - leftInset) / width).clamp(0.0, 1.0);
+          setState(() => _selectedCandle =
+              math.max(0, math.min(candles.length - 1, (ratio * (candles.length - 1)).round())));
+        },
+        child: CustomPaint(
+          painter: _CandleChartPainter(
+            candles, scheme.primary, scheme.error, scheme.outlineVariant,
+            scheme.onSurfaceVariant, _selectedCandle),
+          child: const SizedBox.expand(),
+        ),
+      ));
     }
     final last = candles == null || candles.isEmpty ? null : candles.last;
+    final selected = candles != null && candles.isNotEmpty
+        ? candles[math.max(0, math.min(candles.length - 1, _selectedCandle ?? candles.length - 1))]
+        : null;
     return MintTickSurface(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -411,6 +467,20 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               : 'Stored candle chart with ${candles.length} bars',
           child: body,
         )),
+        if (selected != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            '${_istDate(selected.candleTime)}   O ₹${selected.open.toStringAsFixed(2)}  '
+            'H ₹${selected.high.toStringAsFixed(2)}  '
+            'L ₹${selected.low.toStringAsFixed(2)}  '
+            'C ₹${selected.close.toStringAsFixed(2)}',
+            key: const ValueKey('stock-detail-chart-ohlc'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurface),
+          ),
+          Text('Volume ${selected.volume} · Tap a candle to inspect',
+              key: const ValueKey('stock-detail-chart-volume'),
+              style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
         const SizedBox(height: 8),
         Text(
           last == null
@@ -604,40 +674,89 @@ String _clock(DateTime time) =>
     '${time.second.toString().padLeft(2, '0')}';
 
 
-class _LinePainter extends CustomPainter {
-  _LinePainter(this.values, this.line, this.grid);
-  final List<double> values;
-  final Color line;
+/// True OHLCV chart: no interpolation of missing market sessions and no
+/// fabrication of 5m/1H candles from the daily archive.
+class _CandleChartPainter extends CustomPainter {
+  _CandleChartPainter(this.bars, this.rise, this.fall, this.grid,
+      this.labelColor, this.selectedIndex);
+
+  final List<CustomerCandle> bars;
+  final Color rise;
+  final Color fall;
   final Color grid;
+  final Color labelColor;
+  final int? selectedIndex;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gridPaint = Paint()..color = grid..strokeWidth = 1;
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+    if (bars.isEmpty || size.width <= 65 || size.height <= 45) return;
+    const left = 8.0;
+    const right = 54.0;
+    const top = 8.0;
+    final plotWidth = size.width - left - right;
+    final priceHeight = size.height * 0.70;
+    final volumeTop = size.height * 0.79;
+    final volumeHeight = size.height * 0.14;
+    final low = bars.map((c) => c.low.toDouble()).reduce(math.min);
+    final high = bars.map((c) => c.high.toDouble()).reduce(math.max);
+    final span = math.max(0.00001, high - low);
+    double x(int index) => left + plotWidth * (index + 0.5) / bars.length;
+    double y(num price) => top + (high - price.toDouble()) / span * (priceHeight - top);
+    final gridPaint = Paint()..color = grid..strokeWidth = 0.8;
+    for (var i = 0; i < 3; i++) {
+      final fraction = i / 2;
+      final lineY = top + fraction * (priceHeight - top);
+      canvas.drawLine(Offset(left, lineY), Offset(left + plotWidth, lineY), gridPaint);
+      _paintLabel(canvas, (high - span * fraction).toStringAsFixed(1),
+          Offset(left + plotWidth + 5, lineY - 8), labelColor);
     }
-    final low = values.reduce((a, b) => math.min(a, b));
-    final high = values.reduce((a, b) => math.max(a, b));
-    final span = high - low == 0 ? 1.0 : high - low;
-    final path = Path();
-    for (var i = 0; i < values.length; i++) {
-      final x = size.width * i / (values.length - 1);
-      final y = size.height - (values[i] - low) / span * size.height;
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+    final biggestVolume = math.max(1, bars.map((b) => b.volume).reduce(math.max));
+    final gap = plotWidth / bars.length;
+    final bodyWidth = math.max(1.0, math.min(9.0, gap * 0.65));
+    for (var i = 0; i < bars.length; i++) {
+      final bar = bars[i];
+      final px = x(i);
+      final color = bar.close >= bar.open ? rise : fall;
+      final wick = Paint()..color = color..strokeWidth = math.max(0.8, math.min(1.5, gap * 0.2));
+      canvas.drawLine(Offset(px, y(bar.high)), Offset(px, y(bar.low)), wick);
+      final openY = y(bar.open);
+      final closeY = y(bar.close);
+      canvas.drawRect(
+        Rect.fromLTWH(px - bodyWidth / 2, math.min(openY, closeY),
+          bodyWidth, math.max(1.0, (openY - closeY).abs())),
+        Paint()..color = color,
+      );
+      final volumeLength = volumeHeight * bar.volume / biggestVolume;
+      canvas.drawRect(Rect.fromLTWH(px - bodyWidth / 2,
+          volumeTop + volumeHeight - volumeLength, bodyWidth, volumeLength),
+          Paint()..color = color.withValues(alpha: 0.52));
     }
-    canvas.drawPath(path, Paint()
-      ..color = line
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2
-      ..strokeJoin = StrokeJoin.round);
+    for (final index in [0, bars.length - 1]) {
+      final date = bars[index].candleTime;
+      final stamp = '${date.day}/${date.month}/${date.year.toString().substring(2)}';
+      _paintLabel(canvas, stamp,
+          Offset(index == 0 ? left : math.max(left, left + plotWidth - 47),
+              size.height - 13), labelColor);
+    }
+    final highlighted = selectedIndex;
+    if (highlighted != null && highlighted >= 0 && highlighted < bars.length) {
+      canvas.drawLine(Offset(x(highlighted), top),
+          Offset(x(highlighted), volumeTop + volumeHeight),
+          Paint()..color = labelColor.withValues(alpha: 0.75)..strokeWidth = 0.8);
+    }
+  }
+
+  void _paintLabel(Canvas canvas, String value, Offset offset, Color color) {
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: TextStyle(color: color, fontSize: 10)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    painter.paint(canvas, offset);
   }
 
   @override
-  bool shouldRepaint(_LinePainter old) =>
-      old.values != values || old.line != line || old.grid != grid;
+  bool shouldRepaint(covariant _CandleChartPainter old) =>
+      old.bars != bars || old.rise != rise || old.fall != fall ||
+      old.grid != grid || old.labelColor != labelColor ||
+      old.selectedIndex != selectedIndex;
 }
