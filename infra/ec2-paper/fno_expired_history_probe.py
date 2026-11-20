@@ -37,6 +37,15 @@ STATES = {
     "INVALID_PROVIDER_DATA", "NO_EXPIRED_EXPIRIES", "NO_MATCHING_FUTURES",
     "NO_VALID_CANDLES", "HOST_IDENTITY_INVALID", "HOST_ENV_INVALID",
 }
+STAGES = ("EXPIRIES", "CONTRACTS", "CANDLES")
+HTTP_REASON = {
+    400: "BAD_REQUEST", 401: "UNAUTHORIZED", 403: "FORBIDDEN",
+    404: "NOT_FOUND", 422: "UNPROCESSABLE", 429: "RATE_LIMITED",
+    500: "INTERNAL_ERROR", 502: "BAD_GATEWAY",
+    503: "SERVICE_UNAVAILABLE", 504: "GATEWAY_TIMEOUT",
+}
+STATES |= {stage + "_" + reason for stage in STAGES
+           for reason in (*HTTP_REASON.values(), "OTHER_HTTP", "TRANSPORT_FAILURE")}
 
 
 class Blocked(Exception):
@@ -57,16 +66,13 @@ def expected_request():
     }
 
 
-def classify_http(status, data):
-    if status == 401:
-        return "AUTH_REJECTED"
-    if b"UDAPI1149" in data[:4096]:
+def classify_http(status, data, stage):
+    """Classify only HTTP code + fixed endpoint stage; never provider text."""
+    if stage not in STAGES:
+        return "INVALID_PROVIDER_DATA"
+    if status == 403 and b"UDAPI1149" in data[:4096]:
         return "PLUS_ENTITLEMENT_MISSING"
-    if status == 429:
-        return "RATE_LIMITED"
-    if status in (500, 502, 503, 504):
-        return "PROVIDER_UNAVAILABLE"
-    return "PROVIDER_REJECTED"
+    return stage + "_" + HTTP_REASON.get(status, "OTHER_HTTP")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -74,7 +80,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def get_json(url, token):
+def get_json(url, token, stage):
     parts = urllib.parse.urlsplit(url)
     if (parts.scheme != "https" or parts.netloc != "api.upstox.com"
             or not parts.path.startswith("/v2/expired-instruments/")
@@ -87,12 +93,12 @@ def get_json(url, token):
     try:
         with opener.open(request, timeout=12) as response:
             if response.status != 200:
-                raise Blocked(classify_http(response.status, b""))
+                raise Blocked(classify_http(response.status, b"", stage))
             body = response.read(65537)
     except urllib.error.HTTPError as error:
-        raise Blocked(classify_http(error.code, error.read(4097))) from None
+        raise Blocked(classify_http(error.code, error.read(4097), stage)) from None
     except (urllib.error.URLError, TimeoutError, OSError):
-        raise Blocked("PROVIDER_UNAVAILABLE") from None
+        raise Blocked(stage + "_TRANSPORT_FAILURE") from None
     if len(body) > 65536:
         raise Blocked("INVALID_PROVIDER_DATA")
     try:
@@ -179,7 +185,7 @@ def count_candles(body, first, last):
 def probe(token, today=None):
     today = today or datetime.now(ZoneInfo("Asia/Kolkata")).date()
     underlying = urllib.parse.quote(UNDERLYING, safe="")
-    listed = expiries(get_json(BASE + "/expiries?instrument_key=" + underlying, token), today)
+    listed = expiries(get_json(BASE + "/expiries?instrument_key=" + underlying, token, "EXPIRIES"), today)
     if not listed:
         return "NO_EXPIRED_EXPIRIES", 0, 0, 0
     # Futures typically have monthly expiries; avoid selecting a recent weekly-only expiry.
@@ -187,13 +193,13 @@ def probe(token, today=None):
     completed_month_start = today.replace(day=1)
     last = next((d for d in listed if d < completed_month_start), listed[0])
     url = BASE + "/future/contract?instrument_key=" + underlying + "&expiry_date=" + last.isoformat()
-    key, contracts = future_key(get_json(url, token), last)
+    key, contracts = future_key(get_json(url, token, "CONTRACTS"), last)
     if not key:
         return "NO_MATCHING_FUTURES", len(listed), 0, 0
     first = last - timedelta(days=7)
     url = (BASE + "/historical-candle/" + urllib.parse.quote(key, safe="")
            + "/day/" + last.isoformat() + "/" + first.isoformat())
-    candles = count_candles(get_json(url, token), first, last)
+    candles = count_candles(get_json(url, token, "CANDLES"), first, last)
     return ("HISTORY_SOURCE_VERIFIED" if candles else "NO_VALID_CANDLES",
             len(listed), contracts, candles)
 
