@@ -72,4 +72,136 @@ class CustomerUpstoxFnoLiveOrderServiceTest {
         assertThat(CustomerUpstoxFnoLiveOrderService.availableLongUnits(
             mapper.readTree("{}"),"NSE_FO|123","I")).isZero();
     }
+
+    private CustomerUpstoxFnoLiveOrderService.Receipt receipt() {
+        return new CustomerUpstoxFnoLiveOrderService.Receipt(
+            java.util.UUID.randomUUID(), java.util.UUID.randomUUID(),
+            "NSE_FO|61001", java.time.LocalDate.parse("2026-11-26"), "BUY",
+            65, new java.math.BigDecimal("126"), "UNKNOWN", "mt1234567890123456",
+            "upstoxid123", "ACK_UNCERTAIN", java.time.Instant.parse("2026-11-20T05:00:00Z"));
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode history(String events) throws Exception {
+        return mapper.readTree(events);
+    }
+
+    @Test
+    void fullFillIsTerminalEvenWhenBrokerReturnsOlderOpenUpdateLast() throws Exception {
+        var actual=CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":65,"status":"complete"},
+             {"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":0,"status":"open"}]
+            """),receipt());
+        assertThat(actual.state()).isEqualTo("COMPLETE");
+        assertThat(actual.observedFilledQuantity()).isEqualTo(65);
+        assertThat(actual.outcomeCode()).isEqualTo("UPSTOX_FNO_FULL_FILL_VERIFIED");
+    }
+
+    @Test
+    void partialFillNeverClearsAccountWideReconciliationLock() throws Exception {
+        var actual=CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":14,"status":"open"}]
+            """),receipt());
+        assertThat(actual.state()).isEqualTo("UNKNOWN");
+        assertThat(actual.outcomeCode()).isEqualTo("UPSTOX_FNO_PARTIAL_FILL_UNCERTAIN");
+        assertThat(actual.observedFilledQuantity()).isEqualTo(14);
+    }
+
+    @Test
+    void cancelledWithPartialIsUncertainButZeroFillIsTerminal() throws Exception {
+        var partial=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":12,"status":"cancelled"}]
+            """);
+        var zero=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":0,"status":"cancelled"}]
+            """);
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            partial,receipt()).state()).isEqualTo("UNKNOWN");
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            zero,receipt()).state()).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    void rejectedWithoutProofOfZeroFillsRemainsUnknown() throws Exception {
+        var missingFill=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"status":"rejected"}]
+            """);
+        var zeroFill=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":0,"status":"rejected"}]
+            """);
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            missingFill,receipt()).state()).isEqualTo("UNKNOWN");
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            zeroFill,receipt()).state()).isEqualTo("REJECTED");
+    }
+
+    @Test
+    void missingHistoryOrUnknownBrokerStateCannotClaimSuccess() throws Exception {
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            history("[]"),receipt())).isNull();
+        var result=CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":0,"status":"UNRECOGNIZED"}]
+            """),receipt());
+        assertThat(result.state()).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void foreignTagAndBrokerIdMismatchAbortReconciliation() throws Exception {
+        var foreign=history("""
+            [{"tag":"anotherowner","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":65,"status":"complete"}]
+            """);
+        var wrongId=history("""
+            [{"tag":"mt1234567890123456","order_id":"otherBrokerId",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":65,"status":"complete"}]
+            """);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+            CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(foreign,receipt()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+            CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(wrongId,receipt()))
+            .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    }
+
+    @Test
+    void contradictoryTerminalEventsAndOverfillStayUncertain() throws Exception {
+        var contradictions=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":65,"status":"complete"},
+             {"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":0,"status":"rejected"}]
+            """);
+        var overfill=history("""
+            [{"tag":"mt1234567890123456","order_id":"upstoxid123",
+              "instrument_token":"NSE_FO|61001","transaction_type":"BUY",
+              "quantity":65,"filled_quantity":125,"status":"complete"}]
+            """);
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            contradictions,receipt()).state()).isEqualTo("UNKNOWN");
+        assertThat(CustomerUpstoxFnoLiveOrderService.assessVerifiedBrokerHistory(
+            overfill,receipt()).state()).isEqualTo("UNKNOWN");
+    }
+
 }
