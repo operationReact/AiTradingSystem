@@ -98,6 +98,26 @@ public final class UpstoxAnalyticsSource {
                 || through.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
             throw new IllegalArgumentException("Invalid bounded Upstox historical-candle request");
         }
+        return readValidatedHistoricalCandles(instrumentKey, unit, interval, from, through);
+    }
+
+    /**
+     * Ephemeral provider-listed NIFTY 50 index bars for an authenticated
+     * research request. This method is bounded and index-specific: never
+     * accepts arbitrary symbols, stores bars, trains models or places orders.
+     * The caller must separately enforce research/source permissions.
+     */
+    public List<Candle> historicalNiftyIndexDailyCandles(LocalDate from, LocalDate through) {
+        if (!enabled || from == null || through == null || from.isAfter(through)
+                || ChronoUnit.DAYS.between(from, through) > 120
+                || through.isAfter(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")))) {
+            throw new IllegalArgumentException("Invalid bounded NIFTY index history request");
+        }
+        return readValidatedHistoricalCandles("NSE_INDEX|Nifty 50", "days", 1, from, through);
+    }
+
+    private List<Candle> readValidatedHistoricalCandles(String instrumentKey, String unit,
+            int interval, LocalDate from, LocalDate through) {
         JsonNode root = get("/v3/historical-candle/{key}/{unit}/{interval}/{to}/{from}",
                 instrumentKey, unit, interval, through.toString(), from.toString());
         JsonNode data = root.path("data").path("candles");

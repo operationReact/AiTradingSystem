@@ -401,6 +401,17 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_fno_research_is_authenticated_and_get_only(self):
+        path = "/api/customer/mind/v1/fno-evaluation"
+        self.assertTrue(proxy.allowed("GET", path))
+        for method in ("POST", "PUT", "DELETE"):
+            self.assertFalse(proxy.allowed(method, path))
+        self.assertFalse(proxy.allowed("GET", path + "/orders"))
+        with mock.patch.object(proxy.urllib.request, "urlopen") as urlopen:
+            denied = proxy.handler(event("GET", path, jwt={"claims": {}}), None)
+        self.assertEqual(denied["statusCode"], 401)
+        urlopen.assert_not_called()
+
     def test_mind_research_engines_is_get_only(self):
         path="/api/customer/mind/v1/research-engines"
         self.assertTrue(proxy.allowed("GET",path))

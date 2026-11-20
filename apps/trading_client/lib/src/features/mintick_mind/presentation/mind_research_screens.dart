@@ -338,16 +338,18 @@ extension _MindResearchScreens on _MindWorkspaceState {
         const Icon(Icons.block,color:MindPalette.red,size:18),
         const SizedBox(width:9),
         Expanded(child:Text(cap==null
-            ? 'F&O data status not verified. Everything below is an illustrative mock.'
+            ? 'F&O data status not verified. The prototype panels below are illustrative mocks.'
             : 'F&O contracts / OI / option chain: '+cap.status.label+
               (cap.blockerCode==null?'':' ('+cap.blockerCode!+')')+
-              '. No permitted data source yet (#924). Everything below is an illustrative mock.',
+              '. Remaining prototype panels below are illustrative mocks; the research panel above uses its own authenticated evidence.',
           style:const TextStyle(color:MindPalette.text,fontSize:12))),
       ])));
   }
 
   Widget derivativesScreen()=>_surface('Futures & Options',
     'India derivatives research: contract-aware and non-executable',[
+    if(widget.fnoResearchRepository!=null)
+      MindFnoResearchPanel(repository:widget.fnoResearchRepository!),
     _fnoBlockedBanner(),
     MindPanel(highlight:true,child:Column(children:[
       const MindSectionTitle(title:'F&O Research Modules',icon:Icons.layers_outlined),
@@ -397,6 +399,8 @@ extension _MindResearchScreens on _MindWorkspaceState {
 
   Widget optionChainScreen()=>_surface('Option Chain',
     'Illustrative NIFTY and BANKNIFTY contract research',[
+    if(widget.fnoResearchRepository!=null)
+      MindFnoResearchPanel(repository:widget.fnoResearchRepository!),
     _fnoBlockedBanner(),
     _chips(['NIFTY','BANKNIFTY'],_optionUnderlying,
       (v)=>_updateMind((){

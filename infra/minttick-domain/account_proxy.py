@@ -64,6 +64,7 @@ EXACT = {
     ("POST", "/api/customer/watchlist"),
     # Mintick Mind: customer-authenticated, read-only research/progress/PAPER views.
     ("GET", "/api/customer/mind/v1/overview"),
+    ("GET", "/api/customer/mind/v1/fno-evaluation"),
     ("GET", "/api/customer/mind/v1/evidence"),
     ("GET", "/api/customer/mind/v1/strategy-replay"),
     ("GET", "/api/customer/mind/v1/decision-history"),
