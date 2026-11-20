@@ -29,6 +29,7 @@ import 'features/trading_rooms/domain/trading_room_draft.dart';
 import 'features/mintick_mind/presentation/mind_workspace_page.dart';
 import 'features/mintick_mind/data/mind_readiness_repository.dart';
 import 'features/mintick_mind/data/mind_fno_research_repository.dart';
+import 'features/mintick_mind/data/mind_fno_auto_paper_repository.dart';
 import 'features/mintick_mind/data/mind_evidence_repository.dart';
 import 'features/mintick_mind/data/mind_decision_history_repository.dart';
 import 'features/mintick_mind/data/mind_decision_outcomes_repository.dart';
@@ -217,6 +218,7 @@ class _TradingAppState extends State<TradingApp> {
                 embeddedInProductShell: true,
                 readinessRepository: HttpMindReadinessRepository(_api),
                 fnoResearchRepository: HttpMindFnoResearchRepository(_api),
+                fnoAutoPaperRepository: HttpMindFnoAutoPaperRepository(_api),
                 evidenceRepository: HttpMindEvidenceRepository(_api),
                 strategyReplayRepository: HttpMindStrategyReplayRepository(_api),
                 decisionHistoryRepository: HttpMindDecisionHistoryRepository(_api),
