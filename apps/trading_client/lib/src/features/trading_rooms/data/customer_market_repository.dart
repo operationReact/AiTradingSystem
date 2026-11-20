@@ -1262,6 +1262,23 @@ class HttpCustomerMarketRepository implements CustomerMarketRepository,
     required String toDate,
   }) async {
     if (instrumentId < 1) throw ArgumentError.value(instrumentId);
+    if (interval == 'ONE_MONTH') {
+      // 5Y/MAX: strictly owner-authorized calendar-month aggregates of SHA-
+      // checked actual daily bars; never claim they are daily or intraday rows.
+      final archived = await api.getJson(
+        '/api/customer/owner-history/v1/monthly-candles',
+        query: {'instrumentId': '$instrumentId',
+          'fromDate': fromDate, 'toDate': toDate},
+        timeout: const Duration(seconds: 12));
+      if (archived is! Map<String, dynamic>) {
+        throw const FormatException('Invalid owner monthly candle response');
+      }
+      final page = CustomerCandlePage.fromJson(archived);
+      if (page.instrumentId != instrumentId || page.interval != interval) {
+        throw const FormatException('Owner monthly chart identity mismatch');
+      }
+      return page;
+    }
     final data = await api.getJson('$_root/candles', query: {
       'instrumentId': '$instrumentId',
       'interval': interval,
