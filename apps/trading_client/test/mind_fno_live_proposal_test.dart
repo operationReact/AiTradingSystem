@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:trading_client/src/features/mintick_mind/data/mind_fno_live_proposal_repository.dart';
 import 'package:trading_client/src/features/mintick_mind/presentation/mind_fno_live_proposal_panel.dart';
+import 'package:trading_client/src/features/trading_rooms/data/customer_upstox_fno_live_repository.dart';
 
 Map<String, Object?> _blocked() => {
   'contractVersion': 'mind.fno-live-proposal.v1',
@@ -38,6 +39,33 @@ Map<String, Object?> _candidate() => {
 };
 
 class _FakeRepo implements MindFnoLiveProposalRepository {
+  static const receiptId='12345678-1234-1234-1234-123456789011';
+  static const roomId='12345678-1234-1234-1234-123456789012';
+  String status='UNKNOWN';
+  int reconciliationCalls=0;
+  UpstoxFnoLiveReceipt get receipt=>UpstoxFnoLiveReceipt(
+    id:receiptId,roomId:roomId,instrumentKey:'NSE_FO|61001',
+    expiry:DateTime.utc(2026,11,26),side:'BUY',quantity:65,
+    limitPrice:126,state:status,orderTag:'mt1234567890123456',
+    outcomeCode:status=='UNKNOWN'
+      ? 'UPSTOX_FNO_PARTIAL_FILL_UNCERTAIN':'UPSTOX_FNO_FULL_FILL_VERIFIED',
+    createdAt:DateTime.utc(2026,11,20,5),
+  );
+
+  @override
+  Future<List<UpstoxFnoLiveReceipt>> orderHistory(String roomId) async =>
+      [receipt];
+
+  @override
+  Future<UpstoxFnoLiveReceipt> recheckBrokerOrder(
+      String roomId,String orderId) async {
+    if(orderId!=receiptId)throw const FormatException('Different broker order');
+    reconciliationCalls++;
+    status='COMPLETE';
+    return receipt;
+  }
+
+
   @override
   Future<List<MindFnoLiveRoom>> rooms() async => [
     const MindFnoLiveRoom(
@@ -104,4 +132,34 @@ void main() {
     expect(find.text('Place LIVE Order'), findsNothing);
     expect(find.text('Confirm LIVE'), findsNothing);
   });
+
+  testWidgets('LIVE broker audit never resubmits and requires manual history check',
+      (tester) async {
+    final repo=_FakeRepo();
+    await tester.pumpWidget(MaterialApp(home: Scaffold(
+      body: SingleChildScrollView(
+        child: MindFnoLiveProposalPanel(repository: repo),
+      ),
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(
+      const ValueKey('mind-fno-live-proposal-room'),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('NIFTY LIVE F&O').last);
+    await tester.pumpAndSettle();
+    expect(find.text('UNKNOWN'),findsOneWidget);
+    expect(find.textContaining('PARTIAL FILL UNCERTAIN'),findsOneWidget);
+    expect(repo.reconciliationCalls,0);
+    final check=find.byKey(const ValueKey(
+      'mind-fno-live-recheck-12345678-1234-1234-1234-123456789011'));
+    await tester.ensureVisible(check);
+    await tester.tap(check);
+    await tester.pumpAndSettle();
+    expect(repo.reconciliationCalls,1);
+    expect(find.text('COMPLETE'),findsOneWidget);
+    expect(find.textContaining('no resend'),findsNothing);
+    expect(find.text('Place LIVE Order'),findsNothing);
+  });
+
 }
