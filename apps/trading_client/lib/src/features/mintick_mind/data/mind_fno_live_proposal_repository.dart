@@ -1,5 +1,6 @@
 import '../../../data/authenticated_api_client.dart';
 import '../../trading_rooms/data/customer_room_repository.dart';
+import '../../trading_rooms/data/customer_upstox_fno_live_repository.dart';
 
 /// An authenticated customer-owned F&O LIVE room; no order authority.
 class MindFnoLiveRoom {
@@ -126,6 +127,11 @@ class MindFnoLiveProposal {
 abstract interface class MindFnoLiveProposalRepository {
   Future<List<MindFnoLiveRoom>> rooms();
   Future<MindFnoLiveProposal> evaluate(String roomId);
+
+  /// This interface has no broker order submission method.
+  Future<List<UpstoxFnoLiveReceipt>> orderHistory(String roomId);
+  /// User-invoked broker order-history read; never repeats the broker POST.
+  Future<UpstoxFnoLiveReceipt> recheckBrokerOrder(String roomId, String orderId);
 }
 
 class HttpMindFnoLiveProposalRepository
@@ -153,4 +159,14 @@ class HttpMindFnoLiveProposalRepository
       ),
     );
   }
+
+  @override
+  Future<List<UpstoxFnoLiveReceipt>> orderHistory(String roomId) =>
+      CustomerUpstoxFnoLiveRepository(api).orders(roomId);
+
+  @override
+  Future<UpstoxFnoLiveReceipt> recheckBrokerOrder(
+      String roomId, String orderId) =>
+      CustomerUpstoxFnoLiveRepository(api).reconcile(roomId, orderId);
+
 }
