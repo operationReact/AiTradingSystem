@@ -444,7 +444,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           final width = math.max(1.0, constraints.maxWidth - leftInset - rightInset);
           final ratio = ((tap.localPosition.dx - leftInset) / width).clamp(0.0, 1.0);
           setState(() => _selectedCandle =
-              (ratio * (candles.length - 1)).round().clamp(0, candles.length - 1));
+              math.max(0, math.min(candles.length - 1, (ratio * (candles.length - 1)).round())));
         },
         child: CustomPaint(
           painter: _CandleChartPainter(
@@ -456,7 +456,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     }
     final last = candles == null || candles.isEmpty ? null : candles.last;
     final selected = candles != null && candles.isNotEmpty
-        ? candles[(_selectedCandle ?? candles.length - 1).clamp(0, candles.length - 1)]
+        ? candles[math.max(0, math.min(candles.length - 1, _selectedCandle ?? candles.length - 1))]
         : null;
     return MintTickSurface(child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -712,7 +712,7 @@ class _CandleChartPainter extends CustomPainter {
     }
     final biggestVolume = math.max(1, bars.map((b) => b.volume).reduce(math.max));
     final gap = plotWidth / bars.length;
-    final bodyWidth = (gap * 0.65).clamp(1.0, 9.0);
+    final bodyWidth = math.max(1.0, math.min(9.0, gap * 0.65));
     for (var i = 0; i < bars.length; i++) {
       final bar = bars[i];
       final px = x(i);
