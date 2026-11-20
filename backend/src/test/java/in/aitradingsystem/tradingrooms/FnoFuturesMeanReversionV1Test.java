@@ -155,7 +155,16 @@ class FnoFuturesMeanReversionV1Test {
 
     @Test
     void weakLatestVolumeToOiBlocksSignalEvenWithHighAbsoluteVolume() {
-        Decision d=evaluate(replace(lowRebound(),9,bar(9,"96.5",50000,100000000)));
+        // Keep OI unit normalization consistent across all ten sessions so this
+        // reaches the liquidity gate rather than correctly failing as an OI spike.
+        var highOi=new ArrayList<CompletedSession>();
+        for(var bar:lowRebound()) {
+            highOi.add(new CompletedSession(bar.sessionDate(),bar.sessionVerified(),
+                bar.instrumentKey(),bar.provider(),bar.open(),bar.high(),bar.low(),
+                bar.close(),bar.ohlcvVerified(),bar.ohlcvFirstObservedAt(),
+                bar.volumeUnits(),100000000L,bar.oiFirstObservedAt()));
+        }
+        Decision d=evaluate(highOi);
         assertEquals(Status.NO_SIGNAL,d.status());
         assertEquals("FUT_MR_VOLUME_OR_OI_LOW",d.reasonCode());
     }
