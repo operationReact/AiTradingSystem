@@ -2,6 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import java.time.Clock;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -16,6 +17,7 @@ public class AdminFnoFuturesResearchController {
     private final FnoFuturesResearchService service;
     private final Clock clock;
 
+    @Autowired
     public AdminFnoFuturesResearchController(FnoFuturesResearchService service) {
         this(service, Clock.systemUTC());
     }
