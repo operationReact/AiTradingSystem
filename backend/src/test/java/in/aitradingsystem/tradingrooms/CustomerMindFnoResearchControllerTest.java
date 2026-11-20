@@ -100,6 +100,9 @@ class CustomerMindFnoResearchControllerTest {
         assertThat(result.expiry()).isEqualTo(EXPIRY);
         assertThat(result.instrumentKey()).isEqualTo("NSE_FO|61001CE");
         assertThat(result.bid()).isEqualByComparingTo("125.00");
+        assertThat(result.ltp()).isEqualByComparingTo("125.50");
+        assertThat(result.openInterest()).isEqualTo(1200L);
+        assertThat(result.iv()).isEqualByComparingTo("0.15");
         assertThat(result.completedCandles()).isEqualTo(35);
         assertThat(result.executable()).isFalse();
         assertThat(result.orderPlaced()).isFalse();
