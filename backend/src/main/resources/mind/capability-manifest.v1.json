@@ -5492,21 +5492,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified same NSE_FO futures contract across five completed trading sessions",
+    "Rights-verified finalized futures close price and open-interest snapshots with original as-of publication times",
+    "Session-normalized OI and traded volume plus explicit divergence and source-quality thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_PRICE_OI_DIVERGENCE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesPriceOiDivergenceV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesPriceOiDivergenceV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-174-futures-price-oi-divergence.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed, verified same-contract five-session futures price/OI/volume source adapter and originally observed publication times",
+    "Exchange holiday/session calendar, settlement price provenance, OI contract-unit normalization and corporate actions",
+    "Out-of-sample no-lookahead historical divergence replay and realistic cost/impact testing",
+    "Deployed read-only strategy evaluation and audited PAPER-only research lifecycle"
+   ],
+   "note": "STR-174 deterministic research-only futures price-versus-OI divergence classifier (up price/down OI or down price/up OI); neither pattern proves a buy or sell. No provider adapter, PAPER/LIVE order, UI, or trading authority. Remains DATA_BLOCKED pending actual source and backtest evidence.",
    "id": "strategy.STR-174",
    "kind": "STRATEGY",
    "name": "Price OI Divergence",
