@@ -38,6 +38,19 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         self.conn = f("init_db")(self.root)
         self.addCleanup(self.conn.close)
 
+    def test_owner_bootstrap_bundle_fits_reviewed_bounded_source_limit(self):
+        # The root-only entrypoint concatenates the restricted auth prefix
+        # and owner history collector. Keep an explicit finite size guard,
+        # but let the reviewed incremental source fit before SSM execution.
+        auth=(ROOT / "infra/ec2-paper/probe_owner_angelone_auth.py").read_text()
+        collector=SOURCE.read_text()
+        prefix=auth.split('\nif __name__ == "__main__":',1)[0]
+        combined=prefix+'\n'+collector
+        self.assertLess(len(combined),64000)
+        wrapper=(ROOT / "infra/ec2-paper/run_owner_personal_history.sh").read_text()
+        self.assertIn("assert len(source)<64000",wrapper)
+        self.assertEqual(combined.count('if __name__ == "__main__":'),1)
+
     def test_fixed_20year_windows_are_consecutive_with_max_2000(self):
         windows = list(f("windows")())
         self.assertEqual(len(windows), 4)
