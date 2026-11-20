@@ -501,6 +501,8 @@ void main() {
     expect(find.byKey(const ValueKey('stock-detail-chart-ohlc')), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-detail-chart-volume')), findsOneWidget);
     expect(find.byKey(const ValueKey('stock-detail-range-1Y')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-detail-range-5Y')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-detail-range-MAX')), findsOneWidget);
     final yearly = fake.candleDateRanges.last;
     expect(DateTime.parse(yearly.$2).difference(DateTime.parse(yearly.$1)).inDays, 365);
     await tester.tap(find.byKey(const ValueKey('stock-detail-range-1M')));
@@ -508,6 +510,15 @@ void main() {
     expect(fake.candleIntervals.last, 'ONE_DAY');
     final monthly = fake.candleDateRanges.last;
     expect(DateTime.parse(monthly.$2).difference(DateTime.parse(monthly.$1)).inDays, 30);
+    await tester.tap(find.byKey(const ValueKey('stock-detail-range-5Y')));
+    await tester.pumpAndSettle();
+    expect(fake.candleIntervals.last, 'ONE_MONTH');
+    expect(find.byKey(const ValueKey('stock-detail-monthly-disclaimer')), findsOneWidget);
+    final fiveYears = fake.candleDateRanges.last;
+    expect(DateTime.parse(fiveYears.$2).difference(DateTime.parse(fiveYears.$1)).inDays, 1826);
+    await tester.tap(find.byKey(const ValueKey('stock-detail-range-MAX')));
+    await tester.pumpAndSettle();
+    expect(fake.candleIntervals.last, 'ONE_MONTH');
     await tester.tap(find.byKey(const ValueKey('stock-detail-timeframe-5m')));
     await tester.pumpAndSettle();
     expect(fake.candleIntervals.last, 'FIVE_MINUTE');
