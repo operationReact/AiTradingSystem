@@ -5628,21 +5628,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Same source-listed NSE_FO futures contract, listing/expiry/lot and ten completed trading-session OHLCV closes",
+    "Separately observed and rights-verified finalized OHLCV/OI timestamps, source provenance, normalized volume and OI",
+    "Eight-session baseline volatility, ninth-session extreme, tenth-session partial recovery, liquidity and explicit after-cost research thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MEAN_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMeanReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-177-futures-mean-reversion.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Source-permitted ten-completed-session same-contract F&O OHLCV and normalized OI feed with original first-observed timestamps",
+    "Official NSE session/holiday calendar, verified expiry/listing chronology and rights to compute retained historical signals",
+    "No-lookahead mean-reversion out-of-sample research, transaction/impact/stop/risk analysis and walk-forward regime evidence",
+    "Runtime source adapter and separately gated audited PAPER strategy lifecycle, Flutter and backend deployment verification"
+   ],
+   "note": "Deterministic research-only futures mean-reversion classifier based on eight-baseline-session mean and std, ninth extreme, tenth partial reversal, volume/OI and illustrative cost gates. Signals are observations, never an order or guaranteed profit. Remains DATA_BLOCKED.",
    "id": "strategy.STR-177",
    "kind": "STRATEGY",
    "name": "Futures Mean Reversion",
