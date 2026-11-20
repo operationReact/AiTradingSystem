@@ -27,8 +27,9 @@ class OwnerPrivateIntradayCollectorTest {
                 "Reliance","EQ",null,null,1,new BigDecimal("0.05"),UUID.randomUUID())));
         when(repository.claim(eq("my-owner"),eq("2885"),anyString(),any()))
             .thenReturn(true);
-        var source=new ObjectMapper().readTree(
-            "[[\\"2026-11-19T09:15:00+05:30\\",100,110,90,105,12345]]");
+        var source=new ObjectMapper().createArrayNode();
+        source.addArray().add("2026-11-19T09:15:00+05:30")
+            .add(100).add(110).add(90).add(105).add(12345);
         when(feed.historicalCandles(eq("NSE"),eq("2885"),anyString(),
             anyString(),anyString())).thenReturn(source);
         var collector=new OwnerPrivateIntradayCollector(instruments,feed,
@@ -39,6 +40,9 @@ class OwnerPrivateIntradayCollectorTest {
             eq("FIVE_MINUTE"),any(),any(),argThat(rows->rows.size()==1));
         verify(repository).save(eq("my-owner"),eq("2885"),eq("RELIANCE-EQ"),
             eq("ONE_HOUR"),any(),any(),argThat(rows->rows.size()==1));
+        verify(feed,times(2)).available();
+        verify(feed,times(2)).historicalCandles(eq("NSE"),eq("2885"),
+            anyString(),anyString(),anyString());
         verifyNoMoreInteractions(feed);
     }
 
