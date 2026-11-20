@@ -7,6 +7,8 @@ on:
       - '.github/workflows/minttick-fno-expired-history-source-probe.yml'
       - 'infra/ec2-paper/fno_expired_history_probe.py'
       - 'scripts/tests/test_fno_expired_history_probe.py'
+      - 'infra/ec2-paper/fno_expired_history_receipt.py'
+      - 'scripts/tests/test_fno_expired_history_receipt.py'
   push:
     branches: [dev]
     paths:
@@ -33,6 +35,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile infra/ec2-paper/fno_expired_history_probe.py
           python3 -m unittest discover -s scripts/tests -p test_fno_expired_history_probe.py -v
+          python3 -m py_compile infra/ec2-paper/fno_expired_history_receipt.py
+          python3 -m unittest discover -s scripts/tests -p test_fno_expired_history_receipt.py -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('infra/ec2-paper/fno_expired_history_probe.py').read_text()
