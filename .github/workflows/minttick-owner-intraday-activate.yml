@@ -32,7 +32,9 @@ jobs:
           assert 500 < len(text) < 7000
           assert 'OWNER_HISTORY_BACKFILL_ENABLED=true' in text
           assert 'OWNER_FEED_ENABLED=true' in text
-          assert 'INTRADAY_ACTIVATION_BLOCKED: CUSTOMER_ISOLATION_UNVERIFIED' in text
+          assert 'INTRADAY_ACTIVATION_BLOCKED: MULTIPLE_ACTIVE_CUSTOMERS' in text
+          assert 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE' in text
+          assert 'INTRADAY_OWNER_ISOLATION: VERIFIED' in text
           assert "TRADING_MODE: PAPER" in text
           assert "rollback" in text
           assert "BACKEND_HEALTH: PASS" in text
@@ -126,6 +128,7 @@ jobs:
           allowed={
             'OWNER_FEED_NOT_ACTIVE','OWNER_SUB_NOT_CONFIGURED',
             'BACKEND_FEED_NOT_ACTIVE','CUSTOMER_ISOLATION_UNVERIFIED',
+            'OWNER_ISOLATION_DATABASE_UNAVAILABLE','MULTIPLE_ACTIVE_CUSTOMERS',
             'CONTAINER_START_FAILED','BACKEND_NOT_READY',
             'HOST_IDENTITY','PRIVATE_FILES','OWNER_FEED','BACKEND_CONTAINER',
             'OWNER_ISOLATION','HOST_STAGING','RUNTIME_UPDATE',
