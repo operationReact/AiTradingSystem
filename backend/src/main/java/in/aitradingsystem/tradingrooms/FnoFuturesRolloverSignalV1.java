@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import java.util.List;
 import java.util.Objects;
 
@@ -209,8 +210,7 @@ public final class FnoFuturesRolloverSignalV1 {
     private static boolean validLeg(LegSnapshot leg, String key, LocalDate date,
                                     Instant close, Instant asOf) {
         if (leg == null || !key.equals(leg.instrumentKey())
-                || !("UPSTOX_ANALYTICS".equals(leg.source())
-                    || "ANGEL_ONE_SMARTAPI".equals(leg.source()))
+                || !FnoMarketDataProvider.isSessionHistorySource(leg.source())
                 || leg.exchangeAt() == null || leg.observedAt() == null
                 || leg.exchangeAt().isAfter(close)
                 || leg.exchangeAt().isBefore(close.minus(CLOSING_TICK_WINDOW))

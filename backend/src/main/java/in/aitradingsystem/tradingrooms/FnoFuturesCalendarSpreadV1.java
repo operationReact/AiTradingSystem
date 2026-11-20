@@ -8,6 +8,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import java.util.Objects;
 
 /**
@@ -172,7 +173,7 @@ public final class FnoFuturesCalendarSpreadV1 {
 
     private static boolean validQuote(Quote q, String expectedKey, Instant asOf) {
         return q != null && expectedKey.equals(q.instrumentKey())
-            && ("UPSTOX_V3".equals(q.source()) || "ANGEL_ONE_SMARTAPI".equals(q.source()))
+            && FnoMarketDataProvider.isQuoteSource(q.source())
             && positive(q.bid()) && positive(q.ask()) && q.ask().compareTo(q.bid()) >= 0
             && q.exchangeAt() != null && q.observedAt() != null
             && !q.exchangeAt().isAfter(q.observedAt())

@@ -119,6 +119,23 @@ class FnoFuturesCalendarSpreadV1Test {
     }
 
     @Test
+    void canonicalLiveV3LabelIsAcceptedAsQuoteSourceForBothLegs() {
+        Decision result = evaluate(NEAR, FAR, near("24990", "25010"),
+            far("25400", "25420"), RIGHTS, COSTS);
+        assertEquals(Status.RESEARCH_CANDIDATE, result.status());
+        assertEquals(in.aitradingsystem.marketdata.FnoMarketDataProvider.UPSTOX_V3_LIVE.wireLabel(),
+            result.source());
+    }
+
+    @Test
+    void restAnalyticsLabelIsNotAcceptedAsLiveQuoteSource() {
+        Quote analytics = new Quote(FAR.instrumentKey(), "UPSTOX_ANALYTICS",
+            dec("25400"), dec("25420"), NOW.minusSeconds(3), NOW.minusSeconds(1));
+        assertEquals("CALENDAR_QUOTE_INVALID_OR_STALE", evaluate(NEAR, FAR,
+            near("24990", "25010"), analytics, RIGHTS, COSTS).reasonCode());
+    }
+
+    @Test
     void sourceMismatchCannotSilentlyMixTwoBrokerFeeds() {
         Quote otherBroker = new Quote(FAR.instrumentKey(), "ANGEL_ONE_SMARTAPI",
             dec("25400"), dec("25420"), NOW.minusSeconds(3), NOW.minusSeconds(1));
