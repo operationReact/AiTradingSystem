@@ -34,6 +34,17 @@ class SourceReceiptTest(unittest.TestCase):
         self.assertIn("PLUS_ENTITLEMENT_MISSING", message)
         self.assertNotIn("SOURCE_SAMPLE_VERIFIED", message)
 
+    def test_provider_http_stage_error_is_precise_without_raw_payload(self):
+        receipt = ("FNO EXPIRED SOURCE: EXPIRIES_FORBIDDEN, expiries=0, "
+                   "futures=0, dailyBars=0; rights=UNKNOWN; "
+                   "persisted=FALSE; orders=FALSE")
+        parsed = safe_receipt("REDACTED token private\n" + receipt)
+        self.assertEqual(parsed, ("EXPIRIES_FORBIDDEN", 0, 0, 0))
+        published = safe_issue_message(parsed, "44817825197")
+        self.assertIn("HTTP 403 at expiries endpoint", published)
+        self.assertNotIn("REDACTED token", published)
+        self.assertIn("SOURCE_BLOCKED", published)
+
     def test_ambiguous_forged_and_out_of_range_receipts_are_rejected(self):
         good = ("FNO EXPIRED SOURCE: HISTORY_SOURCE_VERIFIED, expiries=6, "
                 "futures=1, dailyBars=5; rights=UNKNOWN; "
