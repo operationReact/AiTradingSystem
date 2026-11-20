@@ -30,11 +30,11 @@ jobs:
           from pathlib import Path
           text=Path("infra/ec2-paper/enable_owner_intraday_history.sh").read_text()
           assert 500 < len(text) < 7000
-          assert 'OWNER_HISTORY_BACKFILL_ENABLED=true' in text
+          assert 'OWNER_PRIVATE_INTRADAY_ENABLED=true' in text
           assert 'OWNER_FEED_ENABLED=true' in text
-          assert 'INTRADAY_ACTIVATION_BLOCKED: MULTIPLE_ACTIVE_CUSTOMERS' in text
-          assert 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE' in text
-          assert 'INTRADAY_OWNER_ISOLATION: VERIFIED' in text
+          assert 'INTRADAY_ACTIVATION_BLOCKED: SHARED_COLLECTOR_ACTIVE' in text
+          assert 'INTRADAY_ACTIVATION_BLOCKED: PRIVATE_STORAGE_MISSING' in text
+          assert 'INTRADAY_PRIVATE_STORAGE: VERIFIED' in text
           # SSM runs a stdin-streamed bash script: Docker exec must never drain it.
           assert 'exec -T postgres' in text
           assert '</dev/null 2>/dev/null)' in text
@@ -132,9 +132,11 @@ jobs:
             'OWNER_FEED_NOT_ACTIVE','OWNER_SUB_NOT_CONFIGURED',
             'BACKEND_FEED_NOT_ACTIVE','CUSTOMER_ISOLATION_UNVERIFIED',
             'OWNER_ISOLATION_DATABASE_UNAVAILABLE','MULTIPLE_ACTIVE_CUSTOMERS',
+            'PRIVATE_STORAGE_UNAVAILABLE','PRIVATE_STORAGE_MISSING',
+            'SHARED_COLLECTOR_ACTIVE',
             'CONTAINER_START_FAILED','BACKEND_NOT_READY',
             'HOST_IDENTITY','PRIVATE_FILES','OWNER_FEED','BACKEND_CONTAINER',
-            'OWNER_ISOLATION','HOST_STAGING','RUNTIME_UPDATE',
+            'OWNER_ISOLATION','OWNER_PRIVATE_STORAGE','HOST_STAGING','RUNTIME_UPDATE',
             'BACKEND_RECREATE','BACKEND_HEALTH'}
           found=re.search(r'(?m)^INTRADAY_ACTIVATION_BLOCKED: ([A-Z_]+)$',out)
           reason=found.group(1) if found and found.group(1) in allowed else 'UNKNOWN'
