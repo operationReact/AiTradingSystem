@@ -44,8 +44,8 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         # but let the reviewed incremental source fit before SSM execution.
         auth=(ROOT / "infra/ec2-paper/probe_owner_angelone_auth.py").read_text()
         collector=SOURCE.read_text()
-        prefix=auth.split('\\nif __name__ == "__main__":',1)[0]
-        combined=prefix+'\\n'+collector
+        prefix=auth.split('\nif __name__ == "__main__":',1)[0]
+        combined=prefix+'\n'+collector
         self.assertLess(len(combined),64000)
         wrapper=(ROOT / "infra/ec2-paper/run_owner_personal_history.sh").read_text()
         self.assertIn("assert len(source)<64000",wrapper)
