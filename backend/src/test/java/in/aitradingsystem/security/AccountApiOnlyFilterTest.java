@@ -135,6 +135,9 @@ class AccountApiOnlyFilterTest {
         assertBlocked("POST", "/api/customer/mind/v1/paper-portfolio");
         assertPasses("GET", "/api/customer/mind/v1/paper-journal");
         assertPasses("POST", "/api/customer/mind/v1/assistant/query");
+        assertPasses("GET", "/api/customer/mind/v1/fno-evaluation");
+        assertBlocked("POST", "/api/customer/mind/v1/fno-evaluation");
+        assertBlocked("GET", "/api/customer/mind/v1/fno-evaluation/orders");
         assertPasses("GET", "/api/customer/mind/v1/research-engines");
         assertBlocked("POST", "/api/customer/mind/v1/research-engines");
         assertBlocked("GET", "/api/customer/mind/v1/assistant/query");
