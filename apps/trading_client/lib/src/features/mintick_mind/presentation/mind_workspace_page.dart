@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
 import '../data/mind_fno_research_repository.dart';
+import '../data/mind_fno_auto_paper_repository.dart';
+import 'mind_fno_auto_paper_panel.dart';
 import 'mind_fno_research_panel.dart';
 import '../data/mind_evidence_repository.dart';
 import '../data/mind_decision_history_repository.dart';
@@ -109,6 +111,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
     this.embeddedInProductShell = false,
     this.readinessRepository,
     this.fnoResearchRepository,
+    this.fnoAutoPaperRepository,
     this.evidenceRepository,
     this.strategyReplayRepository,
     this.decisionHistoryRepository,
@@ -137,6 +140,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// Backend-evaluated, authenticated NIFTY F&O research; never orders.
   final MindFnoResearchRepository? fnoResearchRepository;
+  final MindFnoAutoPaperRepository? fnoAutoPaperRepository;
 
   /// Null only in isolated prototype/golden tests. Production uses Cognito.
   final MindEvidenceRepository? evidenceRepository;
