@@ -240,6 +240,18 @@ class FnoContractLiquidityGateV1Test {
     }
 
     @Test
+    void futureKnownOiWithinAsOfButAfterQuoteObservationIsLookahead() {
+        var a = series();
+        MarketSnapshot s = a.get(2);
+        // This OI value was first available AFTER the quote's observedAt,
+        // even though it was known by evaluation asOf.
+        MarketSnapshot leaked = timestamp(s, s.exchangeAt(), s.observedAt(),
+            NOW.minusSeconds(2), s.volumeFirstObservedAt());
+        assertEquals("LIQUIDITY_SNAPSHOT_PROVENANCE_INVALID",
+            run(replace(a, 2, leaked)).reasonCode());
+    }
+
+    @Test
     void lastQuoteAgeFailsStrictFreshnessGate() {
         var a = List.of(
             snap(50, "20000", "20004", 100, 125, 20000, 5000),
@@ -252,12 +264,11 @@ class FnoContractLiquidityGateV1Test {
     void moreThanNinetySecondWindowIsRejectedEvenWhenLastQuoteIsFresh() {
         var a = List.of(
             snap(95, "20000", "20004", 100, 125, 20000, 5000),
-            snap(45, "20001", "20005", 100, 125, 20000, 5050),
+            snap(50, "20001", "20005", 100, 125, 20000, 5050),
             snap(5, "20002", "20006", 100, 125, 20000, 5100));
         Thresholds gaps = new Thresholds(100, 20, 2, 20, 50, 5, 10, 45, 500);
-        // The first-to-second 50s gap is too long; still fail closed.
-        assertEquals(Status.BLOCKED_DATA,
-            run(CONTRACT, a, RIGHTS, gaps).status());
+        assertEquals("LIQUIDITY_QUOTE_STALE",
+            run(CONTRACT, a, RIGHTS, gaps).reasonCode());
     }
 
     @Test
