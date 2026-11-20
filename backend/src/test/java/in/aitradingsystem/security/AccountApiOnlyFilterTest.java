@@ -136,6 +136,12 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET", "/api/customer/mind/v1/paper-journal");
         assertPasses("POST", "/api/customer/mind/v1/assistant/query");
         assertPasses("GET", "/api/customer/mind/v1/fno-evaluation");
+        String mindFnoCycle = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles";
+        assertPasses("POST", mindFnoCycle);
+        assertBlocked("GET", mindFnoCycle);
+        assertBlocked("PUT", mindFnoCycle);
+        assertBlocked("POST", mindFnoCycle + "/live");
+        assertBlocked("POST", "/api/customer/trading-rooms/not-a-room/mind/fno/paper-cycles");
         assertBlocked("POST", "/api/customer/mind/v1/fno-evaluation");
         assertBlocked("GET", "/api/customer/mind/v1/fno-evaluation/orders");
         assertPasses("GET", "/api/customer/mind/v1/research-engines");
