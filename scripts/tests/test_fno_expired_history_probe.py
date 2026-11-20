@@ -50,6 +50,19 @@ class ExpiredHistoryContractTests(unittest.TestCase):
             self.assertIn("/historical-candle/", get.call_args_list[2].args[0])
             self.assertIn("%7C", get.call_args_list[2].args[0])
 
+    def test_prefers_last_source_listed_expiry_from_completed_month(self):
+        listed = {"status": "success", "data": ["2026-11-19", "2026-10-22", "2026-10-29"]}
+        old_future = future()
+        old_future["data"][0]["expiry"] = "2026-10-29"
+        old_future["data"][0]["instrument_key"] = "NSE_FO|23456|29-10-2026"
+        old_bars = {"status":"success","data":{"candles":[
+            ["2026-10-28T00:00:00+05:30",100,102,99,101,30,40]]}}
+        with patch.object(p, "get_json", side_effect=[listed, old_future, old_bars]) as get:
+            self.assertEqual(p.probe("fixture", NOW),
+                             ("HISTORY_SOURCE_VERIFIED", 3, 1, 1))
+            self.assertIn("expiry_date=2026-10-29", get.call_args_list[1].args[0])
+            self.assertEqual(get.call_count, 3)
+
     def test_empty_expiries_stop_after_one_read(self):
         with patch.object(p, "get_json", return_value={"status":"success", "data":[]}) as get:
             self.assertEqual(p.probe("fixture", NOW)[0], "NO_EXPIRED_EXPIRIES")
