@@ -45,6 +45,8 @@ class ExpiredHistoryContractTests(unittest.TestCase):
             self.assertEqual(p.probe("fixture-only", NOW),
                              ("HISTORY_SOURCE_VERIFIED", 2, 1, 2))
             self.assertEqual(get.call_count, 3)
+            self.assertEqual([call.args[2] for call in get.call_args_list],
+                             ["EXPIRIES", "CONTRACTS", "CANDLES"])
             self.assertIn("/expiries?", get.call_args_list[0].args[0])
             self.assertIn("/future/contract?", get.call_args_list[1].args[0])
             self.assertIn("/historical-candle/", get.call_args_list[2].args[0])
@@ -74,11 +76,18 @@ class ExpiredHistoryContractTests(unittest.TestCase):
             self.assertEqual(get.call_count, 2)
 
     def test_plus_plan_and_api_error_codes(self):
-        self.assertEqual(p.classify_http(403, b'{"code":"UDAPI1149"}'),
+        self.assertEqual(p.classify_http(403, b'{"code":"UDAPI1149"}', "EXPIRIES"),
                          "PLUS_ENTITLEMENT_MISSING")
-        self.assertEqual(p.classify_http(401, b"other"), "AUTH_REJECTED")
-        self.assertEqual(p.classify_http(429, b"other"), "RATE_LIMITED")
-        self.assertEqual(p.classify_http(503, b"other"), "PROVIDER_UNAVAILABLE")
+        self.assertEqual(p.classify_http(401, b"other", "EXPIRIES"), "EXPIRIES_UNAUTHORIZED")
+        self.assertEqual(p.classify_http(403, b"other", "EXPIRIES"), "EXPIRIES_FORBIDDEN")
+        self.assertEqual(p.classify_http(400, b"other", "EXPIRIES"), "EXPIRIES_BAD_REQUEST")
+        self.assertEqual(p.classify_http(404, b"other", "CONTRACTS"), "CONTRACTS_NOT_FOUND")
+        self.assertEqual(p.classify_http(429, b"other", "CANDLES"), "CANDLES_RATE_LIMITED")
+        self.assertEqual(p.classify_http(503, b"other", "CANDLES"), "CANDLES_SERVICE_UNAVAILABLE")
+        self.assertEqual(p.classify_http(429, b"other", "UNKNOWN"), "INVALID_PROVIDER_DATA")
+        self.assertEqual(
+            p.parse_receipt(p.receipt("EXPIRIES_FORBIDDEN")),
+            ("EXPIRIES_FORBIDDEN", 0, 0, 0))
 
     def test_source_expiry_and_identity_checks(self):
         bad = future()
