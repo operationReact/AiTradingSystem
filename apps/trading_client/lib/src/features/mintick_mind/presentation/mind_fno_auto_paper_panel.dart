@@ -35,7 +35,7 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
 
   Future<void> _setEnabled(bool value) async {
     final id=_selected;
-    if(id==null || _loading || _status==null)return;
+    if(id==null || _loading || _status==null) { return; }
     setState((){_loading=true;_error=null;});
     try {
       final actual=await widget.repository.setEnabled(id,value);
