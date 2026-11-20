@@ -7,7 +7,8 @@ class MindFnoResearch {
     required this.evaluatedAt, required this.completedCandles,
     this.strategyId, this.candleSource, this.latestCompletedCloseAt,
     this.expiry, this.strike, this.instrumentKey, this.lotSize,
-    this.bid, this.ask, this.exchangeAt, this.observedAt,
+    this.bid, this.ask, this.ltp, this.openInterest, this.iv, this.delta,
+    this.theta, this.gamma, this.vega, this.exchangeAt, this.observedAt,
   });
 
   final String status, signal, reasonCode;
@@ -15,7 +16,8 @@ class MindFnoResearch {
   final int completedCandles;
   final String? strategyId, candleSource, instrumentKey;
   final DateTime? latestCompletedCloseAt, expiry, exchangeAt, observedAt;
-  final num? strike, bid, ask;
+  final num? strike, bid, ask, ltp, iv, delta, theta, gamma, vega;
+  final int? openInterest;
   final int? lotSize;
   bool get hasCandidate => status == 'RESEARCH_CANDIDATE';
 
@@ -55,7 +57,11 @@ class MindFnoResearch {
       final observed = raw['observedAt'] is String
           ? DateTime.tryParse(raw['observedAt'] as String) : null;
       final bid = raw['bid'], ask = raw['ask'], strike = raw['strike'];
-      if (signal == 'NO_TRADE' || raw['strategyId'] != id ||
+      if ((raw['ltp'] != null && (raw['ltp'] is! num || (raw['ltp'] as num) <= 0)) ||
+          (raw['openInterest'] != null && (raw['openInterest'] is! int || (raw['openInterest'] as int) < 0)) ||
+          [raw['iv'], raw['delta'], raw['theta'], raw['gamma'], raw['vega']]
+              .any((v) => v != null && v is! num) ||
+          signal == 'NO_TRADE' || raw['strategyId'] != id ||
           key is! String || !RegExp(r'^NSE_FO\|[A-Za-z0-9._-]{1,64}$').hasMatch(key) ||
           raw['quoteSource'] != 'UPSTOX_V3_EXCHANGE_TIMED' ||
           !const {'ANGEL_ONE_SMARTAPI', 'UPSTOX_ANALYTICS'}
@@ -76,7 +82,11 @@ class MindFnoResearch {
         strategyId: id, candleSource: raw['candleSource'] as String,
         latestCompletedCloseAt: closed, expiry: expiry, strike: strike,
         instrumentKey: key, lotSize: raw['lotSize'] as int,
-        bid: bid, ask: ask, exchangeAt: exchange, observedAt: observed,
+        bid: bid, ask: ask, ltp: raw['ltp'] as num?,
+        openInterest: raw['openInterest'] as int?, iv: raw['iv'] as num?,
+        delta: raw['delta'] as num?, theta: raw['theta'] as num?,
+        gamma: raw['gamma'] as num?, vega: raw['vega'] as num?,
+        exchangeAt: exchange, observedAt: observed,
       );
     }
     if (signal != 'NO_TRADE' || raw['strategyId'] != null ||
