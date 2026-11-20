@@ -8,6 +8,7 @@ import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataRepository;
+import in.aitradingsystem.provider.upstox.UpstoxAnalyticsSource;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
@@ -31,9 +32,10 @@ class CustomerMindFnoResearchControllerTest {
     private final CustomerFnoDiscoveryController discovery = mock(CustomerFnoDiscoveryController.class);
     private final InstrumentMasterService instruments = mock(InstrumentMasterService.class);
     private final MarketDataRepository candles = mock(MarketDataRepository.class);
+    private final UpstoxAnalyticsSource analytics = mock(UpstoxAnalyticsSource.class);
     private final Authentication auth = mock(Authentication.class);
     private final CustomerMindFnoResearchController controller =
-        new CustomerMindFnoResearchController(discovery, instruments, candles,
+        new CustomerMindFnoResearchController(discovery, instruments, candles, analytics,
             Clock.fixed(NOW, ZoneOffset.UTC));
 
     @BeforeEach
@@ -160,12 +162,24 @@ class CustomerMindFnoResearchControllerTest {
     }
 
     @Test
-    void noIndexHistoryReturnsPreciseNoTradeReason() {
+    void noIndexHistoryFallsBackToBoundedRealUpstoxIndexRead() {
         when(instruments.activeInstrumentBySymbol("NSE", "Nifty 50"))
             .thenReturn(java.util.Optional.empty());
+        var sourceBars = new ArrayList<UpstoxAnalyticsSource.Candle>();
+        for (var bar : bars("125")) {
+            sourceBars.add(new UpstoxAnalyticsSource.Candle(
+                bar.candleTime(), bar.open(), bar.high(), bar.low(), bar.close(),
+                bar.volume(), 0L));
+        }
+        when(analytics.historicalNiftyIndexDailyCandles(
+            LocalDate.of(2026, 11, 20).minusDays(110), LocalDate.of(2026, 11, 20)))
+            .thenReturn(sourceBars);
+        quotes(true, true);
         var result = controller.inspect(auth);
-        assertThat(result.status()).isEqualTo("BLOCKED");
-        assertThat(result.reasonCode()).isEqualTo("NIFTY_INDEX_CANDLES_UNAVAILABLE");
+        assertThat(result.status()).isEqualTo("RESEARCH_CANDIDATE");
+        assertThat(result.strategyId()).isEqualTo("strategy.STR-181");
+        assertThat(result.candleSource()).isEqualTo("UPSTOX_ANALYTICS");
+        assertThat(result.executable()).isFalse();
         verifyNoInteractions(candles);
     }
 
