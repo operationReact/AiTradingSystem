@@ -104,6 +104,50 @@ class ProgressSnapshotTests(unittest.TestCase):
             self.assertEqual(chart["rows"][1][4], 108)
             self.assertNotIn("password", json.dumps(chart).lower())
 
+    def test_owner_monthly_aggregation_uses_verified_daily_ohlcv_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "archive"
+            root.mkdir()
+            fixture(root)
+            output = Path(tmp) / "monitor"
+            output.mkdir()
+            now = dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc)
+            month = progress._OwnerMonthlySink(output, now)
+            try:
+                with patch.object(progress, "_private_archive", return_value=None):
+                    result = progress.build_snapshot(root, now, "IDLE", {},
+                                                      monthly_sink=month)
+                month.complete()
+            finally:
+                month.discard()
+            report = json.loads((output / "monthly" / "2885.json").read_text())
+            self.assertEqual(result["task"]["candles"], 2)
+            self.assertEqual(report["schema"], "minttick.owner.chart.monthly.v1")
+            self.assertEqual(report["interval"], "ONE_MONTH")
+            self.assertEqual(report["sourceInterval"], "ONE_DAY")
+            self.assertEqual(report["sessionCompleteness"], "UNVERIFIED")
+            self.assertEqual(len(report["rows"]), 1)
+            self.assertEqual(report["rows"][0][1:], [100, 111, 99, 108, 22221])
+
+    def test_monthly_source_tamper_never_produces_a_monthly_cache(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "archive"
+            root.mkdir()
+            fixture(root, tamper=True)
+            output = Path(tmp) / "monitor"
+            output.mkdir()
+            sink = progress._OwnerMonthlySink(output,
+                dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc))
+            try:
+                with patch.object(progress, "_private_archive", return_value=None):
+                    with self.assertRaises(progress.ProgressUnavailable):
+                        progress.build_snapshot(root,
+                            dt.datetime(2024, 1, 4, 12, 0, tzinfo=dt.timezone.utc),
+                            "IDLE", {}, monthly_sink=sink)
+            finally:
+                sink.discard()
+            self.assertFalse((output / "monthly").exists())
+
     def test_tamper_never_promotes_owner_chart_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "archive"
