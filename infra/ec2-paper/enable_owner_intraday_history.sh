@@ -35,10 +35,10 @@ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
 # shared market_candle writer if the app already serves multiple active
 # customers. The broader entitlement / tenant-isolation migration remains
 # a separate prerequisite before exposing these bars to other users.
-customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres sh -c '
-  PGPASSWORD="$POSTGRES_PASSWORD" psql -qtAX -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-    -c "SELECT count(*) FROM app_user WHERE role=\x27CUSTOMER\x27 AND status=\x27ACTIVE\x27"
-' 2>/dev/null || true)"
+customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres \
+  psql -U aitrading -d aitrading -qtAX \
+    -c "SELECT count(*) FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
+    2>/dev/null || true)"
 if ! [[ "$customer_count" =~ ^[0-9]+$ ]] || (( customer_count > 1 )); then
   echo 'INTRADAY_ACTIVATION_BLOCKED: CUSTOMER_ISOLATION_UNVERIFIED'
   exit 2
