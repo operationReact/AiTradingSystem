@@ -60,7 +60,9 @@ public final class CustomerMindFnoResearchController {
         String strategyId, String candleSource, int completedCandles,
         Instant latestCompletedCloseAt, String quoteSource, LocalDate expiry,
         BigDecimal strike, String instrumentKey, Integer lotSize,
-        BigDecimal bid, BigDecimal ask, Instant exchangeAt, Instant observedAt,
+        BigDecimal bid, BigDecimal ask, BigDecimal ltp, Long openInterest,
+        BigDecimal iv, BigDecimal delta, BigDecimal theta, BigDecimal gamma, BigDecimal vega,
+        Instant exchangeAt, Instant observedAt,
         boolean executable, boolean orderPlaced) {}
 
     @GetMapping("/fno-evaluation")
@@ -172,7 +174,8 @@ public final class CustomerMindFnoResearchController {
             "RESEARCH_CANDIDATE", "CE".equals(leg.side()) ? "BUY_CALL_RESEARCH" : "BUY_PUT_RESEARCH",
             decision.reason(), decision.strategyId(), candleSource, completed.size(),
             latestClose, "UPSTOX_V3_EXCHANGE_TIMED", expiry.get(), selected.strikePrice(),
-            leg.instrumentKey(), leg.lotSize(), leg.bid(), leg.ask(),
+            leg.instrumentKey(), leg.lotSize(), leg.bid(), leg.ask(), leg.ltp(), leg.openInterest(),
+            leg.iv(), leg.delta(), leg.theta(), leg.gamma(), leg.vega(),
             leg.exchangeAt(), leg.observedAt(), false, false);
     }
 
@@ -220,6 +223,7 @@ public final class CustomerMindFnoResearchController {
             String reason, int bars, Instant closedAt, String candleSource) {
         return new FnoResearch("mind.fno-research.v1", now, UNDERLYING, status, signal,
             reason, null, candleSource, bars, closedAt,
-            null, null, null, null, null, null, null, null, null, false, false);
+            null, null, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, false, false);
     }
 }
