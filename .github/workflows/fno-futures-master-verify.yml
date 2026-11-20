@@ -35,6 +35,7 @@ jobs:
       - name: Verify parser against the real file
         working-directory: backend
         run: |
+          set -o pipefail
           mvn --batch-mode --no-transfer-progress -Dtest=UpstoxFuturesInstrumentMasterLiveFileTest \
             -Dsurefire.failIfNoSpecifiedTests=false test 2>&1 | tee "$RUNNER_TEMP/verify.log"
-          grep -E '^FNO_MASTER_' "$RUNNER_TEMP/verify.log" || true
+          grep -E '^FNO_MASTER_' "$RUNNER_TEMP/verify.log"

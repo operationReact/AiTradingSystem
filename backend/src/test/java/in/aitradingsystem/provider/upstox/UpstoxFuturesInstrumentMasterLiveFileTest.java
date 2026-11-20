@@ -90,7 +90,13 @@ class UpstoxFuturesInstrumentMasterLiveFileTest {
         assertTrue(near.expiry().isBefore(far.expiry()));
     }
 
+    /** Same magic-byte detection as the parser: gzip (1f 8b) or plain JSON. */
     private static InputStream gzipOrPlain(Path file) throws Exception {
-        return Files.newInputStream(file);
+        InputStream raw = new java.io.BufferedInputStream(Files.newInputStream(file));
+        raw.mark(2);
+        int b1 = raw.read();
+        int b2 = raw.read();
+        raw.reset();
+        return (b1 == 0x1f && b2 == 0x8b) ? new java.util.zip.GZIPInputStream(raw) : raw;
     }
 }
