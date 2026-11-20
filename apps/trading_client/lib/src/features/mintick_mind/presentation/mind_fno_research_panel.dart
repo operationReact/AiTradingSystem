@@ -71,33 +71,27 @@ class _MindFnoResearchPanelState extends State<MindFnoResearchPanel> {
                   ? (result.signal == 'BUY_CALL_RESEARCH'
                       ? 'LONG CALL · RESEARCH CANDIDATE'
                       : 'LONG PUT · RESEARCH CANDIDATE')
-                  : 'NO TRADE · ' + result.status,
+                  : 'NO TRADE · ${result.status}',
               key: const ValueKey('mind-fno-research-decision'),
               style: TextStyle(
                 color: candidate ? MindPalette.mint : MindPalette.yellow,
                 fontSize: 13, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
-            Text('Reason: ' + result.reasonCode.replaceAll('_', ' '),
+            Text('Reason: ${result.reasonCode.replaceAll('_', ' ')}',
               style: const TextStyle(color: MindPalette.text, fontSize: 11)),
             const SizedBox(height: 5),
-            Text('Completed NIFTY candles: ' + result.completedCandles.toString()
-                + ' · Evaluated: ' + result.evaluatedAt.toUtc().toIso8601String(),
+            Text('Completed NIFTY candles: ${result.completedCandles} · Evaluated: ${result.evaluatedAt.toUtc().toIso8601String()}',
               style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
             if (result.latestCompletedCloseAt != null)
-              Text('Latest completed candle: '
-                  + result.latestCompletedCloseAt!.toUtc().toIso8601String(),
+              Text('Latest completed candle: ${result.latestCompletedCloseAt!.toUtc().toIso8601String()}',
                 style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
             if (candidate) ...[
               const SizedBox(height: 8),
-              Text(result.strategyId! + ' · ' + result.instrumentKey!,
+              Text('${result.strategyId!} · ${result.instrumentKey!}',
                 style: const TextStyle(color: MindPalette.text, fontSize: 11)),
-              Text('Expiry: ' + result.expiry!.toIso8601String().substring(0, 10)
-                  + ' · Strike: ' + result.strike.toString()
-                  + ' · Lot: ' + result.lotSize.toString(),
+              Text('Expiry: ${result.expiry!.toIso8601String().substring(0, 10)} · Strike: ${result.strike} · Lot: ${result.lotSize}',
                 style: const TextStyle(color: MindPalette.text, fontSize: 11)),
-              Text('Exchange bid / ask: ' + result.bid.toString()
-                  + ' / ' + result.ask.toString()
-                  + ' · Tick: ' + result.exchangeAt!.toUtc().toIso8601String(),
+              Text('Exchange bid / ask: ${result.bid} / ${result.ask} · Tick: ${result.exchangeAt!.toUtc().toIso8601String()}',
                 style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
               const SizedBox(height: 4),
               const Text('ATM is an approximate paired-premium selection. '
