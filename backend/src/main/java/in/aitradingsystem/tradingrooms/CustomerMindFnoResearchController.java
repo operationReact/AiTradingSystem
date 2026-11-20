@@ -79,9 +79,19 @@ public final class CustomerMindFnoResearchController {
     }
 
     FnoResearch inspect(Authentication authentication) {
+        return inspectInternal(authentication, false);
+    }
+
+    /** Worker may call this only after an owner-scoped, opted-in PAPER room is verified. */
+    FnoResearch inspectForOwnedPaperWorker() {
+        return inspectInternal(null, true);
+    }
+
+    private FnoResearch inspectInternal(Authentication authentication, boolean worker) {
         Instant now = clock.instant();
         // This call performs the existing Cognito customer/active-account check.
-        var cap = discovery.capability(authentication).getBody();
+        var cap = worker ? discovery.internalCapability()
+            : discovery.capability(authentication).getBody();
         if (cap == null || !cap.sourceReady()) return blocked(now, "FNO_SOURCE_UNAVAILABLE", 0, null, null);
         if (!cap.displayRightsVerified() || !cap.contractDiscoveryVerified())
             return blocked(now, "FNO_DISPLAY_RIGHTS_NOT_VERIFIED", 0, null, null);
@@ -91,7 +101,8 @@ public final class CustomerMindFnoResearchController {
         // Dates are read from the actual Upstox source, never computed from a calendar.
         CustomerPaperFnoMarketController.Expiries expiryListing;
         try {
-            expiryListing = discovery.expiries(authentication).getBody();
+            expiryListing = worker ? discovery.internalExpiries()
+                : discovery.expiries(authentication).getBody();
         } catch (ResponseStatusException ex) {
             if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) throw ex;
             return blocked(now, "FNO_EXPIRY_SOURCE_UNAVAILABLE", 0, null, null);
@@ -184,7 +195,8 @@ public final class CustomerMindFnoResearchController {
         // visible in Markets. No REST chain prices or synthesized order quotes.
         CustomerPaperFnoMarketController.Market market;
         try {
-            market = discovery.market(expiry.get(), authentication).getBody();
+            market = worker ? discovery.internalMarket(expiry.get())
+                : discovery.market(expiry.get(), authentication).getBody();
         } catch (ResponseStatusException ex) {
             if (ex.getStatusCode().value() == 401 || ex.getStatusCode().value() == 403) throw ex;
             return blocked(now, "FNO_QUOTE_SOURCE_UNAVAILABLE", completed.size(), latestClose, candleSource);
