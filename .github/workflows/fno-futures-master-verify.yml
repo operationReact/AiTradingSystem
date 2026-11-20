@@ -38,4 +38,4 @@ jobs:
           set -o pipefail
           mvn --batch-mode --no-transfer-progress -Dtest=UpstoxFuturesInstrumentMasterLiveFileTest \
             -Dsurefire.failIfNoSpecifiedTests=false test 2>&1 | tee "$RUNNER_TEMP/verify.log"
-          cat backend/target/fno-master-facts.txt
+          cat target/fno-master-facts.txt
