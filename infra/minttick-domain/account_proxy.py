@@ -50,6 +50,7 @@ EXACT = {
     # Owner-sub checked in Spring; read-only, 365-day bounded private OHLCV cache.
     ("GET", "/api/customer/owner-history/v1/candles"),
     ("GET", "/api/customer/owner-history/v1/monthly-candles"),
+    ("GET", "/api/customer/owner-history/v1/intraday-candles"),
     ("GET", "/api/customer/owner-upstox-analytics/v1/progress"),
     ("GET", "/api/customer/owner-upstox-analytics/v1/persisted-receipts"),
     ("GET", "/api/customer/market-data/instruments/status"),
