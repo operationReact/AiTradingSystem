@@ -118,8 +118,9 @@ public final class FnoFuturesRolloverSignalV1 {
         CompletedSession first = sessions.get(0);
         CompletedSession second = sessions.get(1);
         CompletedSession last = sessions.get(2);
-        if (first.near().openInterestUnits() == 0 || first.far().openInterestUnits() == 0) {
-            return blocked(Status.BLOCKED_DATA, "ROLLOVER_BASELINE_OPEN_INTEREST_MISSING", asOf);
+        if (first.near().openInterestUnits() == 0 || first.far().openInterestUnits() == 0
+                || (last.near().openInterestUnits() == 0 && last.far().openInterestUnits() == 0)) {
+            return blocked(Status.BLOCKED_DATA, "ROLLOVER_BASELINE_OR_FINAL_OPEN_INTEREST_MISSING", asOf);
         }
 
         BigDecimal nearDecline = ratioBps(
