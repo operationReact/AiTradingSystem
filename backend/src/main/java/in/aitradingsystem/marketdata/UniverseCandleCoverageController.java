@@ -17,6 +17,13 @@ public class UniverseCandleCoverageController {
         this.service = service;
     }
 
+    @GetMapping("/hourly")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<UniverseCandleCoverageRepository.Coverage> hourlyCoverage() {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(service.hourlyCoverage());
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
     public ResponseEntity<UniverseCandleCoverageRepository.Coverage> coverage() {

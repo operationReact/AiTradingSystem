@@ -36,6 +36,7 @@ public class OwnerUniverseHistoryBackfill {
     private final Clock clock;
     private Instant retryAfter = Instant.EPOCH;
     private int failures;
+    private boolean hourlyFirst;
 
     @Autowired
     public OwnerUniverseHistoryBackfill(UniverseCandleCoverageService coverage,
@@ -64,12 +65,22 @@ public class OwnerUniverseHistoryBackfill {
                 defer();
                 return;
             }
-            var next = coverage.nextDue();
+            // Alternate interval priority so continuous five-minute backfill
+            // cannot starve the hourly series. Both use actual Angel One bars.
+            HistoricalCandleInterval interval =
+                    hourlyFirst ? HistoricalCandleInterval.ONE_HOUR
+                                : HistoricalCandleInterval.FIVE_MINUTE;
+            var next = hourlyFirst ? coverage.nextHourlyDue() : coverage.nextDue();
+            if (next.isEmpty()) {
+                interval = hourlyFirst ? HistoricalCandleInterval.FIVE_MINUTE
+                                       : HistoricalCandleInterval.ONE_HOUR;
+                next = hourlyFirst ? coverage.nextDue() : coverage.nextHourlyDue();
+            }
+            hourlyFirst = !hourlyFirst;
             if (next.isEmpty()) return;
             var window = coverage.window();
             CandleBackfillRun run = historical.startWithProvider(next.get(),
-                    HistoricalCandleInterval.FIVE_MINUTE, window.fromDate(), window.toDate(),
-                    privateSource);
+                    interval, window.fromDate(), window.toDate(), privateSource);
             // SUCCEEDED with zero rows is still incomplete coverage; that
             // instrument cools down for 18h, but need not stall all symbols.
             if (!"SUCCEEDED".equals(run.status())) {

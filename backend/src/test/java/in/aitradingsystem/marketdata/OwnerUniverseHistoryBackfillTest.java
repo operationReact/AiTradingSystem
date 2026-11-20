@@ -63,6 +63,58 @@ class OwnerUniverseHistoryBackfillTest {
     }
 
     @Test
+    void hourlyAndFiveMinuteBothUseActualCheckpointedProviderWithIndependentCursors() {
+        var coverage = mock(UniverseCandleCoverageService.class);
+        var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        when(feed.available()).thenReturn(true);
+        when(coverage.nextDue()).thenReturn(Optional.of(42L));
+        when(coverage.nextHourlyDue()).thenReturn(Optional.of(43L));
+        when(coverage.window()).thenReturn(new UniverseCandleCoverageService.Window(
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9),
+                NOW.minus(Duration.ofDays(14)), NOW));
+        var stored = mock(CandleBackfillRun.class);
+        when(stored.status()).thenReturn("SUCCEEDED");
+        when(stored.id()).thenReturn(UUID.randomUUID());
+        when(history.startWithProvider(anyLong(), any(), any(), any(), any()))
+            .thenReturn(stored);
+        var collector = new OwnerUniverseHistoryBackfill(coverage, history, feed,
+                new HistoricalCandleParser(), Clock.fixed(NOW, ZoneOffset.UTC));
+        collector.collectOne();
+        collector.collectOne();
+        verify(history).startWithProvider(eq(42L),
+            eq(HistoricalCandleInterval.FIVE_MINUTE), any(), any(),
+            any(MarketDataProvider.class));
+        verify(history).startWithProvider(eq(43L),
+            eq(HistoricalCandleInterval.ONE_HOUR), any(), any(),
+            any(MarketDataProvider.class));
+        verifyNoMoreInteractions(history);
+    }
+
+    @Test
+    void hourlyFallbackRunsEvenIfFiveMinuteCoverageComplete() {
+        var coverage = mock(UniverseCandleCoverageService.class);
+        var history = mock(HistoricalCandleService.class);
+        var feed = mock(AppAngelOneMarketFeedService.class);
+        when(feed.available()).thenReturn(true);
+        when(coverage.nextHourlyDue()).thenReturn(Optional.of(43L));
+        when(coverage.window()).thenReturn(new UniverseCandleCoverageService.Window(
+                LocalDate.of(2026, 10, 27), LocalDate.of(2026, 11, 9),
+                NOW.minus(Duration.ofDays(14)), NOW));
+        var stored = mock(CandleBackfillRun.class);
+        when(stored.status()).thenReturn("SUCCEEDED");
+        when(stored.id()).thenReturn(UUID.randomUUID());
+        when(history.startWithProvider(anyLong(), any(), any(), any(), any()))
+            .thenReturn(stored);
+        new OwnerUniverseHistoryBackfill(coverage, history, feed,
+                new HistoricalCandleParser(), Clock.fixed(NOW, ZoneOffset.UTC))
+            .collectOne();
+        verify(history).startWithProvider(eq(43L),
+            eq(HistoricalCandleInterval.ONE_HOUR), any(), any(),
+            any(MarketDataProvider.class));
+    }
+
+    @Test
     void noDueInstrumentNeverCallsProvider() {
         var repo = mock(UniverseCandleCoverageRepository.class);
         var service = new UniverseCandleCoverageService(repo, Clock.fixed(NOW, ZoneOffset.UTC));

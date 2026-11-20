@@ -44,6 +44,14 @@ public class UniverseCandleCoverageRepository {
                        AND i.trading_symbol LIKE '%-EQ'))
             """;
 
+    // Hourly coverage stays independently checkpointed from FIVE_MINUTE.
+    // These substitutions are on a fixed, internal SQL literal, never user input.
+    private static final int REQUIRED_HOURLY_BARS = 10;
+    private static final String EQUITIES_WITH_HOURLY_BARS =
+            EQUITIES_WITH_BARS.replace("m.interval = 'FIVE_MINUTE'",
+                                       "m.interval = 'ONE_HOUR'")
+                             .replace("LIMIT 64", "LIMIT 10");
+
     private final JdbcTemplate jdbc;
 
     public UniverseCandleCoverageRepository(JdbcTemplate jdbc) {
@@ -89,6 +97,52 @@ public class UniverseCandleCoverageRepository {
                        WHERE r.exchange = i.exchange
                          AND r.symbol_token = i.symbol_token
                          AND r.interval = 'FIVE_MINUTE'
+                         AND r.started_at >= ?
+                  )
+                 ORDER BY bars.bar_count ASC,
+                          i.exchange ASC, i.trading_symbol ASC, i.symbol_token ASC
+                 LIMIT 1
+                """, (rs, row) -> rs.getLong("instrument_id"),
+                utc(fromInclusive), utc(toExclusive), utc(attemptedSince))
+                .stream().findFirst();
+    }
+
+    /** Source-backed hourly counts; no claim of session completeness. */
+    public Coverage hourlyCoverage(Instant fromInclusive, Instant toExclusive) {
+        validateWindow(fromInclusive, toExclusive);
+        return jdbc.query("""
+                SELECT COUNT(*) AS eligible,
+                       COUNT(*) FILTER (WHERE bars.bar_count >= 10) AS covered,
+                       COUNT(*) FILTER (WHERE bars.bar_count < 10) AS incomplete,
+                       COUNT(*) FILTER (WHERE bars.bar_count = 0) AS empty
+                """ + EQUITIES_WITH_HOURLY_BARS,
+                rs -> {
+                    if (!rs.next()) throw new IllegalStateException("Hourly coverage missing");
+                    return new Coverage(fromInclusive, toExclusive,
+                            rs.getLong("eligible"), rs.getLong("covered"),
+                            rs.getLong("incomplete"), rs.getLong("empty"));
+                }, utc(fromInclusive), utc(toExclusive));
+    }
+
+    /**
+     * Independently choose a genuine ONE_HOUR source window for an active
+     * equity. Backfills are persisted and retried using the existing
+     * candle_backfill_run identity (exchange,token,interval,request window).
+     */
+    public Optional<Long> nextDueHourly(Instant fromInclusive, Instant toExclusive,
+                                         Instant attemptedSince) {
+        validateWindow(fromInclusive, toExclusive);
+        if (attemptedSince == null) throw new IllegalArgumentException("Cooldown cutoff is required");
+        return jdbc.query("""
+                SELECT i.instrument_id
+                """ + EQUITIES_WITH_HOURLY_BARS + """
+                  AND bars.bar_count < """ + REQUIRED_HOURLY_BARS + """
+                  AND NOT EXISTS (
+                      SELECT 1
+                        FROM candle_backfill_run r
+                       WHERE r.exchange = i.exchange
+                         AND r.symbol_token = i.symbol_token
+                         AND r.interval = 'ONE_HOUR'
                          AND r.started_at >= ?
                   )
                  ORDER BY bars.bar_count ASC,
