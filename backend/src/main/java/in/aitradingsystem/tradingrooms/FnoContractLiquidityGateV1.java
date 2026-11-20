@@ -234,6 +234,7 @@ public final class FnoContractLiquidityGateV1 {
         return !s.exchangeAt().isAfter(s.observedAt())
             && !s.observedAt().isAfter(asOf)
             && !s.oiFirstObservedAt().isAfter(asOf)
+            && !s.oiFirstObservedAt().isAfter(s.observedAt())
             && !s.volumeFirstObservedAt().isAfter(asOf)
             && !s.exchangeAt().isAfter(asOf)
             && !s.oiFirstObservedAt().isBefore(asOf.minus(MAX_OI_AGE))
