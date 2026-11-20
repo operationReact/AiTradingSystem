@@ -1,28 +1,33 @@
 package in.aitradingsystem.tradingrooms;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
+import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
+import in.aitradingsystem.tradingrooms.FnoFuturesContractRegistry.NearFar;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.ObjectProvider;
 
 class FnoFuturesResearchServiceTest {
     private static final Instant NOW = Instant.parse("2026-11-23T05:00:00Z");
-
-    @SuppressWarnings("unchecked")
-    private static ObjectProvider<UpstoxFnoV3LiveFeedService> noFeed() {
-        ObjectProvider<UpstoxFnoV3LiveFeedService> p = mock(ObjectProvider.class);
-        when(p.getIfAvailable()).thenReturn(null);
-        return p;
-    }
+    private static final LocalDate TODAY = LocalDate.of(2026, 11, 23);
+    private static final String NIFTY = "NSE_INDEX|Nifty 50";
+    private static final FuturesContract NEAR = new FuturesContract("NSE_FO|SYN1001", NIFTY, "NIFTY",
+        "NIFTY FUT 29 DEC 26", LocalDate.of(2026, 12, 29), 75);
+    private static final FuturesContract FAR = new FuturesContract("NSE_FO|SYN1002", NIFTY, "NIFTY",
+        "NIFTY FUT 26 JAN 27", LocalDate.of(2027, 1, 26), 75);
 
     private static MarketSessionCalendar calendar(boolean open) {
         MarketSessionCalendar c = mock(MarketSessionCalendar.class);
@@ -30,63 +35,106 @@ class FnoFuturesResearchServiceTest {
         return c;
     }
 
-    private static Map<String, String> reasons(List<FnoFuturesResearchService.StrategyStatus> rows) {
-        return rows.stream().collect(java.util.stream.Collectors.toMap(
-            FnoFuturesResearchService.StrategyStatus::strategyId,
-            FnoFuturesResearchService.StrategyStatus::reasonCode));
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<UpstoxFnoV3LiveFeedService> feed(UpstoxFnoV3LiveFeedService live) {
+        ObjectProvider<UpstoxFnoV3LiveFeedService> p = mock(ObjectProvider.class);
+        when(p.getIfAvailable()).thenReturn(live);
+        return p;
     }
 
-    @Test
-    void defaultFlagsBlockAllThreeStrategiesOnRights() {
-        var service = new FnoFuturesResearchService(noFeed(), calendar(true), false, false);
-        var rows = service.evaluateAll(NOW);
-        assertEquals(3, rows.size());
-        for (var row : rows) assertEquals("BLOCKED_RIGHTS", row.status(), row.strategyId());
-        assertEquals(Map.of(
-            "strategy.STR-170", "FNO_SOURCE_USE_RIGHTS_NOT_VERIFIED",
-            "strategy.STR-171", "CALENDAR_SOURCE_RIGHTS_NOT_VERIFIED",
-            "strategy.STR-172", "ROLLOVER_SOURCE_RIGHTS_NOT_VERIFIED"), reasons(rows));
-        assertTrue(rows.stream().allMatch(r -> "NONE".equals(r.quoteSource())));
+    private static FnoFuturesContractRegistry registryWith(NearFar pair) {
+        FnoFuturesContractRegistry registry = mock(FnoFuturesContractRegistry.class);
+        when(registry.nearFar(eq(NIFTY), any())).thenReturn(Optional.ofNullable(pair));
+        return registry;
     }
 
-    @Test
-    void verifiedRightsWithoutInputsReturnBlockedDataNotCandidates() {
-        var service = new FnoFuturesResearchService(noFeed(), calendar(true), true, true);
-        var rows = service.evaluateAll(NOW);
-        for (var row : rows) {
-            assertEquals("BLOCKED_DATA", row.status(), row.strategyId());
-            assertNotEquals("RESEARCH_CANDIDATE", row.status());
-        }
-        assertEquals("FUTURES_CONTRACT_OR_SPOT_IDENTITY_INVALID", reasons(rows).get("strategy.STR-170"));
-        assertEquals("CALENDAR_CONTRACT_PAIR_INVALID", reasons(rows).get("strategy.STR-171"));
-        assertEquals("ROLLOVER_CONTRACT_PAIR_INVALID", reasons(rows).get("strategy.STR-172"));
+    private static FnoClosingSnapshotStore emptyStore() {
+        FnoClosingSnapshotStore store = mock(FnoClosingSnapshotStore.class);
+        when(store.pairRows(any(), any(), any(), any())).thenReturn(List.of());
+        return store;
     }
 
-    @Test
-    void closedSessionBlocksCalendarSpreadBeforeContractChecks() {
-        var service = new FnoFuturesResearchService(noFeed(), calendar(false), true, true);
-        var str171 = service.evaluateAll(NOW).stream()
-            .filter(r -> r.strategyId().equals("strategy.STR-171")).findFirst().orElseThrow();
-        assertEquals("BLOCKED_DATA", str171.status());
-        assertEquals("FNO_EXCHANGE_SESSION_NOT_VERIFIED", str171.reasonCode());
-    }
-
-    @Test
-    void v3QuoteIsLabelledWithCanonicalSourceAndRequiresLiveFeed() {
-        assertTrue(new FnoFuturesResearchService(noFeed(), calendar(true), false, false)
-            .v3Quote("NSE_FO|SYN1001").isEmpty());
-
+    private static UpstoxFnoV3LiveFeedService liveWith(Map<String, UpstoxFnoV3LiveFeedService.PaperQuote> quotes) {
         UpstoxFnoV3LiveFeedService live = mock(UpstoxFnoV3LiveFeedService.class);
-        when(live.eligiblePaperQuote("NSE_FO|SYN1001")).thenReturn(Optional.of(
-            new UpstoxFnoV3LiveFeedService.PaperQuote("NSE_FO|SYN1001",
-                new BigDecimal("24990"), new BigDecimal("24992"),
-                NOW.minusSeconds(2), NOW.minusSeconds(1))));
-        @SuppressWarnings("unchecked")
-        ObjectProvider<UpstoxFnoV3LiveFeedService> provider = mock(ObjectProvider.class);
-        when(provider.getIfAvailable()).thenReturn(live);
-        var quote = new FnoFuturesResearchService(provider, calendar(true), false, false)
-            .v3Quote("NSE_FO|SYN1001").orElseThrow();
-        assertEquals(FnoMarketDataProvider.UPSTOX_V3_LIVE.wireLabel(), quote.source());
-        assertEquals(new BigDecimal("24992"), quote.ask());
+        quotes.forEach((k, q) -> when(live.eligiblePaperQuote(k)).thenReturn(Optional.of(q)));
+        return live;
+    }
+
+    private static UpstoxFnoV3LiveFeedService.PaperQuote quote(String key, String bid, String ask) {
+        return new UpstoxFnoV3LiveFeedService.PaperQuote(key, new BigDecimal(bid), new BigDecimal(ask),
+            NOW.minusSeconds(2), NOW.minusSeconds(1));
+    }
+
+    private static Map<String, StrategyStatusView> byId(List<FnoFuturesResearchService.StrategyStatus> rows) {
+        return rows.stream().collect(Collectors.toMap(FnoFuturesResearchService.StrategyStatus::strategyId,
+            r -> new StrategyStatusView(r.status(), r.reasonCode(), r.contractsResolved(), r.freshQuotes(),
+                r.historySessions(), r.inputState())));
+    }
+
+    record StrategyStatusView(String status, String reason, int contracts, int quotes, int history, String input) {}
+
+    @Test
+    void defaultFlagsBlockAllThreeOnRightsEvenWhenContractsExist() {
+        var service = new FnoFuturesResearchService(feed(null), calendar(true),
+            registryWith(new NearFar(NEAR, FAR)), emptyStore(), false, false, "");
+        var rows = byId(service.evaluateAll(NOW));
+        assertEquals("BLOCKED_RIGHTS", rows.get("strategy.STR-171").status());
+        assertEquals("CALENDAR_SOURCE_RIGHTS_NOT_VERIFIED", rows.get("strategy.STR-171").reason());
+        assertEquals("BLOCKED_RIGHTS", rows.get("strategy.STR-172").status());
+    }
+
+    @Test
+    void verifiedRightsWithRealPairButNoLiveQuotesIsBlockedDataNotSignal() {
+        var service = new FnoFuturesResearchService(feed(null), calendar(true),
+            registryWith(new NearFar(NEAR, FAR)), emptyStore(), true, true, "");
+        var calendarRow = byId(service.evaluateAll(NOW)).get("strategy.STR-171");
+        assertEquals("BLOCKED_DATA", calendarRow.status());
+        assertEquals("CALENDAR_QUOTE_INVALID_OR_STALE", calendarRow.reason());
+        assertEquals(2, calendarRow.contracts());
+        assertEquals(0, calendarRow.quotes());
+        assertEquals("NEAR_FAR_CONTRACTS_RESOLVED", calendarRow.input());
+    }
+
+    @Test
+    void freshLiveQuotesWithoutExplicitCostAssumptionsStillProduceNoSignal() {
+        var live = liveWith(Map.of(
+            NEAR.instrumentKey(), quote(NEAR.instrumentKey(), "24990", "25010"),
+            FAR.instrumentKey(), quote(FAR.instrumentKey(), "25400", "25420")));
+        var service = new FnoFuturesResearchService(feed(live), calendar(true),
+            registryWith(new NearFar(NEAR, FAR)), emptyStore(), true, true, "");
+        var row = byId(service.evaluateAll(NOW)).get("strategy.STR-171");
+        assertEquals(2, row.quotes());
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("CALENDAR_COST_ASSUMPTIONS_INVALID", row.reason());
+        assertEquals(FnoMarketDataProvider.UPSTOX_V3_LIVE.wireLabel(),
+            service.evaluateAll(NOW).get(1).quoteSource());
+    }
+
+    @Test
+    void rolloverWithoutThreeCompleteStoredSessionsStaysBlocked() {
+        var store = emptyStore();
+        var service = new FnoFuturesResearchService(feed(null), calendar(true),
+            registryWith(new NearFar(NEAR, FAR)), store, true, true, "");
+        var row = byId(service.evaluateAll(NOW)).get("strategy.STR-172");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals(0, row.history());
+        verify(store).pairRows(eq(NEAR.instrumentKey()), eq(FAR.instrumentKey()), any(), eq(TODAY));
+    }
+
+    @Test
+    void basisCarryStaysBlockedWhenDeliverableSpotIsNotVerified() {
+        var service = new FnoFuturesResearchService(feed(null), calendar(true),
+            registryWith(null), emptyStore(), true, true, "NSE_EQ|INE002A01018");
+        var row = byId(service.evaluateAll(NOW)).get("strategy.STR-170");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("FUTURES_CONTRACT_OR_SPOT_IDENTITY_INVALID", row.reason());
+        assertEquals("NO_VERIFIED_CONTRACT_PAIR", row.input());
+    }
+
+    @Test
+    void liveQuoteIsEmptyWithoutFeedBean() {
+        var service = new FnoFuturesResearchService(feed(null), calendar(true),
+            registryWith(null), emptyStore(), false, false, "");
+        assertTrue(service.liveQuote("NSE_FO|SYN1001").isEmpty());
     }
 }
