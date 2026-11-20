@@ -58,6 +58,10 @@ for key,label in (("MINTTICK_UPSTOX_OAUTH_SSM_ENABLED","MINTTICK_UPSTOX_OAUTH_FL
           "DISABLED" if a==["false"] and b==["false"] else "NOT_CONFIRMED")
     print(label+":",state)
 
+# Read-only release fingerprint; never print environment or credential values.
+release=[line.split("=",1)[1].strip() for line in effective if line.startswith("RELEASE_SHA=")]
+release_sha=release[0] if len(release)==1 and re.fullmatch(r"[0-9a-f]{40}",release[0]) else "UNAVAILABLE"
+print("MINTTICK_DEPLOYED_RELEASE_SHA:",release_sha)
 print("MINTTICK_OPERATOR_ENV_KEYS:",key_state)
 print("MINTTICK_OPERATOR_KEY:", "PRESENT" if key_ok else "MISSING_OR_INVALID")
 try:
