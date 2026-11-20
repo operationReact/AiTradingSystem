@@ -1,5 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
+import in.aitradingsystem.marketdata.MarketSessionCalendar;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -23,6 +25,7 @@ public class CustomerMindFnoPaperAutomationService {
     private final CustomerPaperFnoCapabilityController capability;
     private final CustomerMindFnoPaperCycleService cycles;
     private final Clock clock;
+    private final MarketSessionCalendar sessionCalendar;
 
     public record State(UUID roomId,boolean enabled,Instant nextRunAt,
         Instant lastRunAt,String lastStatus,String lastReason,boolean liveMoney) {}
@@ -34,8 +37,10 @@ public class CustomerMindFnoPaperAutomationService {
 
     public CustomerMindFnoPaperAutomationService(JdbcClient jdbc,
             CustomerPaperFnoCapabilityController capability,
-            CustomerMindFnoPaperCycleService cycles, Clock clock) {
+            CustomerMindFnoPaperCycleService cycles, Clock clock,
+            MarketSessionCalendar sessionCalendar) {
         this.jdbc=jdbc; this.capability=capability; this.cycles=cycles; this.clock=clock;
+        this.sessionCalendar=sessionCalendar;
     }
 
     public State state(UUID owner, UUID room) {
@@ -104,6 +109,8 @@ public class CustomerMindFnoPaperAutomationService {
 
     @Scheduled(fixedDelay=15000)
     public void poll() {
+        // Never poll outside official NSE F&O sessions, including holidays.
+        if (!sessionCalendar.isInsideFnoSession(clock.instant())) return;
         // DB claim serializes workers across application replicas.
         List<Due> claims=jdbc.sql("""
             WITH due AS (
