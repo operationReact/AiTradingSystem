@@ -3,11 +3,16 @@
 # Changes no broker credentials, order rights, external services or public routes.
 set -Eeuo pipefail
 umask 077
+stage=HOST_IDENTITY
+# Print only fixed stage enums, never command output or private values.
+trap 'echo "INTRADAY_ACTIVATION_BLOCKED: ${stage}"' ERR
+echo 'INTRADAY_ACTIVATION_STAGE: STARTED'
 test "$(id -u)" -eq 0
 test "$(uname -m)" = aarch64
 root=/opt/aitradingsystem-paper
 test -d "$root" && test ! -L "$root"
 cd "$root"
+stage=PRIVATE_FILES
 for name in runtime.env .env paper-compose.yml; do
   test -f "$name" && test ! -L "$name"
 done
@@ -16,6 +21,7 @@ test "$(stat -c '%u:%a' .env)" = '0:600'
 grep -Fq 'TRADING_MODE: PAPER' paper-compose.yml
 grep -Fq 'OWNER_HISTORY_BACKFILL_ENABLED:' paper-compose.yml
 grep -Fq 'OWNER_FEED_ENABLED:' paper-compose.yml
+stage=OWNER_FEED
 for file in runtime.env .env; do
   grep -qx 'OWNER_FEED_ENABLED=true' "$file" || {
     echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_FEED_NOT_ACTIVE'; exit 2;
@@ -24,6 +30,7 @@ for file in runtime.env .env; do
     echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_SUB_NOT_CONFIGURED'; exit 2;
   }
 done
+stage=BACKEND_CONTAINER
 backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
 test -n "$backend"
 test "$(docker compose --env-file .env -f paper-compose.yml ps -q backend | wc -l)" -eq 1
@@ -35,6 +42,7 @@ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
 # shared market_candle writer if the app already serves multiple active
 # customers. The broader entitlement / tenant-isolation migration remains
 # a separate prerequisite before exposing these bars to other users.
+stage=OWNER_ISOLATION
 customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres \
   psql -U aitrading -d aitrading -qtAX \
     -c "SELECT count(*) FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
@@ -43,6 +51,7 @@ if ! [[ "$customer_count" =~ ^[0-9]+$ ]] || (( customer_count > 1 )); then
   echo 'INTRADAY_ACTIVATION_BLOCKED: CUSTOMER_ISOLATION_UNVERIFIED'
   exit 2
 fi
+stage=HOST_STAGING
 scratch="$(mktemp -d "$root/.intraday-activation.XXXXXXXX")"
 chmod 0700 "$scratch"
 cleanup() { rm -rf -- "$scratch"; }
@@ -54,6 +63,7 @@ rollback() {
   cp -p "$scratch/compose.env" .env
   docker compose --env-file .env -f paper-compose.yml up -d --no-build --no-deps --force-recreate backend >/dev/null 2>&1 || true
 }
+stage=RUNTIME_UPDATE
 for file in runtime.env .env; do
   tmp="$(mktemp "$root/.intraday-env.XXXXXXXX")"
   grep -v '^OWNER_HISTORY_BACKFILL_ENABLED=' "$file" > "$tmp" || true
@@ -61,12 +71,14 @@ for file in runtime.env .env; do
   install -o root -g root -m 0600 "$tmp" "$file"
   rm -f "$tmp"
 done
+stage=BACKEND_RECREATE
 if ! docker compose --env-file .env -f paper-compose.yml config --quiet ||
    ! docker compose --env-file .env -f paper-compose.yml up -d --no-build --no-deps --force-recreate backend >/dev/null; then
   rollback
   echo 'INTRADAY_ACTIVATION_BLOCKED: CONTAINER_START_FAILED'
   exit 2
 fi
+stage=BACKEND_HEALTH
 for attempt in $(seq 1 45); do
   backend="$(docker compose --env-file .env -f paper-compose.yml ps -q backend)"
   if [[ -n "$backend" ]] &&
