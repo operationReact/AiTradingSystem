@@ -338,7 +338,7 @@ extension _MindResearchScreens on _MindWorkspaceState {
         const Icon(Icons.block,color:MindPalette.red,size:18),
         const SizedBox(width:9),
         Expanded(child:Text(cap==null
-            ? 'F&O strategy coverage is not verified. The prototype panels below are illustrative mocks.'
+            ? 'F&O data status not verified. The prototype panels below are illustrative mocks.'
             : 'F&O contracts / OI / option chain: '+cap.status.label+
               (cap.blockerCode==null?'':' ('+cap.blockerCode!+')')+
               '. Remaining prototype panels below are illustrative mocks; the research panel above uses its own authenticated evidence.',
