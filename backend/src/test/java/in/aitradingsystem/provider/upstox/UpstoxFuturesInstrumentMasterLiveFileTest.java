@@ -28,6 +28,12 @@ import org.junit.jupiter.api.Test;
  */
 class UpstoxFuturesInstrumentMasterLiveFileTest {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final List<String> FACTS = new ArrayList<>();
+
+    private static void fact(String line) {
+        FACTS.add(line);
+        System.out.println(line);
+    }
 
     @Test
     void parserMatchesRealInstrumentMasterSchema() throws Exception {
@@ -43,7 +49,7 @@ class UpstoxFuturesInstrumentMasterLiveFileTest {
             root = new ObjectMapper().readTree(in);
         }
         assertTrue(root.isArray(), "top-level document is not an array");
-        System.out.println("FNO_MASTER_ROWS=" + root.size());
+        fact("FNO_MASTER_ROWS=" + root.size());
         Set<String> segments = new TreeSet<>();
         Set<String> types = new TreeSet<>();
         Set<String> fut = new TreeSet<>();
@@ -57,14 +63,14 @@ class UpstoxFuturesInstrumentMasterLiveFileTest {
                 if (sampleFut == null) sampleFut = row;
             }
         }
-        System.out.println("FNO_MASTER_SEGMENTS=" + segments);
-        System.out.println("FNO_MASTER_INSTRUMENT_TYPES=" + types);
-        System.out.println("FNO_MASTER_NSE_FO_FUT_RAW_ROWS=" + futRows);
+        fact("FNO_MASTER_SEGMENTS=" + segments);
+        fact("FNO_MASTER_INSTRUMENT_TYPES=" + types);
+        fact("FNO_MASTER_NSE_FO_FUT_RAW_ROWS=" + futRows);
         if (sampleFut != null) {
             List<String> names = new ArrayList<>();
             Iterator<Map.Entry<String, JsonNode>> it = sampleFut.fields();
             while (it.hasNext()) names.add(it.next().getKey());
-            System.out.println("FNO_MASTER_FUT_FIELD_NAMES=" + names);
+            fact("FNO_MASTER_FUT_FIELD_NAMES=" + names);
         }
         assertTrue(futRows > 0, "no NSE_FO FUT rows found: schema or segment naming differs");
 
@@ -74,20 +80,23 @@ class UpstoxFuturesInstrumentMasterLiveFileTest {
             contracts = UpstoxFuturesInstrumentMaster.parse(in, asOf);
         }
         var index = UpstoxFuturesInstrumentMaster.index(contracts);
-        System.out.println("FNO_MASTER_PARSED_CURRENT_FUT=" + contracts.size() + " as_of=" + asOf);
-        System.out.println("FNO_MASTER_UNDERLYINGS=" + index.size());
+        fact("FNO_MASTER_PARSED_CURRENT_FUT=" + contracts.size() + " as_of=" + asOf);
+        fact("FNO_MASTER_UNDERLYINGS=" + index.size());
 
         var nifty = index.get("NSE_INDEX|Nifty 50");
-        System.out.println("FNO_MASTER_NIFTY_EXPIRIES=" + (nifty == null ? 0 : nifty.size()));
+        fact("FNO_MASTER_NIFTY_EXPIRIES=" + (nifty == null ? 0 : nifty.size()));
         assertNotNull(nifty, "NIFTY index futures not discovered");
         assertTrue(nifty.size() >= 2, "need near and far NIFTY futures");
         var expiries = new ArrayList<>(nifty.keySet());
         FuturesContract near = nifty.get(expiries.get(0));
         FuturesContract far = nifty.get(expiries.get(1));
-        System.out.println("FNO_MASTER_NEAR=" + near.instrumentKey() + " expiry=" + near.expiry() + " lot=" + near.lotSize());
-        System.out.println("FNO_MASTER_FAR=" + far.instrumentKey() + " expiry=" + far.expiry() + " lot=" + far.lotSize());
+        fact("FNO_MASTER_NEAR=" + near.instrumentKey() + " expiry=" + near.expiry() + " lot=" + near.lotSize());
+        fact("FNO_MASTER_FAR=" + far.instrumentKey() + " expiry=" + far.expiry() + " lot=" + far.lotSize());
         assertEquals(near.lotSize(), far.lotSize(), "near and far lot sizes differ");
         assertTrue(near.expiry().isBefore(far.expiry()));
+        fact("FNO_MASTER_RESULT=PASS");
+        Files.createDirectories(Path.of("target"));
+        Files.write(Path.of("target", "fno-master-facts.txt"), FACTS);
     }
 
     /** Same magic-byte detection as the parser: gzip (1f 8b) or plain JSON. */
