@@ -143,12 +143,12 @@ class _MindFnoLiveOrderAuditState extends State<MindFnoLiveOrderAudit> {
   String? _error;
 
   Future<void> _recheck(UpstoxFnoLiveReceipt receipt) async {
-    if(_rechecking || !_unresolved(receipt.state)) return;
+    if(_rechecking || !_unresolved(receipt.state)) { return; }
     final room=widget.roomId;
     setState(() {_rechecking=true;_error=null;});
     try {
       final checked=await widget.repository.recheckBrokerOrder(room,receipt.id);
-      if(!mounted||widget.roomId!=room)return;
+      if(!mounted||widget.roomId!=room) { return; }
       if(checked.id!=receipt.id||checked.roomId!=room) {
         throw const FormatException('Broker receipt identity mismatch');
       }
