@@ -25,6 +25,8 @@ const _dailyRanges = [
   (label: '3M', days: 90),
   (label: '6M', days: 180),
   (label: '1Y', days: 365),
+  (label: '5Y', days: 1826),
+  (label: 'MAX', days: 9000),
 ];
 
 /// Stock detail: a verified live price when available, a stored-candle chart, and
@@ -99,7 +101,8 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
     try {
       final page = await repo.candles(
         instrumentId: widget.stock.id,
-        interval: timeframe.interval,
+        interval: _timeframe == 2 && _dailyRange >= 4
+            ? 'ONE_MONTH' : timeframe.interval,
         fromDate: _istDate(now.subtract(Duration(
           days: _timeframe == 2 ? _dailyRanges[_dailyRange].days : timeframe.lookbackDays))),
         toDate: _istDate(now),
@@ -467,6 +470,13 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
               : 'Stored candle chart with ${candles.length} bars',
           child: body,
         )),
+        if (_timeframe == 2 && _dailyRange >= 4) ...[
+          const SizedBox(height: 6),
+          Text('Monthly OHLCV aggregated from verified stored daily candles. '
+              'Missing historical sessions remain unfilled.',
+              key: const ValueKey('stock-detail-monthly-disclaimer'),
+              style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
         if (selected != null) ...[
           const SizedBox(height: 8),
           Text(
