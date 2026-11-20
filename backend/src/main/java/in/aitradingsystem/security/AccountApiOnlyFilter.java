@@ -124,6 +124,9 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final java.util.regex.Pattern MIND_FNO_PAPER_AUTOMATION =
         java.util.regex.Pattern.compile(
             "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/paper-automation(/control|/history)?$");
+    private static final java.util.regex.Pattern MIND_FNO_LIVE_PROPOSAL =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/live-proposal$");
 
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
@@ -192,6 +195,8 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                 && ("OPTIONS".equals(method)
                     || ("POST".equals(method)&&path.endsWith("/control"))
                     || ("GET".equals(method)&&!path.endsWith("/control"))))
+            || (MIND_FNO_LIVE_PROPOSAL.matcher(path).matches()
+                && Set.of("GET","OPTIONS").contains(method))
             || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_INVENTORY.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PAPER_PORTFOLIO.equals(path) && Set.of("GET", "OPTIONS").contains(method))
