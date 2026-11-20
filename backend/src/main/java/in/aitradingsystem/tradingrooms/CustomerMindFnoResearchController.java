@@ -224,6 +224,6 @@ public final class CustomerMindFnoResearchController {
         return new FnoResearch("mind.fno-research.v1", now, UNDERLYING, status, signal,
             reason, null, candleSource, bars, closedAt,
             null, null, null, null, null, null, null, null, null, null, null,
-            null, null, null, null, false, false);
+            null, null, null, null, null, false, false);
     }
 }
