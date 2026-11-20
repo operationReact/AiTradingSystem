@@ -184,6 +184,29 @@ class AccountApiOnlyFilterTest {
     }
 
     @Test
+    void onlyOwnerScopedUpstoxLiveFnoOperationsReachBrokerController() throws Exception {
+        String root="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/live/fno/";
+        for (String suffix : List.of("capability","expiries","market","orders")) {
+            assertPasses("GET",root+suffix);
+            assertPasses("OPTIONS",root+suffix);
+        }
+        assertPasses("POST",root+"orders");
+        String reconciliation=root+"orders/12345678-1234-1234-1234-123456789011/reconcile";
+        assertPasses("POST",reconciliation);
+        assertPasses("OPTIONS",reconciliation);
+        assertBlocked("GET",reconciliation);
+        assertBlocked("POST",root+"market");
+        assertBlocked("POST",root+"capability");
+        assertBlocked("POST",root+"expiries");
+        assertBlocked("PUT",root+"orders");
+        assertBlocked("DELETE",root+"orders");
+        assertBlocked("POST",root+"orders/execute");
+        assertBlocked("POST",root+"orders/12345678-1234-1234-1234-123456789011");
+        assertBlocked("POST","/api/customer/trading-rooms/wrong/live/fno/orders");
+        assertBlocked("POST",root+"live");
+    }
+
+    @Test
     void onlyPaperOptionsOrdersAndReadbackMayCrossCustomerAccountBoundary() throws Exception {
         String root="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/paper/fno/";
         assertPasses("POST",root+"orders");

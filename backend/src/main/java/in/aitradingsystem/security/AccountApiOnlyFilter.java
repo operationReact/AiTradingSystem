@@ -127,6 +127,14 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     private static final java.util.regex.Pattern MIND_FNO_LIVE_PROPOSAL =
         java.util.regex.Pattern.compile(
             "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/mind/fno/live-proposal$");
+    /** Exact, room-scoped LIVE F&O surface; JWT and per-order confirmation
+     * are independently enforced by API Gateway and the order controller. */
+    private static final java.util.regex.Pattern OWNER_LIVE_FNO =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/(capability|expiries|market|orders)$");
+    private static final java.util.regex.Pattern OWNER_LIVE_FNO_RECONCILE =
+        java.util.regex.Pattern.compile(
+            "^/api/customer/trading-rooms/[0-9a-fA-F-]{36}/live/fno/orders/[0-9a-fA-F-]{36}/reconcile$");
 
     private static final Set<String> HEALTH_PATHS = Set.of(
         "/actuator/health",
@@ -197,6 +205,12 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
                     || ("GET".equals(method)&&!path.endsWith("/control"))))
             || (MIND_FNO_LIVE_PROPOSAL.matcher(path).matches()
                 && Set.of("GET","OPTIONS").contains(method))
+            || (OWNER_LIVE_FNO.matcher(path).matches()
+                && ("OPTIONS".equals(method)
+                    || ("GET".equals(method))
+                    || ("POST".equals(method)&&path.endsWith("/orders"))))
+            || (OWNER_LIVE_FNO_RECONCILE.matcher(path).matches()
+                && Set.of("POST","OPTIONS").contains(method))
             || (MIND_PROGRESS.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PROGRESS_INVENTORY.equals(path) && Set.of("GET", "OPTIONS").contains(method))
             || (MIND_PAPER_PORTFOLIO.equals(path) && Set.of("GET", "OPTIONS").contains(method))
