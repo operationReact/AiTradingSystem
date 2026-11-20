@@ -5583,21 +5583,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Provider-verified same NSE_FO futures contract, listed-from date, expiry and lot size",
+    "Seven session-complete NSE futures OHLCV bars and final OI in consistent underlying units, with separate original as-of publication timestamps",
+    "Separately verified internal research rights for OHLCV and OI, exchange session provenance and explicit momentum, volume and cost thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_MOMENTUM_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesMomentumV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-176-futures-momentum.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Verified licensed source adapter for same-futures-contract seven completed OHLCV and OI sessions and actual first-known timestamps",
+    "NSE holiday and session calendar, contract listing/expiry and continuity validation; corporate actions and source latency",
+    "Out-of-sample no-lookahead momentum research with realistic execution costs, slippage and walk-forward/regime evidence",
+    "Deployed read-only strategy evaluation, PAPER lifecycle acceptance and Flutter platform verification"
+   ],
+   "note": "Pure deterministic seven-session same-contract price breakout momentum with volume, OI, OHLCV, expiry, as-of publication-time and estimated cost gates. Research classification only, no broker feed order/PAPER execution or proven profitability. DATA_BLOCKED.",
    "id": "strategy.STR-176",
    "kind": "STRATEGY",
    "name": "Futures Momentum",
