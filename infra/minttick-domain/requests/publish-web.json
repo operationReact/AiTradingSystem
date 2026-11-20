@@ -1,9 +1,8 @@
 {
-  "application": "MintTick",
-  "environment": "dev",
-  "aws_account": "098859530205",
-  "site": "www.minttick.com",
+  "authorization": "USER_APPROVED_MINTTICK_PUBLIC_WEB_2026-11-07",
   "operation": "publish-cloudfront-web",
-  "authorization": "USER_APPROVED_MINTTICK_PUBLIC_WEB_2026-11-07"
+  "site": "www.minttick.com",
+  "aws_account": "098859530205",
+  "environment": "dev",
+  "application": "MintTick"
 }
-
