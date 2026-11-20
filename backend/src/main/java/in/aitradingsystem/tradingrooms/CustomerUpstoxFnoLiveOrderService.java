@@ -396,57 +396,115 @@ public final class CustomerUpstoxFnoLiveOrderService {
             return original;
         }
         JsonNode history = broker.orderHistoryByTag(owner, original.orderTag()).data();
-        if (!history.isArray() || history.size() > 200) {
-            throw error(HttpStatus.SERVICE_UNAVAILABLE, "Broker order history unverified");
-        }
-        JsonNode latest = null;
-        for (JsonNode event : history) {
-            if (!original.orderTag().equals(event.path("tag").asText(""))
-                    || !original.instrumentKey().equals(
-                        event.path("instrument_token").asText(""))
-                    || !original.side().equals(event.path("transaction_type").asText(""))
-                    || !event.path("quantity").canConvertToInt()
-                    || event.path("quantity").asInt() != original.quantity()) {
-                throw error(HttpStatus.CONFLICT, "Broker order identity mismatch");
-            }
-            latest = event;
-        }
-        if (latest == null) {
-            // The provider's one-day history cannot establish rejection.
+        BrokerHistoryAssessment assessed = assessVerifiedBrokerHistory(history, original);
+        if (assessed == null) {
+            // Empty broker history is not proof of non-submission.
             return original;
         }
-        String brokerId = latest.path("order_id").asText("");
-        if (!brokerId.matches("[A-Za-z0-9_-]{1,64}")
-                || (original.brokerOrderId() != null
-                    && !original.brokerOrderId().equals(brokerId))) {
-            throw error(HttpStatus.CONFLICT, "Broker order identity not verified");
-        }
-        String brokerStatus = latest.path("status").asText("").toLowerCase(Locale.ROOT);
-        String target = switch (brokerStatus) {
-            case "complete" -> latest.path("filled_quantity").canConvertToInt()
-                    && latest.path("filled_quantity").asInt() == original.quantity()
-                        ? "COMPLETE" : "UNKNOWN";
-            case "rejected" -> latest.path("filled_quantity").asInt(-1) == 0
-                    ? "REJECTED" : "UNKNOWN";
-            case "cancelled", "canceled" ->
-                latest.path("filled_quantity").asInt(-1) == 0
-                    ? "CANCELLED" : "UNKNOWN";
-            default -> "ACKNOWLEDGED";
-        };
+        String brokerId = assessed.brokerOrderId();
+        String target = assessed.state();
         Receipt refreshed = transaction.execute(tx -> {
             jdbc.sql("""
                 UPDATE customer_upstox_fno_live_order
                    SET state=:state,broker_order_id=:bid,
-                       outcome_code='UPSTOX_FNO_BROKER_RECONCILED',
+                       outcome_code=:outcomeCode,
                        updated_at=NOW()
                  WHERE id=:id AND user_id=:owner AND room_id=:room
                    AND state IN ('SUBMITTING','UNKNOWN','ACKNOWLEDGED')
                 """).param("state", target).param("bid", brokerId)
+                 .param("outcomeCode", assessed.outcomeCode())
                 .param("id", orderId).param("owner", owner)
                 .param("room", roomId).update();
             return byId(owner, roomId, orderId);
         });
         return refreshed == null ? original : refreshed;
+    }
+
+    /**
+     * Evaluate broker history without trusting array order or placing trades.
+     * PARTIAL, missing, contradictory or unknown fills never become COMPLETE
+     * and never unblock the existing single-flight LIVE entry lock.
+     */
+    record BrokerHistoryAssessment(String state, String outcomeCode,
+                                   String brokerOrderId, int observedFilledQuantity) {}
+
+    static BrokerHistoryAssessment assessVerifiedBrokerHistory(
+            JsonNode history, Receipt original) {
+        if (history == null || !history.isArray() || history.size() > 200) {
+            throw error(HttpStatus.SERVICE_UNAVAILABLE, "Broker order history unverified");
+        }
+        if (original == null || original.quantity() < 1) {
+            throw error(HttpStatus.CONFLICT, "Order custody unavailable");
+        }
+        if (history.isEmpty()) return null;
+
+        String brokerId = null;
+        boolean badFill = false, unknownStatus = false;
+        int maxFilled = 0;
+        java.util.Set<String> terminal = new java.util.HashSet<>();
+        for (JsonNode event : history) {
+            if (event == null || !original.orderTag().equals(event.path("tag").asText(""))
+                    || !original.instrumentKey().equals(event.path("instrument_token").asText(""))
+                    || !original.side().equals(event.path("transaction_type").asText(""))
+                    || !event.path("quantity").canConvertToInt()
+                    || event.path("quantity").asInt() != original.quantity()) {
+                throw error(HttpStatus.CONFLICT, "Broker order identity mismatch");
+            }
+            String currentId = event.path("order_id").asText("");
+            if (!currentId.matches("[A-Za-z0-9_-]{1,64}")
+                    || (original.brokerOrderId() != null
+                        && !original.brokerOrderId().equals(currentId))
+                    || (brokerId != null && !brokerId.equals(currentId))) {
+                throw error(HttpStatus.CONFLICT, "Broker order identity not verified");
+            }
+            brokerId = currentId;
+            JsonNode fill = event.path("filled_quantity");
+            if (!fill.canConvertToInt() || fill.asInt() < 0
+                    || fill.asInt() > original.quantity()) {
+                badFill = true;
+            } else {
+                maxFilled = Math.max(maxFilled, fill.asInt());
+            }
+            String status = event.path("status").asText("").toLowerCase(Locale.ROOT);
+            switch (status) {
+                case "complete" -> terminal.add("COMPLETE");
+                case "rejected" -> terminal.add("REJECTED");
+                case "cancelled", "canceled" -> terminal.add("CANCELLED");
+                case "open", "pending", "validation pending", "open pending",
+                     "put order req received", "trigger pending" -> { }
+                default -> unknownStatus = true;
+            }
+        }
+        if (terminal.size() > 1 || badFill || unknownStatus) {
+            return new BrokerHistoryAssessment("UNKNOWN",
+                "UPSTOX_FNO_BROKER_HISTORY_UNCERTAIN", brokerId, maxFilled);
+        }
+        if (terminal.contains("COMPLETE") && maxFilled == original.quantity()) {
+            return new BrokerHistoryAssessment("COMPLETE",
+                "UPSTOX_FNO_FULL_FILL_VERIFIED", brokerId, maxFilled);
+        }
+        if (maxFilled > 0 && maxFilled < original.quantity()) {
+            return new BrokerHistoryAssessment("UNKNOWN",
+                "UPSTOX_FNO_PARTIAL_FILL_UNCERTAIN", brokerId, maxFilled);
+        }
+        if (maxFilled != 0) {
+            return new BrokerHistoryAssessment("UNKNOWN",
+                "UPSTOX_FNO_BROKER_HISTORY_UNCERTAIN", brokerId, maxFilled);
+        }
+        if (terminal.contains("REJECTED")) {
+            return new BrokerHistoryAssessment("REJECTED",
+                "UPSTOX_FNO_ZERO_FILL_REJECTED", brokerId, 0);
+        }
+        if (terminal.contains("CANCELLED")) {
+            return new BrokerHistoryAssessment("CANCELLED",
+                "UPSTOX_FNO_ZERO_FILL_CANCELLED", brokerId, 0);
+        }
+        if (terminal.contains("COMPLETE")) {
+            return new BrokerHistoryAssessment("UNKNOWN",
+                "UPSTOX_FNO_BROKER_HISTORY_UNCERTAIN", brokerId, maxFilled);
+        }
+        return new BrokerHistoryAssessment("ACKNOWLEDGED",
+            "UPSTOX_FNO_PENDING_ZERO_FILL_VERIFIED", brokerId, 0);
     }
 
     /** Global emergency stop has no authority to prevent closing a long. */
