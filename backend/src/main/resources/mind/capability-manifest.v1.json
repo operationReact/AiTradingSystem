@@ -5447,21 +5447,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Exact source-listed NSE_FO futures contract identity, expiry, lot size, and research-use provenance",
+    "Five consecutive calendar-verified, completed futures sessions with finalized OI and volume in consistent underlying units",
+    "As-of exchange close and first-observed OI publication timestamps plus explicit trend/participation thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_OPEN_INTEREST_TREND_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesOpenInterestTrendV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesOpenInterestTrendV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-173-futures-open-interest-trend.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified session-complete five-session OI/volume adapter and independent provider observation timestamps",
+    "Exchange holiday/calendar validation and OI publication latency/normalization/contract-adjustment proofs",
+    "Backtested out-of-sample OI trend relevance (not price direction), historical expiry windows and walk-forward evidence",
+    "Deployed bounded read-only strategy evaluation and audited PAPER-only observation readiness"
+   ],
+   "note": "STR-173 is a same-futures-contract five-completed-session OI growth/decline trend classifier with explicit participation and outlier guards. A rising/falling OI trend is not a bullish/bearish trading signal. Pure deterministic research, no feed subscription or order path. DATA_BLOCKED pending real provider and backtest evidence.",
    "id": "strategy.STR-173",
    "kind": "STRATEGY",
    "name": "Open Interest Trend",
