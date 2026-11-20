@@ -21,7 +21,7 @@ APPROVALS = {
         **COMMON,
         "operation": "owner-personal-angelone-daily-history-pilot",
         "from_date": "2006-11-10",
-        "through_date": "2026-11-10",
+        "through_date": "ROLLING_LAST_COMPLETED_NSE_SESSION",
         "max_equities": 5,
         "max_provider_calls": 20,
         "min_spacing_seconds": 10,

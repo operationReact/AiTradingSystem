@@ -25,7 +25,7 @@ OUTPUT_DIR = Path("/opt/aitradingsystem-paper/monitor")
 OUTPUT = OUTPUT_DIR / "progress.json"
 TZ = ZoneInfo("Asia/Kolkata")
 START_YEAR = 2006
-END_YEAR = 2026
+END_YEAR = max(2026, dt.datetime.now(TZ).year)
 SCHEMA = "minttick.owner.history.progress.v1"
 MAX_PAGES = 50000
 MAX_BLOB_BYTES = 786432
@@ -193,7 +193,8 @@ def build_snapshot(root: Path, now: dt.datetime, status: str,
             "name": "NSE cash equities · Historical candles",
             "interval": "ONE_DAY",
             "requestedFrom": "2006-11-10",
-            "requestedThrough": "2026-11-10",
+            "requestedThrough": as_of.isoformat(),
+            "latestRecordedSession": max((year["lastDate"] or "" for year in years), default="") or None,
             "candles": candles,
             "stocksWithCandles": stock_count,
             "archivePages": total_pages,

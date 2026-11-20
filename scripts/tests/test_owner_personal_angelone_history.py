@@ -49,6 +49,65 @@ class OwnerPersonalHistoryOfflineTest(unittest.TestCase):
         for a,b in zip(windows,windows[1:]):
             self.assertEqual(a[1]+dt.timedelta(days=1),b[0])
 
+    def test_incremental_months_never_overlap_the_immutable_base_archive(self):
+        f_months=f("incremental_months")
+        self.assertEqual(list(f_months(dt.date(2026, 11, 10))), [])
+        self.assertEqual(list(f_months(dt.date(2026, 11, 19))), [
+            (dt.date(2026, 11, 11), dt.date(2026, 11, 30),
+             dt.date(2026, 11, 19))])
+        self.assertEqual(list(f_months(dt.date(2026, 12, 4))), [
+            (dt.date(2026, 11, 11), dt.date(2026, 11, 30),
+             dt.date(2026, 11, 30)),
+            (dt.date(2026, 12, 1), dt.date(2026, 12, 31),
+             dt.date(2026, 12, 4))])
+
+    def test_completed_exchange_day_does_not_request_future_or_weekend(self):
+        cutoff=f("last_completed_session")
+        self.assertEqual(cutoff(dt.datetime(2026, 11, 20, 9, 59,
+                                              tzinfo=dt.timezone.utc)),
+                         dt.date(2026, 11, 19))
+        self.assertEqual(cutoff(dt.datetime(2026, 11, 20, 10, 31,
+                                              tzinfo=dt.timezone.utc)),
+                         dt.date(2026, 11, 20))
+        self.assertEqual(cutoff(dt.datetime(2026, 11, 22, 12,
+                                              tzinfo=dt.timezone.utc)),
+                         dt.date(2026, 11, 20))
+
+    def test_incremental_queue_resumes_only_missing_or_stale_months(self):
+        catalogue=[("RELIANCE-EQ", "2885")]
+        now=dt.datetime(2026, 11, 20, 11, 0, tzinfo=dt.timezone.utc)
+        select=f("select_incremental_batch")
+        self.assertEqual(select(self.conn, catalogue, now), [
+            ("RELIANCE-EQ", "2885", dt.date(2026, 11, 11),
+             dt.date(2026, 11, 30), dt.date(2026, 11, 20))])
+        month_start=dt.date(2026, 11, 11)
+        month_end=dt.date(2026, 11, 30)
+        old=dt.date(2026, 11, 19)
+        f("persist_page")(self.conn,self.root,"RELIANCE-EQ","2885",
+                          month_start,month_end,[candle(old.isoformat())],
+                          old,old)
+        self.assertEqual(len(select(self.conn,catalogue,now)),1)
+        # The same bar is idempotent; a new verified trading day extends
+        # the private archive without replacing existing historical rows.
+        row=candle("2026-11-20")
+        self.assertEqual(f("recover_page")(self.conn,self.root,
+            "RELIANCE-EQ","2885",month_start,month_end,[row])[0],1)
+        self.assertEqual(select(self.conn,catalogue,now),[])
+        self.assertEqual(f("existing_page")(self.conn,self.root,
+            "2885",month_start,month_end),2)
+
+    def test_incremental_empty_attempt_is_throttled_for_same_completed_day(self):
+        now=dt.datetime(2026, 11, 20, 11, 0, tzinfo=dt.timezone.utc)
+        start,end=dt.date(2026,11,11),dt.date(2026,11,20)
+        self.conn.execute("""INSERT INTO candle_request
+            (symbol,token,from_date,through_date,attempted_at,outcome)
+            VALUES (?,?,?,?,?,'EMPTY_CAUSE_UNKNOWN')""",
+            ("RELIANCE-EQ","2885",start.isoformat(),end.isoformat(),
+             now.isoformat()))
+        self.conn.commit()
+        self.assertEqual(f("select_incremental_batch")(
+            self.conn,[("RELIANCE-EQ","2885")],now),[])
+
     def test_validate_real_shaped_candles_and_no_historical_completeness_claim(self):
         start=dt.date(2006,11,10)
         rows,first,last=f("validate_rows")(
