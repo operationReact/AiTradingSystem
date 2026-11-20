@@ -74,7 +74,9 @@ def host() -> None:
         if sep and name in {"APP_API_KEY",
                 "MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED",
                 "MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED",
-                "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED"}:
+                "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED",
+                "MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED",
+                "MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED"}:
             values[name] = value
     version = {}
     for line in compose.read_text().splitlines():
@@ -90,6 +92,10 @@ def host() -> None:
         print("FNO_API_FLAG_" + label + ": " +
               ("ENABLED" if values.get(flag) == "true" else "NOT_ENABLED"),
               flush=True)
+    for label, flag in (("LIVE_ORDER", "MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"),
+                        ("DISCOVERY", "MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED")):
+        print("FNO_API_FLAG_" + label + ": " +
+              ("ENABLED" if values.get(flag) == "true" else "NOT_ENABLED"), flush=True)
     code, data = http_get("/actuator/health/readiness")
     print("FNO_API_BACKEND: " +
           ("UP" if code == 200 and isinstance(data, dict)
@@ -125,6 +131,20 @@ def host() -> None:
     print("FNO_API_SUBSCRIPTIONS: " + str(subs), flush=True)
     print("FNO_API_FRESH_TICKS: " + str(ticks), flush=True)
     print("FNO_API_DECODED_FRAMES: " + str(frames), flush=True)
+    research_code, research = http_get("/api/admin/research/fno-futures/status", key)
+    rows = research if research_code == 200 and isinstance(research, list) else []
+    summary = []
+    for row in rows:
+        if isinstance(row, dict) and re.fullmatch(r"strategy\.STR-17[0-9]", str(row.get("strategyId", ""))) \
+                and re.fullmatch(r"[A-Z_]{4,40}", str(row.get("status", ""))) \
+                and re.fullmatch(r"[A-Z0-9_]{4,60}", str(row.get("reasonCode", ""))) \
+                and all(type(row.get(k)) is int and 0 <= row.get(k) <= 1000
+                        for k in ("contractsResolved", "freshQuotes", "historySessions")):
+            summary.append("%s=%s:%s:c%d:q%d:h%d" % (
+                row["strategyId"].split(".")[1], row["status"], row["reasonCode"],
+                row["contractsResolved"], row["freshQuotes"], row["historySessions"]))
+    print("FNO_API_RESEARCH: " + (";".join(summary) if len(rows) == 3 and len(summary) == 3
+                                   else "UNAVAILABLE"), flush=True)
     # Deliberately do not print any exchange instrument, option price or raw response.
 
 def runner() -> None:
@@ -167,6 +187,9 @@ def runner() -> None:
         "FNO_API_SUBSCRIPTIONS": r"[0-9]{1,2}",
         "FNO_API_FRESH_TICKS": r"[0-9]{1,2}",
         "FNO_API_DECODED_FRAMES": r"[0-9]{1,10}",
+        "FNO_API_FLAG_LIVE_ORDER": r"(?:ENABLED|NOT_ENABLED)",
+        "FNO_API_FLAG_DISCOVERY": r"(?:ENABLED|NOT_ENABLED)",
+        "FNO_API_RESEARCH": r"(?:UNAVAILABLE|[A-Za-z0-9_=:;.-]{1,900})",
     }
     for _ in range(35):
         time.sleep(4)
