@@ -5357,21 +5357,40 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "NSE_FO near/far contracts on the same underlying with distinct expiries and matching lot sizes",
+    "Research-rights verified exchange-time bid/ask for both futures legs",
+    "Funding, dividend and two-leg round-trip cost assumptions"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_CALENDAR_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesCalendarSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesCalendarSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/architecture/fno-canonical-strategy-feed.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified source-backed two-expiry futures quote/contract snapshot adapter",
+    "Actual Indian financing, dividend, margin, delivery, slippage and statutory cost verification",
+    "No-lookahead historical calendar spread replay, out-of-sample and walk-forward tests",
+    "Deployed PAPER-only strategy integration and market-session proof"
+   ],
+   "note": "Deterministic research-only near/far futures calendar spread valuation evaluator with no broker feed, orders or backtest wired. Status remains DATA_BLOCKED pending genuine source and PAPER evidence.",
    "id": "strategy.STR-171",
    "kind": "STRATEGY",
    "name": "Futures Calendar Spread",
