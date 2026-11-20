@@ -1,0 +1,28 @@
+name: FNO instrument master reachability probe (read-only, no credentials)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/fno-master-reachability-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Probe public Upstox hosts (HEAD and first bytes only)
+        run: |
+          set -u
+          for url in \
+            https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz \
+            https://api.upstox.com/v2/login/authorization/dialog \
+            https://upstox.com/developer/api-documentation/instruments/; do
+            code=$(curl -sS -o /dev/null -m 30 -w '%{http_code}' -I "$url" 2>/tmp/err || echo "CURL_FAIL")
+            echo "HEAD $url -> $code $(head -c 200 /tmp/err 2>/dev/null)"
+          done
+          curl -sS -m 60 -r 0-511 -o /tmp/head.bin https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz && \
+            echo "RANGE_BYTES=$(wc -c </tmp/head.bin) MAGIC=$(head -c2 /tmp/head.bin | od -An -tx1)" || echo "RANGE_FAIL"
