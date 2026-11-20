@@ -93,6 +93,14 @@ class _MindFnoResearchPanelState extends State<MindFnoResearchPanel> {
                 style: const TextStyle(color: MindPalette.text, fontSize: 11)),
               Text('Exchange bid / ask: ${result.bid} / ${result.ask} · Tick: ${result.exchangeAt!.toUtc().toIso8601String()}',
                 style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+              if (result.ltp != null || result.openInterest != null ||
+                  result.iv != null || result.delta != null) ...[
+                const SizedBox(height: 5),
+                Text('V3 LTP: ${result.ltp ?? '—'} · OI: ${result.openInterest ?? '—'} · IV: ${result.iv ?? '—'}',
+                  style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+                Text('Greeks · Δ ${result.delta ?? '—'} · θ ${result.theta ?? '—'} · γ ${result.gamma ?? '—'} · ν ${result.vega ?? '—'}',
+                  style: const TextStyle(color: MindPalette.muted, fontSize: 10)),
+              ],
               const SizedBox(height: 4),
               const Text('ATM is an approximate paired-premium selection. '
                 'No broker order, sizing or execution approval.',
