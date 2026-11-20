@@ -401,6 +401,18 @@ class AccountProxyTest(unittest.TestCase):
         self.assertEqual(denied["statusCode"],401)
         upstream.assert_not_called()
 
+    def test_mind_fno_virtual_cycle_is_post_only_and_jwt_required(self):
+        path="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles"
+        self.assertTrue(proxy.allowed("POST",path))
+        for method in ("GET","PUT","DELETE"):
+            self.assertFalse(proxy.allowed(method,path))
+        self.assertFalse(proxy.allowed("POST",path+"/live"))
+        self.assertFalse(proxy.allowed("POST","/api/customer/trading-rooms/not-a-uuid/mind/fno/paper-cycles"))
+        with mock.patch.object(proxy.urllib.request,"urlopen") as upstream:
+            response=proxy.handler(event("POST",path,jwt={"claims":{}}),None)
+        self.assertEqual(response["statusCode"],401)
+        upstream.assert_not_called()
+
     def test_mind_fno_research_is_authenticated_and_get_only(self):
         path = "/api/customer/mind/v1/fno-evaluation"
         self.assertTrue(proxy.allowed("GET", path))
