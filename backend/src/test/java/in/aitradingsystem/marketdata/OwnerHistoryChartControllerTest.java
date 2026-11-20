@@ -37,7 +37,7 @@ class OwnerHistoryChartControllerTest {
 
     private OwnerHistoryChartController controller() {
         return new OwnerHistoryChartController("private-owner", tmp.toString(),
-            new ObjectMapper(), instruments);
+            tmp.resolve("monthly").toString(), new ObjectMapper(), instruments);
     }
 
     private void instrument() {
