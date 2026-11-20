@@ -1,11 +1,16 @@
 package in.aitradingsystem.marketdata;
 
 import java.math.BigDecimal;
+import java.sql.Date;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -30,13 +35,30 @@ public class FnoClosingSnapshotStore {
         """;
     private static final String PURGE_SQL = "DELETE FROM fno_closing_snapshot WHERE retain_until < ?";
 
+    private static final String PAIR_ROWS_SQL = """
+        SELECT provider_label, instrument_key, session_date, exchange_at, observed_at,
+               bid, ask, open_interest_units, session_volume_units
+        FROM fno_closing_snapshot
+        WHERE instrument_key IN (?, ?) AND session_date BETWEEN ? AND ?
+        ORDER BY session_date, instrument_key
+        """;
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+
     public enum Outcome { STORED, DUPLICATE_IGNORED, PERSISTENCE_DISABLED }
 
-    /** One closing observation. Prices are INR per underlying unit. */
+    /**
+     * One closing observation. Prices are INR per underlying unit. closeVerified must
+     * be true: only verified closing snapshots may be stored.
+     */
     public record Snapshot(String providerLabel, String instrumentKey, String underlyingKey,
                            LocalDate sessionDate, Instant exchangeAt, Instant observedAt,
                            BigDecimal bid, BigDecimal ask, Long openInterestUnits,
-                           Long sessionVolumeUnits, LocalDate retainUntil) {}
+                           Long sessionVolumeUnits, LocalDate retainUntil, boolean closeVerified) {}
+
+    /** A stored row as read back. Nullable OI or volume is kept as null, never zero. */
+    public record StoredRow(String providerLabel, String instrumentKey, LocalDate sessionDate,
+                            Instant exchangeAt, Instant observedAt, BigDecimal bid, BigDecimal ask,
+                            Long openInterestUnits, Long sessionVolumeUnits) {}
 
     private final JdbcTemplate jdbc;
     private final boolean persistEnabled;
@@ -58,18 +80,37 @@ public class FnoClosingSnapshotStore {
         }
         validate(s);
         int rows = jdbc.update(INSERT_SQL, s.providerLabel(), s.instrumentKey(), s.underlyingKey(),
-            s.sessionDate(), s.exchangeAt(), s.observedAt(), s.bid(), s.ask(),
-            s.openInterestUnits(), s.sessionVolumeUnits(), RIGHTS_BASIS, s.retainUntil());
+            Date.valueOf(s.sessionDate()), Timestamp.from(s.exchangeAt()), Timestamp.from(s.observedAt()),
+            s.bid(), s.ask(), s.openInterestUnits(), s.sessionVolumeUnits(), RIGHTS_BASIS,
+            Date.valueOf(s.retainUntil()));
         return rows == 1 ? Outcome.STORED : Outcome.DUPLICATE_IGNORED;
+    }
+
+    /** Rows for one near/far instrument pair in an inclusive session-date window, oldest first. */
+    public List<StoredRow> pairRows(String nearKey, String farKey, LocalDate from, LocalDate to) {
+        return jdbc.query(PAIR_ROWS_SQL, (rs, n) -> new StoredRow(
+            rs.getString("provider_label"), rs.getString("instrument_key"),
+            rs.getObject("session_date", LocalDate.class),
+            rs.getTimestamp("exchange_at").toInstant(), rs.getTimestamp("observed_at").toInstant(),
+            rs.getBigDecimal("bid"), rs.getBigDecimal("ask"),
+            (Long) rs.getObject("open_interest_units"), (Long) rs.getObject("session_volume_units")),
+            nearKey, farKey, Date.valueOf(from), Date.valueOf(to));
     }
 
     /** Deletes rows whose retention window ended before {@code today}. Always enabled. */
     public int purgeExpired(LocalDate today) {
-        return jdbc.update(PURGE_SQL, today);
+        return jdbc.update(PURGE_SQL, Date.valueOf(today));
+    }
+
+    /** Daily retention cleanup at 03:45 IST. Runs regardless of the persist flag. */
+    @Scheduled(cron = "0 45 3 * * *", zone = "Asia/Kolkata")
+    public void scheduledRetentionPurge() {
+        purgeExpired(LocalDate.now(IST));
     }
 
     static void validate(Snapshot s) {
         if (s == null) throw new IllegalArgumentException("FNO_SNAPSHOT_MISSING");
+        if (!s.closeVerified()) throw new IllegalArgumentException("FNO_SNAPSHOT_CLOSE_NOT_VERIFIED");
         if (FnoMarketDataProvider.fromWire(s.providerLabel()).isEmpty()) {
             throw new IllegalArgumentException("FNO_SNAPSHOT_PROVIDER_NOT_CANONICAL");
         }
