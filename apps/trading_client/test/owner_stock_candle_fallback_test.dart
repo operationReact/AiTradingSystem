@@ -85,6 +85,49 @@ void main() {
     expect(paths, ['/api/customer/owner-history/v1/monthly-candles']);
   });
 
+  test('empty shared FIVE_MINUTE store falls back only to owner-private intraday', () async {
+    final paths = <String>[];
+    final repo = HttpCustomerMarketRepository(AuthenticatedApiClient(
+      session: OperatorSession()..setOperatorKey('test-operator-key'),
+      client: MockClient((request) async {
+        paths.add(request.url.path);
+        if (request.url.path == '/api/customer/market-data/candles') {
+          return http.Response(jsonEncode({...candlePage(rows: []),
+            'interval': 'FIVE_MINUTE'}), 200);
+        }
+        expect(request.url.path,
+            '/api/customer/owner-history/v1/intraday-candles');
+        expect(request.url.queryParameters['interval'], 'FIVE_MINUTE');
+        return http.Response(jsonEncode({...candlePage(rows: [
+          {...bar('2026-11-19', 105),
+            'source': 'ANGEL_ONE_OWNER_PRIVATE'}
+        ]), 'interval': 'FIVE_MINUTE'}), 200);
+      }), baseUri: Uri.parse('https://example.test'),
+    ));
+    final page = await repo.candles(instrumentId: 42,
+      interval: 'FIVE_MINUTE', fromDate: '2026-11-15', toDate: '2026-11-19');
+    expect(page.items, hasLength(1));
+    expect(page.items.single.source, 'ANGEL_ONE_OWNER_PRIVATE');
+    expect(paths, ['/api/customer/market-data/candles',
+      '/api/customer/owner-history/v1/intraday-candles']);
+  });
+
+  test('owner-private intraday 403 never reveals owner data to other customers', () async {
+    final repo = HttpCustomerMarketRepository(AuthenticatedApiClient(
+      session: OperatorSession()..setOperatorKey('test-operator-key'),
+      client: MockClient((request) async {
+        if (request.url.path == '/api/customer/market-data/candles') {
+          return http.Response(jsonEncode({...candlePage(rows: []),
+            'interval': 'ONE_HOUR'}), 200);
+        }
+        return http.Response('Forbidden', 403);
+      }), baseUri: Uri.parse('https://example.test'),
+    ));
+    final page = await repo.candles(instrumentId: 42,
+      interval: 'ONE_HOUR', fromDate: '2026-11-10', toDate: '2026-11-19');
+    expect(page.items, isEmpty);
+  });
+
   test('one stored daily candle recovers usable chart series from owner archive', () async {
     final paths = <String>[];
     final session = OperatorSession()..setOperatorKey('test-operator-key');
