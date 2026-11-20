@@ -48,7 +48,7 @@ def _private_archive(root: Path) -> None:
 
 
 def _yearly(conn: sqlite3.Connection, root: Path, *, chart_sink=None,
-            chart_start=None, chart_end=None):
+            monthly_sink=None, chart_start=None, chart_end=None):
     pages = conn.execute("""SELECT symbol,token,source_sha256,archive_relative_path,
                                    row_count,earliest,latest
                             FROM page WHERE exchange='NSE' ORDER BY token,from_date""").fetchall()
@@ -108,6 +108,8 @@ def _yearly(conn: sqlite3.Connection, root: Path, *, chart_sink=None,
             y["latest"] = max(y["latest"], stamp) if y["latest"] else stamp
             real_rows += 1
             tokens_with_rows.add(token)
+            if monthly_sink is not None:
+                monthly_sink(token, symbol, row)
             if chart_sink is not None and chart_start <= stamp <= chart_end:
                 chart_sink(token, symbol, row)
     years = []
@@ -151,7 +153,7 @@ def _previous_runs(path: Path) -> list[dict]:
 def build_snapshot(root: Path, now: dt.datetime, status: str,
                    scheduler_state: dict, last_run: dict | None = None,
                    previous_runs: list[dict] | None = None,
-                   chart_sink=None):
+                   chart_sink=None, monthly_sink=None):
     if status not in ("RUNNING", "IDLE", "PAUSED", "ERROR"):
         raise ProgressUnavailable("INVALID_STATUS")
     _private_archive(root)
@@ -160,7 +162,7 @@ def build_snapshot(root: Path, now: dt.datetime, status: str,
     try:
         as_of = now.astimezone(TZ).date()
         candles, stock_count, years, total_pages = _yearly(
-            conn, root, chart_sink=chart_sink,
+            conn, root, chart_sink=chart_sink, monthly_sink=monthly_sink,
             chart_start=as_of - dt.timedelta(days=365), chart_end=as_of)
         failed = conn.execute("SELECT count(*) FROM page_failure").fetchone()[0]
         pending = conn.execute("SELECT count(*) FROM recovery_scan WHERE next_through IS NOT NULL").fetchone()[0]
@@ -298,6 +300,116 @@ class _OwnerChartSink:
             shutil.rmtree(self.stage)
 
 
+
+class _OwnerMonthlySink:
+    """Aggregate only SHA-checked daily source rows into real calendar months.
+
+    Monthly bars preserve first open, max high, min low, last close and sum
+    of provider volume. Missing daily sessions are never filled or invented.
+    """
+
+    def __init__(self, output_dir: Path, now: dt.datetime):
+        self.parent = output_dir
+        self.stage = Path(tempfile.mkdtemp(prefix=".owner-month-staging-",
+                                           dir=str(output_dir)))
+        os.chmod(self.stage, 0o755)
+        self.generated = now.astimezone(dt.timezone.utc).isoformat()
+        self.token = None
+        self.symbol = None
+        self.rows = []
+        self.last_session = None
+
+    def __call__(self, token: str, symbol: str, row: list):
+        if self.token != token:
+            self._flush()
+            self.token, self.symbol, self.rows, self.last_session = token, symbol, [], None
+        if self.symbol != symbol or not isinstance(row, list) or len(row) != 6:
+            raise ProgressUnavailable("INVALID_MONTHLY_CHART_IDENTITY")
+        try:
+            instant = dt.datetime.fromisoformat(row[0])
+            if instant.tzinfo is None:
+                raise ValueError("Naive timestamp")
+            session = instant.astimezone(TZ).date()
+            vals = row[1:5]
+            if not all(type(v) in (int, float) and 0 < v < 1e9 for v in vals):
+                raise ValueError("Invalid OHLC")
+            op, hi, lo, close = vals
+            if hi < max(op, close) or lo > min(op, close) or lo > hi:
+                raise ValueError("Invalid OHLC bounds")
+            volume = row[5]
+            if type(volume) is not int or volume < 0 or volume > 10**12:
+                raise ValueError("Invalid volume")
+        except (TypeError, ValueError, IndexError, OverflowError):
+            raise ProgressUnavailable("INVALID_MONTHLY_SOURCE_ROW") from None
+        if self.last_session is not None and session <= self.last_session:
+            raise ProgressUnavailable("OUT_OF_ORDER_MONTHLY_SOURCE")
+        self.last_session = session
+        month = (session.year, session.month)
+        if not self.rows or self.rows[-1][0][:7] != session.isoformat()[:7]:
+            if len(self.rows) >= 400:
+                raise ProgressUnavailable("MONTHLY_EXPORT_LIMIT")
+            self.rows.append([row[0], op, hi, lo, close, volume])
+        else:
+            monthly = self.rows[-1]
+            monthly[2] = max(monthly[2], hi)
+            monthly[3] = min(monthly[3], lo)
+            monthly[4] = close
+            monthly[5] += volume
+
+    def _flush(self):
+        if not self.rows:
+            return
+        if not re.fullmatch(r"[0-9]{1,12}", self.token):
+            raise ProgressUnavailable("INVALID_MONTHLY_TOKEN")
+        payload = {
+            "schema": "minttick.owner.chart.monthly.v1",
+            "generatedAt": self.generated,
+            "exchange": "NSE", "symbol": self.symbol, "token": self.token,
+            "interval": "ONE_MONTH", "sourceInterval": "ONE_DAY",
+            "aggregation": "FIRST_OPEN_MAX_HIGH_MIN_LOW_LAST_CLOSE_SUM_VOLUME",
+            "sessionCompleteness": "UNVERIFIED",
+            "rows": self.rows,
+        }
+        data = (json.dumps(payload, separators=(",", ":")) + "\n").encode("utf-8")
+        if len(data) > 90000:
+            raise ProgressUnavailable("OVERSIZE_MONTHLY_CHART")
+        dest = self.stage / (self.token + ".json")
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), 0o644)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+
+    def complete(self):
+        self._flush()
+        active = self.parent / "monthly"
+        prior = self.parent / ".owner-monthly-previous"
+        for path in (active, prior):
+            if path.is_symlink():
+                raise ProgressUnavailable("UNTRUSTED_MONTHLY_CHART_PATH")
+        if prior.exists():
+            if not prior.is_dir() or prior.stat().st_uid != 0:
+                raise ProgressUnavailable("UNTRUSTED_MONTHLY_CHART_BACKUP")
+            shutil.rmtree(prior)
+        if active.exists():
+            if not active.is_dir() or active.stat().st_uid != 0:
+                raise ProgressUnavailable("UNTRUSTED_MONTHLY_CHART_PATH")
+            os.replace(active, prior)
+        try:
+            os.replace(self.stage, active)
+        except OSError:
+            if prior.exists() and not active.exists():
+                os.replace(prior, active)
+            raise
+        if prior.exists():
+            shutil.rmtree(prior)
+
+    def discard(self):
+        if self.stage.exists() and not self.stage.is_symlink():
+            shutil.rmtree(self.stage)
+
+
 def publish(root: Path = ROOT, output: Path = OUTPUT, *,
             now: dt.datetime | None = None, status: str = "IDLE",
             scheduler_state: dict | None = None, last_run: dict | None = None) -> None:
@@ -315,12 +427,16 @@ def publish(root: Path = ROOT, output: Path = OUTPUT, *,
         raise ProgressUnavailable("UNTRUSTED_MONITOR_FILE")
     previous = _previous_runs(output)
     chart_sink = _OwnerChartSink(target_dir, now)
+    month_sink = _OwnerMonthlySink(target_dir, now)
     try:
         result = build_snapshot(root, now, status, scheduler_state or {},
-                                last_run, previous, chart_sink=chart_sink)
+                                last_run, previous, chart_sink=chart_sink,
+                                monthly_sink=month_sink)
+        month_sink.complete()
         chart_sink.complete()
     finally:
         chart_sink.discard()
+        month_sink.discard()
     data = (json.dumps(result, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
     fd, tmp = tempfile.mkstemp(prefix=".progress-", dir=str(target_dir))
     try:

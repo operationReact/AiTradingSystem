@@ -37,7 +37,7 @@ class OwnerHistoryChartControllerTest {
 
     private OwnerHistoryChartController controller() {
         return new OwnerHistoryChartController("private-owner", tmp.toString(),
-            new ObjectMapper(), instruments);
+            tmp.resolve("monthly").toString(), new ObjectMapper(), instruments);
     }
 
     private void instrument() {
@@ -69,6 +69,41 @@ class OwnerHistoryChartControllerTest {
         assertThat(result.items().get(1).source()).isEqualTo("ANGEL_ONE_OWNER_PRIVATE_ARCHIVE");
         assertThat(result.hasNext()).isFalse();
         verify(instruments).requireActiveInstrument(42);
+    }
+
+    @Test void ownerGetsOnlyRealAggregatedMonthlyBarsOverFiveYears() throws Exception {
+        instrument();
+        Path monthDir = Files.createDirectory(tmp.resolve("monthly"));
+        String json = "{\"schema\":\"minttick.owner.chart.monthly.v1\",\"generatedAt\":\""
+            + OffsetDateTime.now(ZoneOffset.UTC)
+            + "\",\"exchange\":\"NSE\",\"interval\":\"ONE_MONTH\","
+            + "\"sourceInterval\":\"ONE_DAY\","
+            + "\"aggregation\":\"FIRST_OPEN_MAX_HIGH_MIN_LOW_LAST_CLOSE_SUM_VOLUME\","
+            + "\"sessionCompleteness\":\"UNVERIFIED\","
+            + "\"token\":\"2885\",\"symbol\":\"RELIANCE-EQ\",\"rows\":["
+            + "[\"2020-01-02T15:30:00+05:30\",100,130,90,120,20000],"
+            + "[\"2026-11-02T15:30:00+05:30\",200,230,190,220,30000]]}";
+        Files.writeString(monthDir.resolve("2885.json"), json);
+        var result = controller().monthlyCandles(jwt("private-owner"), 42L,
+            LocalDate.of(2020, 1, 1), LocalDate.of(2026, 11, 20)).getBody();
+        assertThat(result).isNotNull();
+        assertThat(result.interval()).isEqualTo("ONE_MONTH");
+        assertThat(result.items()).hasSize(2);
+        assertThat(result.items().get(0).high()).isEqualByComparingTo("130");
+        assertThat(result.items().get(1).volume()).isEqualTo(30000L);
+        assertThat(result.items().get(1).source())
+            .isEqualTo("ANGEL_ONE_OWNER_PRIVATE_ARCHIVE_MONTHLY_FROM_DAILY");
+        assertThat(result.hasNext()).isFalse();
+        assertThatThrownBy(() -> controller().monthlyCandles(jwt("not-owner"), 42L,
+            LocalDate.of(2020, 1, 1), LocalDate.of(2026, 11, 20)))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN));
+        assertThatThrownBy(() -> controller().candles(jwt("private-owner"), 42L,
+            LocalDate.of(2020, 1, 1), LocalDate.of(2026, 11, 20)))
+            .isInstanceOf(ResponseStatusException.class)
+            .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST));
     }
 
     @Test void anotherCustomerCannotReadOrProbeOwnerChart() throws Exception {

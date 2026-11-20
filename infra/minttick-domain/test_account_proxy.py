@@ -154,6 +154,9 @@ class AccountProxyTest(unittest.TestCase):
         # instrument identity, bounded date range and private archive integrity.
         path = "/api/customer/owner-history/v1/candles"
         self.assertTrue(proxy.allowed("GET", path))
+        self.assertTrue(proxy.allowed("GET", "/api/customer/owner-history/v1/monthly-candles"))
+        self.assertFalse(proxy.allowed("POST", "/api/customer/owner-history/v1/monthly-candles"))
+        self.assertFalse(proxy.allowed("GET", "/api/customer/owner-history/v1/monthly-candles/raw"))
         for method, endpoint in (
             ("POST", path), ("PUT", path), ("DELETE", path),
             ("GET", path + "/raw"),

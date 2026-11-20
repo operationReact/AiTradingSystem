@@ -44,15 +44,18 @@ public final class OwnerHistoryChartController {
     private static final int MAX_BARS = 400;
     private final String ownerSubject;
     private final Path charts;
+    private final Path monthlyCharts;
     private final ObjectMapper mapper;
     private final InstrumentMasterService instruments;
 
     public OwnerHistoryChartController(
             @Value("${MINTTICK_ANGEL_ONE_OWNER_SUB:}") String ownerSubject,
             @Value("${MINTTICK_OWNER_HISTORY_CHART_PATH:/run/minttick-owner-history/charts}") String chartsPath,
+            @Value("${MINTTICK_OWNER_HISTORY_MONTHLY_PATH:/run/minttick-owner-history/monthly}") String monthlyPath,
             ObjectMapper mapper, InstrumentMasterService instruments) {
         this.ownerSubject = ownerSubject;
         this.charts = Path.of(chartsPath);
+        this.monthlyCharts = Path.of(monthlyPath);
         this.mapper = mapper;
         this.instruments = instruments;
     }
@@ -63,6 +66,21 @@ public final class OwnerHistoryChartController {
             @RequestParam long instrumentId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        return readCandles(authentication, instrumentId, fromDate, toDate, false);
+    }
+
+    @GetMapping("/monthly-candles")
+    public ResponseEntity<CustomerMarketCandleController.CustomerCandlePage> monthlyCandles(
+            Authentication authentication,
+            @RequestParam long instrumentId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fromDate,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate toDate) {
+        return readCandles(authentication, instrumentId, fromDate, toDate, true);
+    }
+
+    private ResponseEntity<CustomerMarketCandleController.CustomerCandlePage> readCandles(
+            Authentication authentication, long instrumentId,
+            LocalDate fromDate, LocalDate toDate, boolean monthly) {
         // No fallback to an API key, another customer's JWT, or a shared candle table.
         if (ownerSubject.isBlank() || !(authentication instanceof JwtAuthenticationToken jwt)
                 || !ownerSubject.equals(jwt.getToken().getSubject())
@@ -71,7 +89,7 @@ public final class OwnerHistoryChartController {
         }
         if (instrumentId < 1 || fromDate == null || toDate == null || fromDate.isAfter(toDate)
                 || Duration.between(fromDate.atStartOfDay(IST),
-                    toDate.plusDays(1).atStartOfDay(IST)).toDays() > 367
+                    toDate.plusDays(1).atStartOfDay(IST)).toDays() > (monthly ? 11000 : 367)
                 || toDate.isAfter(LocalDate.now(IST))) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid chart window");
         }
@@ -87,16 +105,25 @@ public final class OwnerHistoryChartController {
                 || token == null || !token.matches("[0-9]{1,12}")) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No owner cash-equity archive");
         }
-        Path file = charts.resolve(token + ".json");
-        if (Files.isSymbolicLink(charts) || !Files.isDirectory(charts, LinkOption.NOFOLLOW_LINKS)
+        // Both directories are sanitized, SHA-source-verified snapshots under
+        // the existing private read-only monitor mount, never the raw archive.
+        Path directory = monthly ? monthlyCharts : charts;
+        Path file = directory.resolve(token + ".json");
+        if (Files.isSymbolicLink(directory) || !Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)
                 || Files.isSymbolicLink(file) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Owner chart not exported");
         }
         try {
             if (Files.size(file) > MAX_CACHE_BYTES) throw new IOException("Oversize chart");
             JsonNode data = mapper.readTree(Files.readAllBytes(file));
-            if (data == null || !"minttick.owner.chart.v1".equals(data.path("schema").asText())
-                    || !"ONE_DAY".equals(data.path("interval").asText())
+            if (data == null ||
+                    !(monthly ? "minttick.owner.chart.monthly.v1" : "minttick.owner.chart.v1")
+                        .equals(data.path("schema").asText())
+                    || !(monthly ? "ONE_MONTH" : "ONE_DAY").equals(data.path("interval").asText())
+                    || (monthly && (!"ONE_DAY".equals(data.path("sourceInterval").asText())
+                        || !"FIRST_OPEN_MAX_HIGH_MIN_LOW_LAST_CLOSE_SUM_VOLUME"
+                             .equals(data.path("aggregation").asText())
+                        || !"UNVERIFIED".equals(data.path("sessionCompleteness").asText())))
                     || !"NSE".equals(data.path("exchange").asText())
                     || !instrument.tradingSymbol().equals(data.path("symbol").asText())
                     || !token.equals(data.path("token").asText())
@@ -130,11 +157,13 @@ public final class OwnerHistoryChartController {
                 if (!session.isBefore(fromDate) && !session.isAfter(toDate)) {
                     bars.add(new CustomerMarketCandleController.CustomerCandle(
                         timestamp, open, high, low, close, volume.longValue(),
-                        "ANGEL_ONE_OWNER_PRIVATE_ARCHIVE", exportedAt));
+                        monthly ? "ANGEL_ONE_OWNER_PRIVATE_ARCHIVE_MONTHLY_FROM_DAILY"
+                                : "ANGEL_ONE_OWNER_PRIVATE_ARCHIVE", exportedAt));
                 }
             }
             var page = new CustomerMarketCandleController.CustomerCandlePage(
-                instrumentId, "ONE_DAY", List.copyOf(bars), 0, MAX_BARS, bars.size(), false);
+                instrumentId, monthly ? "ONE_MONTH" : "ONE_DAY",
+                List.copyOf(bars), 0, MAX_BARS, bars.size(), false);
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(page);
         } catch (IOException | DateTimeException | IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
