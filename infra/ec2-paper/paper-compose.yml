@@ -53,6 +53,9 @@ services:
       # confirmed private historical API entitlement and one backend replica.
       # Merged code and a running quote feed do not authorize backfill.
       OWNER_HISTORY_BACKFILL_ENABLED: ${OWNER_HISTORY_BACKFILL_ENABLED:-false}
+      # The owner-only private store is safe even when other customers exist.
+      OWNER_PRIVATE_INTRADAY_ENABLED: ${OWNER_PRIVATE_INTRADAY_ENABLED:-false}
+      OWNER_PRIVATE_INTRADAY_POLL_MS: ${OWNER_PRIVATE_INTRADAY_POLL_MS:-20000}
       OWNER_HISTORY_BACKFILL_POLL_MS: ${OWNER_HISTORY_BACKFILL_POLL_MS:-2000}
       # Actual registered EC2 EIP, host private IPv4 and host NIC MAC are sent
       # to Angel One in official REST login/profile request headers only.
