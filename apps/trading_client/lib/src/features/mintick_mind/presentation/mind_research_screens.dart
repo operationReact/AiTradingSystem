@@ -348,6 +348,8 @@ extension _MindResearchScreens on _MindWorkspaceState {
 
   Widget derivativesScreen()=>_surface('Futures & Options',
     'India derivatives research: contract-aware and non-executable',[
+    if(widget.fnoLiveProposalRepository!=null)
+      MindFnoLiveProposalPanel(repository:widget.fnoLiveProposalRepository!),
     if(widget.fnoAutoPaperRepository!=null)
       MindFnoAutoPaperPanel(repository:widget.fnoAutoPaperRepository!),
     if(widget.fnoResearchRepository!=null)
