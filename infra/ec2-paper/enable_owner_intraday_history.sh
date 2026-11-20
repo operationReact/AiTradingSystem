@@ -47,14 +47,29 @@ docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
 # a separate prerequisite before exposing these bars to other users.
 stage=OWNER_ISOLATION
 echo 'INTRADAY_ACTIVATION_STAGE: OWNER_ISOLATION'
-customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres \
-  psql -U aitrading -d aitrading -qtAX \
-    -c "SELECT count(*) FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
-    2>/dev/null || true)"
-if ! [[ "$customer_count" =~ ^[0-9]+$ ]] || (( customer_count > 1 )); then
-  echo 'INTRADAY_ACTIVATION_BLOCKED: CUSTOMER_ISOLATION_UNVERIFIED'
+# Bound database probe independently of GitHub/SSM polling. Never print
+# identities, SQL output or credentials. Categorize the guard result only.
+isolation_result="$(timeout 20 docker compose --env-file .env -f paper-compose.yml exec -T postgres \
+  psql -U aitrading -d aitrading -qtAX -v ON_ERROR_STOP=1 \
+  -c "SELECT CASE WHEN count(*) > 1 THEN 'MULTIPLE' WHEN count(*) = 1 THEN 'SINGLE' ELSE 'EMPTY' END FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
+  2>/dev/null)" || {
+  echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE'
   exit 2
-fi
+}
+case "$isolation_result" in
+  SINGLE|EMPTY)
+    echo 'INTRADAY_OWNER_ISOLATION: VERIFIED'
+    ;;
+  MULTIPLE)
+    echo 'INTRADAY_ACTIVATION_BLOCKED: MULTIPLE_ACTIVE_CUSTOMERS'
+    exit 2
+    ;;
+  *)
+    echo 'INTRADAY_ACTIVATION_BLOCKED: OWNER_ISOLATION_DATABASE_UNAVAILABLE'
+    exit 2
+    ;;
+esac
+
 stage=HOST_STAGING
 echo 'INTRADAY_ACTIVATION_STAGE: HOST_STAGING'
 scratch="$(mktemp -d "$root/.intraday-activation.XXXXXXXX")"
