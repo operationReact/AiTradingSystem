@@ -11,7 +11,7 @@ class MindFnoAutoPaperPanel extends StatefulWidget {
 }
 
 class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
-  late Future<List<FnoPaperRoom>> _rooms=widget.repository.rooms();
+  late final Future<List<FnoPaperRoom>> _rooms=widget.repository.rooms();
   String? _selected;
   FnoPaperAutomationState? _status;
   List<FnoPaperCycleEvent> _events=const [];
@@ -23,13 +23,13 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
     try {
       final state=await widget.repository.state(id);
       final events=await widget.repository.history(id);
-      if(mounted && _selected==id)setState((){
+      if(mounted && _selected==id) { setState((){
         _status=state;_events=events;_loading=false;
-      });
+      }); }
     } catch(_) {
-      if(mounted && _selected==id)setState((){
+      if(mounted && _selected==id) { setState((){
         _loading=false;_error='Cannot verify PAPER automation status. No changes made.';
-      });
+      }); }
     }
   }
 
@@ -44,8 +44,8 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
         await _load(id);
       }
     } catch(_) {
-      if(mounted)setState((){_loading=false;_error=
-        'Control outcome not confirmed. Refresh status before retrying.';});
+      if(mounted) { setState((){_loading=false;_error=
+        'Control outcome not confirmed. Refresh status before retrying.';}); }
     }
   }
 
@@ -73,9 +73,9 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
               style:const TextStyle(color:MindPalette.muted,fontSize:11));
           }
           final rooms=snapshot.data!;
-          if(rooms.isEmpty)return const Text(
+          if(rooms.isEmpty) { return const Text(
             'Create and fund a dedicated F&O PAPER Intraday/Swing room first.',
-            style:TextStyle(color:MindPalette.yellow,fontSize:11));
+            style:TextStyle(color:MindPalette.yellow,fontSize:11)); }
           return DropdownButtonFormField<String>(
             key:const ValueKey('mind-fno-auto-room'),
             initialValue:_selected,isExpanded:true,
@@ -111,7 +111,7 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
               'Stop PAPER automation':'Enable PAPER automation'),
         ),
         if(_status?.lastStatus!=null)
-          Text('Last: '+_status!.lastStatus!+' · '+(_status!.lastReason??''),
+          Text('Last: ${_status!.lastStatus!} · ${_status!.lastReason??''}',
             style:const TextStyle(color:MindPalette.muted,fontSize:10)),
         if(_error!=null)Text(_error!,style:const TextStyle(color:MindPalette.red,fontSize:11)),
         const SizedBox(height:8),
@@ -122,14 +122,13 @@ class _MindFnoAutoPaperPanelState extends State<MindFnoAutoPaperPanel> {
         for(final e in _events.take(8))Padding(
           padding:const EdgeInsets.only(top:5),
           child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-            Text(e.at.toLocal().toIso8601String().substring(0,16)
-                +' · '+e.status+' · '+e.action,
+            Text('${e.at.toLocal().toIso8601String().substring(0,16)} · ${e.status} · ${e.action}',
               style:const TextStyle(color:MindPalette.text,fontSize:10.5)),
-            Text(e.reason+(e.fillId==null?'':' · Fill '+e.fillId!),
+            Text('${e.reason}${e.fillId==null?'':' · Fill ${e.fillId!}'}',
               maxLines:2,overflow:TextOverflow.ellipsis,
               style:const TextStyle(color:MindPalette.muted,fontSize:10)),
             if(e.realizedPnlPaise!=null)Text(
-              'Virtual realized P&L: ₹'+(e.realizedPnlPaise!/100).toStringAsFixed(2),
+              'Virtual realized P&L: ₹${(e.realizedPnlPaise!/100).toStringAsFixed(2)}',
               style:const TextStyle(color:MindPalette.mint,fontSize:10)),
           ])),
       ],
