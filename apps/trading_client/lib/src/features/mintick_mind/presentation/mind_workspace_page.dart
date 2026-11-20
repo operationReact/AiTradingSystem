@@ -4,6 +4,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../data/mind_fixtures.dart';
 import '../data/mind_readiness_repository.dart';
+import '../data/mind_fno_research_repository.dart';
+import 'mind_fno_research_panel.dart';
 import '../data/mind_evidence_repository.dart';
 import '../data/mind_decision_history_repository.dart';
 import '../data/mind_decision_outcomes_repository.dart';
@@ -106,6 +108,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
   const MintickMindWorkspacePage({
     this.embeddedInProductShell = false,
     this.readinessRepository,
+    this.fnoResearchRepository,
     this.evidenceRepository,
     this.strategyReplayRepository,
     this.decisionHistoryRepository,
@@ -131,6 +134,9 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
   /// A production app injects authenticated evidence, never fake balances.
   final MindReadinessRepository? readinessRepository;
+
+  /// Backend-evaluated, authenticated NIFTY F&O research; never orders.
+  final MindFnoResearchRepository? fnoResearchRepository;
 
   /// Null only in isolated prototype/golden tests. Production uses Cognito.
   final MindEvidenceRepository? evidenceRepository;
