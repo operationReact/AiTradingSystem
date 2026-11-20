@@ -50,7 +50,7 @@ echo 'INTRADAY_ACTIVATION_STAGE: OWNER_ISOLATION'
 customer_count="$(docker compose --env-file .env -f paper-compose.yml exec -T postgres \
   psql -U aitrading -d aitrading -qtAX \
     -c "SELECT count(*) FROM app_user WHERE role='CUSTOMER' AND status='ACTIVE'" \
-    2>/dev/null || true)"
+    </dev/null 2>/dev/null || true)"
 if ! [[ "$customer_count" =~ ^[0-9]+$ ]] || (( customer_count > 1 )); then
   echo 'INTRADAY_ACTIVATION_BLOCKED: CUSTOMER_ISOLATION_UNVERIFIED'
   exit 2
