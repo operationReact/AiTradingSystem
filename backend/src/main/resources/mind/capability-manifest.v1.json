@@ -5719,21 +5719,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Provider-verified NSE_FO future or option instrument key, underlying, expiry, option strike/side and lot size",
+    "Three original source-observed, chronologically ordered same-provider Level-1 bid/ask/depth and exchange timestamps, verified exchange session",
+    "Original as-of OI and cumulative session-volume first-observed timestamps and consistent underlying-unit normalization",
+    "Independently verified research-use rights for quote/OI/volume/contract discovery and explicit depth, spread, impact, OI/volume and freshness thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CONTRACT_LIQUIDITY_GATE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoContractLiquidityGateV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoContractLiquidityGateV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-179-contract-liquidity-gate.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed actual futures/options contract metadata, bid/ask/depth/OI/volume feed and exchange timestamp/session proof",
+    "Provider data rights, original first-observed OI/volume dates, consistently normalized instrument lot quantities and feed availability/reconnect tests",
+    "Historical market-depth and two-sided liquidity disruptions with as-of replay, realistic fills/impact and OOS walk-forward",
+    "Deployed canonical read-only gate, audited PAPER flow, Flutter UI and live broker order independently authorized/verified"
+   ],
+   "note": "STR-179 is a deterministic source/rights-gated futures+options contract liquidity screen using three recent L1 snapshots, volume/OI, both sides depth, spread/impact and quote stability. Research PASS is never permission or guarantee to trade; no broker/API/order path. DATA_BLOCKED.",
    "id": "strategy.STR-179",
    "kind": "STRATEGY",
    "name": "Contract Liquidity Gate",
