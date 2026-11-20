@@ -263,7 +263,7 @@ class FnoFuturesMomentumV1Test {
         for(long badOi:new long[]{0,-1,1_000_000_000_001L}){
             var bad=new CompletedSession(last.exchangeDate(),true,last.instrumentKey(),
                 last.provider(),last.open(),last.high(),last.low(),last.close(),true,
-                last.ohlcvFirstObservedAt(),last.tradedVolumeUnits(),bad,last.oiFirstObservedAt());
+                last.ohlcvFirstObservedAt(),last.tradedVolumeUnits(),badOi,last.oiFirstObservedAt());
             assertEquals(Status.BLOCKED_DATA,run(replace(bars,6,bad)).status());
         }
         var tooNew=new Contract(CONTRACT.instrumentKey(),CONTRACT.underlyingKey(),
