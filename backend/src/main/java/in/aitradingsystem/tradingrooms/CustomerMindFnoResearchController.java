@@ -4,6 +4,7 @@ import in.aitradingsystem.instrument.Instrument;
 import in.aitradingsystem.instrument.InstrumentMasterService;
 import in.aitradingsystem.marketdata.MarketCandle;
 import in.aitradingsystem.marketdata.MarketDataRepository;
+import in.aitradingsystem.provider.upstox.UpstoxAnalyticsSource;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.time.Clock;
@@ -45,13 +46,19 @@ public final class CustomerMindFnoResearchController {
     private final CustomerFnoDiscoveryController discovery;
     private final InstrumentMasterService instruments;
     private final MarketDataRepository candles;
+    private final UpstoxAnalyticsSource analytics;
     private final Clock clock;
+    private volatile IndexHistory cachedIndexHistory;
+
+    private record IndexHistory(Instant fetchedAt, List<UpstoxAnalyticsSource.Candle> bars) {}
 
     public CustomerMindFnoResearchController(CustomerFnoDiscoveryController discovery,
-            InstrumentMasterService instruments, MarketDataRepository candles, Clock clock) {
+            InstrumentMasterService instruments, MarketDataRepository candles,
+            UpstoxAnalyticsSource analytics, Clock clock) {
         this.discovery = discovery;
         this.instruments = instruments;
         this.candles = candles;
+        this.analytics = analytics;
         this.clock = clock;
     }
 
@@ -102,18 +109,20 @@ public final class CustomerMindFnoResearchController {
         // Exact, active NIFTY index identity. Never substitute NIFTY futures
         // or an arbitrary cash equity instrument for underlying index candles.
         Instrument index = findNiftyIndex();
-        if (index == null) return blocked(now, "NIFTY_INDEX_CANDLES_UNAVAILABLE", 0, null, null);
-        List<MarketCandle> stored;
-        try {
-            stored = candles.recentCandles(index.id(), "ONE_DAY", 64);
-        } catch (RuntimeException ex) {
-            return blocked(now, "NIFTY_CANDLE_STORE_UNAVAILABLE", 0, null, null);
+        List<MarketCandle> stored = List.of();
+        if (index != null) {
+            try {
+                stored = candles.recentCandles(index.id(), "ONE_DAY", 64);
+            } catch (RuntimeException unavailable) {
+                // The existing index store is optional. The Upstox source is
+                // independently queried below; no fabricated fallback bars.
+            }
         }
         var completed = new ArrayList<FnoLongOptionCrossoverV1.CompletedBar>();
         String candleSource = null;
         Instant latestClose = null;
         LocalDate previousSession = null;
-        for (MarketCandle row : stored) {
+        if (stored.size() >= 35) for (MarketCandle row : stored) {
             if (row == null || row.candleTime() == null || row.fetchedAt() == null
                     || row.close() == null || row.close().signum() <= 0
                     || row.instrumentId() != index.id()
@@ -133,6 +142,36 @@ public final class CustomerMindFnoResearchController {
             latestClose = closeAt;
             previousSession = day;
         }
+        if (completed.isEmpty()) {
+            // Many existing Angel One archives contain NSE_EQ equities only.
+            // Read NIFTY index history directly from the SAME approved Upstox
+            // Analytics Token source as the option chain. No persistence.
+            final List<UpstoxAnalyticsSource.Candle> sourceBars;
+            try {
+                sourceBars = fetchIndexBars(now);
+            } catch (RuntimeException unavailable) {
+                return blocked(now, "NIFTY_INDEX_PROVIDER_UNAVAILABLE", 0, null, null);
+            }
+            for (var row : sourceBars) {
+                if (row == null || row.time() == null || row.close() == null
+                        || row.close().signum() <= 0)
+                    return blocked(now, "NIFTY_INDEX_PROVIDER_BAR_INVALID",
+                        completed.size(), latestClose, candleSource);
+                LocalDate day = row.time().atZone(IST).toLocalDate();
+                Instant closeAt = day.atTime(SESSION_CLOSE).atZone(IST).toInstant();
+                if (closeAt.isAfter(now)) continue; // Never treat today's open bar as complete.
+                if (latestClose != null && !closeAt.isAfter(latestClose)
+                        || row.time().isAfter(closeAt))
+                    return blocked(now, "NIFTY_INDEX_PROVIDER_BAR_INVALID",
+                        completed.size(), latestClose, candleSource);
+                completed.add(new FnoLongOptionCrossoverV1.CompletedBar(closeAt, now, row.close()));
+                latestClose = closeAt;
+            }
+            candleSource = completed.isEmpty() ? null : "UPSTOX_ANALYTICS";
+        }
+        if (completed.size() < 35)
+            return blocked(now, "NIFTY_INDEX_HISTORY_INSUFFICIENT",
+                completed.size(), latestClose, candleSource);
         var decision = FnoLongOptionCrossoverV1.evaluate(UNDERLYING,
             candleSource != null, List.copyOf(completed), now);
         if (decision.status() == FnoLongOptionCrossoverV1.Status.BLOCKED_DATA ||
@@ -177,6 +216,22 @@ public final class CustomerMindFnoResearchController {
             leg.instrumentKey(), leg.lotSize(), leg.bid(), leg.ask(), leg.ltp(), leg.openInterest(),
             leg.iv(), leg.delta(), leg.theta(), leg.gamma(), leg.vega(),
             leg.exchangeAt(), leg.observedAt(), false, false);
+    }
+
+    /** One bounded index history read per five minutes, shared by all customers. */
+    private synchronized List<UpstoxAnalyticsSource.Candle> fetchIndexBars(Instant now) {
+        IndexHistory cache = cachedIndexHistory;
+        if (cache != null && !now.isBefore(cache.fetchedAt())
+                && now.isBefore(cache.fetchedAt().plus(Duration.ofMinutes(5)))) {
+            return cache.bars();
+        }
+        LocalDate today = now.atZone(IST).toLocalDate();
+        List<UpstoxAnalyticsSource.Candle> received =
+            analytics.historicalNiftyIndexDailyCandles(today.minusDays(110), today);
+        if (received == null || received.size() > 120) throw new IllegalStateException("NIFTY_INDEX_BAD_HISTORY");
+        List<UpstoxAnalyticsSource.Candle> copy = List.copyOf(received);
+        cachedIndexHistory = new IndexHistory(now, copy);
+        return copy;
     }
 
     private Instrument findNiftyIndex() {
