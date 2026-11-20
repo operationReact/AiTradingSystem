@@ -99,6 +99,7 @@ public final class AccountApiOnlyFilter extends OncePerRequestFilter {
     /** Existing customer-authenticated, read-only Mind research endpoints used by the Flutter app. */
     private static final Set<String> MIND_RESEARCH_READS = Set.of(
         "/api/customer/mind/v1/overview",
+        "/api/customer/mind/v1/fno-evaluation",
         "/api/customer/mind/v1/evidence",
         "/api/customer/mind/v1/strategy-replay",
         "/api/customer/mind/v1/decision-history",
