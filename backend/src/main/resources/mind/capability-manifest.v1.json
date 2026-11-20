@@ -5316,21 +5316,36 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "NSE_EQ spot and matching NSE_FO futures exchange-time bid/ask",
+    "Verified contract, expiry and lot size",
+    "Financing, dividend, borrowing and all-in execution cost assumptions"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_BASIS_CARRY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesBasisCarryV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesBasisCarryV1Test.java"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified source-backed spot/futures snapshot adapter",
+    "Actual India funding, dividend, borrow and settlement-cost validation",
+    "No-lookahead historical backtest and walk-forward evidence",
+    "Deployed PAPER-only runtime and brokerage-readiness proof"
+   ],
+   "note": "First deterministic research-only cost-adjusted evaluator in PR #1488. No source adapter, backtest, PAPER order path or LIVE permission. Status stays DATA_BLOCKED.",
    "id": "strategy.STR-170",
    "kind": "STRATEGY",
    "name": "Futures Basis Carry",
