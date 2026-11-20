@@ -44,6 +44,12 @@ public class UniverseCandleCoverageService {
         return repository.coverage(w.fromInclusive(), w.toExclusive());
     }
 
+    /** Operator-only hourly coverage over the same bounded completed window. */
+    public UniverseCandleCoverageRepository.Coverage hourlyCoverage() {
+        Window w = window();
+        return repository.hourlyCoverage(w.fromInclusive(), w.toExclusive());
+    }
+
     /** A separate ONE_HOUR cursor; empty/failed hourly windows cool down on
      * the hourly run ledger rather than blocking FIVE_MINUTE data collection. */
     public Optional<Long> nextHourlyDue() {
