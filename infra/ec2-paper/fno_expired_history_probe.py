@@ -182,7 +182,10 @@ def probe(token, today=None):
     listed = expiries(get_json(BASE + "/expiries?instrument_key=" + underlying, token), today)
     if not listed:
         return "NO_EXPIRED_EXPIRIES", 0, 0, 0
-    last = listed[0]
+    # Futures typically have monthly expiries; avoid selecting a recent weekly-only expiry.
+    # Choose the latest provider-listed expiry in a fully completed month if available.
+    completed_month_start = today.replace(day=1)
+    last = next((d for d in listed if d < completed_month_start), listed[0])
     url = BASE + "/future/contract?instrument_key=" + underlying + "&expiry_date=" + last.isoformat()
     key, contracts = future_key(get_json(url, token), last)
     if not key:
