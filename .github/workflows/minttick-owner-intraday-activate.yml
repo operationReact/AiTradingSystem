@@ -92,11 +92,13 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import os,base64,json
+          import os,base64,gzip,json
           from pathlib import Path
           body=Path('infra/ec2-paper/enable_owner_intraday_history.sh').read_bytes()
           assert 500 < len(body) < 7000
-          command="printf '%s' '"+base64.b64encode(body).decode()+"' | base64 -d | bash"
+          payload=base64.b64encode(gzip.compress(body,mtime=0)).decode()
+          command="printf '%s' '"+payload+"' | base64 -d | gzip -dc | bash"
+          assert len(command) < 3600, 'SSM command must fit its bounded transport'
           path=Path(os.environ['RUNNER_TEMP'])/'intraday-activation.json'
           path.write_text(json.dumps({'commands':[command]}))
           path.chmod(0o600)
