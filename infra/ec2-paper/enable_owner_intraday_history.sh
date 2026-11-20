@@ -86,7 +86,7 @@ stage=RUNTIME_UPDATE
 echo 'INTRADAY_ACTIVATION_STAGE: RUNTIME_UPDATE'
 for file in runtime.env .env; do
   tmp="$(mktemp "$root/.intraday-env.XXXXXXXX")"
-  grep -v '^OWNER_HISTORY_BACKFILL_ENABLED=' "$file" > "$tmp" || true
+  grep -v '^OWNER_PRIVATE_INTRADAY_ENABLED=' "$file" > "$tmp" || true
   printf 'OWNER_PRIVATE_INTRADAY_ENABLED=true\n' >> "$tmp"
   install -o root -g root -m 0600 "$tmp" "$file"
   rm -f "$tmp"
@@ -106,7 +106,7 @@ for attempt in $(seq 1 45); do
   if [[ -n "$backend" ]] &&
       curl --silent --fail --max-time 3 http://127.0.0.1:8080/api/health >/dev/null 2>&1 &&
       docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$backend" |
-        grep -qx 'OWNER_HISTORY_BACKFILL_ENABLED=true'; then
+        grep -qx 'OWNER_PRIVATE_INTRADAY_ENABLED=true'; then
     echo 'INTRADAY_ACTIVATION: ENABLED'
     echo 'INTRADAY_BACKEND_HEALTH: PASS'
     echo 'INTRADAY_SOURCE: ANGEL_ONE_OWNER_SESSION'
