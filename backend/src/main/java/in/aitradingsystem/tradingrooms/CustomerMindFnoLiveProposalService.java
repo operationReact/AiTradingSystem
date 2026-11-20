@@ -279,7 +279,7 @@ public final class CustomerMindFnoLiveProposalService {
         return new Proposal("mind.fno-live-proposal.v1",roomId,at,"BLOCKED",
             List.of(reason),null,"NO_TRADE",null,null,null,null,null,null,
             0,null,null,null,null,null,null,null,null,
-            null,null,null,null,null,null,false,false);
+            null,null,null,null,null,false,false);
     }
 
     private static String safeReason(String value) {
