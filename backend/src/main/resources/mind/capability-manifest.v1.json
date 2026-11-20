@@ -5673,21 +5673,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Reconciled portfolio index-beta INR exposure including existing futures/options hedges and verified beta model, timestamped within five minutes",
+    "Source-verified NSE index-futures contract expiry and same-index identity, market session, fresh bid/ask, open interest and order-book depth",
+    "Broker-verified cash/margin/variation stress reserves plus explicit stress index move, basis divergence, round-trip cost and room-level hedge limits",
+    "Separately verified market, contract discovery and portfolio-data internal research rights"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_FUTURES_HEDGE_OVERLAY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHedgeOverlayV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHedgeOverlayV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-178-futures-hedge-overlay.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed source-backed index futures bid/ask/depth/OI and exchange-session/timestamp proofs with portfolio index match",
+    "Portfolio beta-exposure provenance, actual positions including existing hedges, broker margin and cash ledger integration",
+    "Historical risk/hedge behavior under stress, cross-asset basis error, transaction costs and out-of-sample/forward validation",
+    "Deployed rights-gated read-only evaluator and independently audited PAPER hedge lifecycle, Flutter platform acceptance"
+   ],
+   "note": "STR-178 is a deterministic research-only index-futures portfolio hedge scenario evaluator, not a directional alpha strategy. Uses full-lot sizing without overhedging, verified portfolio beta, market depth, broker margin, liquidity and stress risk after costs. No execution or broker permissions. Remains DATA_BLOCKED.",
    "id": "strategy.STR-178",
    "kind": "STRATEGY",
    "name": "Futures Hedge Overlay",
