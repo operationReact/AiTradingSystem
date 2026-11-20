@@ -136,6 +136,15 @@ class AccountApiOnlyFilterTest {
         assertPasses("GET", "/api/customer/mind/v1/paper-journal");
         assertPasses("POST", "/api/customer/mind/v1/assistant/query");
         assertPasses("GET", "/api/customer/mind/v1/fno-evaluation");
+        String mindLiveProposal="/api/customer/trading-rooms/"
+            +"12345678-1234-1234-1234-123456789012/mind/fno/live-proposal";
+        assertPasses("GET", mindLiveProposal);
+        assertPasses("OPTIONS", mindLiveProposal);
+        assertBlocked("POST", mindLiveProposal);
+        assertBlocked("PUT", mindLiveProposal);
+        assertBlocked("DELETE", mindLiveProposal);
+        assertBlocked("POST", mindLiveProposal+"/orders");
+        assertBlocked("GET", "/api/customer/trading-rooms/not-a-room/mind/fno/live-proposal");
         String mindFnoCycle = "/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-cycles";
         assertPasses("POST", mindFnoCycle);
         String autoBase="/api/customer/trading-rooms/12345678-1234-1234-1234-123456789012/mind/fno/paper-automation";
