@@ -1,6 +1,6 @@
 {
-  "operation": "deploy",
   "kind": "ec2-paper-ssm-release-v1",
+  "operation": "deploy",
   "confirmation": "DEPLOY_EXACT_SHA_PAPER_LOCAL_ONLY",
   "environment": "PAPER",
   "account": "098859530205",
