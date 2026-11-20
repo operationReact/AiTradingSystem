@@ -11,6 +11,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -41,6 +42,7 @@ public class FnoFuturesContractRegistry {
     private volatile Snapshot snapshot;
     private volatile String lastFailure;
 
+    @Autowired
     public FnoFuturesContractRegistry(FuturesInstrumentMasterFetcher fetcher,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean discoveryVerified) {
         this(fetcher, Clock.systemUTC(), discoveryVerified);
