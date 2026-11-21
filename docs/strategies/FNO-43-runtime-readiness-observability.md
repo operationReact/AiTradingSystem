@@ -441,3 +441,32 @@ max-realized-loss, breakeven or broker margin is fabricated. Research-only,
 no order path, zero seeded rows. **31/43 direct typed research paths,
 12 remaining. Real-market historical E2E 0/43, PAPER 0/43, LIVE 0/43.**
 All catalog strategies remain DATA_BLOCKED until independent evidence.
+
+## 22 November 2026 — STR-201 true 30-calendar-day NIFTY ATM IV rank mean reversion
+
+The existing `FnoIvRankMeanReversionV1.evaluate` is now invoked directly by
+`FnoIvRankResearchService` using two **EMPTY V121** original-time
+custody tables. Unlike the short calendar/diagonal chain, STR-201
+requires at least **200 distinct daily sessions** of fully completed
+NIFTY index **OHLCV** and source-normalized **30-day constant-tenor
+ATM annualized IV**, independently licensed by the provider and joined
+by session/date/provider. Each historical IV value must have been
+originally known within 36 hours of that session's 15:30 IST close;
+future knowledge and price-based IV approximation are forbidden.
+
+The source store requires historical index/IV/normalization research-use
+rights, historical source hashes, source-original first-known times,
+and a separate, fresh current NIFTY 30-day normalized IV with its own
+chain/IV/normalization research-use rights. Ambiguous source revisions,
+missing sessions, invalid OHLC, mismatched provider and history/IV
+misalignment all fail closed. The evaluator rejects degenerate
+historical min/max ranges; an extreme IV-rank value **alone** is not a
+reversion signal without a measured genuine IV-point pullback/rebound.
+No strategy signal or rank is equivalent to a probability of profit.
+
+Source permission flags default to false; no test or migration seeds
+an original IV observation. **32/43 distinct typed research callsites,
+11 remaining. Real-market historical E2E 0/43; PAPER 0/43; LIVE 0/43.**
+All manifest strategies remain DATA_BLOCKED; no orders authorized.
+Next STR-202 Volatility Crush requires an official originally scheduled
+event plus genuine original pre/post normalized IV and NIFTY spot quotes.

@@ -19,13 +19,13 @@ import org.springframework.stereotype.Service;
  * A read-only 43-strategy *readiness* registry, not a 43-strategy execution engine.
  * The authoritative manifest supplies identities and distinct required inputs.
  * STR-170..180 have distinct research evaluator calls; STR-180 needs original-time near-close spot/future pair and carry/delivery receipts.
- * STR-181..191 each have distinct true options research evaluator callsites, including 1x2 uncovered ratio tail-risk checks; STR-192/193 require independent original IV; STR-194/195 require original short-leg bid depth/account margin/tail risk; STR-196/197 use original four-leg option quotes and independent IV, but condor and butterfly have distinct OTM/central strike rules. STR-198 is a three-distinct-CALL four-unit 1x2x1 original-source research adapter. STR-199 requires two DIFFERENT expiries without a common-expiry payoff. STR-200 requires different strikes AND expiries with source-proven near OTM short and far ITM long.
+ * STR-181..191 each have distinct true options research evaluator callsites, including 1x2 uncovered ratio tail-risk checks; STR-192/193 require independent original IV; STR-194/195 require original short-leg bid depth/account margin/tail risk; STR-196/197 use original four-leg option quotes and independent IV, but condor and butterfly have distinct OTM/central strike rules. STR-198 is a three-distinct-CALL four-unit 1x2x1 original-source research adapter. STR-199 requires two DIFFERENT expiries without a common-expiry payoff. STR-200 requires different strikes AND expiries with source-proven near OTM short and far ITM long. STR-201 requires 200+ original aligned NIFTY OHLC and 30-day source normalized ATM IV sessions.
  * No research status, including RESEARCH_CANDIDATE, authorizes PAPER/LIVE orders.
  */
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201");
     private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
@@ -65,6 +65,7 @@ public final class Fno43StrategyReadinessService {
     private final FnoLongButterflyResearchService longButterfly;
     private final FnoCalendarSpreadResearchService calendarSpread;
     private final FnoDiagonalSpreadResearchService diagonalSpread;
+    private final FnoIvRankResearchService ivRank;
     private final List<Definition> definitions;
 
     @Autowired
@@ -83,7 +84,8 @@ public final class Fno43StrategyReadinessService {
             FnoIronButterflyResearchService ironButterfly,
             FnoLongButterflyResearchService longButterfly,
             FnoCalendarSpreadResearchService calendarSpread,
-            FnoDiagonalSpreadResearchService diagonalSpread, ObjectMapper mapper) {
+            FnoDiagonalSpreadResearchService diagonalSpread,
+            FnoIvRankResearchService ivRank, ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = Objects.requireNonNull(debitSpreads);
@@ -100,7 +102,45 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = Objects.requireNonNull(longButterfly);
         this.calendarSpread = Objects.requireNonNull(calendarSpread);
         this.diagonalSpread = Objects.requireNonNull(diagonalSpread);
+        this.ivRank = Objects.requireNonNull(ivRank);
         this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Compatibility with STR-200 fixture before independently verified original 30d IV rank. */
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options,
+            FnoDebitSpreadResearchService debitSpreads,
+            FnoCreditSpreadResearchService creditSpreads,
+            FnoOwnedEquityOptionsResearchService ownedStockOptions,
+            FnoEquityCollarResearchService collar,
+            FnoRatioSpreadResearchService ratioSpreads,
+            FnoStraddleResearchService straddle,
+            FnoStrangleResearchService strangle,
+            FnoShortStraddleResearchService shortStraddle,
+            FnoShortStrangleResearchService shortStrangle,
+            FnoIronCondorResearchService ironCondor,
+            FnoIronButterflyResearchService ironButterfly,
+            FnoLongButterflyResearchService longButterfly,
+            FnoCalendarSpreadResearchService calendarSpread,
+            FnoDiagonalSpreadResearchService diagonalSpread, ObjectMapper mapper) {
+        this.futures=Objects.requireNonNull(futures);
+        this.options=Objects.requireNonNull(options);
+        this.debitSpreads=Objects.requireNonNull(debitSpreads);
+        this.creditSpreads=Objects.requireNonNull(creditSpreads);
+        this.ownedStockOptions=Objects.requireNonNull(ownedStockOptions);
+        this.collar=Objects.requireNonNull(collar);
+        this.ratioSpreads=Objects.requireNonNull(ratioSpreads);
+        this.straddle=Objects.requireNonNull(straddle);
+        this.strangle=Objects.requireNonNull(strangle);
+        this.shortStraddle=Objects.requireNonNull(shortStraddle);
+        this.shortStrangle=Objects.requireNonNull(shortStrangle);
+        this.ironCondor=Objects.requireNonNull(ironCondor);
+        this.ironButterfly=Objects.requireNonNull(ironButterfly);
+        this.longButterfly=Objects.requireNonNull(longButterfly);
+        this.calendarSpread=Objects.requireNonNull(calendarSpread);
+        this.diagonalSpread=Objects.requireNonNull(diagonalSpread);
+        this.ivRank=null;
+        this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
     /** Compatibility with STR-199 fixture before different-strike diagonal source. */
@@ -135,6 +175,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=Objects.requireNonNull(longButterfly);
         this.calendarSpread=Objects.requireNonNull(calendarSpread);
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -169,6 +210,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=Objects.requireNonNull(longButterfly);
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -202,6 +244,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -234,6 +277,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -265,6 +309,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -295,6 +340,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -324,6 +370,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -352,6 +399,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -379,6 +427,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -405,6 +454,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly=null;
         this.calendarSpread=null;
         this.diagonalSpread=null;
+        this.ivRank=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -430,6 +480,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = null;
         this.calendarSpread = null;
         this.diagonalSpread = null;
+        this.ivRank = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -454,6 +505,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = null;
         this.calendarSpread = null;
         this.diagonalSpread = null;
+        this.ivRank = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -475,6 +527,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = null;
         this.calendarSpread = null;
         this.diagonalSpread = null;
+        this.ivRank = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -495,6 +548,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = null;
         this.calendarSpread = null;
         this.diagonalSpread = null;
+        this.ivRank = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -515,6 +569,7 @@ public final class Fno43StrategyReadinessService {
         this.longButterfly = null;
         this.calendarSpread = null;
         this.diagonalSpread = null;
+        this.ivRank = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -766,6 +821,19 @@ public final class Fno43StrategyReadinessService {
                 }
             }catch(RuntimeException unavailable){
                 observed.remove("strategy.STR-200");
+            }
+        }
+
+        if(ivRank!=null){
+            try {
+                var result=ivRank.evaluate(now);
+                if(result!=null && "strategy.STR-201".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-201");
             }
         }
 
