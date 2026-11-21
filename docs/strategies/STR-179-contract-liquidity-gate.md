@@ -51,3 +51,42 @@ A Level-1 snapshot **does not** prove marketable depth or fills at the quoted pr
 4. Separately authorized **PAPER-only** integration with auditable strategy routing and risk enforcement, followed by Flutter Android/iOS/web runtime acceptance. This is **not** a request to enable LIVE F&O or broker permissions.
 
 **Client impact:** None in this first backend-only PR. No Flutter product route or APK is generated. The manifest remains `DATA_BLOCKED` despite successful unit tests.
+
+## Read-only source integration — 21 November 2026
+
+The live operator research service now invokes the **distinct**
+`FnoContractLiquidityGateV1.evaluate` on three properly source-observed
+quotes. This is intentionally a **shared risk/liquidity screening primitive,
+not a standalone profitable strategy or an order router**.
+
+The new V104 table and `FnoVerifiedIntradayLiquidityStore` offer a
+read-only, empty-at-deploy source boundary for true exchange-time Level-1
+bid/ask, two-sided underlying-unit depth, finalized/open-interest
+first-observed times and cumulative volume original timestamps. Historical
+candles or current LTP are not substituted. Each row requires independent
+currently valid provider-specific research rights receipts for
+`nse_fo_intraday_l1_depth`, `nse_fo_intraday_oi` and
+`nse_fo_intraday_volume`, with source digests, an exchange-session
+attestation and one-day maximum retention.
+
+The first direct adapter supports **genuine current NIFTY futures only**.
+It uses the verified current instrument master for key/underlying/lot/
+expiry, the shared Upstox V3 feed for one fresh real BID/ASK anchor, and
+exact price/time agreement with the newest attested depth snapshot.
+A future option-specific adapter must obtain full independently verified
+CE/PE/strike/expiry/lot identity rather than guessing from symbol names.
+
+The flag
+`minttick.fno-research.liquidity-research-rights-verified` defaults false.
+No receipt records are automatically inserted and a connected broker feed
+is not evidence that source retention/research permissions exist.
+Three original-time snapshots can return `RESEARCH_PASS` **only**
+with valid source receipts; even then this does not verify fillability,
+profitability, brokerage execution rights, PAPER acceptance, or LIVE
+order approval.
+
+**Remaining:** authorized source ingestion and exchange-session
+attestation, actual feed/OI/volume coverage under verified entitlements,
+rigorous unit audits and source reconciliation, true options contract
+catalog, multi-regime replay, out-of-sample slippage and paper-fill
+monitoring. Readiness stays `DATA_BLOCKED` at the manifest level.
