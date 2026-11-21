@@ -109,6 +109,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V121__fno_verified_nifty_30d_iv_rank_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -222,6 +227,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V121__fno_verified_nifty_30d_iv_rank_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -404,6 +414,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoDiagonalSpreadResearchServiceTest,FnoVerifiedNiftyDiagonalSourceStoreTest' test
+      - name: Validate STR-201 200-plus NIFTY original session-aligned OHLC and licensed 30-day IV rank
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIvRankResearchServiceTest,FnoVerifiedNiftyIvRankSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
