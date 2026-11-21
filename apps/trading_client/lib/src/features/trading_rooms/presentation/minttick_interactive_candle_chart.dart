@@ -28,6 +28,10 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
   int _first = 0, _count = 0, _startFirst = 0, _startCount = 0;
   double _startX = 0, _anchor = 0;
   bool _volume = true, _sma20 = false;
+  int _touches = 0;
+  int? _primaryPointer;
+  Offset? _pointerStart;
+  bool _moved = false;
 
   @override
   void initState() { super.initState(); _recent(); }
@@ -143,11 +147,46 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
       ])),
       const SizedBox(height: 4),
       Expanded(child: LayoutBuilder(builder: (context, constraints) =>
-        GestureDetector(
-          key: const ValueKey('stock-chart-gesture'),
+        Listener(
           behavior: HitTestBehavior.opaque,
-          onTapDown: (details) => _select(details.localPosition, constraints.maxWidth),
-          onDoubleTap: () => setState(_recent),
+          onPointerDown: (event) {
+            _touches++;
+            if (_touches == 1) {
+              _primaryPointer = event.pointer;
+              _pointerStart = event.localPosition;
+              _moved = false;
+            } else {
+              _moved = true;
+            }
+          },
+          onPointerMove: (event) {
+            if (_primaryPointer == event.pointer &&
+                _pointerStart != null &&
+                (event.localPosition - _pointerStart!).distance > 8) {
+              _moved = true;
+            }
+          },
+          onPointerUp: (event) {
+            final inspect = _touches == 1 &&
+                _primaryPointer == event.pointer && !_moved;
+            _touches = math.max(0, _touches - 1);
+            if (_primaryPointer == event.pointer) {
+              _primaryPointer = null;
+              _pointerStart = null;
+            }
+            if (inspect) _select(event.localPosition, constraints.maxWidth);
+          },
+          onPointerCancel: (event) {
+            _touches = math.max(0, _touches - 1);
+            if (_primaryPointer == event.pointer) {
+              _primaryPointer = null;
+              _pointerStart = null;
+            }
+          },
+          child: GestureDetector(
+            key: const ValueKey('stock-chart-gesture'),
+            behavior: HitTestBehavior.opaque,
+            onDoubleTap: () => setState(_recent),
           onScaleStart: (details) => _scaleStart(details, constraints.maxWidth),
           onScaleUpdate: (details) => _scaleUpdate(details, constraints.maxWidth),
           child: CustomPaint(
@@ -160,6 +199,7 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
               volume: _volume, sma20: _sma20,
             ),
             child: const SizedBox.expand(),
+          ),
           ),
         ))),
       SizedBox(height: 40, child: Row(children: [
