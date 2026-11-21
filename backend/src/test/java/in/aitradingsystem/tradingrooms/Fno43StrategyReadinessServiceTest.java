@@ -58,14 +58,20 @@ class Fno43StrategyReadinessServiceTest {
                 "DEBIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "DEBIT_SPREAD_SOURCE_BLOCKED"),
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-184", "BLOCKED_RIGHTS",
                 "DEBIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "DEBIT_SPREAD_SOURCE_BLOCKED")));
+        var credits = mock(FnoCreditSpreadResearchService.class);
+        when(credits.evaluateAll(NOW)).thenReturn(List.of(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-185", "BLOCKED_RIGHTS",
+                "CREDIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "CREDIT_SPREAD_SOURCE_BLOCKED"),
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-186", "BLOCKED_RIGHTS",
+                "CREDIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "CREDIT_SPREAD_SOURCE_BLOCKED")));
         var report = new Fno43StrategyReadinessService(
-            futures, options, spreads, new ObjectMapper()).inspect(NOW);
+            futures, options, spreads, credits, new ObjectMapper()).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(15, report.distinctEvaluatorsObserved());
+        assertEquals(17, report.distinctEvaluatorsObserved());
         assertEquals(0, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(28, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(26, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -78,7 +84,7 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(15, report.strategies().stream()
+        assertEquals(17, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
@@ -88,7 +94,7 @@ class Fno43StrategyReadinessServiceTest {
         assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
@@ -99,6 +105,8 @@ class Fno43StrategyReadinessServiceTest {
         verifyNoMoreInteractions(options);
         verify(spreads, times(1)).evaluateAll(NOW);
         verifyNoMoreInteractions(spreads);
+        verify(credits, times(1)).evaluateAll(NOW);
+        verifyNoMoreInteractions(credits);
     }
 
     @Test
@@ -108,7 +116,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(15, report.strategies().stream()
+        assertEquals(17, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));
@@ -184,6 +192,29 @@ class Fno43StrategyReadinessServiceTest {
              || r.strategyId().equals("strategy.STR-184"))
             .allMatch(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())
                 && !r.reasonCode().contains("secret")));
+        assertEquals(0, report.paperExecutionValidated());
+        assertEquals(0, report.liveExecutionValidated());
+    }
+
+    @Test
+    void creditSourceExceptionsNeverHideOtherStrategyReadinessOrExposeBrokerBalance() {
+        var futures = mock(FnoFuturesResearchService.class);
+        when(futures.evaluateAll(NOW)).thenReturn(List.of(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-170",
+                "BLOCKED_DATA", "SPOT_NOT_VERIFIED", NOW, "NONE", 0, 0, 0, "NO_SPOT")));
+        var options = mock(FnoOptionsResearchService.class);
+        var debit = mock(FnoDebitSpreadResearchService.class);
+        var credit = mock(FnoCreditSpreadResearchService.class);
+        when(credit.evaluateAll(NOW)).thenThrow(
+            new IllegalStateException("private bank cash and broker token"));
+        var report = new Fno43StrategyReadinessService(
+            futures, options, debit, credit, new ObjectMapper()).inspect(NOW);
+        assertEquals(1, report.distinctEvaluatorsObserved());
+        assertTrue(report.strategies().stream().filter(r ->
+            r.strategyId().equals("strategy.STR-185")
+            || r.strategyId().equals("strategy.STR-186")).allMatch(
+                r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())
+                && !r.reasonCode().contains("private")));
         assertEquals(0, report.paperExecutionValidated());
         assertEquals(0, report.liveExecutionValidated());
     }

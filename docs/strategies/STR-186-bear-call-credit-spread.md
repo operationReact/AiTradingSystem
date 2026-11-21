@@ -31,3 +31,28 @@ Outcomes: `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, `RESEARCH_CANDIDATE`. A
 To become an eligible trading strategy requires licensed source permissions and genuine two-CE historical/live quotes, original timestamps, actual NSE strike/expiry/holiday/lot attestations, Indian statutory fees/broker margin and settlement evidence, non-atomic execution and fill-risk model, independent no-lookahead OOS/walk-forward tests, separate account-approved PAPER acceptance and LIVE risk checks. No production deployment, source activation, SSM, trading flag, Flutter screen or order API has been touched.
 
 See [STR-185](STR-185-bull-put-credit-spread.md) and [canonical feed design](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Actual direct research adapter — 21 November 2026
+
+`FnoCreditSpreadResearchService` also calls the **distinct**
+`FnoBearCallCreditSpreadV1.evaluate` with a separately verified
+same-provider three-leg NIFTY observation: **short lower strike CE** at
+bid and **long higher strike CE** at ask, matched expiry, lot and
+original as-of publication. This includes authenticated source-rights
+records for completed NIFTY closes and both option contract sides,
+depth/OI, instrument master and after-tax estimated fees/slippage.
+
+Unlike premium-limited debit spreads, short CE risk needs real
+account-scoped initial broker margin, stressed variation reserve,
+existing-position reconciliation, settlement buffer and a reviewed
+stressed-loss upper bound. V108 adds an **empty** append-only custody
+table containing those distinct checks. No funds, rights or actual
+options prices are defaulted.
+
+`minttick.fno-research.credit-bear-lower-ce-key` and
+`credit-bear-upper-ce-key` start empty; the credit rights and account
+scope flags also fail closed. No source ingestion, broker execution,
+paper order or live permission is supplied by test fixture candidates.
+Theoretical bounded expiry outcomes are research-only, and real data
+E2E/PAPER/LIVE all remain 0/43.
