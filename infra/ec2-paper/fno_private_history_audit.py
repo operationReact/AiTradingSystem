@@ -220,6 +220,43 @@ def audit(journal, cache):
                                        for key in month_contracts[month]), default=0)}
         for month in sorted(month_jobs)
     ]
+    # Structural quarantine: never claim the raw 12-month dataset is clean.
+    # The December 2025 cohort is isolated because Upstox currently returns
+    # both midnight and 09:15 bars for the same daily contract/date. This
+    # produces a potential 11-month research candidate, NOT a trading license
+    # or full source/calendar/price reconciliation.
+    expected_months = [
+        "2025-11", "2025-12", "2026-01", "2026-02", "2026-03",
+        "2026-04", "2026-05", "2026-06", "2026-07", "2026-08",
+        "2026-09", "2026-10",
+    ]
+    quarantine_month = "2025-12"
+    month_lookup = {entry["month"]: entry for entry in coverage}
+    cohort_isolated = (
+        journal_ok and cache_ok and total_jobs == 276
+        and completed == 276 and len(receipts) == 276
+        and sorted(month_lookup) == expected_months
+        and dict(invalid) == {"duplicateDailyDates": 321}
+        and len(jobs) == 276
+        and all(entry["jobs"] == entry["contracts"] == 23 for entry in coverage)
+        and month_lookup[quarantine_month]["duplicateDailyDates"] == 321
+        and all(entry["duplicateDailyDates"] == 0
+                and entry["contractsOver21Candles"] == 0
+                for entry in coverage if entry["month"] != quarantine_month)
+    )
+    eligible = [entry for entry in coverage if entry["month"] != quarantine_month]
+    quarantine = {
+        "status": "ISOLATED" if cohort_isolated else "BLOCKED",
+        "excludedExpiryMonth": quarantine_month,
+        "eligibleExpiryMonths": len(eligible) if cohort_isolated else 0,
+        "eligibleContracts": sum(x["contracts"] for x in eligible)
+                              if cohort_isolated else 0,
+        "eligibleCandles": sum(x["candles"] for x in eligible)
+                            if cohort_isolated else 0,
+        "excludedContracts": month_lookup.get(quarantine_month,{}).get("contracts",0),
+        "excludedCandles": month_lookup.get(quarantine_month,{}).get("candles",0),
+        "boundary": "STRUCTURAL_RESEARCH_ONLY_NO_BACKTEST_APPROVAL",
+    }
     # Cannot certify CE vs PE vs FUT or trading-day completeness from the
     # persisted contract keys alone. Metadata was not stored in the sink.
     return {
@@ -236,6 +273,7 @@ def audit(journal, cache):
                     "zeroOIValid": zero_oi, "receipts": len(receipts)},
         "findings": {k: invalid[k] for k in sorted(invalid)},
         "findingCount": critical,
+        "quarantine": quarantine,
         "limits": ["contractTypeNotPersisted", "holidayCalendarNotAvailable",
                    "sourceCatalogNotReconciled", "privateCacheExpiresAfterSevenDays"]
     }
