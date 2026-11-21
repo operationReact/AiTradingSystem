@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Synthetic offline tests: no provider data, AWS, SSM, or broker credentials."""
+from datetime import datetime, timezone
+import hashlib
+import json
+from pathlib import Path
+import sqlite3
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra" / "ec2-paper"))
+from fno_private_history_audit import audit, read_only, SOURCE
+
+
+class PrivateHistoryAuditTest(unittest.TestCase):
+    def setUp(self):
+        self.work = tempfile.TemporaryDirectory()
+        self.addCleanup(self.work.cleanup)
+        self.jpath = Path(self.work.name) / "jobs.sqlite"
+        self.cpath = Path(self.work.name) / "cache.sqlite"
+        self.journal = sqlite3.connect(self.jpath)
+        self.cache = sqlite3.connect(self.cpath)
+        self.addCleanup(self.journal.close)
+        self.addCleanup(self.cache.close)
+        self.journal.execute("""CREATE TABLE fno_backfill_jobs (
+            contract_key TEXT, interval TEXT, first_day TEXT, last_day TEXT,
+            state TEXT, rows_written INTEGER, attempts INTEGER, reason TEXT)""")
+        self.cache.execute("""CREATE TABLE fno_historical_candles (
+            source TEXT, contract_key TEXT, interval TEXT, candle_ts TEXT,
+            open_price REAL, high_price REAL, low_price REAL,
+            close_price REAL, volume INTEGER, open_interest INTEGER,
+            batch_hash TEXT)""")
+        self.cache.execute("""CREATE TABLE fno_history_receipts (
+            batch_hash TEXT, source TEXT, contract_key TEXT, interval TEXT,
+            row_count INTEGER, committed_at REAL)""")
+        self.key = "NSE_FO|synthetic|30-10-2026"
+        self.first = "2026-10-10"
+        self.last = "2026-10-30"
+        self.digest = hashlib.sha256(
+            f"{SOURCE}|{self.key}|day|{self.first}|{self.last}".encode()).hexdigest()
+        self.journal.execute("INSERT INTO fno_backfill_jobs VALUES(?,?,?,?,?,?,?,?)",
+                             (self.key, "day", self.first, self.last, "DONE", 1, 1, "NONE"))
+        self.cache.execute("INSERT INTO fno_history_receipts VALUES (?,?,?,?,?,?)",
+                           (self.digest, SOURCE, self.key, "day", 1, 1))
+        self.cache.execute("INSERT INTO fno_historical_candles VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                           (SOURCE, self.key, "day", "2026-10-12T00:00:00+05:30",
+                            100.0, 103.0, 99.0, 102.0, 10, 0, self.digest))
+        self.journal.commit()
+        self.cache.commit()
+
+    def run_audit(self):
+        return audit(self.journal, self.cache)
+
+    def test_clean_synthetic_candle_and_zero_oi_are_valid(self):
+        report = self.run_audit()
+        self.assertEqual(report["findingCount"], 0)
+        self.assertEqual(report["candles"]["stored"], 1)
+        self.assertEqual(report["candles"]["zeroOIValid"], 1)
+        self.assertEqual(report["coverage"]["expiryMonths"], 1)
+        self.assertEqual(report["jobs"]["states"]["DONE"], 1)
+        self.assertEqual(report["result"], "REVIEW")  # pilot must reach 276 jobs, 12 months
+        self.assertNotIn(self.key, json.dumps(report))
+
+    def test_rejects_bad_ohlc_and_missing_oi(self):
+        self.cache.execute("UPDATE fno_historical_candles SET high_price=98,open_interest=NULL")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["inconsistentOHLC"], 1)
+        self.assertEqual(report["findings"]["invalidOrMissingOI"], 1)
+
+    def test_rejects_duplicate_business_key(self):
+        self.cache.execute("""INSERT INTO fno_historical_candles
+            SELECT * FROM fno_historical_candles""")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["duplicateCandles"], 1)
+        self.assertEqual(report["findings"]["receiptVsCachedRowsMismatch"], 1)
+
+    def test_reconciles_missing_checkpoint_receipt(self):
+        self.cache.execute("DELETE FROM fno_history_receipts")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["doneMissingReceipt"], 1)
+
+    def test_detects_outside_batch_and_orphan_candles(self):
+        self.cache.execute("""UPDATE fno_historical_candles
+                              SET candle_ts='2026-11-01T00:00:00+05:30'""")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["outsideBatchWindow"], 1)
+        self.cache.execute("UPDATE fno_historical_candles SET batch_hash='unknown'")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["orphanCandleRows"], 1)
+
+    def test_read_only_connection_rejects_writes(self):
+        self.cache.commit()
+        with read_only(self.cpath) as connection:
+            with self.assertRaises(sqlite3.OperationalError):
+                connection.execute("UPDATE fno_historical_candles SET volume=0")
+
+    def test_schema_fails_closed(self):
+        self.cache.execute("DROP TABLE fno_history_receipts")
+        with self.assertRaisesRegex(ValueError, "AUDIT_SCHEMA_UNSUPPORTED"):
+            self.run_audit()
+
+
+if __name__ == "__main__":
+    unittest.main()
