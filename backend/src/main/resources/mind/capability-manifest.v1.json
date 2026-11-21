@@ -6225,21 +6225,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "At least 35 verified completed original-observation NIFTY daily closes with independently checked bullish EMA8/EMA21 crossover",
+    "True source-listed NSE_FO same-expiry/lot NIFTY CE contracts, buy 1 lower strike and sell 2 higher strike; short bid depth enough for two contracts",
+    "Same-provider synchronised original-exchange-time index and both CE quotes, rights, valid bid/ask OI/depth and as-of availability",
+    "Three-leg after-cost net debit/credit, explicit upside stress scenario and documented unbounded upside loss with research non-execution"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CALL_RATIO_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCallRatioSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCallRatioSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-190-call-ratio-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original as-of NIFTY and NSE_FO CE source chain and official market calendars, verified current lot/expiry and at least two real short-leg depth",
+    "Margin and risk policy for uncovered extra short call, plus unbounded-loss tail beyond any stress-price budget; capital preservation review",
+    "Full Indian statutory taxes, true non-atomic 1x2 execution and partial-fill short-call safety and independent out-of-sample historical replay",
+    "Separate signed PAPER and LIVE permissions, brokerage order and account-level uncovered-write authorization and kill switches"
+   ],
+   "note": "Research-only 1x2 call ratio spread has theoretically UNBOUNDED upside loss: one long lower CE plus TWO short higher CEs. A stress scenario is not a loss limit; never executable or trade authorized. DATA_BLOCKED.",
    "id": "strategy.STR-190",
    "kind": "STRATEGY",
    "name": "Call Ratio Spread Research",
