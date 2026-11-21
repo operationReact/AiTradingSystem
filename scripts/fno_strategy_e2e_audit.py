@@ -27,9 +27,11 @@ PROOF_CLASS = "minttick.fno.43-research-evaluator-validation.v1"
 UNVERIFIED = "NO_INDEPENDENT_RUNTIME_EVIDENCE"
 # These are actual Java evaluator invocations in a reviewed research service,
 # NOT proof that the source data or broker permissions were verified at runtime.
-DIRECT_SOURCE_CALLSITE = (
+DIRECT_SOURCE_CALLSITES = (
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
-         "FnoFuturesResearchService.java")
+         "FnoFuturesResearchService.java"),
+    Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
+         "FnoOptionsResearchService.java"),
 )
 SIGNAL_ONLY_CALLSITE = (
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
@@ -120,8 +122,10 @@ def _suite_for_test(surefire: Path, class_name: str) -> tuple[int, int, int, int
 def inspect(root: Path, surefire: Path | None,
             require_surefire: bool = False) -> dict[str, Any]:
     _, items, errors = manifest_items(root)
-    direct = (root / DIRECT_SOURCE_CALLSITE).read_text(encoding="utf-8") \
-        if (root / DIRECT_SOURCE_CALLSITE).is_file() else ""
+    direct = "\n".join(
+        (root / path).read_text(encoding="utf-8")
+        for path in DIRECT_SOURCE_CALLSITES if (root / path).is_file()
+    )
     signal = (root / SIGNAL_ONLY_CALLSITE).read_text(encoding="utf-8") \
         if (root / SIGNAL_ONLY_CALLSITE).is_file() else ""
     rows = []
