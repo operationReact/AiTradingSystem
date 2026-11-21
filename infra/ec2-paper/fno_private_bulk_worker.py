@@ -46,7 +46,7 @@ UNDERLYING = "NSE_INDEX|Nifty 50"
 BASE = "https://api.upstox.com/v2/expired-instruments"
 AGENT = "MintTick-Upstox-ReadOnly-Diagnostics/1.0"
 MAX_MONTHS = 12
-MAX_OPTION_PAIRS = 5
+MAX_OPTION_PAIRS = 11
 MAX_REQUESTS_PER_RUN = 600
 MIN_REQUEST_GAP = 2.5
 DAILY_CACHE_TTL_SECONDS = 7 * 86400
@@ -203,8 +203,9 @@ def contracts(futures,options,expiry):
                     (s,"CE") in by_strike and (s,"PE") in by_strike})
     # Median of available strikes, not a claim of actual historical ATM.
     center=len(strikes)//2
-    chosen=strikes[max(0,center-MAX_OPTION_PAIRS):
-                   min(len(strikes),center+MAX_OPTION_PAIRS+1)]
+    half=MAX_OPTION_PAIRS//2
+    chosen=strikes[max(0,center-half):
+                   min(len(strikes),center+half+1)]
     # 1 future + max 11 matched CE/PE pairs per monthly expiry.
     return fs[:1]+[by_strike[(s,side)] for s in chosen for side in ("CE","PE")]
 
