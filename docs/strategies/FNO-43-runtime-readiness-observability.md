@@ -130,3 +130,21 @@ profitability, broker paper fills or live orders are inferred.
 30/43; signal-only without evaluator: 0/43; independently verified real
 market history E2E: 0/43; PAPER: 0/43; LIVE: 0/43.** The earlier
 11/43 statements above are historical snapshots, not the current tally.
+
+
+## 21 November 2026: STR-183/184 source-backed debit spreads
+
+Two distinct direct research evaluator calls in
+`FnoDebitSpreadResearchService` validate, separately, the bull call
+debit and bear put debit spreads using shared licensed NIFTY daily
+history (V106) and full new as-of two-option source custody (V107).
+The second leg's BID, ASK, independent depth and OI are never inferred
+from a single-leg signal. Combined option fees, tax, risk allocation,
+same-provider timestamps, lot and expiry require separate source proof
+and research-use grants. Source tables start EMPTY; all flags default
+DENIED; actual no-lookahead backtesting and broker execution are pending.
+
+**Current registry evidence: 15/43 distinct direct research evaluator
+paths, 28/43 with no typed direct adapter, 0 signal-route-only without
+distinct evaluator, 0/43 independently verified historical real-data
+E2E, 0/43 PAPER, 0/43 LIVE.** Earlier counts above are dated snapshots.
