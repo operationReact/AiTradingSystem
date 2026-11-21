@@ -32,7 +32,11 @@ public final class FnoExpiryBasisReversionV1 {
     private static final BigDecimal BPS = new BigDecimal("10000");
     private static final BigDecimal DAYS_IN_YEAR = new BigDecimal("365");
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final LocalTime SESSION_CLOSE = LocalTime.of(15, 30);
+    // Both legs' near-close L1 quotes are measured in the COMMON cash session
+    // 15:25–15:30 window. They are not the later futures settlement price.
+    private static final LocalTime CASH_CLOSE = LocalTime.of(15, 30);
+    private static final LocalDate FUTURES_CLOSE_SHIFT_AUG = LocalDate.of(2026, 8, 3);
+    private static final LocalDate FUTURES_CLOSE_SHIFT_DEC = LocalDate.of(2026, 12, 7);
     private static final int SESSIONS = 5;
     private static final Duration MAX_PUBLICATION_LAG = Duration.ofHours(36);
     private static final Duration MAX_CLOSE_WINDOW = Duration.ofMinutes(5);
@@ -246,18 +250,18 @@ public final class FnoExpiryBasisReversionV1 {
                 || p.spotFinalFirstKnownAt() == null
                 || p.futureFinalFirstKnownAt() == null)
             return false;
-        Instant close = p.exchangeSession().atTime(SESSION_CLOSE)
-            .atZone(IST).toInstant();
+        Instant spotClose = cashClose(p.exchangeSession());
+        Instant derivativesClose = futuresClose(p.exchangeSession());
         return Duration.between(p.spot().exchangeAt(),
                 p.future().exchangeAt()).abs().compareTo(MAX_PAIR_SKEW) <= 0
-            && !p.spotFinalFirstKnownAt().isBefore(close)
-            && !p.futureFinalFirstKnownAt().isBefore(close)
+            && !p.spotFinalFirstKnownAt().isBefore(spotClose)
+            && !p.futureFinalFirstKnownAt().isBefore(derivativesClose)
             && !p.spotFinalFirstKnownAt().isBefore(p.spot().firstObservedAt())
             && !p.futureFinalFirstKnownAt().isBefore(p.future().firstObservedAt())
             && !p.spotFinalFirstKnownAt().isAfter(asOf)
             && !p.futureFinalFirstKnownAt().isAfter(asOf)
-            && !p.spotFinalFirstKnownAt().isAfter(close.plus(MAX_PUBLICATION_LAG))
-            && !p.futureFinalFirstKnownAt().isAfter(close.plus(MAX_PUBLICATION_LAG));
+            && !p.spotFinalFirstKnownAt().isAfter(spotClose.plus(MAX_PUBLICATION_LAG))
+            && !p.futureFinalFirstKnownAt().isAfter(derivativesClose.plus(MAX_PUBLICATION_LAG));
     }
 
     private static boolean validQuote(Quote q, LocalDate day, Instant asOf,
@@ -266,7 +270,7 @@ public final class FnoExpiryBasisReversionV1 {
                 || q.ask().compareTo(q.bid()) < 0
                 || q.exchangeAt() == null || q.firstObservedAt() == null)
             return false;
-        Instant close = day.atTime(SESSION_CLOSE).atZone(IST).toInstant();
+        Instant close = cashClose(day);
         if (q.exchangeAt().isBefore(close.minus(MAX_CLOSE_WINDOW))
                 || q.exchangeAt().isAfter(close)
                 || q.exchangeAt().isAfter(q.firstObservedAt())
@@ -274,6 +278,17 @@ public final class FnoExpiryBasisReversionV1 {
                 || q.firstObservedAt().isAfter(close.plus(MAX_PUBLICATION_LAG))) return false;
         return bps(q.ask().subtract(q.bid(), MC), mid(q))
             .compareTo(BigDecimal.valueOf(maxSpreadBps)) <= 0;
+    }
+
+    static Instant cashClose(LocalDate day) {
+        return day.atTime(CASH_CLOSE).atZone(IST).toInstant();
+    }
+
+    static Instant futuresClose(LocalDate day) {
+        LocalTime close = day.isBefore(FUTURES_CLOSE_SHIFT_AUG) ? LocalTime.of(15, 30)
+            : day.isBefore(FUTURES_CLOSE_SHIFT_DEC) ? LocalTime.of(15, 40)
+            : LocalTime.of(15, 45);
+        return day.atTime(close).atZone(IST).toInstant();
     }
 
     private static boolean validAssumptions(Assumptions a) {

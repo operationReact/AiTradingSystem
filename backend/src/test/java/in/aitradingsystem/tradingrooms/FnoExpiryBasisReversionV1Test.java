@@ -53,7 +53,8 @@ class FnoExpiryBasisReversionV1Test {
         LocalDate d = DATES[i];
         return new CompletedPair(d, true, SPOT, FUTURE, "UPSTOX_ANALYTICS",
             quote(d, "100", -45), quote(d, futureMid, -30),
-            true, true, close(d).plusSeconds(60), close(d).plusSeconds(80));
+            true, true, close(d).plusSeconds(60),
+            FnoExpiryBasisReversionV1.futuresClose(d).plusSeconds(80));
     }
 
     private static List<CompletedPair> above() {
@@ -85,6 +86,19 @@ class FnoExpiryBasisReversionV1Test {
             pair.spotKey(), pair.futuresKey(), pair.provider(), spot, future,
             pair.spotFinalVerified(), pair.futureFinalVerified(),
             pair.spotFinalFirstKnownAt(), pair.futureFinalFirstKnownAt());
+    }
+
+    @Test
+    void futuresFinalizationAt1535InvalidEvenWhenCashNearCloseQuotesMatch() {
+        var bars = above();
+        var latest = bars.get(4);
+        var invalid = new CompletedPair(latest.exchangeSession(), true,
+            latest.spotKey(), latest.futuresKey(), latest.provider(),
+            latest.spot(), latest.future(), true, true,
+            latest.spotFinalFirstKnownAt(),
+            close(latest.exchangeSession()).plusSeconds(300));
+        assertEquals("EXPIRY_BASIS_FINAL_PAIR_INVALID",
+            run(replace(bars, 4, invalid)).reasonCode());
     }
 
     @Test

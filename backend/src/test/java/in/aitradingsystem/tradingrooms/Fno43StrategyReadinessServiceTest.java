@@ -43,14 +43,16 @@ class Fno43StrategyReadinessServiceTest {
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-178", "BLOCKED_RIGHTS",
                 "HEDGE_RESEARCH_RIGHTS_NOT_VERIFIED", NOW, "NONE", 0, 0, 0, "INDEX_HEDGE_SOURCE_BLOCKED"),
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-179", "BLOCKED_RIGHTS",
-                "LIQUIDITY_SOURCE_RIGHTS_NOT_VERIFIED", NOW, "NONE", 0, 0, 0, "LIQUIDITY_SOURCE_BLOCKED")));
+                "LIQUIDITY_SOURCE_RIGHTS_NOT_VERIFIED", NOW, "NONE", 0, 0, 0, "LIQUIDITY_SOURCE_BLOCKED"),
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-180", "BLOCKED_RIGHTS",
+                "EXPIRY_BASIS_SOURCE_RIGHTS_MISSING", NOW, "NONE", 0, 0, 0, "EXPIRY_BASIS_VERIFIED_SOURCE_BLOCKED")));
         var report = create(futures).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(10, report.distinctEvaluatorsObserved());
+        assertEquals(11, report.distinctEvaluatorsObserved());
         assertEquals(2, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(33, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(32, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -63,7 +65,7 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(10, report.strategies().stream()
+        assertEquals(11, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
@@ -73,7 +75,7 @@ class Fno43StrategyReadinessServiceTest {
         assertFalse(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("DISTINCT_EVALUATOR_NOT_INVOKED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
@@ -89,7 +91,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(10, report.strategies().stream()
+        assertEquals(11, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));

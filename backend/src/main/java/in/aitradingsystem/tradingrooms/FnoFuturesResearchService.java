@@ -5,6 +5,7 @@ import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
 import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
 import in.aitradingsystem.marketdata.FnoVerifiedIntradayLiquidityStore;
+import in.aitradingsystem.marketdata.FnoVerifiedExpiryBasisPairStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -25,7 +26,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of ten futures research evaluators (STR-170..179).
+ * Read-only invocation of eleven futures research evaluators (STR-170..180).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -73,6 +74,7 @@ public class FnoFuturesResearchService {
     private final FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore;
     private final FnoIndexHedgeResearchStore indexHedgeStore;
     private final FnoVerifiedIntradayLiquidityStore liquidityStore;
+    private final FnoVerifiedExpiryBasisPairStore expiryBasisStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
     private final boolean finalPriceResearchRightsVerified;
@@ -80,11 +82,56 @@ public class FnoFuturesResearchService {
     private final boolean completedOhlcvResearchRightsVerified;
     private final boolean hedgeResearchRightsVerified;
     private final boolean liquidityResearchRightsVerified;
+    private final boolean expiryBasisResearchRightsVerified;
     private final String hedgeAccountScope;
     private final String cashFeasibilityAccountScope;
     private final String basisUnderlyingKey;
 
     @Autowired
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store,
+            FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoCashFuturesFeasibilityStore cashFeasibilityStore,
+            FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
+            FnoIndexHedgeResearchStore indexHedgeStore,
+            FnoVerifiedIntradayLiquidityStore liquidityStore,
+            FnoVerifiedExpiryBasisPairStore expiryBasisStore,
+            @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
+            @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
+            @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
+            @Value("${minttick.fno-research.cash-feasibility-research-rights-verified:false}") boolean cashFeasibilityResearchRightsVerified,
+            @Value("${minttick.fno-research.completed-ohlcv-research-rights-verified:false}") boolean completedOhlcvResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-research-rights-verified:false}") boolean hedgeResearchRightsVerified,
+            @Value("${minttick.fno-research.liquidity-research-rights-verified:false}") boolean liquidityResearchRightsVerified,
+            @Value("${minttick.fno-research.expiry-basis-research-rights-verified:false}") boolean expiryBasisResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-account-scope:}") String hedgeAccountScope,
+            @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
+            @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
+        this.feed = feed;
+        this.calendar = calendar;
+        this.registry = registry;
+        this.store = store;
+        this.finalSessionStore = finalSessionStore;
+        this.cashFeasibilityStore = cashFeasibilityStore;
+        this.completedOhlcvOiStore = completedOhlcvOiStore;
+        this.indexHedgeStore = indexHedgeStore;
+        this.liquidityStore = liquidityStore;
+        this.expiryBasisStore = expiryBasisStore;
+        this.researchRightsVerified = researchRightsVerified;
+        this.contractDiscoveryVerified = contractDiscoveryVerified;
+        this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
+        this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
+        this.completedOhlcvResearchRightsVerified = completedOhlcvResearchRightsVerified;
+        this.hedgeResearchRightsVerified = hedgeResearchRightsVerified;
+        this.liquidityResearchRightsVerified = liquidityResearchRightsVerified;
+        this.expiryBasisResearchRightsVerified = expiryBasisResearchRightsVerified;
+        this.hedgeAccountScope = hedgeAccountScope == null ? "" : hedgeAccountScope.trim();
+        this.cashFeasibilityAccountScope =
+            cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
+        this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
+    }
+
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
             FnoClosingSnapshotStore store,
@@ -103,26 +150,13 @@ public class FnoFuturesResearchService {
             @Value("${minttick.fno-research.hedge-account-scope:}") String hedgeAccountScope,
             @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
-        this.feed = feed;
-        this.calendar = calendar;
-        this.registry = registry;
-        this.store = store;
-        this.finalSessionStore = finalSessionStore;
-        this.cashFeasibilityStore = cashFeasibilityStore;
-        this.completedOhlcvOiStore = completedOhlcvOiStore;
-        this.indexHedgeStore = indexHedgeStore;
-        this.liquidityStore = liquidityStore;
-        this.researchRightsVerified = researchRightsVerified;
-        this.contractDiscoveryVerified = contractDiscoveryVerified;
-        this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
-        this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
-        this.completedOhlcvResearchRightsVerified = completedOhlcvResearchRightsVerified;
-        this.hedgeResearchRightsVerified = hedgeResearchRightsVerified;
-        this.liquidityResearchRightsVerified = liquidityResearchRightsVerified;
-        this.hedgeAccountScope = hedgeAccountScope == null ? "" : hedgeAccountScope.trim();
-        this.cashFeasibilityAccountScope =
-            cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
-        this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
+        this(feed, calendar, registry, store, finalSessionStore,
+            cashFeasibilityStore, completedOhlcvOiStore, indexHedgeStore,
+            liquidityStore, null, researchRightsVerified,
+            contractDiscoveryVerified, finalPriceResearchRightsVerified,
+            cashFeasibilityResearchRightsVerified, completedOhlcvResearchRightsVerified,
+            hedgeResearchRightsVerified, liquidityResearchRightsVerified,
+            false, hedgeAccountScope, cashFeasibilityAccountScope, basisUnderlyingKey);
     }
 
     /** STR-178 source fixtures keep STR-179 research and intraday feed denied. */
@@ -226,7 +260,8 @@ public class FnoFuturesResearchService {
             evaluateFuturesMomentum(now, today, completedWindow),
             evaluateFuturesMeanReversion(now, today, completedWindow),
             evaluateIndexFuturesHedge(now, today, sessionOpen),
-            evaluateContractLiquidityGate(now, today, sessionOpen));
+            evaluateContractLiquidityGate(now, today, sessionOpen),
+            evaluateExpiryBasisReversion(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -1045,6 +1080,143 @@ public class FnoFuturesResearchService {
             null, List.of(), rights, LIQUIDITY_THRESHOLDS, now);
         return status(blocked.strategyId(), blocked.status().name(), reason,
             now, "NONE", contracts, quotes, sourceRows, "LIQUIDITY_SOURCE_BLOCKED");
+    }
+
+
+    /**
+     * STR-180: five genuinely source-attested, as-of finalized near-cash-close
+     * paired quotes of exactly ONE deliverable NSE_EQ and its unrolled NSE_FO
+     * future, using explicit source-reviewed carry, dividends and delivery
+     * costs. The quotes are indicative, NOT exchange settlement prices.
+     */
+    private StrategyStatus evaluateExpiryBasisReversion(Instant now, LocalDate today) {
+        var rights = new FnoExpiryBasisReversionV1.SourceRights(
+            researchRightsVerified && expiryBasisResearchRightsVerified,
+            researchRightsVerified && expiryBasisResearchRightsVerified,
+            contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !expiryBasisResearchRightsVerified) {
+            return expiryBasisBlocked(now, rights, "EXPIRY_BASIS_SOURCE_RIGHTS_MISSING", 0, 0);
+        }
+        if (expiryBasisStore == null
+                || !basisUnderlyingKey.matches("NSE_EQ\\|[A-Za-z0-9._-]{1,64}")) {
+            return expiryBasisBlocked(now, rights,
+                "EXPIRY_BASIS_SPOT_CONTRACT_NOT_CONFIGURED", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return expiryBasisBlocked(now, rights,
+                "EXPIRY_BASIS_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(basisUnderlyingKey, today);
+        if (pair.isEmpty() || !basisUnderlyingKey.equals(pair.get().near().underlyingKey())) {
+            return expiryBasisBlocked(now, rights,
+                "EXPIRY_BASIS_VERIFIED_STOCK_FUTURE_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract future = pair.get().near();
+        long days = java.time.temporal.ChronoUnit.DAYS.between(today, future.expiry());
+        if (days < 3 || days > 14) {
+            return expiryBasisBlocked(now, rights, "EXPIRY_BASIS_OUTSIDE_RESEARCH_DTE", 1, 0);
+        }
+        final List<FnoVerifiedExpiryBasisPairStore.PairProof> source;
+        try {
+            source = expiryBasisStore.readExactPair(basisUnderlyingKey, future.instrumentKey(),
+                future.expiry(), future.lotSize(), today.minusDays(21), today, now);
+        } catch (RuntimeException unavailable) {
+            return expiryBasisBlocked(now, rights,
+                "EXPIRY_BASIS_SOURCE_READ_UNAVAILABLE", 1, 0);
+        }
+        if (source == null || source.size() < 5) {
+            return expiryBasisBlocked(now, rights,
+                "EXPIRY_BASIS_FIVE_VERIFIED_SESSION_PAIRS_MISSING", 1,
+                source == null ? 0 : source.size());
+        }
+        if (source.size() >= 40) {
+            return expiryBasisBlocked(now, rights, "EXPIRY_BASIS_SOURCE_WINDOW_AMBIGUOUS",
+                1, source.size());
+        }
+        String provider = null;
+        LocalDate prev = null, listedFrom = null;
+        String contractDigest = null, carryDigest = null;
+        FnoExpiryBasisReversionV1.Assumptions assumptions = null;
+        for (var row : source) {
+            if (row == null || row.sessionDate() == null || row.listedFrom() == null
+                    || row.assumptions() == null
+                    || !basisUnderlyingKey.equals(row.spotKey())
+                    || !future.instrumentKey().equals(row.futuresKey())
+                    || !future.expiry().equals(row.expiry())
+                    || future.lotSize() != row.lotSize()
+                    || !row.deliverableSpotVerified()
+                    || !FnoMarketDataProvider.isSessionHistorySource(row.provider())
+                    || (provider != null && !provider.equals(row.provider()))
+                    || (listedFrom != null && !listedFrom.equals(row.listedFrom()))
+                    || (assumptions != null && !assumptions.equals(row.assumptions()))
+                    || row.contractSourceDigest() == null
+                    || row.carryCostSourceDigest() == null
+                    || (contractDigest != null
+                        && !contractDigest.equals(row.contractSourceDigest()))
+                    || (carryDigest != null
+                        && !carryDigest.equals(row.carryCostSourceDigest()))
+                    || (prev != null && !prev.isBefore(row.sessionDate()))
+                    || row.sessionDate().isAfter(today)
+                    || !FnoExpiryBasisReversionV1.cashClose(row.sessionDate())
+                        .equals(row.cashSessionCloseAt())
+                    || !FnoExpiryBasisReversionV1.futuresClose(row.sessionDate())
+                        .equals(row.futuresSessionCloseAt())) {
+                return expiryBasisBlocked(now, rights,
+                    "EXPIRY_BASIS_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS", 1, source.size());
+            }
+            provider = row.provider();
+            listedFrom = row.listedFrom();
+            contractDigest = row.contractSourceDigest();
+            carryDigest = row.carryCostSourceDigest();
+            assumptions = row.assumptions();
+            prev = row.sessionDate();
+        }
+        var last = source.subList(source.size() - 5, source.size());
+        List<FnoExpiryBasisReversionV1.CompletedPair> completed = new ArrayList<>();
+        prev = null;
+        for (var row : last) {
+            boolean verifiedTrading = calendar.isTradingDay(row.sessionDate());
+            if (prev != null) {
+                for (LocalDate day = prev.plusDays(1); day.isBefore(row.sessionDate());
+                        day = day.plusDays(1)) {
+                    if (calendar.isTradingDay(day)) verifiedTrading = false;
+                }
+            }
+            var spot = new FnoExpiryBasisReversionV1.Quote(
+                row.spotBid(), row.spotAsk(), row.spotQuoteAt(),
+                row.spotQuoteFirstObservedAt());
+            var futures = new FnoExpiryBasisReversionV1.Quote(
+                row.futuresBid(), row.futuresAsk(), row.futuresQuoteAt(),
+                row.futuresQuoteFirstObservedAt());
+            completed.add(new FnoExpiryBasisReversionV1.CompletedPair(
+                row.sessionDate(), verifiedTrading, row.spotKey(), row.futuresKey(),
+                row.provider(), spot, futures, true, true,
+                row.spotFinalFirstAvailableAt(), row.futuresFinalFirstAvailableAt()));
+            prev = row.sessionDate();
+        }
+        var contract = new FnoExpiryBasisReversionV1.Contract(
+            basisUnderlyingKey, future.instrumentKey(), future.underlyingKey(),
+            listedFrom, future.expiry(), future.lotSize(), true, true);
+        var result = FnoExpiryBasisReversionV1.evaluate(
+            contract, List.copyOf(completed), rights, assumptions, now);
+        return status(result.strategyId(), result.status().name(),
+            result.reasonCode(), now, provider, 1, 0, completed.size(),
+            "VERIFIED_EXPIRY_BASIS_CASH_CLOSE_PAIRS_RESEARCH_NO_ORDER");
+    }
+
+    private static StrategyStatus expiryBasisBlocked(Instant now,
+            FnoExpiryBasisReversionV1.SourceRights rights,
+            String reason, int contracts, int history) {
+        // An independent evaluator callsite exists even while source is denied.
+        var decision = FnoExpiryBasisReversionV1.evaluate(
+            null, List.of(), rights, null, now);
+        return status(decision.strategyId(), decision.status().name(), reason, now,
+            "NONE", contracts, 0, history, "EXPIRY_BASIS_VERIFIED_SOURCE_BLOCKED");
     }
 
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */

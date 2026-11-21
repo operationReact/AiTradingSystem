@@ -12,8 +12,8 @@ Near-expiry futures and cash-stock prices often become closer, but convergence i
 
 - One verified, *deliverable* `NSE_EQ` equity and matching `NSE_FO` single-stock future, source-listed underlying/expiry/lot identity, and listed-from date. No rolling between near and next month, no stitched contracts, no index-spot substitution.
 - **Five consecutive, independently verified completed NSE cash and F&O trading sessions** (sanity checks: chronological weekdays, date gaps 1–5 days). A separately licensed adapter must verify official NSE holiday/special-session, trading calendar, listed contracts, suspensions and original settlement publication times. At evaluation, expiry must be **3–14 calendar days away** for this research-only near-expiry screen, excluding the closest physical-delivery cutoff days. This is not a broker's actual cutoff policy.
-- Each completed session must contain **same-provider** source-verified near-close bid/ask for both legs, with an actual exchange timestamp in the last five minutes through **15:30 IST**, absolute cross-leg skew ≤2 minutes, positive noncrossed quotes, and an explicit maximum bid/ask spread. This is near-close **indicative midquote**, not an exchange settlement or a guaranteed executable fill.
-- Each leg must also have separately preserved **first-observed quote** and **first-known finalized-close** timestamps. Final observations must be on or after 15:30 IST, no earlier than that leg's quote observation, within 36 hours of session close, and not after evaluation `asOf`. A retrospective downloader must never fabricate the timestamp at which a historical quote/settlement was first available.
+- Each completed session must contain **same-provider** source-verified near-close bid/ask for both legs, with an actual exchange timestamp in the last five minutes through the common **15:30 IST cash close**, absolute cross-leg skew ≤2 minutes, positive noncrossed quotes, and an explicit maximum bid/ask spread. This is near-close **indicative midquote**, not an exchange settlement or a guaranteed executable fill.
+- Each leg must also have separately preserved **first-observed quote** and **first-known finalized-close** timestamps. Final observations must be on or after each respective cash (15:30) or futures (effective 15:40/15:45) session close, no earlier than that leg's quote observation, within 36 hours of session close, and not after evaluation `asOf`. A retrospective downloader must never fabricate the timestamp at which a historical quote/settlement was first available.
 - Independent rights attestation for spot quotes, futures quotes and contract research, and separately verified financing, expected dividend events, corporate actions, physical-delivery status, statutory and slippage costs. Display, retention, model training and LIVE F&O execution are separately gated.
 
 ## Deterministic methodology
@@ -39,3 +39,54 @@ Possible outcomes: `BLOCKED_RIGHTS` (missing research-use rights), `BLOCKED_DATA
 **Required next work:** integrate one authorized canonical source adapter for genuine NSE_EQ and NSE_FO closing data, corporate actions, actual dividend events, observed settlement prices, underlying continuity, same-provider rights and source timestamps; run no-lookahead multi-expiry historical replay and walk-forward under realistic Indian costs and liquidity/physical delivery regimes; add independent PAPER-only lifecycle, account risk, audit and Flutter acceptance. No data source, broker order, production deployment, SSM credential, LIVE permission, Flutter/Android APK, or trading flag is changed by this backend-only PR.
 
 See [canonical F&O strategy feed](../architecture/fno-canonical-strategy-feed.md) and [STR-170](STR-170-futures-basis-carry.md) for the complementary instantaneous carry model.
+
+## Read-only source integration (21 November 2026)
+
+`FnoFuturesResearchService.evaluateAll` now contains a distinct
+`FnoExpiryBasisReversionV1.evaluate` invocation. The V105 evidence table is
+**empty at deployment**, and the `FnoVerifiedExpiryBasisPairStore` accesses
+only independently attested source rows, never synthetic candles or a live
+bid/ask converted into a retroactive close. The strategy **does not produce
+orders**, account mutations, or profit forecasts.
+
+The source adapter requires exactly one current source-listed, deliverable
+`NSE_EQ` stock and matching single-stock `NSE_FO` contract, expiry/lot
+and source-listed-from identity, with between 3 and 14 days to expiry. It
+selects the last five strictly ordered, complete, continuous NSE trading
+sessions with one provider, one contract, one verified corporate-action/cost
+evidence digest, and one consistent set of reviewed financing/dividend,
+physical-delivery and transaction-cost assumptions. Contradictory or missing
+rights, fees, contract digest, trading dates or source publication times block.
+
+**Cash/F&O closing-time distinction:** the paired BID/ASK quotes are actual
+co-temporal *indicative near-15:30 cash-close observations* from both
+markets. They are **not** the official F&O settlement close at 15:40 IST
+from 2026-08-03 (15:45 for non-expiring derivatives from 2026-12-07).
+Each historical spot finalized-source timestamp must be available only
+after the official cash close; the distinct futures finalized-source
+timestamp must be available after the actual later F&O session close.
+Both official exchange calendars and their captured-as-of verification
+timestamps must be independently attested.
+
+V105 enforces three independent provider-specific, currently VERIFIED
+`MODEL_INFERENCE` research-use receipts covering:
+`nse_eq_near_close_quote`, `nse_fo_near_close_quote`, and
+`nse_eq_carry_delivery_costs`. Source records also require original
+first-observed quote and original first-known finalized-publication times;
+late downloads cannot claim a first-known historical exchange timestamp.
+Only rows still inside up to 90-day retention are eligible, and all rows
+are immutable until retention expiry.
+
+The server-side flag
+`minttick.fno-research.expiry-basis-research-rights-verified=false`
+is **default denied**. `minttick.fno-research.basis-underlying-key` must
+name an actual individually listed `NSE_EQ` stock; the NIFTY index does
+not qualify as deliverable cash stock. No source ingestion, rights grant
+or cash/futures trade is implied by connecting the research code.
+
+**Readiness:** 11 of 43 *distinct research evaluator paths* connected.
+Independently validated real-market historical E2E, PAPER and LIVE remain
+**0/43**. Genuine data ingestion, source/corporate-action proofs, full
+no-lookahead replay, realistic Indian delivery/fee/margin cash constraints,
+out-of-sample optimization and separate broker/PAPER order gating are
+still necessary. A unit-test candidate is not operational readiness.
