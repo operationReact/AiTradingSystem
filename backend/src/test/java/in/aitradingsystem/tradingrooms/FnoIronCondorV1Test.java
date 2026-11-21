@@ -22,10 +22,10 @@ class FnoIronCondorV1Test {
     static final Contract SC=contract("NSE_FO|NIFTY_110_CE","CE","110");
     static final Contract LC=contract("NSE_FO|NIFTY_120_CE","CE","120");
     static final Quote SPOT=quote(INDEX,"100","100.10","5",100,100,100000);
-    static final Quote LPQ=quote(LP.key(),"0.95","1","5",10,10,1000);
+    static final Quote LPQ=quote(LP.key(),"0.99","1","5",10,10,1000);
     static final Quote SPQ=quote(SP.key(),"4","4.05","5",10,10,1000);
     static final Quote SCQ=quote(SC.key(),"4","4.05","5",10,10,1000);
-    static final Quote LCQ=quote(LC.key(),"0.95","1","5",10,10,1000);
+    static final Quote LCQ=quote(LC.key(),"0.99","1","5",10,10,1000);
     static final Rights RIGHTS=new Rights(true,true,true,true);
     static final Assumptions A=new Assumptions(50,50,300,2,50,10000,300,
         n("20"),n("10000"),1000,1000,10000);
@@ -127,17 +127,17 @@ class FnoIronCondorV1Test {
             state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,SPQ,q,LCQ,RIGHTS,A),
                 Status.BLOCKED_DATA,"IRON_CONDOR_QUOTE_OR_IV_INVALID");
         }
-        var noBuyDepth=quote(LC.key(),"0.95","1","5",10,0,1000);
+        var noBuyDepth=quote(LC.key(),"0.99","1","5",10,0,1000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,SPQ,SCQ,noBuyDepth,RIGHTS,A),
             Status.BLOCKED_DATA,"IRON_CONDOR_QUOTE_OR_IV_INVALID");
     }
     @Test void quoteStalenessFutureKnowledgeAndCrossLegSkewBlock(){
         for(var q:List.of(
-            new Quote(PROVIDER,LP.key(),n("0.95"),n("1"),n("5"),10,10,1000,
+            new Quote(PROVIDER,LP.key(),n("0.99"),n("1"),n("5"),10,10,1000,
                 NOW.minusSeconds(190),NOW.minusSeconds(180)),
-            new Quote(PROVIDER,LP.key(),n("0.95"),n("1"),n("5"),10,10,1000,
+            new Quote(PROVIDER,LP.key(),n("0.99"),n("1"),n("5"),10,10,1000,
                 TICK,NOW.plusSeconds(1)),
-            new Quote(PROVIDER,LP.key(),n("0.95"),n("1"),n("5"),10,10,1000,
+            new Quote(PROVIDER,LP.key(),n("0.99"),n("1"),n("5"),10,10,1000,
                 NOW.minusSeconds(150),NOW.minusSeconds(140)))){
             state(eval(LP,SP,SC,LC,history(),SPOT,q,SPQ,SCQ,LCQ,RIGHTS,A),
                 Status.BLOCKED_DATA,"IRON_CONDOR_QUOTE_OR_IV_INVALID");
@@ -155,7 +155,7 @@ class FnoIronCondorV1Test {
     }
     @Test void trulyAsymmetricWingsUseLargerWingForMaximumLoss(){
         var wide=contract("NSE_FO|NIFTY_140_CE","CE","140");
-        var q=quote(wide.key(),"0.95","1","5",10,10,1000);
+        var q=quote(wide.key(),"0.99","1","5",10,10,1000);
         var budget=new Assumptions(50,50,300,2,50,10000,300,
             n("20"),n("100000"),1000,1000,10000);
         var d=eval(LP,SP,SC,wide,history(),SPOT,LPQ,SPQ,SCQ,q,RIGHTS,budget);
@@ -180,8 +180,8 @@ class FnoIronCondorV1Test {
     @Test void highLicensedIvMoveFailsIllustrativeShortStrikeDistanceGate(){
         var x=quote(SC.key(),"4","4.05","300",10,10,1000);
         var y=quote(SP.key(),"4","4.05","300",10,10,1000);
-        var z=quote(LC.key(),"0.95","1","300",10,10,1000);
-        var t=quote(LP.key(),"0.95","1","300",10,10,1000);
+        var z=quote(LC.key(),"0.99","1","300",10,10,1000);
+        var t=quote(LP.key(),"0.99","1","300",10,10,1000);
         state(eval(LP,SP,SC,LC,history(),SPOT,t,y,x,z,RIGHTS,A),
             Status.NO_SIGNAL,"IRON_CONDOR_IV_MOVE_CROSSES_SHORT_WING_HURDLE");
     }
