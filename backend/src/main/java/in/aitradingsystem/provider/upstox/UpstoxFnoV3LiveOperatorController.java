@@ -71,8 +71,22 @@ public class UpstoxFnoV3LiveOperatorController {
     public ResponseEntity<UpstoxFnoV3LiveFeedService.Status> start(
             @RequestParam("expiry") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate expiry,
-            @RequestParam(value = "includeFutures", defaultValue = "false") boolean includeFutures) {
+            @RequestParam(value = "includeFutures", defaultValue = "false") boolean includeFutures,
+            @RequestParam(value = "spotKey", required = false) String spotKey) {
         LocalDate today = clock.instant().atZone(IST).toLocalDate();
+        if (spotKey != null && !spotKey.isBlank()) {
+            // Spot mode: one verified equity spot leg plus the near future of its own pair. No options.
+            if (!UpstoxFnoV3FeedCodec.validSpotKey(spotKey)) {
+                throw new IllegalArgumentException("UPSTOX_FNO_SPOT_KEY_INVALID");
+            }
+            if (registry == null) throw new IllegalStateException("FNO_FUTURES_REGISTRY_UNAVAILABLE");
+            var pair = registry.nearFar(spotKey, today)
+                    .orElseThrow(() -> new IllegalStateException("FNO_SPOT_PAIR_NOT_VERIFIED"));
+            List<String> futures = List.of(pair.near().instrumentKey());
+            return ResponseEntity.status(HttpStatus.ACCEPTED)
+                    .cacheControl(CacheControl.noStore())
+                    .body(service.start(futures, List.of(spotKey)));
+        }
         if (expiry == null || expiry.isBefore(today) || expiry.isAfter(today.plusDays(90))) {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_EXPIRY");
         }
@@ -84,8 +98,12 @@ public class UpstoxFnoV3LiveOperatorController {
                 .cacheControl(CacheControl.noStore()).body(service.start(keys));
     }
 
+    public ResponseEntity<UpstoxFnoV3LiveFeedService.Status> start(LocalDate expiry, boolean includeFutures) {
+        return start(expiry, includeFutures, null);
+    }
+
     public ResponseEntity<UpstoxFnoV3LiveFeedService.Status> start(LocalDate expiry) {
-        return start(expiry, false);
+        return start(expiry, false, null);
     }
 
     /**

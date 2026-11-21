@@ -56,7 +56,20 @@ final class UpstoxFnoV3FeedCodec {
         return key != null && key.matches("(NSE_FO|BSE_FO)\\|[A-Za-z0-9._-]{1,64}");
     }
 
+    /** NSE equity spot key by ISIN. Accepted only when explicitly subscribed as a verified spot leg. */
+    static boolean validSpotKey(String key) {
+        return key != null && key.matches("NSE_EQ\\|IN[A-Z0-9]{10}");
+    }
+
     static FeedFrame decode(byte[] bytes) {
+        return decode(bytes, java.util.Set.of());
+    }
+
+    /**
+     * Decodes ticks for derivative keys, plus equity spot keys ONLY when explicitly allowed
+     * by the caller (a verified, currently subscribed spot leg). Other equity frames are dropped.
+     */
+    static FeedFrame decode(byte[] bytes, java.util.Set<String> explicitSpotKeys) {
         if (bytes == null || bytes.length == 0 || bytes.length > MAX_FRAME_BYTES) {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_BINARY_FEED");
         }
@@ -81,7 +94,8 @@ final class UpstoxFnoV3FeedCodec {
             }
             List<Tick> ticks = new ArrayList<>();
             for (KeyFeed f : keyed) {
-                if (validKey(f.key) && f.quote != null) {
+                if ((validKey(f.key) || (explicitSpotKeys.contains(f.key) && validSpotKey(f.key)))
+                        && f.quote != null) {
                     Quote q = f.quote;
                     ticks.add(new Tick(f.key, q.tradedAt, feedAt, q.ltp, q.bid, q.ask,
                             q.oi, q.iv, q.delta, q.theta, q.gamma, q.vega, q.previousClose));

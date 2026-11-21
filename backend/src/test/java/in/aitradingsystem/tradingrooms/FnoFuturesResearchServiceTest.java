@@ -132,6 +132,21 @@ class FnoFuturesResearchServiceTest {
     }
 
     @Test
+    void spotQuotePresentStillLeavesStr170BlockedWhenDeliverabilityIsUnverified() {
+        var spot = quote("NSE_EQ|INE002A01018", "2400", "2402");
+        var live = liveWith(Map.of("NSE_EQ|INE002A01018", spot, NEAR.instrumentKey(), quote(NEAR.instrumentKey(), "2405", "2407")));
+        FnoFuturesContractRegistry registry = registryWith(new NearFar(NEAR, FAR));
+        when(registry.nearFar(eq("NSE_EQ|INE002A01018"), any())).thenReturn(Optional.of(new NearFar(NEAR, FAR)));
+        var service = new FnoFuturesResearchService(feed(live), calendar(true),
+            registry, emptyStore(), true, true, "NSE_EQ|INE002A01018");
+        var row = byId(service.evaluateAll(NOW)).get("strategy.STR-170");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("FUTURES_CONTRACT_OR_SPOT_IDENTITY_INVALID", row.reason());
+        assertEquals(2, row.quotes());
+        assertNotEquals("RESEARCH_CANDIDATE", row.status());
+    }
+
+    @Test
     void liveQuoteIsEmptyWithoutFeedBean() {
         var service = new FnoFuturesResearchService(feed(null), calendar(true),
             registryWith(null), emptyStore(), false, false, "");

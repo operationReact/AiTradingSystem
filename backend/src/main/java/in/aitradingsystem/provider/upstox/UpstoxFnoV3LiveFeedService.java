@@ -57,6 +57,7 @@ public class UpstoxFnoV3LiveFeedService {
 
     private volatile String state = "STOPPED";
     private volatile Set<String> subscribed = Set.of();
+    private volatile Set<String> spotSubscribed = Set.of();
     private volatile WebSocket socket;
     private volatile long decodedFrames;
     private volatile long discardedFrames;
@@ -96,17 +97,30 @@ public class UpstoxFnoV3LiveFeedService {
      * provider's active expiry; no arbitrary untrusted instrument is subscribed.
      */
     public synchronized Status start(List<String> keys) {
+        return start(keys, List.of());
+    }
+
+    /**
+     * Derivative keys plus optional verified equity spot keys (ISIN form). Spot keys share the same
+     * single socket and the same cap; they are published only while subscribed here.
+     */
+    public synchronized Status start(List<String> keys, List<String> spotKeys) {
+        List<String> spot = spotKeys == null ? List.of() : spotKeys;
         if (destroyed || !source.enabled()
-                || keys == null || keys.isEmpty() || keys.size() > MAX_SUBSCRIPTIONS
+                || keys == null || keys.isEmpty()
                 || keys.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validKey(k))
-                || keys.stream().distinct().count() != keys.size()) {
+                || spot.stream().anyMatch(k -> !UpstoxFnoV3FeedCodec.validSpotKey(k))
+                || keys.size() + spot.size() > MAX_SUBSCRIPTIONS
+                || java.util.stream.Stream.concat(keys.stream(), spot.stream()).distinct().count()
+                        != keys.size() + spot.size()) {
             throw new IllegalArgumentException("UPSTOX_FNO_STREAM_INVALID_START");
         }
         if (wanted) {
             // No second connection; force an explicit stop before switching expiry.
             throw new IllegalStateException("UPSTOX_FNO_STREAM_ALREADY_STARTED");
         }
-        subscribed = Set.copyOf(keys);
+        subscribed = Set.copyOf(java.util.stream.Stream.concat(keys.stream(), spot.stream()).toList());
+        spotSubscribed = Set.copyOf(spot);
         wanted = true;
         retryCount = 0;
         decodedFrames = 0;
@@ -182,6 +196,7 @@ public class UpstoxFnoV3LiveFeedService {
         retryScheduled = false;
         state = "STOPPED";
         subscribed = Set.of();
+        spotSubscribed = Set.of();
         latest.clear();
         lastTradeAt = null;
         lastFrameAt = null;
@@ -237,7 +252,7 @@ public class UpstoxFnoV3LiveFeedService {
     }
 
     public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
-        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
+        if (key == null || (!UpstoxFnoV3FeedCodec.validKey(key) && !spotSubscribed.contains(key))
                 || !wanted || destroyed || !"CONNECTED".equals(state)) {
             return java.util.Optional.empty();
         }
@@ -303,7 +318,7 @@ public class UpstoxFnoV3LiveFeedService {
     /** A frame is observation evidence only; never a trade or permission grant. */
     private void consume(byte[] frame) {
         try {
-            UpstoxFnoV3FeedCodec.FeedFrame data = UpstoxFnoV3FeedCodec.decode(frame);
+            UpstoxFnoV3FeedCodec.FeedFrame data = UpstoxFnoV3FeedCodec.decode(frame, spotSubscribed);
             Instant now = clock.instant();
             for (var tick : data.ticks()) {
                 if (!subscribed.contains(tick.instrumentKey())) continue;
@@ -437,6 +452,7 @@ public class UpstoxFnoV3LiveFeedService {
             retryScheduled = false;
             state = "STOPPED";
             subscribed = Set.of();
+        spotSubscribed = Set.of();
             latest.clear();
             lastTradeAt = null;
             lastFrameAt = null;

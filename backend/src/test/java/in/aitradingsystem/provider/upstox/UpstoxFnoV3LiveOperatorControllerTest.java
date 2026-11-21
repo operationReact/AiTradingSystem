@@ -178,7 +178,7 @@ class UpstoxFnoV3LiveOperatorControllerTest {
                 .getAnnotation(ConditionalOnProperty.class).havingValue()).isEqualTo("true");
         for (String name : List.of("start", "status", "stop")) {
             var m = name.equals("start")
-                    ? UpstoxFnoV3LiveOperatorController.class.getMethod(name, LocalDate.class, boolean.class)
+                    ? UpstoxFnoV3LiveOperatorController.class.getMethod(name, LocalDate.class, boolean.class, String.class)
                     : UpstoxFnoV3LiveOperatorController.class.getMethod(name);
             assertThat(m.getAnnotation(PreAuthorize.class).value())
                     .contains("ADMIN", "OPERATOR");
