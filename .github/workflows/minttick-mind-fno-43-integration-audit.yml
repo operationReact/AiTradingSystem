@@ -54,6 +54,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V110__fno_verified_owned_equity_collar_cost.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -112,6 +117,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V110__fno_verified_owned_equity_collar_cost.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedOwnedEquityCollarCostStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -228,6 +238,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoOwnedEquityOptionsResearchServiceTest,FnoVerifiedEquityOwnedOptionStoreTest' test
+      - name: Validate STR-189 same settled equity lot, genuine stock bid/ask and nonduplicated collar fees
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoEquityCollarResearchServiceTest,FnoVerifiedOwnedEquityCollarCostStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |

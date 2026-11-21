@@ -70,14 +70,18 @@ class Fno43StrategyReadinessServiceTest {
                 "OWNED_STOCK_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "OWNED_EQUITY_OPTION_SOURCE_BLOCKED"),
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-188", "BLOCKED_RIGHTS",
                 "OWNED_STOCK_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "OWNED_EQUITY_OPTION_SOURCE_BLOCKED")));
+        var collar = mock(FnoEquityCollarResearchService.class);
+        when(collar.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-189", "BLOCKED_RIGHTS",
+                "COLLAR_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "COLLAR_SOURCE_BLOCKED"));
         var report = new Fno43StrategyReadinessService(
-            futures, options, spreads, credits, owned, new ObjectMapper()).inspect(NOW);
+            futures, options, spreads, credits, owned, collar, new ObjectMapper()).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(19, report.distinctEvaluatorsObserved());
+        assertEquals(20, report.distinctEvaluatorsObserved());
         assertEquals(0, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(24, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(23, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -90,7 +94,7 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(19, report.strategies().stream()
+        assertEquals(20, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
@@ -100,7 +104,7 @@ class Fno43StrategyReadinessServiceTest {
         assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
@@ -124,7 +128,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(19, report.strategies().stream()
+        assertEquals(20, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));
