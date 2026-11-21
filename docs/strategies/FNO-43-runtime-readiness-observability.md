@@ -336,3 +336,26 @@ All rights default false and exact contract keys remain blank.
 Independently verified real historical market-data E2E 0/43,
 PAPER 0/43, LIVE 0/43.** The manifest remains `DATA_BLOCKED`.
 Next: STR-197 Iron Butterfly (four-leg centered CE/PE and original IV).
+
+## 21 November 2026 — STR-197 same-center short options iron butterfly
+
+New `FnoIronButterflyResearchService` calls the existing deterministic
+`FnoIronButterflyV1.evaluate` on an **EMPTY**, independent V117 four-leg
+original-source custody table. The **short PE and short CE have the exact
+same source-listed center strike**, with long protective PE below and
+long protective CE above. Same expiry and lot apply to all four contracts.
+
+The four original provider option quotes need independently proven annualized
+IV values and rights receipts, 35+ source-finalized original NIFTY closes,
+synchronized exchange/first-known timestamps, real **short bid depth** and
+protective **long ask depth**, genuine OI, and nonduplicated four-leg fees.
+The theoretical expiry max-loss uses the WIDER of asymmetric wings and the
+actual after-cost credit. It does not establish fills, assignment, broker
+margin, or a guarantee that hedges remain in place during execution.
+Rights default denied; contract keys remain blank; no order path activated.
+
+**28/43 distinct typed read-only research adapter callsites, 15 missing;
+independently verified real-data historical E2E 0/43, PAPER 0/43,
+LIVE 0/43.** `DATA_BLOCKED` remains unchanged for all 43.
+Next candidate STR-198 Long Butterfly must prove three separate call strikes,
+two sold middle contracts and realistic combined four-contract fees.
