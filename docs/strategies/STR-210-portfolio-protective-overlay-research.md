@@ -29,11 +29,13 @@ For each permitted source-authenticated candidate and each integer lot quantity 
 
 `hypotheticalIntrinsic[k] = max(0, originalStrike−hypotheticalIndexAtPutExpiry[k])×officialLot×lots`
 
-`scenarioResidualLoss[k] = max(0, scenarioEquityLoss[k]−max(0,hypotheticalIntrinsic[k]−hypotheticalDebit))`
+`scenarioResidualLoss[k] = max(0, scenarioEquityLoss[k]+hypotheticalDebit−hypotheticalIntrinsic[k])`
 
 `sumThreeResidualLosses = SUM(scenarioResidualLoss[three distinct tail days])`
 
-The evaluator chooses the candidate/quantity minimizing **aggregate three-scenario residual loss**, breaks equal residual ties by lower estimated debit, and rejects the overlay if the aggregate reduction is below an explicit research threshold. **The same premium debit is subtracted in each mutually exclusive scenario** for separate scenario comparisons. These residuals **must not be summed as realized wealth or expected returns**. Total combined unhedged or hedged loss is a *scenario score*, not an actual lifetime drawdown, VaR/expected shortfall, profit forecast or insurance value.
+The evaluator chooses the candidate/quantity minimizing **aggregate three-scenario residual loss**, breaks equal residual ties by lower estimated debit, and rejects the overlay if the aggregate reduction is below an explicit research threshold. **The same premium debit is charged as a cost in each mutually exclusive scenario, including where the put expires worthless** for separate scenario comparisons. These residuals **must not be summed as realized wealth or expected returns**. Total combined unhedged or hedged loss is a *scenario score*, not an actual lifetime drawdown, VaR/expected shortfall, profit forecast or insurance value.
+
+**Strict additional notional guard:** for every candidate and integer lot count, verified current NIFTY spot × official put lot × candidate lots cannot exceed the current source-confirmed value of the held long-equity portfolio. This is a conservative index-equivalent notional ceiling, **not** evidence of matching portfolio beta or an actual risk hedge.
 
 Cash equities do not mechanically track the NIFTY index; individual-stock basis, dividends, price gaps, corporate actions, cash weight, option liquidity and actual settlement can produce materially different results. An index put only pays its true terminal intrinsic in the hypothetical matched-expiry scenario; **it can expire worthless and the portfolio can lose significantly even if a modeled scenario shows high nominal offset**. The conditional option purchase debit is not an actual fill or Indian statutory charges model. Existing positions, portfolio concentration, basis, futures/short calls, taxes and broker margin are not neutralized here.
 
@@ -42,7 +44,7 @@ Cash equities do not mechanically track the NIFTY index; individual-stock basis,
 - Evaluator: `backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1.java`
 - Unit tests: `backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1Test.java`
 - Catalog: `backend/src/main/resources/mind/capability-manifest.v1.json` — `strategy.STR-210`
-- **22 deterministic JUnit tests** use fictional original-time-shaped marks, book and instrument data to check source gates, true synchronized history, entire current holdings basket, nonduplicate source identities, real official matching put lots, OTM/expiry/tick, provider matching, Greeks/IV/OI, ask depth and spread, no scenario loss, upside-only NIFTY, genuine quote timestamp, premium budget, same-index-tail matching and unconditional order prohibition. Tests **are not proof of authentic NSE history or empirical strategy returns**.
+- **23 deterministic JUnit tests** use fictional original-time-shaped marks, book and instrument data to check source gates, true synchronized history, entire current holdings basket, nonduplicate source identities, real official matching put lots, OTM/expiry/tick, provider matching, Greeks/IV/OI, ask depth and spread, no scenario loss, upside-only NIFTY, genuine quote timestamp, premium budget, strict whole-portfolio index-equivalent notional ceiling, premium loss even if the put expires worthless, same-index-tail matching and unconditional order prohibition. Tests **are not proof of authentic NSE history or empirical strategy returns**.
 
 Every decision unconditionally: `executable=false`, `orderPlaced=false`, `paperTradeAuthorized=false`, `liveTradeAuthorized=false`. Capability manifest remains **`DATA_BLOCKED`**.
 
