@@ -30,7 +30,7 @@ public final class FnoRatioSpreadResearchService {
     private final FnoVerifiedRatioSpreadSourceStore ratios;
     private final MarketSessionCalendar calendar;
     private final boolean dailyRights,quoteRights,masterRights,ratioRights;
-    private final String callLong,callShort,putLong,putShort;
+    private final String account,callLong,callShort,putLong,putShort;
     @Autowired
     public FnoRatioSpreadResearchService(
         FnoVerifiedNiftyLongOptionSourceStore daily,
@@ -44,6 +44,7 @@ public final class FnoRatioSpreadResearchService {
             boolean masterRights,
         @Value("${minttick.fno-research.ratio-research-rights-verified:false}")
             boolean ratioRights,
+        @Value("${minttick.fno-research.ratio-account-scope:}") String account,
         @Value("${minttick.fno-research.ratio-call-long-ce-key:}") String callLong,
         @Value("${minttick.fno-research.ratio-call-short-ce-key:}") String callShort,
         @Value("${minttick.fno-research.ratio-put-long-pe-key:}") String putLong,
@@ -51,6 +52,7 @@ public final class FnoRatioSpreadResearchService {
         this.daily=daily;this.ratios=ratios;this.calendar=calendar;
         this.dailyRights=dailyRights;this.quoteRights=quoteRights;
         this.masterRights=masterRights;this.ratioRights=ratioRights;
+        this.account=account==null?"":account.trim();
         this.callLong=callLong==null?"":callLong.trim();
         this.callShort=callShort==null?"":callShort.trim();
         this.putLong=putLong==null?"":putLong.trim();
@@ -64,6 +66,8 @@ public final class FnoRatioSpreadResearchService {
             return both(now,"RATIO_SOURCE_UNAVAILABLE",false,0);
         if(!calendar.isInsideCashSession(now))
             return both(now,"RATIO_CASH_EXCHANGE_SESSION_CLOSED",false,0);
+        if(!account.matches("[A-Za-z0-9_-]{8,80}"))
+            return both(now,"RATIO_BROKER_MARGIN_ACCOUNT_NOT_CONFIGURED",false,0);
         if(!validKeys(callLong,callShort)&&!validKeys(putLong,putShort))
             return both(now,"RATIO_SOURCE_CONTRACT_NOT_CONFIGURED",false,0);
         final List<VerifiedClose> closes;
@@ -88,7 +92,7 @@ public final class FnoRatioSpreadResearchService {
             return blocked(call,now,"RATIO_SOURCE_CONTRACT_NOT_CONFIGURED",
                 false,history.size());
         final Optional<Proof> attested;
-        try{attested=ratios.oneCurrent(call?"CALL":"PUT",longKey,shortKey,now);}
+        try{attested=ratios.oneCurrent(account,call?"CALL":"PUT",longKey,shortKey,now);}
         catch(RuntimeException ignored){
             return blocked(call,now,"RATIO_SOURCE_READ_UNAVAILABLE",
                 false,history.size());
@@ -97,7 +101,7 @@ public final class FnoRatioSpreadResearchService {
             return blocked(call,now,"RATIO_TWO_SHORT_LOT_DEPTH_MARGIN_FEES_MISSING",
                 false,history.size());
         var p=attested.get();
-        if(!valid(p,history.getLast(),call,longKey,shortKey,now))
+        if(!account.equals(p.accountScope())||!valid(p,history.getLast(),call,longKey,shortKey,now))
             return blocked(call,now,"RATIO_PROVIDER_CONTRACT_RISK_OR_TIME_MISMATCH",
                 false,history.size());
         if(call){
