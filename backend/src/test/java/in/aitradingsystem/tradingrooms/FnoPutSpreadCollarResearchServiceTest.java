@@ -67,7 +67,7 @@ class FnoPutSpreadCollarResearchServiceTest {
         assertEquals("STR_207_AUTHENTIC_ORIGINAL_SOURCE_MISSING",
             new FnoPutSpreadCollarResearchService(none,json(),true).evaluate(NOW).reasonCode());
         var tampered=source("{\"policy\":{},\"executeLive\":true}");
-        assertEquals("STR_207_ORIGINAL_TYPED_INPUT_INVALID",
+        assertEquals("STR_207_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoPutSpreadCollarResearchService(tampered,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceExceptionsHideCredentials(){
