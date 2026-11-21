@@ -49,6 +49,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V109__fno_owned_equity_option_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -102,6 +107,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCreditSpreadSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCreditSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V109__fno_owned_equity_option_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedEquityOwnedOptionStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOwnedEquityOptionsResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -212,6 +222,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoCreditSpreadResearchServiceTest,FnoVerifiedNiftyCreditSpreadSourceStoreTest' test
+      - name: Validate STR-187/188 settled broker equity share and physical option coverage receipts
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoOwnedEquityOptionsResearchServiceTest,FnoVerifiedEquityOwnedOptionStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |

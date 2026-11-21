@@ -19,13 +19,13 @@ import org.springframework.stereotype.Service;
  * A read-only 43-strategy *readiness* registry, not a 43-strategy execution engine.
  * The authoritative manifest supplies identities and distinct required inputs.
  * STR-170..180 have distinct research evaluator calls; STR-180 needs original-time near-close spot/future pair and carry/delivery receipts.
- * STR-181..186 each have their own distinct options evaluator callsite beyond the earlier directional signal routes.
+ * STR-181..188 each have distinct true options evaluator callsites, including settled owned-stock protection.
  * No research status, including RESEARCH_CANDIDATE, authorizes PAPER/LIVE orders.
  */
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188");
     private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
@@ -53,9 +53,24 @@ public final class Fno43StrategyReadinessService {
     private final FnoOptionsResearchService options;
     private final FnoDebitSpreadResearchService debitSpreads;
     private final FnoCreditSpreadResearchService creditSpreads;
+    private final FnoOwnedEquityOptionsResearchService ownedStockOptions;
     private final List<Definition> definitions;
 
     @Autowired
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options,
+            FnoDebitSpreadResearchService debitSpreads,
+            FnoCreditSpreadResearchService creditSpreads,
+            FnoOwnedEquityOptionsResearchService ownedStockOptions, ObjectMapper mapper) {
+        this.futures = Objects.requireNonNull(futures);
+        this.options = Objects.requireNonNull(options);
+        this.debitSpreads = Objects.requireNonNull(debitSpreads);
+        this.creditSpreads = Objects.requireNonNull(creditSpreads);
+        this.ownedStockOptions = Objects.requireNonNull(ownedStockOptions);
+        this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Compatibility for isolated per-adapter JUnit fixtures. */
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
             FnoOptionsResearchService options,
             FnoDebitSpreadResearchService debitSpreads,
@@ -64,10 +79,9 @@ public final class Fno43StrategyReadinessService {
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = Objects.requireNonNull(debitSpreads);
         this.creditSpreads = Objects.requireNonNull(creditSpreads);
+        this.ownedStockOptions = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
-
-    /** Existing debit-source tests deliberately don't fabricate credit evidence. */
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
             FnoOptionsResearchService options,
             FnoDebitSpreadResearchService debitSpreads, ObjectMapper mapper) {
@@ -75,24 +89,25 @@ public final class Fno43StrategyReadinessService {
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = Objects.requireNonNull(debitSpreads);
         this.creditSpreads = null;
+        this.ownedStockOptions = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
-
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
             FnoOptionsResearchService options, ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = null;
         this.creditSpreads = null;
+        this.ownedStockOptions = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
-
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
             ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = null;
         this.debitSpreads = null;
         this.creditSpreads = null;
+        this.ownedStockOptions = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -176,6 +191,24 @@ public final class Fno43StrategyReadinessService {
             } catch (RuntimeException unavailable) {
                 observed.remove("strategy.STR-185");
                 observed.remove("strategy.STR-186");
+            }
+        }
+
+        if (ownedStockOptions != null) {
+            try {
+                var sourceRows = ownedStockOptions.evaluateAll(now);
+                if (sourceRows != null) for (var result : sourceRows) {
+                    if (result != null && DIRECT.contains(result.strategyId())
+                            && ("strategy.STR-187".equals(result.strategyId())
+                                || "strategy.STR-188".equals(result.strategyId()))
+                            && result.status() != null && result.reasonCode() != null) {
+                        if (observed.putIfAbsent(result.strategyId(), result) != null)
+                            observed.remove(result.strategyId());
+                    }
+                }
+            } catch (RuntimeException unavailable) {
+                observed.remove("strategy.STR-187");
+                observed.remove("strategy.STR-188");
             }
         }
 
