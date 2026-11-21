@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206", "strategy.STR-207", "strategy.STR-208", "strategy.STR-209", "strategy.STR-210", "strategy.STR-211", "strategy.STR-212");
     private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
@@ -71,6 +71,12 @@ public final class Fno43StrategyReadinessService {
     private final FnoDeltaHedgeResearchService deltaHedge;
     private final FnoBetaHedgeOptionsResearchService betaHedge;
     private final FnoTailRiskPutHedgeResearchService tailHedge;
+    private final FnoPutSpreadCollarResearchService putSpreadCollar;
+    private final FnoDefinedRiskSpreadRollResearchService spreadRoll;
+    private final FnoExpiryRiskNeutralizationResearchService expiryNeutral;
+    private final FnoPortfolioProtectiveOverlayResearchService portfolioOverlay;
+    private final FnoGreeksExposureRebalanceResearchService greeksRebalance;
+    private final FnoSkewBasedHedgeResearchService skewHedge;
     private final List<Definition> definitions;
 
     @Autowired
@@ -95,7 +101,14 @@ public final class Fno43StrategyReadinessService {
             FnoGammaScalpingResearchService gammaScalp,
             FnoDeltaHedgeResearchService deltaHedge,
             FnoBetaHedgeOptionsResearchService betaHedge,
-            FnoTailRiskPutHedgeResearchService tailHedge, ObjectMapper mapper) {
+            FnoTailRiskPutHedgeResearchService tailHedge,
+            FnoPutSpreadCollarResearchService putSpreadCollar,
+            FnoDefinedRiskSpreadRollResearchService spreadRoll,
+            FnoExpiryRiskNeutralizationResearchService expiryNeutral,
+            FnoPortfolioProtectiveOverlayResearchService portfolioOverlay,
+            FnoGreeksExposureRebalanceResearchService greeksRebalance,
+            FnoSkewBasedHedgeResearchService skewHedge,
+            ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = Objects.requireNonNull(debitSpreads);
@@ -118,6 +131,67 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge = Objects.requireNonNull(deltaHedge);
         this.betaHedge = Objects.requireNonNull(betaHedge);
         this.tailHedge = Objects.requireNonNull(tailHedge);
+        this.putSpreadCollar = Objects.requireNonNull(putSpreadCollar);
+        this.spreadRoll = Objects.requireNonNull(spreadRoll);
+        this.expiryNeutral = Objects.requireNonNull(expiryNeutral);
+        this.portfolioOverlay = Objects.requireNonNull(portfolioOverlay);
+        this.greeksRebalance = Objects.requireNonNull(greeksRebalance);
+        this.skewHedge = Objects.requireNonNull(skewHedge);
+        this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Existing STR-206 fixture constructor retained for regression tests. */
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options,
+            FnoDebitSpreadResearchService debitSpreads,
+            FnoCreditSpreadResearchService creditSpreads,
+            FnoOwnedEquityOptionsResearchService ownedStockOptions,
+            FnoEquityCollarResearchService collar,
+            FnoRatioSpreadResearchService ratioSpreads,
+            FnoStraddleResearchService straddle,
+            FnoStrangleResearchService strangle,
+            FnoShortStraddleResearchService shortStraddle,
+            FnoShortStrangleResearchService shortStrangle,
+            FnoIronCondorResearchService ironCondor,
+            FnoIronButterflyResearchService ironButterfly,
+            FnoLongButterflyResearchService longButterfly,
+            FnoCalendarSpreadResearchService calendarSpread,
+            FnoDiagonalSpreadResearchService diagonalSpread,
+            FnoIvRankResearchService ivRank,
+            FnoVolatilityCrushResearchService volatilityCrush,
+            FnoGammaScalpingResearchService gammaScalp,
+            FnoDeltaHedgeResearchService deltaHedge,
+            FnoBetaHedgeOptionsResearchService betaHedge,
+            FnoTailRiskPutHedgeResearchService tailHedge,
+            ObjectMapper mapper) {
+        this.futures = Objects.requireNonNull(futures);
+        this.options = Objects.requireNonNull(options);
+        this.debitSpreads = Objects.requireNonNull(debitSpreads);
+        this.creditSpreads = Objects.requireNonNull(creditSpreads);
+        this.ownedStockOptions = Objects.requireNonNull(ownedStockOptions);
+        this.collar = Objects.requireNonNull(collar);
+        this.ratioSpreads = Objects.requireNonNull(ratioSpreads);
+        this.straddle = Objects.requireNonNull(straddle);
+        this.strangle = Objects.requireNonNull(strangle);
+        this.shortStraddle = Objects.requireNonNull(shortStraddle);
+        this.shortStrangle = Objects.requireNonNull(shortStrangle);
+        this.ironCondor = Objects.requireNonNull(ironCondor);
+        this.ironButterfly = Objects.requireNonNull(ironButterfly);
+        this.longButterfly = Objects.requireNonNull(longButterfly);
+        this.calendarSpread = Objects.requireNonNull(calendarSpread);
+        this.diagonalSpread = Objects.requireNonNull(diagonalSpread);
+        this.ivRank = Objects.requireNonNull(ivRank);
+        this.volatilityCrush = Objects.requireNonNull(volatilityCrush);
+        this.gammaScalp = Objects.requireNonNull(gammaScalp);
+        this.deltaHedge = Objects.requireNonNull(deltaHedge);
+        this.betaHedge = Objects.requireNonNull(betaHedge);
+        this.tailHedge = Objects.requireNonNull(tailHedge);
+        this.putSpreadCollar = null;
+        this.spreadRoll = null;
+        this.expiryNeutral = null;
+        this.portfolioOverlay = null;
+        this.greeksRebalance = null;
+        this.skewHedge = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -162,6 +236,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -205,6 +285,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -247,6 +333,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -288,6 +380,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -328,6 +426,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -367,6 +471,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -405,6 +515,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -442,6 +558,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -478,6 +600,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -513,6 +641,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -547,6 +681,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -580,6 +720,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -612,6 +758,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -643,6 +795,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -673,6 +831,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -700,6 +864,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -726,6 +896,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -752,6 +928,12 @@ public final class Fno43StrategyReadinessService {
         this.deltaHedge=null;
         this.betaHedge=null;
         this.tailHedge=null;
+        this.putSpreadCollar=null;
+        this.spreadRoll=null;
+        this.expiryNeutral=null;
+        this.portfolioOverlay=null;
+        this.greeksRebalance=null;
+        this.skewHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -1085,6 +1267,84 @@ public final class Fno43StrategyReadinessService {
                 }
             }catch(RuntimeException unavailable){
                 observed.remove("strategy.STR-206");
+            }
+        }
+
+        if(putSpreadCollar!=null){
+            try{
+                var result=putSpreadCollar.evaluate(now);
+                if(result!=null && "strategy.STR-207".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-207");
+            }
+        }
+
+        if(spreadRoll!=null){
+            try{
+                var result=spreadRoll.evaluate(now);
+                if(result!=null && "strategy.STR-208".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-208");
+            }
+        }
+
+        if(expiryNeutral!=null){
+            try{
+                var result=expiryNeutral.evaluate(now);
+                if(result!=null && "strategy.STR-209".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-209");
+            }
+        }
+
+        if(portfolioOverlay!=null){
+            try{
+                var result=portfolioOverlay.evaluate(now);
+                if(result!=null && "strategy.STR-210".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-210");
+            }
+        }
+
+        if(greeksRebalance!=null){
+            try{
+                var result=greeksRebalance.evaluate(now);
+                if(result!=null && "strategy.STR-211".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-211");
+            }
+        }
+
+        if(skewHedge!=null){
+            try{
+                var result=skewHedge.evaluate(now);
+                if(result!=null && "strategy.STR-212".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-212");
             }
         }
 
