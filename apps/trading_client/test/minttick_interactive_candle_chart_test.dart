@@ -48,7 +48,9 @@ void main() {
 
     final gesture = find.byKey(const ValueKey('stock-chart-gesture'));
     await tester.tapAt(tester.getTopLeft(gesture) + const Offset(170, 95));
-    await tester.pump();
+    // The chart supports double-tap reset. Flush its short recognition
+    // timer before the test completes so fake_async reports no pending work.
+    await tester.pump(const Duration(seconds: 1));
     expect(tapped, isNotNull);
     expect(tapped, inInclusiveRange(78, 119));
   });
