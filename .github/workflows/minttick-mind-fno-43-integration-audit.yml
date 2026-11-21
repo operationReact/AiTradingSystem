@@ -74,6 +74,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V114__fno_verified_nifty_short_straddle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -152,6 +157,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStrangleIvSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStrangleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V114__fno_verified_nifty_short_straddle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -292,6 +302,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoStrangleResearchServiceTest,FnoVerifiedNiftyStrangleIvSourceStoreTest' test
+      - name: Validate STR-194 original BID depth, independently verified CE/PE IV, broker margin and unbounded tail loss
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoShortStraddleResearchServiceTest,FnoVerifiedNiftyShortStraddleSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
