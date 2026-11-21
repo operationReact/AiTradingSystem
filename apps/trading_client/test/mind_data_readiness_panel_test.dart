@@ -109,6 +109,15 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(MintickMindScreens.all.length, 43);
+    // The standard Overview intentionally does not render the workspace
+    // topbar. Navigate to the existing Coverage route through its sidebar
+    // before exercising the new header shortcut.
+    final coverage = find.byKey(const ValueKey('mind-route-coverage'));
+    await tester.ensureVisible(coverage);
+    await tester.tap(coverage);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mind-progress-coverage')),
+        findsOneWidget);
     await tester.tap(find.byKey(const ValueKey('mind-open-data-readiness')));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('mind-data-readiness-panel')),
