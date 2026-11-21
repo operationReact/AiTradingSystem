@@ -4,6 +4,8 @@ on:
     branches: [dev]
     paths:
       - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'infra/ec2-paper/upstox_fno_backfill_adapters.py'
+      - 'scripts/tests/test_upstox_fno_backfill_adapters.py'
       - 'scripts/tests/test_fno_history_backfill.py'
       - 'infra/ec2-paper/FNO_HISTORY_BACKFILL_PREPARATION.md'
       - '.github/workflows/minttick-fno-history-backfill-prep.yml'
@@ -25,6 +27,8 @@ jobs:
           set -euo pipefail
           python3 -m py_compile infra/ec2-paper/fno_history_backfill.py
           python3 -m unittest discover -s scripts/tests -p 'test_fno_history_backfill.py' -v
+          python3 -m py_compile infra/ec2-paper/upstox_fno_backfill_adapters.py
+          python3 -m unittest discover -s scripts/tests -p 'test_upstox_fno_backfill_adapters.py' -v
           python3 - <<'PY'
           from pathlib import Path
           p=Path('infra/ec2-paper/fno_history_backfill.py').read_text()
@@ -33,6 +37,13 @@ jobs:
           assert 'idempotency_key' in p and 'retry_after_seconds' in p
           assert 'PREPARATION_ONLY' in p
           assert 'api.upstox.com' not in p
+          adapter=Path('infra/ec2-paper/upstox_fno_backfill_adapters.py').read_text()
+          assert 'FNO_DATA_RETENTION_NOT_AUTHORIZED' in adapter
+          assert 'MintTick-Upstox-ReadOnly-History/1.0' in adapter
+          assert 'PRIMARY KEY(source, contract_key, interval, candle_ts)' in adapter
+          assert 'ON CONFLICT' in adapter
+          for forbidden_adapter in ('put-parameter','placeOrder','submitOrder','TRADING_MODE=LIVE','crontab','if __name__ =='):
+              assert forbidden_adapter not in adapter, forbidden_adapter
           for forbidden in ('get-parameter','put-parameter', 'placeOrder',
                             'submitOrder', 'TRADING_MODE=LIVE',
                             'Authorization: Bearer', 'print(token)',
