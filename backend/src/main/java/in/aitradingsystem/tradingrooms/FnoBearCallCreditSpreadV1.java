@@ -60,7 +60,7 @@ public final class FnoBearCallCreditSpreadV1 {
                               int maxStrikeDistanceBps) {}
 
     public record Decision(Status status, String reasonCode, String strategyId,
-                           String longPutKey, String shortPutKey, Instant asOf,
+                           String longCallKey, String shortCallKey, Instant asOf,
                            BigDecimal creditPerUnit, BigDecimal breakEvenAtExpiry,
                            BigDecimal maxLossPerSpreadLotInr,
                            BigDecimal maxGainPerSpreadLotInr,
