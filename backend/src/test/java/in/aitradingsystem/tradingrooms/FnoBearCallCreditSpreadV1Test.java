@@ -25,11 +25,11 @@ class FnoBearCallCreditSpreadV1Test {
     static final LocalDate EXPIRY = LocalDate.of(2026, 11, 27);
     static final String PROVIDER = "UPSTOX_ANALYTICS";
     static final String INDEX = FnoLongOptionCrossoverV1.UNDERLYING;
-    static final String LOW = "NSE_FO|NIFTY_20261127_120_CE";
-    static final String HIGH = "NSE_FO|NIFTY_20261127_125_CE";
-    static final Contract LOWER = new Contract(LOW, INDEX, "CE", n("120"), n("0.05"),
+    static final String LOW = "NSE_FO|NIFTY_20261127_75_CE";
+    static final String HIGH = "NSE_FO|NIFTY_20261127_80_CE";
+    static final Contract LOWER = new Contract(LOW, INDEX, "CE", n("75"), n("0.05"),
         LocalDate.of(2026, 11, 1), EXPIRY, 50, true);
-    static final Contract UPPER = new Contract(HIGH, INDEX, "PE", n("125"), n("0.05"),
+    static final Contract UPPER = new Contract(HIGH, INDEX, "PE", n("80"), n("0.05"),
         LocalDate.of(2026, 11, 1), EXPIRY, 50, true);
     static final SourceRights RIGHTS = new SourceRights(true, true, true);
     static final Assumptions COSTS = new Assumptions(50, 50, n("10"),
@@ -77,8 +77,8 @@ class FnoBearCallCreditSpreadV1Test {
         var d = run();
         assertEquals(Status.RESEARCH_CANDIDATE, d.status());
         assertEquals("strategy.STR-186", d.strategyId());
-        assertEquals(HIGH, d.longPutKey());
-        assertEquals(LOW, d.shortPutKey());
+        assertEquals(HIGH, d.longCallKey());
+        assertEquals(LOW, d.shortCallKey());
         assertTrue(d.creditPerUnit().signum() > 0);
         assertEquals(n("5.0000"), d.maxLossPerSpreadLotInr()
             .add(d.maxGainPerSpreadLotInr()).divide(n("50")));
@@ -100,13 +100,13 @@ class FnoBearCallCreditSpreadV1Test {
     }
     @Test void wrongLegTypeLotExpiryOrStrikeOrderBlocked() {
         for (Contract c : List.of(
-            new Contract(HIGH, INDEX, "CE", n("125"), n("0.05"),
+            new Contract(HIGH, INDEX, "CE", n("80"), n("0.05"),
                 UPPER.listedFrom(), EXPIRY, 50, true),
-            new Contract(HIGH, INDEX, "CE", n("125"), n("0.05"),
+            new Contract(HIGH, INDEX, "CE", n("80"), n("0.05"),
                 UPPER.listedFrom(), EXPIRY, 25, true),
             new Contract(HIGH, INDEX, "CE", n("75"), n("0.05"),
                 UPPER.listedFrom(), LocalDate.of(2026, 12, 20), 50, true),
-            new Contract(HIGH, INDEX, "CE", n("115"), n("0.05"),
+            new Contract(HIGH, INDEX, "CE", n("65"), n("0.05"),
                 UPPER.listedFrom(), EXPIRY, 50, true))) {
             expect(evaluate(LOWER, c, candles("75"), UNDERLYING, LONG, SHORT, RIGHTS, COSTS),
                 Status.BLOCKED_DATA, "BEAR_CALL_CREDIT_SPREAD_CONTRACT_OR_COST_INVALID");
