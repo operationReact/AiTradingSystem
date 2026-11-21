@@ -170,7 +170,7 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
             child: Text(_volume ? 'Volume ✓' : 'Volume')),
         TextButton(key: const ValueKey('stock-chart-sma20'), onPressed: () =>
             setState(() => _sma20 = !_sma20),
-            child: Text(_sma20 ? 'SMA20 ✓' : 'SMA20')),
+            child: Text(_sma20 ? 'SMA20 bars ✓' : 'SMA20 bars')),
       ])),
     ]);
   }
@@ -277,7 +277,10 @@ class _CandleViewport extends CustomPainter {
             Offset(left + w + 3, yy - 9), live ? up : text);
       } else {
         // Off-range quotes must not flatten the historical candles.
-        _label(canvas, 'LTP off-scale', const Offset(left + 4, top + 2), text);
+        _label(canvas,
+            '${live ? 'LIVE' : 'LAST'} ₹${quote!.toStringAsFixed(2)} '
+            '${quote! > maxP ? '↑' : '↓'} outside range',
+            const Offset(left + 4, top + 2), text);
       }
     }
     for (final i in <int>{0, count ~/ 2, count - 1}) {
