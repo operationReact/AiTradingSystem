@@ -94,6 +94,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V118__fno_verified_nifty_long_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -192,6 +197,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIronButterflySourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V118__fno_verified_nifty_long_butterfly_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongButterflySourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -356,6 +366,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoIronButterflyResearchServiceTest,FnoVerifiedNiftyIronButterflySourceStoreTest' test
+      - name: Validate STR-198 authentic three CALL keys and TWO center short lots with four-contract costs
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoLongButterflyResearchServiceTest,FnoVerifiedNiftyLongButterflySourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
