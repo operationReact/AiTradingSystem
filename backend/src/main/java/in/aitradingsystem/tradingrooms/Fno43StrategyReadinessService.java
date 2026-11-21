@@ -25,7 +25,7 @@ import org.springframework.stereotype.Service;
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206");
     private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
@@ -67,6 +67,10 @@ public final class Fno43StrategyReadinessService {
     private final FnoDiagonalSpreadResearchService diagonalSpread;
     private final FnoIvRankResearchService ivRank;
     private final FnoVolatilityCrushResearchService volatilityCrush;
+    private final FnoGammaScalpingResearchService gammaScalp;
+    private final FnoDeltaHedgeResearchService deltaHedge;
+    private final FnoBetaHedgeOptionsResearchService betaHedge;
+    private final FnoTailRiskPutHedgeResearchService tailHedge;
     private final List<Definition> definitions;
 
     @Autowired
@@ -87,7 +91,11 @@ public final class Fno43StrategyReadinessService {
             FnoCalendarSpreadResearchService calendarSpread,
             FnoDiagonalSpreadResearchService diagonalSpread,
             FnoIvRankResearchService ivRank,
-            FnoVolatilityCrushResearchService volatilityCrush, ObjectMapper mapper) {
+            FnoVolatilityCrushResearchService volatilityCrush,
+            FnoGammaScalpingResearchService gammaScalp,
+            FnoDeltaHedgeResearchService deltaHedge,
+            FnoBetaHedgeOptionsResearchService betaHedge,
+            FnoTailRiskPutHedgeResearchService tailHedge, ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = Objects.requireNonNull(options);
         this.debitSpreads = Objects.requireNonNull(debitSpreads);
@@ -106,7 +114,55 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = Objects.requireNonNull(diagonalSpread);
         this.ivRank = Objects.requireNonNull(ivRank);
         this.volatilityCrush = Objects.requireNonNull(volatilityCrush);
+        this.gammaScalp = Objects.requireNonNull(gammaScalp);
+        this.deltaHedge = Objects.requireNonNull(deltaHedge);
+        this.betaHedge = Objects.requireNonNull(betaHedge);
+        this.tailHedge = Objects.requireNonNull(tailHedge);
         this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Legacy STR-202 fixture constructor without four new research adapters. */
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options,
+            FnoDebitSpreadResearchService debitSpreads,
+            FnoCreditSpreadResearchService creditSpreads,
+            FnoOwnedEquityOptionsResearchService ownedStockOptions,
+            FnoEquityCollarResearchService collar,
+            FnoRatioSpreadResearchService ratioSpreads,
+            FnoStraddleResearchService straddle,
+            FnoStrangleResearchService strangle,
+            FnoShortStraddleResearchService shortStraddle,
+            FnoShortStrangleResearchService shortStrangle,
+            FnoIronCondorResearchService ironCondor,
+            FnoIronButterflyResearchService ironButterfly,
+            FnoLongButterflyResearchService longButterfly,
+            FnoCalendarSpreadResearchService calendarSpread,
+            FnoDiagonalSpreadResearchService diagonalSpread,
+            FnoIvRankResearchService ivRank,
+            FnoVolatilityCrushResearchService volatilityCrush,ObjectMapper mapper) {
+        this.futures=Objects.requireNonNull(futures);
+        this.options=Objects.requireNonNull(options);
+        this.debitSpreads=Objects.requireNonNull(debitSpreads);
+        this.creditSpreads=Objects.requireNonNull(creditSpreads);
+        this.ownedStockOptions=Objects.requireNonNull(ownedStockOptions);
+        this.collar=Objects.requireNonNull(collar);
+        this.ratioSpreads=Objects.requireNonNull(ratioSpreads);
+        this.straddle=Objects.requireNonNull(straddle);
+        this.strangle=Objects.requireNonNull(strangle);
+        this.shortStraddle=Objects.requireNonNull(shortStraddle);
+        this.shortStrangle=Objects.requireNonNull(shortStrangle);
+        this.ironCondor=Objects.requireNonNull(ironCondor);
+        this.ironButterfly=Objects.requireNonNull(ironButterfly);
+        this.longButterfly=Objects.requireNonNull(longButterfly);
+        this.calendarSpread=Objects.requireNonNull(calendarSpread);
+        this.diagonalSpread=Objects.requireNonNull(diagonalSpread);
+        this.ivRank=Objects.requireNonNull(ivRank);
+        this.volatilityCrush=Objects.requireNonNull(volatilityCrush);
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
+        this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
     /** Compatibility with STR-201 fixture before original event-anchored IV crush. */
@@ -145,6 +201,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=Objects.requireNonNull(diagonalSpread);
         this.ivRank=Objects.requireNonNull(ivRank);
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -183,6 +243,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=Objects.requireNonNull(diagonalSpread);
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -220,6 +284,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -256,6 +324,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -291,6 +363,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -325,6 +401,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -358,6 +438,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -390,6 +474,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -421,6 +509,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -451,6 +543,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -480,6 +576,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -508,6 +608,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread=null;
         this.ivRank=null;
         this.volatilityCrush=null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions=readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -535,6 +639,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = null;
         this.ivRank = null;
         this.volatilityCrush = null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -561,6 +669,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = null;
         this.ivRank = null;
         this.volatilityCrush = null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -584,6 +696,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = null;
         this.ivRank = null;
         this.volatilityCrush = null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -606,6 +722,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = null;
         this.ivRank = null;
         this.volatilityCrush = null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
@@ -628,6 +748,10 @@ public final class Fno43StrategyReadinessService {
         this.diagonalSpread = null;
         this.ivRank = null;
         this.volatilityCrush = null;
+        this.gammaScalp=null;
+        this.deltaHedge=null;
+        this.betaHedge=null;
+        this.tailHedge=null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -905,6 +1029,62 @@ public final class Fno43StrategyReadinessService {
                 }
             }catch(RuntimeException unavailable){
                 observed.remove("strategy.STR-202");
+            }
+        }
+
+
+        if(gammaScalp!=null){
+            try{
+                var result=gammaScalp.evaluate(now);
+                if(result!=null && "strategy.STR-203".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-203");
+            }
+        }
+
+
+        if(deltaHedge!=null){
+            try{
+                var result=deltaHedge.evaluate(now);
+                if(result!=null && "strategy.STR-204".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-204");
+            }
+        }
+
+
+        if(betaHedge!=null){
+            try{
+                var result=betaHedge.evaluate(now);
+                if(result!=null && "strategy.STR-205".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-205");
+            }
+        }
+
+
+        if(tailHedge!=null){
+            try{
+                var result=tailHedge.evaluate(now);
+                if(result!=null && "strategy.STR-206".equals(result.strategyId())
+                        && result.status()!=null && result.reasonCode()!=null){
+                    if(observed.putIfAbsent(result.strategyId(),result)!=null)
+                        observed.remove(result.strategyId());
+                }
+            }catch(RuntimeException unavailable){
+                observed.remove("strategy.STR-206");
             }
         }
 
