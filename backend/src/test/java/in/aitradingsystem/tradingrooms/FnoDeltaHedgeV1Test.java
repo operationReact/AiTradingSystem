@@ -1,6 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static in.aitradingsystem.tradingrooms.FnoDeltaHedgeV1.INDEX;
 import in.aitradingsystem.tradingrooms.FnoDeltaHedgeV1.*;
 import java.math.BigDecimal;
 import java.time.Instant;
