@@ -811,6 +811,101 @@ public class FnoFuturesResearchService {
             now, "NONE", contracts, 0, history, "FUT_MR_SOURCE_BLOCKED");
     }
 
+
+    /**
+     * STR-178: read-only portfolio hedge feasibility using independently
+     * attested beta, existing positions, margin, risk and L1 depth evidence.
+     * Research rights are not order permissions; no hedge is submitted.
+     */
+    private StrategyStatus evaluateIndexFuturesHedge(Instant now,
+            LocalDate today, boolean sessionOpen) {
+        var rights = new FnoFuturesHedgeOverlayV1.SourceRights(
+            researchRightsVerified && hedgeResearchRightsVerified,
+            contractDiscoveryVerified,
+            hedgeResearchRightsVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !hedgeResearchRightsVerified) {
+            return hedgeBlocked(now, rights, "HEDGE_RESEARCH_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (!sessionOpen) {
+            return hedgeBlocked(now, rights, "HEDGE_FUTURES_SESSION_CLOSED", 0, 0);
+        }
+        if (indexHedgeStore == null
+                || !hedgeAccountScope.matches("[A-Za-z0-9_-]{8,80}")) {
+            return hedgeBlocked(now, rights, "HEDGE_ACCOUNT_OR_SOURCE_NOT_CONFIGURED", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return hedgeBlocked(now, rights, "HEDGE_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty() || !NIFTY.equals(pair.get().near().underlyingKey())) {
+            return hedgeBlocked(now, rights, "HEDGE_VERIFIED_INDEX_FUTURE_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(3))
+            ? pair.get().far() : pair.get().near();
+        var observed = liveQuote(chosen.instrumentKey());
+        if (observed.isEmpty()) {
+            return hedgeBlocked(now, rights, "HEDGE_LIVE_INDEX_FUTURE_QUOTE_MISSING", 1, 0);
+        }
+        final Optional<FnoIndexHedgeResearchStore.Proof> receipt;
+        try {
+            receipt = indexHedgeStore.oneCurrentProof(hedgeAccountScope,
+                NIFTY, chosen.instrumentKey(), chosen.expiry(), chosen.lotSize(), now);
+        } catch (RuntimeException failure) {
+            return hedgeBlocked(now, rights, "HEDGE_PORTFOLIO_EVIDENCE_READ_UNAVAILABLE", 1, 1);
+        }
+        if (receipt == null || receipt.isEmpty()) {
+            return hedgeBlocked(now, rights, "HEDGE_BETA_MARGIN_DEPTH_RISK_PROOF_MISSING", 1, 1);
+        }
+        var proof = receipt.get();
+        var quote = observed.get();
+        var attested = proof.market();
+        if (attested == null || proof.portfolio() == null
+                || proof.funding() == null || proof.stress() == null
+                || !"UPSTOX_V3".equals(proof.provider())
+                || !hedgeAccountScope.equals(proof.accountScope())
+                || !NIFTY.equals(proof.indexKey())
+                || !chosen.instrumentKey().equals(proof.futureKey())
+                || !chosen.expiry().equals(proof.expiry())
+                || chosen.lotSize() != proof.lotSize()
+                || !NIFTY.equals(proof.portfolio().indexUnderlyingKey())
+                || !chosen.instrumentKey().equals(attested.instrumentKey())
+                || !"UPSTOX_V3".equals(attested.provider())
+                || attested.bid() == null || attested.ask() == null
+                || attested.bid().compareTo(quote.bid()) != 0
+                || attested.ask().compareTo(quote.ask()) != 0
+                || attested.exchangeAt() == null || quote.exchangeAt() == null
+                || attested.observedAt() == null
+                || attested.observedAt().isAfter(now)
+                || attested.exchangeAt().isAfter(now)
+                || java.time.Duration.between(attested.exchangeAt(), quote.exchangeAt())
+                    .abs().compareTo(java.time.Duration.ofSeconds(10)) > 0) {
+            return hedgeBlocked(now, rights, "HEDGE_QUOTE_ACCOUNT_OR_RISK_PROOF_MISMATCH", 1, 1);
+        }
+        var contract = new FnoFuturesHedgeOverlayV1.Contract(
+            chosen.instrumentKey(), NIFTY, chosen.expiry(), chosen.lotSize(), true);
+        var decision = FnoFuturesHedgeOverlayV1.evaluate(
+            contract, proof.portfolio(), attested, rights,
+            proof.funding(), proof.stress(), now);
+        return status(decision.strategyId(), decision.status().name(),
+            decision.reasonCode(), now, "UPSTOX_V3", 1, 1, 0,
+            "RECONCILED_INDEX_HEDGE_RESEARCH_NO_ORDER");
+    }
+
+    private static StrategyStatus hedgeBlocked(Instant now,
+            FnoFuturesHedgeOverlayV1.SourceRights rights,
+            String reason, int contracts, int quotes) {
+        var blocked = FnoFuturesHedgeOverlayV1.evaluate(
+            null, null, null, rights, null, null, now);
+        return status(blocked.strategyId(), blocked.status().name(),
+            reason, now, "NONE", contracts, quotes, 0,
+            "INDEX_HEDGE_SOURCE_BLOCKED");
+    }
+
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
     List<FnoFuturesRolloverSignalV1.CompletedSession> completedSessions(NearFar pair, LocalDate today) {
         var rows = store.pairRows(pair.near().instrumentKey(), pair.far().instrumentKey(),
