@@ -6731,21 +6731,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "200+ authentic source-original first-known NIFTY completed daily OHLC index candles aligned session-by-session to independent 30-calendar-day constant-tenor ATM source IV history",
+    "Licensed original listed NIFTY option-chain derived 30-day constant-tenor source IV normalized in annualized percentages, with original interpolation, provider, temporal and research rights",
+    "Fresh independently source-verified current NIFTY normalized 30-day ATM IV quote with authentic exchange/first-known times and matching complete historical source",
+    "Historical 30-day IV rank, non-degenerate prior IV min/max, independent recent high/low and observed absolute vol-point pullback or rebound with no forward lookahead"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IV_RANK_MEAN_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankMeanReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankMeanReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-201-iv-rank-mean-reversion-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated licensed original-first-known NIFTY 30-day constant-tenor ATM IV as-of series and a current ATM IV value, genuine option-chain interpolation provenance and official NSE session calendar",
+    "Original source-consistent multi-month completed NIFTY index candles, verifiable data rights, normalization/tenor continuity, cross-regime source quality and historical IV timestamps",
+    "Independent no-lookahead OOS and walk-forward study proving volatility-rank pullback/rebound incremental predictive edge after actual spread, slippage, regime changes and transaction charges",
+    "Separately permitted PAPER option position/risk mapping, lifecycle ledger and Flutter acceptance, and explicit LIVE option broker permissions, margin, hedge safety and kill switches"
+   ],
+   "note": "Non-executable research-only source-proven 30-day constant-tenor ATM IV rank and observed extreme-then-reversal classifier; 200+ genuine aligned prior sessions, annualized IV percent and authentic current IV. No actual option order or profitability claim. DATA_BLOCKED.",
    "id": "strategy.STR-201",
    "kind": "STRATEGY",
    "name": "IV Rank Mean Reversion",
