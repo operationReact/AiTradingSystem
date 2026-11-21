@@ -29,7 +29,7 @@ class FnoBearCallCreditSpreadV1Test {
     static final String HIGH = "NSE_FO|NIFTY_20261127_80_CE";
     static final Contract LOWER = new Contract(LOW, INDEX, "CE", n("75"), n("0.05"),
         LocalDate.of(2026, 11, 1), EXPIRY, 50, true);
-    static final Contract UPPER = new Contract(HIGH, INDEX, "PE", n("80"), n("0.05"),
+    static final Contract UPPER = new Contract(HIGH, INDEX, "CE", n("80"), n("0.05"),
         LocalDate.of(2026, 11, 1), EXPIRY, 50, true);
     static final SourceRights RIGHTS = new SourceRights(true, true, true);
     static final Assumptions COSTS = new Assumptions(50, 50, n("10"),
