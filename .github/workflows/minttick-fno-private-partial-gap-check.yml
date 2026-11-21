@@ -1,0 +1,150 @@
+name: MintTick F&O - owner-private isolated candle gap source recheck
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-partial-gap-check.yml'
+      - 'infra/ec2-paper/fno_private_partial_gaps.py'
+      - 'scripts/tests/test_fno_private_partial_gaps.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-partial-gap-check.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Offline targeted missing-day source tests
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_partial_gaps.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_partial_gaps.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_private_partial_gaps.py').read_text()
+          for item in ('MAX_CALLS=3','ISOLATED_GAP_COHORT_CHANGED',
+                       'PRAGMA query_only=ON','UpstoxExpiredCandles'):
+              assert item in src
+          for forbidden in ('INSERT INTO','DELETE FROM','UPDATE fno_',
+                            'placeOrder','submitOrder','put-parameter'):
+              assert forbidden not in src
+          PY
+
+  check:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Exact owner-private fixed request gate
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-partial-gap-check.json'
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          p=Path('infra/ec2-paper/requests/fno-private-partial-gap-check.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+            "kind":"minttick-owner-private-fno-three-gaps-v1",
+            "operation":"read-only-three-source-candle-requests",
+            "account":"098859530205",
+            "region":"ap-south-1",
+            "instance_id":"i-09c01b470fb39b85a",
+            "owner_permission_expires":"2026-11-28",
+            "max_provider_gets":3,
+            "no_orders":True,
+            "no_redistribution":True,
+            "private_cache_read_only":True,
+            "no_price_export":True
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-three-partial-gaps
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: On-host read-only 3-request source comparison and aggregate-only output
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_private_bulk_ops import _aws,INSTANCE
+          from verify_ssm_release import verify_aws
+          verify_aws()
+          code=Path('infra/ec2-paper/fno_private_partial_gaps.py').read_bytes()
+          assert 3500<len(code)<14000
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}',commit)
+          digest=hashlib.sha256(code).hexdigest()
+          url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/fno_private_partial_gaps.py'
+          remote=("set -eu\numask 077\n"
+                  "tmp=$(mktemp /tmp/minttick-fno-three-gaps.XXXXXX)\n"
+                  "trap 'rm -f \"$tmp\"' EXIT\n"
+                  "curl --fail --silent --show-error --max-time 25 --proto '=https' "
+                  "--tlsv1.2 -o \"$tmp\" '"+url+"'\n"
+                  "printf '%s  %s\\n' '"+digest+"' \"$tmp\" | sha256sum -c - >/dev/null\n"
+                  "PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3 \"$tmp\"\n")
+          req=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                   '--instance-ids',INSTANCE,'--timeout-seconds','180',
+                   '--comment','MintTick owner private three missing day source recheck',
+                   '--parameters',json.dumps({'commands':[remote]}))
+          cid=(req.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_GAPS_COMMAND_INVALID')
+          for i in range(45):
+              time.sleep(5)
+              result=_aws('ssm','get-command-invocation','--command-id',cid,'--instance-id',INSTANCE)
+              status=result.get('Status')
+              if status in ('Success','Failed','TimedOut','Cancelled'):
+                  if status!='Success':
+                      raise SystemExit('FNO_GAPS_HOST_FAILED')
+                  s=result.get('StandardOutputContent') or ''
+                  lines=[x[len('MINTTICK_FNO_PARTIAL_GAPS_V1:'):] for x in s.splitlines()
+                         if x.startswith('MINTTICK_FNO_PARTIAL_GAPS_V1:')]
+                  if len(lines)!=1 or len(lines[0])>500:
+                      raise SystemExit('FNO_GAPS_RECEIPT_INVALID')
+                  j=json.loads(lines[0])
+                  required={'requests','providerErrors','invalidSourceRecords',
+                            'providerReturnedMissingDay','providerAlsoMissingDay',
+                            'missingDayWithMultipleProviderBars','mayGapChecked','octGapChecked'}
+                  if (set(j)!=required
+                      or any(type(x) is not int or not 0<=x<=3 for x in j.values())
+                      or j['requests']>3):
+                      raise SystemExit('FNO_GAPS_RECEIPT_INVALID')
+                  print('FNO PRIVATE GAPS: '+'; '.join(
+                        k+'='+str(j[k]) for k in sorted(required))+
+                        '; verifiedNSEHolidayCalendar=false; independentEOD=false',flush=True)
+                  if j['providerErrors'] or j['invalidSourceRecords'] or j['requests']!=3:
+                      raise SystemExit('FNO_GAPS_INCOMPLETE_SOURCE_CHECK')
+                  break
+              if status not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_GAPS_UNEXPECTED_STATUS')
+          else:
+              raise SystemExit('FNO_GAPS_SSM_TIMEOUT')
+          PY
+
+# Fixed owner-only 3 GET, no raw values exported, no archival rights.
