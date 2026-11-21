@@ -63,6 +63,31 @@ class CompareTests(unittest.TestCase):
         self.assertEqual(p.status_http(503, b'Secret payload'), "HTTP_5XX")
         self.assertEqual(p.status_http(418, b'Bearer private'), "HTTP_OTHER")
 
+    def test_user_agent_is_explicit_for_both_endpoints(self):
+        headers = []
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, size): return b'{"status":"success","data":[]}'
+        class Opener:
+            def open(self, request, timeout):
+                headers.append((request.get_header("User-agent"), request.get_header("Authorization")))
+                return Response()
+        with patch.object(p.urllib.request, "build_opener", return_value=Opener()):
+            self.assertEqual(p.get_endpoint("https://api.upstox.com/v2/expired-instruments/expiries?instrument_key=NSE_INDEX%7CNifty%2050", "fake-test-token"), ("OK_DATA", {"status":"success","data":[]}))
+            self.assertEqual(p.get_endpoint("https://api.upstox.com/v3/historical-candle/NSE_EQ%7CINE848E01016/days/1/2026-11-20/2026-11-13", "fake-test-token")[0], "OK_DATA")
+        self.assertEqual(len(headers), 2)
+        self.assertTrue(all(ua == p.UPSTOX_USER_AGENT and bearer == "Bearer fake-test-token" for ua, bearer in headers))
+        self.assertNotIn("Python-urllib", p.UPSTOX_USER_AGENT)
+
+    def test_safe_waf_and_token_classification(self):
+        self.assertEqual(p.status_http(403, b"Error 1010: browser_signature_banned"), "CLOUDFLARE_1010")
+        self.assertEqual(p.status_http(401, b'{"error_code":"UDAPI100050"}'), "TOKEN_INVALID")
+        self.assertEqual(p.status_http(403, b'{"error_code":"UDAPI1149"}'), "PLUS_REQUIRED")
+        self.assertEqual(p.parse_line(p.safe_line("CLOUDFLARE_1010",0,"HTTP_403",0)),
+                         ("CLOUDFLARE_1010",0,"HTTP_403",0))
+
     def test_normal_candles_validate_values_and_dates(self):
         self.assertEqual(p.count_equity(normal(), date(2026, 11, 13),
                                         date(2026, 11, 20)), ("OK_DATA", 2))
