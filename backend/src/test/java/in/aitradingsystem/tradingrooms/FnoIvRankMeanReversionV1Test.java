@@ -16,7 +16,7 @@ class FnoIvRankMeanReversionV1Test {
     private static final Instant TICK=NOW.minusSeconds(40);
     private static final String SOURCE="UPSTOX_ANALYTICS";
     private static final String INDEX=FnoLongOptionCrossoverV1.UNDERLYING;
-    private static final String METHOD=SOURCE_IV_METHOD;
+    private static final String METHOD=FnoIvRankMeanReversionV1.SOURCE_IV_METHOD;
     private static final Rights RIGHTS=new Rights(true,true,true,true);
     private static final Assumptions A=new Assumptions(200,450,180,300,
         bd("8"),80,20,5,bd("2"));
