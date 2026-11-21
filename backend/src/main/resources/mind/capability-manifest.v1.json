@@ -5811,21 +5811,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified NIFTY 50 closed daily 35+ session source candles with original first-known timestamps and bullish EMA8/EMA21 crossover",
+    "Rights-verified matching source-listed NSE_FO CE strike, expiry, lot, price tick and canonical NIFTY underlying",
+    "Same-provider time-synchronized NSE underlying and CE bid/ask, option depth and OI at valid exchange session timestamps",
+    "Explicit after-tax INR-per-lot costs, premium-at-risk budget and hypothetical at-expiry payoff scenario"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_CALL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongCallV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongCallV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-181-long-call.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed rights-verified real NSE NIFTY and CE option chain input with contract identities, original observation timestamps and calendar validations",
+    "Actual broker Indian fees, settlement, bid/ask depth and fills, source-proven price/option IV and exercise regime",
+    "Timestamp-correct out-of-sample historical replay and walk-forward calibration across market regimes",
+    "Separate authenticated PAPER order/ledger and Flutter acceptance, LIVE permissions and audit approvals"
+   ],
+   "note": "STR-181 deterministic NIFTY bullish completed EMA8/EMA21 crossover plus source-verified CE contract/quote/depth/expiry and hypothetical premium-risk scenario; never an order, profit forecast or options feed activation. DATA_BLOCKED pending source and PAPER evidence.",
    "id": "strategy.STR-181",
    "kind": "STRATEGY",
    "name": "Long Call",
@@ -5837,21 +5857,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ genuine completed NIFTY 50 daily closes, source first-known timestamp and a new EMA8-below-EMA21 bearish crossover",
+    "Verified listed NSE_FO NIFTY PE with strike, lot, expiry and tick provenance",
+    "Same-provider synchronized fresh underlying and PE ask/bid, verified depth/OI and research-use rights",
+    "Explicit downside-at-expiry hypothetical scenario, bid/ask/slippage, Indian transaction fees and premium-at-risk cap"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_PUT_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongPutV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongPutV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-182-long-put.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-authorized NSE option-chain/underlying adapters and original timestamp provenance",
+    "Verified real exchange expiry/lot contract, Indian option premium fees/taxes and settlement behavior",
+    "Out-of-sample timestamp-correct historical walk-forward replay and actual fill simulation",
+    "Separately approved PAPER lifecycle and Flutter acceptance, LIVE risk/permission audits"
+   ],
+   "note": "Deterministic bearish EMA crossover + PE source, liquidity, modeled maximum premium loss and hypothetical at-expiry payoff. Does not activate any option feed or trading; DATA_BLOCKED until independently verified.",
    "id": "strategy.STR-182",
    "kind": "STRATEGY",
    "name": "Long Put",
@@ -5863,21 +5903,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Source-verified completed NIFTY 50 daily bars and a new bullish EMA8/EMA21 crossover",
+    "Two source-verified NSE_FO NIFTY CE contracts: buy lower strike, sell higher, identical expiry/lot",
+    "Fresh synchronized 3-leg underlying/call bid-ask exchange timestamps, real OI/depth and independent research rights",
+    "Premium debit, costs and taxes, risk-capital allocation, bounded expiry payoff and after-cost reward/risk hurdle"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BULL_CALL_DEBIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-183-bull-call-debit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed synchronized canonical NSE index + two real NIFTY CE option quotes with original first-observed timestamps, instrument/lot/expiry source proof",
+    "Actual India options taxes, physical/expiry settlement/margin and depth, slippage, non-atomic two-leg fill evidence",
+    "Historical as-of replay and independent out-of-sample walk-forward with real market regimes",
+    "Separately approved PAPER lifecycle and Flutter customer acceptance, distinct LIVE F&O broker/account permission"
+   ],
+   "note": "Two-leg lower-strike long CE and upper-strike short CE: deterministic research only after new bullish EMA signal and three-leg rights/as-of/quotes/OI/cost checks. All outputs non-executable. DATA_BLOCKED until market data, OOS and PAPER acceptance.",
    "id": "strategy.STR-183",
    "kind": "STRATEGY",
    "name": "Bull Call Debit Spread",
