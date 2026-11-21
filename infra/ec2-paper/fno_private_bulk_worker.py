@@ -343,6 +343,33 @@ def init_private():
     PERMIT.write_text(json.dumps(private_scope(),sort_keys=True))
     os.chmod(PERMIT,0o600)
 
+def expire_private_cache():
+    """Daily cleanup, including after owner approval expires; no token required."""
+    if BASE_DIR.is_symlink() or not BASE_DIR.is_dir():
+        return "NO_PRIVATE_CACHE"
+    if not DATA_DB.exists() or DATA_DB.is_symlink():
+        return "NO_PRIVATE_CACHE"
+    os.umask(0o077)
+    db=sqlite3.connect(str(DATA_DB),timeout=15,isolation_level=None)
+    try:
+        if today()>CUTOFF:
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("DELETE FROM fno_historical_candles")
+            db.execute("DELETE FROM fno_history_receipts")
+            db.execute("COMMIT")
+            return "OWNER_SCOPE_EXPIRED_CACHE_CLEARED"
+        old=time.time()-DAILY_CACHE_TTL_SECONDS
+        db.execute("BEGIN IMMEDIATE")
+        expired=[x[0] for x in db.execute(
+            "SELECT batch_hash FROM fno_history_receipts WHERE committed_at<?",(old,))]
+        for h in expired:
+            db.execute("DELETE FROM fno_historical_candles WHERE batch_hash=?",(h,))
+            db.execute("DELETE FROM fno_history_receipts WHERE batch_hash=?",(h,))
+        db.execute("COMMIT")
+        return "PRIVATE_CACHE_TTL_ENFORCED"
+    finally:
+        db.close()
+
 def summary():
     if not JOURNAL.is_file() or not DATA_DB.is_file():
         return "NOT_INITIALIZED"
@@ -367,9 +394,14 @@ if __name__=="__main__":
             print("FNO_BULK_SMOKE:"+value["outcome"]+
                   f";complete={value['completed']};total={value['total']};rows={value['rows']};calls={value['requests']}")
         elif mode=="run":
-            val=run(max_requests=MAX_REQUESTS_PER_RUN)
-            print("FNO_BULK_WORKER:"+val["outcome"]+
-                f";complete={val['completed']};total={val['total']};rows={val['rows']}")
+            if today()>CUTOFF:
+                print("FNO_BULK_WORKER:"+expire_private_cache())
+            else:
+                val=run(max_requests=MAX_REQUESTS_PER_RUN)
+                print("FNO_BULK_WORKER:"+val["outcome"]+
+                    f";complete={val['completed']};total={val['total']};rows={val['rows']}")
+        elif mode=="purge":
+            print("FNO_BULK_PURGE:"+expire_private_cache())
         elif mode=="status":
             print("FNO_BULK_STATUS:"+summary())
         else:
