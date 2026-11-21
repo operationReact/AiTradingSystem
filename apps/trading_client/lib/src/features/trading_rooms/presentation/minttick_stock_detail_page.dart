@@ -11,6 +11,7 @@ import 'minttick_interactive_candle_chart.dart';
 import 'minttick_stock_detail_mock_sections.dart';
 
 const _quotePoll = Duration(seconds: 2);
+const _verifiedCandlePoll = Duration(seconds: 30);
 
 /// Chart timeframes map to backend candle intervals. [lookbackDays] bounds the stored window.
 const _timeframes = [
@@ -48,7 +49,10 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
   List<CustomerCandle>? _candles;
   bool _candlesLoading = false;
   bool _candlesFailed = false;
+  bool _candleRefreshFailed = false;
+  bool _candlePageTruncated = false;
   int _candleRequest = 0;
+  Timer? _candleTimer;
 
   CustomerLiveQuote? _quote;
   bool _quoteFailed = false;
@@ -79,25 +83,43 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       _pollQuote();
       _quoteTimer = Timer.periodic(_quotePoll, (_) => _pollQuote());
     }
+    if (_hasCandleRepo && _hasSnapshotRepo) {
+      _candleTimer = Timer.periodic(_verifiedCandlePoll, (_) {
+        final quote = _quote;
+        if (_timeframe < 2 && quote != null && _isFreshLive(quote) &&
+            !_candlesLoading) {
+          // Only refresh actual provider-stored OHLCV from the server. Never
+          // build candles from the LTP snapshot or a clock tick.
+          _loadCandles(refresh: true);
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
     _quoteTimer?.cancel();
+    _candleTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _loadCandles() async {
+  Future<void> _loadCandles({bool refresh = false}) async {
     final CustomerCandleRepository? repo = widget.repository is CustomerCandleRepository
         ? widget.repository as CustomerCandleRepository
         : null;
-    if (repo == null) return;
+    if (repo == null || (refresh && (_candlesLoading || _candles == null))) return;
     final request = ++_candleRequest;
     final timeframe = _timeframes[_timeframe];
     final now = DateTime.now();
+    final previousSelection = _selectedCandle != null && _candles != null &&
+            _selectedCandle! >= 0 && _selectedCandle! < _candles!.length
+        ? _candles![_selectedCandle!].candleTime.toUtc() : null;
     setState(() {
       _candlesLoading = true;
-      _candlesFailed = false;
+      if (!refresh) {
+        _candlesFailed = false;
+        _candleRefreshFailed = false;
+      }
     });
     try {
       final page = await repo.candles(
@@ -111,17 +133,31 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       if (!mounted || request != _candleRequest) return;
       final sorted = [...page.items]
         ..sort((a, b) => a.candleTime.compareTo(b.candleTime));
+      // On a periodic refresh keep the same tapped exchange bar, not the old
+      // numeric index which can shift when the server rolls its bounded page.
+      final selectedIndex = refresh && previousSelection != null
+          ? sorted.indexWhere((c) => c.candleTime.toUtc() == previousSelection)
+          : -1;
       setState(() {
         _candles = sorted;
-        _selectedCandle = null;
+        _selectedCandle = selectedIndex >= 0 ? selectedIndex : null;
+        _candlePageTruncated = page.hasNext;
         _candlesLoading = false;
+        _candlesFailed = false;
+        _candleRefreshFailed = false;
       });
     } catch (_) {
       if (!mounted || request != _candleRequest) return;
       setState(() {
-        _candles = null;
+        // A temporary provider or account failure never erases valid bars
+        // previously displayed; mark the refresh as failed instead.
+        if (!refresh) _candles = null;
         _candlesLoading = false;
-        _candlesFailed = true;
+        if (refresh) {
+          _candleRefreshFailed = true;
+        } else {
+          _candlesFailed = true;
+        }
       });
     }
   }
@@ -471,6 +507,16 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       );
     }
     final last = candles == null || candles.isEmpty ? null : candles.last;
+    final tradeAt = _quote?.exchangeAt;
+    final alignedTrade = tradeAt != null && last != null &&
+        _istDate(tradeAt) == _istDate(last.candleTime);
+    final intervalLag = last != null && tradeAt != null && _timeframe < 2 &&
+        tradeAt.toUtc().difference(last.candleTime.toUtc()) >
+            (_timeframe == 0 ? const Duration(minutes: 15)
+                : const Duration(hours: 3));
+    final chartBehindTrade = last != null && tradeAt != null &&
+        (_timeframe == 2 ? !alignedTrade : intervalLag);
+
     final selected = candles != null && candles.isNotEmpty
         ? candles[math.max(0, math.min(candles.length - 1, _selectedCandle ?? candles.length - 1))]
         : null;
@@ -503,6 +549,37 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           Text('Volume ${selected.volume} · Tap a candle to inspect',
               key: const ValueKey('stock-detail-chart-volume'),
               style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+        if (last != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Last stored bar · ${_istDate(last.candleTime)} '
+            '${_clock(last.candleTime.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
+            key: const ValueKey('stock-chart-last-bar-time'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          if (tradeAt != null) Text(
+            'Latest exchange trade · ${_istDate(tradeAt)} '
+            '${_clock(tradeAt.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
+            key: const ValueKey('stock-chart-last-trade-time'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+          ),
+          if (chartBehindTrade) Text(
+            'Historical chart is behind the latest exchange trade. '
+            'No missing candles have been invented.',
+            key: const ValueKey('stock-chart-coverage-warning'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
+          ),
+          if (_candlePageTruncated) Text(
+            'History window is truncated by the source page limit.',
+            key: const ValueKey('stock-chart-truncated-warning'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
+          ),
+          if (_candleRefreshFailed) Text(
+            'Candle refresh failed · displaying previously verified history',
+            key: const ValueKey('stock-chart-refresh-warning'),
+            style: theme.textTheme.labelSmall?.copyWith(color: scheme.error),
+          ),
         ],
         const SizedBox(height: 8),
         Row(children: [
