@@ -1,5 +1,9 @@
 package in.aitradingsystem.marketdata;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -99,10 +103,27 @@ SELECT s.provider_code,s.original_source_payload::text AS payload_json,
         if(p.json()==null||p.json().isBlank()||p.json().length()>1000000
             ||p.originalFirstKnownAt()==null||p.originalFirstKnownAt().isAfter(now)
             ||p.declaredSha256()==null||!p.declaredSha256().matches("[a-f0-9]{64}")
+            ||!verifiedJsonbSha256(p.json(),p.declaredSha256())
             ||!("UPSTOX_ANALYTICS".equals(p.provider())||
                  "ANGEL_ONE_SMARTAPI".equals(p.provider())))
             return Optional.empty();
         return Optional.of(p);
+    }
+    /** Digest MUST be of PostgreSQL JSONB canonical ::text payload returned
+     * by the query. The original importer stores exactly that digest.
+     * No externally supplied digest is accepted without recomputation. */
+    static boolean verifiedJsonbSha256(String original,String declared){
+        if(original==null||declared==null||!declared.matches("[a-f0-9]{64}"))
+            return false;
+        try{
+            var bytes=MessageDigest.getInstance("SHA-256")
+                .digest(original.getBytes(StandardCharsets.UTF_8));
+            return MessageDigest.isEqual(
+                HexFormat.of().formatHex(bytes).getBytes(StandardCharsets.US_ASCII),
+                declared.getBytes(StandardCharsets.US_ASCII));
+        }catch(NoSuchAlgorithmException unavailable){
+            return false;
+        }
     }
     public int purgeExpired(LocalDate day){
         return jdbc.update("DELETE FROM fno_verified_multistrategy_research_source WHERE retain_until < ?",
