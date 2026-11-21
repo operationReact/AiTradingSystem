@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Admin/operator-only observability; no writes, orders or credentials. */
 @RestController
 @RequestMapping("/api/admin/research/fno-43")
-public final class AdminFno43SourceEvidenceController {
+public class AdminFno43SourceEvidenceController {
     private final Fno43RuntimeSourceAuditService audit;
     private final Clock clock;
 
