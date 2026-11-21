@@ -31,20 +31,20 @@ public final class FnoOwnedEquityOptionsResearchService {
     @Autowired
     public FnoOwnedEquityOptionsResearchService(
             FnoVerifiedEquityOwnedOptionStore source, MarketSessionCalendar calendar,
-            @Value("\${minttick.fno-research.owned-equity-close-rights-verified:false}")
+            @Value("${minttick.fno-research.owned-equity-close-rights-verified:false}")
                 boolean historyRights,
-            @Value("\${minttick.fno-research.settled-holdings-research-rights-verified:false}")
+            @Value("${minttick.fno-research.settled-holdings-research-rights-verified:false}")
                 boolean holdingsRights,
-            @Value("\${minttick.fno-research.stock-option-chain-research-rights-verified:false}")
+            @Value("${minttick.fno-research.stock-option-chain-research-rights-verified:false}")
                 boolean chainRights,
-            @Value("\${minttick.fno-research.stock-option-master-research-rights-verified:false}")
+            @Value("${minttick.fno-research.stock-option-master-research-rights-verified:false}")
                 boolean masterRights,
-            @Value("\${minttick.fno-research.owned-stock-option-fee-rights-verified:false}")
+            @Value("${minttick.fno-research.owned-stock-option-fee-rights-verified:false}")
                 boolean feeRights,
-            @Value("\${minttick.fno-research.owned-stock-account-scope:}") String accountScope,
-            @Value("\${minttick.fno-research.owned-stock-equity-key:}") String stockKey,
-            @Value("\${minttick.fno-research.owned-stock-pe-key:}") String putKey,
-            @Value("\${minttick.fno-research.owned-stock-ce-key:}") String callKey) {
+            @Value("${minttick.fno-research.owned-stock-account-scope:}") String accountScope,
+            @Value("${minttick.fno-research.owned-stock-equity-key:}") String stockKey,
+            @Value("${minttick.fno-research.owned-stock-pe-key:}") String putKey,
+            @Value("${minttick.fno-research.owned-stock-ce-key:}") String callKey) {
         this.source = source;
         this.calendar = calendar;
         this.historyRights = historyRights;
