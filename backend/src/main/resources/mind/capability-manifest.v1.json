@@ -6547,21 +6547,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine first-known completed NIFTY index bars, licensed index research permissions and canonical instrument expiry/lot",
+    "Four source-listed options: buy lower PE, sell SAME CENTRAL STRIKE PE and CE, buy higher CE, all one expiry and lot",
+    "Five synchronized genuine exchange-time spot/option quotes with true buy ask/sell bid depth, OI, independent annualized source IV per each option",
+    "After-fee full credit, worst-width defined-wing theoretical expiry loss and modeled IV move versus protective wing research hurdles"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IRON_BUTTERFLY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronButterflyV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronButterflyV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-197-iron-butterfly-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine real NIFTY index and four NSE_FO options with original first-known as-of quotes, separately traceable annualized option IV, official NSE expiry/lot and exchange calendar",
+    "Actual Indian statutory charges and broker defined-wing multi-leg execution, partial-fill and margin safeguards; expiry payoff is not dynamic exit guarantee",
+    "Out-of-sample walk-forward tests on genuine original-as-of market history with IV, liquidity, costs and gap stress",
+    "Independent PAPER order ledger/UI acceptance and LIVE broker rights, risk exposure monitoring, signed-off kill switches"
+   ],
+   "note": "Research-only four-leg iron butterfly sells same-strike ATM CE+PE, buys lower PE and higher CE. Theoretical expiry loss bounded with all genuine wings intact using WIDER asymmetric wing; real broker risk unproven. DATA_BLOCKED and nonexecutable.",
    "id": "strategy.STR-197",
    "kind": "STRATEGY",
    "name": "Iron Butterfly",
