@@ -586,3 +586,48 @@ trading broker/ledger lifecycle E2E: 0/43. LIVE broker trading E2E: 0/43.**
 All 43 strategy catalog statuses remain `DATA_BLOCKED`. Rights default
 false and V124 inserts ZERO invented market/source rows. This milestone
 is NOT production readiness, a deployed backend or a downloadable APK.
+
+## 22 November 2026 — Real runtime source-evidence vs. paper/live trading proof
+
+Research-code integration reaching **43/43** is one distinct metric, not
+a claim of exchange-grade data ingestion, end-to-end broker simulation or
+live broker execution. The read-only operator endpoint
+
+`GET /api/admin/research/fno-43/source-evidence`
+
+provides a fresh, no-store, ADMIN/OPERATOR-only diagnostic:
+
+- Exactly 43 manifest strategy slots with their actual runtime evaluator
+  status, error reason and observed quote/history counts.
+- STR-203..212: independently queried, provider-bound, first-known and
+  original SHA-verified **source-envelope custody** status, using the
+  existing two receipt-attested source stores. Missing, denied or
+  inaccessible source evidence returns fail-closed reason codes without
+  exposing credentials or the original JSON payload.
+- STR-170..202: explicitly marked
+  `NOT_AUDITED_BY_THIS_SOURCE_FAMILY` because they use **other** source
+  tables; they must never be reported missing from this custody table.
+- `independentMarketE2EValidated=0`,
+  `paperLedgerE2EValidated=0`, and
+  `liveBrokerE2EValidated=0` until separately accepted real data,
+  transaction ledger/fills and live broker proof are implemented.
+  No source receipt, original envelope, unit fixture, signal or CI pass
+  promotes any of these execution metrics.
+
+The service performs SELECT-only queries, does not set rights flags,
+connect to a broker for trading, place paper or live orders, mutate AWS
+resources or create an APK. Errors redact private provider details.
+The count of valid, current source envelopes is not a strategy success
+rate, exchange fill proof, or guarantee of source licensing in all
+required subdomains.
+
+### Unverified dependencies requiring external production evidence
+
+Independently confirm real 200-session NIFTY and normalized ATM 30D
+IV histories where required, official NSE option/future keys and
+expiry/lot/tick metadata, original authentic BID/ASK/depth/Greeks,
+broker-confirmed existing positions and cash holdings, source receipts
+specific to held-equity/Greek/futures/event domains, and real E2E
+session calendars. Then separately verify an actual paper-order lifecycle
+(ledger, cost model, positions, fills, settlement and reproducible
+equity curves) before considering supervised live execution.

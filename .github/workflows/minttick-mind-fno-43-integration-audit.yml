@@ -12,6 +12,9 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43SourceEvidenceController.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
@@ -161,6 +164,9 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43RuntimeSourceAuditServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43SourceEvidenceController.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
@@ -500,6 +506,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedStrategy207212SourceStoreTest,FnoPutSpreadCollarResearchServiceTest,FnoDefinedRiskSpreadRollResearchServiceTest,FnoExpiryRiskNeutralizationResearchServiceTest,FnoPortfolioProtectiveOverlayResearchServiceTest,FnoGreeksExposureRebalanceResearchServiceTest,FnoSkewBasedHedgeResearchServiceTest' test
+      - name: Confirm real-market source evidence does not promote research fixtures to paper/live readiness
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=Fno43RuntimeSourceAuditServiceTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
