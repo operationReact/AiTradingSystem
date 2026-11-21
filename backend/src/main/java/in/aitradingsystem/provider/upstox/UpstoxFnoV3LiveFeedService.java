@@ -380,7 +380,7 @@ public class UpstoxFnoV3LiveFeedService {
                 state = "SUBSCRIBING";
             }
             ws.sendBinary(ByteBuffer.wrap(UpstoxFnoV3FeedCodec.subscription(
-                    "sub", "full", List.copyOf(subscribed))), true)
+                    "sub", "full", List.copyOf(subscribed), spotSubscribed)), true)
                     .whenComplete((ignored, err) -> {
                         if (err != null) {
                             scheduleReconnect(attempt);

@@ -74,6 +74,30 @@ class UpstoxFnoV3FeedCodecTest {
     }
 
     @Test
+    void explicitVerifiedSpotLegIsEncodedOnlyWhenPartOfExactFoPairPlan() {
+        var plan = List.of(KEY, SPOT_KEY);
+        var approved = java.util.Set.of(SPOT_KEY);
+        var wire = new String(
+                UpstoxFnoV3FeedCodec.subscription("sub", "full", plan, approved),
+                StandardCharsets.UTF_8);
+        assertThat(wire).contains("NSE_FO|61001", "NSE_EQ|INE002A01018");
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", plan)).hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", plan, java.util.Set.of()))
+                .hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", List.of(KEY), approved))
+                .hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", List.of(KEY, "NSE_EQ|INFY"), java.util.Set.of("NSE_EQ|INFY")))
+                .hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+        assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
+                "sub", "full", List.of(KEY, SPOT_KEY, SPOT_KEY), approved))
+                .hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
+    }
+
+    @Test
     void invalidFramesAndNonFiniteGreeksFailClosed() {
         assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.decode(new byte[0]))
                 .hasMessage("UPSTOX_FNO_INVALID_BINARY_FEED");
