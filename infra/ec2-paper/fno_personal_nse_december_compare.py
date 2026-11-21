@@ -192,7 +192,7 @@ def compare(by_day,mapping,nse):
             if eod[4]>0 and values[4]==eod[4]*lot:
                 counts[prefix+"NormalizedVolumeMatch"]+=1
             if prefix=="midnight":
-                for i,field in enumerate(("Open","High","Low","Close")):
+                for i,field in enumerate(("Open","High","Low")):
                     if values[i]==eod[i]: counts["midnight"+field+"Match"]+=1
             if values[5]==eod[5]:
                 counts[prefix+"OIMatch"]+=1
