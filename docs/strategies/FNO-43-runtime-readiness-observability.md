@@ -110,3 +110,23 @@ provenance. V105 is empty by default and three source-use rights gates remain
 disabled unless separately verified. **11/43 direct evaluator paths; 32 lack
 direct adapters; 2 signal-only; 0/43 independently verified real data E2E,
 0/43 PAPER, 0/43 LIVE.** No trades or AWS changes.
+
+
+## 21 November 2026: STR-181/182 options E2E-2 integration
+
+The two old EMA8/EMA21 **signal routes** now have *additional, separate*
+direct invocations of their real evaluator classes in
+`FnoOptionsResearchService`. Source-level evidence inspection includes
+both the original futures service and the new options service; simply
+finding a signal string no longer counts as distinct evaluator evidence.
+
+V106 records independent original first-available 35+ completed NIFTY
+daily closes and exact source-listed NIFTY CE/PE option quotes, depth/OI,
+explicit Indian fees and source-reviewed budget. All tables start EMPTY
+and source-use flags default DENIED. No data licensing, broker funds,
+profitability, broker paper fills or live orders are inferred.
+
+**Total direct research evaluator paths: 13/43; missing direct adapters:
+30/43; signal-only without evaluator: 0/43; independently verified real
+market history E2E: 0/43; PAPER: 0/43; LIVE: 0/43.** The earlier
+11/43 statements above are historical snapshots, not the current tally.
