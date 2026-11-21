@@ -6317,21 +6317,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ verified completed source-first-known genuine NIFTY index daily candles and independently licensed index market data",
+    "True source-listed matched CE and PE same NIFTY strike/expiry/lot with authentic quoted ask and ask-depth, actual OI, and instrument metadata",
+    "Licensed same-provider NIFTY spot, CE and PE synchronized as-of quotes and independently source-derived annualized IV percentages for both options",
+    "Explicit two-leg modeled slippage/India statutory fees, full premium-at-risk research budget and transparent IV-one-sigma-versus-cost heuristic"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_STRADDLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongStraddleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongStraddleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-192-long-straddle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Genuine licensed NIFTY index and matching CE+PE source quotes, independently traceable annualized option IV, original quote-exchange/first-seen timestamps and official expiry/lot master",
+    "Actual Indian fees, broker contract permissions and two-leg fill/settlement validation with verified market holidays",
+    "Out-of-sample/walk-forward historic volatility, expiry breakeven and realistic spread/slippage/transaction costs evidence",
+    "User-accepted PAPER ledger/UI lifecycle and separately authorized LIVE broker orders, audited risk/kill switches"
+   ],
+   "note": "Research-only long same-strike CE+PE straddle with both option IV validated as percent, modeled full-debit max expiry loss and breakevens, one-sigma IV cost screening. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-192",
    "kind": "STRATEGY",
    "name": "Long Straddle",
