@@ -153,6 +153,8 @@ public class FnoFuturesResearchService {
     public List<StrategyStatus> evaluateAll(Instant now) {
         LocalDate today = now.atZone(IST).toLocalDate();
         boolean sessionOpen = calendar.isInsideFnoSession(now);
+        // One rights-gated V102 read per evaluation cycle for STR-176 and STR-177.
+        var completedWindow = new CompletedOhlcvReadOnce();
         return List.of(
             evaluateBasisCarry(now, today, sessionOpen),
             evaluateCalendarSpread(now, today, sessionOpen),
@@ -160,8 +162,8 @@ public class FnoFuturesResearchService {
             evaluateOpenInterestTrend(now, today),
             evaluatePriceOiDivergence(now, today),
             evaluateCashFuturesFeasibility(now, today, sessionOpen),
-            evaluateFuturesMomentum(now, today),
-            evaluateFuturesMeanReversion(now, today));
+            evaluateFuturesMomentum(now, today, completedWindow),
+            evaluateFuturesMeanReversion(now, today, completedWindow));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -537,8 +539,45 @@ public class FnoFuturesResearchService {
     }
 
 
+
+    /** Per-request fan-out: avoid redundant SQL and inconsistent as-of snapshots. */
+    private static final class CompletedOhlcvReadOnce {
+        private boolean attempted;
+        private boolean failed;
+        private String key;
+        private LocalDate from;
+        private LocalDate to;
+        private Instant asOf;
+        private List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
+
+        List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> read(
+                FnoVerifiedCompletedOhlcvOiStore source, String instrumentKey,
+                LocalDate start, LocalDate end, Instant instant) {
+            if (!attempted) {
+                attempted = true;
+                key = instrumentKey;
+                from = start;
+                to = end;
+                asOf = instant;
+                try {
+                    rows = source.readExactContract(instrumentKey, start, end, instant);
+                } catch (RuntimeException unavailable) {
+                    failed = true;
+                    throw unavailable;
+                }
+            }
+            if (!key.equals(instrumentKey) || !from.equals(start) || !to.equals(end)
+                    || !asOf.equals(instant) || failed) {
+                // Never reuse a result across a different instrument or evaluation.
+                throw new IllegalStateException("FNO_COMPLETED_SOURCE_WINDOW_UNAVAILABLE");
+            }
+            return rows;
+        }
+    }
+
     /** STR-176: verified original-time futures OHLCV and separately finalized OI. */
-    private StrategyStatus evaluateFuturesMomentum(Instant now, LocalDate today) {
+    private StrategyStatus evaluateFuturesMomentum(Instant now, LocalDate today,
+            CompletedOhlcvReadOnce completedWindow) {
         var rights = new FnoFuturesMomentumV1.SourceRights(
             researchRightsVerified && completedOhlcvResearchRightsVerified,
             researchRightsVerified && completedOhlcvResearchRightsVerified,
@@ -565,7 +604,7 @@ public class FnoFuturesResearchService {
             ? pair.get().far() : pair.get().near();
         final List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
         try {
-            rows = completedOhlcvOiStore.readExactContract(
+            rows = completedWindow.read(completedOhlcvOiStore,
                 chosen.instrumentKey(), today.minusDays(OI_LOOKBACK_DAYS), today, now);
         } catch (RuntimeException unavailable) {
             return momentumBlocked(now, rights, "FUT_MOM_SOURCE_READ_UNAVAILABLE", 1, 0);
@@ -639,7 +678,8 @@ public class FnoFuturesResearchService {
 
 
     /** STR-177: ten source-finalized OHLCV/OI sessions; never paper or live. */
-    private StrategyStatus evaluateFuturesMeanReversion(Instant now, LocalDate today) {
+    private StrategyStatus evaluateFuturesMeanReversion(Instant now, LocalDate today,
+            CompletedOhlcvReadOnce completedWindow) {
         var rights = new FnoFuturesMeanReversionV1.SourceRights(
             researchRightsVerified && completedOhlcvResearchRightsVerified,
             researchRightsVerified && completedOhlcvResearchRightsVerified,
@@ -669,7 +709,7 @@ public class FnoFuturesResearchService {
             ? pair.get().far() : pair.get().near();
         final List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
         try {
-            rows = completedOhlcvOiStore.readExactContract(
+            rows = completedWindow.read(completedOhlcvOiStore,
                 chosen.instrumentKey(), today.minusDays(OI_LOOKBACK_DAYS), today, now);
         } catch (RuntimeException unavailable) {
             return meanReversionBlocked(now, rights, "FUT_MR_SOURCE_READ_UNAVAILABLE", 1, 0);
