@@ -416,3 +416,28 @@ real-market historical E2E 0/43, PAPER E2E 0/43, LIVE E2E 0/43.**
 All 43 catalog identities remain DATA_BLOCKED pending independent evidence.
 Next research strategy STR-200 Diagonal Spread requires original differing
 strikes AND expiries, not same-strike calendar evidence.
+
+## 21 November 2026 — STR-200 diagonal spread, different strikes AND expiries
+
+The existing deterministic `FnoDiagonalSpreadV1.evaluate` is directly
+invoked by `FnoDiagonalSpreadResearchService` on **EMPTY V120** original
+NIFTY near/far option custody, with independently verified IV, source
+rights, two-leg fees, original bid/ask liquidity and first-known times.
+
+A true diagonal MUST use **two different option strikes AND two different
+listed expiries**. The near expiry option is sold at original BID as OTM;
+the far expiry option is bought at original ASK as ITM, same CE/PE type
+and official lot. For CALL: **far CE strike < index bid < near CE strike**.
+For PUT: **near PE strike < index bid < far PE strike**. V119's same-strike
+calendar source does NOT qualify as STR-200 evidence.
+
+The two separate original provider emitted annualized IVs, authenticated
+expiry/lot, original contemporaneous index quote, near BID depth and far
+ASK depth, 35+ genuine completed daily NIFTY closes and fees must all
+be sourced as-of, never inferred. Source rights default false.
+
+**Near-expiry far-long mark remains unknown**; no common-expiry
+max-realized-loss, breakeven or broker margin is fabricated. Research-only,
+no order path, zero seeded rows. **31/43 direct typed research paths,
+12 remaining. Real-market historical E2E 0/43, PAPER 0/43, LIVE 0/43.**
+All catalog strategies remain DATA_BLOCKED until independent evidence.

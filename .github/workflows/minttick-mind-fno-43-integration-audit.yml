@@ -104,6 +104,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V120__fno_verified_nifty_diagonal_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -212,6 +217,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyCalendarSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V120__fno_verified_nifty_diagonal_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyDiagonalSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -388,6 +398,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoCalendarSpreadResearchServiceTest,FnoVerifiedNiftyCalendarSourceStoreTest' test
+      - name: Validate STR-200 distinct OTM near short strike and ITM far long strike, expiries and original IV
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoDiagonalSpreadResearchServiceTest,FnoVerifiedNiftyDiagonalSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
