@@ -36,11 +36,13 @@ CODES = frozenset({
     "OK_DATA", "OK_EMPTY", "HTTP_400", "HTTP_401", "HTTP_403",
     "HTTP_404", "HTTP_422", "HTTP_429", "HTTP_5XX", "HTTP_OTHER",
     "PLUS_REQUIRED", "PROVIDER_INVALID", "TRANSPORT_ERROR",
+    "CLOUDFLARE_1010", "TOKEN_INVALID",
     "TOKEN_UNAVAILABLE", "HOST_INVALID", "NOT_RUN",
 })
 HTTP_CODES = {400, 401, 403, 404, 422, 429}
 EQUITY_KEY = "NSE_EQ|INE848E01016"  # Official Upstox V3 docs NSE_EQ key
 EXPIRED_KEY = "NSE_INDEX|Nifty 50"
+UPSTOX_USER_AGENT = "MintTick-Upstox-ReadOnly-Diagnostics/1.0"
 
 
 def expected_request():
@@ -64,7 +66,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def status_http(code, data):
-    if code == 403 and b"UDAPI1149" in data[:2048]:
+    """Categorize known provider/WAF errors without printing the response."""
+    fragment = data[:2048].lower()
+    if code == 403 and (b"error 1010" in fragment
+                        or b"error code: 1010" in fragment
+                        or b"browser_signature_banned" in fragment):
+        return "CLOUDFLARE_1010"
+    if b"udapi100050" in fragment:
+        return "TOKEN_INVALID"
+    if code == 403 and b"udapi1149" in fragment:
         return "PLUS_REQUIRED"
     if code in HTTP_CODES:
         return f"HTTP_{code}"
@@ -86,6 +96,7 @@ def get_endpoint(url, token):
         return "PROVIDER_INVALID", None
     request = urllib.request.Request(url, headers={
         "Authorization": "Bearer " + token, "Accept": "application/json",
+        "User-Agent": UPSTOX_USER_AGENT,
     }, method="GET")
     try:
         opener = urllib.request.build_opener(NoRedirect())
