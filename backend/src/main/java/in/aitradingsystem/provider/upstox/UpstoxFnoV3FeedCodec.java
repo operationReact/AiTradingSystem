@@ -28,14 +28,29 @@ final class UpstoxFnoV3FeedCodec {
 
     private UpstoxFnoV3FeedCodec() {}
 
-    /** Upstox V3 subscription commands are binary UTF-8 JSON, NOT text frames. */
+    /** Default subscription never authorizes a non-F&O key. */
     static byte[] subscription(String method, String mode, List<String> keys) {
+        return subscription(method, mode, keys, java.util.Set.of());
+    }
+
+    /**
+     * Explicitly permit only spot keys already verified by the operator's
+     * futures-pair registry. The allowed spot set must be a subset of the
+     * exact subscription plan; this does not grant display or execution rights.
+     * Upstox V3 subscription commands are binary UTF-8 JSON, not text frames.
+     */
+    static byte[] subscription(String method, String mode, List<String> keys,
+                               java.util.Set<String> verifiedSpotKeys) {
         if (!("sub".equals(method) || "unsub".equals(method)
                 || "change_mode".equals(method))
                 || !("full".equals(mode) || "ltpc".equals(mode)
                 || "option_greeks".equals(mode))
                 || keys == null || keys.isEmpty() || keys.size() > 64
-                || keys.stream().anyMatch(k -> !validKey(k))
+                || verifiedSpotKeys == null
+                || verifiedSpotKeys.stream().anyMatch(k -> !validSpotKey(k))
+                || !keys.containsAll(verifiedSpotKeys)
+                || keys.stream().anyMatch(k -> !validKey(k)
+                    && !(validSpotKey(k) && verifiedSpotKeys.contains(k)))
                 || keys.stream().distinct().count() != keys.size()) {
             throw new IllegalArgumentException("UPSTOX_FNO_INVALID_SUBSCRIPTION");
         }

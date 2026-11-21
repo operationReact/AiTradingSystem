@@ -122,6 +122,31 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void spotAndFutureShareOneSubscribedSocketWithoutGrantingSpotPaperOrders() {
+        var closeTime=Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var stream=service(closeTime);
+        var spot="NSE_EQ|INE002A01018";
+        try {
+            stream.start(List.of("NSE_FO|61001"),List.of(spot));
+            listener.get().onOpen(socket);
+            var bytes=org.mockito.ArgumentCaptor.forClass(ByteBuffer.class);
+            verify(socket).sendBinary(bytes.capture(),eq(true));
+            var encoded=new String(bytes.getValue().array(),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            assertThat(encoded).contains("NSE_FO|61001",spot);
+            listener.get().onBinary(socket,
+                ByteBuffer.wrap(UpstoxFnoV3FeedCodecTest.firstLevelFor(spot)),true);
+            assertThat(stream.eligiblePaperQuote(spot)).isEmpty();
+            assertThat(stream.eligibleDisplayQuote(spot)).isEmpty();
+            assertThat(stream.eligibleResearchSpotQuote(spot)).isPresent();
+            stream.stop();
+            assertThat(stream.eligibleResearchSpotQuote(spot)).isEmpty();
+        } finally {
+            stream.shutdown();
+        }
+    }
+
+    @Test
     void cannotStartTwoConnectionsOrSubscribeArbitraryKeys() {
         var s = service();
         try {
