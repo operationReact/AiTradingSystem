@@ -6869,21 +6869,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "35+ source-proven completed first-known NIFTY daily closes and six separately verified research rights: broker positions, NIFTY index, authentic NSE option chain, original delta Greeks, listed futures, completed history",
+    "One or more actually broker-confirmed distinct NSE_FO CE/PE positions with real signed option lots, official instrument lot/tick/expiry and original broker first-known evidence, plus verified current futures lots",
+    "Synchronized original-first-known same-provider NIFTY index spot, real option bid/ask/delta/open interest and genuine listed NIFTY futures bid/ask/depth observations",
+    "Pure retrospective signed portfolio delta aggregation and integer-lot hypothetical futures hedge improvement with authentic side-of-book liquidity, modeled spread/slippage/fees and residual-delta risk limits"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DELTA_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-204-delta-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed NIFTY source as-of option delta/quotes, verified futures quotes/depth, official NSE lot/expiry source and source rights; unit fixtures are not real data evidence",
+    "Actual broker reconciled option/futures positions, real brokerage and statutory fees, India margins, settlement, funding, futures rollover and broker short leg permissions",
+    "Original-first-known out-of-sample and walk-forward verified signed-delta hedge studies with real position/fill transaction ledgers, tail gaps, costs and execution constraints",
+    "Independently tested PAPER lifecycle and UI, plus separately authorized LIVE order entitlements, real-time portfolio guardrails and kill switches"
+   ],
+   "note": "Source-proven research-only NIFTY existing-option delta hedge; outputs a hypothetical signed integer futures-lot adjustment and residual delta only. No actual fills, profit, order permissions or broker activation. DATA_BLOCKED.",
    "id": "strategy.STR-204",
    "kind": "STRATEGY",
    "name": "Delta Hedge",
