@@ -20,13 +20,13 @@ class FnoPutRatioSpreadV1Test {
     static final String LOW="NSE_FO|NIFTY_20261127_70_PE";
     static final String HIGH="NSE_FO|NIFTY_20261127_80_PE";
     static final LocalDate EXPIRY=LocalDate.of(2026,11,27);
-    static final Contract LONG=new Contract(LOW,INDEX,"PE",n("80"),n("0.05"),
+    static final Contract LONG=new Contract(HIGH,INDEX,"PE",n("80"),n("0.05"),
         LocalDate.of(2026,11,1),EXPIRY,50,true);
     static final Contract SHORT=new Contract(LOW,INDEX,"PE",n("70"),n("0.05"),
         LocalDate.of(2026,11,1),EXPIRY,50,true);
     static final Quote SPOT=new Quote(PROVIDER,INDEX,n("75"),n("75.10"),
         100,100,100000,TICK,TICK.plusSeconds(10));
-    static final Quote LONG_QUOTE=new Quote(PROVIDER,LOW,n("5.90"),n("6.00"),
+    static final Quote LONG_QUOTE=new Quote(PROVIDER,HIGH,n("5.90"),n("6.00"),
         10,10,1000,TICK,TICK.plusSeconds(10));
     static final Quote SHORT_QUOTE=new Quote(PROVIDER,LOW,n("2.70"),n("2.75"),
         10,10,1000,TICK,TICK.plusSeconds(10));
