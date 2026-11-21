@@ -47,7 +47,7 @@ class Fno43StrategyResearchAuditTest(unittest.TestCase):
         self.assertEqual(43, result["summary"]["strategies"])
         self.assertEqual(43, len(
             [s for s in result["strategies"]
-             if "JUNIT_SUREFIRE_EXECUTION_PROOF_MISSING" in s["blockingIssues"]])
+             if "JUNIT_SUREFIRE_EXECUTION_PROOF_MISSING" in s["blockingIssues"]]))
         self.assertEqual(0, result["summary"]["junitEvidenceComplete"])
 
     def test_surefire_needs_genuine_testcases_not_only_test_count(self):
