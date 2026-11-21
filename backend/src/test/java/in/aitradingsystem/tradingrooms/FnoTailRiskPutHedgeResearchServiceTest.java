@@ -66,7 +66,7 @@ class FnoTailRiskPutHedgeResearchServiceTest {
         assertEquals("STR_206_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoTailRiskPutHedgeResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
-        assertEquals("STR_206_TYPED_SOURCE_PAYLOAD_INVALID",
+        assertEquals("STR_206_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoTailRiskPutHedgeResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
