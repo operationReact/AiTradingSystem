@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python3 infra/ec2-paper/upstox_profile_probe.py runner > "$RUNNER_TEMP/upstox-quote-audit.txt" 2>&1
+          python3 infra/ec2-paper/upstox_profile_probe.py runner > "$RUNNER_TEMP/upstox-profile-audit.txt" 2>&1
       - name: Post only the sanitized profile result to the recovery issue
         if: ${{ always() && github.event_name == 'push' }}
         env:
@@ -96,7 +96,7 @@ jobs:
           GH_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
-          python3 infra/ec2-paper/upstox_profile_probe.py issue "$RUNNER_TEMP/upstox-quote-audit.txt"
+          python3 infra/ec2-paper/upstox_profile_probe.py issue "$RUNNER_TEMP/upstox-profile-audit.txt"
 
 # No names, emails, user identifiers, products, quotes, credentials, historical data, trading rights, EC2 resources,
 # workloads or broker orders are persisted or changed by this workflow.
