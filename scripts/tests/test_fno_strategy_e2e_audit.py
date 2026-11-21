@@ -106,12 +106,12 @@ class Fno43StrategyResearchAuditTest(unittest.TestCase):
         report = audit.inspect(ROOT, None)
         self.assertEqual([], report["errors"])
         rows = {r["id"]: r for r in report["strategies"]}
-        for strategy in ("strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184"):
+        for strategy in ("strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186"):
             self.assertTrue(rows[strategy]["directResearchCallsiteLocated"])
             self.assertFalse(rows[strategy]["strategyEndToEndReady"])
             self.assertFalse(rows[strategy]["paperExecutionReady"])
             self.assertFalse(rows[strategy]["liveExecutionReady"])
-        self.assertEqual(15, report["summary"]["sourceLevelDirectResearchCallsites"])
+        self.assertEqual(17, report["summary"]["sourceLevelDirectResearchCallsites"])
         self.assertEqual(0, report["summary"]["signalRoutingWithoutProvenEvaluatorCallsite"])
 
 
