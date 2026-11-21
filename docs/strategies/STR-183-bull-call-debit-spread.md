@@ -35,3 +35,33 @@ Outcomes: `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, `RESEARCH_CANDIDATE`. *
 **Outstanding:** rights-verified canonical live option chain with two synchronizable CE quotes and true original timestamps, licensed historical replay and independent NSE session/expiry/lot confirmations, actual Indian taxes/exercise/expiry risk, realistic two-leg fill/slippage and no-lookahead walk-forward, PAPER ledger/reconciliation acceptance, Flutter and account-level LIVE F&O permissions. No order endpoints or trading flags changed.
 
 Related: [STR-181](STR-181-long-call.md), [canonical F&O feed](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Direct verified two-CE research adapter — 21 November 2026
+
+`FnoDebitSpreadResearchService` now invokes the **distinct**
+`FnoBullCallDebitSpreadV1.evaluate` on a single true NIFTY 50 source
+provider's 35+ original-first-known completed daily closes and an explicitly
+chosen pair of source-listed CE instruments. Buy **lower strike CE** at
+observed ASK and sell **higher strike CE** at observed BID; both quote
+timestamps, displayed buy/sell-side depth and open interest (in lots),
+expiry, lot, ticks, and underlying index snapshot must be independently
+verified and synchronized. It never guesses strikes or chooses an order.
+
+V107 adds **empty**, append-only original-time two-option evidence custody
+with independent source receipt gates for the underlying index, lower CE,
+higher CE, contract master, and **combined** Indian transaction fees/taxes,
+slippage and research premium-risk capital. Both leg source digests and
+rightsholder receipt references must exist. V106 completed daily close
+data also need active model inference rights. A blocked missing leg or
+cost receipt reports zero observed contracts and quotes, not a synthetic
+fill.
+
+New settings: `minttick.fno-research.debit-spread-research-rights-verified`
+(default **false**), `debit-bull-lower-ce-key` and
+`debit-bull-upper-ce-key` (both blank). The already independent daily
+close, option chain and source master permissions remain mandatory.
+Result `RESEARCH_CANDIDATE` is purely a hypothetical at-expiry
+after-cost max-reward/risk screen, **not** proven profitability, execution
+or financial advice. All 43 manifest entries remain `DATA_BLOCKED`;
+independent real NSE E2E, PAPER and LIVE validation are still unproven.
