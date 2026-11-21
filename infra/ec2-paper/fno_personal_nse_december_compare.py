@@ -258,7 +258,7 @@ def run():
             raise ValueError("SOURCE_REQUEST_COUNT_CHANGED")
         metrics=compare(by_day,mapping,nse)
         report={
-            "status":"RECONCILED" if metrics["missingNSEContractDays"]==0 else "PARTIAL",
+            "status":"CROSSCHECK_COMPLETE" if metrics["missingNSEContractDays"]==0 else "CROSSCHECK_PARTIAL",
             "scope":"DEC_2025_NIFTY_SELECTED_23_CONTRACTS",
             "nseArchivesRequested":scanned,"nseArchivesFetched":retrieved,
             "nseArchiveDaysNotFound":missing,
