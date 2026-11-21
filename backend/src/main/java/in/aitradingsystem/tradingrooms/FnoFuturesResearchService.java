@@ -23,7 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of seven futures research evaluators (STR-170..176).
+ * Read-only invocation of eight futures research evaluators (STR-170..177).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -40,6 +40,10 @@ public class FnoFuturesResearchService {
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
     private static final int OI_LOOKBACK_DAYS = 21;
+    // Experimental pattern parameters; require external regime and cost calibration.
+    private static final FnoFuturesMeanReversionV1.Thresholds MEAN_REVERSION_THRESHOLDS =
+        new FnoFuturesMeanReversionV1.Thresholds(25, 200, 60, 100, 25, 9000,
+            1500, 1000, 900, 5000);
     // Research-only fixture parameters; must be calibrated out-of-sample.
     private static final FnoFuturesMomentumV1.Thresholds MOMENTUM_THRESHOLDS =
         new FnoFuturesMomentumV1.Thresholds(100, 2, 11000, 2000, 2500, 800, 20, 30);
@@ -156,7 +160,8 @@ public class FnoFuturesResearchService {
             evaluateOpenInterestTrend(now, today),
             evaluatePriceOiDivergence(now, today),
             evaluateCashFuturesFeasibility(now, today, sessionOpen),
-            evaluateFuturesMomentum(now, today));
+            evaluateFuturesMomentum(now, today),
+            evaluateFuturesMeanReversion(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
