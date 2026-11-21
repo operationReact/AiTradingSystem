@@ -1,0 +1,49 @@
+name: MintTick F&O independent EOD reconciliation gate (offline tests only)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-licensed-eod-reconciliation.yml'
+      - 'infra/ec2-paper/fno_licensed_eod_reconcile.py'
+      - 'scripts/tests/test_fno_licensed_eod_reconcile.py'
+      - 'docs/fno-independent-eod-unblock.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/fno_licensed_eod_reconcile.py'
+      - 'scripts/tests/test_fno_licensed_eod_reconcile.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify licensed EOD matcher and fail-closed controls offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_licensed_eod_reconcile.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_licensed_eod_reconcile.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_licensed_eod_reconcile.py').read_text()
+          assert 'mode=ro' in src
+          assert 'PRAGMA query_only=ON' in src
+          assert 'MINTTICK_REVIEWED_EOD_RIGHTS_SHA256' in src
+          assert '"backtestingApproved":False' in src
+          assert '"commercialRightsVerified":False' in src
+          for forbidden in ('placeOrder','submitOrder','DELETE FROM',
+                            'UPDATE fno_','INSERT INTO','requests.get',
+                            'urllib.request','urlopen','with-decryption'):
+              assert forbidden not in src, forbidden
+          PY
+
+# No GitHub AWS role, SSM, data-source download, or market-data artifacts.
+# This workflow cannot authorize data usage and never executes against live DB.
