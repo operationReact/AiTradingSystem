@@ -79,6 +79,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V115__fno_verified_nifty_short_strangle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -162,6 +167,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStraddleSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V115__fno_verified_nifty_short_strangle_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyShortStrangleSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -308,6 +318,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoShortStraddleResearchServiceTest,FnoVerifiedNiftyShortStraddleSourceStoreTest' test
+      - name: Validate STR-195 original OTM CE/PE short BID depth, independent IV, broker account margin and naked-call tail
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoShortStrangleResearchServiceTest,FnoVerifiedNiftyShortStrangleSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
