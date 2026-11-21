@@ -2,6 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
+import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -22,7 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of six futures research evaluators (STR-170..175).
+ * Read-only invocation of seven futures research evaluators (STR-170..176).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -39,6 +40,9 @@ public class FnoFuturesResearchService {
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
     private static final int OI_LOOKBACK_DAYS = 21;
+    // Research-only fixture parameters; must be calibrated out-of-sample.
+    private static final FnoFuturesMomentumV1.Thresholds MOMENTUM_THRESHOLDS =
+        new FnoFuturesMomentumV1.Thresholds(100, 2, 11000, 2000, 2500, 800, 20, 30);
     // Research fixture calibration, not empirically approved thresholds.
     private static final FnoFuturesPriceOiDivergenceV1.Thresholds PRICE_OI_THRESHOLDS =
         new FnoFuturesPriceOiDivergenceV1.Thresholds(500, 500, 3, 2500, 2500, 5000);
@@ -57,10 +61,12 @@ public class FnoFuturesResearchService {
     private final FnoClosingSnapshotStore store;
     private final FnoVerifiedFinalPriceOiSessionStore finalSessionStore;
     private final FnoCashFuturesFeasibilityStore cashFeasibilityStore;
+    private final FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
     private final boolean finalPriceResearchRightsVerified;
     private final boolean cashFeasibilityResearchRightsVerified;
+    private final boolean completedOhlcvResearchRightsVerified;
     private final String cashFeasibilityAccountScope;
     private final String basisUnderlyingKey;
 
@@ -70,10 +76,12 @@ public class FnoFuturesResearchService {
             FnoClosingSnapshotStore store,
             FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
             FnoCashFuturesFeasibilityStore cashFeasibilityStore,
+            FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
             @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
             @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
             @Value("${minttick.fno-research.cash-feasibility-research-rights-verified:false}") boolean cashFeasibilityResearchRightsVerified,
+            @Value("${minttick.fno-research.completed-ohlcv-research-rights-verified:false}") boolean completedOhlcvResearchRightsVerified,
             @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
         this.feed = feed;
@@ -82,33 +90,51 @@ public class FnoFuturesResearchService {
         this.store = store;
         this.finalSessionStore = finalSessionStore;
         this.cashFeasibilityStore = cashFeasibilityStore;
+        this.completedOhlcvOiStore = completedOhlcvOiStore;
         this.researchRightsVerified = researchRightsVerified;
         this.contractDiscoveryVerified = contractDiscoveryVerified;
         this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
         this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
+        this.completedOhlcvResearchRightsVerified = completedOhlcvResearchRightsVerified;
         this.cashFeasibilityAccountScope =
             cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
         this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
     }
 
-    /** The pre-STR-175 test constructor continues with cash feasibility denied. */
+    /** Source-only compatibility for existing STR-175 research tests. */
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store,
+            FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoCashFuturesFeasibilityStore cashFeasibilityStore,
+            boolean researchRightsVerified, boolean contractDiscoveryVerified,
+            boolean finalPriceResearchRightsVerified, boolean cashFeasibilityResearchRightsVerified,
+            String cashFeasibilityAccountScope, String basisUnderlyingKey) {
+        this(feed, calendar, registry, store, finalSessionStore, cashFeasibilityStore,
+            null, researchRightsVerified, contractDiscoveryVerified,
+            finalPriceResearchRightsVerified, cashFeasibilityResearchRightsVerified,
+            false, cashFeasibilityAccountScope, basisUnderlyingKey);
+    }
+
+    /** Existing STR-174 evidence fixtures keep STR-175 and STR-176 denied. */
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
             FnoClosingSnapshotStore store, FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
             boolean researchRightsVerified, boolean contractDiscoveryVerified,
             boolean finalPriceResearchRightsVerified, String basisUnderlyingKey) {
-        this(feed, calendar, registry, store, finalSessionStore, null,
+        this(feed, calendar, registry, store, finalSessionStore, null, null,
             researchRightsVerified, contractDiscoveryVerified, finalPriceResearchRightsVerified,
-            false, "", basisUnderlyingKey);
+            false, false, "", basisUnderlyingKey);
     }
 
-    /** Legacy research tests preserve source-denied STR-174 and STR-175. */
+    /** Legacy rights-denied research fixtures. */
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
             FnoClosingSnapshotStore store, boolean researchRightsVerified,
             boolean contractDiscoveryVerified, String basisUnderlyingKey) {
-        this(feed, calendar, registry, store, null, null, researchRightsVerified,
-            contractDiscoveryVerified, false, false, "", basisUnderlyingKey);
+        this(feed, calendar, registry, store, null, null, null,
+            researchRightsVerified, contractDiscoveryVerified, false, false, false,
+            "", basisUnderlyingKey);
     }
 
     /** Current exchange-timed live quote from the shared V3 feed, or empty. */
@@ -129,7 +155,8 @@ public class FnoFuturesResearchService {
             evaluateRollover(now, today),
             evaluateOpenInterestTrend(now, today),
             evaluatePriceOiDivergence(now, today),
-            evaluateCashFuturesFeasibility(now, today, sessionOpen));
+            evaluateCashFuturesFeasibility(now, today, sessionOpen),
+            evaluateFuturesMomentum(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
