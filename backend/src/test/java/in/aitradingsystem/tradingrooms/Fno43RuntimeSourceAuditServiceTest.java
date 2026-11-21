@@ -120,7 +120,9 @@ class Fno43RuntimeSourceAuditServiceTest {
         var now=java.time.Clock.fixed(NOW,java.time.ZoneOffset.UTC);
         var mocked=mock(Fno43RuntimeSourceAuditService.class);
         var controller=new AdminFno43SourceEvidenceController(mocked,now);
-        controller.evidence();
+        var response=controller.evidence();
+        assertNotNull(response.getHeaders().getCacheControl());
+        assertTrue(response.getHeaders().getCacheControl().contains("no-store"));
         verify(mocked).inspect(NOW);
     }
 }
