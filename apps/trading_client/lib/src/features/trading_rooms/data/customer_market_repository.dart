@@ -187,8 +187,13 @@ class CustomerCandle {
     final close = price('close');
     final volume = value['volume'];
     if (time == null || fetched == null || open == null || high == null ||
-        low == null || close == null || high < low ||
-        volume is! num || volume < 0 || value['source'] is! String) {
+        low == null || close == null ||
+        high < low || high < open || high < close ||
+        low > open || low > close ||
+        volume is! num || !volume.isFinite || volume < 0 ||
+        volume != volume.toInt() ||
+        value['source'] is! String ||
+        (value['source'] as String).trim().isEmpty) {
       throw const FormatException('Invalid stored candle');
     }
     return CustomerCandle(candleTime: time, open: open, high: high, low: low,
@@ -213,15 +218,24 @@ class CustomerCandlePage {
         value['hasNext'] is! bool) {
       throw const FormatException('Invalid stored candle page');
     }
+    // Never render an ambiguous pair of bars at the same exchange timestamp.
+    // Out-of-order pages remain supported: the stock view sorts them explicitly.
+    final rows = <CustomerCandle>[];
+    final timestamps = <int>{};
+    for (final item in raw) {
+      if (item is! Map<String, dynamic>) {
+        throw const FormatException('Invalid stored candle row');
+      }
+      final bar = CustomerCandle.fromJson(item);
+      if (!timestamps.add(bar.candleTime.toUtc().microsecondsSinceEpoch)) {
+        throw const FormatException('Duplicate stored candle timestamp');
+      }
+      rows.add(bar);
+    }
     return CustomerCandlePage(
       instrumentId: id.toInt(),
       interval: interval,
-      items: [
-        for (final item in raw)
-          item is Map<String, dynamic>
-              ? CustomerCandle.fromJson(item)
-              : throw const FormatException('Invalid stored candle row'),
-      ],
+      items: rows,
       hasNext: value['hasNext'] as bool,
     );
   }
