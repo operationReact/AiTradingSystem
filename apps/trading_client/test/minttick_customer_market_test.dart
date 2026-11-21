@@ -459,6 +459,9 @@ void main() {
     expect(fake.detailRequests, 1);
     expect(fake.candleIntervals, ['ONE_DAY']);
     expect(find.textContaining('Historical ·'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-last-bar-time')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-last-trade-time')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-coverage-warning')), findsOneWidget);
     expect(
         find.byWidgetPredicate((w) =>
             w is Semantics && w.properties.label == 'Stored candle chart with 2 bars'),
