@@ -459,6 +459,9 @@ void main() {
     expect(fake.detailRequests, 1);
     expect(fake.candleIntervals, ['ONE_DAY']);
     expect(find.textContaining('Historical ·'), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-last-bar-time')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-last-trade-time')), findsOneWidget);
+    expect(find.byKey(const ValueKey('stock-chart-coverage-warning')), findsOneWidget);
     expect(
         find.byWidgetPredicate((w) =>
             w is Semantics && w.properties.label == 'Stored candle chart with 2 bars'),
@@ -523,6 +526,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(fake.candleIntervals.last, 'FIVE_MINUTE');
     expect(find.byKey(const ValueKey('stock-detail-range-1M')), findsNothing);
+  });
+
+  testWidgets('fresh quote polls stored intraday bars without fabricating a candle',
+      (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 3200));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final fake = _CustomerMarketFake()
+      ..status = 'LIVE'
+      ..bars = [
+        _bar(DateTime.utc(2026, 11, 20, 4), 120),
+        _bar(DateTime.utc(2026, 11, 20, 5), 122),
+      ];
+    await tester.pumpWidget(MaterialApp(
+      theme: buildTheme(Brightness.dark),
+      home: MintTickCustomerMarketPage(repository: fake),
+    ));
+    await tester.pumpAndSettle();
+    await _openExplore(tester);
+    await tester.tap(find.byKey(const ValueKey('customer-market-stock-101')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('stock-detail-timeframe-5m')));
+    await tester.pumpAndSettle();
+    expect(fake.candleIntervals.last, 'FIVE_MINUTE');
+
+    final before = fake.candleIntervals.length;
+    // The test backend now returns a *third* stored provider bar. The client
+    // must refresh the source, rather than constructing it from the LTP.
+    fake.bars = [
+      ...fake.bars,
+      _bar(DateTime.utc(2026, 11, 20, 6), 124),
+    ];
+    await tester.pump(const Duration(seconds: 30));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(fake.candleIntervals.length, greaterThan(before));
+    expect(fake.candleIntervals.last, 'FIVE_MINUTE');
+    expect(find.textContaining('3 bars'), findsWidgets);
+
+    // Stop the page's quote and candle timers before this test finishes.
+    await tester.pumpWidget(const MaterialApp(home: SizedBox.shrink()));
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('stock detail shows a retry state when stored candles fail', (tester) async {
