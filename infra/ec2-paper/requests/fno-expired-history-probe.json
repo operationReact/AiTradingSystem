@@ -1,12 +1,12 @@
 {
-  "application": "MintTick",
-  "account": "098859530205",
-  "instance_id": "i-09c01b470fb39b85a",
-  "region": "ap-south-1",
-  "environment": "PAPER",
-  "operation": "read-only-upstox-expired-nifty-future-history-probe",
   "authorization": "OWNER_APPROVED_FNO_HISTORY_DIAGNOSTIC_ONLY",
+  "operation": "read-only-upstox-expired-nifty-future-history-probe",
+  "application": "MintTick",
   "max_provider_gets": 3,
+  "environment": "PAPER",
+  "persist": false,
+  "account": "098859530205",
   "trading_rights_change": false,
-  "persist": false
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a"
 }
