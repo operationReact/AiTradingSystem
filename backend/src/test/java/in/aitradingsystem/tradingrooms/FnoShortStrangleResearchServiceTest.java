@@ -182,7 +182,7 @@ class FnoShortStrangleResearchServiceTest {
         var base=proof();
         var store=ivStore();
         when(store.oneCurrent(ACCOUNT,CE,PE,NOW)).thenReturn(Optional.of(new Proof(
-            base.provider(),"other_broker_margin",base.strike(),base.tick(),
+            base.provider(),"other_broker_margin",base.callStrike(),base.putStrike(),base.tick(),
             base.listedFrom(),base.expiry(),base.lotSize(),base.index(),
             base.call(),base.put(),base.budget(),base.firstKnownAt())));
         assertEquals("SHORT_STRANGLE_IV_CONTRACT_OR_TIMESTAMPS_INVALID",
