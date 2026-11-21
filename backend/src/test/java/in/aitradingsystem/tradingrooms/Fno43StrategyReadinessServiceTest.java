@@ -137,17 +137,37 @@ class Fno43StrategyReadinessServiceTest {
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-202",
                 "BLOCKED_RIGHTS","VOL_CRUSH_ORIGINAL_EVENT_AND_IV_RIGHTS_UNVERIFIED",NOW,
                 "NONE",0,0,0,"VOL_CRUSH_RETROSPECTIVE_SOURCE_BLOCKED_NO_ORDER"));
+        var extra0=mock(FnoGammaScalpingResearchService.class);
+        when(extra0.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-203",
+                "BLOCKED_RIGHTS","STR_203_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_203_ORIGINAL_SOURCE_BLOCKED_NO_ORDER"));
+        var extra1=mock(FnoDeltaHedgeResearchService.class);
+        when(extra1.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-204",
+                "BLOCKED_RIGHTS","STR_204_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_204_ORIGINAL_SOURCE_BLOCKED_NO_ORDER"));
+        var extra2=mock(FnoBetaHedgeOptionsResearchService.class);
+        when(extra2.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-205",
+                "BLOCKED_RIGHTS","STR_205_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_205_ORIGINAL_SOURCE_BLOCKED_NO_ORDER"));
+        var extra3=mock(FnoTailRiskPutHedgeResearchService.class);
+        when(extra3.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-206",
+                "BLOCKED_RIGHTS","STR_206_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_206_ORIGINAL_SOURCE_BLOCKED_NO_ORDER"));
         var report = new Fno43StrategyReadinessService(
             futures, options, spreads, credits, owned, collar, ratio,
             straddle, strangle, shortStraddle, shortStrangle, ironCondor,
             ironButterfly, longButterfly, calendarSpread, diagonalSpread,
-            ivRank, volatilityCrush, new ObjectMapper()).inspect(NOW);
+            ivRank, volatilityCrush, extra0, extra1, extra2, extra3, new ObjectMapper()).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(33, report.distinctEvaluatorsObserved());
+        assertEquals(37, report.distinctEvaluatorsObserved());
         assertEquals(0, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(10, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(6, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -160,7 +180,7 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(33, report.strategies().stream()
+        assertEquals(37, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
@@ -170,7 +190,7 @@ class Fno43StrategyReadinessServiceTest {
         assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
@@ -207,6 +227,14 @@ class Fno43StrategyReadinessServiceTest {
         verifyNoMoreInteractions(ivRank);
         verify(volatilityCrush).evaluate(NOW);
         verifyNoMoreInteractions(volatilityCrush);
+        verify(extra0).evaluate(NOW);
+        verifyNoMoreInteractions(extra0);
+        verify(extra1).evaluate(NOW);
+        verifyNoMoreInteractions(extra1);
+        verify(extra2).evaluate(NOW);
+        verifyNoMoreInteractions(extra2);
+        verify(extra3).evaluate(NOW);
+        verifyNoMoreInteractions(extra3);
     }
 
     @Test
@@ -216,7 +244,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(33, report.strategies().stream()
+        assertEquals(37, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));
