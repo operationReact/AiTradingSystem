@@ -38,3 +38,21 @@ All of the modeled *true theoretical maximum expiry loss* (not just selected str
 Outstanding: licensed first-known index/F&O quotes, official exchange expiry and lot master, actual short-put margin permissions, Indian settlement/physical/cash rules, original as-of out-of-sample and walk-forward profitability evidence, actual multi-leg fill and partial-fill safety, full PAPER acceptance and independent LIVE authorization. No app feature flags, credentials, brokers, routes, deployments or APKs change with this PR.
 
 See [STR-190 Call Ratio Spread](STR-190-call-ratio-spread-research.md).
+
+
+## Direct read-only source adapter — 21 November 2026
+
+`FnoRatioSpreadResearchService` invokes the distinct
+`FnoPutRatioSpreadV1.evaluate`: one genuine higher-strike
+long NIFTY PE and **two** lower-strike shorts with same expiry/lot
+and source-verified underlying/chain quotes. Requires broker-account
+margin reconciliation and two-lot short-side BID depth, original
+35+ first-known completed NIFTY closes, complete modeled three-leg
+tax/slippage, current instrument rights and researched capital.
+
+The maximum expiry put loss is mathematically finite because
+the underlying cannot fall below zero, but may still be severe;
+a finite payoff bound **does not** prove sufficient margin,
+liquidation constraints, settlement funding or executable orders.
+V111 is empty and all research flags/keys default denied/unconfigured.
+No independent real-market E2E, PAPER or LIVE proof is claimed.
