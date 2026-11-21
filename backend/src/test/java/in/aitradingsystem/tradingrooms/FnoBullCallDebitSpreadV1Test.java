@@ -38,7 +38,7 @@ class FnoBullCallDebitSpreadV1Test {
         n("125"), TICK, TICK.plusSeconds(10));
     static final OptionQuote LONG = new OptionQuote(PROVIDER, LOW, n("5"), n("5.10"),
         10, 10, 1000, TICK, TICK.plusSeconds(10));
-    static final OptionQuote SHORT = new OptionQuote(PROVIDER, HIGH, n("2.50"), n("2.60"),
+    static final OptionQuote SHORT = new OptionQuote(PROVIDER, HIGH, n("2.50"), n("2.55"),
         10, 10, 1000, TICK, TICK.plusSeconds(10));
     static BigDecimal n(String n) { return new BigDecimal(n); }
     static List<CompletedClose> candles(String lastClose) {
