@@ -65,7 +65,7 @@ def parse_udiff(blob,day):
         raise ValueError("NSE_CSV_TOO_LARGE")
     data=csv.DictReader(io.StringIO(raw.decode("utf-8-sig"),newline=""))
     required={"BizDt","TckrSymb","FinInstrmTp","XpryDt","StrkPric","OptnTp",
-              "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst"}
+              "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst","NewBrdLotQty"}
     if data.fieldnames is None or not required.issubset(data.fieldnames):
         raise ValueError("NSE_SCHEMA_MISMATCH")
     rows={}
@@ -85,6 +85,10 @@ def parse_udiff(blob,day):
         identity=(kind,strike,day)
         values=tuple(dec(row[k]) for k in (
             "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst"))
+        lot=dec(row["NewBrdLotQty"])
+        if lot<=0 or lot>10000:
+            raise ValueError("NSE_BAD_LOT_SIZE")
+        values=values+(lot,)
         if identity in rows:
             raise ValueError("NSE_DUPLICATE_CONTRACT_ROW")
         rows[identity]=values
@@ -165,11 +169,15 @@ def compare(by_day,mapping,nse):
     counts=Counter()
     for (key,day),candles in by_day.items():
         kind,strike=mapping[key]
-        eod=nse.get((kind,strike,day))
+        source=nse.get((kind,strike,day))
         if len(candles)==2: counts["duplicates"]+=1
-        if eod is None:
+        if source is None:
             counts["missingNSEContractDays"]+=1
             continue
+        if len(source)!=7:
+            raise ValueError("NSE_MISSING_LOT_SIZE")
+        eod=source[:6]
+        lot=source[6]
         counts["matchedNSEContractDays"]+=1
         for clock,values in candles:
             prefix="midnight" if clock=="00:00" else "opening"
@@ -181,6 +189,11 @@ def compare(by_day,mapping,nse):
                 counts[prefix+"CloseMatch"]+=1
             if values[4]==eod[4]:
                 counts[prefix+"VolumeMatch"]+=1
+            if eod[4]>0 and values[4]==eod[4]*lot:
+                counts[prefix+"NormalizedVolumeMatch"]+=1
+            if prefix=="midnight":
+                for i,field in enumerate(("Open","High","Low","Close")):
+                    if values[i]==eod[i]: counts["midnight"+field+"Match"]+=1
             if values[5]==eod[5]:
                 counts[prefix+"OIMatch"]+=1
         if len(candles)==2:
@@ -206,6 +219,8 @@ def compare(by_day,mapping,nse):
         "midnightOHLCMatch","openingOHLCMatch",
         "midnightCloseMatch","openingCloseMatch",
         "midnightVolumeMatch","openingVolumeMatch",
+        "midnightNormalizedVolumeMatch","openingNormalizedVolumeMatch",
+        "midnightOpenMatch","midnightHighMatch","midnightLowMatch",
         "midnightOIMatch","openingOIMatch",
         "midnightOnlyFullMatch","openingOnlyFullMatch",
         "bothFullMatch","neitherFullMatch",
