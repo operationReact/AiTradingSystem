@@ -64,7 +64,7 @@ class FnoGammaScalpingResearchServiceTest {
         assertEquals("STR_203_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoGammaScalpingResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
-        assertEquals("STR_203_TYPED_SOURCE_PAYLOAD_INVALID",
+        assertEquals("STR_203_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoGammaScalpingResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
