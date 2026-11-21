@@ -36,7 +36,7 @@ class FnoBearPutDebitSpreadV1Test {
         300, 2, 50, 5000, n("10000"), 3000, 3000);
     static final UnderlyingQuote UNDERLYING = new UnderlyingQuote(PROVIDER, INDEX,
         n("75"), TICK, TICK.plusSeconds(10));
-    static final OptionQuote LONG = new OptionQuote(PROVIDER, LOW, n("5"), n("5.10"),
+    static final OptionQuote LONG = new OptionQuote(PROVIDER, HIGH, n("5"), n("5.10"),
         10, 10, 1000, TICK, TICK.plusSeconds(10));
     static final OptionQuote SHORT = new OptionQuote(PROVIDER, LOW, n("2.50"), n("2.55"),
         10, 10, 1000, TICK, TICK.plusSeconds(10));
