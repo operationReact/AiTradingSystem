@@ -148,6 +148,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGate.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGateTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -300,6 +302,8 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceResearchServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGate.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTypedResearchProvenanceGateTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -512,6 +516,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=Fno43RuntimeSourceAuditServiceTest' test
+      - name: Validate original provider and first-known timestamp gates for ten research adapters
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoTypedResearchProvenanceGateTest,FnoGammaScalpingResearchServiceTest,FnoDeltaHedgeResearchServiceTest,FnoBetaHedgeOptionsResearchServiceTest,FnoTailRiskPutHedgeResearchServiceTest,FnoPutSpreadCollarResearchServiceTest,FnoDefinedRiskSpreadRollResearchServiceTest,FnoExpiryRiskNeutralizationResearchServiceTest,FnoPortfolioProtectiveOverlayResearchServiceTest,FnoGreeksExposureRebalanceResearchServiceTest,FnoSkewBasedHedgeResearchServiceTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
