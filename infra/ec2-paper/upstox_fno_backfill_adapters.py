@@ -53,7 +53,11 @@ def build_url(contract_key: str, interval: str, first, last) -> str:
     if interval not in ALLOWLISTED_INTERVALS:
         raise ValueError("INVALID_UPSTOX_EXPIRED_INTERVAL")
     _contract_key(contract_key)
-    if first > last:
+    from datetime import date, datetime
+    if (type(first) is not date or type(last) is not date or first > last):
+        raise ValueError("INVALID_UPSTOX_HISTORY_DATES")
+    expiry = datetime.strptime(contract_key.rsplit("|", 1)[1], "%d-%m-%Y").date()
+    if last > expiry:
         raise ValueError("INVALID_UPSTOX_HISTORY_DATES")
     return (BASE + urllib.parse.quote(contract_key, safe="")
             + "/" + interval + "/" + last.isoformat()
@@ -133,7 +137,9 @@ class SQLiteHistoricalCandleSink:
         self.grant, self.verifier = grant, verifier
         self.today = today or (lambda: datetime.now(timezone.utc).date())
         # Fail before opening DB; no market data files with unapproved rights.
-        verify_approval(grant, verifier, "day", self.today())
+        if grant is None or not grant.intervals:
+            raise GateClosed("FNO_DATA_RETENTION_NOT_AUTHORIZED")
+        verify_approval(grant, verifier, grant.intervals[0], self.today())
         self.conn = sqlite3.connect(str(path), timeout=15, isolation_level=None)
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA busy_timeout=15000")
