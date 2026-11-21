@@ -105,7 +105,9 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
     }
     if (item.status == MindProgressStatus.runtimeVerified) return MindPalette.mint;
     if (item.status == MindProgressStatus.tested ||
-        item.status == MindProgressStatus.deployed) return MindPalette.blue;
+        item.status == MindProgressStatus.deployed) {
+      return MindPalette.blue;
+    }
     return MindPalette.yellow;
   }
 
@@ -183,9 +185,7 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
                   ? 'Loading authenticated registry evidence…'
                   : data == null
                     ? 'Registry unavailable. Required families are shown without verified status.'
-                    : 'Manifest ' + data.manifestVersion +
-                      ' · backend ' + (data.revisionKnown ? data.backendRevision : 'unknown') +
-                      ' · observed ' + data.generatedAt.toUtc().toIso8601String(),
+                    : 'Manifest ${data.manifestVersion} · backend ${data.revisionKnown ? data.backendRevision : 'unknown'} · observed ${data.generatedAt.toUtc().toIso8601String()}',
                 style: TextStyle(color: data == null && !loading
                     ? MindPalette.red : MindPalette.muted, fontSize: 10.5),
               ),
@@ -230,7 +230,7 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
                 Padding(
                   padding: const EdgeInsets.only(right: 6),
                   child: ChoiceChip(
-                    key: ValueKey('mind-data-filter-' + filter),
+                    key: ValueKey('mind-data-filter-$filter'),
                     label: Text(filter),
                     selected: _filter == filter,
                     onSelected: (_) => setState(() => _filter = filter),
@@ -272,8 +272,7 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
                 style: TextStyle(color: MindPalette.text, fontSize: 13,
                     fontWeight: FontWeight.w800)),
               const SizedBox(height: 5),
-              Text('Shared source registry: ' +
-                  _state(registry['data.canonical-contract']),
+              Text("Shared source registry: ${_state(registry['data.canonical-contract'])}",
                 style: TextStyle(
                   color: _stateColor(registry['data.canonical-contract']),
                   fontSize: 11)),
@@ -308,7 +307,7 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
     final state = _state(item);
     final color = _stateColor(item);
     return MindPanel(
-      key: ValueKey('mind-data-family-' + family.id),
+      key: ValueKey('mind-data-family-${family.id}'),
       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
       onTap: () => _showDetail(family, item),
       child: Row(children: [
@@ -384,7 +383,7 @@ class _MindDataReadinessPanelState extends State<MindDataReadinessPanel> {
               const SizedBox(height: 5),
               for (final missing in item.missing)
                 Padding(padding: const EdgeInsets.only(bottom: 5),
-                  child: Text('• ' + missing,
+                  child: Text('• $missing',
                     style: const TextStyle(color: MindPalette.muted,
                       fontSize: 11))),
             ],
