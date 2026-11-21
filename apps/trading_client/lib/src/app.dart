@@ -88,6 +88,7 @@ import 'features/upstox_analytics/presentation/upstox_analytics_progress_page.da
 import 'features/upstox_analytics/data/upstox_analytics_progress_repository.dart';
 import 'presentation/historical_data_monitor_page.dart';
 import 'data/history_monitor_repository.dart';
+import 'data/fno_history_progress_repository.dart';
 import 'presentation/create_account_page.dart';
 import 'presentation/cognito_test_page.dart';
 import 'presentation/customer_account_page.dart';
@@ -347,6 +348,7 @@ class _TradingAppState extends State<TradingApp> {
         '/history-monitor': (_) => widget.session.isCustomerAuthenticated
             ? HistoricalDataMonitorPage(
                 repository: HttpHistoryMonitorRepository(_api),
+                fnoRepository: HttpFnoHistoryProgressRepository(_api),
               )
             : _overviewPage(),
         '/upstox-analytics-progress': (_) => widget.session.isCustomerAuthenticated
