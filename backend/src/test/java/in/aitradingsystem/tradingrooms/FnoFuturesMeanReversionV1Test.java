@@ -37,7 +37,10 @@ class FnoFuturesMeanReversionV1Test {
 
     private static BigDecimal n(String s) { return new BigDecimal(s); }
     private static Instant close(LocalDate day) {
-        return day.atTime(LocalTime.of(15,30)).atZone(IST).toInstant();
+        LocalTime end = day.isBefore(LocalDate.of(2026, 8, 3))
+            ? LocalTime.of(15, 30) : day.isBefore(LocalDate.of(2026, 12, 7))
+            ? LocalTime.of(15, 40) : LocalTime.of(15, 45);
+        return day.atTime(end).atZone(IST).toInstant();
     }
     private static CompletedSession bar(int i, String price, long volume, long oi) {
         LocalDate day = DATES[i];
@@ -76,6 +79,18 @@ class FnoFuturesMeanReversionV1Test {
     }
     private static Decision evaluate(List<CompletedSession> bars) {
         return evaluate(CONTRACT,bars,RIGHTS,THRESHOLDS,AS_OF);
+    }
+
+    @Test
+    void prematurelyClaimedFinalOHLCVAt1535MustNotPassNseDerivativesClose() {
+        var rows = lowRebound();
+        var last = rows.get(9);
+        var invalid = new CompletedSession(last.sessionDate(), true, last.instrumentKey(),
+            last.provider(), last.open(), last.high(), last.low(), last.close(), true,
+            close(last.sessionDate()).minusSeconds(300), last.volumeUnits(),
+            last.openInterestUnits(), last.oiFirstObservedAt());
+        assertEquals("FUT_MR_SESSION_INVALID",
+            evaluate(replace(rows, 9, invalid)).reasonCode());
     }
 
     @Test

@@ -673,4 +673,126 @@ class FnoFuturesResearchServiceTest {
         assertFalse(row.reason().contains("bearer"));
     }
 
+
+    private static List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> meanReversionBars() {
+        int[] days = {9, 10, 11, 12, 13, 16, 17, 18, 19, 20};
+        String[] closes = {"100", "101", "99", "100", "100.5", "99.5",
+                           "101", "99", "95", "96.5"};
+        var result = new java.util.ArrayList<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar>();
+        for (int i = 0; i < days.length; i++) {
+            LocalDate day = LocalDate.of(2026, 11, days[i]);
+            Instant sessionClose = day.atTime(15, 40)
+                .atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+            BigDecimal price = new BigDecimal(closes[i]);
+            result.add(new FnoVerifiedCompletedOhlcvOiStore.VerifiedBar(
+                "UPSTOX_ANALYTICS", NEAR.instrumentKey(), NEAR.underlyingKey(),
+                LocalDate.of(2026, 11, 1), NEAR.expiry(), NEAR.lotSize(),
+                day, price, price.add(new BigDecimal("0.4")),
+                price.subtract(new BigDecimal("0.4")), price,
+                i < 8 ? 30000L : (i == 8 ? 45000L : 50000L), 100000L,
+                sessionClose.plusSeconds(150), sessionClose.plusSeconds(900),
+                sessionClose));
+        }
+        return result;
+    }
+
+    @Test
+    void str177DirectlyEvaluatesTenSourceVerifiedSessionsAsReadOnlyResearch() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        when(source.readExactContract(eq(NEAR.instrumentKey()),
+            eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW)))
+            .thenReturn(meanReversionBars());
+        var result = byId(withMomentumStore(source, true).evaluateAll(NOW))
+            .get("strategy.STR-177");
+        assertNotNull(result);
+        assertEquals("RESEARCH_CANDIDATE", result.status());
+        assertEquals("FUT_MR_LOW_EXTREME_REBOUND_OBSERVED", result.reason());
+        assertEquals(1, result.contracts());
+        assertEquals(0, result.quotes());
+        assertEquals(10, result.history());
+        assertEquals("COMPLETED_OHLCV_OI_MEAN_REVERSION_RESEARCH_NO_ORDER", result.input());
+        // One exact as-of source read is fanned out to STR-176 and STR-177.
+        verify(source, times(1)).readExactContract(eq(NEAR.instrumentKey()),
+            eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW));
+    }
+
+    @Test
+    void str177DefaultDeniedSourceRightsDoNotReadHistoryOrInventABrokerOrder() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        var result = byId(withMomentumStore(source, false).evaluateAll(NOW))
+            .get("strategy.STR-177");
+        assertEquals("BLOCKED_RIGHTS", result.status());
+        assertEquals("FUT_MR_SOURCE_RIGHTS_NOT_VERIFIED", result.reason());
+        verifyNoInteractions(source);
+    }
+
+    @Test
+    void str177AbsentTenCompleteSessionsCannotBecomeReversionSignal() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        when(source.readExactContract(any(), any(), any(), any()))
+            .thenReturn(momentumBars());
+        var result = byId(withMomentumStore(source, true).evaluateAll(NOW))
+            .get("strategy.STR-177");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("FUT_MR_TEN_VERIFIED_SESSIONS_MISSING", result.reason());
+        assertEquals(7, result.history());
+    }
+
+    @Test
+    void str177SameContractListingExpiryProviderAndSessionOrderAreMandatory() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        var original = meanReversionBars();
+        var mixed = new java.util.ArrayList<>(original);
+        var last = mixed.get(9);
+        mixed.set(9, new FnoVerifiedCompletedOhlcvOiStore.VerifiedBar(
+            "ANGEL_ONE_SMARTAPI", last.instrumentKey(), last.underlyingKey(),
+            last.listedFrom(), last.expiry(), last.lotSize(), last.sessionDate(),
+            last.open(), last.high(), last.low(), last.close(), last.tradedVolumeUnits(),
+            last.openInterestUnits(), last.ohlcvFirstAvailableAt(),
+            last.oiFirstAvailableAt(), last.verifiedSessionCloseAt()));
+        when(source.readExactContract(any(), any(), any(), any())).thenReturn(mixed);
+        assertEquals("FUT_MR_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+            byId(withMomentumStore(source, true).evaluateAll(NOW))
+                .get("strategy.STR-177").reason());
+        var duplicate = new java.util.ArrayList<>(original);
+        duplicate.set(9, duplicate.get(8));
+        when(source.readExactContract(any(), any(), any(), any())).thenReturn(duplicate);
+        assertEquals("FUT_MR_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+            byId(withMomentumStore(source, true).evaluateAll(NOW))
+                .get("strategy.STR-177").reason());
+    }
+
+    @Test
+    void str177MissingVerifiedTradingDateFailsRatherThanStitchingBars() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        var original = meanReversionBars();
+        // Drop Tuesday 17 and replace with earlier trading session to keep ten rows.
+        var changed = new java.util.ArrayList<>(original);
+        changed.set(6, new FnoVerifiedCompletedOhlcvOiStore.VerifiedBar(
+            "UPSTOX_ANALYTICS", NEAR.instrumentKey(), NEAR.underlyingKey(),
+            LocalDate.of(2026, 11, 1), NEAR.expiry(), NEAR.lotSize(),
+            LocalDate.of(2026, 11, 14), new BigDecimal("101"),
+            new BigDecimal("101.4"), new BigDecimal("100.6"), new BigDecimal("101"),
+            30000L, 100000L, changed.get(6).ohlcvFirstAvailableAt(),
+            changed.get(6).oiFirstAvailableAt(),
+            changed.get(6).verifiedSessionCloseAt()));
+        when(source.readExactContract(any(), any(), any(), any())).thenReturn(changed);
+        var result = byId(withMomentumStore(source, true).evaluateAll(NOW))
+            .get("strategy.STR-177");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("FUT_MR_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS", result.reason());
+    }
+
+    @Test
+    void str177ProviderFailureDoesNotRevealPrivateSourceDetails() {
+        var source = mock(FnoVerifiedCompletedOhlcvOiStore.class);
+        when(source.readExactContract(any(), any(), any(), any()))
+            .thenThrow(new IllegalStateException("secret account credential"));
+        var result = byId(withMomentumStore(source, true).evaluateAll(NOW))
+            .get("strategy.STR-177");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("FUT_MR_SOURCE_READ_UNAVAILABLE", result.reason());
+        assertFalse(result.reason().contains("secret"));
+    }
+
 }

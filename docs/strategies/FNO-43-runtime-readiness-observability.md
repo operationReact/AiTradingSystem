@@ -12,7 +12,7 @@ source rights and real source-original replay.
 The response lists **exactly 43** sorted strategies with the real manifest
 `requiredInputs` and evaluator source paths. Each gets an explicit integration stage:
 
-- STR-170/171/172/173/174/175/176: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
+- STR-170/171/172/173/174/175/176/177: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
   `FnoFuturesResearchService` returned an evaluator result, otherwise
   `DIRECT_ADAPTER_UNAVAILABLE`. Research may be blocked for missing rights,
   costs, contracts, quotes or historical sessions. These statuses are not
@@ -20,7 +20,7 @@ The response lists **exactly 43** sorted strategies with the real manifest
 - STR-181/182: `SIGNAL_ROUTE_ONLY`. The existing `FnoLongOptionCrossoverV1`
   signal path is **not** a distinct `FnoLongCallV1` or `FnoLongPutV1`
   evaluator invocation.
-- STR-177–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
+- STR-178–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
   separate product screens, old services or JUnit fixtures exist.
 
 The four independent acceptance booleans per strategy are always false:
@@ -48,7 +48,7 @@ promotion. Tests are synthetic and provide no source-data coverage evidence.
 
 
 **21 Nov E2E-2 update:** STR-173 has a read-only session-OI adapter with
-research-rights and master freshness gates. The registry now has seven directly
+research-rights and master freshness gates. The registry now has eight directly
 invoked research evaluator paths and 37 missing. An observed result may be
 BLOCKED_RIGHTS or BLOCKED_DATA. All independent real-source E2E, PAPER and
 LIVE validation counters remain zero.
@@ -68,7 +68,7 @@ point-in-time L1-depth + broker margin/capital and cost evidence store. The
 new financial evidence table is empty by default and is purged after at most
 seven days. No arbitrary instrument, assumed cash, synthetic book depth or
 notional brokerage fees are substituted. The registry counts **6/43 direct
-research paths**, **36 without direct adapters**, **2 signal-only routes**,
+research paths**, **35 without direct adapters**, **2 signal-only routes**,
 and still **0/43 independently validated real-source E2E, PAPER or LIVE**.
 
 
@@ -77,3 +77,11 @@ connected, using V102 verified original-time OHLCV/OI history and a default-deni
 research source flag. Registry summary: **7/43 direct evaluator callsites**,
 **36/43 without direct adapters**, **2 signal-only**, **0/43 independently
 verified historical real-source E2E**, **0/43 PAPER** and **0/43 LIVE**.
+
+
+**21 Nov STR-177 follow-on:** Eighth distinct direct evaluator is now wired
+for ten historical completed futures sessions using the shared V102 OHLCV/OI
+source rights and actual first-known timestamp evidence boundary. Registry
+shows **8/43 direct research invocation paths**, **35 missing distinct adapters**,
+**2 signal-only**, and **0/43 independent historical real-source E2E, PAPER
+or LIVE**. The source remains empty until real attested records are ingested.

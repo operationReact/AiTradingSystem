@@ -23,7 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of seven futures research evaluators (STR-170..176).
+ * Read-only invocation of eight futures research evaluators (STR-170..177).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -40,6 +40,10 @@ public class FnoFuturesResearchService {
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
     private static final int OI_LOOKBACK_DAYS = 21;
+    // Experimental pattern parameters; require external regime and cost calibration.
+    private static final FnoFuturesMeanReversionV1.Thresholds MEAN_REVERSION_THRESHOLDS =
+        new FnoFuturesMeanReversionV1.Thresholds(25, 200, 60, 100, 25, 9000,
+            1500, 1000, 900, 5000);
     // Research-only fixture parameters; must be calibrated out-of-sample.
     private static final FnoFuturesMomentumV1.Thresholds MOMENTUM_THRESHOLDS =
         new FnoFuturesMomentumV1.Thresholds(100, 2, 11000, 2000, 2500, 800, 20, 30);
@@ -149,6 +153,8 @@ public class FnoFuturesResearchService {
     public List<StrategyStatus> evaluateAll(Instant now) {
         LocalDate today = now.atZone(IST).toLocalDate();
         boolean sessionOpen = calendar.isInsideFnoSession(now);
+        // One rights-gated V102 read per evaluation cycle for STR-176 and STR-177.
+        var completedWindow = new CompletedOhlcvReadOnce();
         return List.of(
             evaluateBasisCarry(now, today, sessionOpen),
             evaluateCalendarSpread(now, today, sessionOpen),
@@ -156,7 +162,8 @@ public class FnoFuturesResearchService {
             evaluateOpenInterestTrend(now, today),
             evaluatePriceOiDivergence(now, today),
             evaluateCashFuturesFeasibility(now, today, sessionOpen),
-            evaluateFuturesMomentum(now, today));
+            evaluateFuturesMomentum(now, today, completedWindow),
+            evaluateFuturesMeanReversion(now, today, completedWindow));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -532,8 +539,45 @@ public class FnoFuturesResearchService {
     }
 
 
+
+    /** Per-request fan-out: avoid redundant SQL and inconsistent as-of snapshots. */
+    private static final class CompletedOhlcvReadOnce {
+        private boolean attempted;
+        private boolean failed;
+        private String key;
+        private LocalDate from;
+        private LocalDate to;
+        private Instant asOf;
+        private List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
+
+        List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> read(
+                FnoVerifiedCompletedOhlcvOiStore source, String instrumentKey,
+                LocalDate start, LocalDate end, Instant instant) {
+            if (!attempted) {
+                attempted = true;
+                key = instrumentKey;
+                from = start;
+                to = end;
+                asOf = instant;
+                try {
+                    rows = source.readExactContract(instrumentKey, start, end, instant);
+                } catch (RuntimeException unavailable) {
+                    failed = true;
+                    throw unavailable;
+                }
+            }
+            if (!key.equals(instrumentKey) || !from.equals(start) || !to.equals(end)
+                    || !asOf.equals(instant) || failed) {
+                // Never reuse a result across a different instrument or evaluation.
+                throw new IllegalStateException("FNO_COMPLETED_SOURCE_WINDOW_UNAVAILABLE");
+            }
+            return rows;
+        }
+    }
+
     /** STR-176: verified original-time futures OHLCV and separately finalized OI. */
-    private StrategyStatus evaluateFuturesMomentum(Instant now, LocalDate today) {
+    private StrategyStatus evaluateFuturesMomentum(Instant now, LocalDate today,
+            CompletedOhlcvReadOnce completedWindow) {
         var rights = new FnoFuturesMomentumV1.SourceRights(
             researchRightsVerified && completedOhlcvResearchRightsVerified,
             researchRightsVerified && completedOhlcvResearchRightsVerified,
@@ -560,7 +604,7 @@ public class FnoFuturesResearchService {
             ? pair.get().far() : pair.get().near();
         final List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
         try {
-            rows = completedOhlcvOiStore.readExactContract(
+            rows = completedWindow.read(completedOhlcvOiStore,
                 chosen.instrumentKey(), today.minusDays(OI_LOOKBACK_DAYS), today, now);
         } catch (RuntimeException unavailable) {
             return momentumBlocked(now, rights, "FUT_MOM_SOURCE_READ_UNAVAILABLE", 1, 0);
@@ -630,6 +674,111 @@ public class FnoFuturesResearchService {
             null, List.of(), rights, MOMENTUM_THRESHOLDS, now);
         return status(blocked.strategyId(), blocked.status().name(), reason,
             now, "NONE", contracts, 0, history, "FUT_MOM_SOURCE_BLOCKED");
+    }
+
+
+    /** STR-177: ten source-finalized OHLCV/OI sessions; never paper or live. */
+    private StrategyStatus evaluateFuturesMeanReversion(Instant now, LocalDate today,
+            CompletedOhlcvReadOnce completedWindow) {
+        var rights = new FnoFuturesMeanReversionV1.SourceRights(
+            researchRightsVerified && completedOhlcvResearchRightsVerified,
+            researchRightsVerified && completedOhlcvResearchRightsVerified,
+            contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !completedOhlcvResearchRightsVerified) {
+            return meanReversionBlocked(now, rights, "FUT_MR_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (completedOhlcvOiStore == null) {
+            return meanReversionBlocked(now, rights, "FUT_MR_COMPLETED_SOURCE_ADAPTER_MISSING",
+                0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return meanReversionBlocked(now, rights, "FUT_MR_INSTRUMENT_MASTER_NOT_CURRENT",
+                0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty()) {
+            return meanReversionBlocked(now, rights, "FUT_MR_FUTURES_CONTRACT_NOT_RESOLVED",
+                0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(7))
+            ? pair.get().far() : pair.get().near();
+        final List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
+        try {
+            rows = completedWindow.read(completedOhlcvOiStore,
+                chosen.instrumentKey(), today.minusDays(OI_LOOKBACK_DAYS), today, now);
+        } catch (RuntimeException unavailable) {
+            return meanReversionBlocked(now, rights, "FUT_MR_SOURCE_READ_UNAVAILABLE", 1, 0);
+        }
+        if (rows == null || rows.size() < 10) {
+            return meanReversionBlocked(now, rights, "FUT_MR_TEN_VERIFIED_SESSIONS_MISSING",
+                1, rows == null ? 0 : rows.size());
+        }
+        String provider = null;
+        LocalDate listedFrom = null;
+        LocalDate prev = null;
+        for (var row : rows) {
+            if (row == null || row.sessionDate() == null || row.listedFrom() == null
+                    || !chosen.instrumentKey().equals(row.instrumentKey())
+                    || !chosen.underlyingKey().equals(row.underlyingKey())
+                    || !chosen.expiry().equals(row.expiry())
+                    || chosen.lotSize() != row.lotSize()
+                    || !FnoMarketDataProvider.isSessionHistorySource(row.provider())
+                    || (provider != null && !provider.equals(row.provider()))
+                    || (listedFrom != null && !listedFrom.equals(row.listedFrom()))
+                    || (prev != null && !prev.isBefore(row.sessionDate()))
+                    || row.sessionDate().isAfter(today)
+                    || row.sessionDate().isBefore(today.minusDays(OI_LOOKBACK_DAYS))
+                    || row.verifiedSessionCloseAt() == null
+                    || !officialNonExpiringFuturesClose(row.sessionDate()).equals(
+                        row.verifiedSessionCloseAt())
+                    || row.ohlcvFirstAvailableAt() == null || row.oiFirstAvailableAt() == null) {
+                return meanReversionBlocked(now, rights,
+                    "FUT_MR_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS", 1, rows.size());
+            }
+            provider = row.provider();
+            listedFrom = row.listedFrom();
+            prev = row.sessionDate();
+        }
+        var last = rows.subList(rows.size() - 10, rows.size());
+        List<FnoFuturesMeanReversionV1.CompletedSession> bars = new ArrayList<>();
+        prev = null;
+        for (var row : last) {
+            boolean complete = calendar.isTradingDay(row.sessionDate());
+            if (prev != null) {
+                for (LocalDate d = prev.plusDays(1); d.isBefore(row.sessionDate());
+                        d = d.plusDays(1)) {
+                    if (calendar.isTradingDay(d)) complete = false;
+                }
+            }
+            bars.add(new FnoFuturesMeanReversionV1.CompletedSession(
+                row.sessionDate(), complete, row.instrumentKey(), row.provider(),
+                row.open(), row.high(), row.low(), row.close(), true,
+                row.ohlcvFirstAvailableAt(), row.tradedVolumeUnits(),
+                row.openInterestUnits(), row.oiFirstAvailableAt()));
+            prev = row.sessionDate();
+        }
+        var contract = new FnoFuturesMeanReversionV1.Contract(
+            chosen.instrumentKey(), chosen.underlyingKey(), listedFrom,
+            chosen.expiry(), chosen.lotSize(), true);
+        var decision = FnoFuturesMeanReversionV1.evaluate(
+            contract, List.copyOf(bars), rights, MEAN_REVERSION_THRESHOLDS, now);
+        return status(decision.strategyId(), decision.status().name(),
+            decision.reasonCode(), now, provider, 1, 0, bars.size(),
+            "COMPLETED_OHLCV_OI_MEAN_REVERSION_RESEARCH_NO_ORDER");
+    }
+
+    private static StrategyStatus meanReversionBlocked(Instant now,
+            FnoFuturesMeanReversionV1.SourceRights rights,
+            String reason, int contracts, int history) {
+        var decision = FnoFuturesMeanReversionV1.evaluate(
+            null, List.of(), rights, MEAN_REVERSION_THRESHOLDS, now);
+        return status(decision.strategyId(), decision.status().name(), reason,
+            now, "NONE", contracts, 0, history, "FUT_MR_SOURCE_BLOCKED");
     }
 
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
