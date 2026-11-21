@@ -27,7 +27,7 @@ class FnoTailRiskPutHedgeResearchServiceTest {
     }
     @SuppressWarnings("unchecked")
     private static <T> List<T> cast(Object value){return (List<T>)value;}
-    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules();}
+    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);}
     private static FnoTailRiskPutHedgeResearchService.Evidence fixture() throws Exception {
         return new FnoTailRiskPutHedgeResearchService.Evidence(
             cast(method(FnoTailRiskPutHedgeV1Test.class,"owned",new Class<?>[0])),
@@ -42,7 +42,7 @@ class FnoTailRiskPutHedgeResearchServiceTest {
     private static FnoVerifiedStrategy203206SourceStore source(String content){
         var store=mock(FnoVerifiedStrategy203206SourceStore.class);
         when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(new Proof(
-            ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(40),"a".repeat(64))));
+            ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(1),"a".repeat(64))));
         return store;
     }
     @Test void deniedResearchRightsDoNotReadOrPlaceBrokerOrders(){
@@ -77,4 +77,23 @@ class FnoTailRiskPutHedgeResearchServiceTest {
         assertEquals("STR_206_ORIGINAL_SOURCE_READ_FAILED",row.reasonCode());
         assertFalse(row.toString().contains("secret"));
     }
+    @Test void mixedProviderPayloadCannotBorrowFirstProvidersRights() throws Exception {
+        var payload=json().writeValueAsString(fixture());
+        assertTrue(payload.contains("UPSTOX_ANALYTICS"),"fixture must contain source issuer");
+        var other=payload.replace("UPSTOX_ANALYTICS","ANGEL_ONE_SMARTAPI");
+        var row=new FnoTailRiskPutHedgeResearchService(source(other),json(),true).evaluate(NOW);
+        assertEquals("STR_206_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(ID,row.strategyId());
+    }
+    @Test void payloadObservedAfterEvidenceFirstKnownIsRejectedWithoutOrders() throws Exception {
+        var content=json().writeValueAsString(fixture());
+        var store=source(content);
+        when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(
+            new Proof(ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(75),"a".repeat(64))));
+        var row=new FnoTailRiskPutHedgeResearchService(store,json(),true).evaluate(NOW);
+        assertEquals("STR_206_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(0,row.contractsResolved());
+        assertEquals(0,row.freshQuotes());
+    }
+
 }
