@@ -34,7 +34,7 @@ ALLOWED_FINDINGS = {
 def expected_request():
     return {
         "kind": "minttick-owner-private-fno-quality-audit-v1",
-        "audit_revision": 3,
+        "audit_revision": 4,
         "operation": "read-only-historical-candle-and-checkpoint-audit",
         "account": "098859530205",
         "region": "ap-south-1",
@@ -112,6 +112,19 @@ def parse_receipt(output):
                     or type(entry.get("count")) is not int
                     or not 0 <= entry["count"] <= 1000000):
                 raise ValueError("INVALID_TIME_PATTERN_RECEIPT")
+    isolation=report.get("quarantine")
+    if not isinstance(isolation,dict):
+        raise ValueError("INVALID_QUARANTINE_REPORT")
+    fields=("excludedExpiryMonth","eligibleExpiryMonths","eligibleContracts",
+            "eligibleCandles","excludedContracts","excludedCandles","status","boundary")
+    if (set(isolation)!=set(fields)
+            or isolation["status"] not in ("ISOLATED","BLOCKED")
+            or isolation["excludedExpiryMonth"]!="2025-12"
+            or isolation["boundary"]!="STRUCTURAL_RESEARCH_ONLY_NO_BACKTEST_APPROVAL"
+            or any(type(isolation[name]) is not int or not 0<=isolation[name]<=1000000
+                   for name in ("eligibleExpiryMonths","eligibleContracts",
+                                "eligibleCandles","excludedContracts","excludedCandles"))):
+        raise ValueError("INVALID_QUARANTINE_REPORT")
     return report
 
 def print_safe_report(report):
@@ -138,6 +151,15 @@ def print_safe_report(report):
                       f"clockOffset={pattern['time']}; candles={pattern['count']}", flush=True)
     for name,value in sorted(report["findings"].items()):
         print(f"FNO AUDIT FINDING: {name}={value}", flush=True)
+    q=report["quarantine"]
+    print(f"FNO AUDIT QUARANTINE: status={q['status']}; "
+          f"excludedMonth={q['excludedExpiryMonth']}; "
+          f"eligibleMonths={q['eligibleExpiryMonths']}; "
+          f"eligibleContracts={q['eligibleContracts']}; "
+          f"eligibleCandles={q['eligibleCandles']}; "
+          f"excludedContracts={q['excludedContracts']}; "
+          f"excludedCandles={q['excludedCandles']}; "
+          "researchOnly=true; backtestingApproved=false",flush=True)
     print("FNO AUDIT LIMITS: no contract type mapping; no provider source catalogue; "
           "no exchange holiday calendar; seven-day private cache", flush=True)
 
@@ -173,7 +195,10 @@ def runner():
                 raise SystemExit("FNO_AUDIT_INVALID_SAFE_REPORT") from None
             print_safe_report(report)
             if report["result"]!="PASS":
-                raise SystemExit("FNO_AUDIT_REVIEW_REQUIRED")
+                if report["quarantine"]["status"]!="ISOLATED":
+                    raise SystemExit("FNO_AUDIT_REVIEW_REQUIRED")
+                print("FNO AUDIT QUALITY GATE: raw=REVIEW; elevenMonthResearchCohort=ISOLATED; "
+                      "decemberBacktestingBlocked=true",flush=True)
             return
         if state not in ("Pending","InProgress","Delayed"):
             raise SystemExit("FNO_AUDIT_SSM_INVALID_STATUS")
