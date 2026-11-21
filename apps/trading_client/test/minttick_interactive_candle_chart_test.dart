@@ -55,6 +55,37 @@ void main() {
     expect(tapped, inInclusiveRange(78, 119));
   });
 
+  testWidgets('new verified candles preserve zoom and follow right edge',
+      (tester) async {
+    final existing = List.generate(120, bar);
+    await tester.pumpWidget(subject(existing, (_) {}));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('stock-chart-zoom-in')));
+    await tester.pumpAndSettle();
+    expect(find.text('93–120 / 120 bars'), findsOneWidget);
+
+    // A genuine next exchange timestamp is appended by the source; never a
+    // synthetic quote-only bar. The chart keeps exactly the same zoom.
+    final appended = [...existing, bar(120)];
+    await tester.pumpWidget(subject(appended, (_) {}));
+    await tester.pumpAndSettle();
+    expect(find.text('94–121 / 121 bars'), findsOneWidget);
+
+    await tester.drag(find.byKey(const ValueKey('stock-chart-gesture')),
+        const Offset(85, 0));
+    await tester.pumpAndSettle();
+    final label = find.byKey(const ValueKey('stock-chart-visible-range'));
+    final before = tester.widget<Text>(label).data;
+    expect(before, isNot('94–121 / 121 bars'));
+
+    await tester.pumpWidget(subject([...appended, bar(121)], (_) {}));
+    await tester.pumpAndSettle();
+    final after = tester.widget<Text>(label).data;
+    expect(after, isNotNull);
+    expect(after!.split(' / ').first, before!.split(' / ').first);
+    expect(after, contains('/ 122 bars'));
+  });
+
   testWidgets('pan and indicators are local viewport changes only',
       (tester) async {
     final bars = List.generate(120, bar);
