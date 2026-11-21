@@ -6777,21 +6777,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "Independently verified official NIFTY-sensitive calendar event with original schedule first-known, actual event start/end and licensed event-calendar research rights",
+    "35+ authentic completed source-verified NIFTY daily OHLC index candles with original 15:30 IST exchange close and first-known before the scheduled event",
+    "Two genuine source-verified same-provider NIFTY spot and normalized 30-calendar-day constant-tenor ATM implied-volatility snapshots, both original-first-known and correctly anchored before and after event",
+    "Independent chain/IV/constant-tenor/interpolation source rights, measured post-event annualized IV point decline, relative decline bps and actual spot move bps with no pre-event hindsight"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_VOLATILITY_CRUSH_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-202-volatility-crush-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed pre/post officially sourced NIFTY 30-day ATM constant-tenor implied volatility, original separately reported option-chain IV interpolation and genuine before/after spot snapshots",
+    "Original verified official event calendar with event schedule first-known timestamps, release timing and actual NSE session/holiday evidence",
+    "Independent ex-ante original-as-of event studies, out-of-sample walk-forward performance after spreads/IV/price/theta shocks and realistic India statutory fees, with no hindsight from post-event result",
+    "Actual broker market exposure and position sizing/margin/settlement controls, independently accepted PAPER ledger/UI and separately approved LIVE entitlements, risk kill switches"
+   ],
+   "note": "Strictly retrospective research classifier of genuine observed NIFTY 30d constant-tenor ATM IV decline following an independently verified already-finished event. A post-event drop cannot be used as a pre-event entry signal. No order, profitability, max loss or live-paper trading authorization. DATA_BLOCKED.",
    "id": "strategy.STR-202",
    "kind": "STRATEGY",
    "name": "Volatility Crush Research",
