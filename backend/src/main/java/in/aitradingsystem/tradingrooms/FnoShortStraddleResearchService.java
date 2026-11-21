@@ -30,7 +30,7 @@ public final class FnoShortStraddleResearchService {
     private static final String NIFTY=FnoLongOptionCrossoverV1.UNDERLYING;
     private static final ZoneId IST=ZoneId.of("Asia/Kolkata");
     private final FnoVerifiedNiftyLongOptionSourceStore daily;
-    private final FnoVerifiedNiftyShortStraddleSourceStore short-straddles;
+    private final FnoVerifiedNiftyShortStraddleSourceStore straddles;
     private final MarketSessionCalendar calendar;
     private final boolean dailyRights,quotesRights,masterRights,ivRights,shortMarginRights;
     private final String account,callKey,putKey;
@@ -38,7 +38,7 @@ public final class FnoShortStraddleResearchService {
     @Autowired
     public FnoShortStraddleResearchService(
         FnoVerifiedNiftyLongOptionSourceStore daily,
-        FnoVerifiedNiftyShortStraddleSourceStore short-straddles,
+        FnoVerifiedNiftyShortStraddleSourceStore straddles,
         MarketSessionCalendar calendar,
         @Value("$" + "{minttick.fno-research.nifty-daily-close-research-rights-verified:false}")
             boolean dailyRights,
@@ -53,7 +53,7 @@ public final class FnoShortStraddleResearchService {
             boolean shortMarginRights,
         @Value("$" + "{minttick.fno-research.short-straddle-ce-key:}") String callKey,
         @Value("$" + "{minttick.fno-research.short-straddle-pe-key:}") String putKey) {
-        this.daily=daily;this.short-straddles=short-straddles;this.calendar=calendar;
+        this.daily=daily;this.straddles=straddles;this.calendar=calendar;
         this.dailyRights=dailyRights;this.quotesRights=quotesRights;
         this.masterRights=masterRights;this.ivRights=ivRights;
         this.shortMarginRights=shortMarginRights;
@@ -66,7 +66,7 @@ public final class FnoShortStraddleResearchService {
         if(now==null)throw new IllegalArgumentException("SHORT_STRADDLE_AS_OF_REQUIRED");
         if(!dailyRights||!quotesRights||!masterRights||!ivRights||!shortMarginRights)
             return blocked(now,"SHORT_STRADDLE_SOURCE_OR_IV_RIGHTS_UNVERIFIED",true,0);
-        if(daily==null||short-straddles==null||calendar==null)
+        if(daily==null||straddles==null||calendar==null)
             return blocked(now,"SHORT_STRADDLE_SOURCE_UNAVAILABLE",false,0);
         if(!calendar.isInsideCashSession(now))
             return blocked(now,"SHORT_STRADDLE_CASH_SESSION_CLOSED",false,0);
@@ -83,7 +83,7 @@ public final class FnoShortStraddleResearchService {
             return blocked(now,"SHORT_STRADDLE_35_ORIGINAL_DAILY_CLOSES_MISSING",false,
                 closes==null?0:closes.size());
         final Optional<Proof> source;
-        try{source=short-straddles.oneCurrent(account,callKey,putKey,now);}
+        try{source=straddles.oneCurrent(account,callKey,putKey,now);}
         catch(RuntimeException unavailable){
             return blocked(now,"SHORT_STRADDLE_ORIGINAL_IV_SOURCE_READ_FAILED",false,closes.size());
         }
