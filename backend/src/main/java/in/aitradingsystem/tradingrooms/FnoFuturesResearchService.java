@@ -3,6 +3,7 @@ package in.aitradingsystem.tradingrooms;
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
+import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -23,7 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of eight futures research evaluators (STR-170..177).
+ * Read-only invocation of nine futures research evaluators (STR-170..178).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -66,11 +67,14 @@ public class FnoFuturesResearchService {
     private final FnoVerifiedFinalPriceOiSessionStore finalSessionStore;
     private final FnoCashFuturesFeasibilityStore cashFeasibilityStore;
     private final FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore;
+    private final FnoIndexHedgeResearchStore indexHedgeStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
     private final boolean finalPriceResearchRightsVerified;
     private final boolean cashFeasibilityResearchRightsVerified;
     private final boolean completedOhlcvResearchRightsVerified;
+    private final boolean hedgeResearchRightsVerified;
+    private final String hedgeAccountScope;
     private final String cashFeasibilityAccountScope;
     private final String basisUnderlyingKey;
 
@@ -81,11 +85,14 @@ public class FnoFuturesResearchService {
             FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
             FnoCashFuturesFeasibilityStore cashFeasibilityStore,
             FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
+            FnoIndexHedgeResearchStore indexHedgeStore,
             @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
             @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
             @Value("${minttick.fno-research.cash-feasibility-research-rights-verified:false}") boolean cashFeasibilityResearchRightsVerified,
             @Value("${minttick.fno-research.completed-ohlcv-research-rights-verified:false}") boolean completedOhlcvResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-research-rights-verified:false}") boolean hedgeResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-account-scope:}") String hedgeAccountScope,
             @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
         this.feed = feed;
@@ -95,14 +102,36 @@ public class FnoFuturesResearchService {
         this.finalSessionStore = finalSessionStore;
         this.cashFeasibilityStore = cashFeasibilityStore;
         this.completedOhlcvOiStore = completedOhlcvOiStore;
+        this.indexHedgeStore = indexHedgeStore;
         this.researchRightsVerified = researchRightsVerified;
         this.contractDiscoveryVerified = contractDiscoveryVerified;
         this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
         this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
         this.completedOhlcvResearchRightsVerified = completedOhlcvResearchRightsVerified;
+        this.hedgeResearchRightsVerified = hedgeResearchRightsVerified;
+        this.hedgeAccountScope = hedgeAccountScope == null ? "" : hedgeAccountScope.trim();
         this.cashFeasibilityAccountScope =
             cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
         this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
+    }
+
+    /** Earlier source-only fixtures keep STR-178 research denied by default. */
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store,
+            FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoCashFuturesFeasibilityStore cashFeasibilityStore,
+            FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
+            boolean researchRightsVerified, boolean contractDiscoveryVerified,
+            boolean finalPriceResearchRightsVerified, boolean cashFeasibilityResearchRightsVerified,
+            boolean completedOhlcvResearchRightsVerified,
+            String cashFeasibilityAccountScope, String basisUnderlyingKey) {
+        this(feed, calendar, registry, store, finalSessionStore,
+            cashFeasibilityStore, completedOhlcvOiStore, null,
+            researchRightsVerified, contractDiscoveryVerified,
+            finalPriceResearchRightsVerified, cashFeasibilityResearchRightsVerified,
+            completedOhlcvResearchRightsVerified, false, "",
+            cashFeasibilityAccountScope, basisUnderlyingKey);
     }
 
     /** Source-only compatibility for existing STR-175 research tests. */
@@ -163,7 +192,8 @@ public class FnoFuturesResearchService {
             evaluatePriceOiDivergence(now, today),
             evaluateCashFuturesFeasibility(now, today, sessionOpen),
             evaluateFuturesMomentum(now, today, completedWindow),
-            evaluateFuturesMeanReversion(now, today, completedWindow));
+            evaluateFuturesMeanReversion(now, today, completedWindow),
+            evaluateIndexFuturesHedge(now, today, sessionOpen));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
