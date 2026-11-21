@@ -26,7 +26,10 @@ class FnoFuturesOpenInterestTrendV1Test {
     private static final Thresholds THRESHOLDS = new Thresholds(800, 3, 2500, 5000);
 
     private static Instant close(LocalDate d) {
-        return d.atTime(LocalTime.of(15, 30)).atZone(IST).toInstant();
+        LocalTime time = d.isBefore(LocalDate.of(2026, 8, 3)) ? LocalTime.of(15, 30)
+            : d.isBefore(LocalDate.of(2026, 12, 7)) ? LocalTime.of(15, 40)
+            : LocalTime.of(15, 45);
+        return d.atTime(time).atZone(IST).toInstant();
     }
     private static CompletedSession day(int date, long oi, long volume) {
         LocalDate d = LocalDate.of(2026, 11, date);
@@ -268,6 +271,18 @@ class FnoFuturesOpenInterestTrendV1Test {
             evaluate(CONTRACT, rising(), RIGHTS, new Thresholds(800, 5, 2500, 5000)).status());
         assertEquals(Status.BLOCKED_DATA,
             evaluate(CONTRACT, rising(), RIGHTS, new Thresholds(800, 3, 0, 5000)).status());
+    }
+
+    @Test
+    void novemberFuturesCloseAt1540Rejects1530AsUncompletedOI() {
+        var bars = rising();
+        var row = bars.get(4);
+        var premature = new CompletedSession(row.exchangeDate(), true,
+            row.instrumentKey(), row.source(), close(row.exchangeDate()).minusSeconds(600),
+            close(row.exchangeDate()).plusSeconds(1800),
+            row.openInterestUnits(), row.tradedVolumeUnits());
+        assertEquals("OI_COMPLETED_SESSION_INVALID",
+            evaluate(change(bars, 4, premature)).reasonCode());
     }
 
     @Test
