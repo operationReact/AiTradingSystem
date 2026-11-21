@@ -64,7 +64,7 @@ class FnoShortStraddleV1Test {
     }
     @Test void matchingAtmCallPutShortPremiumCarriesUnboundedUpsideLoss() {
         var d=run();
-        assertState(d,Status.RESEARCH_CANDIDATE,"SHORT_STRADDLE_RESEARCH_ONLY");
+        assertState(d,Status.RESEARCH_CANDIDATE,"SHORT_STRADDLE_UNBOUNDED_RISK_RESEARCH_ONLY");
         assertEquals(CE,d.callKey());assertEquals(PE,d.putKey());
         assertTrue(d.theoreticalMaximumDownsideExpiryLossInr().compareTo(d.netCollectedCreditPerLotInr())>0);
         assertTrue(d.lowerExpiryBreakeven().compareTo(n("100"))<0);
