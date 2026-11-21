@@ -48,6 +48,8 @@ DIRECT_SOURCE_CALLSITES = (
          "FnoStrangleResearchService.java"),
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
          "FnoShortStraddleResearchService.java"),
+    Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
+         "FnoShortStrangleResearchService.java"),
 )
 SIGNAL_ONLY_CALLSITE = (
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
