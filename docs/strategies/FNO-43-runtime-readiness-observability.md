@@ -285,3 +285,27 @@ The deterministic Java fixtures and CI are NOT independently verified
 NSE real-data or broker-order evidence. Next: STR-195 Short Strangle,
 which must instead prove **separate OTM strikes** and account-level
 two-short-leg margin/writing rights.
+
+## 21 November 2026 — STR-195 out-of-money short strangle source research
+
+The existing `FnoShortStrangleV1.evaluate` is now invoked by a distinct
+`FnoShortStrangleResearchService` directly on **EMPTY** V115 source data,
+with **PE strike < original NIFTY index bid < CE strike** for two genuinely
+listed contracts of matching lot size and expiry. The V114 same-strike
+short straddle evidence cannot qualify as an OTM strangle.
+
+V115 requires original synchronized CE/PE real **BID depth** and distinct
+provider-emitted true annualized IV with separately verified digests and
+model-inference research-use receipts; independent account-scoped broker
+short-writing eligibility, margin reserve, stress scenario and nonduplicated
+combined fees with an explicit **UNBOUNDED CE upside loss** warning.
+Margin, after-cost premium, and stressed finite price are **not** a maximum
+loss cap, not evidence of profitable trades, and never authorize orders.
+All rights default DENIED and account/instrument keys remain blank.
+
+**26/43 distinct read-only research evaluators, 17 without direct adapters.
+Independently verified original NSE real-data E2E 0/43, PAPER 0/43,
+LIVE 0/43.** All strategies remain `DATA_BLOCKED`, with no
+broker trading permission changes or production deployment.
+Next distinct research path: STR-196 (per capability manifest), requiring
+its own typed source proof, not inferred shared evaluator aliases.
