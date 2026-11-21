@@ -5857,21 +5857,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ genuine completed NIFTY 50 daily closes, source first-known timestamp and a new EMA8-below-EMA21 bearish crossover",
+    "Verified listed NSE_FO NIFTY PE with strike, lot, expiry and tick provenance",
+    "Same-provider synchronized fresh underlying and PE ask/bid, verified depth/OI and research-use rights",
+    "Explicit downside-at-expiry hypothetical scenario, bid/ask/slippage, Indian transaction fees and premium-at-risk cap"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_PUT_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongPutV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongPutV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-182-long-put.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-authorized NSE option-chain/underlying adapters and original timestamp provenance",
+    "Verified real exchange expiry/lot contract, Indian option premium fees/taxes and settlement behavior",
+    "Out-of-sample timestamp-correct historical walk-forward replay and actual fill simulation",
+    "Separately approved PAPER lifecycle and Flutter acceptance, LIVE risk/permission audits"
+   ],
+   "note": "Deterministic bearish EMA crossover + PE source, liquidity, modeled maximum premium loss and hypothetical at-expiry payoff. Does not activate any option feed or trading; DATA_BLOCKED until independently verified.",
    "id": "strategy.STR-182",
    "kind": "STRATEGY",
    "name": "Long Put",
