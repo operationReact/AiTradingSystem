@@ -30,12 +30,16 @@ REPO = "operationReact/AiTradingSystem"
 ISSUE = 1504
 URL = "https://api.upstox.com/v3/market-quote/ltp?instrument_key=NSE_EQ%7CINE848E01016"
 INSTRUMENT = "NSE_EQ|INE848E01016"
+# Explicit truthful client identifier: Upstox staff report default Python-urllib
+# signatures can be rejected by Cloudflare with error 1010.
+UPSTOX_USER_AGENT = "MintTick-Upstox-ReadOnly-Diagnostics/1.0"
 MARKER = "MINTTICK_UPSTOX_QUOTE_ACCESS:"
 STATES = frozenset({
     "QUOTE_VERIFIED", "QUOTE_EMPTY", "QUOTE_HTTP_400", "QUOTE_HTTP_401",
     "QUOTE_HTTP_403", "QUOTE_HTTP_404", "QUOTE_HTTP_422", "QUOTE_HTTP_429",
     "QUOTE_HTTP_5XX", "QUOTE_HTTP_OTHER", "QUOTE_PLUS_REQUIRED",
     "QUOTE_PROVIDER_INVALID", "QUOTE_TRANSPORT_ERROR",
+    "QUOTE_CLOUDFLARE_1010", "QUOTE_TOKEN_INVALID",
     "TOKEN_UNAVAILABLE", "HOST_INVALID",
 })
 
@@ -61,7 +65,15 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def classify_http(code, raw):
-    if code == 403 and b"UDAPI1149" in raw[:2048]:
+    """Allowlisted failure classification only; never log response payload."""
+    snippet = raw[:2048]
+    if code == 403 and (b"error 1010" in snippet.lower()
+                        or b"error code: 1010" in snippet.lower()
+                        or b"browser_signature_banned" in snippet.lower()):
+        return "QUOTE_CLOUDFLARE_1010"
+    if b"UDAPI100050" in snippet:
+        return "QUOTE_TOKEN_INVALID"
+    if code == 403 and b"UDAPI1149" in snippet:
         return "QUOTE_PLUS_REQUIRED"
     if code in (400, 401, 403, 404, 422, 429):
         return "QUOTE_HTTP_" + str(code)
@@ -98,6 +110,7 @@ def quote(token):
     req = urllib.request.Request(URL, headers={
         "Authorization": "Bearer " + token,
         "Accept": "application/json",
+        "User-Agent": UPSTOX_USER_AGENT,
     }, method="GET")
     try:
         with opener.open(req, timeout=12) as response:
@@ -105,6 +118,8 @@ def quote(token):
                 return classify_http(response.status, b"")
             data = response.read(32769)
     except urllib.error.HTTPError as error:
+        # Read only the first bounded bytes for known failure codes. No raw
+        # HTML/JSON body, bearer token, quote, or Cloudflare Ray ID is logged.
         return classify_http(error.code, error.read(2049))
     except (urllib.error.URLError, TimeoutError, OSError):
         return "QUOTE_TRANSPORT_ERROR"
