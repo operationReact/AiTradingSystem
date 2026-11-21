@@ -105,13 +105,14 @@ public final class FnoPutSpreadCollarV1 {
                 || !rights.licensedFuturesMarketQuote() || !rights.licensedInstrumentMaster())
             return blocked(Status.BLOCKED_RIGHTS, "COLLAR_SOURCE_RIGHTS_UNVERIFIED", asOf);
         if (!validPolicy(policy) || !validFutureAndPosition(future, position, asOf, policy)
-                || !validOptionStructure(higherPut, lowerPut, shortCall, future, snapshot, asOf)
+                || !validOptionStructure(higherPut, lowerPut, shortCall, future, snapshot, asOf, policy)
                 || !validSnapshot(snapshot, future, policy, asOf)
+                || position.brokerFirstKnownAt().isAfter(snapshot.exchangeAt())
                 || !validHistory(history, snapshot))
             return blocked(Status.BLOCKED_DATA, "COLLAR_SOURCE_OR_CONTRACT_INVALID", asOf);
-        if (!validLeg(snapshot.buyHigherPut(), higherPut, "BUY", snapshot, policy, asOf)
-                || !validLeg(snapshot.sellLowerPut(), lowerPut, "SELL", snapshot, policy, asOf)
-                || !validLeg(snapshot.sellHigherCall(), shortCall, "SELL", snapshot, policy, asOf))
+        if (!validLeg(snapshot.buyHigherPut(), higherPut, "BUY", snapshot, policy, asOf, position.verifiedLongLots())
+                || !validLeg(snapshot.sellLowerPut(), lowerPut, "SELL", snapshot, policy, asOf, position.verifiedLongLots())
+                || !validLeg(snapshot.sellHigherCall(), shortCall, "SELL", snapshot, policy, asOf, position.verifiedLongLots()))
             return blocked(Status.BLOCKED_DATA, "COLLAR_ORIGINAL_GREEKS_OR_DEPTH_INVALID", asOf);
 
         int lots = position.verifiedLongLots(); // Exactly one 1:-1:-1 per held long futures lot.
@@ -172,7 +173,7 @@ public final class FnoPutSpreadCollarV1 {
     }
     private static boolean validOptionStructure(OptionContract higher, OptionContract lower,
                                                 OptionContract call, FutureContract future,
-                                                Snapshot snap, Instant at) {
+                                                Snapshot snap, Instant at, Policy policy) {
         if (snap == null || higher == null || lower == null || call == null
                 || !validOption(higher, future, "PE", at)
                 || !validOption(lower, future, "PE", at)
@@ -182,6 +183,8 @@ public final class FnoPutSpreadCollarV1 {
             return false;
         // Put spread collar: long higher OTM PE, short lower OTM PE, short OTM CE.
         return lower.strike().compareTo(higher.strike()) < 0
+                && higher.strike().subtract(lower.strike(),MC).compareTo(
+                      BigDecimal.valueOf(policy.minimumPutWingWidthPoints())) >= 0
                 && higher.strike().compareTo(snap.sourceIndexSpot()) < 0
                 && snap.sourceIndexSpot().compareTo(call.strike()) < 0;
     }
@@ -212,7 +215,7 @@ public final class FnoPutSpreadCollarV1 {
                 && !z.toLocalTime().isAfter(CLOSE);
     }
     private static boolean validLeg(Quote q, OptionContract c, String side,
-                                    Snapshot s, Policy p, Instant now) {
+                                    Snapshot s, Policy p, Instant now, int requiredLots) {
         if (q == null || !q.sourceVerified() || !s.provider().equals(q.provider())
                 || !c.key().equals(q.key()) || !spread(q.bid(),q.ask(),p.maxOptionSpreadBps())
                 || !positive(q.originalIvAnnualizedPercent())
@@ -221,15 +224,16 @@ public final class FnoPutSpreadCollarV1 {
                 || q.originalOpenInterestLots() < p.minimumOpenInterestLots()
                 || q.exchangeAt() == null || q.firstKnownAt() == null
                 || q.firstKnownAt().isBefore(q.exchangeAt()) || q.firstKnownAt().isAfter(now)
+                || q.firstKnownAt().isAfter(s.firstKnownAt())
                 || Duration.between(q.exchangeAt(), now).compareTo(
                         Duration.ofSeconds(p.maxQuoteAgeSeconds())) > 0
                 || Math.abs(Duration.between(q.exchangeAt(),s.exchangeAt()).getSeconds())
                          > p.maxSkewSeconds()
                 || q.originalDelta() == null)
             return false;
-        if ("BUY".equals(side) && q.originalAskDepthLots() < 1)
+        if ("BUY".equals(side) && q.originalAskDepthLots() < requiredLots)
             return false;
-        if ("SELL".equals(side) && q.originalBidDepthLots() < 1)
+        if ("SELL".equals(side) && q.originalBidDepthLots() < requiredLots)
             return false;
         BigDecimal d = q.originalDelta();
         return "CE".equals(c.optionType())
