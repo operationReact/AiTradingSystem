@@ -208,3 +208,25 @@ finite at zero underlying, but not an execution guarantee.
 
 Manifest remains `DATA_BLOCKED`; independently verified original
 real-source E2E **0/43**, PAPER **0/43**, LIVE **0/43**.
+
+## 21 November 2026 — STR-192 true original two-leg IV long straddle
+
+The existing `FnoLongStraddleV1.evaluate` from PR #1541 is now called directly
+by `FnoStraddleResearchService`, rather than being counted solely because
+a deterministic strategy class/JUnit fixture exists. This uses the independent
+V106 completed NIFTY close source and new **EMPTY** V112 source-attested original
+NIFTY index+CE+PE bid/ask, independently captured **per-leg IV**, depth/OI,
+identical verified strike/lot/expiry and original as-of timestamps.
+
+Two separate IV digest/receipt records are mandatory. Model-computed,
+calibrated or fabricated IV is not allowed to appear as captured market IV.
+Six separate research rights receipts (index, option chain, instrument master,
+call IV, put IV, all-in costs) and four rights configuration gates remain
+default DENIED; both option keys default blank. No data is seeded.
+
+**Current research integration: 23/43 distinct typed evaluator calls;
+20/43 lack direct adapters. Independent true-market historical E2E 0/43,
+PAPER 0/43, LIVE 0/43.** This is a research-only integration; all strategies
+remain `DATA_BLOCKED`. Estimated one-sigma moves are not return forecasts.
+The next planned adapter is STR-193 long strangle, which MUST NOT reuse
+the same-strike straddle proof as a valid OTM strangle instrument pair.

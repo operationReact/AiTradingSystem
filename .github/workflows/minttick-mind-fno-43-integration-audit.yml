@@ -64,6 +64,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V112__fno_verified_nifty_straddle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -132,6 +137,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedRatioSpreadSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoRatioSpreadResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V112__fno_verified_nifty_straddle_iv_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyStraddleIvSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoStraddleResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -260,6 +270,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoRatioSpreadResearchServiceTest,FnoVerifiedRatioSpreadSourceStoreTest' test
+      - name: Validate STR-192 original CE and PE IV, same-strike contracts and no-order policy
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoStraddleResearchServiceTest,FnoVerifiedNiftyStraddleIvSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
