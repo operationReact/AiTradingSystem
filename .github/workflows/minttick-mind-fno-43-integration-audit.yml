@@ -12,6 +12,10 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -26,6 +30,10 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoClosingSnapshotStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -74,6 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=Fno43StrategyReadinessServiceTest' test
+      - name: Validate STR-173 source adapter and rights-attested snapshot SQL
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoFuturesResearchServiceTest,FnoClosingSnapshotStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
