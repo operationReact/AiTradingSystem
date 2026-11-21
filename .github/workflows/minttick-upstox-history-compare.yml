@@ -91,11 +91,11 @@ jobs:
           set -euo pipefail
           python3 infra/ec2-paper/upstox_history_access_compare.py runner > "$RUNNER_TEMP/history-compare.txt" 2>&1
       - name: Publish one sanitized result to the incident issue
-        if: \${{ always() && github.event_name == 'push' }}
+        if: ${{ always() && github.event_name == 'push' }}
         env:
-          GH_TOKEN: \${{ github.token }}
-          GH_REPOSITORY: \${{ github.repository }}
-          GH_RUN_ID: \${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           python3 infra/ec2-paper/upstox_history_access_compare.py issue "$RUNNER_TEMP/history-compare.txt"
