@@ -12,21 +12,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
  * A read-only 43-strategy *readiness* registry, not a 43-strategy execution engine.
  * The authoritative manifest supplies identities and distinct required inputs.
  * STR-170..180 have distinct research evaluator calls; STR-180 needs original-time near-close spot/future pair and carry/delivery receipts.
- * STR-181/182 have a signal route, NOT a verified call to their distinct evaluators.
+ * STR-181/182 now have distinct option-evaluator callsites besides their preexisting signal routes.
  * No research status, including RESEARCH_CANDIDATE, authorizes PAPER/LIVE orders.
  */
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180");
-    private static final Set<String> SIGNAL_ONLY =
-        Set.of("strategy.STR-181", "strategy.STR-182");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182");
+    private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
     private record Definition(String id, String name, String source, List<String> requiredInputs) {}
@@ -50,10 +50,22 @@ public final class Fno43StrategyReadinessService {
                            List<StrategyRow> strategies) {}
 
     private final FnoFuturesResearchService futures;
+    private final FnoOptionsResearchService options;
     private final List<Definition> definitions;
 
-    public Fno43StrategyReadinessService(FnoFuturesResearchService futures, ObjectMapper mapper) {
+    @Autowired
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options, ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
+        this.options = Objects.requireNonNull(options);
+        this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Compatibility constructor for isolated operator failure and security tests. */
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            ObjectMapper mapper) {
+        this.futures = Objects.requireNonNull(futures);
+        this.options = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -76,6 +88,28 @@ public final class Fno43StrategyReadinessService {
         } catch (RuntimeException unavailable) {
             // Fail closed. Do not expose provider exceptions or token-bearing messages.
             observed.clear();
+        }
+
+        if (options != null) {
+            try {
+                var optionRows = options.evaluateAll(now);
+                if (optionRows != null) for (var result : optionRows) {
+                    if (result != null && DIRECT.contains(result.strategyId())
+                            && ("strategy.STR-181".equals(result.strategyId())
+                                || "strategy.STR-182".equals(result.strategyId()))
+                            && result.status() != null && result.reasonCode() != null) {
+                        if (observed.putIfAbsent(result.strategyId(), result) != null) {
+                            // Never choose from conflicting duplicate source observations.
+                            observed.remove(result.strategyId());
+                        }
+                    }
+                }
+            } catch (RuntimeException unavailable) {
+                // Preserve independently observed futures rows; source failure is
+                // not proof of option readiness and must not expose provider bodies.
+                observed.remove("strategy.STR-181");
+                observed.remove("strategy.STR-182");
+            }
         }
 
         List<StrategyRow> rows = new ArrayList<>(definitions.size());
