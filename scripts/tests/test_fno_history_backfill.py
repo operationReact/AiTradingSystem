@@ -175,6 +175,28 @@ class BackfillTest(unittest.TestCase):
                 f.validate_candles(bad,batch)
         self.assertEqual(len(f.validate_candles([candle()],batch)),1)
 
+    def test_rejects_second_daily_candle_at_0915_even_when_prices_differ(self):
+        batch=f.Batch(1,EXPIRED,"day",date(2025,4,20),date(2025,4,24),1)
+        next_candle=["2025-04-21T09:15:00+05:30",110,111,107,109,50,90]
+        with self.assertRaisesRegex(ValueError, "INVALID_FNO_DAILY_CANDLE"):
+            f.validate_candles([candle(),next_candle],batch)
+
+    def test_rejects_a_single_nonmidnight_or_non_ist_daily_candle(self):
+        batch=f.Batch(1,EXPIRED,"day",date(2025,4,20),date(2025,4,24),1)
+        for ts in ("2025-04-21T09:15:00+05:30",
+                   "2025-04-21T00:00:00+00:00"):
+            with self.subTest(ts=ts), self.assertRaisesRegex(
+                    ValueError,"INVALID_FNO_DAILY_CANDLE"):
+                f.validate_candles([[ts,101,106,100,105,1000,200]],batch)
+
+    def test_intraday_source_timestamps_are_not_subject_to_daily_rule(self):
+        batch=f.Batch(1,EXPIRED,"5minute",date(2025,4,20),date(2025,4,24),1)
+        rows=[
+            ["2025-04-21T09:15:00+05:30",101,106,100,105,1000,200],
+            ["2025-04-21T09:20:00+05:30",102,107,101,106,800,210]
+        ]
+        self.assertEqual(len(f.validate_candles(rows,batch)),2)
+
     def test_failed_or_expired_grants_do_not_invoke_provider(self):
         self.plan()
         p=Provider([f.ProviderReply(200,[candle()])])
