@@ -3,15 +3,18 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../data/history_monitor_repository.dart';
+import '../data/fno_history_progress_repository.dart';
+import 'fno_history_progress_panel.dart';
 import '../data/authenticated_api_client.dart';
 
 /// Owner-private operational metadata, never raw Angel One candle payloads.
 ///
 /// A stored candle is not proof the requested exchange sessions are complete.
 class HistoricalDataMonitorPage extends StatefulWidget {
-  const HistoricalDataMonitorPage({required this.repository, super.key});
+  const HistoricalDataMonitorPage({required this.repository, this.fnoRepository, super.key});
 
   final HistoryMonitorRepository repository;
+  final FnoHistoryProgressRepository? fnoRepository;
 
   @override
   State<HistoricalDataMonitorPage> createState() =>
@@ -167,6 +170,10 @@ class _HistoricalDataMonitorPageState extends State<HistoricalDataMonitorPage> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 104),
           children: [
+            if (widget.fnoRepository != null) ...[
+              FnoHistoryProgressPanel(repository: widget.fnoRepository!),
+              const SizedBox(height: 12),
+            ],
             Text('Private Angel One collection · read-only',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant)),
