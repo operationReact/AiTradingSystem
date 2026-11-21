@@ -62,6 +62,8 @@ DIRECT_SOURCE_CALLSITES = (
          "FnoDiagonalSpreadResearchService.java"),
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
          "FnoIvRankResearchService.java"),
+    Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
+         "FnoVolatilityCrushResearchService.java"),
 )
 SIGNAL_ONLY_CALLSITE = (
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
