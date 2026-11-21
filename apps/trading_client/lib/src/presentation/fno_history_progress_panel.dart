@@ -132,11 +132,10 @@ class _FnoHistoryProgressPanelState extends State<FnoHistoryProgressPanel> {
           if (data != null && data.hasPlannedBatches && data.percent != null) ...[
             const SizedBox(height: 11),
             Row(children: [
-              Text(data.completed.toString() + '/' + data.total.toString() +
-                   ' planned batches',
+              Text('${data.completed}/${data.total} planned batches',
                   style: theme.textTheme.labelMedium),
               const Spacer(),
-              Text(data.percent!.toStringAsFixed(1) + '%',
+              Text('${data.percent!.toStringAsFixed(1)}%',
                   key: const ValueKey('fno-history-percent'),
                   style: theme.textTheme.labelLarge?.copyWith(
                       fontWeight: FontWeight.w800)),
@@ -149,10 +148,10 @@ class _FnoHistoryProgressPanelState extends State<FnoHistoryProgressPanel> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Pending ' + (data.counts?['PENDING'] ?? 0).toString() +
-              ' · Retry ' + (data.counts?['RETRY'] ?? 0).toString() +
-              ' · Blocked ' + (data.counts?['BLOCKED'] ?? 0).toString() +
-              ' · Failed ' + (data.counts?['FAILED'] ?? 0).toString(),
+              'Pending ${data.counts?['PENDING'] ?? 0} · '
+              'Retry ${data.counts?['RETRY'] ?? 0} · '
+              'Blocked ${data.counts?['BLOCKED'] ?? 0} · '
+              'Failed ${data.counts?['FAILED'] ?? 0}',
               style: theme.textTheme.labelSmall,
             ),
           ],
