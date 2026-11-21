@@ -197,7 +197,7 @@ public final class FnoEquityCollarV1 {
                 || !validQuote(pq, a.minBidAskDepthLots(), a.minOpenInterestLots(),
                     a.maxEachOptionSpreadBps())
                 || !validQuote(cq, a.minBidAskDepthLots(), a.minOpenInterestLots(),
-                    a.maxEachOptionSpreadBps(), a.maxEachOptionSpreadBps())
+                    a.maxEachOptionSpreadBps())
                 || !validTime(eq.exchangeAt(), eq.firstKnownAt(), at)
                 || !validTime(pq.exchangeAt(), pq.firstKnownAt(), at)
                 || !validTime(cq.exchangeAt(), cq.firstKnownAt(), at)
