@@ -78,7 +78,7 @@ public final class FnoCoveredCallV1 {
 
     public static Decision evaluate(CallContract contract, Holding holding,
                                     List<CompletedClose> bars, EquityQuote equity,
-                                    CallQuote put, SourceRights rights,
+                                    CallQuote call, SourceRights rights,
                                     Assumptions a, Instant asOf) {
         Objects.requireNonNull(asOf, "asOf");
         if (rights == null || !rights.equityResearch() || !rights.optionChainResearch()
@@ -88,7 +88,7 @@ public final class FnoCoveredCallV1 {
             return blocked(Status.BLOCKED_DATA, "COVERED_CALL_OWNERSHIP_CONTRACT_INVALID", asOf);
         if (!validBars(bars, equity, asOf))
             return blocked(Status.BLOCKED_DATA, "COVERED_CALL_COMPLETED_HISTORY_INVALID", asOf);
-        if (!validQuotes(contract, holding, bars.getLast(), equity, put, a, asOf))
+        if (!validQuotes(contract, holding, bars.getLast(), equity, call, a, asOf))
             return blocked(Status.BLOCKED_DATA, "COVERED_CALL_QUOTES_ASOF_INVALID", asOf);
 
         // The research gate evaluates an observed, completed equity gain versus
