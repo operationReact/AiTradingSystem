@@ -67,7 +67,7 @@ jobs:
           assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
           assert json.loads(p.read_text())=={
               "kind":"minttick-personal-nse-fo-december-crosscheck-v1",
-              "comparison_revision":3,
+              "comparison_revision":4,
               "operation":"in-memory-nse-udiff-vs-upstox-private-december-2025",
               "account":"098859530205",
               "region":"ap-south-1",
@@ -143,6 +143,13 @@ jobs:
                       or report.get('privateUpstoxCandleRows')!=643
                       or report.get('privateContractDays')!=322):
                       raise SystemExit('FNO_DEC_CROSSCHECK_UNTRUSTED')
+                  personal=report.get('personalResearchDaily')
+                  if (report.get('researchDataPersisted') is not False
+                      or not isinstance(personal,dict)
+                      or set(personal)!={'total','upstoxMonths','nseDecember','uniqueDailyKeys'}
+                      or personal!={'total':3930,'upstoxMonths':3608,
+                                    'nseDecember':322,'uniqueDailyKeys':3930}):
+                      raise SystemExit('FNO_DEC_CROSSCHECK_BAD_CANONICAL')
                   metrics=report.get('metrics')
                   allowed={'duplicates','providerConflicts','providerIdenticalPairs',
                     'matchedNSEContractDays','missingNSEContractDays',
@@ -167,6 +174,9 @@ jobs:
                         '; missingArchives='+str(report['nseArchiveDaysNotFound'])+
                         '; UpstoxContracts=23; contractDates=322; duplicates=321; '
                         'exported=false; stored=false; tradingReady=false',flush=True)
+                  print('FNO PERSONAL DAILY CANDIDATE: total=3930; originalNonDec=3608; '
+                        'NSEDecember=322; duplicateDailyKeys=0; persistence=false; '
+                        'tradingApproved=false',flush=True)
                   for key in sorted(allowed):
                       print('FNO NSE METRIC: '+key+'='+str(metrics[key]),flush=True)
                   break
