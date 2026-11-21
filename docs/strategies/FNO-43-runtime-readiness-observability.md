@@ -359,3 +359,31 @@ independently verified real-data historical E2E 0/43, PAPER 0/43,
 LIVE 0/43.** `DATA_BLOCKED` remains unchanged for all 43.
 Next candidate STR-198 Long Butterfly must prove three separate call strikes,
 two sold middle contracts and realistic combined four-contract fees.
+
+## 21 November 2026 — STR-198 three-CALL long butterfly original-source research
+
+The existing deterministic `FnoLongButterflyV1.evaluate` is now invoked
+from a distinct, research-only `FnoLongButterflyResearchService` directly
+on **EMPTY V118** original three-listed-NIFTY-CALL custody, rather than
+reusing the four-leg iron butterfly's central CE/PE structure.
+
+The exact construction is **buy 1 lower-strike CE, sell 2 same-contract
+center-strike CE lots, buy 1 upper-strike CE**, with symmetric spacing,
+matching expiry and lot. The center requires **twice the authentic BID
+liquidity**, while two protective longs require original ASK liquidity.
+Three independent original provider-emitted annualized IVs, original
+underlying plus option exchange/first-seen times, 35+ verified completed
+NIFTY index sessions, and research-use rights receipts are all required.
+
+All **four option contracts** count toward modeled slippage and transaction
+fees (despite only three distinct symbols). The after-cost debit is the
+bounded *theoretical expiry* loss only when the two wings are intact; it
+is not an account's verified live margin, protection against partial fills,
+or proof of broker execution. Research config defaults denied, instruments
+blank; V118 seeds no records and no order path is enabled.
+
+**29/43 source-level direct research adapters (67.4%), 14 pending;
+independent real-market history E2E 0/43, PAPER 0/43 and LIVE 0/43.**
+All 43 remain `DATA_BLOCKED`; the tests do not upgrade their status.
+Next research identity is STR-199, requiring its own distinct typed
+source implementation rather than a shared synthetic strategy alias.

@@ -54,6 +54,8 @@ DIRECT_SOURCE_CALLSITES = (
          "FnoIronCondorResearchService.java"),
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
          "FnoIronButterflyResearchService.java"),
+    Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
+         "FnoLongButterflyResearchService.java"),
 )
 SIGNAL_ONLY_CALLSITE = (
     Path("backend/src/main/java/in/aitradingsystem/tradingrooms/"
