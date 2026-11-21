@@ -174,15 +174,24 @@ public final class FnoPortfolioProtectiveOverlayV1 {
                 BigDecimal debit=unitDebit.multiply(BigDecimal.valueOf(lots),MC)
                         .add(policy.modeledOneOrderFeeInr(),MC);
                 if(debit.compareTo(budget)>0)continue;
+                // Do not model more index-equivalent exposure than the entire
+                // broker-verified long equity portfolio. This is a strict
+                // conservative notional ceiling, NOT a beta or basis hedge.
+                BigDecimal overlayNotional=snapshot.indexSpot()
+                        .multiply(BigDecimal.valueOf((long)lots*c.officialLot()),MC);
+                if(overlayNotional.compareTo(currentValue)>0)break;
                 BigDecimal residual=BigDecimal.ZERO;
                 for(int k=0;k<3;k++){
                     BigDecimal putExpiryIntrinsic=c.strike().subtract(
                             indexScenario[k],MC).max(BigDecimal.ZERO)
                             .multiply(BigDecimal.valueOf((long)lots*c.officialLot()),MC);
-                    BigDecimal scenarioNetBenefit=putExpiryIntrinsic.subtract(debit,MC)
-                            .max(BigDecimal.ZERO);
-                    residual=residual.add(equityLoss[k].subtract(
-                            scenarioNetBenefit,MC).max(BigDecimal.ZERO),MC);
+                    // Each scenario is independent, but each hypothetical
+                    // protection purchase still pays premium even if that put
+                    // later expires worthless. Never clip a negative benefit
+                    // to zero and misrepresent free downside insurance.
+                    BigDecimal scenarioLoss=equityLoss[k].add(debit,MC)
+                            .subtract(putExpiryIntrinsic,MC).max(BigDecimal.ZERO);
+                    residual=residual.add(scenarioLoss,MC);
                 }
                 if(residual.compareTo(selectedResidual)<0
                         || (selectedKey!=null && residual.compareTo(selectedResidual)==0
