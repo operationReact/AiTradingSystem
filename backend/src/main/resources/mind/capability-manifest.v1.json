@@ -6087,21 +6087,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified one settled physically deliverable equity lot in broker-reconciled actual holdings, matching one source-listed NSE_FO PE contract and expiry",
+    "35+ true completed source-first-known NSE equity candles and an observed 20-session drawdown risk trigger",
+    "Rights-verified time-aligned same-provider held equity and genuine PE bid/ask, strike/lot/delivery mapping, OI/depth and original source timestamps",
+    "Nonzero estimated Indian put premium/fees, explicit downside hypothetical expiry comparison and premium-at-risk budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PROTECTIVE_PUT_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoProtectivePutV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoProtectivePutV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-187-protective-put.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed equity and options market data with original observation timestamps and actual official exchange calendar",
+    "Authenticated broker reconciliation proving exactly one settled owned-equity lot, matching real PE physical delivery, corporate actions and lot size",
+    "Correct Indian taxes/expiry/settlement and margin details, real option fills and no-lookahead historical out-of-sample replay",
+    "Separately approved PAPER ledger/UI acceptance and LIVE options permissions and broker order safety"
+   ],
+   "note": "Actual settled-equity protective PE (no proxy/index hedge) deterministic research scenario, requiring broker-reconciled ownership and source rights. Never executes; DATA_BLOCKED until genuine provider/holding integration and independent acceptance.",
    "id": "strategy.STR-187",
    "kind": "STRATEGY",
    "name": "Protective Put",
