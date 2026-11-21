@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           test_list=$(python3 ../scripts/fno_strategy_e2e_audit.py --list-tests)
-          test "$(printf '%s' "$test_list" | tr ',' '\n' | wc -l)" -eq 43
+          test "$(printf '%s\n' "$test_list" | tr ',' '\n' | wc -l)" -eq 43
           mvn --batch-mode --no-transfer-progress "-Dtest=$test_list" test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
