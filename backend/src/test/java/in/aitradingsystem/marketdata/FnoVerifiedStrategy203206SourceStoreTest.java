@@ -42,7 +42,7 @@ class FnoVerifiedStrategy203206SourceStoreTest {
             any(RowMapper.class),any(Object[].class));
     }
     @Test void claimedDigestMustActuallyMatchOriginalCanonicalJsonbText() throws Exception {
-        var value="{\\"provider\\": \\"UPSTOX_ANALYTICS\\"}";
+        var value="{\"provider\": \"UPSTOX_ANALYTICS\"}";
         var bytes=java.security.MessageDigest.getInstance("SHA-256")
             .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         var digest=java.util.HexFormat.of().formatHex(bytes);
