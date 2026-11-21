@@ -60,7 +60,8 @@ CREATE TABLE fno_verified_nifty_straddle_iv_source (
  valid_until TIMESTAMPTZ NOT NULL,
  retain_until DATE NOT NULL,
  CONSTRAINT uq_fno_straddle_iv_source UNIQUE (provider_code,ce_key,pe_key,first_known_at),
- CONSTRAINT ck_fno_straddle_identity CHECK (ce_key<>pe_key AND strike/tick=trunc(strike/tick)),
+ CONSTRAINT ck_fno_straddle_identity CHECK (ce_key<>pe_key AND strike/tick=trunc(strike/tick)
+    AND ce_iv_rights_receipt_id<>pe_iv_rights_receipt_id),
  CONSTRAINT ck_fno_straddle_times CHECK (
   index_exchange_at<=index_first_known_at
   AND ce_exchange_at<=ce_first_known_at AND pe_exchange_at<=pe_first_known_at
