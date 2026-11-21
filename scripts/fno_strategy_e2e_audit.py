@@ -22,7 +22,7 @@ EXPECTED_COUNT = END - START + 1
 CATALOG = Path("backend/src/main/resources/mind/capability-manifest.v1.json")
 SOURCE_ROOT = Path("backend/src/main/java/in/aitradingsystem/tradingrooms")
 TEST_ROOT = Path("backend/src/test/java/in/aitradingsystem/tradingrooms")
-DOC_ROOT = Path("docs/strategies")
+DOC_ROOT = Path("docs")
 PROOF_CLASS = "minttick.fno.43-research-evaluator-validation.v1"
 UNVERIFIED = "NO_INDEPENDENT_RUNTIME_EVIDENCE"
 # These are actual Java evaluator invocations in a reviewed research service,
