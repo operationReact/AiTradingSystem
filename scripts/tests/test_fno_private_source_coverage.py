@@ -30,6 +30,32 @@ class SourceCoverageTests(unittest.TestCase):
         self.assertEqual(m["nonMidnightRows"],1)
         self.assertEqual(m["weekendRows"],0)
 
+    def test_distinguishes_common_closed_day_from_two_partial_gaps(self):
+        expiry=date(2026,10,28)
+        first=expiry-timedelta(days=20)
+        holiday_candidate=first+timedelta(days=7)
+        partial_candidate=first+timedelta(days=8)
+        jobs=[]
+        rows=[]
+        for n in range(23):
+            key=f"NSE_FO|TEST{n:03d}|28-10-2026"
+            jobs.append((key,first.isoformat(),expiry.isoformat()))
+            for d in range(21):
+                day=first+timedelta(days=d)
+                if day.weekday()>=5 or day==holiday_candidate:
+                    continue
+                if day==partial_candidate and n<2:
+                    continue
+                rows.append((key,day.isoformat()+"T00:00:00+05:30"))
+        data=c.calendar_candidates(jobs,rows)
+        month=next(x for x in data if x["month"]=="2026-10")
+        self.assertEqual(month["contracts"],23)
+        self.assertEqual(month["expectedWeekdaySlots"],345)
+        self.assertEqual(month["commonEmptyWeekdays"],1)
+        self.assertEqual(month["partialWeekdayGapSlots"],2)
+        self.assertEqual(month["missingWeekdayCandidates"],25)
+        self.assertEqual(month["observedUniqueDays"],320)
+
     def test_contract_plan_counts_one_future_eleven_strike_pairs(self):
         expiries=[date(2025,11,26),date(2025,12,30)]+[date(2026,m,28) for m in range(1,11)]
         data={}
