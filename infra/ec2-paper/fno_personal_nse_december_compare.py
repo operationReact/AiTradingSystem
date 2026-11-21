@@ -280,7 +280,7 @@ def ro(path):
     db.execute("PRAGMA query_only=ON")
     return db
 
-def run():
+def run(on_canonical=None):
     sys.path.insert(0,str(ROOT/"infra/ec2-paper"))
     from fno_private_bulk_worker import Discovery,grant,ssm_token,today,UNDERLYING
     grant().require("day",today())
@@ -330,6 +330,7 @@ def run():
             or research["excludedDecember"]>1
             or research["total"]!=3930-research["excludedDecember"]):
             raise ValueError("UNEXPECTED_RESEARCH_RESULT")
+        saved = on_canonical(canonical,research,cache) if on_canonical else None
         del canonical
         report={
             "status":"CROSSCHECK_COMPLETE" if metrics["missingNSEContractDays"]==0 else "CROSSCHECK_PARTIAL",
@@ -340,12 +341,13 @@ def run():
             "privateUpstoxCandleRows":643,"privateContractDays":322,
             "priceRowsExported":False,"privateDataPersisted":False,
             "backtestingApproved":False,"metrics":metrics,
-            "personalResearchDaily":research,"researchDataPersisted":False,
+            "personalResearchDaily":research,"researchDataPersisted":saved is not None,
         }
         text=json.dumps(report,sort_keys=True,separators=(",",":"))
         if len(text)>2000:
             raise ValueError("AGGREGATE_REPORT_TOO_LARGE")
         print(MARKER+text,flush=True)
+        return saved
     finally:
         journal.close();cache.close()
 
