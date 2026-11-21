@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -60,6 +61,7 @@ public class FnoCashFuturesFeasibilityStore {
           AND e.depth_first_available_at <= ?
           AND e.captured_at <= ?
           AND e.valid_until >= ?
+          AND e.retain_until >= ?
           AND spot_rights.valid_from <= ?
           AND (spot_rights.valid_to IS NULL OR spot_rights.valid_to > ?)
           AND spot_rights.verified_at <= ?
@@ -85,6 +87,17 @@ public class FnoCashFuturesFeasibilityStore {
 
     public FnoCashFuturesFeasibilityStore(JdbcTemplate jdbc) {
         this.jdbc = Objects.requireNonNull(jdbc);
+    }
+
+    /** Bound short-lived account-specific funding/depth custody: erase after <=7d. */
+    public int purgeExpired(LocalDate today) {
+        return jdbc.update("DELETE FROM fno_cash_futures_feasibility_evidence WHERE retain_until < ?",
+            Date.valueOf(Objects.requireNonNull(today)));
+    }
+
+    @Scheduled(cron = "0 49 3 * * *", zone = "Asia/Kolkata")
+    public void scheduledRetentionPurge() {
+        purgeExpired(LocalDate.now(java.time.ZoneId.of("Asia/Kolkata")));
     }
 
     public Optional<Proof> currentSingleProof(String accountScope, String spotKey,
@@ -126,7 +139,9 @@ public class FnoCashFuturesFeasibilityStore {
                 rs.getBigDecimal("corporate_action_buffer_per_lot_inr"),
                 rs.getBigDecimal("min_stressed_net_per_lot_inr"), true, true, true, true)),
             accountScope, spotKey, futureKey, Date.valueOf(expiry), lotSize,
-            asOfSql, asOfSql, asOfSql, asOfSql, asOfSql, asOfSql, asOfSql,
+            asOfSql, asOfSql, asOfSql,
+            Date.valueOf(asOf.atZone(java.time.ZoneId.of("Asia/Kolkata")).toLocalDate()),
+            asOfSql, asOfSql, asOfSql, asOfSql,
             asOfSql, asOfSql, asOfSql, asOfSql);
         // Never choose a convenient row when two simultaneously eligible but
         // potentially conflicting financial assessments exist.
