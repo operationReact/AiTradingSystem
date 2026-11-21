@@ -6823,21 +6823,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ source-verified completed NIFTY index closes with original exchange and first-known timestamps, separately licensed index/options/Greeks/futures/history research rights",
+    "Two independently verified same-strike/expiry/official lot NIFTY CE and PE and a separately official source-listed genuine NIFTY futures contract with valid expiry, tick and potentially distinct futures lot",
+    "Three or more synchronized original-first-known same-provider intraday NIFTY/index-futures/CE/PE samples with original option delta/gamma/theta per unit, annualized IV, authentic bid/ask/OI and actual futures bid/ask depth",
+    "Retrospective observed-gamma-capture approximation, historical theta drag, integer-lot futures delta hedge turnover and after-spread/slippage/fees hypothetical hedge cost with NO claimed actual fills"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_GAMMA_SCALPING_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-203-gamma-scalping-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed true NIFTY source listed same-strike CE/PE, original as-of delta/gamma/theta/IV path and actual independently listed futures quote and bid/ask depth source with official instrument/calendar proof",
+    "Real option/futures execution fills, initial purchased option premiums, final option liquidation values, futures cash flows, variation margin, funding/basis and genuine India brokerage/statutory charges",
+    "Original-first-known out-of-sample and walk-forward long-gamma futures hedge history proving actual after-cost strategy PnL, hedge frequency robustness, tail/gap risk and transaction fill constraints",
+    "Accepted PAPER option plus futures broker-sim order ledger/Flutter UI, and separately permitted LIVE option/futures entitlements, dynamic portfolio risk caps and kill switches"
+   ],
+   "note": "Research-only observed gamma scalping approximation: long 1 CE+1 PE same strike, hypothetical rounded NIFTY futures delta hedges with true source Greeks and quotes. Estimated gamma-minus-theta-minus-futures-cost is NOT realized PnL; no actual fills, backtest or trade authorization. DATA_BLOCKED.",
    "id": "strategy.STR-203",
    "kind": "STRATEGY",
    "name": "Gamma Scalping Research",
