@@ -111,7 +111,7 @@ class Fno43StrategyResearchAuditTest(unittest.TestCase):
             self.assertFalse(rows[strategy]["strategyEndToEndReady"])
             self.assertFalse(rows[strategy]["paperExecutionReady"])
             self.assertFalse(rows[strategy]["liveExecutionReady"])
-        self.assertEqual(19, report["summary"]["sourceLevelDirectResearchCallsites"])
+        self.assertEqual(20, report["summary"]["sourceLevelDirectResearchCallsites"])
         self.assertEqual(0, report["summary"]["signalRoutingWithoutProvenEvaluatorCallsite"])
 
 
