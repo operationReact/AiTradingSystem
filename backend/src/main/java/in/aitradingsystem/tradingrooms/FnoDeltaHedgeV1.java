@@ -49,7 +49,7 @@ public final class FnoDeltaHedgeV1 {
                                  BigDecimal indexClose, Instant exchangeCloseAt,
                                  Instant firstKnownAt, boolean sourceVerified) {}
     /** Delta is per underlying unit, not per option lot or monetary value. */
-    public record OptionQuote(String key, BigDecimal bid, BigDecimal ask,
+    public record OptionQuote(String provider, String key, BigDecimal bid, BigDecimal ask,
                               BigDecimal originalDelta, long openInterestLots,
                               Instant exchangeAt, Instant firstKnownAt,
                               boolean sourceVerified) {}
@@ -245,7 +245,8 @@ public final class FnoDeltaHedgeV1 {
     }
     private static boolean validOptionQuote(OptionQuote q, Instrument i, Snapshot s,
                                             Policy p, Instant asOf) {
-        if (q == null || !q.sourceVerified() || !i.key().equals(q.key())
+        if (q == null || !q.sourceVerified() || !s.provider().equals(q.provider())
+                || !i.key().equals(q.key())
                 || !spread(q.bid(), q.ask(), p.maxOptionSpreadBps())
                 || q.openInterestLots() < p.minOptionOiLots() || q.originalDelta() == null
                 || q.exchangeAt() == null || q.firstKnownAt() == null
