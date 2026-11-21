@@ -587,7 +587,7 @@ extension _MindSystemScreens on _MindWorkspaceState {
         'Canonical data families · source evidence · no inferred completeness', [
         Align(alignment: Alignment.centerLeft, child: TextButton.icon(
           key: const ValueKey('mind-data-back-to-coverage'),
-          onPressed: () => setState(() => _showDataReadiness = false),
+          onPressed: () => _updateMind(() => _showDataReadiness = false),
           icon: const Icon(Icons.arrow_back, size: 16),
           label: const Text('Back to coverage'),
           style: TextButton.styleFrom(foregroundColor: MindPalette.mint),
