@@ -31,6 +31,9 @@ on:
       - 'backend/src/main/resources/db/migration/V104__fno_verified_intraday_liquidity_evidence.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -64,6 +67,9 @@ on:
       - 'backend/src/main/resources/db/migration/V104__fno_verified_intraday_liquidity_evidence.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -148,6 +154,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedIntradayLiquidityStoreTest' test
+      - name: Validate STR-180 dual exchange close calendars and three independent source/carry rights
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedExpiryBasisPairStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
