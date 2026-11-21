@@ -39,3 +39,42 @@ Official [Upstox rate limits](https://upstox.com/developer/api-documentation/rat
 - counts: PENDING 0, ACTIVE 0, RETRY 0, DONE 0, EMPTY 0, FAILED 0, BLOCKED 0
 
 There is no automatic rollout, token rotation, order execution, LIVE activation or downloader restart. The verified three-GET source probe remains unchanged.
+
+
+## Second integration stage — implemented, but NOT activated
+
+`upstox_fno_backfill_adapters.py` supplies:
+- An actual Upstox expired-instrument candle HTTP GET adapter for the documented
+  `/v2/expired-instruments/historical-candle/{expired_instrument_key}/{interval}/{to_date}/{from_date}`
+  endpoint. It uses a descriptive User-Agent, URL allowlist, no redirects, bounded
+  response parsing, classified HTTP status, and bounded Retry-After.
+- A durable SQLite candle sink keyed by `source + expired contract + interval +
+  candle timestamp`, with atomic batch receipts and conflict-safe upsert. A
+  checkpoint is marked complete only after its sink confirms transaction commit.
+- A SECOND independent, default-DENY `verifier(grant)` requirement at both
+  provider and sink boundaries. A syntactically valid grant reference by itself
+  is not enough to perform a request or open a storage file. An authorized
+  integration must verify real source terms and grant provenance externally.
+- Offline integration tests: provider GET with fake transport, 429 retry delay,
+  malformed provider replies, deny-without-verification, SQLite replay dedupe,
+  revocation, and end-to-end fixture checkpoint and progress.
+
+**No valid retention grant or external verifier is configured or shipped in
+this repository.** No downloader scheduler or live AWS authorization is created,
+and no market-data storage has been performed through this integration. The
+database fixture in tests is temporary and uses synthetic test-only candles.
+
+The Spring Boot authenticated REST progress endpoint and Flutter screen are
+**still pending**. Progress currently exists as Python `MetadataQueue.summary()`
+and `status_json()`, not a connected app view.
+
+### Precise remaining activation conditions
+
+1. Confirm provider terms for persistent expired NSE_FO history / backtesting and
+   document the scope of allowed contracts, timeframe, term, and retention.
+2. Supply a trusted external attestation verifier and a scoped credential
+   provider, avoiding secret logging; deny when authorization expires.
+3. Run a narrow authorized provider-to-sink test, verify rows and OI against
+   the source, restart and prove two separate checkpoint advances.
+4. Expose only sanitized metadata via authenticated backend REST and Flutter;
+   set up a single operator-controlled scheduler and shared provider rate limiter.
