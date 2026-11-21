@@ -192,6 +192,10 @@ class MetadataQueue:
             raise GateClosed("FNO_DATA_RETENTION_NOT_AUTHORIZED")
         rights.require(interval, today or datetime.now(timezone.utc).date())
         key = _contract_key(contract_key)
+        first, last = _date(first), _date(last)
+        contract_expiry = datetime.strptime(key.rsplit('|', 1)[1], '%d-%m-%Y').date()
+        if contract_expiry >= (today or datetime.now(timezone.utc).date()) or last > contract_expiry:
+            raise ValueError('CONTRACT_NOT_EXPIRED_OR_WINDOW_EXCEEDS_EXPIRY')
         windows = list(split_windows(first, last, interval))
         now = utcnow()
         self.db.execute("BEGIN IMMEDIATE")
