@@ -2,7 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.marketdata.FnoVerifiedStrategy202206SourceStore;
+import in.aitradingsystem.marketdata.FnoVerifiedStrategy203206SourceStore;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -22,11 +22,11 @@ public final class FnoDeltaHedgeResearchService {
             FnoDeltaHedgeV1.Snapshot snapshot,
             List<FnoDeltaHedgeV1.CompletedClose> history,
             FnoDeltaHedgeV1.Policy policy) {}
-    private final FnoVerifiedStrategy202206SourceStore source;
+    private final FnoVerifiedStrategy203206SourceStore source;
     private final ObjectMapper mapper;
     private final boolean sourceRights;
     @Autowired
-    public FnoDeltaHedgeResearchService(FnoVerifiedStrategy202206SourceStore source,ObjectMapper mapper,
+    public FnoDeltaHedgeResearchService(FnoVerifiedStrategy203206SourceStore source,ObjectMapper mapper,
         @Value("$" + "{minttick.fno-research.str-204-source-rights-verified:false}")
         boolean sourceRights){
         this.source=source;
@@ -37,7 +37,7 @@ public final class FnoDeltaHedgeResearchService {
         if(now==null)throw new IllegalArgumentException("STR_204_AS_OF_REQUIRED");
         if(!sourceRights)return denied(now,"STR_204_SOURCE_RIGHTS_UNVERIFIED",true);
         if(source==null)return denied(now,"STR_204_PROVENANCE_SOURCE_MISSING",false);
-        final Optional<FnoVerifiedStrategy202206SourceStore.Proof> p;
+        final Optional<FnoVerifiedStrategy203206SourceStore.Proof> p;
         try {p=source.oneCurrent("strategy.STR-204",now);}
         catch(RuntimeException unavailable){
             return denied(now,"STR_204_ORIGINAL_SOURCE_READ_FAILED",false);
