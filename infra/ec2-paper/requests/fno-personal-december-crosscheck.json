@@ -12,5 +12,6 @@
   "no_orders": true,
   "no_persistence": true,
   "no_data_export": true,
-  "no_auth_bypass": true
+  "no_auth_bypass": true,
+  "comparison_revision": 2
 }
