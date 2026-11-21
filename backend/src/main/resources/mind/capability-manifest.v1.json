@@ -6455,21 +6455,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine source-verified completed NIFTY daily closes and original source-first-known observation metadata",
+    "True licensed market option chain: short one OTM high-strike CE plus one OTM low-strike PE, valid NSE lot and identical expiry",
+    "Rights-verified contemporaneous underlying/CE/PE bid/ask and source annualized IV values, bid-side depth and OI, original as-of timestamps",
+    "After-cost option credit, theoretical lower/upper breakevens, finite zero-index put loss and UNLIMITED short-call upside risk"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SHORT_STRANGLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStrangleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStrangleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-195-short-strangle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original as-of NIFTY CE/PE quoted bid and full underlying market history, genuine annualized option IV and NSE contract master/market calendar",
+    "Broker short option writing rights, uncovered margin/settlement obligations and gap or partial-leg execution safeguards; unlimited upside tail cannot be capped by a budget",
+    "Validated India brokerage/statutory fees and no-lookahead OOS walk-forward/backtests including realistic spread/liquidity and tail stress",
+    "Independently accepted PAPER execution lifecycle and LIVE broker authorizations, position monitoring and kill switches"
+   ],
+   "note": "Research-only OTM naked short strangle: sell higher CE and lower PE, true spot strictly between strikes. Uncovered CE theoretical upside loss UNLIMITED. Never PAPER or LIVE executable. DATA_BLOCKED.",
    "id": "strategy.STR-195",
    "kind": "STRATEGY",
    "name": "Short Strangle Research",
