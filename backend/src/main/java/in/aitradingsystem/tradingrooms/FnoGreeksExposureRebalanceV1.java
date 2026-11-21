@@ -159,7 +159,9 @@ public final class FnoGreeksExposureRebalanceV1 {
             current=current.add(greeks(q).scale(units));
         }
         for(Contract c:buyCandidates){
-            if(!validQuote(quotes.get(c.key()),c,snapshot,policy,asOf))
+            Quote q=quotes.get(c.key());
+            if(!validQuote(q,c,snapshot,policy,asOf)
+                    ||q.askDepthLots()<1)
                 return blocked(Status.BLOCKED_DATA,"GREEKS_BUY_ORIGINAL_QUOTE_INVALID",asOf);
         }
 
@@ -304,11 +306,11 @@ public final class FnoGreeksExposureRebalanceV1 {
                     ||("CE".equals(c.type())&&c.strike().compareTo(s.indexSpot())<=0))
                 return false;
         }
-        return !"PE".equals(candidates.get(0).type())
-                    || !"PE".equals(candidates.get(1).type())
-                ? ("PE".equals(candidates.get(0).type()) && "CE".equals(candidates.get(1).type())
-                    || "CE".equals(candidates.get(0).type()) && "PE".equals(candidates.get(1).type()))
-                : false;
+        Contract first=candidates.get(0),second=candidates.get(1);
+        return (("PE".equals(first.type()) && "CE".equals(second.type()))
+                || ("CE".equals(first.type()) && "PE".equals(second.type())))
+                && first.expiry().equals(second.expiry())
+                && first.officialLot()==second.officialLot();
     }
     private static boolean validContract(Contract c,Instant now){
         return c!=null && c.sourceListed() && key(c.key())
