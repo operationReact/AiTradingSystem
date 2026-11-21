@@ -298,7 +298,8 @@ class FnoPortfolioProtectiveOverlayV1Test {
         noOrders(d);
     }
     @Test void cannotAssumeExpiryIntrinsicWhenStressStrikeIsNotReached(){
-        var putA=put(LOW,"90"),putB=put(HIGH,"91");
+        var putA=put(LOW,"90");
+        var putB=put(HIGH,"91");
         var d=evaluate(held(),List.of(putA,putB),snapshot(),history(),
                 rights(),policy());
         assertEquals(Status.NO_OVERLAY,d.status());
