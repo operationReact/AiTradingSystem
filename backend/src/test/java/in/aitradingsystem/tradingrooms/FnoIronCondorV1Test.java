@@ -164,10 +164,10 @@ class FnoIronCondorV1Test {
             .compareTo(n("1500")));
     }
     @Test void nonpositiveCombinedCreditIsNeverAResearchCandidate(){
-        var cheap=quote(SP.key(),"0.20","0.21","5",10,10,1000);
+        var cheap=quote(SP.key(),"0.20","0.202","5",10,10,1000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,cheap,SCQ,LCQ,RIGHTS,A),
             Status.RESEARCH_CANDIDATE,"IRON_CONDOR_DEFINED_EXPIRY_RISK_RESEARCH_ONLY");
-        var bothCheap=quote(SC.key(),"0.20","0.21","5",10,10,1000);
+        var bothCheap=quote(SC.key(),"0.20","0.202","5",10,10,1000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,cheap,bothCheap,LCQ,RIGHTS,A),
             Status.NO_SIGNAL,"IRON_CONDOR_NONPOSITIVE_NET_CREDIT");
     }
