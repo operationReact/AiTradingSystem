@@ -470,3 +470,32 @@ an original IV observation. **32/43 distinct typed research callsites,
 All manifest strategies remain DATA_BLOCKED; no orders authorized.
 Next STR-202 Volatility Crush requires an official originally scheduled
 event plus genuine original pre/post normalized IV and NIFTY spot quotes.
+
+## 22 November 2026 — STR-202 original official-event retrospective IV crush
+
+A distinct read-only `FnoVolatilityCrushResearchService` now invokes
+the existing `FnoVolatilityCrushV1.evaluate` against **EMPTY V122**
+event-anchored original-source custody (event + historical NIFTY index
+OHLC tables). The model requires an independently authenticated
+RBI/NSE/government calendar schedule originally published **before**
+the market event, its source timestamps, category and actual start/end.
+
+Separate original pre/post observations include the independently
+licensed NIFTY spot and normalized annualized 30-calendar-day ATM IV,
+with original exchange/first-known times, separate source hashes,
+interpolation source receipts and research-use rights. The post-event
+quote must be truly sourced **after** the event, while pre-event spot
+and IV must have been known before its start. At least **35** original
+completed NIFTY daily OHLC sessions, all first known before the
+announced event, are required. No current IV value can replace a
+missing historical pre-event IV observation.
+
+A measured annualized IV-point drop, relative decline and actual
+NIFTY spot movement are retrospective descriptions, **never evidence
+that a profitable short-vol position was available before the event**.
+All rights default denied; the event key defaults blank; no records
+are seeded; no order path or margin approval is provided.
+
+**33/43 distinct typed read-only research adapters, 10 pending;
+real-source historical E2E 0/43, PAPER execution E2E 0/43,
+LIVE execution E2E 0/43.** Catalog remains DATA_BLOCKED.
