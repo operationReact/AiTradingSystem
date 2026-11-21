@@ -39,3 +39,33 @@ These are *hypothetical expiry payoffs*, not calibrated expected returns, option
 - No broker subscription, SSM update, deployment, trading flag or order endpoint is altered by this evaluator.
 
 See [canonical feed ADR](../architecture/fno-canonical-strategy-feed.md) and [prior directional EMA evaluator](../../backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongOptionCrossoverV1.java).
+
+
+## Distinct read-only source adapter — 21 November 2026
+
+The previous EMA8/EMA21 bullish crossover route remains only a *signal*.
+A **distinct `FnoLongCallV1.evaluate` invocation** now runs through
+`FnoOptionsResearchService` with point-in-time completed NIFTY closes
+and one explicitly configured source-listed real CE contract. The code
+does NOT manufacture instrument tokens, strikes, prices, OI, book depth,
+premium-risk capacity, fee/tax amounts, or positive signal outcomes.
+
+V106 creates **empty** provider-scoped source evidence tables for 35+
+true NSE trading-session NIFTY closes, original first-known timestamps,
+official exchange calendar and active independent `MODEL_INFERENCE`
+index research receipts, plus exact CE instrument-master and exchange-time
+index/option quotes, ask depth/OI **in lots**, reviewed fees/slippage,
+research capital and a purely hypothetical expiry payoff. Four distinct
+currently verified provider use-rights receipts gate the underlying tick,
+listed option contract, CE option chain depth/OI and fee/risk source.
+No backdating of candles acquired after a decision instant is allowed.
+
+Both the CE instrument key and source flags default unconfigured/denied:
+`long-option-ce-instrument-key`,
+`nifty-daily-close-research-rights-verified`,
+`long-option-quote-research-rights-verified` and
+`long-option-contract-discovery-verified`, all under
+`minttick.fno-research`. A local JUnit fixture candidate is NOT real
+provider data, brokerage approval, traded fill, projected profit,
+PAPER acceptance or LIVE order permission. The manifest stays
+`DATA_BLOCKED`.
