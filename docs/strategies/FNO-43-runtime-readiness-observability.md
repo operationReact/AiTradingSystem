@@ -193,3 +193,18 @@ evidence. Both tables remain empty at default and rights are denied.
 **20/43 direct evaluator paths; 23 without adapters; 0/43 independent
 real-source history E2E, 0/43 PAPER, 0/43 LIVE.** All 43 catalog
 entries stay `DATA_BLOCKED`, and no production order is submitted.
+
+
+## 21 November 2026 — STR-190/191 true 1x2 ratio source research paths
+
+The current audit observes **22/43 distinct read-only research evaluator
+calls**, with **21 still missing direct adapters**. The new V111 empty
+source table requires original exchange-timed L1 depth/OI quotes,
+account-scoped authenticated short margin, independently verified
+three-leg fees, two-short-lot liquidity and explicit tail-risk review
+plus existing genuine daily close source records. Call upside
+theoretical risk remains **unbounded**; put downside is severe,
+finite at zero underlying, but not an execution guarantee.
+
+Manifest remains `DATA_BLOCKED`; independently verified original
+real-source E2E **0/43**, PAPER **0/43**, LIVE **0/43**.
