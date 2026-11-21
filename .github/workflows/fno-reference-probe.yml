@@ -1,0 +1,52 @@
+name: FNO reference metadata and documentation probe (read-only, public)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/fno-reference-probe.yml'
+      - 'scripts/fno_official_docs_probe.py'
+      - 'backend/src/test/java/in/aitradingsystem/provider/upstox/UpstoxFnoReferenceMetadataProbeTest.java'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read official Upstox documentation pages and print matching sentences only
+        run: |
+          set -uo pipefail
+          for page in \
+            https://upstox.com/developer/api-documentation/instruments/ \
+            https://upstox.com/developer/api-documentation/v3/get-market-data-feed/ \
+            https://upstox.com/developer/api-documentation/analytics-token/; do
+            name=$(basename "$(dirname "$page")")/$(basename "$page")
+            if curl -fsS -m 60 -o "$RUNNER_TEMP/doc.html" "$page"; then
+              python3 scripts/fno_official_docs_probe.py "$RUNNER_TEMP/doc.html" "$name"
+            else
+              echo "DOC_FETCH_FAILED $name"
+            fi
+          done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Download the published instrument master (public file)
+        run: |
+          set -euo pipefail
+          curl -fsS -m 300 -o "$RUNNER_TEMP/complete.json.gz" https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz
+          test "$(head -c2 "$RUNNER_TEMP/complete.json.gz" | od -An -tx1 | tr -d ' ')" = "1f8b"
+          echo "FNO_INSTRUMENT_MASTER_GZ=$RUNNER_TEMP/complete.json.gz" >> "$GITHUB_ENV"
+      - name: Print stock-future metadata from the real master
+        working-directory: backend
+        run: |
+          set -o pipefail
+          mvn --batch-mode --no-transfer-progress -Dtest=UpstoxFnoReferenceMetadataProbeTest \
+            -Dsurefire.failIfNoSpecifiedTests=false test 2>&1 | tee "$RUNNER_TEMP/ref.log"
+          grep -E '^FNO_REF_' "$RUNNER_TEMP/ref.log" || true
