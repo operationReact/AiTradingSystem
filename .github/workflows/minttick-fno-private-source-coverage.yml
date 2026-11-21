@@ -69,6 +69,7 @@ jobs:
           assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
           assert json.loads(p.read_text())=={
             "kind":"minttick-owner-private-fno-source-coverage-v1",
+            "audit_revision":2,
             "operation":"metadata-replay-and-readonly-calendar-candidates",
             "account":"098859530205",
             "region":"ap-south-1",
@@ -149,6 +150,7 @@ jobs:
                   if not isinstance(months,list) or [x.get('month') for x in months]!=expected:
                       raise SystemExit('FNO_COVERAGE_INVALID_CALENDAR')
                   cols=('contracts','expectedWeekdaySlots','missingWeekdayCandidates',
+                        'commonEmptyWeekdays','partialWeekdayGapSlots',
                         'observedUniqueDays','weekendRows','dailyDateDuplicates',
                         'nonMidnightRows')
                   for month in months:
@@ -176,6 +178,8 @@ jobs:
                             '; contracts='+str(m['contracts'])+
                             '; weekdays='+str(m['expectedWeekdaySlots'])+
                             '; weekdayGapCandidates='+str(m['missingWeekdayCandidates'])+
+                            '; commonEmptyWeekdays='+str(m['commonEmptyWeekdays'])+
+                            '; partialWeekdayGapSlots='+str(m['partialWeekdayGapSlots'])+
                             '; observedUniqueDays='+str(m['observedUniqueDays'])+
                             '; weekendRows='+str(m['weekendRows'])+
                             '; duplicateDays='+str(m['dailyDateDuplicates'])+
