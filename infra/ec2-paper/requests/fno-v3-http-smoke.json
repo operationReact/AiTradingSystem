@@ -1,7 +1,7 @@
 {
-  "operation": "read-only-fno-v3-http-smoke",
-  "instance_id": "i-09c01b470fb39b85a",
-  "aws_account": "098859530205",
+  "application": "MintTick",
   "region": "ap-south-1",
-  "application": "MintTick"
+  "aws_account": "098859530205",
+  "instance_id": "i-09c01b470fb39b85a",
+  "operation": "read-only-fno-v3-http-smoke"
 }
