@@ -46,11 +46,11 @@ class FnoVerifiedFinalPriceOiSessionStoreTest {
         assertFalse(sql.toLowerCase().contains("market_candle"));
         assertFalse(sql.toLowerCase().contains(" on conflict "));
         assertEquals(18, sql.chars().filter(c -> c == '?').count());
-        Object[] bound = reads.getFirst().getArgument(2, Object[].class);
-        assertEquals(18, bound.length);
-        assertEquals(CONTRACT, bound[0]);
-        assertEquals(java.sql.Date.valueOf(FROM), bound[1]);
-        assertEquals(java.sql.Date.valueOf(TO), bound[2]);
+        Object[] bound = reads.getFirst().getArguments(); // Mockito expands JDBC varargs
+        assertEquals(20, bound.length);
+        assertEquals(CONTRACT, bound[2]);
+        assertEquals(java.sql.Date.valueOf(FROM), bound[3]);
+        assertEquals(java.sql.Date.valueOf(TO), bound[4]);
     }
 
     @Test
