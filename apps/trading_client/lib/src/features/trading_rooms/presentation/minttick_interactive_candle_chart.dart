@@ -47,10 +47,10 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
     if (widget.bars.length < 2) return;
     final end = _first + _count;
     final count = (_count * factor).round()
-        .clamp(math.min(6, widget.bars.length), widget.bars.length);
+        .clamp(math.min(6, widget.bars.length), widget.bars.length).toInt();
     setState(() {
       _count = count;
-      _first = (end - count).clamp(0, widget.bars.length - count);
+      _first = (end - count).clamp(0, widget.bars.length - count).toInt();
     });
   }
 
@@ -75,11 +75,11 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
     final plotWidth = math.max(1.0, width - left - right);
     if (details.pointerCount > 1) {
       final count = (_startCount / math.max(0.05, details.scale)).round()
-          .clamp(math.min(6, widget.bars.length), widget.bars.length);
+          .clamp(math.min(6, widget.bars.length), widget.bars.length).toInt();
       final fraction = ((details.localFocalPoint.dx - left) / plotWidth)
           .clamp(0.0, 1.0);
       final first = (_anchor - fraction * count).round()
-          .clamp(0, widget.bars.length - count);
+          .clamp(0, widget.bars.length - count).toInt();
       if (first != _first || count != _count) {
         setState(() { _first = first; _count = count; });
       }
@@ -87,7 +87,7 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
       final delta = ((details.localFocalPoint.dx - _startX) *
           _startCount / plotWidth).round();
       final first = (_startFirst - delta)
-          .clamp(0, widget.bars.length - _count);
+          .clamp(0, widget.bars.length - _count).toInt();
       if (first != _first) setState(() => _first = first);
     }
   }
