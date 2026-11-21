@@ -30,8 +30,49 @@ An upstream server-side, rights-gated canonical provider adapter must supply:
 
 ## Evidence and remaining tasks
 
-The PR includes 19 JUnit regression tests covering both divergence patterns, correlated price/OI movements, neutral steps, contradiction, low volume, outliers, provider/contract/expiry/rights failures, incomplete session or unverified settlement, future-known observations, invalid OI/price, duplicate/out-of-order sessions, threshold validation and reproducibility.
+The deterministic evaluator includes 21 JUnit regression tests covering both divergence patterns, correlated price/OI movements, neutral steps, contradiction, low volume, outliers, provider/contract/expiry/rights failures, incomplete session or unverified settlement, future-known observations, invalid OI/price, duplicate/out-of-order sessions, threshold validation and reproducibility.
 
 **Not yet verified:** real licensed provider price/OI source receipts; original final-OI publication timestamps for historical bars; exchange holiday/expiry/corporate-action checks; no-lookahead walk-forward, slippage/fees, OOS statistics, actual runtime readiness, PAPER strategy validation, any order authorization, or Flutter device acceptance.
 
 **Integration design:** [Canonical 43-strategy F&O data fan-out](../architecture/fno-canonical-strategy-feed.md). The evaluator takes authorized normalized inputs; it must not have an independent 44th WebSocket or raw broker token.
+
+## E2E-2 source integration increment (21 November 2026)
+
+`FnoFuturesResearchService` now invokes the **distinct**
+`FnoFuturesPriceOiDivergenceV1.evaluate(...)` as STR-174. The dedicated source
+is `FnoVerifiedFinalPriceOiSessionStore` and empty Flyway migration
+`V100__fno_verified_final_price_oi_sessions.sql`.
+
+- Final-price and finalized-OI original first-availability timestamps are **separate,
+  required fields**. V99 bid/ask snapshots, market_candle close with fetch time, LTP
+  and reconstructed post-hoc OHLC are **never** a valid stand-in.
+- One NSE_FO contract (underlying, lot, expiry) is reconciled against the currently
+  loaded instrument master. Multiple providers, reordered or repeated sessions,
+  missing exchange-calendar days, and changed expiry/lot are rejected.
+- SQL demands pre-existing immutable final-session evidence, two independently
+  verified and *currently valid* `golden_source_rights_receipt` rows for
+  `nse_fo_final_price` and `nse_fo_final_oi`, a compatible authoritative
+  `nse_fo_trading_calendar` session record, and source evidence SHA256 digests.
+  Rights, calendar verification, evidence capture and each value's original
+  availability must all precede the requested as-of time. Retention must be valid.
+- No data is seeded, no automatic vendor consumer, historical backfill promotion,
+  user-facing signal, paper fill, live order, runtime rights grant, AWS action or
+  market-data service polling is introduced. Without independently verified price
+  and OI records, STR-174 remains `BLOCKED_RIGHTS` or `BLOCKED_DATA`.
+- Read-only query and retention-only purge are the only runtime operations on V100.
+  Rows are otherwise immutable; expired rows can be erased after their retention
+  deadline.
+- The research evaluator now applies 15:40 IST derivatives normal close from
+  2026-08-03, and 15:45 IST from 2026-12-07 for non-expiring contracts (the
+  evaluator requires at least seven days to expiry).
+  NSE reference: https://noticeblue.com/circulars/b0a5e4ce-04d8-4e1c-82b9-d39257a90a1e
+- The current threshold tuple 500/500/3/2500/2500/5000 is inherited from
+  deterministic examples. It is **not** calibrated on real outcomes.
+
+**Independent remaining acceptance evidence:** attested ingestion of real
+final close and finalized OI with separate first-known source receipt times,
+population and reconciliation of calendar and rights provenance, verified
+no-lookahead replay over multiple genuine expiries, out-of-sample effect sizes,
+risk/fees/slippage and separately authorized PAPER/LIVE workflows. The
+`/api/admin/research/fno-43/readiness` endpoint reports five direct evaluator
+paths, not five live-trading-ready strategies.

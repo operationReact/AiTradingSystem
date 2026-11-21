@@ -28,7 +28,9 @@ import java.util.Objects;
 public final class FnoFuturesPriceOiDivergenceV1 {
     public static final String STRATEGY_ID = "strategy.STR-174";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final LocalTime SESSION_CLOSE = LocalTime.of(15, 30);
+    // 2026 NSE derivatives normal closing times; this strategy excludes expiry day.
+    private static final LocalDate AUGUST_CHANGE = LocalDate.of(2026, 8, 3);
+    private static final LocalDate DECEMBER_CHANGE = LocalDate.of(2026, 12, 7);
     private static final MathContext MC = MathContext.DECIMAL128;
     private static final BigDecimal BPS = new BigDecimal("10000");
     private static final Duration MAX_PUBLICATION_LAG = Duration.ofHours(36);
@@ -213,7 +215,7 @@ public final class FnoFuturesPriceOiDivergenceV1 {
                 || s.tradedVolumeUnits() < 0 || s.tradedVolumeUnits() > MAX_OI_OR_VOLUME
                 || s.finalPriceObservedAt() == null || s.finalizedOiObservedAt() == null)
             return false;
-        Instant close = s.exchangeDate().atTime(SESSION_CLOSE).atZone(IST).toInstant();
+        Instant close = s.exchangeDate().atTime(normalFuturesClose(s.exchangeDate())).atZone(IST).toInstant();
         return !close.isAfter(asOf)
             && !s.finalPriceObservedAt().isBefore(close)
             && !s.finalizedOiObservedAt().isBefore(close)
@@ -221,6 +223,12 @@ public final class FnoFuturesPriceOiDivergenceV1 {
             && !s.finalizedOiObservedAt().isAfter(asOf)
             && !s.finalPriceObservedAt().isAfter(close.plus(MAX_PUBLICATION_LAG))
             && !s.finalizedOiObservedAt().isAfter(close.plus(MAX_PUBLICATION_LAG));
+    }
+
+    private static LocalTime normalFuturesClose(LocalDate date) {
+        if (!date.isBefore(DECEMBER_CHANGE)) return LocalTime.of(15, 45);
+        if (!date.isBefore(AUGUST_CHANGE)) return LocalTime.of(15, 40);
+        return LocalTime.of(15, 30);
     }
 
     private static boolean validThresholds(Thresholds t) {

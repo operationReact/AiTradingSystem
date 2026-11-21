@@ -17,14 +17,14 @@ import org.springframework.stereotype.Service;
 /**
  * A read-only 43-strategy *readiness* registry, not a 43-strategy execution engine.
  * The authoritative manifest supplies identities and distinct required inputs.
- * STR-170..173 have direct research evaluator calls, including gated STR-173 OI history.
+ * STR-170..174 have direct research evaluator calls; STR-174 requires separate final CLOSE and OI receipts.
  * STR-181/182 have a signal route, NOT a verified call to their distinct evaluators.
  * No research status, including RESEARCH_CANDIDATE, authorizes PAPER/LIVE orders.
  */
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174");
     private static final Set<String> SIGNAL_ONLY =
         Set.of("strategy.STR-181", "strategy.STR-182");
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";

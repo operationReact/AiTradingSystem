@@ -12,7 +12,7 @@ source rights and real source-original replay.
 The response lists **exactly 43** sorted strategies with the real manifest
 `requiredInputs` and evaluator source paths. Each gets an explicit integration stage:
 
-- STR-170/171/172/173: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
+- STR-170/171/172/173/174: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
   `FnoFuturesResearchService` returned an evaluator result, otherwise
   `DIRECT_ADAPTER_UNAVAILABLE`. Research may be blocked for missing rights,
   costs, contracts, quotes or historical sessions. These statuses are not
@@ -20,7 +20,7 @@ The response lists **exactly 43** sorted strategies with the real manifest
 - STR-181/182: `SIGNAL_ROUTE_ONLY`. The existing `FnoLongOptionCrossoverV1`
   signal path is **not** a distinct `FnoLongCallV1` or `FnoLongPutV1`
   evaluator invocation.
-- STR-174–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
+- STR-175–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
   separate product screens, old services or JUnit fixtures exist.
 
 The four independent acceptance booleans per strategy are always false:
@@ -48,7 +48,15 @@ promotion. Tests are synthetic and provide no source-data coverage evidence.
 
 
 **21 Nov E2E-2 update:** STR-173 has a read-only session-OI adapter with
-research-rights and master freshness gates. The registry now has four directly
-invoked research evaluator paths and 39 missing. An observed result may be
+research-rights and master freshness gates. The registry now has five directly
+invoked research evaluator paths and 38 missing. An observed result may be
 BLOCKED_RIGHTS or BLOCKED_DATA. All independent real-source E2E, PAPER and
 LIVE validation counters remain zero.
+
+
+**21 Nov E2E-2 follow-on:** STR-174 now has a distinct evaluator invocation
+and an empty verified final close/OI source-receipt store. Without source
+records that separately attest final close, finalized OI, calendar and original
+as-of availability it stays BLOCKED_DATA; the default research-rights flag
+keeps it BLOCKED_RIGHTS. Count **five direct research evaluator paths, 38
+remaining**, still zero independently verified source-E2E, PAPER and LIVE.
