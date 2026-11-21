@@ -9,6 +9,7 @@ import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
+import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
@@ -793,6 +794,130 @@ class FnoFuturesResearchServiceTest {
         assertEquals("BLOCKED_DATA", result.status());
         assertEquals("FUT_MR_SOURCE_READ_UNAVAILABLE", result.reason());
         assertFalse(result.reason().contains("secret"));
+    }
+
+
+    private static final String HEDGE_SCOPE = "personal_hedge_01";
+
+    private static FnoIndexHedgeResearchStore.Proof hedgeProof() {
+        return new FnoIndexHedgeResearchStore.Proof(
+            "UPSTOX_V3", HEDGE_SCOPE, NIFTY, NEAR.instrumentKey(),
+            NEAR.expiry(), NEAR.lotSize(),
+            new FnoFuturesHedgeOverlayV1.Portfolio(
+                NIFTY, new BigDecimal("3000000"),
+                NOW.minusSeconds(120), NOW.minusSeconds(60),
+                true, true, true),
+            new FnoFuturesHedgeOverlayV1.MarketQuote(
+                NEAR.instrumentKey(), "UPSTOX_V3",
+                new BigDecimal("20000"), new BigDecimal("20004"),
+                300L, 300L, 1000000L, NOW.minusSeconds(2),
+                NOW.minusSeconds(1), true, true),
+            new FnoFuturesHedgeOverlayV1.Funding(
+                new BigDecimal("300000"), new BigDecimal("80000"),
+                new BigDecimal("20000"), true, true),
+            new FnoFuturesHedgeOverlayV1.Stress(
+                500, new BigDecimal("1000"), new BigDecimal("500"),
+                10, 50, 3000, true, true));
+    }
+
+    private static FnoFuturesResearchService hedgeService(FnoIndexHedgeResearchStore proofStore,
+            boolean rights, boolean sessionOpen, String account,
+            UpstoxFnoV3LiveFeedService feedSource) {
+        return new FnoFuturesResearchService(feed(feedSource), calendar(sessionOpen),
+            currentRegistry(), emptyStore(), null, null, null, proofStore,
+            true, true, false, false, false, rights, account, "", "");
+    }
+
+    private static UpstoxFnoV3LiveFeedService hedgeFeed() {
+        return liveWith(Map.of(NEAR.instrumentKey(),
+            quote(NEAR.instrumentKey(), "20000", "20004")));
+    }
+
+    @Test
+    void str178ReadsOneReconciledPortfolioBetaAndComputesReadOnlyShortIndexHedge() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        when(proofs.oneCurrentProof(eq(HEDGE_SCOPE), eq(NIFTY), eq(NEAR.instrumentKey()),
+            eq(NEAR.expiry()), eq(NEAR.lotSize()), eq(NOW)))
+            .thenReturn(Optional.of(hedgeProof()));
+        var row = byId(hedgeService(proofs, true, true, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("RESEARCH_CANDIDATE", row.status());
+        assertEquals("HEDGE_STRESSED_EXPOSURE_REDUCTION_RESEARCH_ONLY", row.reason());
+        assertEquals(1, row.contracts());
+        assertEquals(1, row.quotes());
+        assertEquals(0, row.history());
+        assertEquals("RECONCILED_INDEX_HEDGE_RESEARCH_NO_ORDER", row.input());
+        assertFalse(row.input().contains(HEDGE_SCOPE));
+        verify(proofs).oneCurrentProof(eq(HEDGE_SCOPE), eq(NIFTY),
+            eq(NEAR.instrumentKey()), eq(NEAR.expiry()), eq(NEAR.lotSize()), eq(NOW));
+    }
+
+    @Test
+    void str178DeniedResearchRightsNeverReadsSensitivePortfolioEvidence() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        var row = byId(hedgeService(proofs, false, true, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("BLOCKED_RIGHTS", row.status());
+        assertEquals("HEDGE_RESEARCH_RIGHTS_NOT_VERIFIED", row.reason());
+        verifyNoInteractions(proofs);
+    }
+
+    @Test
+    void str178MissingAccountBalanceOrSourceProofBlocksInsteadOfAssumingFunds() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        var missingScope = byId(hedgeService(proofs, true, true, "", hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("HEDGE_ACCOUNT_OR_SOURCE_NOT_CONFIGURED", missingScope.reason());
+        verifyNoInteractions(proofs);
+        var missingReceipts = byId(hedgeService(proofs, true, true, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("BLOCKED_DATA", missingReceipts.status());
+        assertEquals("HEDGE_BETA_MARGIN_DEPTH_RISK_PROOF_MISSING", missingReceipts.reason());
+    }
+
+    @Test
+    void str178RejectsUnmatchedQuoteProviderAndMarketIdentity() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        var original = hedgeProof();
+        var mismatch = new FnoIndexHedgeResearchStore.Proof(
+            original.provider(), original.accountScope(), original.indexKey(),
+            original.futureKey(), original.expiry(), original.lotSize(),
+            original.portfolio(),
+            new FnoFuturesHedgeOverlayV1.MarketQuote(
+                original.futureKey(), "UPSTOX_V3", new BigDecimal("19999"),
+                new BigDecimal("20004"), 300, 300, 1000000,
+                NOW.minusSeconds(2), NOW.minusSeconds(1), true, true),
+            original.funding(), original.stress());
+        when(proofs.oneCurrentProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenReturn(Optional.of(mismatch));
+        var row = byId(hedgeService(proofs, true, true, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("HEDGE_QUOTE_ACCOUNT_OR_RISK_PROOF_MISMATCH", row.reason());
+    }
+
+    @Test
+    void str178RequiresFreshIndexFutureAndOpenDerivativesSession() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        var closed = byId(hedgeService(proofs, true, false, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("HEDGE_FUTURES_SESSION_CLOSED", closed.reason());
+        var missingQuote = byId(hedgeService(proofs, true, true, HEDGE_SCOPE,
+            liveWith(Map.of())).evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("HEDGE_LIVE_INDEX_FUTURE_QUOTE_MISSING", missingQuote.reason());
+        verifyNoInteractions(proofs);
+    }
+
+    @Test
+    void str178PrivateProviderExceptionIsSanitizedAndNeverPromotesRiskReadiness() {
+        var proofs = mock(FnoIndexHedgeResearchStore.class);
+        when(proofs.oneCurrentProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenThrow(new IllegalStateException("secret portfolio broker token"));
+        var row = byId(hedgeService(proofs, true, true, HEDGE_SCOPE, hedgeFeed())
+            .evaluateAll(NOW)).get("strategy.STR-178");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("HEDGE_PORTFOLIO_EVIDENCE_READ_UNAVAILABLE", row.reason());
+        assertFalse(row.reason().contains("secret"));
     }
 
 }
