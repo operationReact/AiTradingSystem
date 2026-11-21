@@ -165,3 +165,19 @@ is not proof of funds or order authorization. V108 is empty by default.
 without direct adapters, 0 signal-only paths lacking direct evaluators,
 0/43 independently verified real NSE source E2E, 0/43 PAPER, 0/43 LIVE.**
 Earlier totals in this document are historical checkpoints.
+
+
+## 21 November 2026 — STR-187/188 source-gated settled equity coverage
+
+Two new independent direct read-only evaluators now require truly settled
+and broker-reconciled stock shares, the genuine corresponding one-lot
+physically deliverable PE or CE contract, 35+ completed equity closes
+and original first-known quote/depth/OI timestamps. New V109 source
+tables are EMPTY; ownership proof, tax/fee/budget and data use-rights
+all default unavailable. Real broker holdings/paper/watchlists are not
+silently converted into verified proof.
+
+**Current 19/43 direct research evaluator paths; 24/43 without direct
+adapters; 0 remaining signal-only without evaluator; independently
+verified real source E2E 0/43, PAPER 0/43, LIVE 0/43.**
+Earlier values in this document are dated audit snapshots.
