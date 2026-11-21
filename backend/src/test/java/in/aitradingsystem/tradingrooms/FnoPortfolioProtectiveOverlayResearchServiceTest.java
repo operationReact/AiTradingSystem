@@ -63,7 +63,7 @@ class FnoPortfolioProtectiveOverlayResearchServiceTest {
         assertEquals("STR_210_AUTHENTIC_ORIGINAL_SOURCE_MISSING",
             new FnoPortfolioProtectiveOverlayResearchService(none,json(),true).evaluate(NOW).reasonCode());
         var tampered=source("{\"policy\":{},\"executeLive\":true}");
-        assertEquals("STR_210_ORIGINAL_TYPED_INPUT_INVALID",
+        assertEquals("STR_210_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoPortfolioProtectiveOverlayResearchService(tampered,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceExceptionsHideCredentials(){
