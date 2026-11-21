@@ -118,6 +118,18 @@ def unit_text():
             "[Install]\n"
             "WantedBy=multi-user.target\n")
 
+def purge_unit():
+    return ("[Unit]\nDescription=MintTick private FNO cache TTL maintenance\n"
+            "[Service]\nType=oneshot\nUser=root\n"
+            "ExecStart=/usr/bin/python3 /opt/aitradingsystem-paper/infra/ec2-paper/fno_private_bulk_worker.py purge\n"
+            "NoNewPrivileges=true\nUMask=0077\n")
+
+def purge_timer():
+    return ("[Unit]\nDescription=MintTick private FNO cache daily expiry check\n"
+            "[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\n"
+            "Unit=minttick-fno-private-purge.service\n"
+            "[Install]\nWantedBy=timers.target\n")
+
 def host():
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         print(receipt("HOST_REJECTED"),flush=True)
@@ -170,7 +182,18 @@ def host():
     temp.write_text(unit_text())
     os.chmod(temp,0o600)
     os.replace(temp,unit)
+    for path,data in (
+        (Path("/etc/systemd/system/minttick-fno-private-purge.service"),purge_unit()),
+        (Path("/etc/systemd/system/minttick-fno-private-purge.timer"),purge_timer())):
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            print(receipt("UNIT_REJECTED",done,total,rows),flush=True)
+            return 2
+        p=path.with_suffix(path.suffix+".tmp")
+        p.write_text(data)
+        os.chmod(p,0o600)
+        os.replace(p,path)
     for command in (("systemctl","daemon-reload"),
+                    ("systemctl","enable","--now","minttick-fno-private-purge.timer"),
                     ("systemctl","enable","--now","minttick-fno-private-backfill.service")):
         result=_call(*command,timeout=40)
         if result is None or result.returncode!=0:
