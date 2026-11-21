@@ -79,7 +79,7 @@ SELECT s.* FROM fno_verified_nifty_diagonal_source s
     public Optional<Proof> oneCurrent(String near,String far,String type,Instant at){
         if(at==null||!validKey(near)||!validKey(far)||near.equals(far)
             ||!("CE".equals(type)||"PE".equals(type)))
-            throw new IllegalArgumentException("CALENDAR_SOURCE_CONTRACT_SCOPE_INVALID");
+            throw new IllegalArgumentException("DIAGONAL_SOURCE_CONTRACT_SCOPE_INVALID");
         Object[] args={near,far,type,Timestamp.from(at),Timestamp.from(at),
             Timestamp.from(at),Date.valueOf(at.atZone(IST).toLocalDate()),Timestamp.from(at)};
         List<Proof> found=jdbc.query(SQL,(rs,n)->new Proof(
