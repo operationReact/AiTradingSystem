@@ -131,7 +131,10 @@ public final class FnoStraddleResearchService {
            || !validTime(p.index().exchangeAt(),p.index().firstKnownAt(),last,at)
            || !validTime(p.call().exchangeAt(),p.call().firstKnownAt(),last,at)
            || !validTime(p.put().exchangeAt(),p.put().firstKnownAt(),last,at)
-           || p.firstKnownAt()==null || p.firstKnownAt().isAfter(at))
+           || p.firstKnownAt()==null || p.firstKnownAt().isAfter(at)
+           || p.firstKnownAt().isBefore(p.index().firstKnownAt())
+           || p.firstKnownAt().isBefore(p.call().firstKnownAt())
+           || p.firstKnownAt().isBefore(p.put().firstKnownAt()))
             return false;
         var minimum=p.index().exchangeAt();
         var maximum=minimum;
