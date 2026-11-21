@@ -256,8 +256,8 @@ public final class FnoBearPutDebitSpreadV1 {
     private static Decision measured(Status status, String reason, Contract l, Contract h,
                                      Instant asOf, BigDecimal debit, BigDecimal breakeven,
                                      BigDecimal maxLoss, BigDecimal maxGain, BigDecimal rr) {
-        return new Decision(status, reason, STRATEGY_ID, l.instrumentKey(),
-            h.instrumentKey(), asOf, rounded(debit), rounded(breakeven),
+        return new Decision(status, reason, STRATEGY_ID, h.instrumentKey(),
+            l.instrumentKey(), asOf, rounded(debit), rounded(breakeven),
             rounded(maxLoss), rounded(maxGain), rounded(rr));
     }
     private static Decision blocked(Status status, String reason, Instant asOf) {
