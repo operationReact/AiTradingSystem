@@ -101,7 +101,7 @@ CREATE TABLE fno_verified_nifty_iron_butterfly_source (
  CONSTRAINT uq_fno_iron_butterfly_proof UNIQUE(provider_code,long_put_key,short_put_key,short_call_key,long_call_key,first_known_at),
  CONSTRAINT ck_fno_iron_butterfly_strikes CHECK(
      long_put_strike<short_put_strike AND short_put_strike=short_call_strike
-     AND long_put_strike<short_put_strike AND short_call_strike<long_call_strike
+     AND short_call_strike<long_call_strike
      AND long_put_strike/tick=trunc(long_put_strike/tick)
      AND short_put_strike/tick=trunc(short_put_strike/tick)
      AND short_call_strike/tick=trunc(short_call_strike/tick)
