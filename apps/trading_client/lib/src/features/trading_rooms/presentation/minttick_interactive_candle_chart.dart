@@ -146,7 +146,7 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
         GestureDetector(
           key: const ValueKey('stock-chart-gesture'),
           behavior: HitTestBehavior.opaque,
-          onTapUp: (details) => _select(details.localPosition, constraints.maxWidth),
+          onTapDown: (details) => _select(details.localPosition, constraints.maxWidth),
           onDoubleTap: () => setState(_recent),
           onScaleStart: (details) => _scaleStart(details, constraints.maxWidth),
           onScaleUpdate: (details) => _scaleUpdate(details, constraints.maxWidth),
