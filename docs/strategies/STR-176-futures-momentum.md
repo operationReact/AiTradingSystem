@@ -13,7 +13,7 @@ The evaluator classifies **UPWARD_BREAKOUT**, **DOWNWARD_BREAKOUT**, or **NONE**
 - One **source-listed, provider-verified NSE_FO futures instrument** with a matching canonical NSE_EQ or NSE_INDEX underlying, provider-confirmed listing date and expiry, and lot size. The same exact futures key applies to all seven observations. Remaining time to expiry must be 7–120 calendar days.
 - **Seven chronologically ordered, verified completed NSE trading sessions**, never merged across rollover or expiry. Basic sanity checks enforce ordered weekdays and calendar gaps of at most five days; a separate upstream adapter must verify the official NSE holiday/special-session calendar and actual session continuity.
 - Each session supplies verified **OHLC** in INR per underlying unit (high >= open/close >= low and positive prices), normalized traded volume in underlying units, positive normalized OI, trusted source identity, original publication timestamps for **OHLCV and OI separately**, and a verified session-completeness flag.
-- Session-end OHLCV and OI first-observed timestamps must be **at or after 15:30 IST session close**, no more than 36 hours after close and never after the supplied evaluation `asOf`. Downloading historical bars later does **not** prove they were available on the original trading date; a properly preserved first-known timestamp is necessary.
+- Session-end OHLCV and OI first-observed timestamps must be **at or after the applicable 15:30/15:40/15:45 IST derivatives session close**, no more than 36 hours after close and never after the supplied evaluation `asOf`. Downloading historical bars later does **not** prove they were available on the original trading date; a properly preserved first-known timestamp is necessary.
 - Verified internal research-use rights for OHLCV, OI and contract discovery separately. Broker F&O account rights, market-data display rights and LIVE order permissions are independent gates.
 
 ## Deterministic classification
@@ -39,8 +39,52 @@ Every `Decision` has `executable=false`, `orderPlaced=false`, `liveTradeAuthoriz
 
 ## Validation and remaining requirements
 
-19 JUnit regression tests cover upward/downward cases, neutral and contradictory close steps, no breakout, low recent volume or OI-normalized volume, illustrative fees, daily outliers, individual rights, listed-contract identity and expiry, provider/contract switching, invalid OHLC, final-data publication lookahead, OI quality, missing or reordered sessions, invalid thresholds and determinism.
+20 JUnit regression tests cover upward/downward cases, neutral and contradictory close steps, no breakout, low recent volume or OI-normalized volume, illustrative fees, daily outliers, individual rights, listed-contract identity and expiry, provider/contract switching, invalid OHLC, final-data publication lookahead, OI quality, missing or reordered sessions, invalid thresholds and determinism.
 
 Before declaring runtime/production readiness: integrate the rights-verified [canonical F&O feed](../architecture/fno-canonical-strategy-feed.md) with genuine exchange session/contract and original as-of publication evidence; replay actual F&O historic bars as-of without lookahead; calibrate thresholds by underlying/regime and after-cost out-of-sample walk-forward analysis; execute only separately authorized **PAPER** trials with explicit risk and reconciled results. A profitable strategy is not established by passing these unit tests.
 
 **Client impact:** backend-only evaluator, no Flutter route/Android APK or web/iOS runtime acceptance. LIVE F&O trading rights remain unchanged.
+
+## Source-gated runtime adapter integration — 21 November 2026
+
+`FnoFuturesResearchService.evaluateAll` now invokes the *distinct*
+`FnoFuturesMomentumV1.evaluate` call. This is a read-only research
+evaluation, not an order, signal-to-order router or model-backed alpha claim.
+
+The newly added V102 table and `FnoVerifiedCompletedOhlcvOiStore` provide an
+**empty-by-default, append-only** contract for one futures contract's completed
+exchange-session OHLCV and separately finalized OI. It is a reusable canonical
+source boundary for subsequent STR-177 and related seven-to-ten session models;
+no new redundant WebSocket is launched.
+
+Required eligibility is independently source-verified:
+
+- Same current-source-master NSE_FO contract, canonical underlying, expiry,
+  lot and **source-confirmed listing-from** identity for all rows; strict
+  single-provider chronological sessions and seven consecutive trading days.
+- Genuine completed session OHLC, normalized volume and finalized OI; original
+  OHLCV and OI *separate first-known times*, independent provider-source digests,
+  verified NSE derivatives session-calendar custody and separate active
+  `MODEL_INFERENCE` research rights for `nse_fo_completed_ohlcv` and
+  `nse_fo_final_oi`.
+- Strict as-of availability for prices, OI, calendar verification and source
+  rights; as-of historical downloads are **not** silently backdated to the
+  original exchange time. Session close now uses the applicable 15:40 IST
+  from 2026-08-03 and 15:45 IST from 2026-12-07 for non-expiring contracts.
+- No roll-over contract stitching, mixed providers, duplicate dates, assumed
+  trading sessions, invented OI, unverified fee assumptions, executable orders,
+  provider credentials, backend deployment or new APIs.
+- Retention-controlled source custody, with only expired-row purge permitted.
+  SQL rejects unverified or absent rights and unknown calendar evidence.
+
+The configuration flag
+`minttick.fno-research.completed-ohlcv-research-rights-verified=false`
+defaults to denial. The V102 table is empty until genuine verified source
+receipts are ingested by a separately reviewed source workflow; sample JUnit
+data cannot populate it.
+
+**Evidence boundary:** seven direct research evaluator paths are now wired,
+but independent real-source historical E2E, PAPER and LIVE remain zero.
+Calibration, fees/slippage, genuine cross-expiry no-lookahead backtesting,
+data provenance attestation and real PAPER ledger reconciliation are still
+required before trading use.

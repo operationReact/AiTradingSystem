@@ -36,7 +36,10 @@ class FnoFuturesMomentumV1Test {
 
     private static BigDecimal n(String value) { return new BigDecimal(value); }
     private static Instant close(LocalDate d) {
-        return d.atTime(LocalTime.of(15, 30)).atZone(IST).toInstant();
+        LocalTime end = d.isBefore(LocalDate.of(2026, 8, 3))
+            ? LocalTime.of(15, 30) : d.isBefore(LocalDate.of(2026, 12, 7))
+            ? LocalTime.of(15, 40) : LocalTime.of(15, 45);
+        return d.atTime(end).atZone(IST).toInstant();
     }
     private static CompletedSession bar(int i, String p, long volume, long oi) {
         LocalDate day = DATES[i];
@@ -71,6 +74,20 @@ class FnoFuturesMomentumV1Test {
         var copied = new ArrayList<>(bars);
         copied.set(index, newBar);
         return copied;
+    }
+
+    @Test
+    void exchangeDerivativesCloseGuardRejectsPrematureFinalBarAt1530() {
+        var data = up();
+        var latest = data.get(6);
+        var premature = new CompletedSession(latest.exchangeDate(), true,
+            latest.instrumentKey(), latest.provider(), latest.open(), latest.high(),
+            latest.low(), latest.close(), true,
+            close(latest.exchangeDate()).minusSeconds(300),
+            latest.tradedVolumeUnits(), latest.openInterestUnits(),
+            latest.oiFirstObservedAt());
+        assertEquals("FUT_MOM_COMPLETED_BAR_INVALID",
+            run(replace(data, 6, premature)).reasonCode());
     }
 
     @Test
