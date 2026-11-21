@@ -1,0 +1,13 @@
+{
+  "kind": "minttick-personal-nse-fo-public-archive-probe-v1",
+  "operation": "fetch-one-december-nse-fo-udiff-zip-memory-only",
+  "account": "098859530205",
+  "region": "ap-south-1",
+  "instance_id": "i-09c01b470fb39b85a",
+  "date": "2025-12-15",
+  "max_archives": 1,
+  "no_orders": true,
+  "no_market_data_export": true,
+  "no_auth_bypass": true,
+  "no_persistence": true
+}
