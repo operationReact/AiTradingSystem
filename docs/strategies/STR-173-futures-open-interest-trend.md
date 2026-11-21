@@ -13,7 +13,7 @@ This evaluator classifies **RISING_OPEN_INTEREST**, **FALLING_OPEN_INTEREST**, o
 An authorized, source-aware server adapter must provide:
 - A genuine `NSE_FO` future, exactly one contract key and listed expiry, canonical `NSE_INDEX` or `NSE_EQ` underlying, source-verified metadata and lot size. Only periods 7–120 calendar days before expiry qualify; near-expiry migrations belong in STR-172.
 - Exactly **five** consecutive, explicitly verified and completed NSE sessions in ascending order for that SAME future. Nonconsecutive dates, duplicates and weekends are rejected where locally detectable; the upstream provider adapter must still verify official exchange holidays and session continuity.
-- For each session, **exchange-close OI in normalized underlying units**, total traded volume in the SAME units, provider identity, exchange event time in the final ten minutes of session, and the timestamp when completed OI data actually became available. This prevents training or backtesting with future-known OI.
+- For each session, **exchange-close OI in normalized underlying units**, total traded volume in the SAME units, provider identity, exchange event time in the final two minutes of session, and the timestamp when completed OI data actually became available. This prevents training or backtesting with future-known OI.
 - Verified internal research-use and instrument discovery permissions. An account's LIVE F&O trading permission is a separate requirement.
 - Explicit versioned thresholds; no assumed data rights, free volume, or default signal thresholds.
 
