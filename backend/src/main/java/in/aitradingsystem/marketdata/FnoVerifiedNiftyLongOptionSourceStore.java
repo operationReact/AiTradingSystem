@@ -97,7 +97,11 @@ public class FnoVerifiedNiftyLongOptionSourceStore {
             AND risk_rights.source_domain = 'nse_fo_option_fees_research_capital'
             AND risk_rights.permitted_use = 'MODEL_INFERENCE'
             AND risk_rights.receipt_status = 'VERIFIED'
-        WHERE q.instrument_key = ?
+        WHERE q.contract_master_verified
+          AND q.lot_units_reconciled
+          AND q.fee_tax_schedule_verified
+          AND q.research_budget_verified
+          AND q.instrument_key = ?
           AND q.option_type = ?
           AND q.retain_until >= ?
           AND q.captured_at <= ?
