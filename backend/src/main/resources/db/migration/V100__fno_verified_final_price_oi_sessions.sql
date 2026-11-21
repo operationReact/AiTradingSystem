@@ -48,6 +48,10 @@ CREATE INDEX fno_verified_final_price_oi_contract_idx
 CREATE FUNCTION fno_reject_verified_final_price_oi_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    -- Permit automatic expiry erasure, but no edits or early deletion.
+    IF TG_OP = 'DELETE' AND OLD.retain_until < CURRENT_DATE THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'Verified F&O final session evidence is append-only'
         USING ERRCODE = '23514';
 END
