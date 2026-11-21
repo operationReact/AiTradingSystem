@@ -67,7 +67,7 @@ class FnoSkewBasedHedgeResearchServiceTest {
         assertEquals("STR_212_AUTHENTIC_ORIGINAL_SOURCE_MISSING",
             new FnoSkewBasedHedgeResearchService(none,json(),true).evaluate(NOW).reasonCode());
         var tampered=source("{\"policy\":{},\"executeLive\":true}");
-        assertEquals("STR_212_ORIGINAL_TYPED_INPUT_INVALID",
+        assertEquals("STR_212_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoSkewBasedHedgeResearchService(tampered,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceExceptionsHideCredentials(){
