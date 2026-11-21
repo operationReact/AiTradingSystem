@@ -5949,21 +5949,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Verified completed NIFTY 50 daily EMA8/EMA21 crossover below (bearish) with original source timestamps",
+    "Two matched NSE_FO NIFTY PE options: long higher strike, short lower strike, same expiry, lot and underlying",
+    "Real synchronized same-provider index and both put bid/ask, OI/depth, spread and research-use permissions",
+    "Round-trip fees, bid/ask slippage, estimated debit/maximum modeled expiry payoff and bounded research capital"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BEAR_PUT_DEBIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBearPutDebitSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBearPutDebitSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-184-bear-put-debit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed verified NSE NIFTY index and two real PE contracts/quotes and true source-first-known publication timestamps",
+    "Actual India spread fees and taxes, broker margin/execution and physical/expiry settlement validation",
+    "No-lookahead historical and out-of-sample walk-forward replay with non-atomic two-leg fills and slippage",
+    "Separate PAPER ledger/Flutter acceptance, and independently authorized LIVE options permissions"
+   ],
+   "note": "Two-leg bearish long higher-strike PE, short lower-strike PE research classifier; completed bearish EMA signal and strict 3-leg time, rights, quote depth and cost gates. Always non-executable. DATA_BLOCKED.",
    "id": "strategy.STR-184",
    "kind": "STRATEGY",
    "name": "Bear Put Debit Spread",
