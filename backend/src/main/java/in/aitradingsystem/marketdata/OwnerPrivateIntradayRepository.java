@@ -1,6 +1,7 @@
 package in.aitradingsystem.marketdata;
 
 import java.time.Instant;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -24,7 +25,22 @@ public class OwnerPrivateIntradayRepository {
 
     /** Atomic per-token 12-hour claim across restarted workers and replicas. */
     public boolean claim(String owner, String token, String interval, Instant now) {
+        return claim(owner, token, interval, now, Duration.ofHours(12));
+    }
+
+    /**
+     * One owner-private claim per instrument/interval and bounded cooldown.
+     * A session-aware worker can recheck actual provider bars after a new
+     * interval closes; a concurrent replica cannot race the same claim.
+     */
+    public boolean claim(String owner, String token, String interval, Instant now,
+                         Duration minimumSpacing) {
         check(owner, token, interval);
+        if (now == null || minimumSpacing == null ||
+                minimumSpacing.compareTo(Duration.ofMinutes(5)) < 0 ||
+                minimumSpacing.compareTo(Duration.ofHours(12)) > 0) {
+            throw new IllegalArgumentException("Invalid intraday query cooldown");
+        }
         return jdbc.query("""
                 INSERT INTO owner_private_intraday_cursor
                   (owner_subject,exchange,symbol_token,interval,attempted_at,status)
@@ -35,7 +51,7 @@ public class OwnerPrivateIntradayRepository {
                  WHERE owner_private_intraday_cursor.attempted_at < ?
                 RETURNING symbol_token
                 """, (rs, i) -> rs.getString(1),
-                owner, token, interval, utc(now), utc(now.minusSeconds(12 * 3600))).size() == 1;
+                owner, token, interval, utc(now), utc(now.minus(minimumSpacing))).size() == 1;
     }
 
     @Transactional

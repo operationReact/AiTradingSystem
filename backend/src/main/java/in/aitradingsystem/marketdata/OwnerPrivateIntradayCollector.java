@@ -7,6 +7,9 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.DayOfWeek;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -63,9 +66,21 @@ public class OwnerPrivateIntradayCollector {
     public synchronized void collectOne() {
         Instant now=clock.instant();
         if (now.isBefore(retryAfter) || ownerSubject.isBlank() || !feed.available()) return;
-        // Only completed sessions; avoid collecting provisional current bars.
-        LocalDate through=now.atZone(IST).toLocalDate().minusDays(1);
+        // A bounded real provider history read may include the current
+        // session. Only *completed* 5m/1H intervals may enter the archive;
+        // real-time LTP is never used to construct a candle.
+        ZonedDateTime local=now.atZone(IST);
+        boolean weekday=local.getDayOfWeek()!=DayOfWeek.SATURDAY
+                && local.getDayOfWeek()!=DayOfWeek.SUNDAY;
+        boolean currentSessionCandidate=weekday
+                && !local.toLocalTime().isBefore(LocalTime.of(9,22))
+                && local.toLocalTime().isBefore(LocalTime.of(15,40));
+        boolean completedToday=weekday
+                && !local.toLocalTime().isBefore(LocalTime.of(15,40));
+        LocalDate through=currentSessionCandidate || completedToday
+                ? local.toLocalDate() : local.toLocalDate().minusDays(1);
         LocalDate from=through.minusDays(13);
+        Instant completenessCutoff=now.minus(Duration.ofMinutes(2));
         for (int checked=0;checked<PILOT.size()*2;checked++) {
             int slot=(next++)%(PILOT.size()*2);
             String symbol=PILOT.get(slot/2);
@@ -76,14 +91,24 @@ public class OwnerPrivateIntradayCollector {
                     instrument.symbolToken()==null||
                     !instrument.symbolToken().matches("[0-9]{1,12}")) continue;
             String token=instrument.symbolToken();
-            if (!repository.claim(ownerSubject,token,interval,now)) continue;
+            Duration minimumSpacing=currentSessionCandidate
+                    ? ("FIVE_MINUTE".equals(interval)
+                        ? Duration.ofMinutes(5) : Duration.ofMinutes(30))
+                    : Duration.ofHours(12);
+            if (!repository.claim(ownerSubject,token,interval,now,minimumSpacing)) continue;
             try {
                 var raw=feed.historicalCandles("NSE",token,interval,
                     LocalDateTime.of(from,LocalTime.of(9,15)).format(FORMAT),
-                    LocalDateTime.of(through,LocalTime.of(15,30)).format(FORMAT));
+                    (currentSessionCandidate
+                        ? LocalDateTime.of(through,local.toLocalTime())
+                        : LocalDateTime.of(through,LocalTime.of(15,30)))
+                            .format(FORMAT));
                 var bars=parser.parse(raw);
                 if (bars.size()>2000) throw new IllegalStateException("Oversize source");
                 Instant previous=null;
+                var completed=new ArrayList<HistoricalCandleParser.CandleValues>();
+                Duration duration="FIVE_MINUTE".equals(interval)
+                        ? Duration.ofMinutes(5) : Duration.ofHours(1);
                 for (var bar:bars) {
                     var date=bar.candleTime().atZone(IST).toLocalDate();
                     var time=bar.candleTime().atZone(IST).toLocalTime();
@@ -94,8 +119,14 @@ public class OwnerPrivateIntradayCollector {
                         throw new IllegalStateException("Invalid private intraday timestamps");
                     }
                     previous=bar.candleTime();
+                    // Historical source can contain a still-forming bar.
+                    // Do not store until the full requested interval ended
+                    // with a further two-minute source-settlement margin.
+                    if (!bar.candleTime().plus(duration).isAfter(completenessCutoff)) {
+                        completed.add(bar);
+                    }
                 }
-                repository.save(ownerSubject,token,symbol,interval,through,now,bars);
+                repository.save(ownerSubject,token,symbol,interval,through,now,completed);
                 providerFailures=0;
                 return;
             } catch (RuntimeException providerError) {
