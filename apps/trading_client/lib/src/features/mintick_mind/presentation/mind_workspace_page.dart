@@ -21,6 +21,7 @@ import '../data/mind_prospective_outcomes_repository.dart';
 import '../data/mind_prospective_evidence_completeness_repository.dart';
 import '../data/mind_progress_repository.dart';
 import 'mind_progress_panel.dart';
+import 'mind_data_readiness_panel.dart';
 import '../data/mind_paper_cycle_repository.dart';
 import 'mind_paper_cycle_panel.dart';
 import '../data/mind_paper_portfolio_repository.dart';
@@ -187,6 +188,7 @@ class MintickMindWorkspacePage extends StatefulWidget {
 
 class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   String _route = 'overview';
+  bool _showDataReadiness = false;
 
   /// Screens whose content has no backend source yet. They keep their labelled
   /// preview but are never presented as working features (DATA_BLOCKED).
@@ -406,10 +408,20 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
         if (_mindRouteHistory.length > 24) _mindRouteHistory.removeAt(0);
       }
       _route = route;
+      if (route != 'coverage') _showDataReadiness = false;
     });
   }
 
+  void _openDataReadiness() {
+    if (_route != 'coverage') _go('coverage');
+    setState(() => _showDataReadiness = true);
+  }
+
   void _backMindScreen() {
+    if (_showDataReadiness) {
+      setState(() => _showDataReadiness = false);
+      return;
+    }
     if (_mindRouteHistory.isEmpty) {
       setState(() => _route = 'overview');
       return;
@@ -556,8 +568,14 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       ],
       const Spacer(),
       if (MediaQuery.sizeOf(context).width >= 480)
-        const MindTag('DEMO DATA', color: MindPalette.yellow),
+        _showDataReadiness
+          ? MindTag(widget.progressRepository == null
+              ? 'NOT VERIFIED' : 'SOURCE REGISTRY · READ ONLY')
+          : const MindTag('DEMO DATA', color: MindPalette.yellow),
       const SizedBox(width: 4),
+      IconButton(key: const ValueKey('mind-open-data-readiness'),
+        tooltip: 'Data readiness', onPressed: _openDataReadiness,
+        icon: const Icon(Icons.storage_outlined, color: MindPalette.muted, size: 20)),
       IconButton(tooltip:'Screen coverage',onPressed:()=>_go('coverage'),
         icon:const Icon(Icons.fact_check_outlined,color:MindPalette.muted,size:20)),
     ]),
@@ -642,7 +660,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           const SizedBox(height:3),
           Text(subtitle,style:const TextStyle(color:MindPalette.muted,fontSize:12)),
           const SizedBox(height:13),
-          const MindTag('ILLUSTRATIVE / OFFLINE · NO LIVE BROKER'),
+          if (_showDataReadiness)
+            const MindTag('READ-ONLY · DATASET COVERAGE NOT PROVEN')
+          else
+            const MindTag('ILLUSTRATIVE / OFFLINE · NO LIVE BROKER'),
           const SizedBox(height:17),
           ...children,
         ],
