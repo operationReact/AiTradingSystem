@@ -110,6 +110,23 @@ class Fno43RuntimeSourceAuditServiceTest {
         assertFalse(report.toString().contains("private broker error"));
     }
 
+    @Test void triplicateStrategyIdNeverRestoresFalseResearchCoverage(){
+        var readiness=mock(Fno43StrategyReadinessService.class);
+        var valid=mockedCoverage(43).inspect(NOW).strategies().getFirst();
+        // Three entries with identical IDs must NOT toggle a missing ID back
+        // to present after the second entry invalidates it.
+        var duplicated=List.of(valid,valid,valid);
+        var coverage=new Fno43StrategyReadinessService.Coverage(
+            "minttick.43.v1",NOW,43,43,0,0,0,0,0,0,duplicated);
+        when(readiness.inspect(NOW)).thenReturn(coverage);
+        var report=audit(readiness,mock(FnoVerifiedStrategy203206SourceStore.class),
+            mock(FnoVerifiedStrategy207212SourceStore.class)).inspect(NOW);
+        assertEquals(0,report.distinctResearchAdaptersObserved());
+        assertEquals(43,report.strategiesWithoutAdapters());
+        assertEquals("READINESS_NOT_OBSERVED",report.strategies().getFirst().integrationState());
+        assertEquals(0,report.independentMarketE2EValidated());
+    }
+
     @Test void noCacheAndRoleRestrictedOperatorEndpoint() throws Exception {
         var route=AdminFno43SourceEvidenceController.class
             .getDeclaredMethod("evidence");

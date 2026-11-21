@@ -5,10 +5,12 @@ import in.aitradingsystem.marketdata.FnoVerifiedStrategy207212SourceStore;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
@@ -61,11 +63,17 @@ public final class Fno43RuntimeSourceAuditService {
             coverage=null; // Do NOT expose secrets/log raw broker errors.
         }
         Map<String,Fno43StrategyReadinessService.StrategyRow> observed=new HashMap<>();
+        // Once an ID is duplicated it remains untrusted even if a third copy
+        // appears; alternating remove/reinsert must never fabricate coverage.
+        Set<String> duplicateIds=new HashSet<>();
         if(coverage!=null && coverage.strategies()!=null)
             for(var r:coverage.strategies()){
-                if(r!=null && r.strategyId()!=null){
-                    if(observed.putIfAbsent(r.strategyId(),r)!=null)
-                        observed.remove(r.strategyId()); // duplicate is not proof
+                if(r==null || r.strategyId()==null)continue;
+                String id=r.strategyId();
+                if(duplicateIds.contains(id))continue;
+                if(observed.putIfAbsent(id,r)!=null){
+                    observed.remove(id);
+                    duplicateIds.add(id);
                 }
             }
         List<SourceRow> rows=new ArrayList<>(43);
