@@ -17,20 +17,21 @@ m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 class NseDecemberCompareTest(unittest.TestCase):
     def test_archive_parser_extracts_specific_futures_and_options(self):
         fields=["BizDt","TckrSymb","FinInstrmTp","XpryDt","StrkPric","OptnTp",
-                "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst"]
+                "OpnPric","HghPric","LwPric","ClsPric","TtlTradgVol","OpnIntrst","NewBrdLotQty"]
         data=io.StringIO()
         w=csv.DictWriter(data,fieldnames=fields);w.writeheader()
         for kind,code,price in (("IDF","",0),("IDO","CE",25000),("IDO","PE",25000)):
             w.writerow(dict(BizDt="2025-12-15",TckrSymb="NIFTY",
                  FinInstrmTp=kind,XpryDt="2025-12-30",StrkPric=str(price),
                  OptnTp=code,OpnPric="100",HghPric="103",LwPric="99",
-                 ClsPric="102",TtlTradgVol="20",OpnIntrst="15"))
+                 ClsPric="102",TtlTradgVol="20",OpnIntrst="15",NewBrdLotQty="75"))
         zipbuf=io.BytesIO()
         with zipfile.ZipFile(zipbuf,"w",zipfile.ZIP_DEFLATED) as z:
             z.writestr("BhavCopy_NSE_FO_0_0_0_20251215_F_0000.csv",data.getvalue())
         rows=m.parse_udiff(zipbuf.getvalue(),date(2025,12,15))
         self.assertEqual(len(rows),3)
-        self.assertEqual(rows[("CE",Decimal(25000),date(2025,12,15))][-1],Decimal(15))
+        self.assertEqual(rows[("CE",Decimal(25000),date(2025,12,15))][-2],Decimal(15))
+        self.assertEqual(rows[("CE",Decimal(25000),date(2025,12,15))][-1],Decimal(75))
 
     def test_full_321_duplicate_pairs_compare_independently(self):
         mapping={}
@@ -44,7 +45,7 @@ class NseDecemberCompareTest(unittest.TestCase):
             for d in range(14):
                 day=date(2025,12,10)+timedelta(days=d)
                 official=tuple(Decimal(n) for n in (100,103,99,102,20,15))
-                nse[(kind,strike,day)]=official
+                nse[(kind,strike,day)]=official+(Decimal(75),)
                 saved[(key,day)]=[("00:00",official)]
                 if (n,d)!=(22,13):
                     identical=n==0 and d<5
@@ -59,6 +60,15 @@ class NseDecemberCompareTest(unittest.TestCase):
         self.assertEqual(totals["midnightOnlyFullMatch"],316)
         self.assertEqual(totals["bothFullMatch"],5)
         self.assertEqual(totals["missingNSEContractDays"],0)
+        # NSE counts contracts; a broker can express volume in lot units.
+        adjusted={
+            k:[(clock,v[:4]+(v[4]*Decimal(75),)+v[5:]) for clock,v in rows]
+            for k,rows in saved.items()
+        }
+        normalized=m.compare(adjusted,mapping,nse)
+        self.assertEqual(normalized["midnightNormalizedVolumeMatch"],322)
+        self.assertEqual(normalized["openingNormalizedVolumeMatch"],321)
+        self.assertEqual(normalized["midnightVolumeMatch"],0)
 
     def test_missing_exchange_rows_detected_without_fabrication(self):
         mapping={}
@@ -77,7 +87,7 @@ class NseDecemberCompareTest(unittest.TestCase):
                     saved[(key,day)].append(("09:15",official if n==0 and d<5 else
                                             official[:3]+(Decimal(101),)+official[4:]))
                 if (n,d)!=(22,13):
-                    nse[(kind,strike,day)]=official
+                    nse[(kind,strike,day)]=official+(Decimal(75),)
         result=m.compare(saved,mapping,nse)
         self.assertEqual(result["missingNSEContractDays"],1)
 
