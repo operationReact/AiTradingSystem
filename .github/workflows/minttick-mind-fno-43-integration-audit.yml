@@ -25,6 +25,9 @@ on:
       - 'backend/src/main/resources/db/migration/V102__fno_verified_completed_ohlcv_oi_session.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V103__fno_index_hedge_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -52,6 +55,9 @@ on:
       - 'backend/src/main/resources/db/migration/V102__fno_verified_completed_ohlcv_oi_session.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V103__fno_index_hedge_research_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoIndexHedgeResearchStoreTest.java'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -124,6 +130,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedCompletedOhlcvOiStoreTest' test
+      - name: Validate STR-178 private beta, margin, risk and independently entitled futures depth
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoIndexHedgeResearchStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
