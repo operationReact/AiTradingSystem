@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Real-input invocation of the three futures research evaluators (STR-170/171/172).
+ * Read-only invocation of four futures research evaluators (STR-170..173).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -35,6 +35,10 @@ public class FnoFuturesResearchService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
+    private static final int OI_LOOKBACK_DAYS = 21;
+    // Experimental research calibration, never permission for PAPER/LIVE orders.
+    private static final FnoFuturesOpenInterestTrendV1.Thresholds OI_THRESHOLDS =
+        new FnoFuturesOpenInterestTrendV1.Thresholds(800, 3, 2500, 5000);
 
     /** Status plus the input counts actually supplied, for observability. */
     public record StrategyStatus(String strategyId, String status, String reasonCode,
@@ -79,7 +83,8 @@ public class FnoFuturesResearchService {
         return List.of(
             evaluateBasisCarry(now, today, sessionOpen),
             evaluateCalendarSpread(now, today, sessionOpen),
-            evaluateRollover(now, today));
+            evaluateRollover(now, today),
+            evaluateOpenInterestTrend(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
