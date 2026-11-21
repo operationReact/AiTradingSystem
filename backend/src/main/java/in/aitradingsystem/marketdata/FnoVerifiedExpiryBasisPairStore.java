@@ -147,7 +147,7 @@ public class FnoVerifiedExpiryBasisPairStore {
                 || to.isAfter(asOf.atZone(IST).toLocalDate())) {
             throw new IllegalArgumentException("FNO_EXPIRY_BASIS_SOURCE_SCOPE_INVALID");
         }
-        Object[] bind = new Object[31];
+        Object[] bind = new Object[30];
         bind[0] = spotKey;
         bind[1] = futuresKey;
         bind[2] = Date.valueOf(expiry);
