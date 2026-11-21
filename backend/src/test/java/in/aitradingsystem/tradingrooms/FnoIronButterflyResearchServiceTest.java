@@ -133,7 +133,7 @@ class FnoIronButterflyResearchServiceTest {
                 d("4"),d("4.05"),d("5"),0,10,1000,
                 NOW.minusSeconds(40),NOW.minusSeconds(30)),
             p.shortCall(),p.longCall(),p.budget(),p.firstKnownAt())));
-        assertEquals("IRON_BUTTERFLY_QUOTE_OR_IV_INVALID",
+        assertEquals("IRON_BUTTERFLY_FOUR_LEG_CONTRACT_QUOTE_OR_PROVENANCE_INVALID",
             service(daily(),s,true).evaluate(NOW).reasonCode());
         when(s.oneCurrent(LP,SP,SC,LC,NOW)).thenReturn(Optional.of(new Proof(
             p.provider(),p.expiry(),p.lotSize(),p.tick(),p.index(),
@@ -141,7 +141,7 @@ class FnoIronButterflyResearchServiceTest {
                 d("0.99"),d("1"),d("5"),10,0,1000,
                 NOW.minusSeconds(40),NOW.minusSeconds(30)),
             p.shortPut(),p.shortCall(),p.longCall(),p.budget(),p.firstKnownAt())));
-        assertEquals("IRON_BUTTERFLY_QUOTE_OR_IV_INVALID",
+        assertEquals("IRON_BUTTERFLY_FOUR_LEG_CONTRACT_QUOTE_OR_PROVENANCE_INVALID",
             service(daily(),s,true).evaluate(NOW).reasonCode());
     }
     @Test void originalIvCannotBeMissingOrEstimated(){
