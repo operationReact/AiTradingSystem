@@ -3,8 +3,8 @@ package in.aitradingsystem.tradingrooms;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import in.aitradingsystem.marketdata.FnoVerifiedStrategy202206SourceStore;
-import in.aitradingsystem.marketdata.FnoVerifiedStrategy202206SourceStore.Proof;
+import in.aitradingsystem.marketdata.FnoVerifiedStrategy203206SourceStore;
+import in.aitradingsystem.marketdata.FnoVerifiedStrategy203206SourceStore.Proof;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -38,14 +38,14 @@ class FnoDeltaHedgeResearchServiceTest {
             cast(method(FnoDeltaHedgeV1Test.class,"history",new Class<?>[0])),
             (FnoDeltaHedgeV1.Policy) method(FnoDeltaHedgeV1Test.class,"policy",new Class<?>[0]));
     }
-    private static FnoVerifiedStrategy202206SourceStore source(String content){
-        var store=mock(FnoVerifiedStrategy202206SourceStore.class);
+    private static FnoVerifiedStrategy203206SourceStore source(String content){
+        var store=mock(FnoVerifiedStrategy203206SourceStore.class);
         when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(new Proof(
             ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(40),"a".repeat(64))));
         return store;
     }
     @Test void deniedResearchRightsDoNotReadOrPlaceBrokerOrders(){
-        var store=mock(FnoVerifiedStrategy202206SourceStore.class);
+        var store=mock(FnoVerifiedStrategy203206SourceStore.class);
         var result=new FnoDeltaHedgeResearchService(store,json(),false).evaluate(NOW);
         assertEquals("strategy.STR-204",result.strategyId());
         assertEquals("BLOCKED_RIGHTS",result.status());
@@ -61,7 +61,7 @@ class FnoDeltaHedgeResearchServiceTest {
         verify(store).oneCurrent(ID,NOW);
     }
     @Test void emptyAndMaliciousPayloadsFailClosed() {
-        var missing=mock(FnoVerifiedStrategy202206SourceStore.class);
+        var missing=mock(FnoVerifiedStrategy203206SourceStore.class);
         assertEquals("STR_204_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoDeltaHedgeResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
@@ -69,7 +69,7 @@ class FnoDeltaHedgeResearchServiceTest {
             new FnoDeltaHedgeResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
-        var store=mock(FnoVerifiedStrategy202206SourceStore.class);
+        var store=mock(FnoVerifiedStrategy203206SourceStore.class);
         when(store.oneCurrent(ID,NOW)).thenThrow(
             new IllegalStateException("secret actual brokerage token"));
         var row=new FnoDeltaHedgeResearchService(store,json(),true).evaluate(NOW);
