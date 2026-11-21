@@ -67,7 +67,7 @@ class FnoDefinedRiskSpreadRollResearchServiceTest {
         assertEquals("STR_208_AUTHENTIC_ORIGINAL_SOURCE_MISSING",
             new FnoDefinedRiskSpreadRollResearchService(none,json(),true).evaluate(NOW).reasonCode());
         var tampered=source("{\"policy\":{},\"executeLive\":true}");
-        assertEquals("STR_208_ORIGINAL_TYPED_INPUT_INVALID",
+        assertEquals("STR_208_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoDefinedRiskSpreadRollResearchService(tampered,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceExceptionsHideCredentials(){
