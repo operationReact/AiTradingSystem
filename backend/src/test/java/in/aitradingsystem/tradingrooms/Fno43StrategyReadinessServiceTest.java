@@ -220,7 +220,7 @@ class Fno43StrategyReadinessServiceTest {
         assertEquals("DIRECT_EVALUATOR_OBSERVED", byId.get("strategy.STR-181").integrationState());
         assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
-        assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
+        assertEquals("DIRECT_EVALUATOR_OBSERVED", byId.get("strategy.STR-212").integrationState());
         assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206", "strategy.STR-207", "strategy.STR-208", "strategy.STR-209", "strategy.STR-210", "strategy.STR-211", "strategy.STR-212"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
