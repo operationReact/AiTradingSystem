@@ -193,9 +193,9 @@ public final class FnoEquityCollarV1 {
                 || !h.provider().equals(pq.provider()) || !h.provider().equals(cq.provider())
                 || !h.equityKey().equals(eq.key())
                 || !p.key().equals(pq.key()) || !c.key().equals(cq.key())
-                || !validQuote(eq, 1, 1, 1, Integer.MAX_VALUE)
+                || !validQuote(eq, 1, 1, Integer.MAX_VALUE)
                 || !validQuote(pq, a.minBidAskDepthLots(), a.minOpenInterestLots(),
-                    a.maxEachOptionSpreadBps(), a.maxEachOptionSpreadBps())
+                    a.maxEachOptionSpreadBps())
                 || !validQuote(cq, a.minBidAskDepthLots(), a.minOpenInterestLots(),
                     a.maxEachOptionSpreadBps(), a.maxEachOptionSpreadBps())
                 || !validTime(eq.exchangeAt(), eq.firstKnownAt(), at)
@@ -218,7 +218,7 @@ public final class FnoEquityCollarV1 {
             && cd.compareTo(BigDecimal.valueOf(a.maxStrikeDistanceBps())) <= 0;
     }
 
-    private static boolean validQuote(Quote q, long depth, long oi, int unused, int maxSpreadBps) {
+    private static boolean validQuote(Quote q, long depth, long oi, int maxSpreadBps) {
         if (!positive(q.bid()) || !positive(q.ask()) || q.ask().compareTo(q.bid()) < 0
                 || q.bidDepthLots() < depth || q.askDepthLots() < depth
                 || q.oiLots() < oi) return false;
