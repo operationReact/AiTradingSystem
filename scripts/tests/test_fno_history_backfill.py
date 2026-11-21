@@ -202,6 +202,16 @@ class BackfillTest(unittest.TestCase):
         for forbidden in ("open","high","low","close","volume","oi","bearer","token","price"):
             self.assertNotIn(forbidden,cols)
 
+    def test_must_be_expired_and_not_plan_after_expiry(self):
+        with self.assertRaises(ValueError):
+            self.q.plan(EXPIRED, "day", date(2025,4,23), date(2025,4,25),
+                        rights=grant(), today=TODAY)
+        with self.assertRaises(ValueError):
+            self.q.plan("NSE_FO|73507|25-11-2026", "day",
+                        date(2026,11,20), date(2026,11,20),
+                        rights=grant(), today=TODAY)
+        self.assertEqual(self.q.summary()["total_batches"], 0)
+
     def test_bad_contract_and_unsupported_interval_rejected(self):
         with self.assertRaises(ValueError):
             self.q.plan("NSE_EQ|12345","day",TODAY,TODAY,rights=grant(),today=TODAY)
