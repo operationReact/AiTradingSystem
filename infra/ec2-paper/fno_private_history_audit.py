@@ -120,7 +120,12 @@ def audit(journal, cache):
     candle_months = Counter()
     duplicates = set()
     seen_daily_dates = set()
+    seen_daily_payload = {}
     monthly_daily_duplicates = Counter()
+    identical_daily_repeats = Counter()
+    divergent_daily_repeats = Counter()
+    same_instant_repeats = Counter()
+    daily_timestamp_patterns = defaultdict(Counter)
     monthly_contract_candles = Counter()
     count = 0
     zero_volume = zero_oi = 0
@@ -155,10 +160,25 @@ def audit(journal, cache):
                 candle_months[month] += 1
                 monthly_contract_candles[(month, key)] += 1
                 daily_key = (source, key, interval, dt.date())
+                # Compare only within the same contract and exchange calendar day.
+                # Never emit the instrument key, raw price, or candle timestamp.
+                candle_payload = (op, high, low, close, volume, oi)
                 if daily_key in seen_daily_dates:
                     invalid["duplicateDailyDates"] += 1
                     monthly_daily_duplicates[month] += 1
+                    previous = seen_daily_payload[daily_key]
+                    if previous[0] == candle_payload:
+                        identical_daily_repeats[month] += 1
+                    else:
+                        divergent_daily_repeats[month] += 1
+                    if previous[1].astimezone(timezone.utc) == dt.astimezone(timezone.utc):
+                        same_instant_repeats[month] += 1
+                else:
+                    seen_daily_payload[daily_key] = (candle_payload, dt)
                 seen_daily_dates.add(daily_key)
+                # Time-of-day and UTC offset only; never retain original date.
+                pattern = dt.strftime("%H:%M%z")
+                daily_timestamp_patterns[month][pattern] += 1
         except (ValueError, TypeError, AttributeError):
             invalid["invalidCandleTimestamp"] += 1
         if any(type(x) not in (int, float) or not math.isfinite(x) or x <= 0
@@ -187,6 +207,13 @@ def audit(journal, cache):
         {"month": month, "jobs": month_jobs[month],
          "contracts": len(month_contracts[month]), "candles": candle_months[month],
          "duplicateDailyDates": monthly_daily_duplicates[month],
+         "duplicateIdenticalPayload": identical_daily_repeats[month],
+         "duplicateConflictingPayload": divergent_daily_repeats[month],
+         "duplicateSameInstant": same_instant_repeats[month],
+         "timestampPatterns": [
+             {"time": clock, "count": n}
+             for clock, n in sorted(daily_timestamp_patterns[month].items())
+         ][:12] if monthly_daily_duplicates[month] else [],
          "contractsOver21Candles": sum(1 for key in month_contracts[month]
                                        if monthly_contract_candles[(month,key)] > 21),
          "maxCandlesPerContract": max((monthly_contract_candles[(month,key)]

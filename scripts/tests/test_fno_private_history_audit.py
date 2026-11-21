@@ -101,6 +101,28 @@ class PrivateHistoryAuditTest(unittest.TestCase):
         self.assertEqual(report["coverage"]["months"][0]["duplicateDailyDates"], 1)
         self.assertEqual(report["findings"].get("duplicateCandles", 0), 0)
 
+    def test_duplicate_daily_identical_payload_is_classified(self):
+        self.cache.execute("""INSERT INTO fno_historical_candles
+            SELECT source,contract_key,interval,'2026-10-12T15:30:00+05:30',
+                   open_price,high_price,low_price,close_price,volume,
+                   open_interest,batch_hash FROM fno_historical_candles""")
+        data = self.run_audit()
+        m = data["coverage"]["months"][0]
+        self.assertEqual(m["duplicateIdenticalPayload"], 1)
+        self.assertEqual(m["duplicateConflictingPayload"], 0)
+        self.assertEqual(m["duplicateSameInstant"], 0)
+        self.assertEqual(m["duplicateDailyDates"], 1)
+        self.assertEqual(sum(x["count"] for x in m["timestampPatterns"]), 2)
+
+    def test_duplicate_daily_conflicting_payload_is_classified(self):
+        self.cache.execute("""INSERT INTO fno_historical_candles
+            SELECT source,contract_key,interval,'2026-10-12T15:30:00+05:30',
+                   open_price,high_price,low_price,close_price+1,volume,
+                   open_interest,batch_hash FROM fno_historical_candles""")
+        m = self.run_audit()["coverage"]["months"][0]
+        self.assertEqual(m["duplicateIdenticalPayload"], 0)
+        self.assertEqual(m["duplicateConflictingPayload"], 1)
+
     def test_enforces_exact_pilot_21_day_expiry_window(self):
         self.journal.execute(
             "UPDATE fno_backfill_jobs SET first_day='2026-10-09'")

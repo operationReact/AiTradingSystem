@@ -34,7 +34,7 @@ ALLOWED_FINDINGS = {
 def expected_request():
     return {
         "kind": "minttick-owner-private-fno-quality-audit-v1",
-        "audit_revision": 2,
+        "audit_revision": 3,
         "operation": "read-only-historical-candle-and-checkpoint-audit",
         "account": "098859530205",
         "region": "ap-south-1",
@@ -99,8 +99,19 @@ def parse_receipt(output):
             raise ValueError("INVALID_MONTH_RECEIPT")
         if any(type(row[k]) is not int or not 0 <= row[k] <= 1000000
                for k in ("jobs","contracts","candles","duplicateDailyDates",
-                         "contractsOver21Candles","maxCandlesPerContract")):
+                         "contractsOver21Candles","maxCandlesPerContract",
+                         "duplicateIdenticalPayload","duplicateConflictingPayload",
+                         "duplicateSameInstant")):
             raise ValueError("INVALID_MONTH_RECEIPT")
+        patterns = row.get("timestampPatterns")
+        if not isinstance(patterns,list) or len(patterns)>12:
+            raise ValueError("INVALID_TIME_PATTERN_RECEIPT")
+        for entry in patterns:
+            if (not isinstance(entry,dict)
+                    or not re.fullmatch(r"[0-2][0-9]:[0-5][0-9][+-][0-2][0-9][0-5][0-9]", entry.get("time",""))
+                    or type(entry.get("count")) is not int
+                    or not 0 <= entry["count"] <= 1000000):
+                raise ValueError("INVALID_TIME_PATTERN_RECEIPT")
     return report
 
 def print_safe_report(report):
@@ -117,7 +128,14 @@ def print_safe_report(report):
               f"contracts={month['contracts']}; candles={month['candles']}; "
               f"dailyDuplicates={month['duplicateDailyDates']}; "
               f"contractsOver21Candles={month['contractsOver21Candles']}; "
-              f"maxCandlesPerContract={month['maxCandlesPerContract']}", flush=True)
+              f"maxCandlesPerContract={month['maxCandlesPerContract']}; "
+              f"identicalDailyDuplicates={month['duplicateIdenticalPayload']}; "
+              f"conflictingDailyDuplicates={month['duplicateConflictingPayload']}; "
+              f"duplicateSameInstant={month['duplicateSameInstant']}", flush=True)
+        if month['duplicateDailyDates']:
+            for pattern in month["timestampPatterns"]:
+                print(f"FNO AUDIT TIME: month={month['month']}; "
+                      f"clockOffset={pattern['time']}; candles={pattern['count']}", flush=True)
     for name,value in sorted(report["findings"].items()):
         print(f"FNO AUDIT FINDING: {name}={value}", flush=True)
     print("FNO AUDIT LIMITS: no contract type mapping; no provider source catalogue; "
