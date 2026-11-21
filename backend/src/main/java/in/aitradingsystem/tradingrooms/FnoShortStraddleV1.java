@@ -52,7 +52,7 @@ public final class FnoShortStraddleV1 {
                            BigDecimal theoreticalMaximumDownsideExpiryLossInr,
                            BigDecimal lowerExpiryBreakeven, BigDecimal upperExpiryBreakeven,
                            BigDecimal expectedOneSigmaMovePerUnit,
-                           BigDecimal expectedMoveOverCostBps,
+                           BigDecimal expectedMoveOverCreditBps,
                            boolean unlimitedTheoreticalUpsideLoss) {
         public boolean executable() { return false; }
         public boolean orderPlaced() { return false; }
