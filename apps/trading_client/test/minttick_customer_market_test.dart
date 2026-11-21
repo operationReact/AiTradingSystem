@@ -454,11 +454,11 @@ void main() {
     expect(find.text('₹121.00'), findsOneWidget);
     expect(find.text('₹120.00'), findsOneWidget);
     expect(find.text('987654'), findsOneWidget);
-    expect(find.text('+4.55 (+3.76%) vs previous close'), findsOneWidget);
+    expect(find.text('+4.55 (+3.76%) · vs prev. close'), findsOneWidget);
     expect(find.textContaining('provider day values'), findsOneWidget);
     expect(fake.detailRequests, 1);
     expect(fake.candleIntervals, ['ONE_DAY']);
-    expect(find.textContaining('Stored candles ·'), findsOneWidget);
+    expect(find.textContaining('Historical ·'), findsOneWidget);
     expect(
         find.byWidgetPredicate((w) =>
             w is Semantics && w.properties.label == 'Stored candle chart with 2 bars'),
