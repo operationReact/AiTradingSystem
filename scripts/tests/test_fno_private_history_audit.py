@@ -89,6 +89,24 @@ class PrivateHistoryAuditTest(unittest.TestCase):
         report = self.run_audit()
         self.assertEqual(report["findings"]["orphanCandleRows"], 1)
 
+    def test_multiple_daily_timestamps_same_contract_are_rejected(self):
+        self.cache.execute("""INSERT INTO fno_historical_candles
+            SELECT source, contract_key, interval, '2026-10-12T15:30:00+05:30',
+                   open_price, high_price, low_price, close_price,
+                   volume, open_interest, batch_hash FROM fno_historical_candles""")
+        self.cache.execute("UPDATE fno_history_receipts SET row_count=2")
+        self.journal.execute("UPDATE fno_backfill_jobs SET rows_written=2")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["duplicateDailyDates"], 1)
+        self.assertEqual(report["coverage"]["months"][0]["duplicateDailyDates"], 1)
+        self.assertEqual(report["findings"].get("duplicateCandles", 0), 0)
+
+    def test_enforces_exact_pilot_21_day_expiry_window(self):
+        self.journal.execute(
+            "UPDATE fno_backfill_jobs SET first_day='2026-10-09'")
+        report = self.run_audit()
+        self.assertEqual(report["findings"]["unexpectedPilotWindow"], 1)
+
     def test_read_only_connection_rejects_writes(self):
         self.cache.commit()
         with read_only(self.cpath) as connection:
