@@ -213,7 +213,7 @@ def audit(journal, cache):
          "timestampPatterns": [
              {"time": clock, "count": n}
              for clock, n in sorted(daily_timestamp_patterns[month].items())
-         ][:12],
+         ][:12] if monthly_daily_duplicates[month] else [],
          "contractsOver21Candles": sum(1 for key in month_contracts[month]
                                        if monthly_contract_candles[(month,key)] > 21),
          "maxCandlesPerContract": max((monthly_contract_candles[(month,key)]
