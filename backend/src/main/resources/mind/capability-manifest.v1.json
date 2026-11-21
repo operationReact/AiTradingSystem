@@ -6593,21 +6593,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine source-first-known completed historical NIFTY daily candles and licensed index research rights",
+    "Three separately source-listed, source-verified CALL options: buy low CE, sell TWO matching center CE lots, buy upper CE, symmetric strike spacing and same expiry/official lot",
+    "True contemporaneous same-provider NIFTY plus three CE bid/ask, original as-of exchange and first-known timestamps, authentic ask depth at long legs, TWO lots bid depth at center, open interest and annualized option IV",
+    "Actual modeled 4-contract India transaction fees, slippage, full after-cost debit at risk, theoretical symmetric butterfly expiry breakevens and research risk/reward/IV-move hurdles"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_BUTTERFLY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongButterflyV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongButterflyV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-198-long-butterfly-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original first-known NIFTY index and genuine three-strike NSE CE source quotes, independently reported original CE IV, official strike/lot/expiry calendar",
+    "Actual India statutory fees and broker multi-unit two-short-center fill, margin, option exercise, partial-order hedge and settlement safeguards",
+    "True original-as-of out-of-sample and walk-forward research including actual spread, option volatility, liquidity, slippage and gap stress",
+    "Independent PAPER ledger/Flutter acceptance and separately approved LIVE rights, account risk policies, audited emergency kill switches"
+   ],
+   "note": "Research-only symmetric long CALL butterfly: buy 1 lower CE, SELL 2 center CE, buy 1 upper CE, same expiry/lot. Theoretical maximum expiry loss equals after-cost net debit only with all contracts intact. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-198",
    "kind": "STRATEGY",
    "name": "Long Butterfly",
