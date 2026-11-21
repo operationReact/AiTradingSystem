@@ -64,7 +64,7 @@ class FnoGreeksExposureRebalanceResearchServiceTest {
         assertEquals("STR_211_AUTHENTIC_ORIGINAL_SOURCE_MISSING",
             new FnoGreeksExposureRebalanceResearchService(none,json(),true).evaluate(NOW).reasonCode());
         var tampered=source("{\"policy\":{},\"executeLive\":true}");
-        assertEquals("STR_211_ORIGINAL_TYPED_INPUT_INVALID",
+        assertEquals("STR_211_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoGreeksExposureRebalanceResearchService(tampered,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceExceptionsHideCredentials(){
