@@ -216,6 +216,13 @@ class FnoLongCallV1Test {
             Status.BLOCKED_DATA, "LONG_CALL_CONTRACT_OR_ASSUMPTIONS_INVALID");
     }
 
+    @Test void missingCostsCannotBeTreatedAsFreeTrading() {
+        var a = new Assumptions(500, 50, n("0"), 10000, 300, 1000, 2, 50,
+            n("10000"), 3000);
+        blocked(run(bars("125"), CONTRACT, SPOT, QUOTE, RIGHTS, a, NOW),
+            Status.BLOCKED_DATA, "LONG_CALL_CONTRACT_OR_ASSUMPTIONS_INVALID");
+    }
+
     @Test void deterministicRepeatedEvaluationDoesNotPlaceOrders() {
         assertEquals(run(), run());
         assertFalse(run().liveTradeAuthorized());
