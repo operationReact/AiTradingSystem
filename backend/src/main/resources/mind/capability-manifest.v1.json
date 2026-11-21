@@ -5903,21 +5903,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Source-verified completed NIFTY 50 daily bars and a new bullish EMA8/EMA21 crossover",
+    "Two source-verified NSE_FO NIFTY CE contracts: buy lower strike, sell higher, identical expiry/lot",
+    "Fresh synchronized 3-leg underlying/call bid-ask exchange timestamps, real OI/depth and independent research rights",
+    "Premium debit, costs and taxes, risk-capital allocation, bounded expiry payoff and after-cost reward/risk hurdle"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BULL_CALL_DEBIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBullCallDebitSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-183-bull-call-debit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed synchronized canonical NSE index + two real NIFTY CE option quotes with original first-observed timestamps, instrument/lot/expiry source proof",
+    "Actual India options taxes, physical/expiry settlement/margin and depth, slippage, non-atomic two-leg fill evidence",
+    "Historical as-of replay and independent out-of-sample walk-forward with real market regimes",
+    "Separately approved PAPER lifecycle and Flutter customer acceptance, distinct LIVE F&O broker/account permission"
+   ],
+   "note": "Two-leg lower-strike long CE and upper-strike short CE: deterministic research only after new bullish EMA signal and three-leg rights/as-of/quotes/OI/cost checks. All outputs non-executable. DATA_BLOCKED until market data, OOS and PAPER acceptance.",
    "id": "strategy.STR-183",
    "kind": "STRATEGY",
    "name": "Bull Call Debit Spread",
