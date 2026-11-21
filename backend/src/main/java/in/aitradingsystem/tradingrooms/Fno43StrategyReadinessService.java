@@ -19,13 +19,13 @@ import org.springframework.stereotype.Service;
  * A read-only 43-strategy *readiness* registry, not a 43-strategy execution engine.
  * The authoritative manifest supplies identities and distinct required inputs.
  * STR-170..180 have distinct research evaluator calls; STR-180 needs original-time near-close spot/future pair and carry/delivery receipts.
- * STR-181/182 now have distinct option-evaluator callsites besides their preexisting signal routes.
+ * STR-181..184 each have their own options evaluator callsite beyond the earlier directional signal routes.
  * No research status, including RESEARCH_CANDIDATE, authorizes PAPER/LIVE orders.
  */
 @Service
 public final class Fno43StrategyReadinessService {
     private static final Set<String> DIRECT =
-        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182");
+        Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184");
     private static final Set<String> SIGNAL_ONLY = Set.of();
     private static final String MANIFEST = "/mind/capability-manifest.v1.json";
 
@@ -51,21 +51,34 @@ public final class Fno43StrategyReadinessService {
 
     private final FnoFuturesResearchService futures;
     private final FnoOptionsResearchService options;
+    private final FnoDebitSpreadResearchService debitSpreads;
     private final List<Definition> definitions;
 
     @Autowired
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
-            FnoOptionsResearchService options, ObjectMapper mapper) {
+            FnoOptionsResearchService options,
+            FnoDebitSpreadResearchService debitSpreads, ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = Objects.requireNonNull(options);
+        this.debitSpreads = Objects.requireNonNull(debitSpreads);
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
-    /** Compatibility constructor for isolated operator failure and security tests. */
+    /** Compatibility constructor for individual options source tests. */
+    public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
+            FnoOptionsResearchService options, ObjectMapper mapper) {
+        this.futures = Objects.requireNonNull(futures);
+        this.options = Objects.requireNonNull(options);
+        this.debitSpreads = null;
+        this.definitions = readManifest(Objects.requireNonNull(mapper));
+    }
+
+    /** Compatibility constructor for independent backend security tests. */
     public Fno43StrategyReadinessService(FnoFuturesResearchService futures,
             ObjectMapper mapper) {
         this.futures = Objects.requireNonNull(futures);
         this.options = null;
+        this.debitSpreads = null;
         this.definitions = readManifest(Objects.requireNonNull(mapper));
     }
 
@@ -109,6 +122,27 @@ public final class Fno43StrategyReadinessService {
                 // not proof of option readiness and must not expose provider bodies.
                 observed.remove("strategy.STR-181");
                 observed.remove("strategy.STR-182");
+            }
+        }
+
+        if (debitSpreads != null) {
+            try {
+                var spreads = debitSpreads.evaluateAll(now);
+                if (spreads != null) for (var result : spreads) {
+                    if (result != null && DIRECT.contains(result.strategyId())
+                            && ("strategy.STR-183".equals(result.strategyId())
+                                || "strategy.STR-184".equals(result.strategyId()))
+                            && result.status() != null && result.reasonCode() != null) {
+                        if (observed.putIfAbsent(result.strategyId(), result) != null) {
+                            observed.remove(result.strategyId());
+                        }
+                    }
+                }
+            } catch (RuntimeException unavailable) {
+                // Fail closed for this source only; do not hide independent
+                // futures or single-leg options evaluator observations.
+                observed.remove("strategy.STR-183");
+                observed.remove("strategy.STR-184");
             }
         }
 
