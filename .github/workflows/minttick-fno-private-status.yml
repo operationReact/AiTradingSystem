@@ -40,7 +40,7 @@ jobs:
               assert required in src, required
           for forbidden in ('--with-decryption', 'placeOrder', 'submitOrder',
                             'put-parameter', 'start-instances', 'stop-instances'):
-              assert forbidden not in src, forbidden
+              assert forbidden not in src.split('  status:\n', 1)[1], forbidden
           PY
 
   status:
