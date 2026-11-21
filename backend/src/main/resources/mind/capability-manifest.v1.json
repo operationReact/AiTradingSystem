@@ -5765,21 +5765,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_F_O_CONTRACTS_OI_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "F&O contracts + OI feed"
+    "Source-verified matching listed NSE_EQ stock and NSE_FO single-stock futures contract, listing, expiry, lot size and deliverability",
+    "Five completed, chronological, same-provider NSE exchange-session close spot/future bid/ask pairs and independently verified finalized quote publication as-of times",
+    "Explicit financing/dividend rates, confirmed dividends/corporate actions and physical-delivery/Indian statutory cost review",
+    "Point-in-time signed carry-adjusted basis residuals, consecutive narrowing, residual costs and strict research thresholds"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: F&O contracts + OI feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EXPIRY_BASIS_REVERSION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryBasisReversionV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryBasisReversionV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-180-expiry-basis-reversion.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed same-stock NSE cash/futures historical closing bid/ask feed and source-first-observed settlement/quote timestamps, with verified original exchange dates",
+    "Verified contracts/corporate actions/actual dividend schedule/Indian funding and delivery/expiry restrictions and applicable taxes",
+    "No-lookahead five-session expiry approach historical basis convergence replay, transaction costs/fillability and out-of-sample walk-forward evidence",
+    "Deployed rights-gated canonical F&O data adapter and separately approved PAPER strategy lifecycle and Flutter runtime acceptance"
+   ],
+   "note": "STR-180 deterministic research-only five-session single-stock near-expiry carry-adjusted signed basis convergence classifier; distinct from STR-170 instantaneous basis carry. Excludes index-spot substitution, near delivery cutoff, cross-contract stitching and buy/sell orders. STATUS remains DATA_BLOCKED.",
    "id": "strategy.STR-180",
    "kind": "STRATEGY",
    "name": "Expiry Basis Reversion",
