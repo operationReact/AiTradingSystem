@@ -7007,21 +7007,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently verifiable rights: broker-confirmed existing long NIFTY futures, source original index completed closes, official listed option chain, original per-leg delta and IV, genuine listed futures bid/ask and official NSE instrument master",
+    "35+ genuine original-first-known completed NIFTY index daily closes and synchronized original first-known same-provider current NIFTY index, futures and three independently listed option bid/ask/Greeks/OI/order-book quotes",
+    "Verified existing positive long NIFTY futures lots and original broker average entry price; exact same underlying/expiry/official lot as bought higher OTM put, sold lower OTM put and sold higher OTM call",
+    "Entire actual buy-ask/sell-bid quote depth, modeled directional slippage and nonzero India fees, exact 1:-1:-1 structures per verified long future lot, honest conditional common-expiry payoff at zero/lower put/higher put/short call strike with exposed extreme downside"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PUT_SPREAD_COLLAR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutSpreadCollarV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-207-put-spread-collar-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed NIFTY NSE source-listed same-expiry future/options, authentic original-time quotes/IV/Greeks/bid-ask depth, official master, authenticated true existing long broker future holdings and entry basis",
+    "Actual brokerage/exchange/statutory India charges, short call/put initial and stress margin, futures variation margin, partial-fill ledger, basis, counterparty/position/settlement and forced-liquidation constraints",
+    "Independent original-first-known historical options+futures original-quote out-of-sample/walk-forward hedging results including premium, downside below short put, upside sacrifice, gaps, funding and after-cost actual realized strategy PnL",
+    "Verified PAPER multi-leg and futures broker-sim order-cancel-exit/expiry ledger and Flutter UI, separately accepted LIVE futures/options broker permissions, fresh cash/pledged margin, portfolio caps and kill switches"
+   ],
+   "note": "RESEARCH-ONLY NIFTY long-futures + long higher OTM put / short lower OTM put / short OTM call hypothetical matched expiry. A put-spread collar leaves substantial downside below lower put and caps upside above short call; premium and conditional expiry payoff are NOT realized PnL or margin proof. All order flags false, DATA_BLOCKED.",
    "id": "strategy.STR-207",
    "kind": "STRATEGY",
    "name": "Put Spread Collar",
