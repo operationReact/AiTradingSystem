@@ -6271,21 +6271,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ as-of original first-known genuinely completed NIFTY index daily closes and newly formed bearish EMA8/EMA21 crossover",
+    "Two genuine source-listed same-expiry NIFTY PE instruments: buy one higher-strike long put; sell two lower-strike short puts, adequate depth for two shorts",
+    "Rights-verified synchronized index and PE bid/ask, exchange timestamps, open interest and depth; authentic NSE expiry/lot/session mapping",
+    "True theoretical maximum expiry loss computed from S=0 and S>=higher strike, nonzero three-leg Indian modeled fees and short-put margin review"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PUT_RATIO_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPutRatioSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPutRatioSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-191-put-ratio-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine first-known NIFTY and NSE_FO option chain with official option master/expiries/lot sizes and verified two-short-lot depth",
+    "Broker uncovered short-put margin/risk permissions; real three-leg non-atomic execution, market gap, liquidation and settlement obligations",
+    "Independent original-timestamp OOS and walk-forward research with realistic India fees, margin and fill slippage",
+    "Account-specific signed PAPER acceptance, LIVE broker permissions, risk caps, audited kill switches and app workflow"
+   ],
+   "note": "Research-only one higher PE long and TWO lower PE shorts, fresh bearish EMA crossover. Unlike naked call ratio loss, put ratio theoretical expiry maximum loss is finite at S=0 or S>=long strike; can still be very severe. Never executable. DATA_BLOCKED.",
    "id": "strategy.STR-191",
    "kind": "STRATEGY",
    "name": "Put Ratio Spread Research",
