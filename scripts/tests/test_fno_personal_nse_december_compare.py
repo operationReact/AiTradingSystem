@@ -111,10 +111,19 @@ class NseDecemberCompareTest(unittest.TestCase):
         source={("CE",Decimal(25000),day):ref}
         canonical,summary=m.canonical_personal_rows(nondec,original,mapping,source)
         self.assertEqual(summary["total"],2)
+        self.assertEqual(summary["excludedDecember"],0)
         self.assertEqual(canonical[(december,day)][2],"NSE_PUBLIC_EOD")
         self.assertEqual(canonical[(december,day)][1][4],Decimal(1500))
         self.assertEqual(canonical[(november,date(2025,11,24))][2],"UPSTOX_PRIVATE")
         self.assertNotEqual(canonical[(december,day)][1][3],Decimal(97))
+        bad_source={("CE",Decimal(25000),day):
+                    (Decimal(0),Decimal(0),Decimal(0),Decimal(103),
+                     Decimal(0),Decimal(50),Decimal(75))}
+        excluded,report=m.canonical_personal_rows(nondec,original,mapping,bad_source)
+        self.assertEqual(report["excludedDecember"],1)
+        self.assertEqual(report["nseDecember"],0)
+        self.assertEqual(report["total"],1)
+        self.assertNotIn((december,day),excluded)
         with self.assertRaisesRegex(ValueError,"DUPLICATE_NON_DECEMBER_DAY"):
             m.canonical_personal_rows(nondec+nondec,original,mapping,source)
         with self.assertRaisesRegex(ValueError,"MISSING_EXCHANGE_REFERENCE_DAY"):

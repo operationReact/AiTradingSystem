@@ -249,6 +249,7 @@ def canonical_personal_rows(non_dec_rows, by_day, mapping, nse):
             raise ValueError("INVALID_NON_DECEMBER_OHLC")
         merged[identity]=(stamp,vals,"UPSTOX_PRIVATE")
     other=len(merged)
+    excluded=0
     for (key,day),original in by_day.items():
         if key not in mapping or (key,day) in merged:
             raise ValueError("MISMATCHED_RESEARCH_CONTRACT")
@@ -262,11 +263,14 @@ def canonical_personal_rows(non_dec_rows, by_day, mapping, nse):
         if (min(prices)<=0 or prices[2]>min(prices[0],prices[3])
             or prices[1]<max(prices[0],prices[3])
             or units!=units.to_integral_value() or units>Decimal(1_000_000_000_000)):
-            raise ValueError("INVALID_EXCHANGE_REFERENCE_OHLC")
+            # Never synthesize OHLC or silently replace the source day.
+            excluded+=1
+            continue
         merged[(key,day)]=(day.isoformat()+"T00:00:00+05:30",
                            prices+(units,oi),"NSE_PUBLIC_EOD")
     return merged,{"total":len(merged),"upstoxMonths":other,
-                   "nseDecember":len(by_day),"uniqueDailyKeys":len(merged)}
+                   "nseDecember":len(by_day)-excluded,"excludedDecember":excluded,
+                   "uniqueDailyKeys":len(merged)}
 
 def ro(path):
     if not path.is_file() or path.is_symlink():
@@ -321,8 +325,10 @@ def run():
         if len(other)!=3608:
             raise ValueError("NON_DECEMBER_COHORT_CHANGED")
         canonical,research=canonical_personal_rows(other,by_day,mapping,nse)
-        if (research["total"]!=3930 or research["upstoxMonths"]!=3608
-            or research["nseDecember"]!=322):
+        if (research["upstoxMonths"]!=3608
+            or research["nseDecember"]+research["excludedDecember"]!=322
+            or research["excludedDecember"]>1
+            or research["total"]!=3930-research["excludedDecember"]):
             raise ValueError("UNEXPECTED_RESEARCH_RESULT")
         del canonical
         report={
