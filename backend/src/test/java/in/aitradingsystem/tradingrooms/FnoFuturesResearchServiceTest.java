@@ -10,6 +10,7 @@ import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
 import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
+import in.aitradingsystem.marketdata.FnoVerifiedIntradayLiquidityStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
@@ -917,6 +918,135 @@ class FnoFuturesResearchServiceTest {
             .evaluateAll(NOW)).get("strategy.STR-178");
         assertEquals("BLOCKED_DATA", row.status());
         assertEquals("HEDGE_PORTFOLIO_EVIDENCE_READ_UNAVAILABLE", row.reason());
+        assertFalse(row.reason().contains("secret"));
+    }
+
+
+    private static List<FnoVerifiedIntradayLiquidityStore.Snapshot> threeLiquiditySnapshots() {
+        int[] delays = {35, 20, 5};
+        String[] bid = {"20000", "20001", "20002"};
+        String[] ask = {"20004", "20005", "20006"};
+        var result = new java.util.ArrayList<FnoVerifiedIntradayLiquidityStore.Snapshot>();
+        for (int i = 0; i < delays.length; i++) {
+            int ago = delays[i];
+            result.add(new FnoVerifiedIntradayLiquidityStore.Snapshot(
+                "UPSTOX_V3", NEAR.instrumentKey(), NEAR.underlyingKey(),
+                NEAR.expiry(), NEAR.lotSize(), "FUTURE",
+                new BigDecimal(bid[i]), new BigDecimal(ask[i]),
+                225L, 250L, 20000L, 5000L + i * 50L,
+                NOW.minusSeconds(ago), NOW.minusSeconds(ago - 1),
+                NOW.minusSeconds(ago + 35), NOW.minusSeconds(ago - 1)));
+        }
+        return result;
+    }
+
+    private static FnoFuturesResearchService liquidityService(
+            FnoVerifiedIntradayLiquidityStore source, boolean rights,
+            boolean sessionOpen, UpstoxFnoV3LiveFeedService live) {
+        return new FnoFuturesResearchService(
+            feed(live), calendar(sessionOpen), currentRegistry(), emptyStore(),
+            null, null, null, null, source,
+            true, true, false, false, false, false, rights,
+            "", "", "");
+    }
+
+    private static UpstoxFnoV3LiveFeedService liquidityFeed() {
+        return liveWith(Map.of(NEAR.instrumentKey(),
+            quote(NEAR.instrumentKey(), "20002", "20006")));
+    }
+
+    @Test
+    void str179ThreeSourceVerifiedLiquiditySnapshotsPassResearchNotBrokerExecution() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        when(source.latestThreeFutures(eq(NEAR.instrumentKey()),
+            eq(NEAR.expiry()), eq(NEAR.lotSize()), eq(NOW)))
+            .thenReturn(threeLiquiditySnapshots());
+        var row = byId(liquidityService(source, true, true, liquidityFeed())
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("RESEARCH_PASS", row.status());
+        assertEquals("LIQUIDITY_RESEARCH_SCREEN_PASSED", row.reason());
+        assertEquals(1, row.contracts());
+        assertEquals(1, row.quotes());
+        assertEquals(3, row.history());
+        assertEquals("THREE_SOURCE_OBSERVED_LIQUIDITY_SNAPSHOTS_NO_ORDER", row.input());
+        verify(source).latestThreeFutures(eq(NEAR.instrumentKey()),
+            eq(NEAR.expiry()), eq(NEAR.lotSize()), eq(NOW));
+    }
+
+    @Test
+    void str179RightsDeniedNeverReadsMarketDepthOiOrVolume() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        var row = byId(liquidityService(source, false, true, liquidityFeed())
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("BLOCKED_RIGHTS", row.status());
+        assertEquals("LIQUIDITY_SOURCE_RIGHTS_NOT_VERIFIED", row.reason());
+        verifyNoInteractions(source);
+    }
+
+    @Test
+    void str179TwoOrFewerSourceSnapshotsCannotApproveLiquidity() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        when(source.latestThreeFutures(any(), any(), anyInt(), any()))
+            .thenReturn(threeLiquiditySnapshots().subList(0, 2));
+        var row = byId(liquidityService(source, true, true, liquidityFeed())
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("LIQUIDITY_THREE_SOURCE_SNAPSHOTS_MISSING", row.reason());
+        assertEquals(2, row.history());
+    }
+
+    @Test
+    void str179ProviderExpiryOrMetadataMismatchesStayBlocked() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        var rows = new java.util.ArrayList<>(threeLiquiditySnapshots());
+        var last = rows.get(2);
+        rows.set(2, new FnoVerifiedIntradayLiquidityStore.Snapshot(
+            "ANGEL_ONE_SMARTAPI", last.instrumentKey(), last.underlyingKey(),
+            last.expiry(), last.lotSize(), last.kind(), last.bid(), last.ask(),
+            last.bidDepthUnits(), last.askDepthUnits(), last.oiUnits(),
+            last.cumulativeVolumeUnits(), last.exchangeAt(), last.observedAt(),
+            last.oiFirstObservedAt(), last.volumeFirstObservedAt()));
+        when(source.latestThreeFutures(any(), any(), anyInt(), any()))
+            .thenReturn(rows);
+        var row = byId(liquidityService(source, true, true, liquidityFeed())
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("LIQUIDITY_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS", row.reason());
+    }
+
+    @Test
+    void str179UnmatchedLastLiveQuoteNeverConfirmsBookOrOpenInterest() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        when(source.latestThreeFutures(any(), any(), anyInt(), any()))
+            .thenReturn(threeLiquiditySnapshots());
+        var wrongFeed = liveWith(Map.of(NEAR.instrumentKey(),
+            quote(NEAR.instrumentKey(), "20100", "20104")));
+        var row = byId(liquidityService(source, true, true, wrongFeed)
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("LIQUIDITY_SOURCE_LIVE_QUOTE_MISMATCH", row.reason());
+    }
+
+    @Test
+    void str179MissingLiveQuoteOrClosedSessionSkipsSourceRead() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        assertEquals("LIQUIDITY_FNO_SESSION_CLOSED",
+            byId(liquidityService(source, true, false, liquidityFeed())
+                .evaluateAll(NOW)).get("strategy.STR-179").reason());
+        assertEquals("LIQUIDITY_CURRENT_LIVE_QUOTE_MISSING",
+            byId(liquidityService(source, true, true, liveWith(Map.of()))
+                .evaluateAll(NOW)).get("strategy.STR-179").reason());
+        verifyNoInteractions(source);
+    }
+
+    @Test
+    void str179SourceFailureNeverLeaksPrivateFeedOrAccountMessage() {
+        var source = mock(FnoVerifiedIntradayLiquidityStore.class);
+        when(source.latestThreeFutures(any(), any(), anyInt(), any()))
+            .thenThrow(new IllegalStateException("secret private provider token"));
+        var row = byId(liquidityService(source, true, true, liquidityFeed())
+            .evaluateAll(NOW)).get("strategy.STR-179");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("LIQUIDITY_SOURCE_READ_UNAVAILABLE", row.reason());
         assertFalse(row.reason().contains("secret"));
     }
 
