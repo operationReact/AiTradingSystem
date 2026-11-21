@@ -199,7 +199,7 @@ class FnoFuturesResearchServiceTest {
         assertEquals(1, result.contracts());
         assertEquals(0, result.quotes());
         assertEquals(5, result.history());
-        assertEquals("OI_SINGLE_CONTRACT_RESEARCH_ONLY", result.input());
+        assertEquals("OI_RESEARCH_ONLY_NO_ORDER_PERMISSION", result.input());
         verify(store).verifiedOiContractRows(eq(NEAR.instrumentKey()),
             eq(TODAY.minusDays(21)), eq(TODAY));
     }
