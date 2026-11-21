@@ -157,17 +157,48 @@ class Fno43StrategyReadinessServiceTest {
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-206",
                 "BLOCKED_RIGHTS","STR_206_SOURCE_RIGHTS_UNVERIFIED",NOW,
                 "NONE",0,0,0,"STR_206_ORIGINAL_SOURCE_BLOCKED_NO_ORDER"));
+        var final0=mock(FnoPutSpreadCollarResearchService.class);
+        when(final0.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-207",
+                "BLOCKED_RIGHTS","STR_207_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_207_SOURCE_DENIED_NO_ORDER"));
+        var final1=mock(FnoDefinedRiskSpreadRollResearchService.class);
+        when(final1.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-208",
+                "BLOCKED_RIGHTS","STR_208_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_208_SOURCE_DENIED_NO_ORDER"));
+        var final2=mock(FnoExpiryRiskNeutralizationResearchService.class);
+        when(final2.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-209",
+                "BLOCKED_RIGHTS","STR_209_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_209_SOURCE_DENIED_NO_ORDER"));
+        var final3=mock(FnoPortfolioProtectiveOverlayResearchService.class);
+        when(final3.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-210",
+                "BLOCKED_RIGHTS","STR_210_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_210_SOURCE_DENIED_NO_ORDER"));
+        var final4=mock(FnoGreeksExposureRebalanceResearchService.class);
+        when(final4.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-211",
+                "BLOCKED_RIGHTS","STR_211_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_211_SOURCE_DENIED_NO_ORDER"));
+        var final5=mock(FnoSkewBasedHedgeResearchService.class);
+        when(final5.evaluate(NOW)).thenReturn(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-212",
+                "BLOCKED_RIGHTS","STR_212_SOURCE_RIGHTS_UNVERIFIED",NOW,
+                "NONE",0,0,0,"STR_212_SOURCE_DENIED_NO_ORDER"));
         var report = new Fno43StrategyReadinessService(
             futures, options, spreads, credits, owned, collar, ratio,
             straddle, strangle, shortStraddle, shortStrangle, ironCondor,
             ironButterfly, longButterfly, calendarSpread, diagonalSpread,
-            ivRank, volatilityCrush, extra0, extra1, extra2, extra3, new ObjectMapper()).inspect(NOW);
+            ivRank, volatilityCrush, extra0, extra1, extra2, extra3,
+            final0,final1,final2,final3,final4,final5,new ObjectMapper()).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(37, report.distinctEvaluatorsObserved());
+        assertEquals(43, report.distinctEvaluatorsObserved());
         assertEquals(0, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(6, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(0, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -180,7 +211,7 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(37, report.strategies().stream()
+        assertEquals(43, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
@@ -190,7 +221,7 @@ class Fno43StrategyReadinessServiceTest {
         assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
         assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-189", "strategy.STR-190", "strategy.STR-191", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206", "strategy.STR-207", "strategy.STR-208", "strategy.STR-209", "strategy.STR-210", "strategy.STR-211", "strategy.STR-212"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
@@ -235,6 +266,18 @@ class Fno43StrategyReadinessServiceTest {
         verifyNoMoreInteractions(extra2);
         verify(extra3).evaluate(NOW);
         verifyNoMoreInteractions(extra3);
+        verify(final0).evaluate(NOW);
+        verifyNoMoreInteractions(final0);
+        verify(final1).evaluate(NOW);
+        verifyNoMoreInteractions(final1);
+        verify(final2).evaluate(NOW);
+        verifyNoMoreInteractions(final2);
+        verify(final3).evaluate(NOW);
+        verifyNoMoreInteractions(final3);
+        verify(final4).evaluate(NOW);
+        verifyNoMoreInteractions(final4);
+        verify(final5).evaluate(NOW);
+        verifyNoMoreInteractions(final5);
     }
 
     @Test
@@ -244,7 +287,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(37, report.strategies().stream()
+        assertEquals(43, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));
