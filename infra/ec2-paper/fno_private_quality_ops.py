@@ -28,12 +28,13 @@ ALLOWED_FINDINGS = {
     "outsideBatchWindow", "invalidCandleTimestamp",
     "invalidOrMissingOHLC", "inconsistentOHLC",
     "invalidOrMissingVolume", "invalidOrMissingOI",
-    "receiptVsCachedRowsMismatch",
+    "receiptVsCachedRowsMismatch", "duplicateDailyDates", "unexpectedPilotWindow",
 }
 
 def expected_request():
     return {
         "kind": "minttick-owner-private-fno-quality-audit-v1",
+        "audit_revision": 2,
         "operation": "read-only-historical-candle-and-checkpoint-audit",
         "account": "098859530205",
         "region": "ap-south-1",
@@ -97,7 +98,8 @@ def parse_receipt(output):
         if not re.fullmatch(r"20\d{2}-(0[1-9]|1[0-2])", row["month"]):
             raise ValueError("INVALID_MONTH_RECEIPT")
         if any(type(row[k]) is not int or not 0 <= row[k] <= 1000000
-               for k in ("jobs","contracts","candles")):
+               for k in ("jobs","contracts","candles","duplicateDailyDates",
+                         "contractsOver21Candles","maxCandlesPerContract")):
             raise ValueError("INVALID_MONTH_RECEIPT")
     return report
 
@@ -112,7 +114,10 @@ def print_safe_report(report):
           f"criticalFindings={report['findingCount']}", flush=True)
     for month in cov["months"]:
         print(f"FNO AUDIT MONTH: month={month['month']}; jobs={month['jobs']}; "
-              f"contracts={month['contracts']}; candles={month['candles']}", flush=True)
+              f"contracts={month['contracts']}; candles={month['candles']}; "
+              f"dailyDuplicates={month['duplicateDailyDates']}; "
+              f"contractsOver21Candles={month['contractsOver21Candles']}; "
+              f"maxCandlesPerContract={month['maxCandlesPerContract']}", flush=True)
     for name,value in sorted(report["findings"].items()):
         print(f"FNO AUDIT FINDING: {name}={value}", flush=True)
     print("FNO AUDIT LIMITS: no contract type mapping; no provider source catalogue; "

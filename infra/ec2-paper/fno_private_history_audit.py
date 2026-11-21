@@ -7,7 +7,7 @@ are sent outside the host. GitHub receives bounded aggregate counters only.
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import math
@@ -93,6 +93,8 @@ def audit(journal, cache):
         month = expiry.strftime("%Y-%m")
         month_jobs[month] += 1
         month_contracts[month].add(key)
+        if first_date != expiry - timedelta(days=20) or last_date != expiry:
+            invalid["unexpectedPilotWindow"] += 1
         if state == "DONE" and rows_written == 0:
             invalid["doneWithZeroWritten"] += 1
         if state != "DONE" and rows_written > 0:
@@ -117,6 +119,9 @@ def audit(journal, cache):
     rows_per_hash = Counter()
     candle_months = Counter()
     duplicates = set()
+    seen_daily_dates = set()
+    monthly_daily_duplicates = Counter()
+    monthly_contract_candles = Counter()
     count = 0
     zero_volume = zero_oi = 0
     for row in cache.execute("""SELECT source,contract_key,interval,candle_ts,
@@ -146,7 +151,14 @@ def audit(journal, cache):
                 invalid["outsideBatchWindow"] += 1
             if job:
                 expiry = datetime.strptime(key.rsplit("|", 1)[1], "%d-%m-%Y").date()
-                candle_months[expiry.strftime("%Y-%m")] += 1
+                month = expiry.strftime("%Y-%m")
+                candle_months[month] += 1
+                monthly_contract_candles[(month, key)] += 1
+                daily_key = (source, key, interval, dt.date())
+                if daily_key in seen_daily_dates:
+                    invalid["duplicateDailyDates"] += 1
+                    monthly_daily_duplicates[month] += 1
+                seen_daily_dates.add(daily_key)
         except (ValueError, TypeError, AttributeError):
             invalid["invalidCandleTimestamp"] += 1
         if any(type(x) not in (int, float) or not math.isfinite(x) or x <= 0
@@ -173,7 +185,12 @@ def audit(journal, cache):
     complete = total_jobs == 276 and completed == total_jobs
     coverage = [
         {"month": month, "jobs": month_jobs[month],
-         "contracts": len(month_contracts[month]), "candles": candle_months[month]}
+         "contracts": len(month_contracts[month]), "candles": candle_months[month],
+         "duplicateDailyDates": monthly_daily_duplicates[month],
+         "contractsOver21Candles": sum(1 for key in month_contracts[month]
+                                       if monthly_contract_candles[(month,key)] > 21),
+         "maxCandlesPerContract": max((monthly_contract_candles[(month,key)]
+                                       for key in month_contracts[month]), default=0)}
         for month in sorted(month_jobs)
     ]
     # Cannot certify CE vs PE vs FUT or trading-day completeness from the
