@@ -45,7 +45,7 @@ class NseDecemberCompareTest(unittest.TestCase):
             for d in range(14):
                 day=date(2025,12,10)+timedelta(days=d)
                 official=tuple(Decimal(n) for n in (100,103,99,102,20,15))
-                nse[(kind,strike,day)]=official+(Decimal(75),)+(Decimal(75),)
+                nse[(kind,strike,day)]=official+(Decimal(75),)
                 saved[(key,day)]=[("00:00",official)]
                 if (n,d)!=(22,13):
                     identical=n==0 and d<5
@@ -87,7 +87,7 @@ class NseDecemberCompareTest(unittest.TestCase):
                     saved[(key,day)].append(("09:15",official if n==0 and d<5 else
                                             official[:3]+(Decimal(101),)+official[4:]))
                 if (n,d)!=(22,13):
-                    nse[(kind,strike,day)]=official
+                    nse[(kind,strike,day)]=official+(Decimal(75),)
         result=m.compare(saved,mapping,nse)
         self.assertEqual(result["missingNSEContractDays"],1)
 
