@@ -7145,21 +7145,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently authenticated research rights: broker-verified current long NSE cash equity holdings, original-first-known NIFTY index and each holding's historically matched equity daily closes, genuine listed NIFTY option chain, authentic original put delta/IV and official NSE option instrument master",
+    "65+ completed historical original-first-known sessions, each with genuine NIFTY index and every held NSE cash-equity close on identical provider/date/exchange close; source-consistent verified current positive brokerage shares and synchronized equity marks",
+    "Two distinct source-listed OTM NIFTY puts with original real bid/ask/negative delta/annualized IV/open interest/ASK-side depth, same official expiry/lot size, actual tick and listing source and original first-known timestamps",
+    "Three distinct largest historically observed matched NIFTY down days with corresponding actual same-session held-stock returns at today's broker-held long-stock weights; hypothetical index shock persistence to option expiry, conditional put intrinsic only, ask-side friction/premium budget/whole-depth constraints, and explicitly unmodeled index-stock basis risk"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_PORTFOLIO_PROTECTIVE_OVERLAY_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoPortfolioProtectiveOverlayV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-210-portfolio-protective-overlay-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated genuine source-permitted broker equity holdings/current source marks, original completed NIFTY and all equity closes, official source NSE listed put master/expiry/lot and genuine licensed option delta/IV/ask depth; fictional test fixtures are not market-data evidence",
+    "Source-original corporate actions/adjustments, official NSE holiday/session calendars, multiple truly independent tail clusters, index/equity tracking and concentration/basis shocks, unbiased original-first-known OOS/walk-forward option quote and expiry/exit repricing research, complete after-cost empirical portfolio results",
+    "Actual broker long-put premium/cash settlement and validated India brokerage/exchange/statutory fees, true real fill/slippage/market impact and existing hedge/derivative inventory reconciliation, multi-leg risk/duplicate hedge control",
+    "Approved independent PAPER broker order, exercise/settlement and portfolio ledger with Flutter UI, separately user-authorized LIVE NSE F&O permissions with premium caps, drawdown guardrails, kill switches and auditable broker execution"
+   ],
+   "note": "NON-EXECUTABLE source-gated broker long NSE cash-equity portfolio study of two genuine OTM NIFTY puts across three different historically observed same-day matching index/equity downturns, with hypothetical later-expiry put intrinsic, true quoted ask friction, premium/depth budget; basis risk and price-path unmodeled. Not historical fill or real PnL, order rights or production activation. DATA_BLOCKED.",
    "id": "strategy.STR-210",
    "kind": "STRATEGY",
    "name": "Portfolio Protective Overlay",
