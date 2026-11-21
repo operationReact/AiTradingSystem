@@ -206,6 +206,7 @@ public final class FnoDebitSpreadResearchService {
                 || !upperKey.equals(p.higher().key())
                 || !p.lower().kind().equals(side.equals("BULL_CALL") ? "CE" : "PE")
                 || !p.lower().kind().equals(p.higher().kind())
+                || p.lower().strike() == null || p.higher().strike() == null
                 || p.lower().strike().compareTo(p.higher().strike()) >= 0
                 || p.lower().expiry() == null
                 || !p.lower().expiry().equals(p.higher().expiry())
@@ -263,9 +264,10 @@ public final class FnoDebitSpreadResearchService {
             : FnoBearPutDebitSpreadV1.evaluate(null,null,List.of(),null,null,null,
                 new FnoBearPutDebitSpreadV1.SourceRights(!denied,!denied,!denied),
                 null,now).status().name();
-        return status(bull ? FnoBullCallDebitSpreadV1.STRATEGY_ID
-                           : FnoBearPutDebitSpreadV1.STRATEGY_ID,
-            type, reason, now, "NONE", sessions, "DEBIT_SPREAD_SOURCE_BLOCKED");
+        return new FnoFuturesResearchService.StrategyStatus(
+            bull ? FnoBullCallDebitSpreadV1.STRATEGY_ID
+                 : FnoBearPutDebitSpreadV1.STRATEGY_ID,
+            type, reason, now, "NONE", 0, 0, sessions, "DEBIT_SPREAD_SOURCE_BLOCKED");
     }
 
     private static FnoFuturesResearchService.StrategyStatus status(
