@@ -69,9 +69,23 @@ def calendar_candidates(job_rows,candle_rows):
         keys=[k for k,v in months.items() if v==m]
         slots=sum(len(expected[k]) for k in keys)
         missing=sum(len(expected[k]-observed[k]) for k in keys)
+        possible_days=set().union(*(expected[k] for k in keys))
+        common_empty=0
+        partial_missing=0
+        for day in possible_days:
+            applicable=[k for k in keys if day in expected[k]]
+            absent=sum(1 for k in applicable if day not in observed[k])
+            if absent and absent==len(applicable):
+                common_empty+=1
+            elif absent:
+                partial_missing+=absent
+        if missing!=common_empty*len(keys)+partial_missing:
+            raise ValueError("COVERAGE_SESSION_COUNTS_INCONSISTENT")
         by_month.append({
             "month":m,"contracts":len(keys),"expectedWeekdaySlots":slots,
             "missingWeekdayCandidates":missing,
+            "commonEmptyWeekdays":common_empty,
+            "partialWeekdayGapSlots":partial_missing,
             "observedUniqueDays":sum(len(observed[k]) for k in keys),
             "weekendRows":weekend[m],"dailyDateDuplicates":duplicates[m],
             "nonMidnightRows":irregular[m],
