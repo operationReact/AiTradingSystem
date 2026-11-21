@@ -36,3 +36,27 @@ All outputs are only `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, `RESEARCH_CA
 **Outstanding:** licensed first-seen NSE equity/CE feed, real brokerage holdings/restrictions (not invented), source-listed true delivery/expiry/lot and corporate-action verification, Indian settlement rules, margin and naked-short protection, historical out-of-sample replay and walk-forward, separately approved PAPER lifecycle/UI and LIVE rights. Synthetic JUnit fixtures are **not** claimed as live market prices.
 
 See [STR-187](STR-187-protective-put.md) and [canonical F&O architecture](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Broker-owned stock source integration — 21 November 2026
+
+`FnoOwnedEquityOptionsResearchService` now invokes the full, distinct
+`FnoCoveredCallV1.evaluate` with a genuinely settled and unpledged
+broker-reconciled NSE_EQ one-lot position and corresponding actual
+NSE_FO same-stock CE. Verified 35+ completed equity close observations
+include original first-known timestamps, while fresh same-provider
+NSE_EQ and CE exchange quotes preserve their independent observed times.
+
+V109's source records require separate currently valid research-use
+receipts for the equity history, the **broker holdings** record,
+actual equity tick, option-chain depth/OI, option master/physical
+delivery mapping, and after-cost fee/notional-budget inputs. The
+covered-call evaluator explicitly retains underlying stock downside
+exposure and estimates hypothetical called-away upside rather than
+presenting a risk-free income stream.
+
+The stock account, stock instrument, CE instrument and rights flags
+default unconfigured/false; no actual brokerage holdings are inserted
+by the integration. Full call coverage must match real settled
+shares and options lot. No source-verified real data E2E, PAPER
+or LIVE order execution was performed or approved.
