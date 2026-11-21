@@ -162,9 +162,23 @@ def store(canonical, metrics, raw_db, *, root=ROOT, now=None):
         if fd>=0:os.close(fd)
         if tmp.exists(): tmp.unlink()
 
-def read_canonical(*, root=ROOT, now=None, key=None, limit=100):
-    """Read owner-local rows only. Must never be exposed as an open HTTP API."""
+def read_canonical(*, root=ROOT, now=None, key=None, limit=100, as_of=None):
+    """Owner-only, provisional DAILY research read with a mandatory replay as-of.
+
+    Midnight candle_ts is a SESSION LABEL, not proof the final day's OHLC was
+    available then. A decision made on session day D must not see D's final
+    OHLCV/OI, even if a broker encoded it as 00:00+05:30. Only strictly older
+    session days can be read. This day-boundary rule is necessary but NOT
+    sufficient for independently verified exchange publication/rights or E2E.
+    The private dataset remains blocked for validated backtests and orders.
+    """
     now=time.time() if now is None else float(now)
+    if not isinstance(as_of,datetime) or as_of.tzinfo is None or as_of.utcoffset() is None:
+        raise ValueError("CANONICAL_ASOF_REQUIRED")
+    if as_of.timestamp()>now+5:
+        raise ValueError("CANONICAL_ASOF_IN_FUTURE")
+    # The exchange session is local to India, not the runner's UTC timezone.
+    before_session_day=as_of.astimezone(ZoneInfo("Asia/Kolkata")).date().isoformat()
     p=_safe_target(root)
     if not p.is_file() or now>=END_IST:
         raise ValueError("CANONICAL_NOT_AVAILABLE")
@@ -179,8 +193,9 @@ def read_canonical(*, root=ROOT, now=None, key=None, limit=100):
             raise ValueError("CANONICAL_READ_EXPIRED_OR_INVALID")
         data=db.execute("""SELECT session_day,candle_ts,open_price,high_price,
                            low_price,close_price,volume,open_interest,source
-                           FROM daily WHERE contract_key=? ORDER BY session_day DESC
-                           LIMIT ?""",(key,limit)).fetchall()
+                           FROM daily WHERE contract_key=? AND session_day<?
+                           ORDER BY session_day DESC LIMIT ?""",
+                        (key,before_session_day,limit)).fetchall()
         return data
     finally:
         db.close()

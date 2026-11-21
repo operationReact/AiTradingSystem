@@ -17,10 +17,9 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
-  cancel-in-progress: false
-
+# Offline pull-request validation must not compete with frequent host SSM
+# jobs for the single pending slot of the shared AWS lifecycle mutex.
+# The same lock still serializes ONLY the real host-persist job.
 jobs:
   validate:
     runs-on: ubuntu-24.04
@@ -54,6 +53,9 @@ jobs:
 
   persist:
     needs: validate
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
     if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     timeout-minutes: 12
