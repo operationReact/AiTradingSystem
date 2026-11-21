@@ -66,7 +66,7 @@ class FnoBetaHedgeOptionsResearchServiceTest {
         assertEquals("STR_205_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoBetaHedgeOptionsResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
-        assertEquals("STR_205_TYPED_SOURCE_PAYLOAD_INVALID",
+        assertEquals("STR_205_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoBetaHedgeOptionsResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
