@@ -205,7 +205,7 @@ class BackfillTest(unittest.TestCase):
     def test_bad_contract_and_unsupported_interval_rejected(self):
         with self.assertRaises(ValueError):
             self.q.plan("NSE_EQ|12345","day",TODAY,TODAY,rights=grant(),today=TODAY)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(f.GateClosed):
             self.q.plan(EXPIRED,"week",TODAY,TODAY,rights=grant(),today=TODAY)
         with self.assertRaises(ValueError):
             self.q.plan(EXPIRED,"day",TODAY,TODAY-timedelta(days=1),
