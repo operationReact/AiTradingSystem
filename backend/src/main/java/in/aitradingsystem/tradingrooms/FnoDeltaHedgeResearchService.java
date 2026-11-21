@@ -45,6 +45,10 @@ public final class FnoDeltaHedgeResearchService {
         if(p==null||p.isEmpty())
             return denied(now,"STR_204_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",false);
         var proof=p.get();
+        if(proof==null||!"strategy.STR-204".equals(proof.strategyId())
+                ||!FnoTypedResearchProvenanceGate.valid(
+                    mapper,proof.json(),proof.provider(),proof.originalFirstKnownAt(),now))
+            return denied(now,"STR_204_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",false);
         final Evidence v;
         try {v=mapper.readValue(proof.json(),Evidence.class);}
         catch(Exception malformed){
