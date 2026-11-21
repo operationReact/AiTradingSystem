@@ -418,6 +418,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
   }
 
   void _backMindScreen() {
+    if (_showDataReadiness) {
+      setState(() => _showDataReadiness = false);
+      return;
+    }
     if (_mindRouteHistory.isEmpty) {
       setState(() => _route = 'overview');
       return;
@@ -564,7 +568,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
       ],
       const Spacer(),
       if (MediaQuery.sizeOf(context).width >= 480)
-        const MindTag('DEMO DATA', color: MindPalette.yellow),
+        _showDataReadiness
+          ? MindTag(widget.progressRepository == null
+              ? 'NOT VERIFIED' : 'SOURCE REGISTRY · READ ONLY')
+          : const MindTag('DEMO DATA', color: MindPalette.yellow),
       const SizedBox(width: 4),
       IconButton(key: const ValueKey('mind-open-data-readiness'),
         tooltip: 'Data readiness', onPressed: _openDataReadiness,
@@ -653,7 +660,10 @@ class _MindWorkspaceState extends State<MintickMindWorkspacePage> {
           const SizedBox(height:3),
           Text(subtitle,style:const TextStyle(color:MindPalette.muted,fontSize:12)),
           const SizedBox(height:13),
-          const MindTag('ILLUSTRATIVE / OFFLINE · NO LIVE BROKER'),
+          if (_showDataReadiness)
+            const MindTag('READ-ONLY · DATASET COVERAGE NOT PROVEN')
+          else
+            const MindTag('ILLUSTRATIVE / OFFLINE · NO LIVE BROKER'),
           const SizedBox(height:17),
           ...children,
         ],
