@@ -181,3 +181,15 @@ silently converted into verified proof.
 adapters; 0 remaining signal-only without evaluator; independently
 verified real source E2E 0/43, PAPER 0/43, LIVE 0/43.**
 Earlier values in this document are dated audit snapshots.
+
+## 21 November 2026: STR-189 verified collar direct research adapter
+
+The twentieth distinct research path now separately evaluates a broker
+settled one-lot stock collar with a lower-strike PE and higher-strike CE.
+V109 source data is reused and V110 adds independently entitled **genuine
+stock BID/ASK** plus nonduplicated combined fee/assignment/room risk
+evidence. Both tables remain empty at default and rights are denied.
+
+**20/43 direct evaluator paths; 23 without adapters; 0/43 independent
+real-source history E2E, 0/43 PAPER, 0/43 LIVE.** All 43 catalog
+entries stay `DATA_BLOCKED`, and no production order is submitted.
