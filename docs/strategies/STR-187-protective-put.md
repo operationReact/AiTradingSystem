@@ -41,3 +41,28 @@ All outputs are one of `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, `RESEARCH_
 **Open:** rights-authorized real NSE equity/option feeds and original publication times, valid reconciliation and ownership semantics, true contract/lot/delivery/corporate action details, Indian taxes/expiry/broker margin rules, no-lookahead OOS and walk-forward performance, real PAPER approval and Flutter acceptance; separately audited LIVE permissions and order handling. This commit does **not** connect to providers or turn on actual options trading.
 
 See [STR-186](STR-186-bear-call-credit-spread.md), [canonical F&O research feed](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Broker-owned stock source integration — 21 November 2026
+
+`FnoOwnedEquityOptionsResearchService` now invokes the full, distinct
+`FnoProtectivePutV1.evaluate` method using 35+ source-first-known
+completed `NSE_EQ` close sessions and one **actually broker-reconciled,
+settled, unpledged, deliverable, one-lot** shareholding matching an
+independently source-listed same-equity `NSE_FO` PE.
+
+The new V109 EMPTY custody has one verified equity history table
+(official NSE equity session calendar and independently active provider
+research rights) and a separate short-retention broker-account-scoped
+ownership/option table, with exact share count, acquisition cost,
+first-observed holdings, physical settlement mapping, original NSE
+stock/option ticks, bid/ask depth/OI in lots, independent fees/tax
+and premium-risk budget evidence. Both tables are immutable before
+retention expiry. No broker funds or holdings are seeded.
+
+Source rights flags, broker account scope, stock key and explicit PE
+instrument key are all default-denied/unconfigured. A broker login,
+paper position, linked watchlist or present index price is NOT proof
+of settled delivery-eligible shares. The calculated hypothetical
+expiry downside benefit is not a forecast, an order, PAPER fill, or
+LIVE NSE hedging approval. Real-source E2E remains unverified.
