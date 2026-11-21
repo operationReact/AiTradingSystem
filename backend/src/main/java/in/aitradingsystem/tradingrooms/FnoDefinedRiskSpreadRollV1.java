@@ -194,7 +194,7 @@ public final class FnoDefinedRiskSpreadRollV1 {
                                           Instant now,Policy p){
         if(!validPut(a,now)||!validPut(b,now)||!validPut(c,now)||!validPut(d,now))
             return false;
-        Set<String> keys=Set.of(a.key(),b.key(),c.key(),d.key());
+        Set<String> keys=new HashSet<>(List.of(a.key(),b.key(),c.key(),d.key()));
         if(keys.size()!=4 || !a.expiry().equals(b.expiry())
                 || !c.expiry().equals(d.expiry())
                 || a.officialLot()!=b.officialLot()
