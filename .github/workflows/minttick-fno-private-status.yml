@@ -89,7 +89,7 @@ jobs:
           snapshot=subprocess.run(['/usr/bin/python3',
               '/opt/aitradingsystem-paper/infra/ec2-paper/fno_private_bulk_worker.py',
               'status'],capture_output=True,text=True,timeout=10,check=False)
-          match=re.fullmatch(r'FNO_BULK_STATUS:jobs=(\\d+);complete=(\\d+);rows=(\\d+)',
+          match=re.fullmatch(r'FNO_BULK_STATUS:jobs=(\d+);complete=(\d+);rows=(\d+)',
                              snapshot.stdout.strip()) if snapshot.returncode==0 else None
           if match:
               total,done,rows=map(int,match.groups())
@@ -118,7 +118,7 @@ jobs:
               status=result.get('Status')
               if status=='Success':
                   raw=result.get('StandardOutputContent') or ''
-                  matches=re.findall(r'^MINTTICK_FNO_STATUS_V1:(ACTIVE|INACTIVE|FAILED|ACTIVATING|DEACTIVATING|UNKNOWN|UNAVAILABLE|INVALID)\\|(\\d{1,8})\\|(\\d{1,8})\\|(\\d{1,9})$',raw,re.M)
+                  matches=re.findall(r'^MINTTICK_FNO_STATUS_V1:(ACTIVE|INACTIVE|FAILED|ACTIVATING|DEACTIVATING|UNKNOWN|UNAVAILABLE|INVALID)\|(\d{1,8})\|(\d{1,8})\|(\d{1,9})$',raw,re.M)
                   if len(matches)!=1:
                       raise SystemExit('FNO_STATUS_RECEIPT_INVALID')
                   unit,done,total,rows=matches[0]
