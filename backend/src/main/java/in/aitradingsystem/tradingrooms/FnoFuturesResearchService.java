@@ -2,6 +2,7 @@ package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
+import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
@@ -15,11 +16,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of four futures research evaluators (STR-170..173).
+ * Read-only invocation of five futures research evaluators (STR-170..174).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -36,6 +38,9 @@ public class FnoFuturesResearchService {
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
     private static final int OI_LOOKBACK_DAYS = 21;
+    // Research fixture calibration, not empirically approved thresholds.
+    private static final FnoFuturesPriceOiDivergenceV1.Thresholds PRICE_OI_THRESHOLDS =
+        new FnoFuturesPriceOiDivergenceV1.Thresholds(500, 500, 3, 2500, 2500, 5000);
     // Experimental research calibration, never permission for PAPER/LIVE orders.
     private static final FnoFuturesOpenInterestTrendV1.Thresholds OI_THRESHOLDS =
         new FnoFuturesOpenInterestTrendV1.Thresholds(800, 3, 2500, 5000);
@@ -49,23 +54,38 @@ public class FnoFuturesResearchService {
     private final MarketSessionCalendar calendar;
     private final FnoFuturesContractRegistry registry;
     private final FnoClosingSnapshotStore store;
+    private final FnoVerifiedFinalPriceOiSessionStore finalSessionStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
+    private final boolean finalPriceResearchRightsVerified;
     private final String basisUnderlyingKey;
 
+    @Autowired
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
-            FnoClosingSnapshotStore store,
+            FnoClosingSnapshotStore store, FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
             @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
+            @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
         this.feed = feed;
         this.calendar = calendar;
         this.registry = registry;
         this.store = store;
+        this.finalSessionStore = finalSessionStore;
         this.researchRightsVerified = researchRightsVerified;
         this.contractDiscoveryVerified = contractDiscoveryVerified;
+        this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
         this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
+    }
+
+    /** Legacy research fixtures retain default-denied final-price source rights. */
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store, boolean researchRightsVerified,
+            boolean contractDiscoveryVerified, String basisUnderlyingKey) {
+        this(feed, calendar, registry, store, null, researchRightsVerified,
+            contractDiscoveryVerified, false, basisUnderlyingKey);
     }
 
     /** Current exchange-timed live quote from the shared V3 feed, or empty. */
@@ -84,7 +104,8 @@ public class FnoFuturesResearchService {
             evaluateBasisCarry(now, today, sessionOpen),
             evaluateCalendarSpread(now, today, sessionOpen),
             evaluateRollover(now, today),
-            evaluateOpenInterestTrend(now, today));
+            evaluateOpenInterestTrend(now, today),
+            evaluatePriceOiDivergence(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
