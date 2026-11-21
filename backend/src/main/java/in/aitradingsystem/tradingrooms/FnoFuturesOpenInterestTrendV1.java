@@ -34,7 +34,7 @@ public final class FnoFuturesOpenInterestTrendV1 {
     private static final LocalTime PRE_AUGUST_CLOSE = LocalTime.of(15, 30);
     private static final LocalTime AUGUST_CLOSE = LocalTime.of(15, 40);
     private static final LocalTime DECEMBER_CLOSE = LocalTime.of(15, 45);
-    private static final Duration CLOSING_WINDOW = Duration.ofMinutes(10);
+    private static final Duration CLOSING_WINDOW = Duration.ofMinutes(2);
     private static final Duration MAX_PUBLICATION_LAG = Duration.ofHours(36);
     private static final BigDecimal BPS = new BigDecimal("10000");
     private static final MathContext MC = MathContext.DECIMAL128;
