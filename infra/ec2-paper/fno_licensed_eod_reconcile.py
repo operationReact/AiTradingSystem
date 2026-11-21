@@ -150,7 +150,7 @@ def reconcile(cache, catalogue, reference):
                      low_price,close_price,volume,open_interest
                      FROM fno_historical_candles
                      WHERE source=? AND interval='day' AND contract_key LIKE ?""",
-                     (SOURCE,"%|-12-2025"))
+                     (SOURCE,"%-12-2025"))
     count=0
     for key,stamp,op,high,low,close,volume,oi in rows:
         count+=1
