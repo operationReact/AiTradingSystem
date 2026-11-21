@@ -65,7 +65,7 @@ class FnoDeltaHedgeResearchServiceTest {
         assertEquals("STR_204_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoDeltaHedgeResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
-        assertEquals("STR_204_TYPED_SOURCE_PAYLOAD_INVALID",
+        assertEquals("STR_204_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoDeltaHedgeResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
