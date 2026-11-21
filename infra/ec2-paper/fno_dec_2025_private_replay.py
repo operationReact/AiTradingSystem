@@ -15,10 +15,7 @@ import sys
 import time
 from urllib.parse import quote
 
-sys.path.insert(0, "/opt/aitradingsystem-paper/infra/ec2-paper")
-from fno_private_bulk_worker import grant, ssm_token, today
-from upstox_fno_backfill_adapters import UpstoxExpiredCandles
-from fno_history_backfill import SOURCE
+SOURCE = "upstox-expired-nse-fo"
 
 ROOT=Path("/opt/aitradingsystem-paper/fno-history")
 JOURNAL=ROOT/"checkpoints.sqlite"
@@ -94,6 +91,9 @@ def compare_one(persisted, fresh):
 
 
 def run():
+    sys.path.insert(0, "/opt/aitradingsystem-paper/infra/ec2-paper")
+    from fno_private_bulk_worker import grant, ssm_token, today
+    from upstox_fno_backfill_adapters import UpstoxExpiredCandles
     approval=grant()  # exact owner-private permit through 2026-11-28
     if today()>date(2026,11,28):
         raise RuntimeError("REPLAY_OWNER_SCOPE_EXPIRED")
