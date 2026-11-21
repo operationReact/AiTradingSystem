@@ -89,4 +89,34 @@ class FnoClosingSnapshotStoreTest {
         when(jdbc.update(any(String.class), any(Object[].class))).thenReturn(3);
         assertEquals(3, new FnoClosingSnapshotStore(jdbc, false).purgeExpired(SESSION));
     }
+
+    @Test
+    void oiReadIsExactContractReadOnlyAndFiltersRightsAndRetention() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        var store = new FnoClosingSnapshotStore(jdbc, false);
+        store.verifiedOiContractRows(VALID.instrumentKey(), SESSION.minusDays(10), SESSION);
+        verify(jdbc).query(
+            argThat((String sql) -> sql.contains("instrument_key = ?")
+                && sql.contains("rights_basis = ?")
+                && sql.contains("retain_until >= ?")
+                && sql.contains("ORDER BY session_date, provider_label")),
+            any(org.springframework.jdbc.core.RowMapper.class),
+            eq(VALID.instrumentKey()),
+            eq(java.sql.Date.valueOf(SESSION.minusDays(10))),
+            eq(java.sql.Date.valueOf(SESSION)),
+            eq(FnoClosingSnapshotStore.RIGHTS_BASIS), any(java.sql.Date.class));
+        verifyNoMoreInteractions(jdbc);
+    }
+
+    @Test
+    void oiReadRejectsNonFuturesAndInvalidDateScopeBeforeAnySql() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        var store = new FnoClosingSnapshotStore(jdbc, false);
+        assertThrows(IllegalArgumentException.class, () ->
+            store.verifiedOiContractRows("NSE_EQ|SYN1001", SESSION.minusDays(10), SESSION));
+        assertThrows(IllegalArgumentException.class, () ->
+            store.verifiedOiContractRows(VALID.instrumentKey(), SESSION, SESSION.minusDays(1)));
+        verifyNoInteractions(jdbc);
+    }
+
 }
