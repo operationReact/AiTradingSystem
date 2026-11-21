@@ -7099,21 +7099,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six original-source research rights: verified broker-complete same-expiry signed NIFTY options positions, licensed 35+ completed NIFTY index closes, real original option chain, authentic original delta/gamma/IV, official NSE instrument master and independently source-verified official last-tradable expiry cutoff",
+    "Complete broker-attested as-of NIFTY one-expiry CE/PE position book and original first-known signed lots with source-listed unique NSE_FO keys, actual official lot/strike/tick/expiry and no missing or duplicate option quotes",
+    "Synchronized originally known same-provider NIFTY spot and each listed option BID/ASK/original delta/gamma/annualized IV/OI/side-specific bid/ask depth adequate to hypothetically close all broker-held lots",
+    "Official source original last trading timestamp bounded by a close-window policy, theoretical full expiry-book bid-sale or ask-buy hypothetical debit with slippage/fees and configured positive debit cap, net original delta/gamma, and honest bounded expiry intrinsic study scenarios with open-ended short-call flag"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EXPIRY_RISK_NEUTRALIZATION_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoExpiryRiskNeutralizationV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-209-expiry-risk-neutralization-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed original-time authentic NIFTY index closes, listed NSE options chain bid/ask/depth, official lot/strike/expiry and independently authenticated expiry last-tradable cutoffs; current fictional JUnit test fixtures do not prove such source access",
+    "Actually reconciled broker complete same-expiry option positions with source-first-known records, order/fill state, cash margin and complete no-hidden-leg book evidence; genuine original provider option delta/gamma/IV data with real rights",
+    "Real broker closing and netting capability, partial fills/cancel rollback/expiry settlement and India statutory fee/slippage/market-impact evidence, original-first-known out-of-sample/walk-forward expiry risk and tail observations",
+    "Independent PAPER close-all lifecycle UI and settlement ledger plus separately verified LIVE F&O broker buy-to-cover and sell-to-close permissions, approved margin/cash risk controls and emergency kill-switch"
+   ],
+   "note": "NON-EXECUTABLE complete-attested-expiry-options-book hypothetical bid/ask close-out before separately verified official expiry cutoff; genuine-source-gated net delta/gamma and conditional expiry intrinsic stress, never actual executed neutralization or no-risk claim. All PAPER/LIVE order flags false; DATA_BLOCKED.",
    "id": "strategy.STR-209",
    "kind": "STRATEGY",
    "name": "Expiry Risk Neutralization",
