@@ -6133,21 +6133,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Source-confirmed settled and deliverable one-lot owned NSE equity shares with broker holdings provenance",
+    "One corresponding verified genuine listed NSE_FO CE option matching shares/lot/expiry and CE delivery rights",
+    "35+ verified completed NSE equity closes, original first-known timestamps and observed owned-position gain screening trigger",
+    "Licensed time-aligned true equity/CE quotes, bid depth, OI, slippage and nonzero Indian fees; full held-stock notional risk cap"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_COVERED_CALL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCoveredCallV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCoveredCallV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-188-covered-call.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original-observation NSE spot/CE option quotes, contract expiry/lot/physical-settlement metadata and official calendar",
+    "Real account-reconciled settled and unrestricted owned shares, covered-writing entitlement and continuous cover verification",
+    "Indian settlement/taxes, upside assignment/exercise and naked short-call contingency safety, broker account margin rules",
+    "Historical as-of OOS and walk-forward evidence, customer-approved PAPER ledger and Flutter acceptance, separately authorized LIVE rights"
+   ],
+   "note": "Research-only one-lot actually-owned deliverable stock and matching short CE; premium and scenario modeled with capped upside and large residual stock downside. Strict original as-of and rights checks. DATA_BLOCKED, never executable.",
    "id": "strategy.STR-188",
    "kind": "STRATEGY",
    "name": "Covered Call",
