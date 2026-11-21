@@ -29,7 +29,10 @@ class FnoFuturesPriceOiDivergenceV1Test {
         new Thresholds(500, 500, 3, 2500, 2500, 5000);
 
     private static Instant close(LocalDate day) {
-        return day.atTime(LocalTime.of(15, 30)).atZone(IST).toInstant();
+        LocalTime clock = day.isBefore(LocalDate.of(2026, 8, 3)) ? LocalTime.of(15, 30)
+            : day.isBefore(LocalDate.of(2026, 12, 7)) ? LocalTime.of(15, 40)
+            : LocalTime.of(15, 45);
+        return day.atTime(clock).atZone(IST).toInstant();
     }
 
     private static CompletedSession day(int date, String price, long oi, long volume) {
@@ -278,6 +281,44 @@ class FnoFuturesPriceOiDivergenceV1Test {
             RIGHTS, new Thresholds(0, 500, 3, 2500, 2500, 5000)).status());
         assertEquals(Status.BLOCKED_DATA, run(CONTRACT, priceUpOiDown(),
             RIGHTS, new Thresholds(500, 500, 5, 2500, 2500, 5000)).status());
+    }
+
+    @Test
+    void str174NovemberFuturesFinalPriceKnownAt1535IsRejectedAfter1540CloseRule() {
+        var rows = priceUpOiDown();
+        CompletedSession row = rows.get(4);
+        var premature = new CompletedSession(row.exchangeDate(), true,
+            row.instrumentKey(), row.provider(), row.finalClosePrice(), true,
+            close(row.exchangeDate()).minusSeconds(300),
+            row.finalizedOpenInterestUnits(), row.tradedVolumeUnits(),
+            row.finalizedOiObservedAt());
+        assertEquals("PRICE_OI_FINAL_SESSION_INVALID",
+            run(replace(rows, 4, premature)).reasonCode());
+    }
+
+    @Test
+    void str174DecemberNormalCloseMustBe1545Not1540ForNonExpiringFutures() {
+        Instant asOf = LocalDate.of(2026, 12, 11).atTime(17, 0).atZone(IST).toInstant();
+        var decemberContract = new Contract(CONTRACT.instrumentKey(),
+            CONTRACT.underlyingKey(), LocalDate.of(2027, 1, 28), 75, true);
+        List<CompletedSession> dec = new ArrayList<>();
+        for (int day = 7; day <= 11; day++) {
+            LocalDate d = LocalDate.of(2026, 12, day);
+            Instant closing = close(d);
+            dec.add(new CompletedSession(d, true, decemberContract.instrumentKey(),
+                "UPSTOX_ANALYTICS", new BigDecimal("100"), true,
+                closing.plusSeconds(120), 100000L, 50000L, closing.plusSeconds(900)));
+        }
+        assertEquals(Status.NO_SIGNAL, FnoFuturesPriceOiDivergenceV1.evaluate(
+            decemberContract, dec, RIGHTS, THRESHOLDS, asOf).status());
+        CompletedSession last = dec.get(4);
+        dec.set(4, new CompletedSession(last.exchangeDate(), true, last.instrumentKey(),
+            last.provider(), last.finalClosePrice(), true,
+            close(last.exchangeDate()).minusSeconds(60), last.finalizedOpenInterestUnits(),
+            last.tradedVolumeUnits(), last.finalizedOiObservedAt()));
+        assertEquals("PRICE_OI_FINAL_SESSION_INVALID",
+            FnoFuturesPriceOiDivergenceV1.evaluate(
+                decemberContract, dec, RIGHTS, THRESHOLDS, asOf).reasonCode());
     }
 
     @Test
