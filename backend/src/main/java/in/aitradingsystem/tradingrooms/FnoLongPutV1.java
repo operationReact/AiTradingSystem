@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * STR-182: deterministic, research-only NIFTY Long Put (PE) classifier.
- * A completed EMA8/EMA21 bullish crossover is necessary but not sufficient:
+ * STR-182: deterministic, research-only NIFTY Long Put (CE) classifier.
+ * A completed EMA8/EMA21 bearish crossover is necessary but not sufficient:
  * one verified put contract and synchronized, recent quotes must support a
  * cost-aware hypothetical *expiry* payoff. Not a forecast or order proposal.
  * The adapter must independently attest true source rights and publication times.
@@ -83,7 +83,7 @@ public final class FnoLongPutV1 {
         if (rights == null || !rights.underlyingResearchVerified()
                 || !rights.optionChainResearchVerified()
                 || !rights.contractDiscoveryVerified()) {
-            return blocked(Status.BLOCKED_RIGHTS, "LONG_PUT_SOURPE_RIGHTS_UNVERIFIED", asOf);
+            return blocked(Status.BLOCKED_RIGHTS, "LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", asOf);
         }
         if (!validContract(contract, asOf) || !validAssumptions(assumptions)) {
             return blocked(Status.BLOCKED_DATA, "LONG_PUT_CONTRACT_OR_ASSUMPTIONS_INVALID", asOf);
@@ -110,7 +110,7 @@ public final class FnoLongPutV1 {
         }
         if (trend.status() != FnoLongOptionCrossoverV1.Status.RESEARCH_CANDIDATE
                 || !STRATEGY_ID.equals(trend.strategyId())) {
-            return measured(Status.NO_SIGNAL, "LONG_PUT_NEW_BULLISH_CROSSOVER_ABSENT",
+            return measured(Status.NO_SIGNAL, "LONG_PUT_NEW_BEARISH_CROSSOVER_ABSENT",
                 contract, provider, asOf, null, null, null, null);
         }
 
@@ -129,7 +129,7 @@ public final class FnoLongPutV1 {
             .multiply(BigDecimal.valueOf(assumptions.maxCapitalAllocationBps()), MC)
             .divide(BPS, MC);
         if (maxLoss.compareTo(allowedCapital) > 0) {
-            return measured(Status.NO_SIGNAL, "LONG_PUT_PREMIUM_EXPEEDS_RESEARCH_BUDGET",
+            return measured(Status.NO_SIGNAL, "LONG_PUT_PREMIUM_EXCEEDS_RESEARCH_BUDGET",
                 contract, provider, asOf, breakeven, maxLoss, null, null);
         }
         BigDecimal target = underlying.price()
@@ -143,8 +143,8 @@ public final class FnoLongPutV1 {
         boolean passes = hypotheticalPnl.signum() > 0 && ratio.compareTo(
             BigDecimal.valueOf(assumptions.minScenarioRewardRiskBps())) >= 0;
         return measured(passes ? Status.RESEARCH_CANDIDATE : Status.NO_SIGNAL,
-            passes ? "LONG_PUT_BULLISH_SPENARIO_RESEARCH_ONLY"
-                   : "LONG_PUT_EXPIRY_SPENARIO_AFTER_COSTS_INSUFFICIENT",
+            passes ? "LONG_PUT_BEARISH_SCENARIO_RESEARCH_ONLY"
+                   : "LONG_PUT_EXPIRY_SCENARIO_AFTER_COSTS_INSUFFICIENT",
             contract, provider, asOf, breakeven, maxLoss, hypotheticalPnl, ratio);
     }
 
