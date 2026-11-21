@@ -6041,21 +6041,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "35+ true completed NSE NIFTY index closes with source first-known timestamps and new bearish EMA8/EMA21 crossover",
+    "Two verified matching NSE_FO CE instruments: sell lower-strike, buy higher-strike, same lot/expiry",
+    "Same-provider 3-leg time-synced real quotes, positive bid/ask depth and OI, strike/option/source research rights",
+    "Net credit after bid/ask/slippage and modeled fees, capped hypothetical expiry max loss and risk capital limit"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BEAR_CALL_CREDIT_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBearCallCreditSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBearCallCreditSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-186-bear-call-credit-spread.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-verified NSE source-listed NIFTY CE option chain and spot original source publication and live historical depth/quotes",
+    "Actual NSE session/lot/expiry/tax/settlement and broker account margin/non-atomic short-call/long-call execution verification",
+    "Timestamp-correct OOS and walk-forward replay with realistic costs and leg execution failure",
+    "Separately authorized PAPER life cycle and Flutter acceptance, LIVE broker entitlement/approval and audited guardrails"
+   ],
+   "note": "Research-only short lower CE long higher CE credit spread, verified new bearish crossover and three aligned source quotes; bounded model loss after fees, never a broker order. DATA_BLOCKED.",
    "id": "strategy.STR-186",
    "kind": "STRATEGY",
    "name": "Bear Call Credit Spread",
