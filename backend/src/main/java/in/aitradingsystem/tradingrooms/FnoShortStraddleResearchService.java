@@ -120,7 +120,7 @@ public final class FnoShortStraddleResearchService {
         return new FnoFuturesResearchService.StrategyStatus(
             result.strategyId(),result.status().name(),result.reasonCode(),
             now,proof.provider(),2,3,history.size(),
-            "ORIGINAL_PER_LEG_IV_SOURCE_RESEARCH_ONLY_NO_ORDER");
+            "SHORT_STRADDLE_UNBOUNDED_TAIL_RESEARCH_NO_ORDER");
     }
 
     private static FnoShortStraddleV1.Quote quote(Leg p,String provider) {
