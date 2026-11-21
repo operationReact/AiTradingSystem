@@ -39,7 +39,32 @@ class _ChartState extends State<MintTickInteractiveCandleChart> {
   @override
   void didUpdateWidget(covariant MintTickInteractiveCandleChart old) {
     super.didUpdateWidget(old);
-    if (!identical(old.bars, widget.bars)) _recent();
+    if (identical(old.bars, widget.bars)) return;
+    // Replacing a verified server series must not reset a trader's viewport.
+    // A right-anchored viewport follows new bars; a manually panned viewport
+    // remains anchored to the original exchange timestamp.
+    if (old.bars.isEmpty || widget.bars.isEmpty || _count == 0) {
+      _recent();
+      return;
+    }
+    final wasAtRight = _first + _count >= old.bars.length;
+    final wasFitAll = _first == 0 && _count == old.bars.length;
+    if (wasFitAll) {
+      _first = 0;
+      _count = widget.bars.length;
+      return;
+    }
+    final oldest = old.bars[_first.clamp(0, old.bars.length - 1).toInt()]
+        .candleTime.toUtc();
+    _count = math.min(_count, widget.bars.length);
+    if (wasAtRight) {
+      _first = math.max(0, widget.bars.length - _count);
+      return;
+    }
+    final anchorIndex = widget.bars.indexWhere(
+        (b) => !b.candleTime.toUtc().isBefore(oldest));
+    _first = (anchorIndex < 0 ? 0 : anchorIndex)
+        .clamp(0, widget.bars.length - _count).toInt();
   }
 
   void _recent() {
