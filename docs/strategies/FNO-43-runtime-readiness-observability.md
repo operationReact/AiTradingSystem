@@ -499,3 +499,46 @@ are seeded; no order path or margin approval is provided.
 **33/43 distinct typed read-only research adapters, 10 pending;
 real-source historical E2E 0/43, PAPER execution E2E 0/43,
 LIVE execution E2E 0/43.** Catalog remains DATA_BLOCKED.
+
+## 22 November 2026 — STR-203 to STR-206: four typed source-gated risk studies
+
+STR-202 (Volatility Crush) already has its separate event/IV research
+adapter in `dev`; this PR adds four **distinct deterministic evaluator**
+invocations, not four aliases of volatility-crush evidence.
+
+- **STR-203 Gamma Scalping:** real original same-expiry listed CE and PE,
+  separately listed NIFTY futures, a time-ordered synchronized underlying/
+  option/futures quote + authentic per-unit original delta/gamma/theta/IV
+  path, completed source index sessions, modeled *hypothetical* futures
+  hedge turnover and estimated theta/transaction drag. Not actual fills
+  or realized gamma P&L.
+- **STR-204 Delta Hedge:** broker-confirmed signed existing options and
+  futures lots, original option delta and future bid/ask/depth, completed
+  index history. Output is a proposed integer lot adjustment and
+  retrospective residual exposure, **not a broker order**.
+- **STR-205 Beta Hedge Options:** broker-confirmed OWNED equities, 65+
+  aligned historical index/held-equity closes, original equity prices,
+  separately listed NIFTY long option, real delta/IV/ask-side depth.
+  Current-weight historical beta is a *local retrospective proxy*,
+  not forecast portfolio protection.
+- **STR-206 Tail-Risk Put Hedge:** same genuine broker holdings and aligned
+  held-equity/index histories; independent listed OTM NIFTY long put
+  with original delta/IV/ask/depth, replay of observed historical
+  downside session at current weights. The put is hypothetical and its
+  conditional later-expiry intrinsic is NOT observed hedge profit.
+
+The new **EMPTY V123** rights-attested custody table stores each
+source-original typed payload as JSONB, uniquely scoped to one strategy,
+provider and original first-known time, with independently verified
+index/options/history/Greek/instrument/auxiliary source-use receipt IDs.
+The reader refuses missing/ambiguous entitlements and source records;
+the four typed `Fno*V1.evaluate` methods remain the final model checks.
+All strategy-specific user/config research rights default denied.
+Separate tests reject absent rights, malformed envelopes, provider-source
+exceptions and unauthorized executable outcomes; synthetic fixtures are
+not represented as market-original evidence.
+
+**37/43 distinct source-level research evaluator callsites (86.0%);
+six remaining. Real market historical E2E 0/43, PAPER 0/43,
+LIVE 0/43.** All manifest strategy statuses remain DATA_BLOCKED.
+No broker orders, credentials, AWS deployment or APK are activated.
