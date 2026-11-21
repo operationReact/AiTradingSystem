@@ -6,6 +6,7 @@ import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
+import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
@@ -258,6 +259,116 @@ class FnoFuturesResearchServiceTest {
         assertEquals("BLOCKED_DATA", result.status());
         assertEquals("OI_HISTORY_READ_UNAVAILABLE", result.reason());
         assertFalse(result.reason().contains("broker"));
+    }
+
+
+    private static List<FnoVerifiedFinalPriceOiSessionStore.FinalSession> finalRows(int... dates) {
+        String[] closes = {"100", "104", "108", "112", "116"};
+        long[] oi = {100000L, 95000L, 90000L, 85000L, 80000L};
+        var result = new java.util.ArrayList<FnoVerifiedFinalPriceOiSessionStore.FinalSession>();
+        for (int i = 0; i < dates.length; i++) {
+            LocalDate date = LocalDate.of(2026, 11, dates[i]);
+            Instant close = date.atTime(15, 40).atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+            result.add(new FnoVerifiedFinalPriceOiSessionStore.FinalSession(
+                "UPSTOX_ANALYTICS", NEAR.instrumentKey(), NEAR.underlyingKey(),
+                NEAR.expiry(), NEAR.lotSize(), date,
+                new BigDecimal(closes[i]), close.plusSeconds(120),
+                oi[i], 50000L, close.plusSeconds(900), close));
+        }
+        return result;
+    }
+
+    private static FnoFuturesResearchService verified174(
+            FnoVerifiedFinalPriceOiSessionStore finalStore) {
+        return new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), emptyStore(), finalStore, true, true, true, "");
+    }
+
+    @Test
+    void str174EvaluatesFiveGenuineFinalCloseOiReceiptShapesButNeverOrders() {
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        when(receipts.readExactContract(eq(NEAR.instrumentKey()),
+            eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW)))
+            .thenReturn(finalRows(16, 17, 18, 19, 20));
+        var row = byId(verified174(receipts).evaluateAll(NOW)).get("strategy.STR-174");
+        assertEquals("RESEARCH_CANDIDATE", row.status());
+        assertEquals("PRICE_RISING_WITH_FALLING_OI", row.reason());
+        assertEquals(1, row.contracts());
+        assertEquals(5, row.history());
+        assertEquals(0, row.quotes());
+        assertEquals("PRICE_OI_FINAL_RECEIPT_RESEARCH_ONLY", row.input());
+        verify(receipts, times(1)).readExactContract(eq(NEAR.instrumentKey()),
+            eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW));
+    }
+
+    @Test
+    void str174DefaultsToRightsDeniedAndNeverReadsFinalSessionSource() {
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        var service = new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), emptyStore(), receipts, true, true, false, "");
+        var row = byId(service.evaluateAll(NOW)).get("strategy.STR-174");
+        assertEquals("BLOCKED_RIGHTS", row.status());
+        assertEquals("PRICE_OI_SOURCE_RIGHTS_NOT_VERIFIED", row.reason());
+        verifyNoInteractions(receipts);
+    }
+
+    @Test
+    void str174MissingFinalPriceReceiptFailsClosedRatherThanUsingBidAsk() {
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        var row = byId(verified174(receipts).evaluateAll(NOW)).get("strategy.STR-174");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("PRICE_OI_FIVE_VERIFIED_FINAL_SESSIONS_MISSING", row.reason());
+        assertEquals(0, row.quotes());
+    }
+
+    @Test
+    void str174RejectsNonExchangeCloseTimestampAndUnverifiedFinalPrice() {
+        var vals = new java.util.ArrayList<>(finalRows(16, 17, 18, 19, 20));
+        var original = vals.get(4);
+        vals.set(4, new FnoVerifiedFinalPriceOiSessionStore.FinalSession(
+            original.providerLabel(), original.instrumentKey(), original.underlyingKey(),
+            original.expiry(), original.lotSize(), original.sessionDate(),
+            original.finalClosePrice(), original.finalPriceFirstAvailableAt(),
+            original.finalOpenInterestUnits(), original.tradedVolumeUnits(),
+            original.finalizedOiFirstAvailableAt(), original.verifiedExchangeCloseAt().minusSeconds(600)));
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        when(receipts.readExactContract(any(), any(), any(), any())).thenReturn(vals);
+        var row = byId(verified174(receipts).evaluateAll(NOW)).get("strategy.STR-174");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("PRICE_OI_FINAL_ROWS_INCOMPLETE_OR_AMBIGUOUS", row.reason());
+    }
+
+    @Test
+    void str174RejectsCrossProviderHistoryAndMissingMarketDay() {
+        var mixed = new java.util.ArrayList<>(finalRows(16, 17, 18, 19, 20));
+        var original = mixed.get(4);
+        mixed.set(4, new FnoVerifiedFinalPriceOiSessionStore.FinalSession(
+            "ANGEL_ONE_SMARTAPI", original.instrumentKey(), original.underlyingKey(),
+            original.expiry(), original.lotSize(), original.sessionDate(),
+            original.finalClosePrice(), original.finalPriceFirstAvailableAt(),
+            original.finalOpenInterestUnits(), original.tradedVolumeUnits(),
+            original.finalizedOiFirstAvailableAt(), original.verifiedExchangeCloseAt()));
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        when(receipts.readExactContract(any(), any(), any(), any())).thenReturn(mixed);
+        assertEquals("PRICE_OI_FINAL_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+            byId(verified174(receipts).evaluateAll(NOW))
+            .get("strategy.STR-174").reason());
+        when(receipts.readExactContract(any(), any(), any(), any()))
+            .thenReturn(finalRows(13, 16, 17, 19, 20));
+        assertEquals("PRICE_OI_FINAL_SESSION_INVALID",
+            byId(verified174(receipts).evaluateAll(NOW))
+            .get("strategy.STR-174").reason());
+    }
+
+    @Test
+    void str174SanitizesDatasourceFailureInsteadOfLeakingSensitiveProviderText() {
+        var receipts = mock(FnoVerifiedFinalPriceOiSessionStore.class);
+        when(receipts.readExactContract(any(), any(), any(), any()))
+            .thenThrow(new IllegalStateException("private-provider-secret"));
+        var row = byId(verified174(receipts).evaluateAll(NOW)).get("strategy.STR-174");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("PRICE_OI_FINAL_SESSION_READ_UNAVAILABLE", row.reason());
+        assertFalse(row.reason().contains("secret"));
     }
 
 }
