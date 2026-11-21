@@ -12,7 +12,7 @@ source rights and real source-original replay.
 The response lists **exactly 43** sorted strategies with the real manifest
 `requiredInputs` and evaluator source paths. Each gets an explicit integration stage:
 
-- STR-170/171/172/173/174/175/176/177/178/179: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
+- STR-170/171/172/173/174/175/176/177/178/179/180: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
   `FnoFuturesResearchService` returned an evaluator result, otherwise
   `DIRECT_ADAPTER_UNAVAILABLE`. Research may be blocked for missing rights,
   costs, contracts, quotes or historical sessions. These statuses are not
@@ -48,7 +48,7 @@ promotion. Tests are synthetic and provide no source-data coverage evidence.
 
 
 **21 Nov E2E-2 update:** STR-173 has a read-only session-OI adapter with
-research-rights and master freshness gates. The registry now has ten directly
+research-rights and master freshness gates. The registry now has eleven directly
 invoked research evaluator paths and 37 missing. An observed result may be
 BLOCKED_RIGHTS or BLOCKED_DATA. All independent real-source E2E, PAPER and
 LIVE validation counters remain zero.
@@ -68,7 +68,7 @@ point-in-time L1-depth + broker margin/capital and cost evidence store. The
 new financial evidence table is empty by default and is purged after at most
 seven days. No arbitrary instrument, assumed cash, synthetic book depth or
 notional brokerage fees are substituted. The registry counts **6/43 direct
-research paths**, **33 without direct adapters**, **2 signal-only routes**,
+research paths**, **32 without direct adapters**, **2 signal-only routes**,
 and still **0/43 independently validated real-source E2E, PAPER or LIVE**.
 
 
@@ -99,5 +99,14 @@ routing or risk-limit bypass is introduced.
 uses three source-attested intraday L1/depth/OI/volume receipts (V104), independent
 research rights and the existing live quote source. Futures-only current
 adapter until option identity is separately proven. **10/43 direct evaluator
-paths, 33 without direct adapters, 2 signal-only, and 0/43 independently
+paths, 32 without direct adapters, 2 signal-only, and 0/43 independently
 proven real-data E2E, PAPER or LIVE**. No liquidity screen result is an order.
+
+
+**21 Nov STR-180:** Eleventh distinct research evaluator integrated with
+original as-of spot/futures co-timed 15:30 indicative quotes, two exchange
+calendars, later effective-dated F&O finalization, delivery and reviewed cost
+provenance. V105 is empty by default and three source-use rights gates remain
+disabled unless separately verified. **11/43 direct evaluator paths; 32 lack
+direct adapters; 2 signal-only; 0/43 independently verified real data E2E,
+0/43 PAPER, 0/43 LIVE.** No trades or AWS changes.
