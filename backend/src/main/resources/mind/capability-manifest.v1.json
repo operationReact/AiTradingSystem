@@ -6501,21 +6501,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ source-completed genuine NIFTY daily closes with source-first-known timestamps and verified research permissions",
+    "Four independently source-listed NIFTY options, one long lower PE, short higher PE, short lower CE, long higher CE, identical expiry and lot, five synchronized original exchange quotes",
+    "Genuine bid liquidity/OI for both sold options, ask liquidity/OI for protective bought options, true annualized licensed IV for each four contracts",
+    "After-fees and slippage net credit, loss modeled using wider of asymmetric wings, profit/loss research thresholds and transparent IV move heuristic"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_IRON_CONDOR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIronCondorV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIronCondorV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-196-iron-condor-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Authenticated licensed NIFTY spot plus four genuine listed option contracts and true IV with original source-first-known timestamps and official expiry/lot calendar",
+    "Indian fees/settlement, all-four-leg fill/partial-execution risks, verified broker margin and hedge-completeness safeguards",
+    "Original as-of out-of-sample and walk-forward test evidence including real quotes, spread, slippage, IV and gap stress",
+    "Independently approved PAPER trading lifecycle plus separately authorized LIVE broker entitlements, audited account risk limits and kill switches"
+   ],
+   "note": "Deterministic research-only 4-leg iron condor. Theoretical expiry risk bounded if all four genuine protective legs intact; asymmetric maximum loss uses widest wing. This is NOT a broker margin or non-atomic-execution guarantee. DATA_BLOCKED, never executable.",
    "id": "strategy.STR-196",
    "kind": "STRATEGY",
    "name": "Iron Condor",
