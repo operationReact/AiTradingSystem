@@ -309,3 +309,30 @@ LIVE 0/43.** All strategies remain `DATA_BLOCKED`, with no
 broker trading permission changes or production deployment.
 Next distinct research path: STR-196 (per capability manifest), requiring
 its own typed source proof, not inferred shared evaluator aliases.
+
+## 21 November 2026 — STR-196 source-attested four-leg iron condor
+
+New read-only `FnoIronCondorResearchService` calls the existing
+`FnoIronCondorV1.evaluate` on exact V116 `FnoVerifiedNiftyIronCondorSourceStore`
+evidence. Four independent listed NIFTY options require
+long low PE < short high PE < original NIFTY spot < short low CE <
+long high CE, with same expiry and lot. Five synchronized original-time
+exchange quotes are required (underlying and each option).
+
+Both sold legs use actual BID and BID depth; each protective long uses
+actual ASK and ASK depth. Every leg requires its independently attested
+provider-emitted annualized IV, independent quote/source hash and
+source-as-of `MODEL_INFERENCE` rights; all original 35+ V106 completed
+NIFTY candles and four-leg fees must be verified. No synthesized quotes,
+estimated IV, filled broker orders or proof rows are created.
+
+Theoretical max expiry loss uses **the wider of potentially unequal
+put/call wing widths**, minus net combined after-cost credit. This
+*defined expiry payoff* is not proof of atomic execution, margin,
+protection against partial fills, liquidation, or LIVE/PAPER readiness.
+All rights default false and exact contract keys remain blank.
+
+**27/43 distinct source-level research evaluator callsites, 16 pending.
+Independently verified real historical market-data E2E 0/43,
+PAPER 0/43, LIVE 0/43.** The manifest remains `DATA_BLOCKED`.
+Next: STR-197 Iron Butterfly (four-leg centered CE/PE and original IV).
