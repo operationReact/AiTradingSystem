@@ -267,6 +267,7 @@ public final class FnoPortfolioProtectiveOverlayV1 {
         if(puts==null||puts.size()!=2||s.putQuotes().size()!=2)return false;
         Set<String> keys=new HashSet<>();
         LocalDate commonExpiry=null;
+        int commonLot=0;
         LocalDate today=now.atZone(IST).toLocalDate();
         for(PutContract c:puts){
             if(c==null||!c.sourceListed()||!optionKey(c.key())||!keys.add(c.key())
@@ -277,8 +278,8 @@ public final class FnoPortfolioProtectiveOverlayV1 {
                     ||c.expiry()==null)return false;
             long days=ChronoUnit.DAYS.between(today,c.expiry());
             if(days<7||days>policy.maxExpiryDays())return false;
-            if(commonExpiry==null)commonExpiry=c.expiry();
-            else if(!commonExpiry.equals(c.expiry()))return false;
+            if(commonExpiry==null){commonExpiry=c.expiry();commonLot=c.officialLot();}
+            else if(!commonExpiry.equals(c.expiry())||commonLot!=c.officialLot())return false;
         }
         for(PutQuote q:s.putQuotes()){
             if(q==null||!keys.remove(q.key())||!q.sourceVerified()
