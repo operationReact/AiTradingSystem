@@ -65,6 +65,7 @@ SELECT s.*
     AND s.instrument_master_verified
     AND s.nonduplicated_four_leg_fees_verified
     AND s.short_put_strike=s.short_call_strike
+    AND abs(s.short_put_strike - s.index_bid) * 10000 / s.index_bid <= s.max_atm_distance_bps
     AND s.long_put_iv_source_sha256<>s.short_put_iv_source_sha256
     AND s.long_put_quote_source_sha256<>s.short_put_quote_source_sha256
     AND s.long_put_iv_source_sha256<>s.short_call_iv_source_sha256
