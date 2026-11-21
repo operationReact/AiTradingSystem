@@ -23,6 +23,7 @@ CREATE TABLE fno_cash_futures_feasibility_evidence (
     depth_exchange_at TIMESTAMPTZ NOT NULL,
     depth_first_available_at TIMESTAMPTZ NOT NULL,
     valid_until TIMESTAMPTZ NOT NULL,
+    retain_until DATE NOT NULL,
     funding_annual_bps NUMERIC(18,6) NOT NULL CHECK (funding_annual_bps BETWEEN 0 AND 5000),
     dividend_annual_bps NUMERIC(18,6) NOT NULL CHECK (dividend_annual_bps BETWEEN 0 AND 10000),
     stock_borrow_annual_bps NUMERIC(18,6) NOT NULL CHECK (stock_borrow_annual_bps BETWEEN 0 AND 10000),
@@ -63,6 +64,9 @@ CREATE TABLE fno_cash_futures_feasibility_evidence (
     captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_fno_cash_futures_depth_proof UNIQUE (
         provider_code, account_scope, spot_key, future_key, depth_first_available_at),
+    CONSTRAINT ck_fno_cash_futures_retention CHECK (
+        retain_until >= (depth_first_available_at AT TIME ZONE 'Asia/Kolkata')::DATE
+        AND retain_until <= (depth_first_available_at AT TIME ZONE 'Asia/Kolkata')::DATE + 7),
     CONSTRAINT ck_fno_cash_futures_timing CHECK (
         depth_exchange_at <= depth_first_available_at
         AND depth_first_available_at <= captured_at
@@ -75,10 +79,13 @@ CREATE INDEX ix_fno_cash_futures_scope
     ON fno_cash_futures_feasibility_evidence (
         account_scope, spot_key, future_key, depth_first_available_at DESC);
 
--- Prevent editing or silently replacing evidence; no pre-seeded rows.
+-- Prevent editing or silently replacing evidence; only retention-expired erasure is allowed.
 CREATE FUNCTION fno_reject_cash_futures_evidence_mutation() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
+    IF TG_OP = 'DELETE' AND OLD.retain_until < (now() AT TIME ZONE 'Asia/Kolkata')::DATE THEN
+        RETURN OLD;
+    END IF;
     RAISE EXCEPTION 'Cash-futures feasibility evidence is append-only'
         USING ERRCODE = '23514';
 END
