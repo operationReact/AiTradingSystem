@@ -103,8 +103,8 @@ public final class FnoBullCallDebitSpreadV1 {
                 || !"strategy.STR-181".equals(direction.strategyId()))
             return noSignal("BULL_CALL_SPREAD_NEW_BULLISH_CROSSOVER_ABSENT", lower, upper, asOf);
 
-        // A cautious hypothetical: pay upper ask for long, receive lower bid
-        // for short (leg names refer to strike, not market quote ordering).
+        // A cautious hypothetical: buy the lower-strike call at its ask,
+        // sell the higher-strike call at its bid; both legs include slippage.
         BigDecimal longPaid = longQuote.ask()
             .multiply(BPS.add(BigDecimal.valueOf(a.buySlippageBps()), MC), MC)
             .divide(BPS, MC);
