@@ -36,3 +36,28 @@ Results: `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, or `RESEARCH_CANDIDATE`.
 Required external acceptance: licensed NSE option chain and NIFTY feed with original source publication timestamps and validated calendar, real strikes/lot/taxes/expiry and depth/OI, no-lookahead out-of-sample and walk-forward replay, authorized PAPER lifecycle and Flutter integration. Research source rights do not authorize LIVE execution.
 
 See [canonical F&O source architecture](../architecture/fno-canonical-strategy-feed.md), [Long Call STR-181](STR-181-long-call.md).
+
+
+## Distinct read-only source adapter — 21 November 2026
+
+`FnoOptionsResearchService` now invokes its own
+`FnoLongPutV1.evaluate`, independently of the STR-181 long-call path.
+The lower EMA8/EMA21 crossover alone never authorizes buying a put:
+the evaluator also needs 35+ source-first-known completed NIFTY daily
+closes, a source-listed true `NSE_FO` **PE** contract with matching
+strike/tick/expiry/lot and original-time synchronized NIFTY and PE quotes,
+ask depth/open interest **in lots**, explicit tax/slippage and research
+premium risk-capital evidence.
+
+V106 is empty at deployment. Its source readers require active provider-
+specific verified `MODEL_INFERENCE` rights for daily NIFTY index closes,
+underlying index ticks, PE option-chain depth/OI, option instrument master
+and independent Indian fees/research-capital receipts. Missing, conflicting
+or forward-known records fail closed, never becoming synthetic option data.
+The explicit configured `long-option-pe-instrument-key` is blank by
+default; all corresponding research permission flags default to false.
+
+The theoretical downside-at-expiry payoff is an *illustrative stress
+scenario*, not a price forecast. No real independent data E2E, PAPER
+or LIVE has passed. Manifest status remains `DATA_BLOCKED` pending
+source rights and point-in-time broker/paper reconciliation.
