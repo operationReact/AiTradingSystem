@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic offline tests: no provider data, AWS, SSM, or broker credentials."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
+import calendar
 import hashlib
 import json
 from pathlib import Path
@@ -128,6 +129,45 @@ class PrivateHistoryAuditTest(unittest.TestCase):
             "UPDATE fno_backfill_jobs SET first_day='2026-10-09'")
         report = self.run_audit()
         self.assertEqual(report["findings"]["unexpectedPilotWindow"], 1)
+
+    def test_research_quarantine_separates_only_provider_duplicate_month(self):
+        self.journal.execute("DELETE FROM fno_backfill_jobs")
+        self.cache.execute("DELETE FROM fno_historical_candles")
+        self.cache.execute("DELETE FROM fno_history_receipts")
+        for year,month in [(2025,11),(2025,12)]+[(2026,m) for m in range(1,11)]:
+            expiry=date(year,month,calendar.monthrange(year,month)[1])
+            first=expiry-timedelta(days=20)
+            for n in range(23):
+                key=f"NSE_FO|SYN{n:03}|{expiry:%d-%m-%Y}"
+                digest=hashlib.sha256(
+                    f"{SOURCE}|{key}|day|{first}|{expiry}".encode()).hexdigest()
+                timestamps=[f"{expiry.isoformat()}T00:00:00+05:30"]
+                if month==12:
+                    timestamps=[
+                        f"{(expiry-timedelta(days=d)).isoformat()}T00:00:00+05:30"
+                        for d in range(14)]
+                    timestamps += [
+                        f"{(expiry-timedelta(days=d)).isoformat()}T09:15:00+05:30"
+                        for d in range(14) if (n,d)!=(22,13)]
+                count=len(timestamps)
+                self.journal.execute("INSERT INTO fno_backfill_jobs VALUES(?,?,?,?,?,?,?,?)",
+                    (key,"day",first.isoformat(),expiry.isoformat(),"DONE",count,1,"NONE"))
+                self.cache.execute("INSERT INTO fno_history_receipts VALUES(?,?,?,?,?,?)",
+                    (digest,SOURCE,key,"day",count,1))
+                self.cache.executemany("INSERT INTO fno_historical_candles VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    [(SOURCE,key,"day",stamp,100.,103.,99.,102.,10,1,digest)
+                     for stamp in timestamps])
+        report=self.run_audit()
+        self.assertEqual(report["result"],"REVIEW")
+        self.assertEqual(report["findingCount"],321)
+        self.assertEqual(report["quarantine"]["status"],"ISOLATED")
+        self.assertEqual(report["quarantine"]["eligibleExpiryMonths"],11)
+        self.assertEqual(report["quarantine"]["eligibleContracts"],253)
+        self.assertEqual(report["quarantine"]["excludedCandles"],643)
+        self.cache.execute("UPDATE fno_historical_candles SET open_interest=-1 "
+                           "WHERE contract_key LIKE '%30-11-2025'")
+        report=self.run_audit()
+        self.assertEqual(report["quarantine"]["status"],"BLOCKED")
 
     def test_read_only_connection_rejects_writes(self):
         self.cache.commit()
