@@ -78,3 +78,34 @@ and `status_json()`, not a connected app view.
    the source, restart and prove two separate checkpoint advances.
 4. Expose only sanitized metadata via authenticated backend REST and Flutter;
    set up a single operator-controlled scheduler and shared provider rate limiter.
+
+
+## Customer-authenticated checkpoint progress bridge
+
+This phase adds an OPTIONAL metadata bridge. It is **not yet a live collector**.
+
+- `fno_history_progress_snapshot.py` converts the local SQLite checkpoint
+  journal into a **bounded, atomic, owner-private 0600 JSON snapshot** with
+  batch states only. It never includes contract identifiers, candle prices, OI,
+  broker credentials or bearer tokens. No exporter is scheduled or invoked by
+  existing production workflows.
+- Spring Boot `GET /api/customer/fno-history/progress` is covered by the
+  existing CUSTOMER role requirement. The backend reads only the explicitly
+  configured `FNO_HISTORY_PROGRESS_SNAPSHOT_PATH`; the default empty setting
+  returns `NOT_CONFIGURED` with unknown counts and **no percentage**.
+- The endpoint validates the snapshot schema, source, journal totals,
+  completed/empty counts, timestamps and percentage; a snapshot older than
+  ten minutes is `STALE`. Any malformed or unsafe snapshot fails closed as
+  `UNAVAILABLE`. Paths and data payloads are never sent to the client.
+- Flutter adds a compact Upstox F&O progress section atop the existing
+  customer Historical Data Monitor. This section does not imply live running,
+  data-retention permission or an active collector. It can show a planned
+  batch percentage only when it receives a valid non-empty journal snapshot.
+
+**Current deployment state:** no snapshot publisher has been connected to a
+runtime scheduler, no env path has been configured, and no historical data
+ingest has been activated. The UI therefore reports "not connected" rather
+than a synthetic 5% or 100%. An authorized runner must supply a legitimate
+checkpoint database and explicitly call the exporter; the backend must be
+configured with the snapshot's controlled path. This wiring requires the
+provider rights and operational review described above.
