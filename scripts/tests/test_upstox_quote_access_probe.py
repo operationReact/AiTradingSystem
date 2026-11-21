@@ -4,6 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 import urllib.error
+from io import BytesIO
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra" / "ec2-paper"))
 import upstox_quote_access_probe as q
@@ -40,6 +41,35 @@ class QuoteAccessTest(unittest.TestCase):
         self.assertEqual(q.classify_http(403,b'{"code":"UDAPI1149"}'),"QUOTE_PLUS_REQUIRED")
         self.assertEqual(q.classify_http(429,b"private"),"QUOTE_HTTP_429")
         self.assertEqual(q.classify_http(503,b"private"),"QUOTE_HTTP_5XX")
+
+    def test_explicit_descriptive_user_agent_reaches_http_request(self):
+        """Avoid Python-urllib/x.y default signature observed as blocked by WAF."""
+        token = "test-token-not-real-" * 3
+        request_seen = []
+        class DummyResponse:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, size): return b'{"status":"success","data":{}}'
+        class DummyOpener:
+            def open(self, request, timeout):
+                request_seen.append(request)
+                return DummyResponse()
+        with patch.object(q.urllib.request, "build_opener", return_value=DummyOpener()):
+            self.assertEqual(q.quote(token), "QUOTE_EMPTY")
+        self.assertEqual(len(request_seen), 1)
+        req = request_seen[0]
+        self.assertEqual(req.get_method(), "GET")
+        self.assertEqual(req.get_header("User-agent"), q.UPSTOX_USER_AGENT)
+        self.assertEqual(req.get_header("Authorization"), "Bearer " + token)
+        self.assertNotIn("Python-urllib", req.get_header("User-agent"))
+
+    def test_cloudflare_1010_is_safe_and_separate_from_upstox_rejection(self):
+        self.assertEqual(q.classify_http(403, b"Error 1010: browser_signature_banned"), "QUOTE_CLOUDFLARE_1010")
+        self.assertEqual(q.classify_http(403, b"error code: 1010"), "QUOTE_CLOUDFLARE_1010")
+        self.assertEqual(q.classify_http(401, b'{"error_code":"UDAPI100050"}'), "QUOTE_TOKEN_INVALID")
+        self.assertEqual(q.classify_http(403, b"some other blocked request"), "QUOTE_HTTP_403")
+        self.assertEqual(q.parse_receipt(q.safe_receipt("QUOTE_CLOUDFLARE_1010")), "QUOTE_CLOUDFLARE_1010")
 
     def test_token_syntax_blocks_short_inputs_without_network(self):
         self.assertEqual(q.quote("x"),"TOKEN_UNAVAILABLE")
