@@ -711,7 +711,8 @@ class FnoFuturesResearchServiceTest {
         assertEquals(0, result.quotes());
         assertEquals(10, result.history());
         assertEquals("COMPLETED_OHLCV_OI_MEAN_REVERSION_RESEARCH_NO_ORDER", result.input());
-        verify(source, times(2)).readExactContract(eq(NEAR.instrumentKey()),
+        // One exact as-of source read is fanned out to STR-176 and STR-177.
+        verify(source, times(1)).readExactContract(eq(NEAR.instrumentKey()),
             eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW));
     }
 
