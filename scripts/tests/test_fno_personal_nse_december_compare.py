@@ -106,7 +106,7 @@ class NseDecemberCompareTest(unittest.TestCase):
         original={(december,day):[
             ("00:00",tuple(ref[:4])+(Decimal(1500),ref[5])),
             ("09:15",(Decimal(99),Decimal(100),Decimal(95),
-                      Decimal(97),Decimal(100),Decimal(40))]}
+                      Decimal(97),Decimal(100),Decimal(40)))]}
         mapping={december:("CE",Decimal(25000))}
         source={("CE",Decimal(25000),day):ref}
         canonical,summary=m.canonical_personal_rows(nondec,original,mapping,source)
