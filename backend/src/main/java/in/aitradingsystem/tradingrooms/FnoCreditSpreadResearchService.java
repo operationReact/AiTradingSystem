@@ -129,7 +129,7 @@ public final class FnoCreditSpreadResearchService {
         // Margin, existing hedges and possible assignment are independent
         // account evidence; modeled credit risk never proves broker capacity.
         var capitalProof = p.capital();
-        if (c == null || capitalProof.availableCashInr() == null || capitalProof.initialMarginInr() == null
+        if (capitalProof == null || capitalProof.availableCashInr() == null || capitalProof.initialMarginInr() == null
                 || capitalProof.variationMarginInr() == null || capitalProof.settlementBufferInr() == null
                 || capitalProof.stressedMaxLossInr() == null
                 || capitalProof.initialMarginInr().signum() <= 0 || capitalProof.variationMarginInr().signum() <= 0
