@@ -7191,21 +7191,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six source rights: genuine verified complete broker-held NIFTY option book, licensed original completed 35+ NIFTY daily closes, genuine source-listed options chain, source-original option delta/gamma, source-original vega/theta/IV and official NSE NIFTY F&O instrument master",
+    "Broker-verifiable original-first-known complete signed lot options positions and original synchronized market snapshot plus exact matching source-original quote key set for every held and candidate option; genuine listed lot/strike/expiry/tick and broker attestation",
+    "Two authentic source-listed OTM NIFTY option buy-only research candidates, one PUT and one CALL with same listed expiry and official lot; original bid/ask, per-unit delta/gamma/vega/theta with documented Greek units, IV/OI and genuine ASK-side depth",
+    "Historical sourced observed index movement gate; true ASK plus buy-slippage and nonzero fees; integer buy lots constrained by actual depth, premium, absolute residual delta/gamma/vega, maximum negative theta and minimum original absolute delta improvement, with no delta sign reversal"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_GREEKS_EXPOSURE_REBALANCE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGreeksExposureRebalanceV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-211-greeks-exposure-rebalance-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed genuine NSE NIFTY original completed daily index history, broker source-listed live/historical original option bid/ask/order depth, exact official lot/strike/expiry/tick master and original source Greek delta/gamma/vega/theta/annualized IV with documented true units; fictional JUnit fixtures are not NSE data",
+    "Real reconciled complete NIFTY option inventory at the broker, signed existing long/short holdings, genuine original broker as-of proof and actual cash/premium/margin and short-option liability risk",
+    "Independent original-first-known multi-regime out-of-sample/walk-forward option Greek repricing and actual after-cost option expiry/exit P&L evidence, full gamma/skew/vega/volatility shock/margin stress and slippage models",
+    "Authorized independent PAPER option-buy and unwind lifecycle settlement/F&O ledger and Flutter UI; separately verified user-authorized LIVE broker F&O rights, position premium/cash caps, actual risk guards, kill switches and audit"
+   ],
+   "note": "RESEARCH ONLY broker-confirmed complete NIFTY option book sensitivity: hypothetically buy listed OTM NIFTY PE or CE to reduce absolute original-delta while enforcing gamma/vega/negative theta and premium/depth caps. Not actual trade, broker margin proof, multi-Greek neutralization, realized PnL or option-order rights. Every order flag false; DATA_BLOCKED.",
    "id": "strategy.STR-211",
    "kind": "STRATEGY",
    "name": "Greeks Exposure Rebalance",
