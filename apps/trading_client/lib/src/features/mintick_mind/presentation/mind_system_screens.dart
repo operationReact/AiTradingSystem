@@ -582,9 +582,35 @@ extension _MindSystemScreens on _MindWorkspaceState {
 
   Widget coverageScreen() {
     final repository = widget.progressRepository;
+    if (_showDataReadiness) {
+      return _surface('Data Readiness',
+        'Canonical data families · source evidence · no inferred completeness', [
+        Align(alignment: Alignment.centerLeft, child: TextButton.icon(
+          key: const ValueKey('mind-data-back-to-coverage'),
+          onPressed: () => setState(() => _showDataReadiness = false),
+          icon: const Icon(Icons.arrow_back, size: 16),
+          label: const Text('Back to coverage'),
+          style: TextButton.styleFrom(foregroundColor: MindPalette.mint),
+        )),
+        if (repository == null)
+          const MindPanel(child: Text(
+            'Source registry not connected. Sign in to inspect authenticated data evidence.',
+            style: TextStyle(color: MindPalette.muted, fontSize: 12),
+          ))
+        else
+          MindDataReadinessPanel(
+            key: const ValueKey('mind-data-readiness-panel'),
+            repository: repository,
+          ),
+      ]);
+    }
     if (repository != null) {
       return _surface('Screen & Strategy Coverage',
         'Audited inventory with server-side evidence. DONE only after runtime verification.',[
+        _tile('Data Readiness',
+          '24 required source families · missing inputs and source evidence',
+          Icons.storage_outlined, tap: _openDataReadiness),
+        const SizedBox(height: 10),
         MindProgressCoverageView(
           key: const ValueKey('mind-progress-coverage'),
           repository: repository,
@@ -595,6 +621,9 @@ extension _MindSystemScreens on _MindWorkspaceState {
     final groups=['PRIMARY','AGENTS','RESEARCH','CAPITAL','SYSTEM'];
     return _surface('Screen & Strategy Coverage',
       'Progress registry not connected · nothing on this page is verified',[
+      _tile('Data Readiness', '24 canonical family requirements · not verified',
+        Icons.storage_outlined, tap: _openDataReadiness),
+      const SizedBox(height: 10),
       MindPanel(key:const ValueKey('mind-progress-not-connected'),
         child:const Text('Progress not verified: sign in to load the audited server registry. '
           'Screens below are listed for navigation only.',
