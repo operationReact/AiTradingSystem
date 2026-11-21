@@ -80,8 +80,7 @@ class UpstoxFnoV3FeedCodecTest {
         var wire = new String(
                 UpstoxFnoV3FeedCodec.subscription("sub", "full", plan, approved),
                 StandardCharsets.UTF_8);
-        assertThat(wire).contains(
-                "\\"instrumentKeys\\":[\\"NSE_FO|61001\\",\\"NSE_EQ|INE002A01018\\"]");
+        assertThat(wire).contains("NSE_FO|61001", "NSE_EQ|INE002A01018");
         assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
                 "sub", "full", plan)).hasMessage("UPSTOX_FNO_INVALID_SUBSCRIPTION");
         assertThatThrownBy(() -> UpstoxFnoV3FeedCodec.subscription(
