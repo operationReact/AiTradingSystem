@@ -51,6 +51,9 @@ public final class FnoPortfolioProtectiveOverlayResearchService {
         if(proof==null||!"strategy.STR-210".equals(proof.strategyId())
             ||proof.provider()==null||proof.json()==null)
             return denied(now,"STR_210_WRONG_PROVENANCE_IDENTITY",false);
+        if(!FnoTypedResearchProvenanceGate.valid(
+                mapper,proof.json(),proof.provider(),proof.originalFirstKnownAt(),now))
+            return denied(now,"STR_210_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",false);
         final Evidence v;
         try{v=mapper.readValue(proof.json(),Evidence.class);}
         catch(Exception malformed){

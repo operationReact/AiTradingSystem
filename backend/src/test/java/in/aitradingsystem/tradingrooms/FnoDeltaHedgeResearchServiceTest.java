@@ -27,7 +27,7 @@ class FnoDeltaHedgeResearchServiceTest {
     }
     @SuppressWarnings("unchecked")
     private static <T> List<T> cast(Object value){return (List<T>)value;}
-    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules();}
+    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);}
     private static FnoDeltaHedgeResearchService.Evidence fixture() throws Exception {
         return new FnoDeltaHedgeResearchService.Evidence(
             cast(method(FnoDeltaHedgeV1Test.class,"options",new Class<?>[0])),
@@ -41,7 +41,7 @@ class FnoDeltaHedgeResearchServiceTest {
     private static FnoVerifiedStrategy203206SourceStore source(String content){
         var store=mock(FnoVerifiedStrategy203206SourceStore.class);
         when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(new Proof(
-            ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(40),"a".repeat(64))));
+            ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(1),"a".repeat(64))));
         return store;
     }
     @Test void deniedResearchRightsDoNotReadOrPlaceBrokerOrders(){
@@ -65,7 +65,7 @@ class FnoDeltaHedgeResearchServiceTest {
         assertEquals("STR_204_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",
             new FnoDeltaHedgeResearchService(missing,json(),true).evaluate(NOW).reasonCode());
         var invalid=source("{\"policy\":{},\"untrustedExecutionFlag\":true}");
-        assertEquals("STR_204_TYPED_SOURCE_PAYLOAD_INVALID",
+        assertEquals("STR_204_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",
             new FnoDeltaHedgeResearchService(invalid,json(),true).evaluate(NOW).reasonCode());
     }
     @Test void sourceAccessFailureRedactsPrivateBrokerTokens(){
@@ -76,4 +76,23 @@ class FnoDeltaHedgeResearchServiceTest {
         assertEquals("STR_204_ORIGINAL_SOURCE_READ_FAILED",row.reasonCode());
         assertFalse(row.toString().contains("secret"));
     }
+    @Test void mixedProviderPayloadCannotBorrowFirstProvidersRights() throws Exception {
+        var payload=json().writeValueAsString(fixture());
+        assertTrue(payload.contains("UPSTOX_ANALYTICS"),"fixture must contain source issuer");
+        var other=payload.replace("UPSTOX_ANALYTICS","ANGEL_ONE_SMARTAPI");
+        var row=new FnoDeltaHedgeResearchService(source(other),json(),true).evaluate(NOW);
+        assertEquals("STR_204_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(ID,row.strategyId());
+    }
+    @Test void payloadObservedAfterEvidenceFirstKnownIsRejectedWithoutOrders() throws Exception {
+        var content=json().writeValueAsString(fixture());
+        var store=source(content);
+        when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(
+            new Proof(ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(75),"a".repeat(64))));
+        var row=new FnoDeltaHedgeResearchService(store,json(),true).evaluate(NOW);
+        assertEquals("STR_204_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(0,row.contractsResolved());
+        assertEquals(0,row.freshQuotes());
+    }
+
 }

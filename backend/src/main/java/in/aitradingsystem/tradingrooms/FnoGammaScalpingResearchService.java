@@ -45,6 +45,10 @@ public final class FnoGammaScalpingResearchService {
         if(p==null||p.isEmpty())
             return denied(now,"STR_203_GENUINE_ORIGINAL_SOURCE_EVIDENCE_MISSING",false);
         var proof=p.get();
+        if(proof==null||!"strategy.STR-203".equals(proof.strategyId())
+                ||!FnoTypedResearchProvenanceGate.valid(
+                    mapper,proof.json(),proof.provider(),proof.originalFirstKnownAt(),now))
+            return denied(now,"STR_203_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",false);
         final Evidence v;
         try {v=mapper.readValue(proof.json(),Evidence.class);}
         catch(Exception malformed){
@@ -55,7 +59,7 @@ public final class FnoGammaScalpingResearchService {
         try {
             var result=FnoGammaScalpingV1.evaluate(v.call(),v.put(),v.future(),v.history(),v.samples(),
                 new FnoGammaScalpingV1.Rights(true,true,true,true,true),v.policy(),now);
-            if(result==null||!result.retrospectiveOnly()&&!result.actualOptionOrHedgeFillsObserved()||result.executable()
+            if(result==null||(!result.retrospectiveOnly()||result.actualOptionOrHedgeFillsObserved())||result.executable()
                 ||result.orderPlaced()||result.liveTradeAuthorized())
                 return denied(now,"STR_203_RESEARCH_NO_ORDER_INVARIANT_FAILED",false);
             return new FnoFuturesResearchService.StrategyStatus(
