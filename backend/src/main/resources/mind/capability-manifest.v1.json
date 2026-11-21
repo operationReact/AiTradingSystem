@@ -7053,21 +7053,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently verified research permissions: actual broker-confirmed matched existing NIFTY put debit vertical, original as-of NIFTY index and 35+ completed closes, authentic listed option quotes, original put delta/IV Greeks and official NSE option instrument master",
+    "Exactly equal verified long-high-PE and short-low-PE original broker lots, correct matched existing expiry, broker positive original spread debit and original broker first-known position evidence",
+    "Separately listed and sourced later-expiry higher-strike long-PE and lower-strike short-PE, matching original official NIFTY lot, source-original first-known per-leg bid/ask/negative delta/IV/open interest and order-book depth for all four exact bid/ask close/open sides",
+    "Deterministic source-observed historical downside regime, hypothetical 4-leg close-and-open signed cash flow with buy/sell slippage and positive fees, new vertical finite theoretical expiry maximum loss/gain, signed roll debit and explicit research cost budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DEFINED_RISK_SPREAD_ROLL_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDefinedRiskSpreadRollV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-208-defined-risk-spread-roll-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Real licensed NSE NIFTY original-time spot and 35+ complete index closes; live/historical official old/new option chain and source first-known bid/ask/delta/IV/actual directional depth, authentic official expiry and lot source and documented provider rights",
+    "Actual reconciled matched broker existing positive long/high put and negative lower put positions, genuine original cash-flow debit/fills, wallet/collateral/margin and true broker short-option order entitlements",
+    "Original-first-known independently evidenced cross-expiry option exit/entry fill and settlement ledgers, actual four-leg legging/margin/partial fill/cancel/rollback and India costs, after-cost out-of-sample/walk-forward simulated risk under gaps and stop-outs",
+    "Explicit independent PAPER multi-leg ledger and Flutter acceptance and separately authorized LIVE F&O broker write permissions, risk/margin guards, kill switches and monitored execution audit"
+   ],
+   "note": "Source-attested non-executable research of original broker-confirmed existing long NIFTY bear put debit spread to later expiry long bear put debit spread. Four-leg hypothetical ask/bid close/open, finite new expiry spread maximum loss and gain; not real fills, lifetime margin proof, realized PnL or paper/live authorization. DATA_BLOCKED.",
    "id": "strategy.STR-208",
    "kind": "STRATEGY",
    "name": "Defined Risk Spread Roll",
