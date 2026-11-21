@@ -42,3 +42,40 @@ Every decision is `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, or `RESEARCH_CA
 **Still required before any trading claim:** genuine licensed provider data with retained first-observation timestamps; official calendar, corporate actions, source-listed deliverables and lot; genuine broker reconciled holdings and rights; account-level F&O covered-call/put settlement and taxes, short-leg margin and multi-leg fill sequencing safeguards; no-lookahead out-of-sample/walk-forward replay; separately approved PAPER ledger and Flutter acceptance; independently audited LIVE brokerage permissions and kill switches. Tests use hypothetical fixtures only.
 
 See [STR-187 Protective Put](STR-187-protective-put.md) and [STR-188 Covered Call](STR-188-covered-call.md).
+
+## Source-backed direct adapter (21 November 2026)
+
+The new read-only `FnoEquityCollarResearchService` invokes the actual
+`FnoEquityCollarV1.evaluate` and requires **one verified settled and
+unrestricted full lot of NSE_EQ stock, not two separately owned lots**, plus
+the source-listed matching same-expiry long PE and short CE. Both options
+must agree on provider, account, holding-acquisition cost and exact holding
+snapshot timestamp. The existing V109 stock/option source is reused for
+original-time 35+ consecutive official NSE daily closes and both options
+without any new WebSocket or assumed broker position.
+
+An additional **EMPTY** V110 account-scoped proof table independently
+attests combined, **not double-counted**, Indian collar fees/taxes,
+assignment/delivery review, room research-budget limits and a true
+two-sided, original-time NSE_EQ BID/ASK quote. This specifically forbids
+using one LTP as both stock BID and ASK. Separate currently verified
+provider-scoped `MODEL_INFERENCE` research rights are required for
+`nse_eq_owned_stock_collar_all_in_fees` and `nse_eq_quote_depth`,
+in addition to original V109 stock-close/holdings/options/master rights.
+
+Source timestamps, as-of, equity BID/ASK price containment, equity
+last-price observation consistency and PE/CE quote synchronization are
+checked before passing any model input to the distinct evaluator. If the
+two broker holdings snapshots disagree, either option is missing,
+combined fees/capital are not attested, or quote/right/retention
+integrity is incomplete, the strategy remains BLOCKED.
+
+`minttick.fno-research.collar-combined-fee-rights-verified=false`
+is disabled by default, and all stock, PE/CE and account identifiers are
+blank until configured and independently source verified. No settled
+stock is inferred from a watchlist or PAPER holdings.
+
+**Scope:** deterministic research-only payoff floor/ceiling. Actual
+provider receipts, source rights, P&L after real fills, assignment
+and delivery costs, independent market-data E2E, PAPER and LIVE
+remain unverified. Manifest stays `DATA_BLOCKED`.
