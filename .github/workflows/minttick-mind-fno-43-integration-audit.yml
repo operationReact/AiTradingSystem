@@ -119,6 +119,17 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_str202_206_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy202206SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy202206SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -242,6 +253,17 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_str202_206_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy202206SourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedStrategy202206SourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoGammaScalpingResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDeltaHedgeResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsResearchServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -436,6 +458,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVolatilityCrushResearchServiceTest,FnoVerifiedNiftyVolCrushSourceStoreTest' test
+      - name: Validate STR-203 through STR-206 rights-attested original typed research-only source
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedStrategy202206SourceStoreTest,FnoGammaScalpingResearchServiceTest,FnoDeltaHedgeResearchServiceTest,FnoBetaHedgeOptionsResearchServiceTest,FnoTailRiskPutHedgeResearchServiceTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
