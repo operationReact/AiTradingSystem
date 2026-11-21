@@ -5337,6 +5337,10 @@
     {
      "kind": "TEST",
      "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesBasisCarryV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/architecture/fno-canonical-strategy-feed.md"
     }
    ],
    "missing": [

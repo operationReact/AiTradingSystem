@@ -155,6 +155,13 @@ class FnoProtectivePutV1Test {
         expect(evaluate(CONTRACT,HOLD,bars("94"),SPOT,PUT,RIGHTS,a),
             Status.BLOCKED_DATA,"PROTECTIVE_PUT_OWNERSHIP_CONTRACT_INVALID");
     }
+    @Test void catalogStrategyIdentityIsProvenByEvaluatorOutput() {
+        assertEquals("strategy.STR-187", FnoProtectivePutV1.STRATEGY_ID);
+        assertEquals(FnoProtectivePutV1.STRATEGY_ID, run().strategyId());
+        assertFalse(run().executable());
+        assertFalse(run().orderPlaced());
+        assertFalse(run().liveTradeAuthorized());
+    }
     @Test void repeatEvaluationIsDeterministicAndNonExecutable() {
         assertEquals(run(),run());
         assertFalse(run().liveTradeAuthorized());

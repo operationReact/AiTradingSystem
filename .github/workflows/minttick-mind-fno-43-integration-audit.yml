@@ -1,0 +1,105 @@
+name: MintTick Mind F&O - all 43 research evaluator integration evidence
+
+# Research source/tests + catalog contract validation, not broker execution.
+# No AWS credentials, market-data APIs, broker endpoints, SSM or deployments.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/resources/mind/capability-manifest.v1.json'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
+      - 'docs/strategies/STR-*.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/resources/mind/capability-manifest.v1.json'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: minttick-fno43-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fno-43-research-evaluator-evidence:
+    name: Verify all 43 F&O evaluators and audited JUnit results (NO broker)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python source/manifest audit contract tests (zero network)
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_strategy_e2e_audit.py' -v
+      - name: Set up isolated Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute exactly the 43 manifest-attested strategy test classes
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          test_list=$(python3 ../scripts/fno_strategy_e2e_audit.py --list-tests)
+          test "$(printf '%s\n' "$test_list" | tr ',' '\n' | wc -l)" -eq 43
+          mvn --batch-mode --no-transfer-progress "-Dtest=$test_list" test
+      - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/fno_strategy_e2e_audit.py \
+            --surefire-dir backend/target/surefire-reports \
+            --require-surefire \
+            --report artifacts/fno43-evaluator-validation.json
+      - name: Summary with explicit real-data and trade-access blockers
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json,os,pathlib
+          path=pathlib.Path('artifacts/fno43-evaluator-validation.json')
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## F&O 43-strategy research integration evidence\n\n')
+              if not path.is_file():
+                  f.write('FAILED: audit report absent; no source or execution readiness may be inferred.\n')
+              else:
+                  a=json.loads(path.read_text())
+                  s=a['summary']
+                  f.write(f"Manifest coverage: **{s['implemented']}/43**; executed JUnit files: "
+                          f"**{s['junitEvidenceComplete']}/43**; JUnit cases: **{s['executedJunitCases']}**.\n\n")
+                  f.write(f"Real-source E2E: **{s['realDataE2EValidated']}/43**. ")
+                  f.write(f"PAPER: **{s['paperTradingValidated']}/43**; ")
+                  f.write(f"LIVE: **{s['liveTradingValidated']}/43**.\n\n")
+                  f.write('This check has NO exchange/broker data and must never authorize orders.\n')
+          PY
+      - name: Publish falsifiable per-strategy evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: minttick-fno43-research-evidence
+          path: |
+            artifacts/fno43-evaluator-validation.json
+            backend/target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno*V1Test.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+# This validates deterministic evaluator research and test evidence.
+# Real NSE provider rights, original-time replay, broker-book reconciliation,
+# PAPER and LIVE integration remain separate auditable stages.
