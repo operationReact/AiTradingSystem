@@ -148,3 +148,20 @@ DENIED; actual no-lookahead backtesting and broker execution are pending.
 paths, 28/43 with no typed direct adapter, 0 signal-route-only without
 distinct evaluator, 0/43 independently verified historical real-data
 E2E, 0/43 PAPER, 0/43 LIVE.** Earlier counts above are dated snapshots.
+
+
+## 21 November 2026 — STR-185 and STR-186 credit-spread research
+
+Separate, actual evaluator callsites for
+`FnoBullPutCreditSpreadV1.evaluate` and
+`FnoBearCallCreditSpreadV1.evaluate` are now wired to shared verified
+V106 NIFTY daily history and new V108 account-scoped market-plus-margin
+source proof. The broker-account source requires real settled positions,
+six independent market/master/margin/cost research grants, and funded
+initial/variation/settlement reserves; a broker login or source price
+is not proof of funds or order authorization. V108 is empty by default.
+
+**Current: 17/43 distinct direct research evaluator paths, 26/43
+without direct adapters, 0 signal-only paths lacking direct evaluators,
+0/43 independently verified real NSE source E2E, 0/43 PAPER, 0/43 LIVE.**
+Earlier totals in this document are historical checkpoints.
