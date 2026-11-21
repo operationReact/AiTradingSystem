@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 public final class FnoVerifiedRatioSpreadSourceStore {
     private static final ZoneId IST=ZoneId.of("Asia/Kolkata");
     private static final String SQL="""
-        SELECT s.provider_code,s.ratio_side,s.index_key,s.long_key,s.short_key,
+        SELECT s.provider_code,s.account_scope,s.ratio_side,s.index_key,s.long_key,s.short_key,
                s.long_strike,s.short_strike,s.long_tick,s.short_tick,
                s.long_listed_from,s.short_listed_from,s.expiry,s.lot_size,
                s.index_bid,s.index_ask,s.index_exchange_at,s.index_first_known_at,
@@ -69,7 +69,7 @@ public final class FnoVerifiedRatioSpreadSourceStore {
            AND cost_rights.source_domain='nse_fo_ratio_3leg_fees_margin'
            AND cost_rights.permitted_use='MODEL_INFERENCE'
            AND cost_rights.receipt_status='VERIFIED'
-         WHERE s.ratio_side=? AND s.long_key=? AND s.short_key=?
+         WHERE s.account_scope=? AND s.ratio_side=? AND s.long_key=? AND s.short_key=?
            AND s.independently_reconciled_margin AND s.true_two_short_lots_depth
            AND s.three_leg_fees_not_double_counted
            AND s.source_instrument_master_verified AND s.stress_tail_risk_reviewed
@@ -107,27 +107,28 @@ public final class FnoVerifiedRatioSpreadSourceStore {
                        BigDecimal capitalInr,int maxLossAllocationBps,
                        BigDecimal stressUnderlyingPrice,int minPeakRewardBps,
                        BigDecimal brokerMarginReserveInr){}
-    public record Proof(String provider,String ratioSide,String indexKey,
+    public record Proof(String provider,String accountScope,String ratioSide,String indexKey,
                         OptionLeg longLeg,OptionLeg shortLeg,IndexQuote index,
                         Risk risk,String contractDigest,Instant firstKnownAt){}
     private final JdbcTemplate jdbc;
     public FnoVerifiedRatioSpreadSourceStore(JdbcTemplate jdbc){
         this.jdbc=Objects.requireNonNull(jdbc);
     }
-    public Optional<Proof> oneCurrent(String side,String longKey,String shortKey,Instant at){
-        if(!("CALL".equals(side)||"PUT".equals(side))
+    public Optional<Proof> oneCurrent(String account,String side,String longKey,String shortKey,Instant at){
+        if(account==null||!account.matches("[A-Za-z0-9_-]{8,80}")
+           ||!("CALL".equals(side)||"PUT".equals(side))
            ||longKey==null||!longKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,80}")
            ||shortKey==null||!shortKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,80}")
            ||longKey.equals(shortKey)||at==null)
             throw new IllegalArgumentException("RATIO_RESEARCH_SOURCE_SCOPE_INVALID");
         Object[] a=new Object[(int)SQL.chars().filter(c->c=='?').count()];
-        a[0]=side;a[1]=longKey;a[2]=shortKey;
-        Arrays.fill(a,3,a.length,Timestamp.from(at));
-        a[6]=Date.valueOf(at.atZone(IST).toLocalDate());
+        a[0]=account;a[1]=side;a[2]=longKey;a[3]=shortKey;
+        Arrays.fill(a,4,a.length,Timestamp.from(at));
+        a[7]=Date.valueOf(at.atZone(IST).toLocalDate());
         List<Proof> result=jdbc.query(SQL,(rs,i)->{
             LocalDate expiry=rs.getObject("expiry",LocalDate.class);
             int lot=rs.getInt("lot_size");
-            return new Proof(rs.getString("provider_code"),rs.getString("ratio_side"),
+            return new Proof(rs.getString("provider_code"),rs.getString("account_scope"),rs.getString("ratio_side"),
                 rs.getString("index_key"),
                 new OptionLeg(rs.getString("long_key"),rs.getBigDecimal("long_strike"),
                     rs.getBigDecimal("long_tick"),
@@ -163,7 +164,7 @@ public final class FnoVerifiedRatioSpreadSourceStore {
         },a);
         if(result==null||result.size()!=1)return Optional.empty();
         Proof p=result.getFirst();
-        if(p==null||!side.equals(p.ratioSide())
+        if(p==null||!account.equals(p.accountScope())||!side.equals(p.ratioSide())
            ||!longKey.equals(p.longLeg().key())
            ||!shortKey.equals(p.shortLeg().key())
            ||!"NSE_INDEX|Nifty 50".equals(p.indexKey())
