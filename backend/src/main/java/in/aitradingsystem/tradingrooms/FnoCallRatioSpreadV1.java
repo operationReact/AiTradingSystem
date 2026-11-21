@@ -111,6 +111,9 @@ public final class FnoCallRatioSpreadV1 {
         if (peak.signum() <= 0)
             return measured(Status.NO_SIGNAL, "CALL_RATIO_PEAK_PROFIT_NOT_POSITIVE",
                 lowerLongCall, higherShortCall, asOf, netDebit, peak, stressPnl, stressLoss);
+        if (a.upsideStressUnderlyingPrice().compareTo(higherShortCall.strike()) <= 0)
+            return measured(Status.NO_SIGNAL, "CALL_RATIO_UPSIDE_STRESS_NOT_ABOVE_SHORT_STRIKE",
+                lowerLongCall, higherShortCall, asOf, netDebit, peak, stressPnl, stressLoss);
         if (stressLoss.compareTo(allowedStressLoss) > 0)
             return measured(Status.NO_SIGNAL, "CALL_RATIO_STRESS_LOSS_BUDGET_EXCEEDED",
                 lowerLongCall, higherShortCall, asOf, netDebit, peak, stressPnl, stressLoss);
