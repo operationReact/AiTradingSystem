@@ -18,6 +18,33 @@ class V3SocketPilotTest(unittest.TestCase):
         self.assertEqual(p.EXACT["operation"],
             "one-shot-private-upstox-fno-v3-socket-evidence")
 
+    def test_monday_nse_session_window_and_holiday_are_fail_closed(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        ist=ZoneInfo("Asia/Kolkata")
+        self.assertTrue(p.inside_monday_nse_window(
+            datetime(2026,11,23,9,15,tzinfo=ist)))
+        self.assertTrue(p.inside_monday_nse_window(
+            datetime(2026,11,23,10,0,tzinfo=ist).astimezone(ZoneInfo("UTC"))))
+        for at in (
+            datetime(2026,11,22,10,0,tzinfo=ist),
+            datetime(2026,11,23,9,14,tzinfo=ist),
+            datetime(2026,11,23,15,30,tzinfo=ist),
+            datetime(2026,11,24,10,0,tzinfo=ist),
+            datetime(2026,11,25,10,0,tzinfo=ist),
+            datetime(2026,11,23,10,0)
+        ):
+            with self.subTest(at=at):
+                self.assertFalse(p.inside_monday_nse_window(at))
+
+    def test_host_can_observe_already_enabled_display_rights_without_granting_rights(self):
+        text=pathlib.Path(p.__file__).read_text()
+        self.assertIn('MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED',text)
+        self.assertIn('MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED',text)
+        self.assertIn('A pre-existing display-rights config may be true',text)
+        self.assertNotIn('env.get("MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED")',text)
+        self.assertNotIn('FLAG+"=true"',text)
+
     def test_rejects_unverified_quote_rights_and_malformed_status(self):
         self.assertIsNotNone(p.valid_status(sample()))
         for key in ("displayRightsVerified","liveTradingEnabled"):

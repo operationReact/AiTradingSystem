@@ -6,6 +6,8 @@ Uses next exchange-listed expiry expected 2026-11-23 (Nov 24 is NSE holiday).
 No persistent subscription or customer display policy is enabled by this test.
 """
 import base64
+from datetime import datetime, time as local_time
+from zoneinfo import ZoneInfo
 import gzip
 import json
 import os
@@ -18,7 +20,7 @@ import urllib.error
 import urllib.request
 
 ROOT = Path("/opt/aitradingsystem-paper")
-SHA = "4ecc90348b56f5aa696d23b68ed32950eb82fa38"
+SHA = "0a1302f264f37ac71f167d0ace4947dbe4f30577"
 EXPIRY = "2026-11-23"
 INSTANCE = "i-09c01b470fb39b85a"
 ACCOUNT = "098859530205"
@@ -76,7 +78,7 @@ def valid_status(payload):
 
 # Sanitized failure tokens only; the host's stderr is never echoed verbatim.
 VALID_ERRORS = {"WRONG_HOST","WRONG_HOST_ENV","DUPLICATE_FLAG",
-    "SOURCE_NOT_READY","UNREVIEWED_RIGHTS_FLAG",
+    "SOURCE_NOT_READY","UNREVIEWED_RIGHTS_FLAG","NSE_SESSION_NOT_OPEN",
     "OPERATOR_AUTH_UNAVAILABLE","BUSY_OPERATOR_SOCKET",
     "SOURCE_OR_EXPIRY_REJECTED","V3_STATUS_UNVERIFIED",
     "SOCKET_STOP_UNVERIFIED","UNAPPROVED_API_ROUTE",
@@ -84,6 +86,20 @@ VALID_ERRORS = {"WRONG_HOST","WRONG_HOST_ENV","DUPLICATE_FLAG",
     "SCRIPT_TOO_LARGE","SSM_UNAVAILABLE","SSM_BAD_COMMAND_ID",
     "V3_PRIVATE_PROBE_UNVERIFIED","V3_PRIVATE_INVALID_SSM_STATE",
     "V3_PRIVATE_TIMEOUT","INVALID_MODE"}
+
+def inside_monday_nse_window(at):
+    """Bound this exact one-shot proof to the next verified NSE F&O session.
+
+    A regular 09:15-15:30 IST window does not authorize broker trading;
+    24 Nov 2026 is an exchange holiday and must not be used as fallback.
+    """
+    if at is None or at.tzinfo is None or at.utcoffset() is None:
+        return False
+    india = at.astimezone(ZoneInfo("Asia/Kolkata"))
+    return (india.date().isoformat() == EXPIRY
+            and local_time(9, 15) <= india.time().replace(tzinfo=None)
+                < local_time(15, 30))
+
 
 def host_error_token(stderr):
     """Return the whitelisted host failure token from SSM stderr, else None."""
@@ -95,6 +111,8 @@ def host_error_token(stderr):
     return found
 
 def host():
+    if not inside_monday_nse_window(datetime.now(ZoneInfo("Asia/Kolkata"))):
+        raise ValueError("NSE_SESSION_NOT_OPEN")
     if os.geteuid()!=0 or os.uname().machine!="aarch64":
         raise ValueError("WRONG_HOST")
     for name in ("runtime.env",".env"):
@@ -115,8 +133,10 @@ def host():
     if compose.get("RELEASE_SHA")!=SHA or (
         env.get("MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED")!="true"):
         raise ValueError("SOURCE_NOT_READY")
+    # A pre-existing display-rights config may be true, but this proof
+    # never changes, validates or relies upon that entitlement. Only an
+    # already-stopped source socket is eligible for the bounded handshake.
     for flag in ("MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED",
-                 "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED",
                  "MINTTICK_UPSTOX_FNO_AUTO_MARKET_FEED_ENABLED"):
         if env.get(flag,"false")!="false":
             raise ValueError("UNREVIEWED_RIGHTS_FLAG")
@@ -150,6 +170,8 @@ def host():
             print("V3_PRIVATE_STOP:CONFIRMED",flush=True)
 
 def runner():
+    if not inside_monday_nse_window(datetime.now(ZoneInfo("Asia/Kolkata"))):
+        raise ValueError("NSE_SESSION_NOT_OPEN")
     p=Path(REQUEST)
     if p.is_symlink() or not p.is_file() or p.stat().st_size>1300:
         raise ValueError("REQUEST_INVALID")
