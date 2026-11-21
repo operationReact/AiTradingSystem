@@ -53,10 +53,10 @@ public final class FnoCreditSpreadResearchService {
                 boolean spreadRights,
             @Value("${minttick.fno-research.credit-spread-account-scope:}")
                 String creditAccountScope,
-            @Value("${minttick.fno-research.debit-bull-lower-ce-key:}") String bullLower,
-            @Value("${minttick.fno-research.debit-bull-upper-ce-key:}") String bullUpper,
-            @Value("${minttick.fno-research.debit-bear-lower-pe-key:}") String bearLower,
-            @Value("${minttick.fno-research.debit-bear-upper-pe-key:}") String bearUpper) {
+            @Value("${minttick.fno-research.credit-bull-lower-pe-key:}") String bullLower,
+            @Value("${minttick.fno-research.credit-bull-upper-pe-key:}") String bullUpper,
+            @Value("${minttick.fno-research.credit-bear-lower-ce-key:}") String bearLower,
+            @Value("${minttick.fno-research.credit-bear-upper-ce-key:}") String bearUpper) {
         this.dailyStore = dailyStore;
         this.spreadStore = spreadStore;
         this.calendar = calendar;
@@ -240,7 +240,7 @@ public final class FnoCreditSpreadResearchService {
                 || p.lower() == null || p.higher() == null || p.index() == null
                 || p.risk() == null || !lowerKey.equals(p.lower().key())
                 || !upperKey.equals(p.higher().key())
-                || !p.lower().kind().equals(side.equals("BULL_CALL") ? "PE" : "CE")
+                || !p.lower().kind().equals(side.equals("BULL_PUT") ? "PE" : "CE")
                 || !p.lower().kind().equals(p.higher().kind())
                 || p.lower().strike() == null || p.higher().strike() == null
                 || p.lower().strike().compareTo(p.higher().strike()) >= 0
