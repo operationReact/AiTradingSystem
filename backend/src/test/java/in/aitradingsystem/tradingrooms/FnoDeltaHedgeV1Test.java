@@ -43,10 +43,10 @@ class FnoDeltaHedgeV1Test {
         return new FuturesPosition(signedLots, BROKER, true);
     }
     private static OptionQuote call(String delta) {
-        return new OptionQuote(CEKEY,n("4.95"),n("5.05"),n(delta),1000,QUOTED,KNOWN,true);
+        return new OptionQuote(SRC,CEKEY,n("4.95"),n("5.05"),n(delta),1000,QUOTED,KNOWN,true);
     }
     private static OptionQuote put(String delta) {
-        return new OptionQuote(PEKEY,n("4.95"),n("5.05"),n(delta),1000,QUOTED,KNOWN,true);
+        return new OptionQuote(SRC,PEKEY,n("4.95"),n("5.05"),n(delta),1000,QUOTED,KNOWN,true);
     }
     private static List<OptionQuote> quotes() {
         return List.of(call("0.8"), put("-0.1"));
@@ -129,22 +129,43 @@ class FnoDeltaHedgeV1Test {
                 run(futureKnown,future(),heldFutures(0),snapshot(),history(),rights(),policy(),ASOF).status());
     }
     @Test void futureKnownOrUnoriginalGreeksAreRejected() {
-        var q=new OptionQuote(CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,
+        var q=new OptionQuote(SRC,CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,
                 QUOTED,ASOF.plusSeconds(1),true);
         var s=snap(List.of(q,put("-0.1")),10,10,QUOTED,KNOWN,SRC);
         assertEquals(Status.BLOCKED_DATA,
                 run(options(),future(),heldFutures(0),s,history(),rights(),policy(),ASOF).status());
-        var synthetic=new OptionQuote(CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,QUOTED,KNOWN,false);
+        var synthetic=new OptionQuote(SRC,CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,QUOTED,KNOWN,false);
         s=snap(List.of(synthetic,put("-0.1")),10,10,QUOTED,KNOWN,SRC);
         assertEquals(Status.BLOCKED_DATA,
                 run(options(),future(),heldFutures(0),s,history(),rights(),policy(),ASOF).status());
     }
     @Test void originalQuoteMustMatchSourceSnapshotTime() {
-        var stale=new OptionQuote(CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,
+        var stale=new OptionQuote(SRC,CEKEY,n("4.95"),n("5.05"),n("0.8"),1000,
                 QUOTED.minusSeconds(120),KNOWN,true);
         var s=snap(List.of(stale,put("-0.1")),10,10,QUOTED,KNOWN,SRC);
         assertEquals(Status.BLOCKED_DATA,
                 run(options(),future(),heldFutures(0),s,history(),rights(),policy(),ASOF).status());
+    }
+    @Test void perQuoteProviderCannotBeSilentlyMixedAcrossBrokers() {
+        var foreign=new OptionQuote("ANGEL_ONE_SMARTAPI",CEKEY,n("4.95"),n("5.05"),
+                n("0.8"),1000,QUOTED,KNOWN,true);
+        var s=snap(List.of(foreign,put("-0.1")),10,10,QUOTED,KNOWN,SRC);
+        Decision d=run(options(),future(),heldFutures(0),s,history(),rights(),policy(),ASOF);
+        assertEquals(Status.BLOCKED_DATA,d.status());
+        neverExecutable(d);
+    }
+    @Test void shortsRequireHypotheticalBuyUsingTrueAskDepth() {
+        var shorts=List.of(new OptionPosition(ce(),-1,BROKER,true),
+                new OptionPosition(pe(),-1,BROKER,true));
+        var d=run(shorts,future(),heldFutures(0),
+                snap(quotes(),10,1,QUOTED,KNOWN,SRC),history(),rights(),policy(),ASOF);
+        assertEquals(Status.RESEARCH_REBALANCE,d.status());
+        assertEquals(1,d.hypotheticalChangeFuturesLots());
+        assertTrue(d.hypotheticalOneWayCostInr().signum()>0);
+        neverExecutable(d);
+        var noAsk=snap(quotes(),10,0,QUOTED,KNOWN,SRC);
+        assertEquals(Status.BLOCKED_DATA,
+                run(shorts,future(),heldFutures(0),noAsk,history(),rights(),policy(),ASOF).status());
     }
     @Test void missingDuplicateOrUnknownKeysFailClosed() {
         var missing=snap(List.of(call("0.8")),10,10,QUOTED,KNOWN,SRC);
