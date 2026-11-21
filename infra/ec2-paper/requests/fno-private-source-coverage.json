@@ -10,5 +10,6 @@
   "no_orders": true,
   "no_redistribution": true,
   "private_cache_read_only": true,
-  "no_market_price_export": true
+  "no_market_price_export": true,
+  "audit_revision": 2
 }
