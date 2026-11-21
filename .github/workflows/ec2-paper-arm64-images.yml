@@ -5,6 +5,7 @@ on:
     branches: [dev]
     paths:
       - 'backend/Dockerfile.ec2-paper-arm64'
+      - 'backend/Dockerfile.ec2-paper-prebuilt-arm64'
       - 'backend/pom.xml'
       - 'backend/src/**'
       - 'apps/trading_client/Dockerfile.lightsail-paper'
@@ -20,6 +21,7 @@ on:
     branches: [dev]
     paths:
       - 'backend/Dockerfile.ec2-paper-arm64'
+      - 'backend/Dockerfile.ec2-paper-prebuilt-arm64'
       - 'apps/trading_client/Dockerfile.lightsail-paper'
       - 'infra/ec2-paper/bootstrap.sh'
       - 'infra/lightsail/paper-compose.yml'
@@ -68,6 +70,23 @@ jobs:
           flutter pub get
           flutter build web --release --dart-define=API_BASE_URL=http://localhost:8088
 
+      # Compile the exact JAR on the native GitHub runner using Maven cache.
+      # Do not resolve Maven Central dependencies inside an ARM64/QEMU builder.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Compile exact source JAR on native runner
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress -DskipTests package
+          test -s target/ai-trading-system-0.1.0-SNAPSHOT.jar
+
       - name: Build exact GitHub commit backend and frontend for EC2 Graviton ARM64
         shell: bash
         run: |
@@ -82,7 +101,7 @@ jobs:
           # Maven compiles pure Java on the hosted runner architecture; the
           # final Java runtime layer is ARM64 on the cheaper EC2 t4g.medium.
           docker buildx build --platform linux/arm64 --load \
-            --file backend/Dockerfile.ec2-paper-arm64 \
+            --file backend/Dockerfile.ec2-paper-prebuilt-arm64 \
             --tag "$api" backend
           docker buildx build --platform linux/arm64 --load \
             --file apps/trading_client/Dockerfile.lightsail-paper \

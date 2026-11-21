@@ -6,18 +6,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/ec2-paper-arm64-images.yml"
-BACKEND = ROOT / "backend/Dockerfile.ec2-paper-arm64"
+BACKEND = ROOT / "backend/Dockerfile.ec2-paper-prebuilt-arm64"
 COMPOSE = ROOT / "infra/lightsail/paper-compose.yml"
 
 
 class PaperARM64RuntimeContract(unittest.TestCase):
     def test_cross_compile_maven_native_runtime_image_and_nonroot_java(self):
         src = BACKEND.read_text()
-        self.assertIn("FROM --platform=$BUILDPLATFORM maven:", src)
+        self.assertNotIn("maven:", src)
         self.assertIn("FROM eclipse-temurin:21-jre-jammy", src)
         self.assertIn("USER 10001", src)
         self.assertIn("-Xmx1024m", src)
-        self.assertIn("COPY --from=build /workspace/target/*.jar", src)
+        self.assertIn("COPY target/ai-trading-system-0.1.0-SNAPSHOT.jar /app/app.jar", src)
         self.assertIn('ENTRYPOINT ["java","-jar","/app/app.jar"]', src)
         self.assertNotIn("apt-get install python", src)
         self.assertNotIn("TRADING_MODE=LIVE", src)
@@ -34,7 +34,10 @@ class PaperARM64RuntimeContract(unittest.TestCase):
             "flutter build web --release",
             "--dart-define=API_BASE_URL=http://localhost:8088",
             "docker buildx build --platform linux/arm64 --load",
-            "--file backend/Dockerfile.ec2-paper-arm64",
+            "--file backend/Dockerfile.ec2-paper-prebuilt-arm64",
+            "mvn --batch-mode --no-transfer-progress -DskipTests package",
+            "test -s target/ai-trading-system-0.1.0-SNAPSHOT.jar",
+            "java-version: '21'",
             "--file apps/trading_client/Dockerfile.lightsail-paper",
             'test "$(docker image inspect "$api" --format',
             'test "$(docker image inspect "$web" --format',
