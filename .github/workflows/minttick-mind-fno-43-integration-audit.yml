@@ -114,6 +114,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_event_vol_crush_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -232,6 +237,11 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyIvRankSourceStoreTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchService.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoIvRankResearchServiceTest.java'
+      - 'backend/src/main/resources/db/migration/V122__fno_verified_event_vol_crush_source.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyVolCrushSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoVolatilityCrushResearchServiceTest.java'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
@@ -420,6 +430,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoIvRankResearchServiceTest,FnoVerifiedNiftyIvRankSourceStoreTest' test
+      - name: Validate STR-202 verified official pre-known event, 35 original NIFTY closes and two separately sourced 30d IV observations
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoVolatilityCrushResearchServiceTest,FnoVerifiedNiftyVolCrushSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
