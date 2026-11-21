@@ -276,9 +276,13 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
     requests=0
     try:
         discovery=Discovery(token)
-        if not queue.summary()["total_batches"]:
-            source_plan(queue,discovery,approval,month_limit=3 if start_limit else MAX_MONTHS)
-            requests=discovery.calls
+        if start_limit:
+            if not queue.summary()["total_batches"]:
+                source_plan(queue,discovery,approval,month_limit=3)
+        else:
+            # Extend the smoke-plan idempotently across all selected months.
+            source_plan(queue,discovery,approval,month_limit=MAX_MONTHS)
+        requests=discovery.calls
         provider=UpstoxExpiredCandles(lambda:token,grant=approval,
             verifier=verify_scope,today=today)
         worker=BackfillWorker(queue,provider,sink,approval,
@@ -291,7 +295,11 @@ def run(start_limit=0, max_requests=MAX_REQUESTS_PER_RUN, wait_for_more=False):
             if result=="IDLE":
                 # Extend from initial 3 months to a full 12-month NIFTY pilot.
                 if start_limit: break
-                if queue.summary()["total_batches"] and not wait_for_more: break
+                statuses=queue.summary()["counts"]
+                if (not wait_for_more and
+                        statuses["PENDING"]==0 and statuses["ACTIVE"]==0
+                        and statuses["RETRY"]==0):
+                    break
                 time.sleep(60)
                 continue
             requests+=1
