@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * STR-182: deterministic, research-only NIFTY Long Put (CE) classifier.
+ * STR-182: deterministic, research-only NIFTY Long Put (PE) classifier.
  * A completed EMA8/EMA21 bearish crossover is necessary but not sufficient:
  * one verified put contract and synchronized, recent quotes must support a
  * cost-aware hypothetical *expiry* payoff. Not a forecast or order proposal.
