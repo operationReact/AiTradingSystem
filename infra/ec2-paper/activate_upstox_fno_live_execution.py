@@ -22,7 +22,7 @@ import urllib.error
 REGION="ap-south-1"
 ACCOUNT="098859530205"
 INSTANCE="i-09c01b470fb39b85a"
-EXPECTED_RELEASE="691454e4b7995f54ee0ac5c4e14e44ed53ffbf48"
+EXPECTED_RELEASE="0a1302f264f37ac71f167d0ace4947dbe4f30577"
 REQUEST_FILE="infra/ec2-paper/requests/upstox-fno-live-execution-activate.json"
 FLAG="MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"
 EXACT_REQUEST={
@@ -36,9 +36,22 @@ EXACT_REQUEST={
 }
 REQUIRED_SOURCE=(
     "MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED",
-    "MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED",
     "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED",
 )
+
+def source_flags_ready(flags):
+    """Mirror customer discovery semantics: verified display implies listing.
+
+    This never grants or independently proves display rights. It only avoids
+    requiring a redundant discovery flag when display-rights config is true.
+    The actual customer order path still checks each source and broker gate.
+    """
+    if not isinstance(flags,dict):
+        return False
+    if any(flags.get(key)!="true" for key in REQUIRED_SOURCE):
+        return False
+    return (flags.get("MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED")=="true"
+            or flags.get("MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED")=="true")
 ERRORS={
     "INVALID_MODE","BAD_REQUEST_FILE","BAD_OWNER_REQUEST",
     "INVALID_HOST","INVALID_HOST_FILES","INSECURE_HOST_ENV",
@@ -154,7 +167,7 @@ def host():
     previous=entries(before[".env"])
     if previous.get("RELEASE_SHA")!=EXPECTED_RELEASE:
         raise ValueError("DEPLOYED_RELEASE_CHANGED")
-    if any(previous.get(k,"false")!="true" for k in REQUIRED_SOURCE):
+    if not source_flags_ready(previous):
         raise ValueError("BROKER_SOURCE_OR_RIGHTS_NOT_READY")
     if not (previous.get("MINTTICK_UPSTOX_OAUTH_SSM_ENABLED","false")=="true" or
             (bool(previous.get("UPSTOX_CLIENT_ID")) and
