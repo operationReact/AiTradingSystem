@@ -106,6 +106,42 @@ class UpstoxFnoV3FeedCodecTest {
         assertThat(UpstoxFnoV3FeedCodec.decode(frame).ticks()).isEmpty();
     }
 
+    private static final String SPOT_KEY = "NSE_EQ|INE002A01018";
+
+    /** Same protobuf shape as validFirstLevel(), keyed by an arbitrary instrument key. */
+    static byte[] firstLevelFor(String key) {
+        Proto ltpc = new Proto().d(1, 120.5).v(2, TRADE_MS).v(3, 65).d(4, 130);
+        Proto firstDepth = new Proto().v(1, 100).d(2, 119.5).v(3, 200).d(4, 121);
+        Proto first = new Proto().m(1, ltpc).m(2, firstDepth);
+        return new Proto().m(2, new Proto().s(1, key).m(2, new Proto().m(3, first)))
+                .v(3, TRADE_MS + 1000).bytes();
+    }
+
+    @Test
+    void spotKeyValidatorAcceptsOnlyNseEquityIsinForm() {
+        assertThat(UpstoxFnoV3FeedCodec.validSpotKey(SPOT_KEY)).isTrue();
+        assertThat(UpstoxFnoV3FeedCodec.validSpotKey("NSE_EQ|INFY")).isFalse();
+        assertThat(UpstoxFnoV3FeedCodec.validSpotKey("BSE_EQ|INE002A01018")).isFalse();
+        assertThat(UpstoxFnoV3FeedCodec.validSpotKey("NSE_FO|INE002A01018")).isFalse();
+        assertThat(UpstoxFnoV3FeedCodec.validSpotKey(null)).isFalse();
+    }
+
+    @Test
+    void defaultDecodeStillDropsEquityFramesEvenWhenWellFormed() {
+        assertThat(UpstoxFnoV3FeedCodec.decode(firstLevelFor(SPOT_KEY)).ticks()).isEmpty();
+    }
+
+    @Test
+    void equityFrameIsPublishedOnlyWhenExplicitlyAllowedAsSubscribedSpot() {
+        var tick = UpstoxFnoV3FeedCodec.decode(firstLevelFor(SPOT_KEY), java.util.Set.of(SPOT_KEY))
+                .ticks();
+        assertThat(tick).hasSize(1);
+        assertThat(tick.get(0).instrumentKey()).isEqualTo(SPOT_KEY);
+        // An allowed set must not admit a non-equity or malformed key.
+        assertThat(UpstoxFnoV3FeedCodec.decode(firstLevelFor("NSE_EQ|INFY"),
+                java.util.Set.of("NSE_EQ|INFY")).ticks()).isEmpty();
+    }
+
     static byte[] validFirstLevel() {
         Proto ltpc = new Proto().d(1, 120.5).v(2, TRADE_MS).v(3, 65).d(4, 130);
         Proto firstDepth = new Proto().v(1, 100).d(2, 119.5).v(3, 200).d(4, 121);
