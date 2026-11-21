@@ -5,7 +5,7 @@ import in.aitradingsystem.marketdata.FnoVerifiedNiftyDiagonalSourceStore.Leg;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyDiagonalSourceStore.Proof;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyLongOptionSourceStore;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyLongOptionSourceStore.VerifiedClose;
-import in.aitradingsystem.marketdata.MarketSessionDiagonal;
+import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
@@ -30,7 +30,7 @@ public final class FnoDiagonalSpreadResearchService {
     private static final ZoneId IST=ZoneId.of("Asia/Kolkata");
     private final FnoVerifiedNiftyLongOptionSourceStore daily;
     private final FnoVerifiedNiftyDiagonalSourceStore diagonals;
-    private final MarketSessionDiagonal diagonal;
+    private final MarketSessionCalendar diagonal;
     private final boolean dailyRights,chainRights,masterRights,ivRights,feesRights;
     private final String nearKey,farKey,optionType;
 
@@ -38,7 +38,7 @@ public final class FnoDiagonalSpreadResearchService {
     public FnoDiagonalSpreadResearchService(
         FnoVerifiedNiftyLongOptionSourceStore daily,
         FnoVerifiedNiftyDiagonalSourceStore diagonals,
-        MarketSessionDiagonal diagonal,
+        MarketSessionCalendar diagonal,
         @Value("$" + "{minttick.fno-research.nifty-daily-close-research-rights-verified:false}") boolean dailyRights,
         @Value("$" + "{minttick.fno-research.long-option-quote-research-rights-verified:false}") boolean chainRights,
         @Value("$" + "{minttick.fno-research.long-option-contract-discovery-verified:false}") boolean masterRights,
