@@ -72,7 +72,7 @@ public final class FnoOptionsResearchService {
         } catch (RuntimeException ignored) {
             return bothBlocked(now, "LONG_OPTION_DAILY_SOURCE_READ_UNAVAILABLE", 0);
         }
-        if (!validHistory(closes, now)) return bothBlocked(now,
+        if (!validHistory(closes, calendar, now)) return bothBlocked(now,
             "LONG_OPTION_35_COMPLETED_SOURCE_CLOSES_MISSING",
             closes == null ? 0 : closes.size());
         return List.of(one(true, now, closes), one(false, now, closes));
@@ -155,7 +155,8 @@ public final class FnoOptionsResearchService {
             "VERIFIED_NIFTY_PE_SOURCE_RESEARCH_ONLY");
     }
 
-    private boolean validHistory(List<VerifiedClose> rows, Instant now) {
+    static boolean validHistory(List<VerifiedClose> rows,
+            MarketSessionCalendar calendar, Instant now) {
         if (rows == null || rows.size() < 35 || rows.size() > 90) return false;
         LocalDate previous = null;
         String provider = null;
