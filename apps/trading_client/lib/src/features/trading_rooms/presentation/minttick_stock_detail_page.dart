@@ -388,8 +388,7 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
       final diff = ltp - previousClose;
       final pct = diff / previousClose * 100;
       changeText = '${diff >= 0 ? '+' : ''}${diff.toStringAsFixed(2)} '
-          '(${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%) vs previous close'
-          '${isStored ? ' · stored last trade' : ''}';
+          '(${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%) · vs prev. close';
     } else if (previousClose == null) {
       changeText = 'Change needs the previous close from day statistics.';
     } else {
@@ -414,11 +413,20 @@ class _MintTickStockDetailPageState extends State<MintTickStockDetailPage> {
           const SizedBox(height: 6),
           Text(
             changeText,
-            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: ltp != null && previousClose != null
+                  ? (ltp >= previousClose ? scheme.primary : scheme.error)
+                  : scheme.onSurfaceVariant,
+              height: 1.3),
           ),
-          if (tickAt != null) Text(
-            'Exchange tick ${_istDate(tickAt)} ${_clock(tickAt.toLocal())} · source ${quote?.source ?? '—'}',
-            style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant, height: 1.4),
+          if (tickAt != null) Tooltip(
+            message: 'Exchange source: ${quote?.source ?? '—'}',
+            child: Text(
+              'Exchange trade · ${_istDate(tickAt)} '
+              '${_clock(tickAt.toUtc().add(const Duration(hours: 5, minutes: 30)))} IST',
+              style: theme.textTheme.bodySmall?.copyWith(
+                  color: scheme.onSurfaceVariant, height: 1.3),
+            ),
           ),
         ],
       ))),
