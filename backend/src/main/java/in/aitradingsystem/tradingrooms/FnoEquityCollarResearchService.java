@@ -95,6 +95,14 @@ public final class FnoEquityCollarResearchService {
         if(cost==null||cost.isEmpty()||!p.provider().equals(cost.get().provider()))
             return blocked(now,"COLLAR_VERIFIED_UNDUPLICATED_COST_PROOF_MISSING",
                 false,history.size());
+        if (p.equityPrice().compareTo(cost.get().equityBid()) < 0
+                || p.equityPrice().compareTo(cost.get().equityAsk()) > 0
+                || !p.equityExchangeAt().equals(cost.get().equityExchangeAt())
+                || !p.equityFirstKnownAt().equals(cost.get().equityFirstKnownAt())
+                || c.equityPrice().compareTo(cost.get().equityBid()) < 0
+                || c.equityPrice().compareTo(cost.get().equityAsk()) > 0)
+            return blocked(now,"COLLAR_EQUITY_QUOTE_SOURCE_MISMATCH",
+                false,history.size());
         var a=cost.get().assumptions();
         var put=new FnoEquityCollarV1.Contract(p.optionKey(),stock,"PE",p.strike(),
             p.tickSize(),p.listedFrom(),p.expiry(),p.lotSize(),true,true);
@@ -103,8 +111,9 @@ public final class FnoEquityCollarResearchService {
         var holding=new FnoEquityCollarV1.Holding(p.provider(),stock,
             p.holding().settledOwnedShares(),p.holding().acquisitionCost(),
             p.holding().observedAt(),true,true);
-        var equity=new FnoEquityCollarV1.Quote(p.provider(),stock,p.equityPrice(),
-            p.equityPrice(),1,1,1,p.equityExchangeAt(),p.equityFirstKnownAt());
+        var equity=new FnoEquityCollarV1.Quote(p.provider(),stock,
+            cost.get().equityBid(),cost.get().equityAsk(),
+            1,1,1,cost.get().equityExchangeAt(),cost.get().equityFirstKnownAt());
         var putQ=new FnoEquityCollarV1.Quote(p.provider(),putKey,p.bid(),p.ask(),
             p.bidDepthLots(),p.askDepthLots(),p.oiLots(),
             p.optionExchangeAt(),p.optionFirstKnownAt());
