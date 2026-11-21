@@ -128,15 +128,15 @@ public final class FnoCreditSpreadResearchService {
                 false, closes.size());
         // Margin, existing hedges and possible assignment are independent
         // account evidence; modeled credit risk never proves broker capacity.
-        var c = p.capital();
-        if (c == null || c.availableCashInr() == null || c.initialMarginInr() == null
-                || c.variationMarginInr() == null || c.settlementBufferInr() == null
-                || c.stressedMaxLossInr() == null
-                || c.initialMarginInr().signum() <= 0 || c.variationMarginInr().signum() <= 0
-                || c.settlementBufferInr().signum() <= 0 || c.stressedMaxLossInr().signum() <= 0
-                || c.availableCashInr().compareTo(
-                    c.initialMarginInr().add(c.variationMarginInr())
-                        .add(c.settlementBufferInr())) < 0) {
+        var capitalProof = p.capital();
+        if (c == null || capitalProof.availableCashInr() == null || capitalProof.initialMarginInr() == null
+                || capitalProof.variationMarginInr() == null || capitalProof.settlementBufferInr() == null
+                || capitalProof.stressedMaxLossInr() == null
+                || capitalProof.initialMarginInr().signum() <= 0 || capitalProof.variationMarginInr().signum() <= 0
+                || capitalProof.settlementBufferInr().signum() <= 0 || capitalProof.stressedMaxLossInr().signum() <= 0
+                || capitalProof.availableCashInr().compareTo(
+                    capitalProof.initialMarginInr().add(capitalProof.variationMarginInr())
+                        .add(capitalProof.settlementBufferInr())) < 0) {
             return blocked(bullish, now, "CREDIT_SPREAD_BROKER_MARGIN_RESERVES_INSUFFICIENT",
                 false, closes.size());
         }
@@ -172,7 +172,7 @@ public final class FnoCreditSpreadResearchService {
             if (result.status() == FnoBullPutCreditSpreadV1.Status.RESEARCH_CANDIDATE
                     && (result.maxLossPerSpreadLotInr() == null
                         || result.maxLossPerSpreadLotInr().compareTo(
-                            c.stressedMaxLossInr()) > 0)) {
+                            capitalProof.stressedMaxLossInr()) > 0)) {
                 return blocked(true, now, "CREDIT_SPREAD_STRESSED_LOSS_EXCEEDS_RECONCILED_CAP",
                     false, bars.size());
             }
@@ -212,7 +212,7 @@ public final class FnoCreditSpreadResearchService {
         if (result.status() == FnoBearCallCreditSpreadV1.Status.RESEARCH_CANDIDATE
                 && (result.maxLossPerSpreadLotInr() == null
                     || result.maxLossPerSpreadLotInr().compareTo(
-                        c.stressedMaxLossInr()) > 0)) {
+                        capitalProof.stressedMaxLossInr()) > 0)) {
             return blocked(false, now, "CREDIT_SPREAD_STRESSED_LOSS_EXCEEDS_RECONCILED_CAP",
                 false, bars.size());
         }
