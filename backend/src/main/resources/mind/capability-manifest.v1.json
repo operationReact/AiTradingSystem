@@ -6639,21 +6639,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine completed NIFTY index daily bars with original first-known timestamps and licensed index research rights",
+    "Independently source-verified same-strike same-type NIFTY CE/PE near-expiry short option and far-expiry long option, official lot size and distinct authenticated expiration dates",
+    "Synchronized genuine original-as-of NIFTY/near-short/far-long quotes with separately sourced annualized IV per expiry, authentic near bid depth and far ask depth, actual OI and exchange-time freshness",
+    "After-cost two-leg calendar net debit, original source IV term-structure ratio, quoted premium coverage and illustrative near-expiry IV one-sigma movement, NO assumed same-expiry payoff"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_CALENDAR_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoCalendarSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-199-calendar-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed source NIFTY near/far expiry option-chain with genuine independent IV and original first-known timestamps, authentic listed expiry and official lot/calendar rules",
+    "Actual post-expiry long residual option market value, live multi-expiry liquidity, Indian option settlement/charges, near expiry broker writing margin and roll risk",
+    "Out-of-sample original-as-of historical term-structure and IV walk-forward evaluation with after-cost non-atomic fills, volatility shock and liquidation risks",
+    "Independently accepted PAPER app/ledger and separately authorized LIVE broker option-writing entitlements, expiry/assignment/settlement handling and risk/kill switches"
+   ],
+   "note": "Research-only long calendar spread: sell 1 near-expiry CE or PE and buy 1 farther-expiry same-strike/type/lot contract. As expiries differ, no static expiry max profit/loss or breakeven claims; far-dated residual mark unknown. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-199",
    "kind": "STRATEGY",
    "name": "Calendar Spread",
