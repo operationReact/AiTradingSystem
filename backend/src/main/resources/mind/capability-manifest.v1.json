@@ -7237,21 +7237,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently evidenced source rights: broker-confirmed original as-of long listed NIFTY future holdings/average entry basis, genuine 35+ original completed NIFTY daily closes, real listed NIFTY options chain, genuine source-original put/call delta and annualized IV, current official NIFTY futures bid/ask and official option/futures instrument master",
+    "Official identical underlying/expiry/lot sourced NIFTY future, long higher OTM NIFTY PE and short lower PE plus independent OTM reference CE; true source-listed strikes and dates, synchronously known real bid/ask, original signed delta/IV/OI and depth for all owned lots on correct buy-ASK/sell-BID sides",
+    "Delta-matched independently verified source-original higher bought put IV versus comparable absolute-delta OTM reference call IV, explicit IV-percent-point put skew research threshold, and strict source-original same-provider first-known timestamps before evaluation",
+    "Worst originally observed completed NIFTY index daily loss replayed as explicit fictional persistent common-expiry stress; genuine ASK/BID slippage, positive one-leg and two-leg fees, signed premium saving and budget gate, conditional put spread protection and severe uncapped downside below sold lower put against actually long NIFTY future"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SKEW_BASED_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoSkewBasedHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-212-skew-based-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actually licensed NSE NIFTY original-time index, listed future bid/ask and full NIFTY option chain quotes/depth, authentic IV/delta skew by strike and official real expiry/lot/tick master; synthetic JUnit data alone is not market-data evidence",
+    "Original first-known source-reconciled real broker existing LONG NIFTY futures positions, historical actual entry prices, initial/variation margin and genuine cash and broker F&O multi-leg rights",
+    "Auditable out-of-sample full source-verified historical put/call IV/skew/option bid/ask snapshots, observed option fills/exits/expiry, multi-leg short-option margin/legging, actual India fees and extreme-loss stress below sold lower put after costs",
+    "Independently accepted PAPER multi-leg ledger/settlement and Flutter portfolio validation, separately user-consented LIVE NSE futures/options broker order access, collateral/limits and kill switches"
+   ],
+   "note": "Final catalog research-only source-attested NIFTY long future + hypothetical purchased higher OTM put / sold lower put; reference call is a genuine original-IV delta-matched skew reference only, never traded. Lower put caps protective intrinsic so extreme futures downside remains massive. No realized backtest or trade, no real NSE source proven; every order flag false, DATA_BLOCKED.",
    "id": "strategy.STR-212",
    "kind": "STRATEGY",
    "name": "Skew-Based Hedge",
