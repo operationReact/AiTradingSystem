@@ -95,6 +95,31 @@ class NseDecemberCompareTest(unittest.TestCase):
         result=m.compare(saved,mapping,nse)
         self.assertEqual(result["missingNSEContractDays"],1)
 
+    def test_builds_one_provenanced_personal_daily_candle_per_contract_date(self):
+        december="NSE_FO|D1|30-12-2025"
+        november="NSE_FO|N1|26-11-2025"
+        day=date(2025,12,15)
+        ref=(Decimal(100),Decimal(104),Decimal(99),Decimal(103),
+             Decimal(20),Decimal(50),Decimal(75))
+        nondec=[(november,"2025-11-24T00:00:00+05:30",
+                 110,111,109,110,200,10)]
+        original={(december,day):[
+            ("00:00",tuple(ref[:4])+(Decimal(1500),ref[5])),
+            ("09:15",(Decimal(99),Decimal(100),Decimal(95),
+                      Decimal(97),Decimal(100),Decimal(40))]}
+        mapping={december:("CE",Decimal(25000))}
+        source={("CE",Decimal(25000),day):ref}
+        canonical,summary=m.canonical_personal_rows(nondec,original,mapping,source)
+        self.assertEqual(summary["total"],2)
+        self.assertEqual(canonical[(december,day)][2],"NSE_PUBLIC_EOD")
+        self.assertEqual(canonical[(december,day)][1][4],Decimal(1500))
+        self.assertEqual(canonical[(november,date(2025,11,24))][2],"UPSTOX_PRIVATE")
+        self.assertNotEqual(canonical[(december,day)][1][3],Decimal(97))
+        with self.assertRaisesRegex(ValueError,"DUPLICATE_NON_DECEMBER_DAY"):
+            m.canonical_personal_rows(nondec+nondec,original,mapping,source)
+        with self.assertRaisesRegex(ValueError,"MISSING_EXCHANGE_REFERENCE_DAY"):
+            m.canonical_personal_rows(nondec,original,mapping,{})
+
     def test_source_url_is_fixed_to_window_and_weekdays(self):
         self.assertIn("20251215",m.source_url(date(2025,12,15)))
         with self.assertRaisesRegex(ValueError,"INVALID_PROBE_DAY"):
