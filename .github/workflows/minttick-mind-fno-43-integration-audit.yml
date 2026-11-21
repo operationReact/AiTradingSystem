@@ -9,6 +9,10 @@ on:
       - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
@@ -19,6 +23,10 @@ on:
       - '.github/workflows/minttick-mind-fno-43-integration-audit.yml'
       - 'scripts/fno_strategy_e2e_audit.py'
       - 'scripts/tests/test_fno_strategy_e2e_audit.py'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43ReadinessController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43StrategyReadinessServiceTest.java'
+      - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno*V1Test.java'
@@ -60,6 +68,12 @@ jobs:
           test_list=$(python3 ../scripts/fno_strategy_e2e_audit.py --list-tests)
           test "$(printf '%s\n' "$test_list" | tr ',' '\n' | wc -l)" -eq 43
           mvn --batch-mode --no-transfer-progress "-Dtest=$test_list" test
+      - name: Validate read-only 43-strategy runtime readiness coverage and role contract
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=Fno43StrategyReadinessServiceTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
