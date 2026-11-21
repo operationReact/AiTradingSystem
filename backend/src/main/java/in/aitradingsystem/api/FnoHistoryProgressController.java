@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -153,7 +154,7 @@ public class FnoHistoryProgressController {
                 captured.toString(),
                 total == 0 ? null : total, completed, percent, written, last,
                 Map.copyOf(counts), false, false, PLAN_SCOPE);
-        } catch (IOException | IllegalArgumentException e) {
+        } catch (IOException | IllegalArgumentException | DateTimeException e) {
             // Never include local paths or untrusted JSON in a response.
             return unavailable("UNAVAILABLE", "INVALID_RUNTIME_SNAPSHOT");
         }
