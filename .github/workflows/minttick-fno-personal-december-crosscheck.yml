@@ -67,7 +67,7 @@ jobs:
           assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
           assert json.loads(p.read_text())=={
               "kind":"minttick-personal-nse-fo-december-crosscheck-v1",
-              "comparison_revision":2,
+              "comparison_revision":3,
               "operation":"in-memory-nse-udiff-vs-upstox-private-december-2025",
               "account":"098859530205",
               "region":"ap-south-1",
