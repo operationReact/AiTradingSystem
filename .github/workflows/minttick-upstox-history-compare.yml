@@ -1,0 +1,104 @@
+name: MintTick - protected Upstox standard-vs-expired historical access
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-upstox-history-compare.yml'
+      - 'infra/ec2-paper/upstox_history_access_compare.py'
+      - 'scripts/tests/test_upstox_history_access_compare.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/upstox-history-access-compare.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify bounded, nonpersisting source comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/upstox_history_access_compare.py
+          python3 -m unittest discover -s scripts/tests -p test_upstox_history_access_compare.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/upstox_history_access_compare.py').read_text()
+          assert 8000 < len(s) < 22000
+          assert '"max_provider_gets": 2' in s
+          assert '"persist": False' in s
+          assert '"trading_rights_change": False' in s
+          assert 'https://api.upstox.com/v3/historical-candle/' in s
+          assert 'https://api.upstox.com/v2/expired-instruments/expiries' in s
+          for forbidden in ('submitOrder', 'placeOrder', 'POSTGRES_PASSWORD',
+                            'put-parameter', 'TRADING_MODE=LIVE',
+                            'UPDATE customer_', 'DELETE FROM',
+                            'print(token)', 'print(result.stdout)'):
+              assert forbidden not in s, forbidden
+          PY
+
+  compare:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    env:
+      AWS_REGION: ap-south-1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact owner-approved single-file comparison request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/upstox-history-access-compare.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0, 'infra/ec2-paper')
+          from upstox_history_access_compare import expected_request
+          path=Path('infra/ec2-paper/requests/upstox-history-access-compare.json')
+          assert path.is_file() and not path.is_symlink() and path.stat().st_size < 1024
+          assert json.loads(path.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: upstox-history-access-owner
+          role-duration-seconds: 900
+      - name: Compare two provider GETs using SSM token on exact existing PAPER EC2
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/upstox_history_access_compare.py runner > "$RUNNER_TEMP/history-compare.txt" 2>&1
+      - name: Publish one sanitized result to the incident issue
+        if: ${{ always() && github.event_name == 'push' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPOSITORY: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/upstox_history_access_compare.py issue "$RUNNER_TEMP/history-compare.txt"
+
+# Owner-only diagnostic. No market data is persisted or displayed. No broker
+# trading rights, instance lifecycle, secrets or database records are changed.
