@@ -531,6 +531,107 @@ public class FnoFuturesResearchService {
             "CASH_FUT_FEASIBILITY_SOURCE_BLOCKED");
     }
 
+
+    /** STR-176: verified original-time futures OHLCV and separately finalized OI. */
+    private StrategyStatus evaluateFuturesMomentum(Instant now, LocalDate today) {
+        var rights = new FnoFuturesMomentumV1.SourceRights(
+            researchRightsVerified && completedOhlcvResearchRightsVerified,
+            researchRightsVerified && completedOhlcvResearchRightsVerified,
+            contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !completedOhlcvResearchRightsVerified) {
+            return momentumBlocked(now, rights, "FUT_MOM_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (completedOhlcvOiStore == null) {
+            return momentumBlocked(now, rights, "FUT_MOM_COMPLETED_SOURCE_ADAPTER_MISSING", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return momentumBlocked(now, rights, "FUT_MOM_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty()) {
+            return momentumBlocked(now, rights, "FUT_MOM_FUTURES_CONTRACT_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(7))
+            ? pair.get().far() : pair.get().near();
+        final List<FnoVerifiedCompletedOhlcvOiStore.VerifiedBar> rows;
+        try {
+            rows = completedOhlcvOiStore.readExactContract(
+                chosen.instrumentKey(), today.minusDays(OI_LOOKBACK_DAYS), today, now);
+        } catch (RuntimeException unavailable) {
+            return momentumBlocked(now, rights, "FUT_MOM_SOURCE_READ_UNAVAILABLE", 1, 0);
+        }
+        if (rows == null || rows.size() < 7) {
+            return momentumBlocked(now, rights, "FUT_MOM_SEVEN_VERIFIED_SESSIONS_MISSING",
+                1, rows == null ? 0 : rows.size());
+        }
+        String provider = null;
+        LocalDate listedFrom = null;
+        LocalDate prev = null;
+        for (var row : rows) {
+            if (row == null || row.sessionDate() == null || row.listedFrom() == null
+                    || !chosen.instrumentKey().equals(row.instrumentKey())
+                    || !chosen.underlyingKey().equals(row.underlyingKey())
+                    || !chosen.expiry().equals(row.expiry())
+                    || chosen.lotSize() != row.lotSize()
+                    || !FnoMarketDataProvider.isSessionHistorySource(row.provider())
+                    || (provider != null && !provider.equals(row.provider()))
+                    || (listedFrom != null && !listedFrom.equals(row.listedFrom()))
+                    || (prev != null && !prev.isBefore(row.sessionDate()))
+                    || row.sessionDate().isAfter(today)
+                    || row.sessionDate().isBefore(today.minusDays(OI_LOOKBACK_DAYS))
+                    || row.verifiedSessionCloseAt() == null
+                    || !officialNonExpiringFuturesClose(row.sessionDate()).equals(
+                        row.verifiedSessionCloseAt())
+                    || row.ohlcvFirstAvailableAt() == null || row.oiFirstAvailableAt() == null) {
+                return momentumBlocked(now, rights, "FUT_MOM_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+                    1, rows.size());
+            }
+            provider = row.provider();
+            listedFrom = row.listedFrom();
+            prev = row.sessionDate();
+        }
+        var last = rows.subList(rows.size() - 7, rows.size());
+        List<FnoFuturesMomentumV1.CompletedSession> bars = new ArrayList<>();
+        prev = null;
+        for (var row : last) {
+            boolean complete = calendar.isTradingDay(row.sessionDate());
+            if (prev != null) {
+                for (LocalDate d = prev.plusDays(1); d.isBefore(row.sessionDate());
+                        d = d.plusDays(1)) {
+                    if (calendar.isTradingDay(d)) complete = false;
+                }
+            }
+            bars.add(new FnoFuturesMomentumV1.CompletedSession(
+                row.sessionDate(), complete, row.instrumentKey(), row.provider(),
+                row.open(), row.high(), row.low(), row.close(), true,
+                row.ohlcvFirstAvailableAt(), row.tradedVolumeUnits(),
+                row.openInterestUnits(), row.oiFirstAvailableAt()));
+            prev = row.sessionDate();
+        }
+        var contract = new FnoFuturesMomentumV1.Contract(
+            chosen.instrumentKey(), chosen.underlyingKey(), listedFrom,
+            chosen.expiry(), chosen.lotSize(), true);
+        var result = FnoFuturesMomentumV1.evaluate(
+            contract, List.copyOf(bars), rights, MOMENTUM_THRESHOLDS, now);
+        return status(result.strategyId(), result.status().name(), result.reasonCode(),
+            now, provider, 1, 0, bars.size(), "COMPLETED_OHLCV_OI_RESEARCH_NO_ORDER");
+    }
+
+    private static StrategyStatus momentumBlocked(Instant now,
+            FnoFuturesMomentumV1.SourceRights rights, String reason,
+            int contracts, int history) {
+        // Distinct evaluator observed even when every source datum fails closed.
+        var blocked = FnoFuturesMomentumV1.evaluate(
+            null, List.of(), rights, MOMENTUM_THRESHOLDS, now);
+        return status(blocked.strategyId(), blocked.status().name(), reason,
+            now, "NONE", contracts, 0, history, "FUT_MOM_SOURCE_BLOCKED");
+    }
+
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
     List<FnoFuturesRolloverSignalV1.CompletedSession> completedSessions(NearFar pair, LocalDate today) {
         var rows = store.pairRows(pair.near().instrumentKey(), pair.far().instrumentKey(),
