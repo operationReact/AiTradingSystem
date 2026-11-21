@@ -49,3 +49,36 @@ The positive fixture models **₹10 lakh long index-beta exposure**, **₹20,000
 - Flutter/Android/iOS/web UI and deployment evidence are not part of this backend-only pull request.
 
 The research implementation belongs in the shared rights-gated [F&O canonical strategy feed](../architecture/fno-canonical-strategy-feed.md). It must not independently create an additional raw WebSocket connection.
+
+## Source-backed research integration — 21 November 2026
+
+`FnoFuturesResearchService.evaluateAll` now calls the **distinct**
+`FnoFuturesHedgeOverlayV1.evaluate` and uses existing Upstox V3
+exchange-timed index-futures quotes, plus the new separately attested
+`FnoIndexHedgeResearchStore` for source-reconciled portfolio exposure,
+existing hedges, bid/ask book depth, OI, margin stress, costs and
+room-level lot limits.
+
+V103 creates an **empty, account-scoped, immutable** evidence table. It
+requires at least two currently verified provider-specific independent
+`MODEL_INFERENCE` rights receipts for the futures-depth and reconciled
+portfolio-beta source domains. It does not automatically ingest positions,
+model beta, assume bank cash, set risk limits, authorize trading or
+manufacture account balances. Explicit account scope and source-use flags
+default to unconfigured / `false`. Snapshot/custody proof is at most
+one-day retained, with only retention-expired deletion permitted.
+
+The adapter checks current source-master expiry/lot/underlying,
+open F&O exchange session, a fresh live futures BID/ASK, exact quote
+price agreement with attested depth, <=10 second exchange-time skew
+and matching provider/account/index identity before supplying the
+read-only hedge evaluator. A research candidate is an *illustrative
+post-cost stress reduction*; it never requests broker orders.
+
+**Known unresolved evidence:** actual independently verified broker
+account positions, existing options/futures overlays, approved current
+beta model and rebalance math, live source-backed depth/OI/margin,
+fresh source rights grants, realistic fee/risk scenarios, genuine
+no-lookahead walk-forward outcomes, broker reconciliation and separately
+approved PAPER/LIVE trading. No production provider account is certified
+by deterministic Java fixtures. The catalog remains `DATA_BLOCKED`.

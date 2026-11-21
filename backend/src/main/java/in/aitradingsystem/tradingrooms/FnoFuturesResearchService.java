@@ -3,6 +3,7 @@ package in.aitradingsystem.tradingrooms;
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
 import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
+import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -23,7 +24,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of eight futures research evaluators (STR-170..177).
+ * Read-only invocation of nine futures research evaluators (STR-170..178).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -66,11 +67,14 @@ public class FnoFuturesResearchService {
     private final FnoVerifiedFinalPriceOiSessionStore finalSessionStore;
     private final FnoCashFuturesFeasibilityStore cashFeasibilityStore;
     private final FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore;
+    private final FnoIndexHedgeResearchStore indexHedgeStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
     private final boolean finalPriceResearchRightsVerified;
     private final boolean cashFeasibilityResearchRightsVerified;
     private final boolean completedOhlcvResearchRightsVerified;
+    private final boolean hedgeResearchRightsVerified;
+    private final String hedgeAccountScope;
     private final String cashFeasibilityAccountScope;
     private final String basisUnderlyingKey;
 
@@ -81,11 +85,14 @@ public class FnoFuturesResearchService {
             FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
             FnoCashFuturesFeasibilityStore cashFeasibilityStore,
             FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
+            FnoIndexHedgeResearchStore indexHedgeStore,
             @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
             @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
             @Value("${minttick.fno-research.cash-feasibility-research-rights-verified:false}") boolean cashFeasibilityResearchRightsVerified,
             @Value("${minttick.fno-research.completed-ohlcv-research-rights-verified:false}") boolean completedOhlcvResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-research-rights-verified:false}") boolean hedgeResearchRightsVerified,
+            @Value("${minttick.fno-research.hedge-account-scope:}") String hedgeAccountScope,
             @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
         this.feed = feed;
@@ -95,14 +102,36 @@ public class FnoFuturesResearchService {
         this.finalSessionStore = finalSessionStore;
         this.cashFeasibilityStore = cashFeasibilityStore;
         this.completedOhlcvOiStore = completedOhlcvOiStore;
+        this.indexHedgeStore = indexHedgeStore;
         this.researchRightsVerified = researchRightsVerified;
         this.contractDiscoveryVerified = contractDiscoveryVerified;
         this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
         this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
         this.completedOhlcvResearchRightsVerified = completedOhlcvResearchRightsVerified;
+        this.hedgeResearchRightsVerified = hedgeResearchRightsVerified;
+        this.hedgeAccountScope = hedgeAccountScope == null ? "" : hedgeAccountScope.trim();
         this.cashFeasibilityAccountScope =
             cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
         this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
+    }
+
+    /** Earlier source-only fixtures keep STR-178 research denied by default. */
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store,
+            FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoCashFuturesFeasibilityStore cashFeasibilityStore,
+            FnoVerifiedCompletedOhlcvOiStore completedOhlcvOiStore,
+            boolean researchRightsVerified, boolean contractDiscoveryVerified,
+            boolean finalPriceResearchRightsVerified, boolean cashFeasibilityResearchRightsVerified,
+            boolean completedOhlcvResearchRightsVerified,
+            String cashFeasibilityAccountScope, String basisUnderlyingKey) {
+        this(feed, calendar, registry, store, finalSessionStore,
+            cashFeasibilityStore, completedOhlcvOiStore, null,
+            researchRightsVerified, contractDiscoveryVerified,
+            finalPriceResearchRightsVerified, cashFeasibilityResearchRightsVerified,
+            completedOhlcvResearchRightsVerified, false, "",
+            cashFeasibilityAccountScope, basisUnderlyingKey);
     }
 
     /** Source-only compatibility for existing STR-175 research tests. */
@@ -163,7 +192,8 @@ public class FnoFuturesResearchService {
             evaluatePriceOiDivergence(now, today),
             evaluateCashFuturesFeasibility(now, today, sessionOpen),
             evaluateFuturesMomentum(now, today, completedWindow),
-            evaluateFuturesMeanReversion(now, today, completedWindow));
+            evaluateFuturesMeanReversion(now, today, completedWindow),
+            evaluateIndexFuturesHedge(now, today, sessionOpen));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -779,6 +809,101 @@ public class FnoFuturesResearchService {
             null, List.of(), rights, MEAN_REVERSION_THRESHOLDS, now);
         return status(decision.strategyId(), decision.status().name(), reason,
             now, "NONE", contracts, 0, history, "FUT_MR_SOURCE_BLOCKED");
+    }
+
+
+    /**
+     * STR-178: read-only portfolio hedge feasibility using independently
+     * attested beta, existing positions, margin, risk and L1 depth evidence.
+     * Research rights are not order permissions; no hedge is submitted.
+     */
+    private StrategyStatus evaluateIndexFuturesHedge(Instant now,
+            LocalDate today, boolean sessionOpen) {
+        var rights = new FnoFuturesHedgeOverlayV1.SourceRights(
+            researchRightsVerified && hedgeResearchRightsVerified,
+            contractDiscoveryVerified,
+            hedgeResearchRightsVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !hedgeResearchRightsVerified) {
+            return hedgeBlocked(now, rights, "HEDGE_RESEARCH_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (!sessionOpen) {
+            return hedgeBlocked(now, rights, "HEDGE_FUTURES_SESSION_CLOSED", 0, 0);
+        }
+        if (indexHedgeStore == null
+                || !hedgeAccountScope.matches("[A-Za-z0-9_-]{8,80}")) {
+            return hedgeBlocked(now, rights, "HEDGE_ACCOUNT_OR_SOURCE_NOT_CONFIGURED", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return hedgeBlocked(now, rights, "HEDGE_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty() || !NIFTY.equals(pair.get().near().underlyingKey())) {
+            return hedgeBlocked(now, rights, "HEDGE_VERIFIED_INDEX_FUTURE_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(3))
+            ? pair.get().far() : pair.get().near();
+        var observed = liveQuote(chosen.instrumentKey());
+        if (observed.isEmpty()) {
+            return hedgeBlocked(now, rights, "HEDGE_LIVE_INDEX_FUTURE_QUOTE_MISSING", 1, 0);
+        }
+        final Optional<FnoIndexHedgeResearchStore.Proof> receipt;
+        try {
+            receipt = indexHedgeStore.oneCurrentProof(hedgeAccountScope,
+                NIFTY, chosen.instrumentKey(), chosen.expiry(), chosen.lotSize(), now);
+        } catch (RuntimeException failure) {
+            return hedgeBlocked(now, rights, "HEDGE_PORTFOLIO_EVIDENCE_READ_UNAVAILABLE", 1, 1);
+        }
+        if (receipt == null || receipt.isEmpty()) {
+            return hedgeBlocked(now, rights, "HEDGE_BETA_MARGIN_DEPTH_RISK_PROOF_MISSING", 1, 1);
+        }
+        var proof = receipt.get();
+        var quote = observed.get();
+        var attested = proof.market();
+        if (attested == null || proof.portfolio() == null
+                || proof.funding() == null || proof.stress() == null
+                || !"UPSTOX_V3".equals(proof.provider())
+                || !hedgeAccountScope.equals(proof.accountScope())
+                || !NIFTY.equals(proof.indexKey())
+                || !chosen.instrumentKey().equals(proof.futureKey())
+                || !chosen.expiry().equals(proof.expiry())
+                || chosen.lotSize() != proof.lotSize()
+                || !NIFTY.equals(proof.portfolio().indexUnderlyingKey())
+                || !chosen.instrumentKey().equals(attested.instrumentKey())
+                || !"UPSTOX_V3".equals(attested.provider())
+                || attested.bid() == null || attested.ask() == null
+                || attested.bid().compareTo(quote.bid()) != 0
+                || attested.ask().compareTo(quote.ask()) != 0
+                || attested.exchangeAt() == null || quote.exchangeAt() == null
+                || attested.observedAt() == null
+                || attested.observedAt().isAfter(now)
+                || attested.exchangeAt().isAfter(now)
+                || java.time.Duration.between(attested.exchangeAt(), quote.exchangeAt())
+                    .abs().compareTo(java.time.Duration.ofSeconds(10)) > 0) {
+            return hedgeBlocked(now, rights, "HEDGE_QUOTE_ACCOUNT_OR_RISK_PROOF_MISMATCH", 1, 1);
+        }
+        var contract = new FnoFuturesHedgeOverlayV1.Contract(
+            chosen.instrumentKey(), NIFTY, chosen.expiry(), chosen.lotSize(), true);
+        var decision = FnoFuturesHedgeOverlayV1.evaluate(
+            contract, proof.portfolio(), attested, rights,
+            proof.funding(), proof.stress(), now);
+        return status(decision.strategyId(), decision.status().name(),
+            decision.reasonCode(), now, "UPSTOX_V3", 1, 1, 0,
+            "RECONCILED_INDEX_HEDGE_RESEARCH_NO_ORDER");
+    }
+
+    private static StrategyStatus hedgeBlocked(Instant now,
+            FnoFuturesHedgeOverlayV1.SourceRights rights,
+            String reason, int contracts, int quotes) {
+        var blocked = FnoFuturesHedgeOverlayV1.evaluate(
+            null, null, null, rights, null, null, now);
+        return status(blocked.strategyId(), blocked.status().name(),
+            reason, now, "NONE", contracts, quotes, 0,
+            "INDEX_HEDGE_SOURCE_BLOCKED");
     }
 
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
