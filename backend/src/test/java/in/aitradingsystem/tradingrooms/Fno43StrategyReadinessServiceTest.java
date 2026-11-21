@@ -46,13 +46,20 @@ class Fno43StrategyReadinessServiceTest {
                 "LIQUIDITY_SOURCE_RIGHTS_NOT_VERIFIED", NOW, "NONE", 0, 0, 0, "LIQUIDITY_SOURCE_BLOCKED"),
             new FnoFuturesResearchService.StrategyStatus("strategy.STR-180", "BLOCKED_RIGHTS",
                 "EXPIRY_BASIS_SOURCE_RIGHTS_MISSING", NOW, "NONE", 0, 0, 0, "EXPIRY_BASIS_VERIFIED_SOURCE_BLOCKED")));
-        var report = create(futures).inspect(NOW);
+        var options = mock(FnoOptionsResearchService.class);
+        when(options.evaluateAll(NOW)).thenReturn(List.of(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-181", "BLOCKED_RIGHTS",
+                "LONG_CALL_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "NIFTY_OPTION_SOURCE_BLOCKED"),
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-182", "BLOCKED_RIGHTS",
+                "LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", NOW, "NONE", 0, 0, 0, "NIFTY_OPTION_SOURCE_BLOCKED")));
+        var report = new Fno43StrategyReadinessService(
+            futures, options, new ObjectMapper()).inspect(NOW);
 
         assertEquals(43, report.manifestStrategies());
         assertEquals(43, report.strategies().size());
-        assertEquals(11, report.distinctEvaluatorsObserved());
-        assertEquals(2, report.signalRoutesWithoutDistinctEvaluator());
-        assertEquals(32, report.strategiesWithoutDirectEvaluatorAdapter());
+        assertEquals(13, report.distinctEvaluatorsObserved());
+        assertEquals(0, report.signalRoutesWithoutDistinctEvaluator());
+        assertEquals(30, report.strategiesWithoutDirectEvaluatorAdapter());
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertEquals(0, report.historicalDataE2EValidated());
         assertEquals(0, report.paperExecutionValidated());
@@ -65,23 +72,25 @@ class Fno43StrategyReadinessServiceTest {
             && !r.independentlyVerifiedSourceRights()
             && !r.historicalDataE2EValidated()
             && !r.paperExecutionValidated() && !r.liveExecutionValidated()));
-        assertEquals(11, report.strategies().stream()
+        assertEquals(13, report.strategies().stream()
             .filter(Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved).count());
         var byId = report.strategies().stream().collect(
             Collectors.toMap(r -> r.strategyId(), r -> r));
         assertEquals("SPOT_NOT_VERIFIED", byId.get("strategy.STR-170").reasonCode());
         assertEquals(1, byId.get("strategy.STR-170").contractsResolved());
-        assertEquals("SIGNAL_ROUTE_ONLY", byId.get("strategy.STR-181").integrationState());
-        assertFalse(byId.get("strategy.STR-181").distinctEvaluatorObserved());
-        assertEquals("DISTINCT_EVALUATOR_NOT_INVOKED", byId.get("strategy.STR-182").reasonCode());
+        assertEquals("DIRECT_EVALUATOR_OBSERVED", byId.get("strategy.STR-181").integrationState());
+        assertTrue(byId.get("strategy.STR-181").distinctEvaluatorObserved());
+        assertEquals("LONG_PUT_SOURCE_RIGHTS_UNVERIFIED", byId.get("strategy.STR-182").reasonCode());
         assertEquals("NO_TYPED_SOURCE_ADAPTER", byId.get("strategy.STR-212").integrationState());
-        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180"),
+        assertEquals(Set.of("strategy.STR-170", "strategy.STR-171", "strategy.STR-172", "strategy.STR-173", "strategy.STR-174", "strategy.STR-175", "strategy.STR-176", "strategy.STR-177", "strategy.STR-178", "strategy.STR-179", "strategy.STR-180", "strategy.STR-181", "strategy.STR-182"),
             report.strategies().stream().filter(
                 Fno43StrategyReadinessService.StrategyRow::distinctEvaluatorObserved)
                 .map(Fno43StrategyReadinessService.StrategyRow::strategyId)
                 .collect(Collectors.toSet()));
         verify(futures, times(1)).evaluateAll(NOW);
         verifyNoMoreInteractions(futures);
+        verify(options, times(1)).evaluateAll(NOW);
+        verifyNoMoreInteractions(options);
     }
 
     @Test
@@ -91,7 +100,7 @@ class Fno43StrategyReadinessServiceTest {
         var report = create(futures).inspect(NOW);
         assertEquals(43, report.strategies().size());
         assertEquals(0, report.distinctEvaluatorsObserved());
-        assertEquals(11, report.strategies().stream()
+        assertEquals(13, report.strategies().stream()
             .filter(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())).count());
         assertTrue(report.strategies().stream().noneMatch(r ->
             r.reasonCode().contains("secret") || r.distinctEvaluatorObserved()));
@@ -119,6 +128,30 @@ class Fno43StrategyReadinessServiceTest {
         assertEquals(0, report.independentlyVerifiedSourceStrategies());
         assertFalse(report.strategies().get(1).paperExecutionValidated());
         assertFalse(report.strategies().get(1).liveExecutionValidated());
+    }
+
+    @Test
+    void failedOptionSourceDoesNotEraseSeparatelyVerifiedFuturesResearchStatus() {
+        var futures = mock(FnoFuturesResearchService.class);
+        when(futures.evaluateAll(NOW)).thenReturn(List.of(
+            new FnoFuturesResearchService.StrategyStatus("strategy.STR-170",
+                "BLOCKED_DATA", "SPOT_NOT_VERIFIED", NOW, "NONE", 1, 0, 0, "NO_SPOT")));
+        var options = mock(FnoOptionsResearchService.class);
+        when(options.evaluateAll(NOW)).thenThrow(
+            new IllegalStateException("secret broker token"));
+        var report = new Fno43StrategyReadinessService(
+            futures, options, new ObjectMapper()).inspect(NOW);
+        assertEquals(1, report.distinctEvaluatorsObserved());
+        assertTrue(report.strategies().stream()
+            .anyMatch(r -> r.strategyId().equals("strategy.STR-170")
+                && r.distinctEvaluatorObserved()));
+        assertTrue(report.strategies().stream()
+            .filter(r -> r.strategyId().equals("strategy.STR-181")
+                      || r.strategyId().equals("strategy.STR-182"))
+            .allMatch(r -> "DIRECT_ADAPTER_UNAVAILABLE".equals(r.integrationState())
+                && !r.reasonCode().contains("secret")));
+        assertEquals(0, report.paperExecutionValidated());
+        assertEquals(0, report.liveExecutionValidated());
     }
 
     @Test
