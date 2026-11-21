@@ -293,7 +293,7 @@ class FnoDefinedRiskSpreadRollV1Test {
         neverExecutable(d);
     }
     @Test void tooExpensiveNewDebitCannotBeClaimedDefinedRiskCreditRoll(){
-        var q=quote(NL,"13","14",10,10,SRC,EX,KNOWN);
+        var q=quote(NL,"13.9","14",10,10,SRC,EX,KNOWN);
         var s=snap(oldLongQuote(),oldShortQuote(),q,newShortQuote());
         Decision d=evaluate(held(1),oldLong(),oldShort(),newLong(),newShort(),
                 s,history(),rights(),policy());
