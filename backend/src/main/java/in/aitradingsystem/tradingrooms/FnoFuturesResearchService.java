@@ -248,6 +248,118 @@ public class FnoFuturesResearchService {
             now, "NONE", contractCount, 0, rowCount, "OI_INPUTS_BLOCKED");
     }
 
+
+    /**
+     * STR-174 requires independently attested FINAL futures closing prices, NOT
+     * V99 bid/ask snapshots or LTP. Source receipt and original first-known times
+     * are checked in the separate read-only store and again by the evaluator.
+     */
+    private StrategyStatus evaluatePriceOiDivergence(Instant now, LocalDate today) {
+        var rights = new FnoFuturesPriceOiDivergenceV1.SourceRights(
+            researchRightsVerified && finalPriceResearchRightsVerified,
+            researchRightsVerified, contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !finalPriceResearchRightsVerified) {
+            return priceOiBlocked(now, rights, "PRICE_OI_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (finalSessionStore == null) {
+            return priceOiBlocked(now, rights, "PRICE_OI_FINAL_SOURCE_ADAPTER_MISSING", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return priceOiBlocked(now, rights, "PRICE_OI_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty()) {
+            return priceOiBlocked(now, rights, "PRICE_OI_FUTURES_CONTRACT_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(7))
+            ? pair.get().far() : pair.get().near();
+        var contract = new FnoFuturesPriceOiDivergenceV1.Contract(
+            chosen.instrumentKey(), chosen.underlyingKey(), chosen.expiry(),
+            chosen.lotSize(), true);
+        final List<FnoVerifiedFinalPriceOiSessionStore.FinalSession> rows;
+        try {
+            rows = finalSessionStore.readExactContract(chosen.instrumentKey(),
+                today.minusDays(OI_LOOKBACK_DAYS), today, now);
+        } catch (RuntimeException inaccessible) {
+            // Do not disclose SQL, broker tokens or evidence identifiers.
+            return priceOiBlocked(now, rights, "PRICE_OI_FINAL_SESSION_READ_UNAVAILABLE", 1, 0);
+        }
+        if (rows == null || rows.size() < 5) {
+            return priceOiBlocked(now, rights, "PRICE_OI_FIVE_VERIFIED_FINAL_SESSIONS_MISSING",
+                1, rows == null ? 0 : rows.size());
+        }
+        String provider = null;
+        LocalDate preceding = null;
+        for (var row : rows) {
+            if (row == null || row.sessionDate() == null
+                    || !chosen.instrumentKey().equals(row.instrumentKey())
+                    || !chosen.underlyingKey().equals(row.underlyingKey())
+                    || !chosen.expiry().equals(row.expiry())
+                    || chosen.lotSize() != row.lotSize()
+                    || !FnoMarketDataProvider.isSessionHistorySource(row.providerLabel())
+                    || (provider != null && !provider.equals(row.providerLabel()))
+                    || (preceding != null && !preceding.isBefore(row.sessionDate()))
+                    || row.finalClosePrice() == null
+                    || row.finalPriceFirstAvailableAt() == null
+                    || row.finalizedOiFirstAvailableAt() == null
+                    || row.verifiedExchangeCloseAt() == null
+                    || row.sessionDate().isAfter(today)
+                    || row.sessionDate().isBefore(today.minusDays(OI_LOOKBACK_DAYS))
+                    || !row.verifiedExchangeCloseAt().equals(
+                        officialNonExpiringFuturesClose(row.sessionDate()))) {
+                return priceOiBlocked(now, rights, "PRICE_OI_FINAL_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+                    1, rows.size());
+            }
+            provider = row.providerLabel();
+            preceding = row.sessionDate();
+        }
+        List<FnoVerifiedFinalPriceOiSessionStore.FinalSession> last =
+            rows.subList(rows.size() - 5, rows.size());
+        List<FnoFuturesPriceOiDivergenceV1.CompletedSession> sessions = new ArrayList<>();
+        LocalDate prev = null;
+        for (var row : last) {
+            boolean complete = calendar.isTradingDay(row.sessionDate());
+            if (prev != null) {
+                for (LocalDate d = prev.plusDays(1); d.isBefore(row.sessionDate()); d = d.plusDays(1)) {
+                    if (calendar.isTradingDay(d)) complete = false;
+                }
+            }
+            sessions.add(new FnoFuturesPriceOiDivergenceV1.CompletedSession(
+                row.sessionDate(), complete, row.instrumentKey(), row.providerLabel(),
+                row.finalClosePrice(), true, row.finalPriceFirstAvailableAt(),
+                row.finalOpenInterestUnits(), row.tradedVolumeUnits(),
+                row.finalizedOiFirstAvailableAt()));
+            prev = row.sessionDate();
+        }
+        var result = FnoFuturesPriceOiDivergenceV1.evaluate(
+            contract, List.copyOf(sessions), rights, PRICE_OI_THRESHOLDS, now);
+        return status(result.strategyId(), result.status().name(), result.reasonCode(),
+            now, provider, 1, 0, sessions.size(), "PRICE_OI_FINAL_RECEIPT_RESEARCH_ONLY");
+    }
+
+    private static Instant officialNonExpiringFuturesClose(LocalDate date) {
+        java.time.LocalTime close = date.isBefore(LocalDate.of(2026, 8, 3))
+            ? java.time.LocalTime.of(15, 30)
+            : date.isBefore(LocalDate.of(2026, 12, 7))
+            ? java.time.LocalTime.of(15, 40) : java.time.LocalTime.of(15, 45);
+        return date.atTime(close).atZone(IST).toInstant();
+    }
+
+    private static StrategyStatus priceOiBlocked(Instant now,
+            FnoFuturesPriceOiDivergenceV1.SourceRights rights,
+            String reason, int contracts, int sourceRows) {
+        // Always execute the distinct evaluator, including fail-closed paths.
+        var blocked = FnoFuturesPriceOiDivergenceV1.evaluate(
+            null, List.of(), rights, PRICE_OI_THRESHOLDS, now);
+        return status(blocked.strategyId(), blocked.status().name(), reason,
+            now, "NONE", contracts, 0, sourceRows, "PRICE_OI_FINAL_SOURCE_BLOCKED");
+    }
+
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
     List<FnoFuturesRolloverSignalV1.CompletedSession> completedSessions(NearFar pair, LocalDate today) {
         var rows = store.pairRows(pair.near().instrumentKey(), pair.far().instrumentKey(),
