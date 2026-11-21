@@ -28,7 +28,8 @@ import java.util.Objects;
 public final class FnoFuturesMeanReversionV1 {
     public static final String STRATEGY_ID = "strategy.STR-177";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final LocalTime SESSION_CLOSE = LocalTime.of(15, 30);
+    private static final LocalDate AUGUST_CLOSE_CHANGE = LocalDate.of(2026, 8, 3);
+    private static final LocalDate DECEMBER_CLOSE_CHANGE = LocalDate.of(2026, 12, 7);
     private static final Duration MAX_FIRST_OBSERVED_LAG = Duration.ofHours(36);
     private static final BigDecimal BPS = new BigDecimal("10000");
     private static final BigDecimal HUNDRED = new BigDecimal("100");
@@ -251,7 +252,7 @@ public final class FnoFuturesMeanReversionV1 {
                 || b.openInterestUnits() <= 0 || b.openInterestUnits() > MAX_UNITS
                 || b.ohlcvFirstObservedAt() == null || b.oiFirstObservedAt() == null)
             return false;
-        Instant close = b.sessionDate().atTime(SESSION_CLOSE).atZone(IST).toInstant();
+        Instant close = b.sessionDate().atTime(normalNonExpiringClose(b.sessionDate())).atZone(IST).toInstant();
         return !close.isAfter(asOf)
             && !b.ohlcvFirstObservedAt().isBefore(close)
             && !b.oiFirstObservedAt().isBefore(close)
@@ -259,6 +260,12 @@ public final class FnoFuturesMeanReversionV1 {
             && !b.oiFirstObservedAt().isAfter(asOf)
             && !b.ohlcvFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG))
             && !b.oiFirstObservedAt().isAfter(close.plus(MAX_FIRST_OBSERVED_LAG));
+    }
+
+    private static LocalTime normalNonExpiringClose(LocalDate date) {
+        if (!date.isBefore(DECEMBER_CLOSE_CHANGE)) return LocalTime.of(15, 45);
+        if (!date.isBefore(AUGUST_CLOSE_CHANGE)) return LocalTime.of(15, 40);
+        return LocalTime.of(15, 30);
     }
 
     private static boolean positive(BigDecimal x) { return x != null && x.signum() > 0; }
