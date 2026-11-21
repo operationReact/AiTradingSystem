@@ -6363,10 +6363,10 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "35+ verified completed genuine point-in-time NIFTY index daily closes with original source first-known timestamps",
-    "Two true source-listed NIFTY options: buy OTM higher-strike CE and lower-strike PE with identical expiry/lot; actual spot strictly between strikes",
-    "Licensed same-provider synchronized source NIFTY/CE/PE bid-ask, options OI and ask-depth and independently verified annualized implied-volatility percentages",
-    "Modeled full combined debit including two-leg slippage/Indian fees, complete premium-at-risk budget and IV move vs OTM-strike plus cost screening"
+    "35+ verified completed NIFTY daily closes with source-original first-known publication timestamps",
+    "Two licensed source-listed options: buy one OTM NIFTY CE above spot, buy one OTM PE below spot, matching genuine expiry and lot",
+    "Same-provider synchronous underlying/CE/PE true bid/ask, OI, ask-depth and separate source-derived annualized implied volatility percentages for both options",
+    "Nonzero two-leg estimated Indian fees, transaction slippage, full premium risk budget and illustrative IV-one-sigma movement versus OTM strike gaps/breakevens"
    ],
    "dependsOn": [
     "data.fno"
@@ -6392,12 +6392,12 @@
     }
    ],
    "missing": [
-    "Rights-permitted real NSE index and OTM NIFTY CE/PE chain plus true published IV, exchange timestamps and expiry/lot instrument master",
-    "Verified exchange calendar and original first-known as-of data with Indian options fees, real depth/liquidity, settlement and broker access",
-    "Out-of-sample and forward walk historical volatility, time decay, full actual spread and non-atomic two-leg fill costs",
-    "Independent PAPER UI and ledger acceptance and separately approved LIVE broker options rights and execution risk gates"
+    "Licensed true NSE index/OTM CE/PE source feed, original quote first-observation timestamps, original annualized CE/PE IV, actual NSE expiry/lot master",
+    "Accurate India statutory charges, official calendar, exchange and broker rights and market execution conditions",
+    "Independent original-time OOS, volatility-regime and walk-forward backtest with fill and bid-ask impact",
+    "Separately accepted PAPER ledger/Flutter UI and LIVE broker order entitlements, audit, risk limits and kill switches"
    ],
-   "note": "Research-only NIFTY OTM long strangle with source IV and bought CE+PE, distinct lower PE and upper CE strikes, authentic as-of chain, full premium maximum expiry loss and breakevens. DATA_BLOCKED; never executable.",
+   "note": "Research-only long strangle buys OTM lower PE and higher CE; uses authentic IV and full premium at risk, correct asymmetric expiry breakevens, modeled volatility move. DATA_BLOCKED and never executable.",
    "id": "strategy.STR-193",
    "kind": "STRATEGY",
    "name": "Long Strangle",
