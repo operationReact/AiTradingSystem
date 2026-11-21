@@ -1,15 +1,15 @@
 {
-  "kind": "minttick-owner-private-fno-source-coverage-v1",
-  "operation": "metadata-replay-and-readonly-calendar-candidates",
   "account": "098859530205",
-  "region": "ap-south-1",
+  "audit_revision": 2,
   "instance_id": "i-09c01b470fb39b85a",
-  "scope": "12-completed-nifty-expiry-months-daily",
-  "owner_permission_expires": "2026-11-28",
+  "kind": "minttick-owner-private-fno-source-coverage-v1",
   "max_provider_gets": 25,
+  "no_market_price_export": true,
   "no_orders": true,
   "no_redistribution": true,
+  "operation": "metadata-replay-and-readonly-calendar-candidates",
+  "owner_permission_expires": "2026-11-28",
   "private_cache_read_only": true,
-  "no_market_price_export": true,
-  "audit_revision": 2
+  "region": "ap-south-1",
+  "scope": "12-completed-nifty-expiry-months-daily"
 }
