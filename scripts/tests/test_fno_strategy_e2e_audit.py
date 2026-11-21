@@ -102,5 +102,18 @@ class Fno43StrategyResearchAuditTest(unittest.TestCase):
             self.assertNotIn(banned, source)
 
 
+    def test_long_call_and_long_put_have_distinct_verified_research_callsite_files(self):
+        report = audit.inspect(ROOT, None)
+        self.assertEqual([], report["errors"])
+        rows = {r["id"]: r for r in report["strategies"]}
+        for strategy in ("strategy.STR-181", "strategy.STR-182"):
+            self.assertTrue(rows[strategy]["directResearchCallsiteLocated"])
+            self.assertFalse(rows[strategy]["strategyEndToEndReady"])
+            self.assertFalse(rows[strategy]["paperExecutionReady"])
+            self.assertFalse(rows[strategy]["liveExecutionReady"])
+        self.assertEqual(13, report["summary"]["sourceLevelDirectResearchCallsites"])
+        self.assertEqual(0, report["summary"]["signalRoutingWithoutProvenEvaluatorCallsite"])
+
+
 if __name__ == "__main__":
     unittest.main()
