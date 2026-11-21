@@ -29,7 +29,7 @@ These are *hypothetical expiry payoffs*, not calibrated expected returns, option
 
 ### Test evidence
 
-15 isolated local Java test methods cover bullish/flat/bearish outcomes, rights, verified contracts and expiry, stale/forward-known/cross-provider/mismatched quotes, time skew, session hours, crossed/wide bid-ask, absent depth/OI, duplicate/future-known bars, historical first-seen lookahead, insufficient scenario outcome, capped research capital, invalid fees and determinism. They use **explicitly constructed illustrative fixtures**, not licensed Indian market data.
+16 isolated local Java test methods cover bullish/flat/bearish outcomes, rights, verified contracts and expiry, stale/forward-known/cross-provider/mismatched quotes, time skew, session hours, crossed/wide bid-ask, absent depth/OI, duplicate/future-known bars, historical first-seen lookahead, insufficient scenario outcome, capped research capital, invalid fees and determinism. They use **explicitly constructed illustrative fixtures**, not licensed Indian market data.
 
 ## Non-implemented prerequisites
 
