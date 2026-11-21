@@ -11,6 +11,7 @@ import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.FnoVerifiedCompletedOhlcvOiStore;
 import in.aitradingsystem.marketdata.FnoIndexHedgeResearchStore;
 import in.aitradingsystem.marketdata.FnoVerifiedIntradayLiquidityStore;
+import in.aitradingsystem.marketdata.FnoVerifiedExpiryBasisPairStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import in.aitradingsystem.provider.upstox.UpstoxFnoV3LiveFeedService;
 import in.aitradingsystem.provider.upstox.UpstoxFuturesInstrumentMaster.FuturesContract;
@@ -1048,6 +1049,193 @@ class FnoFuturesResearchServiceTest {
         assertEquals("BLOCKED_DATA", row.status());
         assertEquals("LIQUIDITY_SOURCE_READ_UNAVAILABLE", row.reason());
         assertFalse(row.reason().contains("secret"));
+    }
+
+
+    private static final String EXPIRY_BASIS_SPOT = "NSE_EQ|INE002A01018";
+    private static final FuturesContract EXPIRY_STOCK_NEAR = new FuturesContract(
+        "NSE_FO|STOCK_NOV26", EXPIRY_BASIS_SPOT, "TEST_STOCK",
+        "TEST STOCK FUT NOV26", LocalDate.of(2026, 11, 27), 250);
+    private static final FuturesContract EXPIRY_STOCK_FAR = new FuturesContract(
+        "NSE_FO|STOCK_DEC26", EXPIRY_BASIS_SPOT, "TEST_STOCK",
+        "TEST STOCK FUT DEC26", LocalDate.of(2026, 12, 29), 250);
+
+    private static FnoFuturesContractRegistry expiryStockRegistry() {
+        var r = currentRegistry();
+        when(r.nearFar(eq(EXPIRY_BASIS_SPOT), any()))
+            .thenReturn(Optional.of(new NearFar(EXPIRY_STOCK_NEAR, EXPIRY_STOCK_FAR)));
+        return r;
+    }
+
+    private static FnoExpiryBasisReversionV1.Assumptions expiryBasisAssumptions() {
+        return new FnoExpiryBasisReversionV1.Assumptions(
+            new BigDecimal("500"), BigDecimal.ZERO, new BigDecimal("20"),
+            3, 150, 30, 50, 2500, true, true, true, true);
+    }
+
+    private static List<FnoVerifiedExpiryBasisPairStore.PairProof> expiryBasisPairs() {
+        int[] days = {16, 17, 18, 19, 20};
+        String[] futuresMids = {"104", "103.2", "102.6", "101.8", "100.85"};
+        var pairs = new java.util.ArrayList<FnoVerifiedExpiryBasisPairStore.PairProof>();
+        for (int i = 0; i < days.length; i++) {
+            LocalDate date = LocalDate.of(2026, 11, days[i]);
+            Instant cashClose = FnoExpiryBasisReversionV1.cashClose(date);
+            Instant futureClose = FnoExpiryBasisReversionV1.futuresClose(date);
+            BigDecimal v = new BigDecimal(futuresMids[i]);
+            pairs.add(new FnoVerifiedExpiryBasisPairStore.PairProof(
+                "UPSTOX_ANALYTICS", EXPIRY_BASIS_SPOT, EXPIRY_STOCK_NEAR.instrumentKey(),
+                LocalDate.of(2026, 11, 1), EXPIRY_STOCK_NEAR.expiry(),
+                EXPIRY_STOCK_NEAR.lotSize(), date,
+                new BigDecimal("99.99"), new BigDecimal("100.01"),
+                v.subtract(new BigDecimal("0.01")), v.add(new BigDecimal("0.01")),
+                cashClose.minusSeconds(45), cashClose.minusSeconds(30),
+                cashClose.plusSeconds(30), cashClose.plusSeconds(30),
+                cashClose.plusSeconds(60), futureClose.plusSeconds(80),
+                cashClose, futureClose, true,
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                expiryBasisAssumptions()));
+        }
+        return pairs;
+    }
+
+    private static FnoFuturesResearchService withExpiryBasis(
+            FnoVerifiedExpiryBasisPairStore pairs, boolean granted) {
+        return withExpiryBasis(pairs, granted, EXPIRY_BASIS_SPOT);
+    }
+
+    private static FnoFuturesResearchService withExpiryBasis(
+            FnoVerifiedExpiryBasisPairStore pairs, boolean granted, String spot) {
+        return new FnoFuturesResearchService(
+            feed(null), validCalendar(), expiryStockRegistry(), emptyStore(),
+            null, null, null, null, null, pairs,
+            true, true, false, false, false, false, false, granted,
+            "", "", spot);
+    }
+
+    @Test
+    void str180VerifiedFiveNearCashClosePairsEvaluateDistinctExpiryBasisReversionResearch() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        when(source.readExactPair(eq(EXPIRY_BASIS_SPOT),
+            eq(EXPIRY_STOCK_NEAR.instrumentKey()), eq(EXPIRY_STOCK_NEAR.expiry()),
+            eq(250), eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW)))
+            .thenReturn(expiryBasisPairs());
+        var actual = byId(withExpiryBasis(source, true).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertNotNull(actual);
+        assertEquals("RESEARCH_CANDIDATE", actual.status());
+        assertEquals("EXPIRY_BASIS_ABOVE_FAIR_CONVERGENCE_OBSERVED", actual.reason());
+        assertEquals(1, actual.contracts());
+        assertEquals(0, actual.quotes());
+        assertEquals(5, actual.history());
+        assertEquals("VERIFIED_EXPIRY_BASIS_CASH_CLOSE_PAIRS_RESEARCH_NO_ORDER", actual.input());
+        verify(source).readExactPair(eq(EXPIRY_BASIS_SPOT),
+            eq(EXPIRY_STOCK_NEAR.instrumentKey()), eq(EXPIRY_STOCK_NEAR.expiry()),
+            eq(250), eq(TODAY.minusDays(21)), eq(TODAY), eq(NOW));
+    }
+
+    @Test
+    void str180DefaultDeniedResearchRightsNeverAccessPairedQuoteEvidence() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        var row = byId(withExpiryBasis(source, false).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertEquals("BLOCKED_RIGHTS", row.status());
+        assertEquals("EXPIRY_BASIS_SOURCE_RIGHTS_MISSING", row.reason());
+        verifyNoInteractions(source);
+    }
+
+    @Test
+    void str180IndexIsNotDeliverableSpotAndUnconfiguredEquityCannotPass() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        var row = byId(withExpiryBasis(source, true, NIFTY).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("EXPIRY_BASIS_SPOT_CONTRACT_NOT_CONFIGURED", row.reason());
+        verifyNoInteractions(source);
+    }
+
+    @Test
+    void str180NoFiveFullVerifiedSessionsCannotBeConvertedIntoArbitrage() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        when(source.readExactPair(any(), any(), any(), anyInt(), any(), any(), any()))
+            .thenReturn(expiryBasisPairs().subList(0, 4));
+        var row = byId(withExpiryBasis(source, true).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("EXPIRY_BASIS_FIVE_VERIFIED_SESSION_PAIRS_MISSING", row.reason());
+        assertEquals(4, row.history());
+    }
+
+    @Test
+    void str180RejectsProviderChangesContractChangesAndCarryAssumptionDrift() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        var rows = new java.util.ArrayList<>(expiryBasisPairs());
+        var old = rows.get(4);
+        rows.set(4, new FnoVerifiedExpiryBasisPairStore.PairProof(
+            "ANGEL_ONE_SMARTAPI", old.spotKey(), old.futuresKey(),
+            old.listedFrom(), old.expiry(), old.lotSize(), old.sessionDate(),
+            old.spotBid(), old.spotAsk(), old.futuresBid(), old.futuresAsk(),
+            old.spotQuoteAt(), old.futuresQuoteAt(),
+            old.spotQuoteFirstObservedAt(), old.futuresQuoteFirstObservedAt(),
+            old.spotFinalFirstAvailableAt(), old.futuresFinalFirstAvailableAt(),
+            old.cashSessionCloseAt(), old.futuresSessionCloseAt(),
+            old.deliverableSpotVerified(), old.contractSourceDigest(),
+            old.carryCostSourceDigest(), old.assumptions()));
+        when(source.readExactPair(any(), any(), any(), anyInt(), any(), any(), any()))
+            .thenReturn(rows);
+        assertEquals("EXPIRY_BASIS_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+            byId(withExpiryBasis(source, true).evaluateAll(NOW))
+                .get("strategy.STR-180").reason());
+        rows.set(4, new FnoVerifiedExpiryBasisPairStore.PairProof(
+            old.provider(), old.spotKey(), old.futuresKey(),
+            old.listedFrom(), old.expiry(), old.lotSize(), old.sessionDate(),
+            old.spotBid(), old.spotAsk(), old.futuresBid(), old.futuresAsk(),
+            old.spotQuoteAt(), old.futuresQuoteAt(),
+            old.spotQuoteFirstObservedAt(), old.futuresQuoteFirstObservedAt(),
+            old.spotFinalFirstAvailableAt(), old.futuresFinalFirstAvailableAt(),
+            old.cashSessionCloseAt(), old.futuresSessionCloseAt(),
+            old.deliverableSpotVerified(), old.contractSourceDigest(),
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            old.assumptions()));
+        assertEquals("EXPIRY_BASIS_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS",
+            byId(withExpiryBasis(source, true).evaluateAll(NOW))
+                .get("strategy.STR-180").reason());
+    }
+
+    @Test
+    void str180PrematureFuturesCloseSourceCannotPresentCompletedSession() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        var rows = new java.util.ArrayList<>(expiryBasisPairs());
+        var old = rows.get(4);
+        rows.set(4, new FnoVerifiedExpiryBasisPairStore.PairProof(
+            old.provider(), old.spotKey(), old.futuresKey(),
+            old.listedFrom(), old.expiry(), old.lotSize(), old.sessionDate(),
+            old.spotBid(), old.spotAsk(), old.futuresBid(), old.futuresAsk(),
+            old.spotQuoteAt(), old.futuresQuoteAt(),
+            old.spotQuoteFirstObservedAt(), old.futuresQuoteFirstObservedAt(),
+            old.spotFinalFirstAvailableAt(),
+            old.cashSessionCloseAt().plusSeconds(60),
+            old.cashSessionCloseAt(), old.futuresSessionCloseAt(),
+            old.deliverableSpotVerified(), old.contractSourceDigest(),
+            old.carryCostSourceDigest(), old.assumptions()));
+        when(source.readExactPair(any(), any(), any(), anyInt(), any(), any(), any()))
+            .thenReturn(rows);
+        var result = byId(withExpiryBasis(source, true).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("EXPIRY_BASIS_FINAL_PAIR_INVALID", result.reason());
+    }
+
+    @Test
+    void str180ProviderExceptionNeverLeaksInstrumentRightsOrSecrets() {
+        var source = mock(FnoVerifiedExpiryBasisPairStore.class);
+        when(source.readExactPair(any(), any(), any(), anyInt(), any(), any(), any()))
+            .thenThrow(new IllegalStateException("secret proprietary broker response"));
+        var result = byId(withExpiryBasis(source, true).evaluateAll(NOW))
+            .get("strategy.STR-180");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("EXPIRY_BASIS_SOURCE_READ_UNAVAILABLE", result.reason());
+        assertFalse(result.reason().contains("secret"));
     }
 
 }
