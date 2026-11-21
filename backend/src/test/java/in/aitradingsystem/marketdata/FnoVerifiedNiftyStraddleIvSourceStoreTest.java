@@ -1,0 +1,49 @@
+package in.aitradingsystem.marketdata;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+import java.sql.Date;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+
+class FnoVerifiedNiftyStraddleIvSourceStoreTest {
+    private static final Instant NOW=Instant.parse("2026-11-20T05:00:00Z");
+    private static final String CE="NSE_FO|NIFTY_20261127_100_CE";
+    private static final String PE="NSE_FO|NIFTY_20261127_100_PE";
+
+    @Test void unauthorizedOrAmbiguousKeysRejectedBeforeDbRead() {
+        var jdbc=mock(JdbcTemplate.class);
+        var store=new FnoVerifiedNiftyStraddleIvSourceStore(jdbc);
+        assertThrows(IllegalArgumentException.class,()->store.oneCurrent("",PE,NOW));
+        assertThrows(IllegalArgumentException.class,()->store.oneCurrent(CE,CE,NOW));
+        assertThrows(IllegalArgumentException.class,()->store.oneCurrent(CE,PE,null));
+        verifyNoInteractions(jdbc);
+    }
+    @Test void noOriginalProviderQuoteYieldsNoResearchData() {
+        var jdbc=mock(JdbcTemplate.class);
+        var store=new FnoVerifiedNiftyStraddleIvSourceStore(jdbc);
+        assertTrue(store.oneCurrent(CE,PE,NOW).isEmpty());
+        verify(jdbc).query(
+            argThat((String sql)->sql.contains("ce_iv_rights.source_domain='nse_fo_option_implied_volatility'")
+                && sql.contains("pe_iv_rights.source_domain='nse_fo_option_implied_volatility'")
+                && sql.contains("s.ce_iv_source_sha256<>s.pe_iv_source_sha256")
+                && sql.contains("s.captured_at<=?")
+                && sql.contains("s.instrument_master_verified")
+                && sql.contains("receipt_status='VERIFIED'")
+                && sql.contains("ORDER BY s.first_known_at DESC LIMIT 2")),
+            any(RowMapper.class),any(Object[].class));
+    }
+    @Test void retentionOnlyRemovesPreviouslyExpiredSourceObservations() {
+        var jdbc=mock(JdbcTemplate.class);
+        when(jdbc.update(anyString(),any(Date.class))).thenReturn(0);
+        var store=new FnoVerifiedNiftyStraddleIvSourceStore(jdbc);
+        assertEquals(0,store.purgeExpired(LocalDate.of(2026,11,21)));
+        verify(jdbc).update(eq(
+            "DELETE FROM fno_verified_nifty_straddle_iv_source WHERE retain_until < ?"),
+            eq(Date.valueOf(LocalDate.of(2026,11,21))));
+    }
+}
