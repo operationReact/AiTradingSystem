@@ -100,7 +100,7 @@ class FnoBearCallCreditSpreadV1Test {
     }
     @Test void wrongLegTypeLotExpiryOrStrikeOrderBlocked() {
         for (Contract c : List.of(
-            new Contract(HIGH, INDEX, "CE", n("80"), n("0.05"),
+            new Contract(HIGH, INDEX, "PE", n("80"), n("0.05"),
                 UPPER.listedFrom(), EXPIRY, 50, true),
             new Contract(HIGH, INDEX, "CE", n("80"), n("0.05"),
                 UPPER.listedFrom(), EXPIRY, 25, true),
