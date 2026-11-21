@@ -251,9 +251,30 @@ public class UpstoxFnoV3LiveFeedService {
                 && time.isBefore(java.time.LocalTime.of(15, 40));
     }
 
+    /**
+     * PAPER and order gates: derivative keys only. Equity spot quotes are never returned here,
+     * so no execution or display path can act on an NSE_EQ observation.
+     */
     public java.util.Optional<PaperQuote> eligiblePaperQuote(String key) {
-        if (key == null || (!UpstoxFnoV3FeedCodec.validKey(key) && !spotSubscribed.contains(key))
-                || !wanted || destroyed || !"CONNECTED".equals(state)) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)) {
+            return java.util.Optional.empty();
+        }
+        return freshQuote(key);
+    }
+
+    /**
+     * Research-only spot accessor. Returns a quote for an NSE_EQ key only while that exact key is
+     * explicitly subscribed as a spot leg. Not valid for PAPER fills, orders or customer display.
+     */
+    public java.util.Optional<PaperQuote> eligibleResearchSpotQuote(String key) {
+        if (key == null || !UpstoxFnoV3FeedCodec.validSpotKey(key) || !spotSubscribed.contains(key)) {
+            return java.util.Optional.empty();
+        }
+        return freshQuote(key);
+    }
+
+    private java.util.Optional<PaperQuote> freshQuote(String key) {
+        if (!wanted || destroyed || !"CONNECTED".equals(state)) {
             return java.util.Optional.empty();
         }
         Observation observed = latest.get(key);

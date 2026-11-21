@@ -75,6 +75,24 @@ class UpstoxSpotLegSubscriptionTest {
     }
 
     @Test
+    void equitySpotQuotesAreNeverReturnedToPaperOrOrderGates() {
+        var s = service();
+        s.start(List.of(FUT), List.of(SPOT));
+        assertThat(s.eligiblePaperQuote(SPOT)).isEmpty();
+        assertThat(s.eligibleDisplayQuote(SPOT)).isEmpty();
+        assertThat(s.eligibleResearchSpotQuote(SPOT)).isEmpty();
+    }
+
+    @Test
+    void researchSpotAccessorRejectsUnsubscribedAndDerivativeKeys() {
+        var s = service();
+        assertThat(s.eligibleResearchSpotQuote(SPOT)).isEmpty();
+        s.start(List.of(FUT));
+        assertThat(s.eligibleResearchSpotQuote(SPOT)).isEmpty();
+        assertThat(s.eligibleResearchSpotQuote(FUT)).isEmpty();
+    }
+
+    @Test
     void controllerSpotModeSubscribesOnlyTheVerifiedNearFutureAndSpot() {
         var registry = mock(FnoFuturesContractRegistry.class);
         var near = new FuturesContract(FUT, SPOT, "RELIANCE", "RELIANCE FUT", LocalDate.of(2026, 11, 26), 250);

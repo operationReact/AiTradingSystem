@@ -68,7 +68,9 @@ public class FnoFuturesResearchService {
     Optional<UpstoxFnoV3LiveFeedService.PaperQuote> liveQuote(String instrumentKey) {
         UpstoxFnoV3LiveFeedService live = feed.getIfAvailable();
         if (live == null || instrumentKey == null) return Optional.empty();
-        return live.eligiblePaperQuote(instrumentKey);
+        return instrumentKey.startsWith("NSE_EQ|")
+                ? live.eligibleResearchSpotQuote(instrumentKey)
+                : live.eligiblePaperQuote(instrumentKey);
     }
 
     public List<StrategyStatus> evaluateAll(Instant now) {

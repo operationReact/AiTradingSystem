@@ -134,7 +134,8 @@ class FnoFuturesResearchServiceTest {
     @Test
     void spotQuotePresentStillLeavesStr170BlockedWhenDeliverabilityIsUnverified() {
         var spot = quote("NSE_EQ|INE002A01018", "2400", "2402");
-        var live = liveWith(Map.of("NSE_EQ|INE002A01018", spot, NEAR.instrumentKey(), quote(NEAR.instrumentKey(), "2405", "2407")));
+        var live = liveWith(Map.of(NEAR.instrumentKey(), quote(NEAR.instrumentKey(), "2405", "2407")));
+        when(live.eligibleResearchSpotQuote("NSE_EQ|INE002A01018")).thenReturn(Optional.of(spot));
         FnoFuturesContractRegistry registry = registryWith(new NearFar(NEAR, FAR));
         when(registry.nearFar(eq("NSE_EQ|INE002A01018"), any())).thenReturn(Optional.of(new NearFar(NEAR, FAR)));
         var service = new FnoFuturesResearchService(feed(live), calendar(true),
