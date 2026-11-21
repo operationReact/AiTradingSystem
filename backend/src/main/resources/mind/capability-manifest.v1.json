@@ -6685,21 +6685,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ original first-known source-completed NIFTY daily closes and independent licensed index research rights",
+    "Two separately source-listed NIFTY CE or PE instruments of SAME OPTION TYPE and LOT, but DIFFERENT authenticated strikes and ordered expiries: short OTM near leg, long ITM far leg",
+    "Same-provider original-as-of NIFTY index, near-short and far-long exchange quotes with original annualized source IV for BOTH expiries, real bid liquidity for sold leg and ask depth for bought leg",
+    "After-fee net debit, original near/far IV term-structure, option premium ratio and near-expiry illustrative IV movement research metrics; no synthetic expiry maximum loss or breakeven"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_DIAGONAL_SPREAD_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoDiagonalSpreadV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-200-diagonal-spread-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed original-source NIFTY index and genuine multiple-expiry CE/PE options, separately traceable annualized IV, original observation timestamps and official lot/strike/expiry calendar",
+    "Actual broker near-expiry short-writing permissions and margin, farther expiry residual value, India statutory charges and multi-leg partial-fill/settlement risk controls",
+    "Original-as-of OOS and walk-forward historical IV term-structure evidence with non-atomic fills, true fees, slippage, spread and shocked markets",
+    "Independent PAPER UI and ledger acceptance and separate LIVE broker option-writing entitlements, account exposure controls, settlement lifecycle and kill switches"
+   ],
+   "note": "Research-only long diagonal spread with different strikes AND expiries. Sell OTM near CE/PE, buy ITM farther same option type/lot. No static expiry P&L/maximum-realized-loss claim. DATA_BLOCKED, never PAPER/LIVE executable.",
    "id": "strategy.STR-200",
    "kind": "STRATEGY",
    "name": "Diagonal Spread",
