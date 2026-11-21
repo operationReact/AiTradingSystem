@@ -41,11 +41,14 @@ class BulkTest(unittest.TestCase):
         self.permit.write_text(json.dumps(p.private_scope()))
         self.mock1=patch.object(p,"PERMIT",self.permit)
         self.mock2=patch.object(p,"today",lambda:DAY)
+        self.mock3=patch.object(p,"STATUS",self.path/"progress.json")
         self.mock1.start()
         self.mock2.start()
+        self.mock3.start()
     def tearDown(self):
         self.mock1.stop()
         self.mock2.stop()
+        self.mock3.stop()
         self.tmp.cleanup()
 
     def test_owner_scope_exact_and_time_limited_not_provider_license(self):
