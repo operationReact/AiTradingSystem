@@ -6363,21 +6363,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ verified completed genuine point-in-time NIFTY index daily closes with original source first-known timestamps",
+    "Two true source-listed NIFTY options: buy OTM higher-strike CE and lower-strike PE with identical expiry/lot; actual spot strictly between strikes",
+    "Licensed same-provider synchronized source NIFTY/CE/PE bid-ask, options OI and ask-depth and independently verified annualized implied-volatility percentages",
+    "Modeled full combined debit including two-leg slippage/Indian fees, complete premium-at-risk budget and IV move vs OTM-strike plus cost screening"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_LONG_STRANGLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoLongStrangleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoLongStrangleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-193-long-strangle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Rights-permitted real NSE index and OTM NIFTY CE/PE chain plus true published IV, exchange timestamps and expiry/lot instrument master",
+    "Verified exchange calendar and original first-known as-of data with Indian options fees, real depth/liquidity, settlement and broker access",
+    "Out-of-sample and forward walk historical volatility, time decay, full actual spread and non-atomic two-leg fill costs",
+    "Independent PAPER UI and ledger acceptance and separately approved LIVE broker options rights and execution risk gates"
+   ],
+   "note": "Research-only NIFTY OTM long strangle with source IV and bought CE+PE, distinct lower PE and upper CE strikes, authentic as-of chain, full premium maximum expiry loss and breakevens. DATA_BLOCKED; never executable.",
    "id": "strategy.STR-193",
    "kind": "STRATEGY",
    "name": "Long Strangle",
