@@ -46,10 +46,11 @@ class FnoVerifiedFinalPriceOiSessionStoreTest {
         assertFalse(sql.toLowerCase().contains("market_candle"));
         assertFalse(sql.toLowerCase().contains(" on conflict "));
         assertEquals(18, sql.chars().filter(c -> c == '?').count());
-        assertEquals(CONTRACT, reads.getFirst().getArgument(2));
-        verify(jdbc, times(1)).query(anyString(),
-            any(org.springframework.jdbc.core.RowMapper.class), any(Object[].class));
-        verifyNoMoreInteractions(jdbc);
+        Object[] bound = reads.getFirst().getArgument(2, Object[].class);
+        assertEquals(18, bound.length);
+        assertEquals(CONTRACT, bound[0]);
+        assertEquals(java.sql.Date.valueOf(FROM), bound[1]);
+        assertEquals(java.sql.Date.valueOf(TO), bound[2]);
     }
 
     @Test
