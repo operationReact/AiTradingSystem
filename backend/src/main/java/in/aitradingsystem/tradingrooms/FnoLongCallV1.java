@@ -221,7 +221,7 @@ public final class FnoLongCallV1 {
     private static boolean validAssumptions(Assumptions a) {
         return a != null && between(a.hypotheticalUpsideAtExpiryBps(), 100, 3000)
             && between(a.buySlippageBps(), 0, 1000)
-            && a.allInFeesPerLotInr() != null && a.allInFeesPerLotInr().signum() >= 0
+            && a.allInFeesPerLotInr() != null && a.allInFeesPerLotInr().signum() > 0
             && a.allInFeesPerLotInr().compareTo(BigDecimal.valueOf(100000)) <= 0
             && between(a.minScenarioRewardRiskBps(), 1000, 50000)
             && between(a.maxOptionSpreadBps(), 1, 3000)
