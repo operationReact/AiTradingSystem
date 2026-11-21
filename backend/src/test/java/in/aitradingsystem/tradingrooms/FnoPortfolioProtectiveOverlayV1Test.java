@@ -159,6 +159,13 @@ class FnoPortfolioProtectiveOverlayV1Test {
         assertEquals(Status.BLOCKED_DATA,evaluate(held(),List.of(put(LOW,"98"),bad),
                 snapshot(),history(),rights(),policy()).status());
     }
+    @Test void candidatePutsMustShareActuallyListedOfficialLot(){
+        var differentLot=new PutContract(HIGH,INDEX,n("99"),n("0.05"),
+                LocalDate.of(2026,11,1),EXPIRY,75,true);
+        assertEquals(Status.BLOCKED_DATA,evaluate(held(),
+                List.of(put(LOW,"98"),differentLot),snapshot(),
+                history(),rights(),policy()).status());
+    }
     @Test void uniqueAuthenticatedPutCandidatesRequired(){
         assertEquals(Status.BLOCKED_DATA,evaluate(held(),
                 List.of(put(HIGH,"99"),put(HIGH,"99")),snapshot(),
