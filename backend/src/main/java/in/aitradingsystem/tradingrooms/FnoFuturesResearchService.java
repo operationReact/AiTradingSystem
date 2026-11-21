@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Real-input invocation of the three futures research evaluators (STR-170/171/172).
+ * Read-only invocation of four futures research evaluators (STR-170..173).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -35,6 +35,10 @@ public class FnoFuturesResearchService {
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
     private static final int HISTORY_LOOKBACK_DAYS = 14;
     private static final int ROLLOVER_SESSIONS = 3;
+    private static final int OI_LOOKBACK_DAYS = 21;
+    // Experimental research calibration, never permission for PAPER/LIVE orders.
+    private static final FnoFuturesOpenInterestTrendV1.Thresholds OI_THRESHOLDS =
+        new FnoFuturesOpenInterestTrendV1.Thresholds(800, 3, 2500, 5000);
 
     /** Status plus the input counts actually supplied, for observability. */
     public record StrategyStatus(String strategyId, String status, String reasonCode,
@@ -79,7 +83,8 @@ public class FnoFuturesResearchService {
         return List.of(
             evaluateBasisCarry(now, today, sessionOpen),
             evaluateCalendarSpread(now, today, sessionOpen),
-            evaluateRollover(now, today));
+            evaluateRollover(now, today),
+            evaluateOpenInterestTrend(now, today));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -137,6 +142,89 @@ public class FnoFuturesResearchService {
             sessions.isEmpty() ? "NONE" : sessions.get(0).near().source(),
             pair.isPresent() ? 2 : 0, 0, sessions.size(),
             pair.isPresent() ? "NEAR_FAR_CONTRACTS_RESOLVED" : "NO_VERIFIED_CONTRACT_PAIR");
+    }
+
+
+    /** Source-only STR-173 integration. Historical rights are independent of broker permissions. */
+    private StrategyStatus evaluateOpenInterestTrend(Instant now, LocalDate today) {
+        var rights = new FnoFuturesOpenInterestTrendV1.SourceRights(
+            researchRightsVerified, contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified) {
+            return oiBlocked(now, rights, "OI_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return oiBlocked(now, rights, "OI_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty()) {
+            return oiBlocked(now, rights, "OI_VERIFIED_FUTURES_CONTRACT_MISSING", 0, 0);
+        }
+        FuturesContract chosen = pair.get().near().expiry().isBefore(today.plusDays(7))
+            ? pair.get().far() : pair.get().near();
+        var contract = new FnoFuturesOpenInterestTrendV1.Contract(
+            chosen.instrumentKey(), chosen.underlyingKey(), chosen.expiry(),
+            chosen.lotSize(), true);
+        final List<FnoClosingSnapshotStore.StoredRow> rows;
+        try {
+            rows = store.verifiedOiContractRows(chosen.instrumentKey(),
+                today.minusDays(OI_LOOKBACK_DAYS), today);
+        } catch (RuntimeException sourceUnavailable) {
+            return oiBlocked(now, rights, "OI_HISTORY_READ_UNAVAILABLE", 1, 0);
+        }
+        if (rows == null || rows.size() < 5) {
+            return oiBlocked(now, rights, "OI_FIVE_COMPLETED_SESSIONS_MISSING",
+                1, rows == null ? 0 : rows.size());
+        }
+        String provider = null;
+        var dates = new java.util.HashSet<LocalDate>();
+        for (var row : rows) {
+            if (row == null || row.sessionDate() == null
+                    || !dates.add(row.sessionDate())
+                    || !chosen.instrumentKey().equals(row.instrumentKey())
+                    || !FnoMarketDataProvider.isSessionHistorySource(row.providerLabel())
+                    || (provider != null && !provider.equals(row.providerLabel()))
+                    || row.openInterestUnits() == null || row.sessionVolumeUnits() == null
+                    || row.exchangeAt() == null || row.observedAt() == null) {
+                return oiBlocked(now, rights, "OI_SOURCE_ROWS_AMBIGUOUS_OR_INCOMPLETE",
+                    1, rows.size());
+            }
+            provider = row.providerLabel();
+        }
+        List<FnoClosingSnapshotStore.StoredRow> last = rows.subList(rows.size() - 5, rows.size());
+        List<FnoFuturesOpenInterestTrendV1.CompletedSession> sessions = new ArrayList<>();
+        LocalDate preceding = null;
+        for (var row : last) {
+            boolean complete = calendar.isTradingDay(row.sessionDate());
+            if (preceding != null) {
+                for (LocalDate date = preceding.plusDays(1);
+                        date.isBefore(row.sessionDate()); date = date.plusDays(1)) {
+                    if (calendar.isTradingDay(date)) complete = false;
+                }
+            }
+            sessions.add(new FnoFuturesOpenInterestTrendV1.CompletedSession(
+                row.sessionDate(), complete, row.instrumentKey(), row.providerLabel(),
+                row.exchangeAt(), row.observedAt(),
+                row.openInterestUnits(), row.sessionVolumeUnits()));
+            preceding = row.sessionDate();
+        }
+        var result = FnoFuturesOpenInterestTrendV1.evaluate(
+            contract, List.copyOf(sessions), rights, OI_THRESHOLDS, now);
+        return status(result.strategyId(), result.status().name(), result.reasonCode(),
+            now, provider, 1, 0, sessions.size(), "OI_RESEARCH_ONLY_NO_ORDER_PERMISSION");
+    }
+
+    /** Fail-closed input result still invokes the distinct evaluator. */
+    private static StrategyStatus oiBlocked(Instant now,
+            FnoFuturesOpenInterestTrendV1.SourceRights rights,
+            String reason, int contractCount, int rowCount) {
+        var result = FnoFuturesOpenInterestTrendV1.evaluate(
+            null, List.of(), rights, OI_THRESHOLDS, now);
+        return status(result.strategyId(), result.status().name(), reason,
+            now, "NONE", contractCount, 0, rowCount, "OI_INPUTS_BLOCKED");
     }
 
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */

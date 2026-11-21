@@ -153,4 +153,111 @@ class FnoFuturesResearchServiceTest {
             registryWith(null), emptyStore(), false, false, "");
         assertTrue(service.liveQuote("NSE_FO|SYN1001").isEmpty());
     }
+
+    private static List<FnoClosingSnapshotStore.StoredRow> oiRows(int... days) {
+        List<FnoClosingSnapshotStore.StoredRow> rows = new java.util.ArrayList<>();
+        long[] values = {100000, 110000, 121000, 133000, 146000};
+        for (int i = 0; i < days.length; i++) {
+            LocalDate day = LocalDate.of(2026, 11, days[i]);
+            var close = day.atTime(15, 40).atZone(java.time.ZoneId.of("Asia/Kolkata")).toInstant();
+            rows.add(new FnoClosingSnapshotStore.StoredRow(
+                "UPSTOX_ANALYTICS", NEAR.instrumentKey(), day,
+                close.minusSeconds(30), close.plusSeconds(30),
+                new BigDecimal("25000"), new BigDecimal("25002"),
+                values[i], 48000L));
+        }
+        return rows;
+    }
+
+    private static FnoFuturesContractRegistry currentRegistry() {
+        FnoFuturesContractRegistry registry = registryWith(new NearFar(NEAR, FAR));
+        when(registry.status()).thenReturn(new FnoFuturesContractRegistry.Status(
+            "LOADED", null, NOW.minusSeconds(3600), "source-master-sha", 2, 1));
+        return registry;
+    }
+
+    private static MarketSessionCalendar validCalendar() {
+        MarketSessionCalendar c = calendar(false);
+        when(c.isTradingDay(any(LocalDate.class))).thenAnswer(invocation -> {
+            LocalDate d = invocation.getArgument(0);
+            return d.getDayOfWeek().getValue() <= 5;
+        });
+        return c;
+    }
+
+    @Test
+    void str173DirectAdapterEvaluatesFiveOriginalTimedSingleContractSessionsWithoutOrders() {
+        var store = emptyStore();
+        when(store.verifiedOiContractRows(eq(NEAR.instrumentKey()), eq(TODAY.minusDays(21)),
+            eq(TODAY))).thenReturn(oiRows(16, 17, 18, 19, 20));
+        var service = new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), store, true, true, "");
+        var result = byId(service.evaluateAll(NOW)).get("strategy.STR-173");
+        assertNotNull(result);
+        assertEquals("RESEARCH_CANDIDATE", result.status());
+        assertEquals("SUSTAINED_OPEN_INTEREST_RISE", result.reason());
+        assertEquals(1, result.contracts());
+        assertEquals(0, result.quotes());
+        assertEquals(5, result.history());
+        assertEquals("OI_RESEARCH_ONLY_NO_ORDER_PERMISSION", result.input());
+        verify(store).verifiedOiContractRows(eq(NEAR.instrumentKey()),
+            eq(TODAY.minusDays(21)), eq(TODAY));
+    }
+
+    @Test
+    void str173ResearchRightsDeniedDoesNotReadHistoryOrMaster() {
+        var registry = currentRegistry();
+        var store = emptyStore();
+        var service = new FnoFuturesResearchService(feed(null), validCalendar(),
+            registry, store, false, false, "");
+        var result = byId(service.evaluateAll(NOW)).get("strategy.STR-173");
+        assertEquals("BLOCKED_RIGHTS", result.status());
+        assertEquals("OI_SOURCE_RIGHTS_NOT_VERIFIED", result.reason());
+        verify(registry, never()).status();
+        verify(store, never()).verifiedOiContractRows(any(), any(), any());
+    }
+
+    @Test
+    void str173RejectsMixedProviderRowsWithoutPickingConvenientSource() {
+        var original = oiRows(16, 17, 18, 19, 20);
+        var modified = new java.util.ArrayList<>(original);
+        var last = original.get(4);
+        modified.set(4, new FnoClosingSnapshotStore.StoredRow(
+            "ANGEL_ONE_SMARTAPI", last.instrumentKey(), last.sessionDate(),
+            last.exchangeAt(), last.observedAt(), last.bid(), last.ask(),
+            last.openInterestUnits(), last.sessionVolumeUnits()));
+        var store = emptyStore();
+        when(store.verifiedOiContractRows(any(), any(), any())).thenReturn(modified);
+        var result = byId(new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), store, true, true, "").evaluateAll(NOW))
+            .get("strategy.STR-173");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("OI_SOURCE_ROWS_AMBIGUOUS_OR_INCOMPLETE", result.reason());
+    }
+
+    @Test
+    void str173RejectsMissingTradingDayInHistory() {
+        var store = emptyStore();
+        when(store.verifiedOiContractRows(any(), any(), any()))
+            .thenReturn(oiRows(13, 16, 17, 19, 20));
+        var result = byId(new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), store, true, true, "").evaluateAll(NOW))
+            .get("strategy.STR-173");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("OI_COMPLETED_SESSION_INVALID", result.reason());
+    }
+
+    @Test
+    void str173RejectedSnapshotsAndSourceExceptionsDoNotExposeProviderDetails() {
+        var store = emptyStore();
+        when(store.verifiedOiContractRows(any(), any(), any()))
+            .thenThrow(new IllegalStateException("private broker token"));
+        var result = byId(new FnoFuturesResearchService(feed(null), validCalendar(),
+            currentRegistry(), store, true, true, "").evaluateAll(NOW))
+            .get("strategy.STR-173");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("OI_HISTORY_READ_UNAVAILABLE", result.reason());
+        assertFalse(result.reason().contains("broker"));
+    }
+
 }

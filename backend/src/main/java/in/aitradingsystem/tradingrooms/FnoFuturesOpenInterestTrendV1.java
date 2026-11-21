@@ -27,8 +27,14 @@ import java.util.Objects;
 public final class FnoFuturesOpenInterestTrendV1 {
     public static final String STRATEGY_ID = "strategy.STR-173";
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
-    private static final LocalTime CLOSE_TIME = LocalTime.of(15, 30);
-    private static final Duration CLOSING_WINDOW = Duration.ofMinutes(10);
+    // NSE equity derivatives normal close changed on 2026-08-03 and 2026-12-07.
+    // The >=7-day DTE contract rule avoids December expiry-day special hours.
+    private static final LocalDate AUGUST_2026_CLOSE_CHANGE = LocalDate.of(2026, 8, 3);
+    private static final LocalDate DECEMBER_2026_CLOSE_CHANGE = LocalDate.of(2026, 12, 7);
+    private static final LocalTime PRE_AUGUST_CLOSE = LocalTime.of(15, 30);
+    private static final LocalTime AUGUST_CLOSE = LocalTime.of(15, 40);
+    private static final LocalTime DECEMBER_CLOSE = LocalTime.of(15, 45);
+    private static final Duration CLOSING_WINDOW = Duration.ofMinutes(2);
     private static final Duration MAX_PUBLICATION_LAG = Duration.ofHours(36);
     private static final BigDecimal BPS = new BigDecimal("10000");
     private static final MathContext MC = MathContext.DECIMAL128;
@@ -190,7 +196,7 @@ public final class FnoFuturesOpenInterestTrendV1 {
                 || s.tradedVolumeUnits() < 0 || s.tradedVolumeUnits() > MAX_UNITS) {
             return false;
         }
-        Instant close = s.exchangeDate().atTime(CLOSE_TIME).atZone(IST).toInstant();
+        Instant close = s.exchangeDate().atTime(officialFuturesClose(s.exchangeDate())).atZone(IST).toInstant();
         return !close.isAfter(asOf)
             && !s.exchangeAt().isAfter(close)
             && !s.exchangeAt().isBefore(close.minus(CLOSING_WINDOW))
@@ -198,6 +204,12 @@ public final class FnoFuturesOpenInterestTrendV1 {
             && !s.observedAt().isBefore(close)
             && !s.observedAt().isAfter(asOf)
             && !s.observedAt().isAfter(close.plus(MAX_PUBLICATION_LAG));
+    }
+
+    private static LocalTime officialFuturesClose(LocalDate date) {
+        if (!date.isBefore(DECEMBER_2026_CLOSE_CHANGE)) return DECEMBER_CLOSE;
+        if (!date.isBefore(AUGUST_2026_CLOSE_CHANGE)) return AUGUST_CLOSE;
+        return PRE_AUGUST_CLOSE;
     }
 
     private static boolean validThresholds(Thresholds t) {
