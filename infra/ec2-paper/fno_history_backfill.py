@@ -126,6 +126,7 @@ def validate_candles(candles: object, batch: Batch) -> list[tuple]:
         raise ValueError("INVALID_FNO_CANDLES")
     result = []
     seen = set()
+    seen_daily_dates = set()
     for item in candles:
         if not isinstance(item, list) or len(item) != 7:
             raise ValueError("INVALID_FNO_CANDLES")
@@ -139,6 +140,17 @@ def validate_candles(candles: object, batch: Batch) -> list[tuple]:
                 or timestamp.isoformat() in seen):
             raise ValueError("INVALID_FNO_TIMESTAMP")
         seen.add(timestamp.isoformat())
+        if batch.interval == "day":
+            # Official Upstox expired-day samples are midnight IST; a 09:15
+            # observation under the same day interval is ambiguous, not a
+            # second daily bar. Fail the whole batch, never silently select.
+            canonical_offset = timedelta(hours=5, minutes=30)
+            if (timestamp.utcoffset() != canonical_offset
+                    or timestamp.hour != 0 or timestamp.minute != 0
+                    or timestamp.second != 0 or timestamp.microsecond != 0
+                    or timestamp.date() in seen_daily_dates):
+                raise ValueError("INVALID_FNO_DAILY_CANDLE")
+            seen_daily_dates.add(timestamp.date())
         if (any(type(v) not in (int, float) or not math.isfinite(v) or v <= 0
                 for v in (op, high, low, close))
                 or low > min(op, close) or high < max(op, close)
