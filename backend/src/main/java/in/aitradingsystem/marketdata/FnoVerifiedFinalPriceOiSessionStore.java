@@ -9,6 +9,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Objects;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
@@ -80,6 +81,17 @@ public class FnoVerifiedFinalPriceOiSessionStore {
 
     public FnoVerifiedFinalPriceOiSessionStore(JdbcTemplate jdbc) {
         this.jdbc = Objects.requireNonNull(jdbc);
+    }
+
+    /** Erase only expired evidence (V100 trigger forbids edits and early deletion). */
+    public int purgeExpired(LocalDate today) {
+        return jdbc.update("DELETE FROM fno_verified_final_price_oi_session WHERE retain_until < ?",
+            Date.valueOf(Objects.requireNonNull(today)));
+    }
+
+    @Scheduled(cron = "0 47 3 * * *", zone = "Asia/Kolkata")
+    public void scheduledRetentionPurge() {
+        purgeExpired(LocalDate.now(IST));
     }
 
     /**
