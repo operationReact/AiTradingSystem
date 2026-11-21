@@ -1,0 +1,44 @@
+name: MintTick F&O history backfill preparation - offline contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/fno_history_backfill.py'
+      - 'scripts/tests/test_fno_history_backfill.py'
+      - 'infra/ec2-paper/FNO_HISTORY_BACKFILL_PREPARATION.md'
+      - '.github/workflows/minttick-fno-history-backfill-prep.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  offline-preparation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test restart-safe checkpoint, rates, rights, no-data-storage progress
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_history_backfill.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_history_backfill.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('infra/ec2-paper/fno_history_backfill.py').read_text()
+          assert 'FNO_DATA_RETENTION_NOT_AUTHORIZED' in p
+          assert 'BEGIN IMMEDIATE' in p and 'lease_until' in p
+          assert 'idempotency_key' in p and 'retry_after_seconds' in p
+          assert 'PREPARATION_ONLY' in p
+          assert 'api.upstox.com' not in p
+          for forbidden in ('get-parameter','put-parameter', 'placeOrder',
+                            'submitOrder', 'TRADING_MODE=LIVE',
+                            'Authorization: Bearer', 'print(token)',
+                            'schedule.every(', 'crontab'):
+              assert forbidden not in p, forbidden
+          PY
+
+# No AWS login, SSM, Upstox calls, backend deployment, broker orders,
+# market-data persistence or scheduled work. Only offline unit tests.
