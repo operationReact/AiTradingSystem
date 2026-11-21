@@ -28,7 +28,7 @@ class FnoGreeksExposureRebalanceResearchServiceTest {
     }
     @SuppressWarnings("unchecked")
     private static <T> List<T> cast(Object x){return (List<T>)x;}
-    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules();}
+    private static ObjectMapper json(){return new ObjectMapper().findAndRegisterModules().disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);}
     private static FnoGreeksExposureRebalanceResearchService.Evidence fixture() throws Exception {
         var t=FnoGreeksExposureRebalanceV1Test.class;
         return new FnoGreeksExposureRebalanceResearchService.Evidence(
@@ -41,7 +41,7 @@ class FnoGreeksExposureRebalanceResearchServiceTest {
     private static FnoVerifiedStrategy207212SourceStore source(String json){
         var store=mock(FnoVerifiedStrategy207212SourceStore.class);
         when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(
-            new Proof(ID,"UPSTOX_ANALYTICS",json,NOW.minusSeconds(45),"a".repeat(64))));
+            new Proof(ID,"UPSTOX_ANALYTICS",json,NOW.minusSeconds(1),"a".repeat(64))));
         return store;
     }
     @Test void sourceRightsDisabledCannotReadBrokerMarketRecords(){
@@ -74,4 +74,23 @@ class FnoGreeksExposureRebalanceResearchServiceTest {
         assertEquals("STR_211_ORIGINAL_SOURCE_READ_FAILED",row.reasonCode());
         assertFalse(row.toString().contains("TOKEN"));
     }
+    @Test void mixedProviderPayloadCannotBorrowFirstProvidersRights() throws Exception {
+        var payload=json().writeValueAsString(fixture());
+        assertTrue(payload.contains("UPSTOX_ANALYTICS"),"fixture must contain source issuer");
+        var other=payload.replace("UPSTOX_ANALYTICS","ANGEL_ONE_SMARTAPI");
+        var row=new FnoGreeksExposureRebalanceResearchService(source(other),json(),true).evaluate(NOW);
+        assertEquals("STR_211_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(ID,row.strategyId());
+    }
+    @Test void payloadObservedAfterEvidenceFirstKnownIsRejectedWithoutOrders() throws Exception {
+        var content=json().writeValueAsString(fixture());
+        var store=source(content);
+        when(store.oneCurrent(ID,NOW)).thenReturn(Optional.of(
+            new Proof(ID,"UPSTOX_ANALYTICS",content,NOW.minusSeconds(75),"a".repeat(64))));
+        var row=new FnoGreeksExposureRebalanceResearchService(store,json(),true).evaluate(NOW);
+        assertEquals("STR_211_PROVIDER_ORIGINAL_TIME_PROVENANCE_INVALID",row.reasonCode());
+        assertEquals(0,row.contractsResolved());
+        assertEquals(0,row.freshQuotes());
+    }
+
 }
