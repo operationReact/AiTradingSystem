@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 /** Admin-only read-only coverage view. It does not evaluate or place broker orders. */
 @RestController
 @RequestMapping("/api/admin/research/fno-43")
-public final class AdminFno43ReadinessController {
+public class AdminFno43ReadinessController {
     private final Fno43StrategyReadinessService service;
     private final Clock clock;
 
