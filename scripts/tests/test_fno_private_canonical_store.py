@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Synthetic-only validation of canonical owner cache, access and expiration."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from decimal import Decimal
 from pathlib import Path
 import importlib.util
@@ -75,7 +76,8 @@ class FnoPrivateCanonicalStoreTests(unittest.TestCase):
                              {"NSE_PUBLIC_EOD":321,"UPSTOX_PRIVATE":3608})
         finally:db.close()
         key=next(iter(self.entries))[0]
-        got=m.read_canonical(root=self.root,now=NOW,key=key,limit=20)
+        got=m.read_canonical(root=self.root,now=NOW,key=key,limit=20,
+                             as_of=datetime.fromtimestamp(NOW,timezone.utc))
         self.assertGreater(len(got),0)
         self.assertTrue(all(row[-1]=="UPSTOX_PRIVATE" for row in got))
 
@@ -85,7 +87,8 @@ class FnoPrivateCanonicalStoreTests(unittest.TestCase):
         result=m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=NOW+300)
         self.assertEqual(result["expiresEpoch"],int(first))
         with self.assertRaisesRegex(ValueError,"CANONICAL_READ_EXPIRED_OR_INVALID"):
-            m.read_canonical(root=self.root,now=first,key=next(iter(self.entries))[0])
+            m.read_canonical(root=self.root,now=first,key=next(iter(self.entries))[0],
+                             as_of=datetime.fromtimestamp(first,timezone.utc))
         self.assertEqual(m.purge(root=self.root,now=first),"CANONICAL_EXPIRED_REMOVED")
         self.assertFalse((self.root/m.TARGET.name).exists())
 
@@ -119,16 +122,56 @@ class FnoPrivateCanonicalStoreTests(unittest.TestCase):
         p.unlink()
         m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=NOW)
         with self.assertRaisesRegex(ValueError,"CANONICAL_INVALID_QUERY"):
-            m.read_canonical(root=self.root,now=NOW,key="bad key",limit=100)
+            m.read_canonical(root=self.root,now=NOW,key="bad key",limit=100,
+                             as_of=datetime.fromtimestamp(NOW,timezone.utc))
         with self.assertRaisesRegex(ValueError,"CANONICAL_INVALID_QUERY"):
-            m.read_canonical(root=self.root,now=NOW,key=next(iter(self.entries))[0],limit=100000)
+            m.read_canonical(root=self.root,now=NOW,key=next(iter(self.entries))[0],limit=100000,
+                             as_of=datetime.fromtimestamp(NOW,timezone.utc))
+
+    def test_daily_midnight_label_never_becomes_same_session_future_ohlc(self):
+        m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=NOW)
+        key,day=next(iter(self.entries))
+        # Even at 15:45 IST that day, the daily EOD row cannot be treated as
+        # a midnight-observed value by a strategy replay.
+        decision=datetime.combine(day,time(15,45),tzinfo=ZoneInfo("Asia/Kolkata"))
+        rows=m.read_canonical(root=self.root,now=NOW,key=key,
+                              as_of=decision)
+        self.assertTrue(all(item[0] < day.isoformat() for item in rows))
+        # At the next Indian local session date, it is a PROVISIONAL
+        # historical research input only, not a verified source publish time.
+        later=datetime.combine(day+timedelta(days=1),time(9,20),
+                               tzinfo=ZoneInfo("Asia/Kolkata"))
+        available=m.read_canonical(root=self.root,now=NOW,key=key,as_of=later)
+        self.assertIn(day.isoformat(),[item[0] for item in available])
+        self.assertNotEqual(available[0][1][:10],later.date().isoformat())
+
+    def test_asof_is_explicit_timezone_aware_and_not_in_future(self):
+        m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=NOW)
+        key=next(iter(self.entries))[0]
+        with self.assertRaisesRegex(ValueError,"CANONICAL_ASOF_REQUIRED"):
+            m.read_canonical(root=self.root,now=NOW,key=key)
+        with self.assertRaisesRegex(ValueError,"CANONICAL_ASOF_REQUIRED"):
+            m.read_canonical(root=self.root,now=NOW,key=key,
+                             as_of=datetime(2025,11,20,10))
+        with self.assertRaisesRegex(ValueError,"CANONICAL_ASOF_IN_FUTURE"):
+            m.read_canonical(root=self.root,now=NOW,key=key,
+                             as_of=datetime.fromtimestamp(NOW+3600,timezone.utc))
+        # Compare as-of in UTC after Indian midnight: it must respect the
+        # Indian session calendar instead of using the server's UTC date.
+        key,day=next(iter(self.entries))
+        midnight_ist=datetime.combine(day+timedelta(days=1),time(0,10),
+                                      tzinfo=ZoneInfo("Asia/Kolkata"))
+        got=m.read_canonical(root=self.root,now=NOW,key=key,
+                             as_of=midnight_ist.astimezone(timezone.utc))
+        self.assertIn(day.isoformat(),[item[0] for item in got])
 
     def test_hard_stop_by_end_of_owner_scope(self):
         with self.assertRaisesRegex(ValueError,"CANONICAL_OWNER_SCOPE_EXPIRED"):
             m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=m.END_IST)
         m.store(self.entries,m.EXPECTED,self.source,root=self.root,now=NOW)
         with self.assertRaisesRegex(ValueError,"CANONICAL_NOT_AVAILABLE"):
-            m.read_canonical(root=self.root,now=m.END_IST,key=next(iter(self.entries))[0])
+            m.read_canonical(root=self.root,now=m.END_IST,key=next(iter(self.entries))[0],
+                             as_of=datetime.fromtimestamp(m.END_IST,timezone.utc))
         self.assertEqual(m.purge(root=self.root,now=m.END_IST),"CANONICAL_EXPIRED_REMOVED")
 
 if __name__=="__main__":unittest.main()

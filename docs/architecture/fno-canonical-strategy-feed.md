@@ -36,3 +36,19 @@ STR-170 needs deliverable single-stock spot plus matching futures. STR-171 needs
 Acceptance dashboard fields: provider_state, subscriptions_requested/active/rejected, fresh_exchange_timed_quotes, stale_quotes, source_rights_verified, strategy_input_ready_count, strategy_data_blocked_count, per_strategy_last_evaluation_at.
 
 Official reference: https://upstox.com/developer/api-documentation/v3/get-market-data-feed/ and https://upstox.com/developer/api-documentation/instruments/ .
+
+## Private pilot daily-candle as-of boundary (22 November 2026)
+
+The short-lived owner-private 3,929-row F&O daily pilot retains source bar
+timestamps such as `00:00+05:30` as **session labels, not observation or
+publication time**. A completed daily high/low/close or final OI must not
+enter a strategy decision from the same calendar session, regardless of how
+the provider encoded `candle_ts`. The owner-private
+`read_canonical(..., as_of=aware_datetime)` call now rejects missing/naive/
+future decision timestamps and selects only `session_day < local Indian
+decision date`. This is a necessary conservative anti-look-ahead bound,
+**not proof of exact source publication or original first-known time**.
+The existing source/retention rights, expiration date, lack of complete
+exchange-calendar and provenance, and `backtestingApproved=false` stay
+unchanged. No data is promoted to the 43-strategy verified market E2E metric,
+PAPER, LIVE, or any customer-facing API by this change.
