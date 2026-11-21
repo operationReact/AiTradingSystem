@@ -273,8 +273,10 @@ class FnoSkewBasedHedgeV1Test {
     }
     @Test void shallowPutWingCanFailNetStressProtectionDespiteSkew(){
         var closer=option(HIGH,"PE","96",EXPIRY,50);
+        var narrowWing=new Policy(35,180,30,1000,100,10,300,10,3,45,1,
+                n("0.06"),n("4"),100,10,10,n("5"),n("8"),n("200"));
         Decision d=evaluate(held(1),future(),closer,lower(),call(),
-                snapshot(),history(),rights(),policy());
+                snapshot(),history(),rights(),narrowWing);
         assertEquals(Status.NO_HEDGE,d.status());
         assertEquals(0,d.hypotheticalPutSpreadLots());
         neverOrders(d);
