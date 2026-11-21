@@ -42,6 +42,15 @@ public class FnoClosingSnapshotStore {
         WHERE instrument_key IN (?, ?) AND session_date BETWEEN ? AND ?
         ORDER BY session_date, instrument_key
         """;
+    /** STR-173: exact retained research-attested closing rows, not a full source-rights proof. */
+    private static final String VERIFIED_OI_CONTRACT_ROWS_SQL = """
+        SELECT provider_label, instrument_key, session_date, exchange_at, observed_at,
+               bid, ask, open_interest_units, session_volume_units
+        FROM fno_closing_snapshot
+        WHERE instrument_key = ? AND session_date BETWEEN ? AND ?
+          AND rights_basis = ? AND retain_until >= ?
+        ORDER BY session_date, provider_label
+        """;
     private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
 
     public enum Outcome { STORED, DUPLICATE_IGNORED, PERSISTENCE_DISABLED }
@@ -95,6 +104,27 @@ public class FnoClosingSnapshotStore {
             rs.getBigDecimal("bid"), rs.getBigDecimal("ask"),
             (Long) rs.getObject("open_interest_units"), (Long) rs.getObject("session_volume_units")),
             nearKey, farKey, Date.valueOf(from), Date.valueOf(to));
+    }
+
+    /**
+     * Research-only exact contract OI reader. The stored rights-basis is necessary,
+     * not sufficient proof of current source-use rights. Never writes or backfills.
+     */
+    public List<StoredRow> verifiedOiContractRows(String contractKey, LocalDate from,
+                                                   LocalDate to) {
+        if (contractKey == null || !contractKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || from == null || to == null || from.isAfter(to)
+                || to.isAfter(LocalDate.now(IST))) {
+            throw new IllegalArgumentException("FNO_OI_READ_SCOPE_INVALID");
+        }
+        return jdbc.query(VERIFIED_OI_CONTRACT_ROWS_SQL, (rs, n) -> new StoredRow(
+            rs.getString("provider_label"), rs.getString("instrument_key"),
+            rs.getObject("session_date", LocalDate.class),
+            rs.getTimestamp("exchange_at").toInstant(), rs.getTimestamp("observed_at").toInstant(),
+            rs.getBigDecimal("bid"), rs.getBigDecimal("ask"),
+            (Long) rs.getObject("open_interest_units"), (Long) rs.getObject("session_volume_units")),
+            contractKey, Date.valueOf(from), Date.valueOf(to), RIGHTS_BASIS,
+            Date.valueOf(LocalDate.now(IST)));
     }
 
     /** Deletes rows whose retention window ended before {@code today}. Always enabled. */
