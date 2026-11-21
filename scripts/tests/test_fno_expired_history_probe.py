@@ -1,5 +1,5 @@
 """Offline, source-backed schema acceptance tests: NO broker or AWS calls."""
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 import sys
 import unittest
@@ -74,6 +74,33 @@ class ExpiredHistoryContractTests(unittest.TestCase):
         with patch.object(p, "get_json", side_effect=[expiries(), {"status":"success","data":[]}]) as get:
             self.assertEqual(p.probe("fixture", NOW)[0], "NO_MATCHING_FUTURES")
             self.assertEqual(get.call_count, 2)
+
+    def test_accepts_112_source_listed_expiries(self):
+        # Upstox's authenticated Plus source returned 112 real expiry dates.
+        dates = [(NOW - timedelta(days=days)).isoformat() for days in range(1, 113)]
+        result = p.expiries({"status": "success", "data": dates}, NOW)
+        self.assertEqual(len(result), 112)
+
+    def test_provider_get_uses_explicit_user_agent(self):
+        seen = []
+        class Response:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *args): return False
+            def read(self, size): return b'{"status":"success","data":[]}'
+        class Opener:
+            def open(self, request, timeout):
+                seen.append(request)
+                return Response()
+        with patch.object(p.urllib.request, "build_opener", return_value=Opener()):
+            result = p.get_json(
+                "https://api.upstox.com/v2/expired-instruments/expiries?instrument_key=NSE_INDEX%7CNifty%2050",
+                "test-only", "EXPIRIES")
+        self.assertEqual(result, {"status": "success", "data": []})
+        self.assertEqual(len(seen), 1)
+        self.assertEqual(seen[0].get_header("User-agent"), p.UPSTOX_USER_AGENT)
+        self.assertEqual(seen[0].get_header("Authorization"), "Bearer test-only")
+        self.assertNotIn("Python-urllib", p.UPSTOX_USER_AGENT)
 
     def test_plus_plan_and_api_error_codes(self):
         self.assertEqual(p.classify_http(403, b'{"code":"UDAPI1149"}', "EXPIRIES"),

@@ -29,6 +29,7 @@ INSTANCE = "i-09c01b470fb39b85a"
 UNDERLYING = "NSE_INDEX|Nifty 50"
 SSM_TOKEN = "/minttick/upstox/analytics-token"
 BASE = "https://api.upstox.com/v2/expired-instruments"
+UPSTOX_USER_AGENT = "MintTick-Upstox-ReadOnly-Diagnostics/1.0"
 REQUEST = "infra/ec2-paper/requests/fno-expired-history-probe.json"
 MARKER = "MINTTICK_FNO_EXPIRED_HISTORY:"
 STATES = {
@@ -89,6 +90,7 @@ def get_json(url, token, stage):
     opener = urllib.request.build_opener(NoRedirect())
     request = urllib.request.Request(url, method="GET", headers={
         "Authorization": "Bearer " + token, "Accept": "application/json",
+        "User-Agent": UPSTOX_USER_AGENT,
     })
     try:
         with opener.open(request, timeout=12) as response:
@@ -111,7 +113,7 @@ def expiries(body, today):
     if not isinstance(body, dict) or body.get("status") != "success":
         raise Blocked("INVALID_PROVIDER_DATA")
     data = body.get("data")
-    if not isinstance(data, list) or len(data) > 100:
+    if not isinstance(data, list) or len(data) > 128:
         raise Blocked("INVALID_PROVIDER_DATA")
     found = set()
     for value in data:
