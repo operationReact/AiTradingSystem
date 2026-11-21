@@ -6,7 +6,7 @@ import in.aitradingsystem.marketdata.FnoVerifiedNiftyDiagonalSourceStore;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyDiagonalSourceStore.*;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyLongOptionSourceStore;
 import in.aitradingsystem.marketdata.FnoVerifiedNiftyLongOptionSourceStore.VerifiedClose;
-import in.aitradingsystem.marketdata.MarketSessionDiagonal;
+import in.aitradingsystem.marketdata.MarketSessionCalendar;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,8 +23,8 @@ class FnoDiagonalSpreadResearchServiceTest {
     static final String NEAR="NSE_FO|TEST_20261127_105_CE";
     static final String FAR="NSE_FO|TEST_20261224_95_CE";
     static BigDecimal d(String x){return new BigDecimal(x);}
-    static MarketSessionDiagonal diagonal(){
-        var c=mock(MarketSessionDiagonal.class);
+    static MarketSessionCalendar diagonal(){
+        var c=mock(MarketSessionCalendar.class);
         when(c.isInsideCashSession(NOW)).thenReturn(true);
         when(c.isTradingDay(any(LocalDate.class))).thenAnswer(i->
             ((LocalDate)i.getArgument(0)).getDayOfWeek().getValue()<=5);
