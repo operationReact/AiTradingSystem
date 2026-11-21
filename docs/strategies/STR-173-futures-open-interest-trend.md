@@ -34,7 +34,7 @@ A fixed example for deterministic tests uses a minimum **800 bps (8%)** total OI
 - Pure Java 21 evaluator: no OAuth/SSM/WebSocket, service endpoints, DB writes, scheduler, customer display, PAPER/LIVE orders or position mutations.
 - All decisions have `executable=false`, `orderPlaced=false`, `directionalBuyOrSell=false`. There is no P&L calculation or claim of profitable prediction.
 - Explicit as-of observation time, bounded OI/volume, closed-session validation, single-provider consistency, contract identity and expiry verification, stale-data checks and no rollover mixing.
-- **18 JUnit tests** cover growth, decline, flat OI, flat-step confirmation, opposite moves, low volume, outliers, rights, contract identity, expiry, source changes, pre-close/future-known data, bad OI, gaps, stale history, thresholds and deterministic reproducibility.
+- **19 deterministic evaluator JUnit tests** cover growth, decline, flat OI, flat-step confirmation, opposite moves, low volume, outliers, rights, contract identity, expiry, source changes, pre-close/future-known data, bad OI, gaps, stale history, thresholds and deterministic reproducibility.
 
 ## Remaining before operational readiness
 
@@ -44,3 +44,37 @@ A fixed example for deterministic tests uses a minimum **800 bps (8%)** total OI
 4. Independently validate read-only/PAPER research pipeline, risk, acceptance, Flutter output where required. LIVE execution remains disabled pending separate broker approval.
 
 **Client impact for this first PR:** backend pure research only; no Flutter changes or UI acceptance are claimed.
+
+## E2E-2 source-adapter increment (21 November 2026)
+
+A separate read-only integration now invokes the exact `FnoFuturesOpenInterestTrendV1.evaluate(...)`
+from `FnoFuturesResearchService` and surfaces STR-173 in
+`/api/admin/research/fno-futures/status` and the 43-strategy readiness endpoint.
+
+- Existing instrument-master registry must have a current, loaded source digest and
+  a verified same-underlying futures expiry pair. Select one contract with at least
+  seven days to expiry, never splice near/far expiry OI.
+- The `FnoClosingSnapshotStore.verifiedOiContractRows` SQL selects one exact
+  `NSE_FO` key, bounded dates, only originally persisted records carrying the
+  `INTERNAL_RESEARCH_VERIFIED` marker, and unexpired retention. An independent
+  present source-use authorization flag must also be true. These gates are necessary,
+  **not independently sufficient to certify source entitlement or genuine first-known provenance**.
+- The adapter rejects null/ambiguous OI and volume, source mixing, duplicate
+  sessions, and gaps according to the calendar. Missing rights or data yields
+  BLOCKED_RIGHTS / BLOCKED_DATA with stable operator-facing codes.
+- An important regression was corrected: normal NSE F&O close is 15:40 IST
+  from 3 August 2026, not 15:30; the subsequent scheduled 7 December 2026
+  non-expiring futures close is 15:45. The evaluator rejects pre-close data.
+  Source: NSE/FAOP/74467 (29 May 2026) and exchange CAS guidance
+  (https://www.nseindia.in/resources/exchange-communication-holidays).
+- Provisional 800/3/2500/5000 research thresholds reuse deterministic test
+  calibration. **Not optimized on real NSE data, not approved trading thresholds.**
+- New integration and repository tests validate rights-denied zero read, one
+  original-time five-session invocation, cross-provider and missing-session
+  failures, provider-exception sanitization, scoped query retention rights and
+  read-only behavior.
+
+This does **not** establish 43 real-data E2E passes, even one real-source
+walk-forward, independent provider entitlement, production deployment, PAPER
+execution, approved LIVE F&O orders or profitable research outcomes. Every
+strategy stays `DATA_BLOCKED` pending independently reproduced source evidence.
