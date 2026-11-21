@@ -24,9 +24,9 @@ class FnoCashFuturesFeasibilityStoreTest {
             .filter(i -> "query".equals(i.getMethod().getName())).toList();
         assertEquals(1, queryCalls.size());
         Object[] args = queryCalls.getFirst().getArguments();
-        assertEquals(18, args.length);
+        assertEquals(19, args.length);
         String sql = (String) args[0];
-        assertEquals(16, sql.chars().filter(c -> c == '?').count());
+        assertEquals(17, sql.chars().filter(c -> c == '?').count());
         assertEquals(ACCOUNT, args[2]);
         assertEquals(SPOT, args[3]);
         assertEquals(FUTURE, args[4]);
@@ -44,6 +44,7 @@ class FnoCashFuturesFeasibilityStoreTest {
         assertTrue(sql.contains("e.depth_first_available_at <= ?"));
         assertTrue(sql.contains("e.captured_at <= ?"));
         assertTrue(sql.contains("e.valid_until >= ?"));
+        assertTrue(sql.contains("e.retain_until >= ?"));
         assertTrue(sql.contains("ORDER BY e.depth_first_available_at DESC"));
         assertTrue(sql.contains("LIMIT 2"));
         assertFalse(sql.toUpperCase().contains("INSERT INTO"));
@@ -72,6 +73,18 @@ class FnoCashFuturesFeasibilityStoreTest {
     }
 
     @Test
+    void privateAccountFinancialEvidenceCanOnlyBePurgedAfterRetentionExpiry() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        var store = new FnoCashFuturesFeasibilityStore(jdbc);
+        LocalDate today = LocalDate.of(2026, 11, 23);
+        store.purgeExpired(today);
+        verify(jdbc).update(eq(
+            "DELETE FROM fno_cash_futures_feasibility_evidence WHERE retain_until < ?"),
+            eq(java.sql.Date.valueOf(today)));
+        verifyNoMoreInteractions(jdbc);
+    }
+
+    @Test
     void migrationIsEmptyImmutableAccountScopedAndDoesNotDefaultBrokerFinancialInputs()
             throws Exception {
         try (var stream = getClass().getResourceAsStream(
@@ -88,6 +101,9 @@ class FnoCashFuturesFeasibilityStoreTest {
             assertTrue(ddl.contains("margin_evidence_sha256"));
             assertTrue(ddl.contains("fees_evidence_sha256"));
             assertTrue(ddl.contains("delivery_identity_verified"));
+            assertTrue(ddl.contains("retain_until DATE NOT NULL"));
+            assertTrue(ddl.contains("depth_first_available_at AT TIME ZONE"));
+            assertTrue(ddl.contains("IF TG_OP = 'DELETE'"));
             assertTrue(ddl.contains("BEFORE UPDATE OR DELETE"));
             assertFalse(ddl.contains("INSERT INTO fno_cash_futures_feasibility_evidence"));
             assertFalse(ddl.contains("mock-broker"));
