@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * STR-183 bull call debit and STR-184 bear put credit spread:
+ * STR-185 bull put credit and STR-186 bear call credit spreads:
  * distinct full two-leg, source-rights verified, after-cost research only.
  * A single option quote or directional EMA signal cannot certify a spread.
  * No broker-side execution, positions, buying power mutation or source seeding.
