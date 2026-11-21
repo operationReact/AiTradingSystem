@@ -6179,21 +6179,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain feed"
+    "Genuine settled/reconciled one-lot NSE_EQ broker-owned shares, and source-listed physically matching NSE_FO lower-strike PE/higher-strike CE contracts with same expiry/lot",
+    "35+ verified completed NSE equity sessions with source-first-known publication and latest close versus 20-prior-session drawdown trigger",
+    "Licensed synchronous true bid/ask equity, put and call snapshots from same provider, OI/depth and valid quote age/skew, contract rights and market calendar",
+    "Explicit Indian tax/fees and leg slippage, theoretical expiry floor/cap, full held-stock notional budget and maximum net-debit budget"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_EQUITY_COLLAR_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoEquityCollarV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoEquityCollarV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-189-equity-collar.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed actual NSE_EQ/NSE_FO first-known three-leg quote snapshots and source-listed corporate-action-adjusted deliverables, contract expiry and official market sessions",
+    "Genuine broker-reconciled settled unrestricted stock holdings, correct short-call rights and margin/settlement controls, non-atomic two-option execution safety",
+    "India broker statutory taxes and physical-delivery obligations, original as-of historical and out-of-sample/walk-forward evidence",
+    "Independently accepted customer PAPER ledger + Flutter scenarios and LIVE options broker authorization, risk flags and audited kill switches"
+   ],
+   "note": "Research-only three-leg owned equity collar: long lower PE, short higher CE; source-verified ownership, original timestamps and explicit modeled floor/capped upside. No orders; DATA_BLOCKED.",
    "id": "strategy.STR-189",
    "kind": "STRATEGY",
    "name": "Collar",
