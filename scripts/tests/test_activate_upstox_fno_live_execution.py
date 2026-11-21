@@ -21,6 +21,22 @@ class UpstoxFnoManualLiveActivationTests(unittest.TestCase):
         self.assertEqual(req["expected_backend_release"],activation.EXPECTED_RELEASE)
         self.assertEqual(req["instance_id"],"i-09c01b470fb39b85a")
 
+    def test_display_rights_can_imply_discovery_but_never_imply_feed_or_usage(self):
+        flags={
+            "MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED":"true",
+            "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED":"true",
+            "MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED":"false",
+        }
+        self.assertTrue(activation.source_flags_ready(flags))
+        for key in ("MINTTICK_UPSTOX_FNO_V3_FEED_ENABLED",
+                    "MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED"):
+            failed=dict(flags,**{key:"false"})
+            self.assertFalse(activation.source_flags_ready(failed))
+        self.assertFalse(activation.source_flags_ready(None))
+        self.assertFalse(activation.source_flags_ready({}))
+        self.assertEqual(activation.EXPECTED_RELEASE,
+            "0a1302f264f37ac71f167d0ace4947dbe4f30577")
+
     def test_only_live_flag_is_added_and_other_broker_secrets_remain_byte_identical(self):
         content=b"UPSTOX_CLIENT_SECRET=do-not-log-me\nMINTTICK_UPSTOX_FNO_PAPER_ENABLED=false\n"
         result=activation.replace_flag(content)
