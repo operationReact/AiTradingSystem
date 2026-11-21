@@ -6915,21 +6915,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independent genuine research rights: authenticated broker long-equity holdings, original-first-known NIFTY daily history, as-of individual equity prices/history, licensed real option chain, original exchange Greeks and NSE-listed option master",
+    "65+ matched, original source-timestamped fully completed daily NIFTY plus every held NSE-equity closes, same provider/session and actual original first-known times; sufficient authentic index variance",
+    "Currently broker-confirmed positive equity shares, genuine synchronized underlying prices and real listed NIFTY long put or call option with original per-underlying-unit delta, annualized IV, bid/ask, OI, ask depth and valid official lot/expiry",
+    "Current-weight historical portfolio beta with no lookahead; hypothetical signed beta INR exposure, local long-option delta hedge in integer lots and true ask-side premium/slippage/fee liquidity and budget constraints"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_BETA_HEDGE_OPTIONS_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoBetaHedgeOptionsV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-205-beta-hedge-options-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Actual licensed original-time NSE index and every equity historical closes, adjustments for corporate actions, independently verified 60+ daily historical return observations and reproducible provider permissions",
+    "Actually reconciled signed broker portfolio equity quantities/current quotes, genuine authentic NSE index long option delta/IV/ask depth and official instrument lot/expiry mapping (test fixtures are fictional)",
+    "Point-in-time OOS/walk-forward changing-beta validation with actual option historical purchase and liquidation prices, full Indian statutory trading charges, corporate actions, horizon and actual after-cost hedged portfolio PnL",
+    "Independent accepted broker PAPER order/settlement/ledger and Flutter UI, plus separately consented and reviewed LIVE F&O permissions, premium/cash caps, risk and kill switches"
+   ],
+   "note": "Non-executable source-gated historical current-weight beta proxy and hypothetical bought put/call delta hedge for verified long equity holdings. No forecast, observed option fills, realized hedge results, PAPER/LIVE rights or app activation. DATA_BLOCKED.",
    "id": "strategy.STR-205",
    "kind": "STRATEGY",
    "name": "Beta Hedge with Options",
