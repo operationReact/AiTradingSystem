@@ -36,14 +36,14 @@ public final class FnoOptionsResearchService {
     @Autowired
     public FnoOptionsResearchService(FnoVerifiedNiftyLongOptionSourceStore store,
             MarketSessionCalendar calendar,
-            @Value("\${minttick.fno-research.nifty-daily-close-research-rights-verified:false}")
+            @Value("${minttick.fno-research.nifty-daily-close-research-rights-verified:false}")
                 boolean indexResearchRights,
-            @Value("\${minttick.fno-research.long-option-quote-research-rights-verified:false}")
+            @Value("${minttick.fno-research.long-option-quote-research-rights-verified:false}")
                 boolean optionResearchRights,
-            @Value("\${minttick.fno-research.long-option-contract-discovery-verified:false}")
+            @Value("${minttick.fno-research.long-option-contract-discovery-verified:false}")
                 boolean discoveryRights,
-            @Value("\${minttick.fno-research.long-option-ce-instrument-key:}") String ceKey,
-            @Value("\${minttick.fno-research.long-option-pe-instrument-key:}") String peKey) {
+            @Value("${minttick.fno-research.long-option-ce-instrument-key:}") String ceKey,
+            @Value("${minttick.fno-research.long-option-pe-instrument-key:}") String peKey) {
         this.store = store;
         this.calendar = calendar;
         this.indexResearchRights = indexResearchRights;
