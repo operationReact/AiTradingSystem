@@ -27,7 +27,7 @@ class FnoDefinedRiskSpreadRollV1Test {
     private static BigDecimal n(String s){return new BigDecimal(s);}
     private static Rights rights(){return new Rights(true,true,true,true,true,true);}
     private static Policy policy(){
-        return new Policy(180,30,400,10,300,10,14,7,45,4,
+        return new Policy(180,30,600,10,300,10,14,7,45,4,
                 100,10,10,n("5"),n("500"),n("500"));
     }
     private static BrokerSpread held(int lots){
@@ -282,9 +282,9 @@ class FnoDefinedRiskSpreadRollV1Test {
         neverExecutable(d);
     }
     @Test void higherModeledRollDebitCanFailWithoutRiskClaims(){
-        var strict=new Policy(180,30,400,10,300,10,14,7,45,4,
+        var strict=new Policy(180,30,600,10,300,10,14,7,45,4,
                 100,10,10,n("5"),n("1"),n("250"));
-        var q=quote(OL,"1","1.1",10,10,SRC,EX,KNOWN);
+        var q=quote(OL,"1.04","1.1",10,10,SRC,EX,KNOWN);
         var s=snap(q,oldShortQuote(),newLongQuote(),newShortQuote());
         Decision d=evaluate(held(1),oldLong(),oldShort(),newLong(),newShort(),
                 s,history(),rights(),strict);
@@ -308,7 +308,7 @@ class FnoDefinedRiskSpreadRollV1Test {
         assertEquals(Status.NO_ROLL,d.status()); // new risk 505.9 > 500 declared
         assertEquals(0,d.hypotheticalRollLots());
         neverExecutable(d);
-        var wider=new Policy(180,30,400,10,300,10,14,7,45,4,
+        var wider=new Policy(180,30,600,10,300,10,14,7,45,4,
                 100,10,10,n("5"),n("500"),n("1000"));
         d=evaluate(b,oldLong(),oldShort(),newLong(),newShort(),
                 snapshot(),history(),rights(),wider);
