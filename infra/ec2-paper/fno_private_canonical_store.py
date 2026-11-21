@@ -132,7 +132,7 @@ def store(canonical, metrics, raw_db, *, root=ROOT, now=None):
             db.execute("""CREATE TABLE meta(
                 schema_version TEXT NOT NULL, generated_at INTEGER NOT NULL,
                 expires_at INTEGER NOT NULL, total INTEGER NOT NULL,
-                source_commit_min INTEGER NOT NULL)""")
+                CHECK(total>0))""")
             db.execute("""CREATE TABLE daily(
                 contract_key TEXT NOT NULL, session_day TEXT NOT NULL,
                 candle_ts TEXT NOT NULL,
@@ -142,8 +142,8 @@ def store(canonical, metrics, raw_db, *, root=ROOT, now=None):
                 source TEXT NOT NULL CHECK(source IN ('UPSTOX_PRIVATE','NSE_PUBLIC_EOD')),
                 PRIMARY KEY(contract_key,session_day))""")
             db.executemany("INSERT INTO daily VALUES (?,?,?,?,?,?,?,?,?,?)", rows)
-            db.execute("INSERT INTO meta VALUES (?,?,?,?,?)",
-                       (VERSION,int(now),int(expires),len(rows),int(expires-LIFETIME)))
+            db.execute("INSERT INTO meta VALUES (?,?,?,?)",
+                       (VERSION,int(now),int(expires),len(rows)))
             db.commit()
             if (db.execute("PRAGMA quick_check").fetchone() != ("ok",)
                     or db.execute("SELECT COUNT(*) FROM daily").fetchone()[0]!=3929):
