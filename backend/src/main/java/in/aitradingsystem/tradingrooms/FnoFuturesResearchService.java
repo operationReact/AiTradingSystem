@@ -939,6 +939,114 @@ public class FnoFuturesResearchService {
             "INDEX_HEDGE_SOURCE_BLOCKED");
     }
 
+
+    /**
+     * STR-179 is a reusable, research-only source liquidity gate. It is not
+     * independent trading alpha or a broker risk-limit override.
+     */
+    private StrategyStatus evaluateContractLiquidityGate(Instant now, LocalDate today,
+            boolean sessionOpen) {
+        var rights = new FnoContractLiquidityGateV1.SourceRights(
+            researchRightsVerified && liquidityResearchRightsVerified,
+            researchRightsVerified && liquidityResearchRightsVerified,
+            researchRightsVerified && liquidityResearchRightsVerified,
+            contractDiscoveryVerified);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !liquidityResearchRightsVerified) {
+            return liquidityBlocked(now, rights,
+                "LIQUIDITY_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0, 0);
+        }
+        if (!sessionOpen) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_FNO_SESSION_CLOSED", 0, 0, 0);
+        }
+        if (liquidityStore == null) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_SOURCE_ADAPTER_MISSING", 0, 0, 0);
+        }
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_INSTRUMENT_MASTER_NOT_CURRENT",
+                0, 0, 0);
+        }
+        var pair = registry.nearFar(NIFTY, today);
+        if (pair.isEmpty() || !NIFTY.equals(pair.get().near().underlyingKey())) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_FUTURE_CONTRACT_NOT_RESOLVED",
+                0, 0, 0);
+        }
+        FuturesContract chosen = pair.get().near();
+        var current = liveQuote(chosen.instrumentKey());
+        if (current.isEmpty()) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_CURRENT_LIVE_QUOTE_MISSING",
+                1, 0, 0);
+        }
+        final List<FnoVerifiedIntradayLiquidityStore.Snapshot> sourceRows;
+        try {
+            sourceRows = liquidityStore.latestThreeFutures(
+                chosen.instrumentKey(), chosen.expiry(), chosen.lotSize(), now);
+        } catch (RuntimeException inaccessible) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_SOURCE_READ_UNAVAILABLE",
+                1, 1, 0);
+        }
+        if (sourceRows == null || sourceRows.size() != 3) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_THREE_SOURCE_SNAPSHOTS_MISSING",
+                1, 1, sourceRows == null ? 0 : sourceRows.size());
+        }
+        var rows = new ArrayList<FnoContractLiquidityGateV1.MarketSnapshot>();
+        String provider = null;
+        for (var row : sourceRows) {
+            if (row == null || !"UPSTOX_V3".equals(row.provider())
+                    || !chosen.instrumentKey().equals(row.instrumentKey())
+                    || !chosen.underlyingKey().equals(row.underlyingKey())
+                    || !chosen.expiry().equals(row.expiry())
+                    || chosen.lotSize() != row.lotSize()
+                    || !"FUTURE".equals(row.kind())
+                    || (provider != null && !provider.equals(row.provider()))
+                    || row.exchangeAt() == null || row.observedAt() == null
+                    || row.oiFirstObservedAt() == null || row.volumeFirstObservedAt() == null) {
+                return liquidityBlocked(now, rights,
+                    "LIQUIDITY_SOURCE_ROWS_INCOMPLETE_OR_AMBIGUOUS", 1, 1, sourceRows.size());
+            }
+            provider = row.provider();
+            rows.add(new FnoContractLiquidityGateV1.MarketSnapshot(
+                row.instrumentKey(), row.provider(), row.exchangeAt(), row.observedAt(),
+                row.bid(), row.ask(), row.bidDepthUnits(), row.askDepthUnits(),
+                row.oiUnits(), row.cumulativeVolumeUnits(),
+                row.oiFirstObservedAt(), row.volumeFirstObservedAt(),
+                true, true, true, true));
+        }
+        var last = sourceRows.getLast();
+        var quote = current.get();
+        if (last.bid() == null || last.ask() == null
+                || last.bid().compareTo(quote.bid()) != 0
+                || last.ask().compareTo(quote.ask()) != 0
+                || quote.exchangeAt() == null
+                || java.time.Duration.between(last.exchangeAt(), quote.exchangeAt())
+                    .abs().compareTo(java.time.Duration.ofSeconds(10)) > 0) {
+            return liquidityBlocked(now, rights, "LIQUIDITY_SOURCE_LIVE_QUOTE_MISMATCH",
+                1, 1, sourceRows.size());
+        }
+        var contract = new FnoContractLiquidityGateV1.Contract(
+            chosen.instrumentKey(), chosen.underlyingKey(), chosen.expiry(),
+            chosen.lotSize(), FnoContractLiquidityGateV1.DerivativeKind.FUTURE,
+            null, true);
+        var decision = FnoContractLiquidityGateV1.evaluate(
+            contract, List.copyOf(rows), rights, LIQUIDITY_THRESHOLDS, now);
+        return status(decision.strategyId(), decision.status().name(),
+            decision.reasonCode(), now, provider, 1, 1, rows.size(),
+            "THREE_SOURCE_OBSERVED_LIQUIDITY_SNAPSHOTS_NO_ORDER");
+    }
+
+    private static StrategyStatus liquidityBlocked(Instant now,
+            FnoContractLiquidityGateV1.SourceRights rights,
+            String reason, int contracts, int quotes, int sourceRows) {
+        var blocked = FnoContractLiquidityGateV1.evaluate(
+            null, List.of(), rights, LIQUIDITY_THRESHOLDS, now);
+        return status(blocked.strategyId(), blocked.status().name(), reason,
+            now, "NONE", contracts, quotes, sourceRows, "LIQUIDITY_SOURCE_BLOCKED");
+    }
+
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
     List<FnoFuturesRolloverSignalV1.CompletedSession> completedSessions(NearFar pair, LocalDate today) {
         var rows = store.pairRows(pair.near().instrumentKey(), pair.far().instrumentKey(),
