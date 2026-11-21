@@ -35,3 +35,30 @@ All decisions are `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL` or `RESEARCH_CAN
 **Not completed:** licensed real option-chain data and original source timestamps, true NSE exchange calendar, live synchronized paired PE data, actual Indian fees/delivery/expiry/broker margin verification, independent no-lookahead historical and walk-forward evidence, PAPER ledger and Flutter acceptance, separately approved LIVE rights. No broker order, SSM, production deployment, customer entitlement or LIVE/PAPER flag changed.
 
 See [STR-183](STR-183-bull-call-debit-spread.md) and [canonical F&O architecture](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Direct verified two-PE research adapter — 21 November 2026
+
+`FnoDebitSpreadResearchService` now invokes
+`FnoBearPutDebitSpreadV1.evaluate` on verified source history and
+two distinct listed NSE_FO NIFTY put options. The actual option
+construction is **long higher-strike PE at ASK**, **short lower-strike
+PE at BID**, same expiry/lot and same provider. No simulated or
+single-option price is accepted as both legs.
+
+The new empty V107 custody includes original event and first-observed
+timestamps for the index and both PE quotes, independent per-leg
+bid/ask depth and open interest **in lots**, a verified genuine option
+master digest, tax/fee/slippage model and bounded research-risk capital.
+At least five approved point-in-time provider-specific research-use
+receipts are needed for this three-leg (index + two options) observation,
+in addition to V106 verified daily NIFTY 35+ completed closes and
+official calendar. A malformed or cross-provider option/expiry,
+missing exchange quote or unverifiable costs fail closed.
+
+Both `debit-bear-lower-pe-key` and `debit-bear-upper-pe-key` under
+`minttick.fno-research` are blank by default; the global debit-spread
+research rights flag defaults false. The hypothetical terminal
+spread payoff is not a fill, margin guarantee, realized return,
+broker position, paper trade or live order. Real-source E2E,
+PAPER and LIVE acceptance remain zero.
