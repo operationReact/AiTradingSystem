@@ -542,3 +542,47 @@ not represented as market-original evidence.
 six remaining. Real market historical E2E 0/43, PAPER 0/43,
 LIVE 0/43.** All manifest strategy statuses remain DATA_BLOCKED.
 No broker orders, credentials, AWS deployment or APK are activated.
+
+## 22 November 2026 — Final STR-207 to STR-212 separately typed, original-source research
+
+All 43 original deterministic Java evaluators now have a distinct direct
+research callsite. Final six adapters use **EMPTY V124** extension of the
+immutable original JSONB source-custody table, six separate verified
+`MODEL_INFERENCE` rights receipts, provider and strategy-bound first-known
+as-of evidence, SHA-256 source payload digest and typed Jackson input
+validation. Each individual `Fno*V1.evaluate` is responsible for its
+actual underlying strike/expiry/lot/book/Greeks/history rules.
+
+- **STR-207 Put Spread Collar:** requires broker-attested long NIFTY future,
+  three genuine same-expiry listed options and original books; the bought
+  higher put, written lower put and written higher call produce only an
+  expiry scenario. Severe downside below the lower put is still exposed.
+- **STR-208 Defined Risk Spread Roll:** authenticated existing broker
+  put-debit vertical and individually quoted four actual close/open legs,
+  independently listed later expiry. Hypothetical roll cashflow, not
+  actual fills, reconciled new holdings, or executable recommendation.
+- **STR-209 Expiry Risk Neutralization:** a broker-*complete* same-expiry
+  signed options book, independently attested official last tradable
+  exchange cutoff and original per-contract delta/gamma and
+  quote liquidity; theoretical close-all, not a broker liquidation order.
+- **STR-210 Portfolio Protective Overlay:** broker-verified long equities,
+  65+ same-day original NIFTY/held-equity closes, two true long put
+  options and THREE independently observed historical tail sessions.
+  Expiry-stress put intrinsic and equity-index basis risk are **unmodeled
+  real protection**, not profit estimates.
+- **STR-211 Greeks Exposure Rebalance:** broker-complete verified options
+  portfolio and original delta/gamma/vega/theta/IV with both genuine
+  OTM buy-only CE and PE candidates. Only local linear Greeks are modeled;
+  no actual exchange option purchase, risk-free exposure, or full hedge.
+- **STR-212 Skew-Based Hedge:** original delta-matched NIFTY put/call IV
+  skew, broker-existing long futures, quoted put debit spread with
+  official shared expiry and correct bid/ask sides. This is NOT a
+  defined-downside protection: the sold lower put caps the put-wing
+  protection while long-future losses persist.
+
+**Code-level direct typed evaluator integration: 43/43 (100%).**
+**Independently verified real NSE historical market E2E: 0/43. PAPER
+trading broker/ledger lifecycle E2E: 0/43. LIVE broker trading E2E: 0/43.**
+All 43 strategy catalog statuses remain `DATA_BLOCKED`. Rights default
+false and V124 inserts ZERO invented market/source rows. This milestone
+is NOT production readiness, a deployed backend or a downloadable APK.
