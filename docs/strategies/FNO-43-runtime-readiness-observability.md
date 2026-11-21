@@ -12,7 +12,7 @@ source rights and real source-original replay.
 The response lists **exactly 43** sorted strategies with the real manifest
 `requiredInputs` and evaluator source paths. Each gets an explicit integration stage:
 
-- STR-170/171/172/173/174: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
+- STR-170/171/172/173/174/175: `DIRECT_EVALUATOR_OBSERVED` if the existing read-only
   `FnoFuturesResearchService` returned an evaluator result, otherwise
   `DIRECT_ADAPTER_UNAVAILABLE`. Research may be blocked for missing rights,
   costs, contracts, quotes or historical sessions. These statuses are not
@@ -20,7 +20,7 @@ The response lists **exactly 43** sorted strategies with the real manifest
 - STR-181/182: `SIGNAL_ROUTE_ONLY`. The existing `FnoLongOptionCrossoverV1`
   signal path is **not** a distinct `FnoLongCallV1` or `FnoLongPutV1`
   evaluator invocation.
-- STR-175–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
+- STR-176–180, STR-183–212: `NO_TYPED_SOURCE_ADAPTER`, even where
   separate product screens, old services or JUnit fixtures exist.
 
 The four independent acceptance booleans per strategy are always false:
@@ -48,8 +48,8 @@ promotion. Tests are synthetic and provide no source-data coverage evidence.
 
 
 **21 Nov E2E-2 update:** STR-173 has a read-only session-OI adapter with
-research-rights and master freshness gates. The registry now has five directly
-invoked research evaluator paths and 38 missing. An observed result may be
+research-rights and master freshness gates. The registry now has six directly
+invoked research evaluator paths and 37 missing. An observed result may be
 BLOCKED_RIGHTS or BLOCKED_DATA. All independent real-source E2E, PAPER and
 LIVE validation counters remain zero.
 
@@ -60,3 +60,13 @@ records that separately attest final close, finalized OI, calendar and original
 as-of availability it stays BLOCKED_DATA; the default research-rights flag
 keeps it BLOCKED_RIGHTS. Count **five direct research evaluator paths, 38
 remaining**, still zero independently verified source-E2E, PAPER and LIVE.
+
+
+**21 Nov E2E-2 STR-175 update:** A sixth distinct read-only research evaluator
+call is connected through one provider/account-scoped, independently rights-gated,
+point-in-time L1-depth + broker margin/capital and cost evidence store. The
+new financial evidence table is empty by default and is purged after at most
+seven days. No arbitrary instrument, assumed cash, synthetic book depth or
+notional brokerage fees are substituted. The registry counts **6/43 direct
+research paths**, **37 without direct adapters**, **2 signal-only routes**,
+and still **0/43 independently validated real-source E2E, PAPER or LIVE**.

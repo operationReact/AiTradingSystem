@@ -19,6 +19,9 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStoreTest.java'
       - 'backend/src/main/resources/db/migration/V100__fno_verified_final_price_oi_sessions.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V101__fno_cash_futures_feasibility_evidence.sql'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -40,6 +43,9 @@ on:
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedFinalPriceOiSessionStoreTest.java'
       - 'backend/src/main/resources/db/migration/V100__fno_verified_final_price_oi_sessions.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoCashFuturesFeasibilityStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V101__fno_cash_futures_feasibility_evidence.sql'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -100,6 +106,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedFinalPriceOiSessionStoreTest' test
+      - name: Validate STR-175 broker account depth, capital and cost evidence without orders
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoCashFuturesFeasibilityStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |

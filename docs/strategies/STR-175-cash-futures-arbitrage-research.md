@@ -33,3 +33,58 @@ All outcomes report `executable=false`, `orderPlaced=false`, `riskFreeArbitrageV
 **Missing before any operational use:** actual provider quotes and order-book depth rights/provenance, complete Indian cash/future charges (including delivery-related costs, exchange/stamp/STT/GST charges where applicable), actual broker margin and settlement constraints, verified dividend/corporate-action events and borrowing restrictions, no-lookahead historical depth backtests and walk-forward stress tests, PAPER integration and independent source/Flutter/runtime acceptance. Data publication/redistribution rights and LIVE F&O trading permission remain separately gated.
 
 **Client impact:** no API or Flutter UI changes. The catalog stays DATA_BLOCKED; unit tests validate fixture mathematics, not an exchange-connected trade or profit.
+
+## E2E-2 direct research integration (21 November 2026)
+
+The operator-only `FnoFuturesResearchService.evaluateAll` now invokes the
+**distinct** STR-175 `FnoCashFuturesArbitrageResearchV1.evaluate(...)` using
+the existing shared Upstox V3 spot/futures quote feed for observed BID/ASK,
+plus the new read-only `FnoCashFuturesFeasibilityStore` as an independent
+account-scoped, provider-scoped evidence boundary.
+
+The new `V101__fno_cash_futures_feasibility_evidence.sql` migration creates
+an **empty** append-only evidence table. No source rows, rights flags, broker
+accounts or capital figures are auto-populated. Proof rows require all of:
+
+- Matching exact NSE_EQ stock and NSE_FO same-stock futures key, expiry, lot,
+  provider and configured opaque broker account scope.
+- Actual ask-side cash and bid-side futures displayed depth, **with their
+  quoted prices and first-observed times**, matched exactly to a current
+  shared-feed quote within bounded timing and availability windows.
+- Separately verified, currently active research-use rights for
+  `nse_eq_quote_depth` and `nse_fo_quote_depth`, owned by the same
+  provider. A successful authenticated market feed is **not** such a grant.
+- Explicit positive futures margin, stress margin, delivery cash buffer and
+  current broker funds; independently evidenced funding/dividend/stock borrow
+  assumptions and statutory/tax/slippage/dividend/corporate-event costs.
+  The V101 digest fields are *evidence references* for external verification,
+  not cryptographic proof of their underlying source contents.
+- A current instrument-master digest, open F&O exchange session and
+  verified deliverable underlying. No index is treated as deliverable cash.
+  Full-lot book depth is mandatory. A depth or fee receipt from a different
+  account/provider/expiry is rejected rather than silently reused.
+
+V101 financial/market-depth records have a **maximum seven-day retention**.
+A retention-only purge deletes expired rows; any edits or early erasure are
+blocked. No customer response exposes account funds.
+
+**Configuration remains fail-closed by default:**
+`minttick.fno-research.cash-feasibility-research-rights-verified=false`;
+`minttick.fno-research.cash-feasibility-account-scope` is empty unless
+explicitly configured. Existing STR-170 carry research does not certify
+delivery, funding, original depth, or feasibility on its own.
+
+The new integration tests exercise direct evaluator invocation with mocked
+complete receipts, missing rights, missing account identity, quote/depth
+mismatch, mixed providers, short book depth, missing live quotes, market
+closure and sanitized source exceptions. SQL/schema tests ensure independent
+rights and retention. **Mocked positive outcomes are NOT proof of live
+data, source permissions, settled cash, return on capital, profitability,
+PAPER execution or LIVE orders.** The manifest remains DATA_BLOCKED.
+
+Next work before independently validated operational STR-175:
+approved server-side evidence ingestion/attestation and broker funds/margin
+reconciliation, up-to-date corporate-action and complete Indian cost
+receipts, actual exchange depth coverage, multi-day point-in-time
+walk-forward including fill/settlement constraints, PAPER ledger, and
+separately authorized LIVE execution.

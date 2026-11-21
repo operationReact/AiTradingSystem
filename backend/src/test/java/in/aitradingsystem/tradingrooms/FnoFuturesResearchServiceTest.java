@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
+import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -369,6 +370,172 @@ class FnoFuturesResearchServiceTest {
         assertEquals("BLOCKED_DATA", row.status());
         assertEquals("PRICE_OI_FINAL_SESSION_READ_UNAVAILABLE", row.reason());
         assertFalse(row.reason().contains("secret"));
+    }
+
+
+    private static final String CASH_EQUITY = "NSE_EQ|INE002A01018";
+    private static final String TEST_SCOPE = "private_testing_01";
+    private static final FuturesContract CASH_NEAR = new FuturesContract(
+        "NSE_FO|SYN_STOCK_DEC", CASH_EQUITY, "TEST_STOCK", "TEST STOCK FUT DEC26",
+        LocalDate.of(2026, 12, 29), 250);
+    private static final FuturesContract CASH_FAR = new FuturesContract(
+        "NSE_FO|SYN_STOCK_JAN", CASH_EQUITY, "TEST_STOCK", "TEST STOCK FUT JAN27",
+        LocalDate.of(2027, 1, 26), 250);
+
+    private static FnoFuturesContractRegistry cashRegistry() {
+        var registry = currentRegistry();
+        when(registry.nearFar(eq(CASH_EQUITY), any()))
+            .thenReturn(Optional.of(new NearFar(CASH_NEAR, CASH_FAR)));
+        return registry;
+    }
+
+    private static FnoCashFuturesFeasibilityStore.Proof cashProof() {
+        return new FnoCashFuturesFeasibilityStore.Proof(
+            "UPSTOX_V3", TEST_SCOPE, CASH_EQUITY, CASH_NEAR.instrumentKey(),
+            CASH_NEAR.expiry(), CASH_NEAR.lotSize(),
+            600L, 500L, new BigDecimal("100.10"), new BigDecimal("103.50"),
+            NOW.minusSeconds(2), NOW.minusSeconds(1),
+            new FnoFuturesBasisCarryV1.Assumptions(
+                new BigDecimal("600"), BigDecimal.ZERO, new BigDecimal("100"),
+                new BigDecimal("20"), new BigDecimal("25")),
+            new FnoCashFuturesArbitrageResearchV1.Capital(
+                new BigDecimal("50000"), new BigDecimal("8000"),
+                new BigDecimal("3000"), new BigDecimal("2000"), true, true, true),
+            new FnoCashFuturesArbitrageResearchV1.AdditionalCosts(
+                new BigDecimal("0.03"), new BigDecimal("50"), new BigDecimal("20"),
+                new BigDecimal("15"), new BigDecimal("250"),
+                true, true, true, true));
+    }
+
+    private static UpstoxFnoV3LiveFeedService matchedCashQuotes() {
+        var live = liveWith(Map.of(CASH_NEAR.instrumentKey(),
+            quote(CASH_NEAR.instrumentKey(), "103.50", "103.70")));
+        when(live.eligibleResearchSpotQuote(CASH_EQUITY))
+            .thenReturn(Optional.of(quote(CASH_EQUITY, "100", "100.10")));
+        return live;
+    }
+
+    private static FnoFuturesResearchService cashService(
+            FnoCashFuturesFeasibilityStore receipts, boolean cashRights,
+            boolean sessionOpen, String accountScope, UpstoxFnoV3LiveFeedService live) {
+        return new FnoFuturesResearchService(feed(live), calendar(sessionOpen),
+            cashRegistry(), emptyStore(), null, receipts, true, true,
+            false, cashRights, accountScope, CASH_EQUITY);
+    }
+
+    @Test
+    void str175IntegratesVerifiedSameAccountDepthCapitalAndCostsWithoutOrderExecution() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        when(store.currentSingleProof(eq(TEST_SCOPE), eq(CASH_EQUITY),
+            eq(CASH_NEAR.instrumentKey()), eq(CASH_NEAR.expiry()), eq(250), eq(NOW)))
+            .thenReturn(Optional.of(cashProof()));
+        var result = byId(cashService(store, true, true, TEST_SCOPE,
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertNotNull(result);
+        assertEquals("RESEARCH_CANDIDATE", result.status());
+        assertEquals("STRESSED_CASH_FUT_RESEARCH_CANDIDATE", result.reason());
+        assertEquals(1, result.contracts());
+        assertEquals(2, result.quotes());
+        assertEquals(0, result.history());
+        assertEquals("CASH_FUT_VERIFIED_FEASIBILITY_RECEIPT_RESEARCH_ONLY", result.input());
+        verify(store).currentSingleProof(eq(TEST_SCOPE), eq(CASH_EQUITY),
+            eq(CASH_NEAR.instrumentKey()), eq(CASH_NEAR.expiry()), eq(250), eq(NOW));
+        // The integration exposes only research status, never capital or account data.
+        assertFalse(result.input().contains(TEST_SCOPE));
+    }
+
+    @Test
+    void str175DefaultRightsDeniedDoesNotFetchBrokerEvidence() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        var result = byId(cashService(store, false, true, TEST_SCOPE,
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_RIGHTS", result.status());
+        assertEquals("CASH_FUT_SOURCE_RIGHTS_NOT_VERIFIED", result.reason());
+        verifyNoInteractions(store);
+    }
+
+    @Test
+    void str175RefusesWrongAccountAndMissingMarginReceipts() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        var noAccount = byId(cashService(store, true, true, "",
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_DATA", noAccount.status());
+        assertEquals("CASH_FUT_ACCOUNT_OR_STOCK_SCOPE_NOT_CONFIGURED", noAccount.reason());
+        verifyNoInteractions(store);
+        var noEvidence = byId(cashService(store, true, true, TEST_SCOPE,
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_DATA", noEvidence.status());
+        assertEquals("CASH_FUT_DEPTH_MARGIN_DELIVERY_COST_EVIDENCE_MISSING", noEvidence.reason());
+    }
+
+    @Test
+    void str175RejectsStalePriceDepthPriceMismatchAndWrongProvider() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        var p = cashProof();
+        when(store.currentSingleProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenReturn(Optional.of(new FnoCashFuturesFeasibilityStore.Proof(
+                p.provider(), p.accountScope(), p.spotKey(), p.futureKey(), p.expiry(),
+                p.lotSize(), p.spotAskDepthUnits(), p.futuresBidDepthUnits(),
+                new BigDecimal("100.11"), p.futuresBidAtDepth(),
+                p.depthExchangeAt(), p.depthFirstAvailableAt(), p.basis(), p.capital(), p.costs())));
+        var mismatch = byId(cashService(store, true, true, TEST_SCOPE,
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_DATA", mismatch.status());
+        assertEquals("CASH_FUT_PRICE_DEPTH_OR_ACCOUNT_PROOF_MISMATCH", mismatch.reason());
+        when(store.currentSingleProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenReturn(Optional.of(new FnoCashFuturesFeasibilityStore.Proof(
+                "ANGEL_ONE_SMARTAPI", p.accountScope(), p.spotKey(), p.futureKey(),
+                p.expiry(), p.lotSize(), p.spotAskDepthUnits(), p.futuresBidDepthUnits(),
+                p.spotAskAtDepth(), p.futuresBidAtDepth(),
+                p.depthExchangeAt(), p.depthFirstAvailableAt(), p.basis(), p.capital(), p.costs())));
+        assertEquals("CASH_FUT_PRICE_DEPTH_OR_ACCOUNT_PROOF_MISMATCH",
+            byId(cashService(store, true, true, TEST_SCOPE, matchedCashQuotes())
+                .evaluateAll(NOW)).get("strategy.STR-175").reason());
+    }
+
+    @Test
+    void str175DepthBelowFullLotIsInfeasibleNotACashAndCarrySignal() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        var p = cashProof();
+        when(store.currentSingleProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenReturn(Optional.of(new FnoCashFuturesFeasibilityStore.Proof(
+                p.provider(), p.accountScope(), p.spotKey(), p.futureKey(),
+                p.expiry(), p.lotSize(), 249L, 500L,
+                p.spotAskAtDepth(), p.futuresBidAtDepth(),
+                p.depthExchangeAt(), p.depthFirstAvailableAt(),
+                p.basis(), p.capital(), p.costs())));
+        var result = byId(cashService(store, true, true, TEST_SCOPE,
+            matchedCashQuotes()).evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("INFEASIBLE", result.status());
+        assertEquals("CASH_FUT_TWO_LEG_DEPTH_INSUFFICIENT", result.reason());
+    }
+
+    @Test
+    void str175NoLiveSpotQuoteNeverRequestsMarginEvidenceOrInventsDepth() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        var live = liveWith(Map.of(CASH_NEAR.instrumentKey(),
+            quote(CASH_NEAR.instrumentKey(), "103.50", "103.70")));
+        var result = byId(cashService(store, true, true, TEST_SCOPE, live)
+            .evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_DATA", result.status());
+        assertEquals("CASH_FUT_MATCHED_LIVE_QUOTES_MISSING", result.reason());
+        verifyNoInteractions(store);
+    }
+
+    @Test
+    void str175SessionClosedAndStoreExceptionsFailClosedWithoutSensitiveText() {
+        var store = mock(FnoCashFuturesFeasibilityStore.class);
+        assertEquals("CASH_FUT_EXCHANGE_SESSION_CLOSED",
+            byId(cashService(store, true, false, TEST_SCOPE, matchedCashQuotes())
+                .evaluateAll(NOW)).get("strategy.STR-175").reason());
+        verifyNoInteractions(store);
+        when(store.currentSingleProof(any(), any(), any(), any(), anyInt(), any()))
+            .thenThrow(new IllegalStateException("private account and token"));
+        var row = byId(cashService(store, true, true, TEST_SCOPE, matchedCashQuotes())
+            .evaluateAll(NOW)).get("strategy.STR-175");
+        assertEquals("BLOCKED_DATA", row.status());
+        assertEquals("CASH_FUT_FEASIBILITY_EVIDENCE_READ_UNAVAILABLE", row.reason());
+        assertFalse(row.reason().contains("private"));
     }
 
 }

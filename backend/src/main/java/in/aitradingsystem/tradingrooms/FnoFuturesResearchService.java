@@ -1,6 +1,7 @@
 package in.aitradingsystem.tradingrooms;
 
 import in.aitradingsystem.marketdata.FnoClosingSnapshotStore;
+import in.aitradingsystem.marketdata.FnoCashFuturesFeasibilityStore;
 import in.aitradingsystem.marketdata.FnoMarketDataProvider;
 import in.aitradingsystem.marketdata.FnoVerifiedFinalPriceOiSessionStore;
 import in.aitradingsystem.marketdata.MarketSessionCalendar;
@@ -21,7 +22,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * Read-only invocation of five futures research evaluators (STR-170..174).
+ * Read-only invocation of six futures research evaluators (STR-170..175).
  *
  * <p>Inputs come only from verified sources: contracts from the instrument-master
  * registry, live quotes from the existing shared V3 feed, and closing history from
@@ -55,37 +56,59 @@ public class FnoFuturesResearchService {
     private final FnoFuturesContractRegistry registry;
     private final FnoClosingSnapshotStore store;
     private final FnoVerifiedFinalPriceOiSessionStore finalSessionStore;
+    private final FnoCashFuturesFeasibilityStore cashFeasibilityStore;
     private final boolean researchRightsVerified;
     private final boolean contractDiscoveryVerified;
     private final boolean finalPriceResearchRightsVerified;
+    private final boolean cashFeasibilityResearchRightsVerified;
+    private final String cashFeasibilityAccountScope;
     private final String basisUnderlyingKey;
 
     @Autowired
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
-            FnoClosingSnapshotStore store, FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoClosingSnapshotStore store,
+            FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            FnoCashFuturesFeasibilityStore cashFeasibilityStore,
             @Value("${minttick.fno-research.research-rights-verified:false}") boolean researchRightsVerified,
             @Value("${minttick.fno-research.contract-discovery-verified:false}") boolean contractDiscoveryVerified,
             @Value("${minttick.fno-research.finalized-price-research-rights-verified:false}") boolean finalPriceResearchRightsVerified,
+            @Value("${minttick.fno-research.cash-feasibility-research-rights-verified:false}") boolean cashFeasibilityResearchRightsVerified,
+            @Value("${minttick.fno-research.cash-feasibility-account-scope:}") String cashFeasibilityAccountScope,
             @Value("${minttick.fno-research.basis-underlying-key:}") String basisUnderlyingKey) {
         this.feed = feed;
         this.calendar = calendar;
         this.registry = registry;
         this.store = store;
         this.finalSessionStore = finalSessionStore;
+        this.cashFeasibilityStore = cashFeasibilityStore;
         this.researchRightsVerified = researchRightsVerified;
         this.contractDiscoveryVerified = contractDiscoveryVerified;
         this.finalPriceResearchRightsVerified = finalPriceResearchRightsVerified;
+        this.cashFeasibilityResearchRightsVerified = cashFeasibilityResearchRightsVerified;
+        this.cashFeasibilityAccountScope =
+            cashFeasibilityAccountScope == null ? "" : cashFeasibilityAccountScope.trim();
         this.basisUnderlyingKey = basisUnderlyingKey == null ? "" : basisUnderlyingKey.trim();
     }
 
-    /** Legacy research fixtures retain default-denied final-price source rights. */
+    /** The pre-STR-175 test constructor continues with cash feasibility denied. */
+    public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
+            MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
+            FnoClosingSnapshotStore store, FnoVerifiedFinalPriceOiSessionStore finalSessionStore,
+            boolean researchRightsVerified, boolean contractDiscoveryVerified,
+            boolean finalPriceResearchRightsVerified, String basisUnderlyingKey) {
+        this(feed, calendar, registry, store, finalSessionStore, null,
+            researchRightsVerified, contractDiscoveryVerified, finalPriceResearchRightsVerified,
+            false, "", basisUnderlyingKey);
+    }
+
+    /** Legacy research tests preserve source-denied STR-174 and STR-175. */
     public FnoFuturesResearchService(ObjectProvider<UpstoxFnoV3LiveFeedService> feed,
             MarketSessionCalendar calendar, FnoFuturesContractRegistry registry,
             FnoClosingSnapshotStore store, boolean researchRightsVerified,
             boolean contractDiscoveryVerified, String basisUnderlyingKey) {
-        this(feed, calendar, registry, store, null, researchRightsVerified,
-            contractDiscoveryVerified, false, basisUnderlyingKey);
+        this(feed, calendar, registry, store, null, null, researchRightsVerified,
+            contractDiscoveryVerified, false, false, "", basisUnderlyingKey);
     }
 
     /** Current exchange-timed live quote from the shared V3 feed, or empty. */
@@ -105,7 +128,8 @@ public class FnoFuturesResearchService {
             evaluateCalendarSpread(now, today, sessionOpen),
             evaluateRollover(now, today),
             evaluateOpenInterestTrend(now, today),
-            evaluatePriceOiDivergence(now, today));
+            evaluatePriceOiDivergence(now, today),
+            evaluateCashFuturesFeasibility(now, today, sessionOpen));
     }
 
     private StrategyStatus evaluateBasisCarry(Instant now, LocalDate today, boolean sessionOpen) {
@@ -358,6 +382,126 @@ public class FnoFuturesResearchService {
             null, List.of(), rights, PRICE_OI_THRESHOLDS, now);
         return status(blocked.strategyId(), blocked.status().name(), reason,
             now, "NONE", contracts, 0, sourceRows, "PRICE_OI_FINAL_SOURCE_BLOCKED");
+    }
+
+
+    /**
+     * STR-175: one-lot cash-equity BUY + same-stock futures SELL feasibility.
+     * The existing shared V3 feed supplies only exchange-timed bid/ask. Verified
+     * exchange L1 depth, account funds, delivery/margin and distinct fee receipts
+     * must originate separately from V101; never infer from LTP or balances.
+     */
+    private StrategyStatus evaluateCashFuturesFeasibility(Instant now,
+            LocalDate today, boolean sessionOpen) {
+        var rights = new FnoFuturesBasisCarryV1.SourceRights(
+            researchRightsVerified && cashFeasibilityResearchRightsVerified,
+            researchRightsVerified && cashFeasibilityResearchRightsVerified,
+            sessionOpen, false);
+        if (!researchRightsVerified || !contractDiscoveryVerified
+                || !cashFeasibilityResearchRightsVerified) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_SOURCE_RIGHTS_NOT_VERIFIED", 0, 0);
+        }
+        if (!sessionOpen) {
+            return cashFeasibilityBlocked(now, rights, "CASH_FUT_EXCHANGE_SESSION_CLOSED", 0, 0);
+        }
+        if (cashFeasibilityStore == null
+                || !cashFeasibilityAccountScope.matches("[A-Za-z0-9_-]{8,80}")
+                || !basisUnderlyingKey.matches("NSE_EQ\\|[A-Za-z0-9._-]{1,64}")) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_ACCOUNT_OR_STOCK_SCOPE_NOT_CONFIGURED", 0, 0);
+        }
+
+        var master = registry.status();
+        if (master == null || !"LOADED".equals(master.state())
+                || master.fetchedAt() == null || master.sha256() == null
+                || master.sha256().isBlank() || master.fetchedAt().isAfter(now)
+                || java.time.Duration.between(master.fetchedAt(), now).toHours() > 48) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_INSTRUMENT_MASTER_NOT_CURRENT", 0, 0);
+        }
+        Optional<NearFar> pair = registry.nearFar(basisUnderlyingKey, today);
+        if (pair.isEmpty() || !basisUnderlyingKey.equals(pair.get().near().underlyingKey())) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_SINGLE_STOCK_CONTRACT_NOT_RESOLVED", 0, 0);
+        }
+        FuturesContract future = pair.get().near();
+        var spotQuote = liveQuote(basisUnderlyingKey);
+        var futureQuote = liveQuote(future.instrumentKey());
+        int fresh = (spotQuote.isPresent() ? 1 : 0) + (futureQuote.isPresent() ? 1 : 0);
+        if (fresh != 2) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_MATCHED_LIVE_QUOTES_MISSING", 1, fresh);
+        }
+        final Optional<FnoCashFuturesFeasibilityStore.Proof> receipt;
+        try {
+            receipt = cashFeasibilityStore.currentSingleProof(cashFeasibilityAccountScope,
+                basisUnderlyingKey, future.instrumentKey(), future.expiry(), future.lotSize(), now);
+        } catch (RuntimeException unavailable) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_FEASIBILITY_EVIDENCE_READ_UNAVAILABLE", 1, fresh);
+        }
+        if (receipt == null || receipt.isEmpty()) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_DEPTH_MARGIN_DELIVERY_COST_EVIDENCE_MISSING", 1, fresh);
+        }
+        var proof = receipt.get();
+        var spot = spotQuote.get();
+        var fut = futureQuote.get();
+        boolean sameEvidence = "UPSTOX_V3".equals(proof.provider())
+            && cashFeasibilityAccountScope.equals(proof.accountScope())
+            && basisUnderlyingKey.equals(proof.spotKey())
+            && future.instrumentKey().equals(proof.futureKey())
+            && future.expiry().equals(proof.expiry())
+            && future.lotSize() == proof.lotSize()
+            && proof.spotAskAtDepth() != null
+            && proof.futuresBidAtDepth() != null
+            && proof.spotAskAtDepth().compareTo(spot.ask()) == 0
+            && proof.futuresBidAtDepth().compareTo(fut.bid()) == 0
+            && proof.depthExchangeAt() != null
+            && proof.depthFirstAvailableAt() != null
+            && !proof.depthFirstAvailableAt().isAfter(now)
+            && !proof.depthExchangeAt().isAfter(now)
+            && java.time.Duration.between(proof.depthExchangeAt(), now).compareTo(
+                java.time.Duration.ofSeconds(15)) <= 0
+            && java.time.Duration.between(proof.depthExchangeAt(), spot.exchangeAt())
+                .abs().compareTo(java.time.Duration.ofSeconds(10)) <= 0
+            && java.time.Duration.between(proof.depthExchangeAt(), fut.exchangeAt())
+                .abs().compareTo(java.time.Duration.ofSeconds(10)) <= 0;
+        if (!sameEvidence) {
+            return cashFeasibilityBlocked(now, rights,
+                "CASH_FUT_PRICE_DEPTH_OR_ACCOUNT_PROOF_MISMATCH", 1, fresh);
+        }
+        var contract = new FnoFuturesBasisCarryV1.Contract(
+            basisUnderlyingKey, future.instrumentKey(), future.underlyingKey(),
+            future.expiry(), future.lotSize(), true, true);
+        var buyStock = new FnoCashFuturesArbitrageResearchV1.Leg(
+            spot.instrumentKey(), "UPSTOX_V3",
+            new FnoFuturesBasisCarryV1.Quote(
+                spot.bid(), spot.ask(), spot.exchangeAt(), spot.observedAt()),
+            proof.spotAskDepthUnits(), true);
+        var sellFuture = new FnoCashFuturesArbitrageResearchV1.Leg(
+            fut.instrumentKey(), "UPSTOX_V3",
+            new FnoFuturesBasisCarryV1.Quote(
+                fut.bid(), fut.ask(), fut.exchangeAt(), fut.observedAt()),
+            proof.futuresBidDepthUnits(), true);
+        var result = FnoCashFuturesArbitrageResearchV1.evaluate(
+            contract, buyStock, sellFuture, rights, proof.basis(),
+            proof.capital(), proof.costs(), now);
+        return status(result.strategyId(), result.status().name(),
+            result.reasonCode(), now, "UPSTOX_V3", 1, fresh, 0,
+            "CASH_FUT_VERIFIED_FEASIBILITY_RECEIPT_RESEARCH_ONLY");
+    }
+
+    private static StrategyStatus cashFeasibilityBlocked(Instant now,
+            FnoFuturesBasisCarryV1.SourceRights rights, String reason,
+            int contracts, int quotes) {
+        // The distinct evaluator is invoked even for blocked as-of source paths.
+        var result = FnoCashFuturesArbitrageResearchV1.evaluate(
+            null, null, null, rights, null, null, null, now);
+        return status(result.strategyId(), result.status().name(),
+            reason, now, "NONE", contracts, quotes, 0,
+            "CASH_FUT_FEASIBILITY_SOURCE_BLOCKED");
     }
 
     /** Last up to three sessions where BOTH legs are stored with OI and volume, oldest first. */
