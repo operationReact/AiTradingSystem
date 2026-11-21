@@ -34,6 +34,13 @@ on:
       - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V106__fno_nifty_long_option_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchServiceTest.java'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -70,6 +77,13 @@ on:
       - 'backend/src/main/resources/db/migration/V105__fno_verified_expiry_basis_pair_evidence.sql'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStoreTest.java'
+      - 'backend/src/main/resources/db/migration/V106__fno_nifty_long_option_source_evidence.sql'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedNiftyLongOptionSourceStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoOptionsResearchServiceTest.java'
+      - 'scripts/fno_strategy_e2e_audit.py'
+      - 'scripts/tests/test_fno_strategy_e2e_audit.py'
       - 'docs/strategies/FNO-43-runtime-readiness-observability.md'
       - 'backend/src/main/resources/mind/capability-manifest.v1.json'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno*V1.java'
@@ -160,6 +174,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress '-Dtest=FnoVerifiedExpiryBasisPairStoreTest' test
+      - name: Validate STR-181/182 option contract/chain rights, 35 completed NIFTY closes and distinct evaluator calls
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoOptionsResearchServiceTest,FnoVerifiedNiftyLongOptionSourceStoreTest' test
       - name: Produce machine-verifiable report; never promote fixtures to real-data readiness
         shell: bash
         run: |
