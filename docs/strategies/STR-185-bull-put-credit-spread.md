@@ -33,3 +33,30 @@ Returns `BLOCKED_RIGHTS`, `BLOCKED_DATA`, `NO_SIGNAL`, or `RESEARCH_CANDIDATE`. 
 Required for further acceptance: licensed historical and live NSE PE bid/ask source with first-known timestamps; verified exchange session/expiry/lot calendar; Indian transaction costs and broker margin, settlement and realistic two-leg fillability; no-lookahead out-of-sample and walk-forward evaluation; account-specific PAPER ledger, Flutter integration, and independent LIVE options permission/consent checks.
 
 See [STR-184](STR-184-bear-put-debit-spread.md) and [canonical F&O feed](../architecture/fno-canonical-strategy-feed.md).
+
+
+## Actual direct research adapter — 21 November 2026
+
+`FnoCreditSpreadResearchService` now calls the **distinct**
+`FnoBullPutCreditSpreadV1.evaluate` with source-first-known completed 35+
+NIFTY close observations, the genuine same-expiry/lot **short higher strike
+PE** and **long lower strike PE**, and synchronized verified index/option
+bid/ask, independent OI/depth-in-lots for both option legs.
+
+V108 contains **EMPTY** immutable broker-account-scoped market and margin
+evidence. A verified provider-specific original quote is insufficient by
+itself: the attested broker margin, current reconciled existing positions,
+stress variation margin, potential settlement/assignment buffer, independently
+reviewed stressed maximum loss, fees and risk budget must also exist.
+Six separately verified model-inference rights receipts are required for
+the index tick, both PE quote streams, instrument master, combined fees/budget
+and account-specific margin evidence. A retrieved quote does not establish
+order placement rights or prove a broker balance.
+
+All keys and permissions default to unconfigured/false, including
+`minttick.fno-research.credit-spread-research-rights-verified`,
+`credit-spread-account-scope`, `credit-bull-lower-pe-key`, and
+`credit-bull-upper-pe-key`. Missing actual source evidence, rights,
+contract identity or funded margin blocks research. The modeled expiry
+max loss and credit are **not realized P&L or a fill**. No real-data source
+E2E, PAPER execution or LIVE orders are validated.
