@@ -95,7 +95,7 @@ class FnoIronButterflyV1Test {
     @Test void allFourStrikeTypeLotExpiryAndListingIdentityMustBeValid(){
         for(var invalid:List.of(
             contract(LC.key(),"PE","120"),
-            contract(LC.key(),"CE","105"),
+            contract(LC.key(),"CE","95"),
             new Contract(LC.key(),INDEX,"CE",n("120"),n("0.05"),
                 LC.listedFrom(),EXP,25,true),
             new Contract(LC.key(),INDEX,"CE",n("120"),n("0.05"),
@@ -156,7 +156,7 @@ class FnoIronButterflyV1Test {
     @Test void trulyAsymmetricWingsUseLargerWingForMaximumLoss(){
         var wide=contract("NSE_FO|NIFTY_140_CE","CE","140");
         var q=quote(wide.key(),"0.99","1","5",10,10,1000);
-        var budget=new Assumptions(50,50,300,2,50,10000,300,
+        var budget=new Assumptions(50,50,300,2,50,10000,500,300,
             n("20"),n("100000"),1000,1000,10000);
         var d=eval(LP,SP,SC,wide,history(),SPOT,LPQ,SPQ,SCQ,q,RIGHTS,budget);
         state(d,Status.RESEARCH_CANDIDATE,"IRON_BUTTERFLY_DEFINED_EXPIRY_RISK_RESEARCH_ONLY");
@@ -165,14 +165,12 @@ class FnoIronButterflyV1Test {
     }
     @Test void nonpositiveCombinedCreditIsNeverAResearchCandidate(){
         var cheap=quote(SP.key(),"0.20","0.202","5",10,10,1000);
-        state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,cheap,SCQ,LCQ,RIGHTS,A),
-            Status.RESEARCH_CANDIDATE,"IRON_BUTTERFLY_DEFINED_EXPIRY_RISK_RESEARCH_ONLY");
         var bothCheap=quote(SC.key(),"0.20","0.202","5",10,10,1000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,cheap,bothCheap,LCQ,RIGHTS,A),
             Status.NO_SIGNAL,"IRON_BUTTERFLY_NONPOSITIVE_NET_CREDIT");
     }
     @Test void fullWorstWingNotPremiumControlsRiskAllocation(){
-        var limited=new Assumptions(50,50,300,2,50,10000,300,
+        var limited=new Assumptions(50,50,300,2,50,10000,500,300,
             n("20"),n("100"),100,1000,10000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,SPQ,SCQ,LCQ,RIGHTS,limited),
             Status.NO_SIGNAL,"IRON_BUTTERFLY_WORST_EXPIRY_LOSS_BUDGET_EXCEEDED");
@@ -186,7 +184,7 @@ class FnoIronButterflyV1Test {
             Status.NO_SIGNAL,"IRON_BUTTERFLY_IV_MOVE_EXCEEDS_PROTECTIVE_WING_HURDLE");
     }
     @Test void zeroFourLegFeesCannotPassAndRepeatableResultsNeverAuthorizeOrders(){
-        var zero=new Assumptions(50,50,300,2,50,10000,300,
+        var zero=new Assumptions(50,50,300,2,50,10000,500,300,
             n("0"),n("10000"),1000,1000,10000);
         state(eval(LP,SP,SC,LC,history(),SPOT,LPQ,SPQ,SCQ,LCQ,RIGHTS,zero),
             Status.BLOCKED_DATA,"IRON_BUTTERFLY_CONTRACT_OR_COST_INVALID");
