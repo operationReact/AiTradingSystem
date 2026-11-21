@@ -230,3 +230,26 @@ PAPER 0/43, LIVE 0/43.** This is a research-only integration; all strategies
 remain `DATA_BLOCKED`. Estimated one-sigma moves are not return forecasts.
 The next planned adapter is STR-193 long strangle, which MUST NOT reuse
 the same-strike straddle proof as a valid OTM strangle instrument pair.
+
+## 21 November 2026 — STR-193 distinct OTM long strangle IV research
+
+`FnoStrangleResearchService` directly invokes the existing distinct
+`FnoLongStrangleV1.evaluate` from the earlier merged model PRs.
+V113 stores EMPTY, separately attested actual higher-strike CE and
+lower-strike PE with **strict** `PE strike < original index bid < CE strike`,
+co-timed quotes, independently proven per-leg option IV, and genuine same
+lot and expiry. One STR-192 same-strike straddle row can NEVER qualify.
+
+STR-193 shares true V106 completed NIFTY closes but not the V112
+same-strike option proof. Six source-model research-use receipts must be
+verified as-of original quote time, including distinct per-leg IV digests
+and receipts. All source flags remain default denied and exact contract
+keys blank. No IV is calculated from the candidate's own quote and
+passed off as an independent market observation.
+
+**24/43 typed research evaluator callsites**, **19/43 without direct
+adapters**, **0/43 independently verified real-market history E2E**,
+**0/43 PAPER**, **0/43 LIVE**. All 43 entries stay `DATA_BLOCKED`.
+The hypothetical IV one-sigma screening metric is NOT a profitability
+estimate. Next direct research path: STR-194 Short Straddle; unlimited
+call upside-loss and real broker margin/writing rights must be preserved.
