@@ -387,3 +387,32 @@ independent real-market history E2E 0/43, PAPER 0/43 and LIVE 0/43.**
 All 43 remain `DATA_BLOCKED`; the tests do not upgrade their status.
 Next research identity is STR-199, requiring its own distinct typed
 source implementation rather than a shared synthetic strategy alias.
+
+## 21 November 2026 — STR-199 two-expiry calendar spread source adapter
+
+The existing `FnoCalendarSpreadV1.evaluate` is now invoked directly from
+`FnoCalendarSpreadResearchService` on **EMPTY V119** original near/far
+NIFTY option custody. The short near option and long far option have
+**different authenticated expiries** but exactly matching strike,
+CE/PE type and official lot size; the type may be CE or PE.
+
+V119 requires three synchronized original-time exchange quotes (NIFTY,
+near and far options); distinct, independently attested original
+annualized IV and research-use receipts for BOTH expiries; genuine
+near **BID** depth and far **ASK** depth; OI, instrument master,
+35+ source-verified completed NIFTY index closes and two-leg fees.
+The option pair must have 7–60 days between expiries, and stale
+or inconsistent timestamps/provider/costs fail closed.
+
+The after-cost debit and IV term-structure ratios are research metrics,
+**not** a theoretical realized max-loss / common-expiry breakeven:
+the far option still has time value when the short leg expires, so its
+near-expiry mark and broker settlement remain **UNVERIFIED**.
+No synthetic price, IV, near-expiry long mark, order or margin is inferred.
+All configured research rights default false, contract keys default blank.
+
+**30/43 distinct direct source-level research callsites, 13 missing;
+real-market historical E2E 0/43, PAPER E2E 0/43, LIVE E2E 0/43.**
+All 43 catalog identities remain DATA_BLOCKED pending independent evidence.
+Next research strategy STR-200 Diagonal Spread requires original differing
+strikes AND expiries, not same-strike calendar evidence.
