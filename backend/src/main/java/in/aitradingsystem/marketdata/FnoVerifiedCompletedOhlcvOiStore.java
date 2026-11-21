@@ -107,7 +107,7 @@ public class FnoVerifiedCompletedOhlcvOiStore {
             instrumentKey, Date.valueOf(from), Date.valueOf(to),
             Date.valueOf(asOf.atZone(IST).toLocalDate()),
             cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff,
-            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff);
+            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff);
     }
 
     public int purgeExpired(LocalDate today) {
