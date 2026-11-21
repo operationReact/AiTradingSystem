@@ -106,12 +106,12 @@ class Fno43StrategyResearchAuditTest(unittest.TestCase):
         report = audit.inspect(ROOT, None)
         self.assertEqual([], report["errors"])
         rows = {r["id"]: r for r in report["strategies"]}
-        for strategy in ("strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206"):
+        for strategy in ("strategy.STR-181", "strategy.STR-182", "strategy.STR-183", "strategy.STR-184", "strategy.STR-185", "strategy.STR-186", "strategy.STR-187", "strategy.STR-188", "strategy.STR-192", "strategy.STR-193", "strategy.STR-194", "strategy.STR-195", "strategy.STR-196", "strategy.STR-197", "strategy.STR-198", "strategy.STR-199", "strategy.STR-200", "strategy.STR-201", "strategy.STR-202", "strategy.STR-203", "strategy.STR-204", "strategy.STR-205", "strategy.STR-206", "strategy.STR-207", "strategy.STR-208", "strategy.STR-209", "strategy.STR-210", "strategy.STR-211", "strategy.STR-212"):
             self.assertTrue(rows[strategy]["directResearchCallsiteLocated"])
             self.assertFalse(rows[strategy]["strategyEndToEndReady"])
             self.assertFalse(rows[strategy]["paperExecutionReady"])
             self.assertFalse(rows[strategy]["liveExecutionReady"])
-        self.assertEqual(37, report["summary"]["sourceLevelDirectResearchCallsites"])
+        self.assertEqual(43, report["summary"]["sourceLevelDirectResearchCallsites"])
         self.assertEqual(0, report["summary"]["signalRoutingWithoutProvenEvaluatorCallsite"])
 
 
