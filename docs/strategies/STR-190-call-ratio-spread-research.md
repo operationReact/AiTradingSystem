@@ -39,3 +39,30 @@ Even if these research tests pass, all `Decision` objects retain `unlimitedTheor
 **Open blockers:** authenticated/rights-permitted genuine NIFTY and NSE_FO option source, complete original exchange as-of timestamps, actual spread liquidity for two short contracts, margin/stress testing far beyond one scenario, broker uncovered-writing permissions and operational safety, non-atomic multi-leg execution proof, robust Indian transaction taxes/settlement details, independent OOS walk-forward and fill replay, separately approved PAPER and LIVE acceptance. Since the default product goal favors controlled drawdowns, this uncovered-tail-risk strategy must remain research-only unless a different structure makes risk genuinely bounded and permissioned.
 
 See [STR-189 Collar](STR-189-equity-collar.md).
+
+
+## Direct read-only source adapter — 21 November 2026
+
+`FnoRatioSpreadResearchService` directly invokes
+`FnoCallRatioSpreadV1.evaluate` for exactly one source-listed long
+lower-strike NIFTY CE and **two** higher-strike short NIFTY CE lots. The
+new V111 source table starts **EMPTY** and requires actual same-provider,
+same-expiry, source-normalized lot identity, original-time synchronized
+index + two option BID/ASK quotes and short bid depth >= two full
+contracts. Broker-account-scoped margin reserves, explicitly
+non-duplicated Indian three-leg fees and independently reviewed
+stress assumptions must be evidenced; V106 source-first-known 35+
+completed NIFTY closes are separately mandatory.
+
+Five independently verified currently valid
+`MODEL_INFERENCE` research-use rights are required for index tick,
+long and short option chain depth/OI, contract master and 1x2
+ratio-specific margin/fee source. `ratio-research-rights-verified`
+defaults **false** and `ratio-account-scope` and both CE keys default
+blank. No bridge from a two-leg debit spread's fee estimate is allowed.
+
+**Unbounded upside loss** remains true for every call ratio spread.
+No finite stress scenario, broker margin snapshot or research
+candidate changes that mathematical risk. This path is **never
+executable**, cannot place paper or real orders, and does not imply
+real-source data completion or profitability.
