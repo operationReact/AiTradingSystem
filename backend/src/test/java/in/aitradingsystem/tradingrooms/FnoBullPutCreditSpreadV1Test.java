@@ -144,7 +144,7 @@ class FnoBullPutCreditSpreadV1Test {
             Status.BLOCKED_DATA, "BULL_PUT_CREDIT_SPREAD_HISTORY_INVALID");
     }
     @Test void uneconomicCreditRejected() {
-        var noCredit = new OptionQuote(PROVIDER, HIGH, n("1.00"), n("1.05"),
+        var noCredit = new OptionQuote(PROVIDER, HIGH, n("1.98"), n("2.02"),
             10, 10, 1000, TICK, TICK.plusSeconds(10));
         expect(evaluate(LOWER, UPPER, candles("125"), UNDERLYING, LONG, noCredit,
             RIGHTS, COSTS), Status.NO_SIGNAL, "BULL_PUT_CREDIT_SPREAD_CREDIT_NOT_ECONOMIC");
