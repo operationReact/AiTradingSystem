@@ -6961,21 +6961,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_GREEKS_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + greeks feed"
+    "Six independently attested rights: verified long-cash equity broker holdings, completed NIFTY original history, each held-equity original history, genuine exchange-listed options, original option delta/IV and official instrument master",
+    "65+ chronological source-verified completed daily NIFTY index and every currently held equity close with original first-known and matched provider/session provenance, proving the worst originally observed NIFTY negative daily session and coincident equity returns",
+    "Source-listed out-of-money NIFTY long put with true lot/strike/expiry/tick, genuine same-provider bid/ask, original put delta and annualized IV, ask depth/open interest, authentic current NIFTY and each holding price",
+    "Explicit hindsight-only fixed-current-holdings tail-session replay, hypothetical put intrinsic at expiry if worst observed daily shock persists, full estimated ask/slippage/fee debit, integer-lot purchase and loss-reduction/premium/depth policy checks"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + greeks feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_TAIL_RISK_PUT_HEDGE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoTailRiskPutHedgeV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-206-tail-risk-put-hedge-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Licensed authentic original-time NIFTY index and every current holding historical stock closes, point-in-time source rights, stock corporate action treatment, independently verified actual NSE listed PE master/quote/IV/delta/OI/depth, genuine broker positions; fictional unit fixtures are not such evidence",
+    "Multiple true independently sourced historical tail scenarios (intraday gaps, multi-day index and holdings correlation breaks, IV repricing and option expiry outcomes) and original-first-known out-of-sample/walk-forward after-cost real option expiry/exit and portfolio hedge proof",
+    "True source broker execution bid/ask and fill/fees/settlement ledger, actual India statutory/broker charges and cash, premium affordability, official risk/lot/expiry handling and portfolio option inventory awareness",
+    "Accepted independent PAPER option-buy/settlement ledger and Flutter visibility, separately consented LIVE F&O broker entitlements, position-risk caps, guardrails, kill switches and no duplicate hedges"
+   ],
+   "note": "NON-EXECUTABLE hypothetical worst-origin-index-daily-tail current-holdings replay with listed OTM long NIFTY put intrinsic-only at a conditional later expiry. Neither observed hedge PnL nor market crash protection; no real rights, paper/live orders or runtime deployment. DATA_BLOCKED.",
    "id": "strategy.STR-206",
    "kind": "STRATEGY",
    "name": "Tail Risk Put Hedge",
