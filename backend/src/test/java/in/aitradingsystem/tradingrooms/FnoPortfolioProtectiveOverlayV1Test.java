@@ -102,11 +102,34 @@ class FnoPortfolioProtectiveOverlayV1Test {
         assertTrue(d.worstObservedNiftyDropBps().compareTo(n("470"))>0);
         assertTrue(d.worstObservedNiftyDropBps().compareTo(n("480"))<0);
         assertEquals(HIGH,d.hypotheticalSelectedPut());
-        assertEquals(10,d.hypotheticalBoughtLots());
+        assertEquals(4,d.hypotheticalBoughtLots()); // verified 20,000 INR / (100 index x 50 lot)
         assertTrue(d.hypotheticalPutDebitInr().signum()>0);
         assertTrue(d.sumThreeScenarioUnhedgedLossesInr()
                 .compareTo(d.sumThreeScenarioAfterOverlayLossesInr())>0);
         assertTrue(d.aggregateScenarioLossReductionBps().compareTo(n("500"))>0);
+        noOrders(d);
+    }
+    @Test void premiumIsChargedOnEveryIndependentExpiryStressAndNotionalIsCapped(){
+        Decision d=run();
+        assertEquals(Status.RESEARCH_CANDIDATE,d.status());
+        assertEquals(HIGH,d.hypotheticalSelectedPut());
+        // No hypothetical overlay greater than the entire genuine portfolio.
+        assertTrue(n("100").multiply(n("50"))
+                .multiply(BigDecimal.valueOf(d.hypotheticalBoughtLots()))
+                .compareTo(d.verifiedCurrentLongEquityValueInr())<=0);
+
+        // Fixture's three worst matched down sessions are 105 -> 100.
+        // All three are alternative scenarios, not realized simultaneous days.
+        var mc=java.math.MathContext.DECIMAL128;
+        BigDecimal expiryIndex=n("100").multiply(n("100").divide(n("105"),mc),mc);
+        BigDecimal oneScenarioIntrinsic=n("99").subtract(expiryIndex,mc)
+                .multiply(n("50"),mc)
+                .multiply(BigDecimal.valueOf(d.hypotheticalBoughtLots()),mc);
+        BigDecimal expected=d.sumThreeScenarioUnhedgedLossesInr()
+                .add(d.hypotheticalPutDebitInr().multiply(n("3"),mc),mc)
+                .subtract(oneScenarioIntrinsic.multiply(n("3"),mc),mc);
+        assertEquals(0,expected.setScale(4,java.math.RoundingMode.HALF_UP)
+                .compareTo(d.sumThreeScenarioAfterOverlayLossesInr()));
         noOrders(d);
     }
     @Test void noSourcePermissionMeansNoOverlayAtAll(){
