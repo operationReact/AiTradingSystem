@@ -227,6 +227,47 @@ def compare(by_day,mapping,nse):
     ]
     return {k:counts[k] for k in keys}
 
+
+def canonical_personal_rows(non_dec_rows, by_day, mapping, nse):
+    """Build source-attributed unique daily candles in memory, never export them."""
+    merged={}
+    for key,stamp,op,high,low,close,volume,oi in non_dec_rows:
+        if not re.fullmatch(r"NSE_FO\|[A-Za-z0-9_-]+\|\d{2}-\d{2}-\d{4}",key):
+            raise ValueError("INVALID_RESEARCH_KEY")
+        dt=datetime.fromisoformat(stamp)
+        expiry=datetime.strptime(key.rsplit("|",1)[1],"%d-%m-%Y").date()
+        if (expiry.year,expiry.month)==(2025,12):
+            raise ValueError("DECEMBER_WRONG_PROVENANCE")
+        if (dt.tzinfo is None or dt.utcoffset()!=timedelta(hours=5,minutes=30)
+            or dt.time().hour!=0 or dt.time().minute!=0 or dt.time().second!=0
+            or dt.date()>expiry):
+            raise ValueError("INVALID_RESEARCH_DAY")
+        identity=(key,dt.date())
+        if identity in merged:raise ValueError("DUPLICATE_NON_DECEMBER_DAY")
+        vals=tuple(dec(x) for x in (op,high,low,close,volume,oi))
+        if min(vals[:4])<=0 or vals[2]>min(vals[0],vals[3]) or vals[1]<max(vals[0],vals[3]):
+            raise ValueError("INVALID_NON_DECEMBER_OHLC")
+        merged[identity]=(stamp,vals,"UPSTOX_PRIVATE")
+    other=len(merged)
+    for (key,day),original in by_day.items():
+        if key not in mapping or (key,day) in merged:
+            raise ValueError("MISMATCHED_RESEARCH_CONTRACT")
+        kind,strike=mapping[key]
+        source=nse.get((kind,strike,day))
+        if source is None or len(source)!=7:
+            raise ValueError("MISSING_EXCHANGE_REFERENCE_DAY")
+        prices=source[:4]
+        units=source[4]*source[6]  # NSE contracts converted to lot-sized quantity
+        oi=source[5]
+        if (min(prices)<=0 or prices[2]>min(prices[0],prices[3])
+            or prices[1]<max(prices[0],prices[3])
+            or units!=units.to_integral_value() or units>Decimal(1_000_000_000_000)):
+            raise ValueError("INVALID_EXCHANGE_REFERENCE_OHLC")
+        merged[(key,day)]=(day.isoformat()+"T00:00:00+05:30",
+                           prices+(units,oi),"NSE_PUBLIC_EOD")
+    return merged,{"total":len(merged),"upstoxMonths":other,
+                   "nseDecember":len(by_day),"uniqueDailyKeys":len(merged)}
+
 def ro(path):
     if not path.is_file() or path.is_symlink():
         raise ValueError("PRIVATE_CACHE_NOT_AVAILABLE")
@@ -272,6 +313,18 @@ def run():
         if scanned!=15 or provider.calls!=2:
             raise ValueError("SOURCE_REQUEST_COUNT_CHANGED")
         metrics=compare(by_day,mapping,nse)
+        other=list(cache.execute("""SELECT contract_key,candle_ts,open_price,
+                high_price,low_price,close_price,volume,open_interest
+                FROM fno_historical_candles
+                WHERE source=? AND interval='day'
+                  AND contract_key NOT LIKE '%-12-2025'""",(SOURCE,)))
+        if len(other)!=3608:
+            raise ValueError("NON_DECEMBER_COHORT_CHANGED")
+        canonical,research=canonical_personal_rows(other,by_day,mapping,nse)
+        if (research["total"]!=3930 or research["upstoxMonths"]!=3608
+            or research["nseDecember"]!=322):
+            raise ValueError("UNEXPECTED_RESEARCH_RESULT")
+        del canonical
         report={
             "status":"CROSSCHECK_COMPLETE" if metrics["missingNSEContractDays"]==0 else "CROSSCHECK_PARTIAL",
             "scope":"DEC_2025_NIFTY_SELECTED_23_CONTRACTS",
@@ -281,6 +334,7 @@ def run():
             "privateUpstoxCandleRows":643,"privateContractDays":322,
             "priceRowsExported":False,"privateDataPersisted":False,
             "backtestingApproved":False,"metrics":metrics,
+            "personalResearchDaily":research,"researchDataPersisted":False,
         }
         text=json.dumps(report,sort_keys=True,separators=(",",":"))
         if len(text)>2000:
