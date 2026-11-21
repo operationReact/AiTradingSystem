@@ -6409,21 +6409,41 @@
    "owner": "Claude",
    "blockerCode": "MISSING_DATA_OPTION_CHAIN_IV_FEED",
    "requiredInputs": [
-    "OHLCV candles",
-    "option chain + IV feed"
+    "35+ genuine verified completed original-first-known NIFTY daily index closes with licensed index research rights",
+    "Two genuine NSE_FO CE and PE sold at identical strike/expiry/lot/underlying from the licensed option chain, verified instrument metadata",
+    "Original-as-of synchronized true NIFTY/CE/PE quotes with authentic bid liquidity, OI and traceable separately licensed IV percent for each option",
+    "After-cost net short premium, explicitly modeled Indian transaction fees, illustrative volatility move and explicit unbounded theoretical upside loss flag"
    ],
    "dependsOn": [
     "data.fno"
    ],
-   "implementation": null,
-   "evidence": [],
-   "missing": [
-    "Permitted data source: option chain + IV feed",
-    "Deterministic evaluator",
-    "Unit tests",
-    "Backtest evidence"
+   "implementation": {
+    "code": "FNO_SHORT_STRADDLE_V1",
+    "version": "1",
+    "match": "EXACT",
+    "runtime": "JAVA_DETERMINISTIC"
+   },
+   "evidence": [
+    {
+     "kind": "SOURCE",
+     "path": "backend/src/main/java/in/aitradingsystem/tradingrooms/FnoShortStraddleV1.java"
+    },
+    {
+     "kind": "TEST",
+     "path": "backend/src/test/java/in/aitradingsystem/tradingrooms/FnoShortStraddleV1Test.java"
+    },
+    {
+     "kind": "DOC",
+     "path": "docs/strategies/STR-194-short-straddle-research.md"
+    }
    ],
-   "note": "Catalog name only; no evaluator in repository.",
+   "missing": [
+    "Genuine licensed NIFTY index/option chain and true CE/PE source IV, original quote as-of, official instrument/expiry/lot master and NSE calendar",
+    "Uncovered short CE theoretical unlimited upside loss, actual margin and broker permissions, crash/gap and partial-fill risk controls",
+    "True statutory India transaction fees and broker settlement rules, OOS walk-forward evidence with tails, spread and non-atomic execution",
+    "Independent PAPER ledger acceptance and LIVE opt-in, broker order rights, margin monitoring and audited risk kill switches"
+   ],
+   "note": "Research-only naked short same-strike CE+PE. THEORETICAL UPSIDE LOSS UNBOUNDED despite finite IV stress and premium budget; no PAPER/LIVE orders authorized. DATA_BLOCKED.",
    "id": "strategy.STR-194",
    "kind": "STRATEGY",
    "name": "Short Straddle Research",
