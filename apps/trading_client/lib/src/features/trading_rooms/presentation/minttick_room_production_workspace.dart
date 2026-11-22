@@ -367,7 +367,7 @@ class _MintTickRoomProductionWorkspaceState
                     ]),
                     Text(
                       widget.room.marketScope == 'FNO'
-                          ? 'F&O · Options · NIFTY · MY ROOM'
+                          ? 'Options · NIFTY · MY ROOM'
                           : '${widget.room.focus} · $_roomScopeLabel · MY ROOM',
                       maxLines: 1, overflow: TextOverflow.ellipsis,
                       style: type.labelSmall?.copyWith(
@@ -514,7 +514,7 @@ class _MintTickRoomProductionWorkspaceState
         key: const ValueKey('room-trade-market-switch'),
         segments: const [
           ButtonSegment(value: 'EQUITY', label: Text('Equity')),
-          ButtonSegment(value: 'FNO', label: Text('F&O · Options')),
+          ButtonSegment(value: 'FNO', label: Text('Options')),
         ],
         selected: {_tradeMarket},
         onSelectionChanged: (value) =>
