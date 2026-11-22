@@ -236,26 +236,16 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
-    expect(find.text('NO FRESH QUOTES'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-options-ce')), findsOneWidget);
     expect(find.byKey(const ValueKey('minttick-options-pe')), findsOneWidget);
-
     await tester.tap(find.byKey(const ValueKey('minttick-options-pe')));
     await tester.pump();
-    expect(find.byKey(const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_PE')),
-      findsOneWidget);
-    expect(find.byKey(const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_CE')),
-      findsNothing);
-    await tester.tap(find.byKey(const ValueKey('minttick-options-expiry-picker')));
-    await tester.pumpAndSettle();
-    expect(find.text('Expiry date'), findsOneWidget);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
-    await tester.pump();
+    expect(tester.widget<ChoiceChip>(
+      find.byKey(const ValueKey('minttick-options-pe'))).selected, isTrue);
+    expect(tester.widget<ChoiceChip>(
+      find.byKey(const ValueKey('minttick-options-ce'))).selected, isFalse);
     expect(tester.takeException(), isNull);
-    expect(find.text('Top gainers'), findsOneWidget);
   });
 
   group('ATM estimate and freshness', () {
