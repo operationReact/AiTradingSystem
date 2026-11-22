@@ -300,6 +300,8 @@ void main() {
     await tester.pump();
     expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
     expect(find.text('ATM'), findsOneWidget);
+    expect(find.text('CALL · CE'), findsOneWidget);
+    expect(find.text('PUT · PE'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-insights')));
     await tester.pump();
@@ -339,6 +341,8 @@ void main() {
         find.byKey(const ValueKey('fno-discovery-strike-search')), '25300');
     await tester.pump();
     expect(find.textContaining('Showing listed strikes near 25300'), findsOneWidget);
+    expect(find.text('CALL · CE'), findsOneWidget);
+    expect(find.text('PUT · PE'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
