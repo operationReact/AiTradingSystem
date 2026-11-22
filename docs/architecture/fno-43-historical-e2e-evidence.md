@@ -180,3 +180,42 @@ reproducible after-cost walk-forward/OOS outcomes and independent approval.
 The existing 0/43 real-data E2E, 0/43 PAPER ledger and 0/43 LIVE broker
 execution counters remain unchanged. Never promote routing/compilation or
 fictitious JUnit fixtures to a successfully backtested strategy.
+
+## Additional original-source historical replay adapters: STR-179 and STR-180
+
+The 43/43 typed dispatcher provides Java evaluator ROUTING, not source
+adapters or independently accepted E2E. Source-to-evaluator adapters already
+handle STR-174, STR-176 and STR-177. STR-173 still needs actual original
+near-close quote custody despite its historical structural replay bridge.
+
+* STR-179 reads original V104 fno_verified_intraday_liquidity_evidence
+  (only verified UPSTOX_V3 futures). Its existing SQL enforces independent
+  quote, OI and volume MODEL_INFERENCE research-use receipts, original
+  first-observed times, retention and a 90-second as-of window. The new
+  adapter additionally checks NSE F&O session, actual listed contract,
+  expiry, lot, source, three chronological exchange-time snapshots and
+  calls the unchanged FnoContractLiquidityGateV1 evaluator.
+* STR-180 reads original V105 fno_verified_expiry_basis_pair_evidence.
+  SQL separately joins NSE cash/futures calendars and verified original
+  near-close spot/futures quotes, finalized first-known timestamps,
+  independently reviewed carry/cost rights and delivery assumptions.
+  The new adapter requires a single deliverable stock/futures pair,
+  five consecutive verified exchange sessions, fixed 3-14 DTE and
+  invokes the original FnoExpiryBasisReversionV1 evaluator. Source
+  near-close quotes are not settlement prices and are not broker fills.
+
+Both V104 and V105 originally contained ZERO seeded source rows. A
+compile/test success, and even a production deployment, does not prove
+historical source availability or a positive after-cost OOS result.
+Independent source custody, entitlements, true chronology, transaction
+costs and out-of-sample acceptance are still mandatory before counting
+any historical E2E success.
+
+New admin/operator GET-only endpoints:
+- /api/admin/research/fno-43/historical-liquidity-replay
+  (contractKey, expiry, lotSize, asOf)
+- /api/admin/research/fno-43/historical-basis-replay
+  (spotKey, contractKey, expiry, lotSize, asOf)
+
+Both return sanitized state/counter/reason only; no private market quotes,
+source receipt digests, orders, position data or permission changes.
