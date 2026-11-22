@@ -1,0 +1,65 @@
+name: MintTick F&O - protected original-source historical evaluator GET
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-43-historical-operator-probe.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
+permissions:
+  contents: read
+jobs:
+  verify-operator-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Validate private original V100/V102 read-only replay controls
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno43HistoricalReplayControllerTest.xml
+      - name: Enforce GET with role only and no market-data or broker route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java')
+          src=p.read_text()
+          for mandatory in ('@PreAuthorize("hasAnyRole(', '@GetMapping("/historical-replay")',
+                            'CacheControl.noStore()', 'Fno174VerifiedHistoricalReplayService',
+                            'Fno176VerifiedHistoricalReplayService',
+                            'Fno177VerifiedHistoricalReplayService'):
+              assert mandatory in src,mandatory
+          for forbidden in ('@PostMapping','submitOrder','placeOrder',
+                            'return ResponseEntity.status(HttpStatus.ACCEPTED)',
+                            'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert forbidden not in src,forbidden
+          assert src.count('false,false,false,false') == 1
+          PY
+      - name: Print honest read-only historical source evidence tier
+        if: always()
+        shell: bash
+        run: |
+          echo 'Protected admin GET invokes real source stores only when credentials and original research-use rights allow it.'
+          echo 'Synthetic CI does not verify original host V100/V102 rows, OOS after-cost or broker orders.'
