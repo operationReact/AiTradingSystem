@@ -37,6 +37,23 @@ class _LiveDiscovery extends Fake implements CustomerFnoDiscoveryRepository {
       ]);
 }
 
+class _ClosedDiscovery extends _LiveDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async => _liveMarket([
+        _strike(25200, 300, 100),
+        _strike(25300, 150, 140),
+        _strike(25400, 60, 200),
+      ], status: 'MARKET_CLOSED');
+}
+
+class _ManyClosedDiscovery extends _LiveDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async => _liveMarket(
+    List.generate(28, (index) =>
+      _strike(20000 + index * 50, 100 + index, 90 + index)),
+    status: 'MARKET_CLOSED');
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -101,6 +118,54 @@ void main() {
         market, DateTime.parse('2026-11-17T08:00:17Z')), isEmpty);
     expect(MintTickFnoDiscoveryFacts.freshLegs(
         _market(fresh: false), DateTime.parse('2026-11-17T08:00:08Z')), isEmpty);
+  });
+
+  test('OI PCR uses only complete fresh CE/PE source rows', () {
+    // Quote fixtures are created after this test starts: evaluate one second
+    // later so sub-millisecond construction skew is not mistaken for future data.
+    final now = DateTime.now().toUtc().add(const Duration(seconds: 1));
+    final complete = _liveMarket([
+      _strike(25200, 300, 100),
+      _strike(25300, 150, 140),
+    ]);
+    final total = MintTickFnoDiscoveryFacts.verifiedOiTotals(complete, now);
+    expect(total, isNotNull);
+    expect(total!.calls, 2400);
+    expect(total.puts, 2400);
+    expect(total.pcr, 1.0);
+
+    final stale = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _staleLeg('CE', 150),
+      'put': _liveLeg('PE', 140),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(stale, now), isNull);
+
+    final missingOi = _liveLeg('PE', 140)..remove('openInterest');
+    final incomplete = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150),
+      'put': missingOi,
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(incomplete, now), isNull);
+
+    final partial = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(partial, now), isNull);
+
+    final zeroCallOi = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150)..['openInterest'] = 0,
+      'put': _liveLeg('PE', 140),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(zeroCallOi, now), isNull);
+
+    final closed = _liveMarket([
+      _strike(25300, 150, 140),
+    ], status: 'MARKET_CLOSED');
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(closed, now), isNull);
   });
 
   test('close-to-close changes only appear for fresh verified V3 quotes', () {
@@ -210,7 +275,7 @@ void main() {
     await tester.pump();
     expect(find.text('F&O · Discover'), findsOneWidget);
     expect(find.textContaining('Market discovery works without a room.'), findsOneWidget);
-    expect(find.textContaining('No verified'), findsWidgets);
+    expect(find.text('Price leaders unavailable'), findsOneWidget);
     expect(find.text('Create F&O room'), findsWidgets);
     final create = find.text('Create F&O room').first;
     await tester.ensureVisible(create);
@@ -237,13 +302,96 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
     expect(find.text('LIVE'), findsOneWidget);
+    expect(find.text('Explore NIFTY options'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-discovery-quick-chain')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
     expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
     expect(find.text('ATM'), findsOneWidget);
+    expect(find.text('CALL · CE'), findsOneWidget);
+    expect(find.text('PUT · PE'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-insights')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Options positioning'), findsOneWidget);
+    expect(find.text('OI PCR'), findsOneWidget);
+    expect(find.text('1.00'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.text('Top gainers'), findsOneWidget);
+  });
+
+  testWidgets('closed market starts with overview and search-first chain',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms, discovery: _ClosedDiscovery()),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Price leaders unavailable'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
+    expect(find.textContaining('No strike selected.'), findsOneWidget);
+    expect(find.text('25300'), findsNothing);
+    await tester.enterText(
+        find.byKey(const ValueKey('fno-discovery-strike-search')), '25300');
+    await tester.pump();
+    expect(find.textContaining('Showing listed strikes near 25300'), findsOneWidget);
+    expect(find.text('CALL · CE'), findsOneWidget);
+    expect(find.text('PUT · PE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closed session browsing stays limited and detail has no dash wall',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms, discovery: _ManyClosedDiscovery()),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
+    expect(find.textContaining('No strike selected.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(
+      const ValueKey('fno-discovery-browse-strikes')));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-browse-strikes')));
+    await tester.pump();
+    expect(find.text('20000'), findsOneWidget);
+    expect(find.text('20400'), findsOneWidget);
+    expect(find.text('20450'), findsNothing);
+    await tester.ensureVisible(find.byKey(
+      const ValueKey('fno-discovery-next-page')));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-next-page')));
+    await tester.pump();
+    expect(find.text('20450'), findsOneWidget);
+    expect(find.text('20000'), findsNothing);
+    await tester.ensureVisible(find.text('View PE').first);
+    await tester.tap(find.text('View PE').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Price, OI and Greeks are unavailable'),
+        findsOneWidget);
+    expect(find.text('LTP'), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   group('ATM estimate and freshness', () {
