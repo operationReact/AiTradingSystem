@@ -48,6 +48,12 @@ public final class CustomerFnoDiscoveryController {
     private final boolean contractDiscoveryVerified;
     private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
     private volatile ContractMetadata cachedMetadata;
+    private volatile CustomerFnoLastTradeSnapshotStore lastTrades;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLastTrades(CustomerFnoLastTradeSnapshotStore snapshotStore) {
+        this.lastTrades = snapshotStore;
+    }
 
     private record ContractMetadata(LocalDate expiry, Instant receivedAt,
         List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
@@ -176,10 +182,12 @@ public final class CustomerFnoDiscoveryController {
                 "F&O source provenance unavailable");
         }
         boolean open = sessionCalendar.isInsideFnoSession(now);
-        var strikes = CustomerPaperFnoMarketController.selectDiscovery(
+        var liveStrikes = CustomerPaperFnoMarketController.selectDiscovery(
             contracts, chain, stream, open);
-        boolean fresh = strikes.stream().anyMatch(s ->
+        boolean fresh = liveStrikes.stream().anyMatch(s ->
             s.call().quoteFresh() || s.put().quoteFresh());
+        // Order eligibility is never restored by retained snapshots.
+        var strikes = withLastVerifiedTrades(liveStrikes);
         String status = !open ? "MARKET_CLOSED" :
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
@@ -187,6 +195,31 @@ public final class CustomerFnoDiscoveryController {
             expiry, chain.retrievedAt(), status, true, false, strikes,
             chain.strikes().isEmpty() ? null
                 : chain.strikes().getFirst().underlyingSpotPrice());
+    }
+
+    private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
+            List<CustomerPaperFnoMarketController.Strike> current) {
+        var store = lastTrades;
+        if (store == null) return current;
+        return current.stream().map(row ->
+            new CustomerPaperFnoMarketController.Strike(row.strikePrice(),
+                lastVerifiedLeg(row.call(), store),
+                lastVerifiedLeg(row.put(), store))).toList();
+    }
+
+    private static CustomerPaperFnoMarketController.Leg lastVerifiedLeg(
+            CustomerPaperFnoMarketController.Leg leg,
+            CustomerFnoLastTradeSnapshotStore store) {
+        if (leg == null || leg.quoteFresh()) return leg;
+        var retained = store.latest(leg.instrumentKey());
+        if (retained.isEmpty()) return leg;
+        var last = retained.orElseThrow();
+        return new CustomerPaperFnoMarketController.Leg(
+            leg.instrumentKey(), leg.tradingSymbol(), leg.side(), leg.lotSize(),
+            leg.tickSize(), null, null,
+            last.exchangeAt(), last.observedAt(), false, false,
+            last.ltp(), last.previousClose(), last.openInterest(),
+            null, null, null, null, null);
     }
 
     /**
