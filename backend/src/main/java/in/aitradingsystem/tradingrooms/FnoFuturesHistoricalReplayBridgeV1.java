@@ -145,7 +145,11 @@ public final class FnoFuturesHistoricalReplayBridgeV1 {
                             "UPSTOX_ANALYTICS", "ANGEL_ONE_SMARTAPI")
                             .contains(bar.provider())
                         || (provider != null && !provider.equals(bar.provider()))
-                        || bar.closeQuoteAt() == null
+                        // The V102 completed OHLCV source does not contain
+                        // actual near-close quote ticks. STR-176 uses finalized
+                        // OHLCV/OI; only STR-173 requires a real closeQuoteAt.
+                        || (FnoFuturesOpenInterestTrendV1.STRATEGY_ID.equals(strategyId)
+                            && bar.closeQuoteAt() == null)
                         || bar.sourceFirstKnownAt() == null
                         || bar.oiFirstKnownAt() == null
                         || bar.sourceFirstKnownAt().isAfter(window.asOf())
