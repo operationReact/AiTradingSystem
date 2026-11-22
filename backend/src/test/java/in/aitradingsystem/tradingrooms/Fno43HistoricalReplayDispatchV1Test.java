@@ -41,9 +41,6 @@ class Fno43HistoricalReplayDispatchV1Test {
             syntheticCustody(c));
     }
 
-    private static ReplayReportAssertions _none() { return null; }
-    private interface ReplayReportAssertions {}
-
     @Test
     void catalogContainsExactly43ContiguousUniqueRealStaticJavaEvaluators() throws Exception {
         List<CaseSpec> all = Fno43HistoricalReplayDispatchV1.catalog();
@@ -173,7 +170,8 @@ class Fno43HistoricalReplayDispatchV1Test {
     void rejectsMissingOrSwappedPerStrategyManifestRequirement() {
         var c=Fno43HistoricalReplayDispatchV1.catalog().get(209-170);
         var proof=new ArrayList<>(syntheticCustody(c));
-        var first=proof.get(0),second=proof.get(1);
+        var first=proof.get(0);
+        var second=proof.get(1);
         proof.set(0,second);proof.set(1,first);
         assertEquals("MISSING_OR_FUTURE_KNOWN_INPUT_CUSTODY",
             Fno43HistoricalReplayDispatchV1.replay(c.strategyId(),
