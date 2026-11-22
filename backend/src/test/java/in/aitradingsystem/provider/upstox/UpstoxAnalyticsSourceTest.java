@@ -102,7 +102,7 @@ class UpstoxAnalyticsSourceTest {
     @Test
     void readsActualLastOptionLtpWithExactInstrumentIdentityAndExchangeTime() {
         token();
-        Instant traded = Instant.now().minusSeconds(3600);
+        Instant traded = Instant.now().minusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
         Instant observed = Instant.now().minusSeconds(3500);
         server.expect(requestTo(org.hamcrest.Matchers.containsString(
                 "/v3/market-quote/quotes?instrument_key=")))
