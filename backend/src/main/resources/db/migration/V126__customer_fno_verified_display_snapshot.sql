@@ -10,7 +10,7 @@ CREATE TABLE customer_fno_verified_display_snapshot (
     open_interest BIGINT,
     retain_until DATE NOT NULL,
     CONSTRAINT customer_fno_snapshot_key_chk CHECK (
-        instrument_key ~ '^(NSE_FO|BSE_FO)\\|[A-Za-z0-9._-]{1,64}$'),
+        instrument_key ~ '^(NSE_FO|BSE_FO)\|[A-Za-z0-9._-]{1,64}$'),
     CONSTRAINT customer_fno_snapshot_price_chk CHECK (ltp > 0),
     CONSTRAINT customer_fno_snapshot_oi_chk CHECK (
         open_interest IS NULL OR open_interest >= 0),
