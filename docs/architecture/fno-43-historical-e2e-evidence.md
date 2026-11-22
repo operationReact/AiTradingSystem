@@ -105,3 +105,37 @@ A source adapter must first obtain original custody and licensed
 rights evidence; thereafter extend to a bounded historical
 walk-forward/OOS, bid-ask and statutory-cost evaluator ledger before
 any strategy may qualify as historical E2E.
+
+
+## Rights-attested PostgreSQL replay source for STR-176
+
+Fno176VerifiedHistoricalReplayService now reads the existing V102
+fno_verified_completed_ohlcv_oi_session table through
+FnoVerifiedCompletedOhlcvOiStore.readExactReplayContract.
+The SQL requires genuine independently stored original OHLCV and OI
+first-available timestamps before each decision's as-of, separately
+verified and still valid MODEL_INFERENCE source rights receipts, a
+source-verified NSE trading-calendar record and unexpired storage.
+The replay read retains immutable original OHLCV, OI and listing
+source digests. This is NOT the 3,929-row private SQLite pilot.
+
+The service additionally requires the independently configured
+fno-research research/completed-OHLCV/contract-discovery flags, validates
+officially matched one-contract session identity, exact provider,
+calendar continuity, retained original hashes, and a bounded
+7-session lookback. It calls the exact STR-176 Java evaluator
+through the source-independent replay bridge. If rights, custody,
+contract metadata or calendar gaps are missing, it returns an
+explicit BLOCKED reason without fallback candles.
+
+STR-176 can evaluate completed OHLCV/OI without an L1 closing quote.
+The adapter passes null for closeQuoteAt rather than inventing a
+closing tick. STR-173 remains stricter: it still requires actual
+source-timestamped near-close quotes, and cannot use V102 alone.
+
+This is a **production-compilable source-to-evaluator path** with
+synthetic SQL/mocking tests, not evidence that eligible V102 rows are
+actually present on EC2. The result always retains
+independentlyVerifiedHistoricalE2E=false, PAPER=false, LIVE=false:
+after-cost out-of-sample evaluation, real source custody proof
+inspection and broker execution need separate acceptance.
