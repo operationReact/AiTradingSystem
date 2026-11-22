@@ -1,12 +1,12 @@
 {
-  "authorization": "OWNER_APPROVED_UPSTOX_TOKEN_QUOTE_DIAG_2026_11_21",
-  "max_provider_gets": 1,
-  "kind": "minttick-owner-upstox-quote-source-check-v1",
-  "persist": false,
-  "operation": "one-get-upstox-ltp-read-only",
-  "environment": "PAPER",
-  "instance_id": "i-09c01b470fb39b85a",
-  "region": "ap-south-1",
-  "account": "098859530205",
-  "trading_rights_change": false
+    "authorization": "OWNER_APPROVED_UPSTOX_TOKEN_QUOTE_DIAG_2026_11_21",
+    "max_provider_gets": 1,
+    "kind": "minttick-owner-upstox-quote-source-check-v1",
+    "persist": false,
+    "operation": "one-get-upstox-ltp-read-only",
+    "environment": "PAPER",
+    "instance_id": "i-09c01b470fb39b85a",
+    "region": "ap-south-1",
+    "account": "098859530205",
+    "trading_rights_change": false
 }
