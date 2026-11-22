@@ -1,0 +1,95 @@
+name: MintTick F&O - real owner-private historical E2E evidence inventory
+
+# Strictly read-only original private cache inspection, not a backtest acceptance.
+# PR tests use synthetic data; host proof is one reviewed one-file dev request.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-historical-e2e-evidence.yml'
+      - 'infra/ec2-paper/fno43_historical_e2e_probe.py'
+      - 'scripts/tests/test_fno43_historical_e2e_probe.py'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno43-historical-e2e-probe.json'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check 43 exact strategy IDs and fail-closed daily source provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno43_historical_e2e_probe.py
+          python3 -m unittest discover -s scripts/tests \
+            -p test_fno43_historical_e2e_probe.py -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/fno43_historical_e2e_probe.py').read_text()
+          assert 8000 < len(s) < 18000
+          for required in ('?mode=ro','PRAGMA query_only=ON',
+                           'ORIGINAL_FIRST_KNOWN_AT_MISSING',
+                           'SOURCE_RESEARCH_RIGHTS_NOT_ATTESTED',
+                           'historicalE2EValidated', 'backtestingApproved',
+                           'no_paper_or_live_orders'):
+              assert required in s,required
+          for forbidden in ('submitOrder', 'placeOrder', '--with-decryption',
+                            'put-parameter', 'start-instances',
+                            'stop-instances', 'docker compose down'):
+              assert forbidden not in s,forbidden
+          PY
+
+  host-proof:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    concurrency:
+      group: aitrading-paper-ec2-manual-lifecycle
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Allow only one exact fixed read-only request file
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = \
+            'infra/ec2-paper/requests/fno43-historical-e2e-probe.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno43_historical_e2e_probe import EXACT
+          p=Path('infra/ec2-paper/requests/fno43-historical-e2e-probe.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())==EXACT
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-fno43-historical-e2e-readonly
+      - name: Audit original private SQLite and report 43 strategy blockers (NO ORDERS)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/fno43_historical_e2e_probe.py runner
+
+# No historical data leaves host. A successful JOB != a successful strategy E2E.
+# No enabling research retention, rights flags, routes, paper or LIVE orders.
