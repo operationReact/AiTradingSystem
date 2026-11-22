@@ -1001,10 +1001,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 _decimal(fresh && leg.iv != null ? leg.iv : chain?.iv)),
             _sheetRow(sheetContext,
                 fresh && leg.delta != null ? 'Delta' : 'Delta · chain snapshot',
-                _decimal(fresh && leg.delta != null ? leg.delta : chain?.delta)),
+                _decimal(fresh && leg.delta != null ? leg.delta : chain?.delta, places: 4)),
             _sheetRow(sheetContext,
                 fresh && leg.gamma != null ? 'Gamma' : 'Gamma · chain snapshot',
-                _decimal(fresh && leg.gamma != null ? leg.gamma : chain?.gamma)),
+                _decimal(fresh && leg.gamma != null ? leg.gamma : chain?.gamma, places: 6)),
             _sheetRow(sheetContext,
                 fresh && leg.theta != null ? 'Theta' : 'Theta · chain snapshot',
                 _decimal(fresh && leg.theta != null ? leg.theta : chain?.theta)),
@@ -1211,8 +1211,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   static String _price(num? n) =>
       n == null || !n.isFinite || n <= 0 ? '—' : '₹${n.toStringAsFixed(2)}';
 
-  static String _decimal(num? n) =>
-      n == null || !n.isFinite ? '—' : n.toStringAsFixed(2);
+  static String _decimal(num? n, {int places = 2}) =>
+      n == null || !n.isFinite ? '—' : n.toStringAsFixed(places);
 
   static String _ymd(DateTime d) => '${d.day.toString().padLeft(2, '0')} '
       '${_month(d.month)} ${d.year}';
