@@ -873,10 +873,17 @@ void main() {
     await tester.tap(find.text('F&O'));
     await tester.pumpAndSettle();
     expect(find.text('F&O · Discover'), findsOneWidget);
-    expect(find.textContaining('TRADING TERMINAL · OPTIONAL'), findsOneWidget);
+    expect(find.text('Explore NIFTY options'), findsOneWidget);
     expect(find.text('Market discovery works without a room.'), findsOneWidget);
     expect(find.textContaining('DISPLAY RIGHTS NOT VERIFIED'), findsWidgets);
+    // Trading controls are intentionally off the discovery landing view.
+    expect(find.textContaining('TRADING TERMINAL · OPTIONAL'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pumpAndSettle();
     expect(find.textContaining('No verified option contracts available'), findsWidgets);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-trade')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('TRADING TERMINAL · OPTIONAL'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
