@@ -92,26 +92,47 @@ public final class CustomerFnoLastTradeSnapshotStore {
         }
     }
 
-    public Optional<LastTrade> latest(String instrumentKey) {
-        if (!allowed || instrumentKey == null ||
-                !instrumentKey.matches("(NSE_FO|BSE_FO)\\\\|[A-Za-z0-9._-]{1,64}")) {
-            return Optional.empty();
-        }
+    /** One bounded query for up to 512 exact listed CE/PE keys per discovery refresh. */
+    public java.util.Map<String, LastTrade> latestAll(
+            java.util.Collection<String> instrumentKeys) {
+        if (!allowed || instrumentKeys == null || instrumentKeys.isEmpty()
+                || instrumentKeys.size() > 512) return java.util.Map.of();
+        var keys = instrumentKeys.stream()
+            .filter(k -> k != null && k.matches(
+                "(NSE_FO|BSE_FO)\\\\|[A-Za-z0-9._-]{1,64}"))
+            .distinct().toList();
+        if (keys.isEmpty()) return java.util.Map.of();
         Instant now = clock.instant();
-        List<LastTrade> rows = jdbc.query("""
-            SELECT ltp, previous_close, open_interest, exchange_at, observed_at
+        var parameters = new org.springframework.jdbc.core.namedparam.MapSqlParameterSource()
+            .addValue("keys", keys)
+            .addValue("today", Date.valueOf(now.atZone(IST).toLocalDate()))
+            .addValue("oldest", Timestamp.from(now.minusSeconds(7 * 86400L)))
+            .addValue("now", Timestamp.from(now));
+        var named = new org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate(jdbc);
+        return named.query("""
+            SELECT instrument_key, ltp, previous_close, open_interest,
+                   exchange_at, observed_at
             FROM customer_fno_verified_display_snapshot
-            WHERE instrument_key = ? AND retain_until >= ?
-              AND exchange_at >= ? AND exchange_at <= ?
-            """, (rs, row) -> new LastTrade(rs.getBigDecimal("ltp"),
-                rs.getBigDecimal("previous_close"),
-                (Long) rs.getObject("open_interest"),
-                rs.getTimestamp("exchange_at").toInstant(),
-                rs.getTimestamp("observed_at").toInstant()),
-            instrumentKey, Date.valueOf(now.atZone(IST).toLocalDate()),
-            Timestamp.from(now.minusSeconds(7 * 86400L)),
-            Timestamp.from(now));
-        return rows.stream().findFirst();
+            WHERE instrument_key IN (:keys) AND retain_until >= :today
+              AND exchange_at >= :oldest AND exchange_at <= :now
+            """, parameters, (java.sql.ResultSet rs) -> {
+                var found = new java.util.HashMap<String, LastTrade>();
+                while (rs.next()) {
+                    found.put(rs.getString("instrument_key"),
+                        new LastTrade(rs.getBigDecimal("ltp"),
+                        rs.getBigDecimal("previous_close"),
+                        (Long) rs.getObject("open_interest"),
+                        rs.getTimestamp("exchange_at").toInstant(),
+                        rs.getTimestamp("observed_at").toInstant()));
+                }
+                return java.util.Map.copyOf(found);
+            });
+    }
+
+    public Optional<LastTrade> latest(String instrumentKey) {
+        return Optional.ofNullable(latestAll(
+            instrumentKey == null ? List.of() : List.of(instrumentKey))
+            .get(instrumentKey));
     }
 
     @Scheduled(cron = "0 10 4 * * *", zone = "Asia/Kolkata")
