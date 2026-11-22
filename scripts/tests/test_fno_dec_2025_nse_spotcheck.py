@@ -137,5 +137,38 @@ class DecemberSpotcheckTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"DECEMBER_DUPLICATE_STAMP_OR_COLUMNS"):
             m.compare_one_day(rows+[rows[0]],catalogue,reference)
 
+    def test_broker_lot_scaled_nse_volume_for_both_timestamp_families(self):
+        keys,catalogue,rows,reference=fixture()
+        lots={key:Decimal(75) for key in keys}
+        scaled=[]
+        for key,stamp,op,high,low,close,vol,oi in rows:
+            scaled.append((key,stamp,op,high,low,close,vol*75,oi))
+        evidence=m.volume_unit_evidence(scaled,catalogue,reference,lots)
+        self.assertEqual(evidence["midnightLotMetadataChecked"],23)
+        self.assertEqual(evidence["openingLotMetadataChecked"],23)
+        self.assertEqual(evidence["midnightNseVolumeTimesLotMatches"],23)
+        self.assertEqual(evidence["openingNseVolumeTimesLotMatches"],23)
+        self.assertEqual(evidence["midnightUnscaledVolumeMatches"],0)
+        self.assertEqual(evidence["openingUnscaledVolumeMatches"],0)
+        self.assertNotIn("SYN",str(evidence))
+
+    def test_authenticated_lot_sizes_required_and_invalid_values_blocked(self):
+        keys,catalogue,rows,reference=fixture()
+        futures=[]
+        options=[]
+        for key,(expiry,kind,strike) in catalogue.items():
+            item={"segment":"NSE_FO","exchange":"NSE",
+                  "underlying_key":UNDERLYING,"expiry":expiry.isoformat(),
+                  "instrument_key":key,"instrument_type":kind,
+                  "strike_price":float(strike),"lot_size":75}
+            (futures if kind=="FUT" else options).append(item)
+        mapped,lots=m.map_contracts(set(keys),futures,options,include_lots=True)
+        self.assertEqual(mapped,catalogue)
+        self.assertEqual(set(lots),set(keys))
+        self.assertTrue(all(x==Decimal(75) for x in lots.values()))
+        options[0]["lot_size"]=None
+        with self.assertRaisesRegex(ValueError,"DECEMBER_AUTHENTICATED_LOT_SIZE_INVALID"):
+            m.map_contracts(set(keys),futures,options,include_lots=True)
+
 if __name__=="__main__":
     unittest.main()
