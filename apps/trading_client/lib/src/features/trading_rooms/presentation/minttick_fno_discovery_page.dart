@@ -700,16 +700,18 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 'through the full chain while prices are unavailable.',
                 style: type.bodySmall),
           )
+        else if (MediaQuery.sizeOf(context).width < 600)
+          _compactChain(context, market, strikes, atm, now)
         else
           SingleChildScrollView(
-          controller: _chainScroll,
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(width: _tableWidth, child: Column(children: [
-            _chainHeader(context),
-            for (final strike in strikes)
-              _chainRow(context, market, strike, atm, now),
-          ])),
-        ),
+            controller: _chainScroll,
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(width: _tableWidth, child: Column(children: [
+              _chainHeader(context),
+              for (final strike in strikes)
+                _chainRow(context, market, strike, atm, now),
+            ])),
+          ),
         const SizedBox(height: 8),
         if (market.strikes.length > strikes.length || _showAllStrikes)
           Align(alignment: Alignment.centerRight,
@@ -741,6 +743,69 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final start = math.max(0,
         math.min(centre - _windowRadius, strikes.length - window));
     return strikes.sublist(start, start + window);
+  }
+
+  /// On a phone both CE and PE prices must be visible without horizontal
+  /// scrolling. Extended OI/Greeks/depth are available from the leg detail.
+  Widget _compactChain(BuildContext context, CustomerFnoMarket market,
+      List<CustomerFnoStrike> strikes, num? atm, DateTime now) {
+    final c = Theme.of(context).colorScheme;
+    final heading = Theme.of(context).textTheme.labelSmall?.copyWith(
+      fontWeight: FontWeight.w800, color: c.onSurfaceVariant);
+    Widget priceCell(CustomerFnoLeg? leg) {
+      final fresh = leg != null && _fresh(market, leg, now);
+      final change = fresh ? leg!.priceChangePct : null;
+      return Expanded(child: InkWell(
+        onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 3),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(_price(fresh ? leg!.ltp : null),
+              maxLines: 1,
+              style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w800,
+                fontFeatures: [FontFeature.tabularFigures()])),
+            const SizedBox(height: 3),
+            Text(_changeText(change), maxLines: 1,
+              style: TextStyle(fontSize: 10,
+                color: change == null ? c.onSurfaceVariant
+                    : change >= 0 ? c.primary : c.error)),
+          ]),
+        )));
+    }
+    return Column(children: [
+      Row(children: [
+        Expanded(child: Text('CALL · CE',
+          textAlign: TextAlign.center, style: heading)),
+        Expanded(child: Text('STRIKE',
+          textAlign: TextAlign.center, style: heading)),
+        Expanded(child: Text('PUT · PE',
+          textAlign: TextAlign.center, style: heading)),
+      ]),
+      Divider(color: c.outlineVariant),
+      for (final strike in strikes)
+        Container(
+          decoration: BoxDecoration(
+            color: atm != null && atm == strike.strikePrice
+                ? c.primary.withValues(alpha: 0.12) : null,
+            border: Border(bottom: BorderSide(
+              color: c.outlineVariant.withValues(alpha: 0.5), width: 0.5)),
+          ),
+          child: Row(children: [
+            priceCell(strike.call),
+            Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              if (atm != null && atm == strike.strikePrice)
+                Text('ATM ≈', style: TextStyle(
+                  fontSize: 9, color: c.primary, fontWeight: FontWeight.w700)),
+              Text(_strike(strike.strikePrice),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 14, fontWeight: FontWeight.w800)),
+            ])),
+            priceCell(strike.put),
+          ]),
+        ),
+    ]);
   }
 
   Widget _chainHeader(BuildContext context) {
