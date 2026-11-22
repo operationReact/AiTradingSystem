@@ -48,6 +48,7 @@ public final class CustomerFnoLastTradeSnapshotStore {
     private final boolean allowed;
     private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public CustomerFnoLastTradeSnapshotStore(JdbcTemplate jdbc,
             ObjectProvider<UpstoxFnoV3LiveFeedService> feed, Environment env) {
         this(jdbc, feed, env.getProperty(
