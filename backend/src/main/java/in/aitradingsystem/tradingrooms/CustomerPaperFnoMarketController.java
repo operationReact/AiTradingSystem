@@ -60,7 +60,17 @@ public class CustomerPaperFnoMarketController {
     public record Market(String underlyingKey, LocalDate expiry, String source,
                          String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
                          boolean displayRightsVerified, boolean trainingRightsVerified,
-                         boolean liveOrderEnabled, List<Strike> strikes) {}
+                         boolean liveOrderEnabled, List<Strike> strikes,
+                         BigDecimal underlyingReferenceSpot) {
+        public Market(String underlyingKey, LocalDate expiry, String source,
+                String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
+                boolean displayRightsVerified, boolean trainingRightsVerified,
+                boolean liveOrderEnabled, List<Strike> strikes) {
+            this(underlyingKey, expiry, source, status, snapshotAt,
+                    exchangeSpotTimeVerified, displayRightsVerified,
+                    trainingRightsVerified, liveOrderEnabled, strikes, null);
+        }
+    }
 
     private final JdbcClient jdbc;
     private final CustomerIdentityStore identities;
@@ -178,9 +188,18 @@ public class CustomerPaperFnoMarketController {
     static Market marketResponse(LocalDate expiry, Instant snapshotAt,
             String status, boolean displayAllowed, boolean paperAllowed,
             List<Strike> strikes) {
+        return marketResponse(expiry, snapshotAt, status, displayAllowed,
+            paperAllowed, strikes, null);
+    }
+
+    static Market marketResponse(LocalDate expiry, Instant snapshotAt,
+            String status, boolean displayAllowed, boolean paperAllowed,
+            List<Strike> strikes, BigDecimal referenceSpot) {
         return new Market(UNDERLYING, expiry, "UPSTOX_ANALYTICS",
             status, snapshotAt, false, displayAllowed, paperAllowed, false,
-            List.copyOf(strikes));
+            List.copyOf(strikes),
+            referenceSpot != null && referenceSpot.signum() > 0
+                ? referenceSpot : null);
     }
 
     /**
@@ -209,7 +228,7 @@ public class CustomerPaperFnoMarketController {
             UpstoxAnalyticsSource.OptionChainSnapshot chain,
             UpstoxFnoV3LiveFeedService live, boolean marketOpen, boolean paperAllowed) {
         // Trade terminal stays deliberately bounded at 24 near-ATM strikes.
-        return selectBounded(contracts, chain, live, marketOpen, paperAllowed, 24);
+        return selectBounded(contracts, chain, live, marketOpen, paperAllowed, 24, false);
     }
 
     /** Read-only discovery may display all listed rows in the current NIFTY
@@ -220,14 +239,14 @@ public class CustomerPaperFnoMarketController {
             List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
             UpstoxAnalyticsSource.OptionChainSnapshot chain,
             UpstoxFnoV3LiveFeedService live, boolean marketOpen) {
-        return selectBounded(contracts, chain, live, marketOpen, false, 256);
+        return selectBounded(contracts, chain, live, marketOpen, false, 256, true);
     }
 
     private static List<Strike> selectBounded(
             List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
             UpstoxAnalyticsSource.OptionChainSnapshot chain,
             UpstoxFnoV3LiveFeedService live, boolean marketOpen,
-            boolean paperAllowed, int maximumStrikes) {
+            boolean paperAllowed, int maximumStrikes, boolean displayOnly) {
         if (contracts==null || chain==null || chain.strikes()==null
                 || chain.strikes().isEmpty() || chain.strikes().size()>1024
                 || contracts.size()>1024) return List.of();
@@ -263,26 +282,48 @@ public class CustomerPaperFnoMarketController {
                     || put.strikePrice().compareTo(strike.strikePrice())!=0)
                 continue;
             rows.add(new Strike(strike.strikePrice(),
-                leg(call,live,marketOpen,paperAllowed),
-                leg(put,live,marketOpen,paperAllowed)));
+                leg(call,live,marketOpen,paperAllowed,displayOnly),
+                leg(put,live,marketOpen,paperAllowed,displayOnly)));
         }
         rows.sort(Comparator.comparing(Strike::strikePrice));
         return List.copyOf(rows);
     }
 
     private static Leg leg(UpstoxAnalyticsSource.FnoOptionContract c,
-            UpstoxFnoV3LiveFeedService live, boolean marketOpen, boolean paperAllowed) {
+            UpstoxFnoV3LiveFeedService live, boolean marketOpen,
+            boolean paperAllowed, boolean displayOnly) {
+        // Display-only discoveries may use a genuine fresh V3 trade even if
+        // executable two-sided order depth is unavailable. No paper eligibility.
+        if (displayOnly) {
+            var details = marketOpen
+                ? live.eligibleDisplayQuote(c.instrumentKey())
+                : java.util.Optional.<UpstoxFnoV3LiveFeedService.DisplayQuote>empty();
+            var d = details.orElse(null);
+            return new Leg(c.instrumentKey(), c.tradingSymbol(), c.side(),
+                c.lotSize(), c.tickSize(),
+                null, null,
+                d == null ? null : d.exchangeAt(),
+                d == null ? null : d.observedAt(),
+                d != null, false,
+                d == null ? null : d.ltp(),
+                d == null ? null : d.previousClose(),
+                d == null ? null : d.openInterest(),
+                d == null ? null : d.iv(),
+                d == null ? null : d.delta(),
+                d == null ? null : d.theta(),
+                d == null ? null : d.gamma(),
+                d == null ? null : d.vega());
+        }
+        // Execution-eligible quotes still require strictly validated bid/ask.
         var quote = marketOpen ? live.eligiblePaperQuote(c.instrumentKey())
                 : java.util.Optional.<UpstoxFnoV3LiveFeedService.PaperQuote>empty();
-        // V3's optional analytics values are only from the SAME fresh
-        // exchange-timed observation used for the executable bid/ask.
-        // REST option-chain Greeks/LTP are never substituted.
         var details = quote.isPresent()
                 ? live.eligibleDisplayQuote(c.instrumentKey())
                 : java.util.Optional.<UpstoxFnoV3LiveFeedService.DisplayQuote>empty();
         if (quote.isPresent() && details.isPresent()
                 && (!quote.get().exchangeAt().equals(details.get().exchangeAt())
                     || !quote.get().observedAt().equals(details.get().observedAt())
+                    || details.get().bid() == null || details.get().ask() == null
                     || quote.get().bid().compareTo(details.get().bid()) != 0
                     || quote.get().ask().compareTo(details.get().ask()) != 0)) {
             details = java.util.Optional.empty();

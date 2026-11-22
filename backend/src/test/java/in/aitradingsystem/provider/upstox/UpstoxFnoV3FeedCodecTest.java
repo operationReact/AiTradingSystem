@@ -166,6 +166,15 @@ class UpstoxFnoV3FeedCodecTest {
                 java.util.Set.of("NSE_EQ|INFY")).ticks()).isEmpty();
     }
 
+    /** Real LTPC/analytics payload without first-level depth. */
+    static byte[] validFirstLevelWithoutDepth() {
+        Proto ltpc = new Proto().d(1, 120.5).v(2, TRADE_MS).v(3, 65).d(4, 130);
+        Proto first = new Proto().m(1, ltpc).d(5, 5000).d(6, .21);
+        return new Proto().m(2,
+                new Proto().s(1, KEY).m(2, new Proto().m(3, first)))
+                .v(3, TRADE_MS + 1000).bytes();
+    }
+
     static byte[] validFirstLevel() {
         Proto ltpc = new Proto().d(1, 120.5).v(2, TRADE_MS).v(3, 65).d(4, 130);
         Proto firstDepth = new Proto().v(1, 100).d(2, 119.5).v(3, 200).d(4, 121);

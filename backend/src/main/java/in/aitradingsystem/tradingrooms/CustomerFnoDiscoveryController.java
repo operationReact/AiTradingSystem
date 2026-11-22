@@ -184,7 +184,9 @@ public final class CustomerFnoDiscoveryController {
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
         return CustomerPaperFnoMarketController.marketResponse(
-            expiry, chain.retrievedAt(), status, true, false, strikes);
+            expiry, chain.retrievedAt(), status, true, false, strikes,
+            chain.strikes().isEmpty() ? null
+                : chain.strikes().getFirst().underlyingSpotPrice());
     }
 
     /**

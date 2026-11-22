@@ -99,6 +99,29 @@ class UpstoxFnoV3LiveFeedServiceTest {
     }
 
     @Test
+    void authorizedFreshLtpDisplaysEvenWhenOrderBookDepthIsMissing() {
+        var clock = Clock.fixed(Instant.parse("2026-11-13T09:15:02Z"), ZoneOffset.UTC);
+        var s = service(clock);
+        try {
+            s.start(List.of("NSE_FO|61001"));
+            listener.get().onOpen(socket);
+            listener.get().onBinary(socket, ByteBuffer.wrap(
+                    UpstoxFnoV3FeedCodecTest.validFirstLevelWithoutDepth()), true);
+            assertThat(s.eligiblePaperQuote("NSE_FO|61001")).isEmpty();
+            var display = s.eligibleDisplayQuote("NSE_FO|61001");
+            assertThat(display).isPresent();
+            assertThat(display.orElseThrow().ltp()).isEqualByComparingTo("120.5");
+            assertThat(display.orElseThrow().openInterest()).isEqualTo(5000L);
+            assertThat(display.orElseThrow().bid()).isNull();
+            assertThat(display.orElseThrow().ask()).isNull();
+            s.stop();
+            assertThat(s.eligibleDisplayQuote("NSE_FO|61001")).isEmpty();
+        } finally {
+            s.shutdown();
+        }
+    }
+
+    @Test
     void initialBinaryBeforeSubscriptionAckIsConsumedAndCannotBeDowngraded() {
         var s = service();
         CompletableFuture<WebSocket> delayedAck = new CompletableFuture<>();

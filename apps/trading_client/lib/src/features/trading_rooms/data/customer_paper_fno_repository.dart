@@ -404,6 +404,7 @@ class CustomerFnoMarket {
     required this.displayRightsVerified,
     required this.liveOrderEnabled,
     required this.strikes,
+    this.underlyingReferenceSpot,
   });
 
   final String underlyingKey;
@@ -414,6 +415,8 @@ class CustomerFnoMarket {
   final bool displayRightsVerified;
   final bool liveOrderEnabled;
   final List<CustomerFnoStrike> strikes;
+  /// REST chain reference spot used only for contract ordering, never live LTP.
+  final num? underlyingReferenceSpot;
 
   bool get hasFreshQuotes => status == 'FRESH_QUOTES';
 
@@ -425,6 +428,11 @@ class CustomerFnoMarket {
     final display = value['displayRightsVerified'];
     final live = value['liveOrderEnabled'];
     final strikesRaw = value['strikes'];
+    final referenceSpot = value['underlyingReferenceSpot'];
+    if (referenceSpot != null && (referenceSpot is! num ||
+        !referenceSpot.isFinite || referenceSpot <= 0)) {
+      throw const FormatException('Invalid F&O reference spot');
+    }
     if (underlying is! String || expiry == null ||
         !const {'MARKET_CLOSED', 'FRESH_QUOTES', 'NO_FRESH_QUOTES'}.contains(status) ||
         display is! bool || strikesRaw is! List) {
@@ -452,6 +460,7 @@ class CustomerFnoMarket {
       displayRightsVerified: display,
       liveOrderEnabled: live == true,
       strikes: strikes,
+      underlyingReferenceSpot: referenceSpot as num?,
     );
   }
 }

@@ -155,6 +155,26 @@ class CustomerPaperFnoMarketControllerTest {
     }
 
     @Test
+    void discoveryDisplaysFreshV3LtpWithoutExecutableBidAsk() {
+        var ts = Instant.parse("2026-11-16T04:01:00Z");
+        when(live.eligibleDisplayQuote(CE)).thenReturn(Optional.of(
+            new UpstoxFnoV3LiveFeedService.DisplayQuote(
+                CE, new BigDecimal("111"), new BigDecimal("105"), 4001L,
+                null, null, null, null, null,
+                null, null, ts, ts.plusSeconds(1))));
+        var rows = CustomerPaperFnoMarketController.selectDiscovery(
+            List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
+            chain(), live, true);
+        assertThat(rows).hasSize(1);
+        assertThat(rows.getFirst().call().ltp()).isEqualByComparingTo("111");
+        assertThat(rows.getFirst().call().openInterest()).isEqualTo(4001L);
+        assertThat(rows.getFirst().call().quoteFresh()).isTrue();
+        assertThat(rows.getFirst().call().paperEligible()).isFalse();
+        assertThat(rows.getFirst().call().bid()).isNull();
+        verify(live, never()).eligiblePaperQuote(CE);
+    }
+
+    @Test
     void closedMarketNeverLeaksProviderSnapshotPricesAsExecutable() {
         var rows=CustomerPaperFnoMarketController.select(
             List.of(contract(CE,"CE","25000"),contract(PE,"PE","25000")),
