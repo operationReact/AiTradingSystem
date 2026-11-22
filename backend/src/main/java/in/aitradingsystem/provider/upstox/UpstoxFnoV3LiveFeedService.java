@@ -315,25 +315,39 @@ public class UpstoxFnoV3LiveFeedService {
             java.math.BigDecimal vega, java.math.BigDecimal bid,
             java.math.BigDecimal ask, Instant exchangeAt, Instant observedAt) {}
 
+    /**
+     * Display-only V3 observation. A fresh exchange-timed LTPC is meaningful
+     * even if first-level depth has no executable two-sided bid/ask.
+     * This NEVER authorizes an order: eligiblePaperQuote remains independent.
+     */
     public java.util.Optional<DisplayQuote> eligibleDisplayQuote(String key) {
-        var permitted = eligiblePaperQuote(key);
-        if (permitted.isEmpty()) return java.util.Optional.empty();
+        if (key == null || !UpstoxFnoV3FeedCodec.validKey(key)
+                || !wanted || destroyed || !"CONNECTED".equals(state)
+                || !regularNseSession(clock.instant())) {
+            return java.util.Optional.empty();
+        }
         Observation observation = latest.get(key);
-        if (observation == null) return java.util.Optional.empty();
-        var paper = permitted.get();
+        if (observation == null || !subscribed.contains(key)) {
+            return java.util.Optional.empty();
+        }
         var tick = observation.tick();
-        // Reject a raced replacement: never mix the side/price from one frame
-        // with Greeks/interest from a different observation.
-        if (!paper.exchangeAt().equals(tick.tradedAt())
-                || !paper.observedAt().equals(observation.observedAt())
-                || paper.bid().compareTo(tick.bid()) != 0
-                || paper.ask().compareTo(tick.ask()) != 0) {
+        Instant now = clock.instant();
+        Instant exchange = tick.tradedAt();
+        Instant received = observation.observedAt();
+        if (exchange == null || exchange.isAfter(now.plusSeconds(2))
+                || received.isAfter(now.plusSeconds(2))
+                || exchange.isAfter(received.plusSeconds(2))
+                || Duration.between(exchange, now).isNegative()
+                || Duration.between(exchange, now).compareTo(Duration.ofSeconds(15)) > 0
+                || Duration.between(received, now).isNegative()
+                || Duration.between(received, now).compareTo(Duration.ofSeconds(15)) > 0
+                || tick.ltp() == null || tick.ltp().signum() <= 0) {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(new DisplayQuote(
                 key, tick.ltp(), tick.previousClose(), tick.openInterest(),
                 tick.iv(), tick.delta(), tick.theta(), tick.gamma(), tick.vega(),
-                paper.bid(), paper.ask(), paper.exchangeAt(), paper.observedAt()));
+                tick.bid(), tick.ask(), exchange, received));
     }
 
     /** A frame is observation evidence only; never a trade or permission grant. */
