@@ -219,3 +219,34 @@ only the source-specific adapters can read original receipts.
 **Independently accepted after-cost market E2E remains 0/43**
 until original eligible data and walk-forward/transaction cost
 evidence actually pass independent review.
+
+
+## Original as-of two-option debit spreads STR-183 / STR-184
+
+\`Fno183184VerifiedHistoricalReplayService\` reuses the unchanged
+\`FnoDebitSpreadResearchService\` for historical decisions, with an exact
+two-key original NSE_FO option pair and independent V106 completed NIFTY
+closes plus V108 real debit spread source evidence. The SQL readers
+require provider-matched original timestamps and separately VERIFIED
+MODEL_INFERENCE rights for the underlying tick, both option quotes,
+option contract master and fee/risk receipts. The original research
+service enforces complete 35-session calendar, true simultaneous
+underlying+both option bid/ask, adequate full-lot depth/OI, cost and
+capital/budget prerequisites, expiry/lot/strike consistency and
+after-cost hypothetical payout logic.
+
+\`ADMIN/OPERATOR\` \`GET /api/admin/research/fno-43/historical-debit-spread\`
+accepts exact historical \`asOf\` and two distinct original option keys;
+returns only fixed research reason codes and aggregate counts with
+\`Cache-Control: no-store\`. No price data, account positions, private
+source receipts or orders are exposed. The other debit spread strategy
+is given deliberately blank keys and cannot silently choose an
+alternative contract or place an order.
+
+This adds source-connected historical evaluator paths for STR-183/184.
+The source fixtures in CI are synthetic: a green job does not prove
+that V106/V108 original market rows exist in deployed PostgreSQL or
+that a rights-certified after-cost historical out-of-sample outcome
+has been observed. The historical E2E accepted counter remains 0/43
+until independently validated source/performance/transaction receipts
+qualify, and paper/live broker validation is separate.

@@ -7,6 +7,8 @@ on:
       - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
       - 'docs/architecture/fno-43-historical-operator-probe.md'
   push:
     branches: [dev]
@@ -14,6 +16,8 @@ on:
       - '.github/workflows/minttick-fno43-historical-operator-readonly.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno183184VerifiedHistoricalReplayServiceTest.java'
 permissions:
   contents: read
 jobs:
@@ -36,7 +40,7 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest' test
+            '-Dtest=AdminFno43HistoricalReplayControllerTest,Fno174VerifiedHistoricalReplayServiceTest,Fno176VerifiedHistoricalReplayServiceTest,Fno177VerifiedHistoricalReplayServiceTest,Fno181182VerifiedHistoricalReplayServiceTest,Fno183184VerifiedHistoricalReplayServiceTest' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno43HistoricalReplayControllerTest.xml
       - name: Enforce GET with role only and no market-data or broker route
         shell: bash
@@ -47,15 +51,22 @@ jobs:
           p=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java')
           src=p.read_text()
           for mandatory in ('@PreAuthorize("hasAnyRole(', '@GetMapping("/historical-replay")',
+                            '@GetMapping("/historical-debit-spread")',
                             'CacheControl.noStore()', 'Fno174VerifiedHistoricalReplayService',
                             'Fno176VerifiedHistoricalReplayService',
-                            'Fno177VerifiedHistoricalReplayService'):
+                            'Fno177VerifiedHistoricalReplayService',
+                            'Fno181182VerifiedHistoricalReplayService',
+                            'Fno183184VerifiedHistoricalReplayService'):
               assert mandatory in src,mandatory
           for forbidden in ('@PostMapping','submitOrder','placeOrder',
                             'return ResponseEntity.status(HttpStatus.ACCEPTED)',
                             'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
               assert forbidden not in src,forbidden
-          assert src.count('false,false,false,false') == 1
+          # Both original one-contract and two-contract routes must keep
+          # their four separate historical/PAPER/LIVE/order outcomes false.
+          assert src.count('false,false,false,false') == 2
+          assert src.count('ResponseEntity.ok().cacheControl(CacheControl.noStore())') == 2
+          assert src.count('@PreAuthorize("hasAnyRole(\'ADMIN\', \'OPERATOR\')")') == 2
           PY
       - name: Print honest read-only historical source evidence tier
         if: always()

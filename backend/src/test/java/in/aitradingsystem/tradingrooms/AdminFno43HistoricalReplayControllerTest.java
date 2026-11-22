@@ -28,9 +28,11 @@ class AdminFno43HistoricalReplayControllerTest {
         mock(Fno177VerifiedHistoricalReplayService.class);
     private final Fno181182VerifiedHistoricalReplayService options=
         mock(Fno181182VerifiedHistoricalReplayService.class);
+    private final Fno183184VerifiedHistoricalReplayService debit=
+        mock(Fno183184VerifiedHistoricalReplayService.class);
 
     private AdminFno43HistoricalReplayController route() {
-        return new AdminFno43HistoricalReplayController(s174,s176,s177,options,CLOCK);
+        return new AdminFno43HistoricalReplayController(s174,s176,s177,options,debit,CLOCK);
     }
 
     @Test
@@ -127,6 +129,66 @@ class AdminFno43HistoricalReplayControllerTest {
     }
 
     @Test
+    void originalTwoLegBullAndBearSpreadRoutesAreProtectedGetOnly() throws Exception {
+        Method method=AdminFno43HistoricalReplayController.class.getMethod(
+            "inspectDebitSpread",String.class,String.class,String.class,Instant.class);
+        assertEquals("hasAnyRole('ADMIN', 'OPERATOR')",
+            method.getAnnotation(PreAuthorize.class).value());
+        assertArrayEquals(new String[]{"/historical-debit-spread"},
+            method.getAnnotation(GetMapping.class).value());
+        for(var param:method.getParameters())
+            assertNotNull(param.getAnnotation(RequestParam.class));
+        String lower="NSE_FO|NIFTY_125_CE";
+        String higher="NSE_FO|NIFTY_130_CE";
+        when(debit.inspect("strategy.STR-183",lower,higher,AS_OF)).thenReturn(
+            new Fno183184VerifiedHistoricalReplayService.Report(
+                "strategy.STR-183","ORIGINAL_SOURCE_RESEARCH_EVALUATOR_RAN_NOT_E2E",
+                "BULL_CALL_SPREAD_RESEARCH_SETUP_ONLY",35,2,false,false,false,false));
+        var result=route().inspectDebitSpread("strategy.STR-183",lower,higher,AS_OF);
+        assertEquals(200,result.getStatusCode().value());
+        assertTrue(result.getHeaders().getCacheControl().contains("no-store"));
+        assertEquals(35,result.getBody().originalSourceRowsObserved());
+        assertEquals(35,result.getBody().originalSessionsEvaluated());
+        assertFalse(result.getBody().independentHistoricalE2EAccepted());
+        assertFalse(result.getBody().paperLedgerE2EValidated());
+        assertFalse(result.getBody().liveBrokerE2EValidated());
+        assertFalse(result.getBody().brokerOrdersPlaced());
+        assertFalse(result.toString().contains(lower));
+        verify(debit).inspect("strategy.STR-183",lower,higher,AS_OF);
+
+        when(debit.inspect("strategy.STR-184",lower,higher,AS_OF)).thenReturn(
+            new Fno183184VerifiedHistoricalReplayService.Report(
+                "strategy.STR-184","BLOCKED_NOT_HISTORICAL_E2E",
+                "DEBIT_SPREAD_TWO_LEG_QUOTES_COSTS_OR_DEPTH_PROOF_MISSING",
+                0,0,false,false,false,false));
+        var blocked=route().inspectDebitSpread("strategy.STR-184",lower,higher,AS_OF);
+        assertEquals(0,blocked.getBody().originalSessionsEvaluated());
+        assertFalse(blocked.getBody().independentHistoricalE2EAccepted());
+        verifyNoInteractions(s174,s176,s177,options);
+    }
+
+    @Test
+    void spreadRouteNeverAcceptsOneLegSameKeyOrUnlistedStrategy() {
+        String lower="NSE_FO|NIFTY_125_CE";
+        for (var pair:java.util.List.of(
+                java.util.List.of(lower,lower),
+                java.util.List.of("NSE_EQ|BAD","NSE_FO|HIGH"),
+                java.util.List.of(lower,"NSE_FO|../../bad"))) {
+            var err=assertThrows(ResponseStatusException.class,
+                ()->route().inspectDebitSpread("strategy.STR-183",
+                    pair.get(0),pair.get(1),AS_OF));
+            assertEquals(HttpStatus.BAD_REQUEST,err.getStatusCode());
+        }
+        assertThrows(ResponseStatusException.class,
+            ()->route().inspectDebitSpread("strategy.STR-185",lower,
+                "NSE_FO|HIGH",AS_OF));
+        assertThrows(ResponseStatusException.class,
+            ()->route().inspectDebitSpread("strategy.STR-183",lower,
+                "NSE_FO|HIGH",CLOCK.instant().plusSeconds(1)));
+        verifyNoInteractions(debit);
+    }
+
+    @Test
     void allOther38StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
         for(int n=170;n<=212;n++){
             if(n==174||n==176||n==177||n==181||n==182)continue;
@@ -135,7 +197,7 @@ class AdminFno43HistoricalReplayControllerTest {
                 ()->route().inspect("strategy.STR-"+strategyNumber,KEY,AS_OF));
             assertEquals(HttpStatus.BAD_REQUEST,err.getStatusCode());
         }
-        verifyNoInteractions(s174,s176,s177,options);
+        verifyNoInteractions(s174,s176,s177,options,debit);
     }
 
     @Test
@@ -149,7 +211,7 @@ class AdminFno43HistoricalReplayControllerTest {
         var future=assertThrows(ResponseStatusException.class,()->
             route().inspect("strategy.STR-176",KEY,CLOCK.instant().plusSeconds(1)));
         assertEquals(400,future.getStatusCode().value());
-        verifyNoInteractions(s174,s176,s177,options);
+        verifyNoInteractions(s174,s176,s177,options,debit);
     }
 
     @Test
