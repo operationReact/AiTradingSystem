@@ -51,6 +51,37 @@ class FnoVerifiedCompletedOhlcvOiStoreTest {
     }
 
     @Test
+    void replayReaderUsesSameOriginalRightsAndAsOfSqlPlusThreeSourceDigests() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        var store = new FnoVerifiedCompletedOhlcvOiStore(jdbc);
+        store.readExactReplayContract(FUTURE, FROM, TO, AS_OF);
+        var query = mockingDetails(jdbc).getInvocations().stream()
+            .filter(x -> "query".equals(x.getMethod().getName())).findFirst().orElseThrow();
+        Object[] args = query.getArguments();
+        assertEquals(20, args.length);
+        String sql = (String) args[0];
+        assertEquals(18, sql.chars().filter(c -> c == '?').count());
+        for (String gate : java.util.List.of(
+                "s.ohlcv_source_digest",
+                "s.oi_source_digest",
+                "s.listing_source_digest",
+                "ohlcv_rights.receipt_status = 'VERIFIED'",
+                "oi_rights.receipt_status = 'VERIFIED'",
+                "ohlcv_rights.permitted_use = 'MODEL_INFERENCE'",
+                "oi_rights.permitted_use = 'MODEL_INFERENCE'",
+                "s.captured_at <= ?",
+                "s.ohlcv_first_available_at <= ?",
+                "s.oi_first_available_at <= ?",
+                "cal.first_available_at <= ?",
+                "cal.verified_at <= ?",
+                "cal.session_status = 'TRADING'"))
+            assertTrue(sql.contains(gate), gate);
+        assertFalse(sql.toUpperCase().contains("INSERT INTO"));
+        assertFalse(sql.contains("market_candle"));
+        assertFalse(sql.contains("fno_closing_snapshot"));
+    }
+
+    @Test
     void invalidContractDatesOrLookbackAreRejectedBeforeDatabaseQuery() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         var store = new FnoVerifiedCompletedOhlcvOiStore(jdbc);

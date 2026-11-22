@@ -2,6 +2,8 @@ package in.aitradingsystem.marketdata;
 
 import java.math.BigDecimal;
 import java.sql.Date;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,7 +29,8 @@ public class FnoVerifiedCompletedOhlcvOiStore {
                s.open_price, s.high_price, s.low_price, s.close_price,
                s.traded_volume_units, s.final_open_interest_units,
                s.ohlcv_first_available_at, s.oi_first_available_at,
-               cal.session_close_at
+               cal.session_close_at, s.ohlcv_source_digest,
+               s.oi_source_digest, s.listing_source_digest
         FROM fno_verified_completed_ohlcv_oi_session s
         JOIN golden_data_provider p ON p.provider_code = s.provider_code
             AND p.source_kind = 'EXTERNAL'
@@ -77,6 +80,11 @@ public class FnoVerifiedCompletedOhlcvOiStore {
         Instant ohlcvFirstAvailableAt, Instant oiFirstAvailableAt,
         Instant verifiedSessionCloseAt) {}
 
+    /** Only model-inference-rights/journal/calendar joined rows are visible. */
+    public record ReplayProofBar(
+        VerifiedBar bar, String originalOhlcvDigest,
+        String originalOiDigest, String originalListingDigest) {}
+
     private final JdbcTemplate jdbc;
 
     public FnoVerifiedCompletedOhlcvOiStore(JdbcTemplate jdbc) {
@@ -92,7 +100,39 @@ public class FnoVerifiedCompletedOhlcvOiStore {
             throw new IllegalArgumentException("FNO_COMPLETED_OHLCV_OI_SCOPE_INVALID");
         }
         Timestamp cutoff = Timestamp.from(asOf);
-        return jdbc.query(SQL, (rs, i) -> new VerifiedBar(
+        return jdbc.query(SQL, (rs, i) -> mapBar(rs),
+            instrumentKey, Date.valueOf(from), Date.valueOf(to),
+            Date.valueOf(asOf.atZone(IST).toLocalDate()),
+            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff,
+            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff);
+    }
+
+    /**
+     * Read the same SQL-rights-attested exact futures source as STR-176,
+     * including the original immutable source digests. No historical
+     * publication time or contract quote is inferred from a daily label.
+     */
+    public List<ReplayProofBar> readExactReplayContract(
+            String instrumentKey, LocalDate from, LocalDate to, Instant asOf) {
+        if (instrumentKey == null || !instrumentKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || from == null || to == null || asOf == null
+                || from.isAfter(to) || from.isBefore(to.minusDays(30))
+                || to.isAfter(asOf.atZone(IST).toLocalDate())) {
+            throw new IllegalArgumentException("FNO_COMPLETED_OHLCV_OI_SCOPE_INVALID");
+        }
+        Timestamp cutoff = Timestamp.from(asOf);
+        return jdbc.query(SQL, (rs, i) -> new ReplayProofBar(
+            mapBar(rs), rs.getString("ohlcv_source_digest"),
+            rs.getString("oi_source_digest"),
+            rs.getString("listing_source_digest")),
+            instrumentKey, Date.valueOf(from), Date.valueOf(to),
+            Date.valueOf(asOf.atZone(IST).toLocalDate()),
+            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff,
+            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff);
+    }
+
+    private static VerifiedBar mapBar(ResultSet rs) throws SQLException {
+        return new VerifiedBar(
             rs.getString("provider_code"), rs.getString("instrument_key"),
             rs.getString("underlying_key"),
             rs.getObject("listed_from", LocalDate.class),
@@ -103,11 +143,7 @@ public class FnoVerifiedCompletedOhlcvOiStore {
             rs.getLong("traded_volume_units"), rs.getLong("final_open_interest_units"),
             rs.getTimestamp("ohlcv_first_available_at").toInstant(),
             rs.getTimestamp("oi_first_available_at").toInstant(),
-            rs.getTimestamp("session_close_at").toInstant()),
-            instrumentKey, Date.valueOf(from), Date.valueOf(to),
-            Date.valueOf(asOf.atZone(IST).toLocalDate()),
-            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff,
-            cutoff, cutoff, cutoff, cutoff, cutoff, cutoff, cutoff);
+            rs.getTimestamp("session_close_at").toInstant());
     }
 
     public int purgeExpired(LocalDate today) {
