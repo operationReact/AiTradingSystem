@@ -149,7 +149,7 @@ class FnoOptionsResearchServiceTest {
         var source=store("125");
         var denied=service(source,false,CE,PE).evaluateOne(
             "strategy.STR-181",NOW);
-        assertEquals("LONG_CALL_SOURCE_RIGHTS_UNVERIFIED",denied.reasonCode());
+        assertEquals("LONG_OPTION_SOURCE_RIGHTS_UNVERIFIED",denied.reasonCode());
         verifyNoInteractions(source);
         var source2=store("125");
         var missing=service(source2,true,"",PE).evaluateOne(
