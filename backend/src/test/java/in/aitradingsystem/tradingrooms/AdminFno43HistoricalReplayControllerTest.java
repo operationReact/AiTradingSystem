@@ -26,9 +26,11 @@ class AdminFno43HistoricalReplayControllerTest {
         mock(Fno176VerifiedHistoricalReplayService.class);
     private final Fno177VerifiedHistoricalReplayService s177=
         mock(Fno177VerifiedHistoricalReplayService.class);
+    private final Fno181182VerifiedHistoricalReplayService options=
+        mock(Fno181182VerifiedHistoricalReplayService.class);
 
     private AdminFno43HistoricalReplayController route() {
-        return new AdminFno43HistoricalReplayController(s174,s176,s177,CLOCK);
+        return new AdminFno43HistoricalReplayController(s174,s176,s177,options,CLOCK);
     }
 
     @Test
@@ -92,15 +94,45 @@ class AdminFno43HistoricalReplayControllerTest {
     }
 
     @Test
-    void allOther40StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
+    void allOther38StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
         for(int n=170;n<=212;n++){
-            if(n==174||n==176||n==177)continue;
+            if(n==174||n==176||n==177||n==181||n==182)continue;
             int strategyNumber=n;
             var err=assertThrows(ResponseStatusException.class,
                 ()->route().inspect("strategy.STR-"+strategyNumber,KEY,AS_OF));
             assertEquals(HttpStatus.BAD_REQUEST,err.getStatusCode());
         }
+        verifyNoInteractions(s174,s176,s177,options);
+    }
+
+    @Test
+    void sourceVerifiedHistoricalLongCallAndPutRoutesHaveNoDataLeakAndNoOrders() {
+        String ceKey="NSE_FO|NIFTY_20261127_125_CE";
+        String peKey="NSE_FO|NIFTY_20261127_75_PE";
+        for(String id:new String[]{"strategy.STR-181","strategy.STR-182"}){
+            String key=id.endsWith("181")?ceKey:peKey;
+            when(options.inspect(id,key,AS_OF)).thenReturn(
+                new Fno181182VerifiedHistoricalReplayService.Evidence(
+                    id,AS_OF,"SOURCE_V106_EVALUATOR_RESEARCH_ONLY",
+                    "RESEARCH_CANDIDATE","LONG_OPTION_SOURCE_REASON",
+                    35,2,false,false,false,false));
+            var response=route().inspect(id,key,AS_OF);
+            assertEquals(200,response.getStatusCode().value());
+            assertTrue(response.getHeaders().getCacheControl().contains("no-store"));
+            var body=response.getBody();
+            assertNotNull(body);
+            assertEquals(35,body.originalSessionsEvaluated());
+            assertEquals("SOURCE_V106_EVALUATOR_RESEARCH_ONLY",
+                body.sourceAndEvaluatorState());
+            assertFalse(body.independentHistoricalE2EAccepted());
+            assertFalse(body.paperLedgerE2EValidated());
+            assertFalse(body.liveBrokerE2EValidated());
+            assertFalse(body.brokerOrdersPlaced());
+            assertFalse(body.toString().contains(key));
+        }
         verifyNoInteractions(s174,s176,s177);
+        verify(options).inspect("strategy.STR-181",ceKey,AS_OF);
+        verify(options).inspect("strategy.STR-182",peKey,AS_OF);
     }
 
     @Test
@@ -114,7 +146,7 @@ class AdminFno43HistoricalReplayControllerTest {
         var future=assertThrows(ResponseStatusException.class,()->
             route().inspect("strategy.STR-176",KEY,CLOCK.instant().plusSeconds(1)));
         assertEquals(400,future.getStatusCode().value());
-        verifyNoInteractions(s174,s176,s177);
+        verifyNoInteractions(s174,s176,s177,options);
     }
 
     @Test
