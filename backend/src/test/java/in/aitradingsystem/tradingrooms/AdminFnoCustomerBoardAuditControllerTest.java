@@ -74,6 +74,34 @@ class AdminFnoCustomerBoardAuditControllerTest {
     }
 
     @Test
+    void snapshotFetchedAfterAuditStartedIsNotIncorrectlyMarkedFuture() {
+        var discovery = mock(CustomerFnoDiscoveryController.class);
+        var clock = mock(Clock.class);
+        // The audit starts before Upstox returns its option-chain response.
+        when(clock.instant()).thenReturn(NOW, NOW.plusSeconds(4));
+        when(discovery.internalCapability()).thenReturn(capability(true));
+        var original = market();
+        var completedLater = new CustomerPaperFnoMarketController.Market(
+            original.underlyingKey(), original.expiry(), original.source(),
+            original.status(), NOW.plusSeconds(2),
+            original.exchangeSpotTimeVerified(), original.displayRightsVerified(),
+            original.trainingRightsVerified(), original.liveOrderEnabled(),
+            original.strikes(), original.underlyingReferenceSpot(),
+            original.chainSnapshotIndicators());
+        when(discovery.internalMarket(LocalDate.of(2026, 12, 1)))
+            .thenReturn(completedLater);
+        var result = new AdminFnoCustomerBoardAuditController(discovery, clock)
+            .audit().getBody();
+        assertThat(result).isNotNull();
+        assertThat(result.status()).isEqualTo("CONTRACT_MATCHED");
+        assertThat(result.chainSnapshotRecent()).isTrue();
+        assertThat(result.chainSnapshotLtpPresent()).isTrue();
+        assertThat(result.chainSnapshotOiPresent()).isTrue();
+        assertThat(result.chainSnapshotGreeksComplete()).isTrue();
+        verify(clock, times(2)).instant();
+    }
+
+    @Test
     void unavailableSourceFailsClosedWithoutCallingProvider() {
         var discovery = mock(CustomerFnoDiscoveryController.class);
         when(discovery.internalCapability()).thenReturn(capability(false));
