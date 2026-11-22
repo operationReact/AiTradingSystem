@@ -403,7 +403,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         child: Text(_error!,
             style: TextStyle(color: theme.colorScheme.error))),
       if (_section == 'Overview') ...[
-        _overview(context, market, now, room),
+        _overview(context, market, now),
       ] else if (_section == 'Chain') ...[
         _expiryRow(context),
         const SizedBox(height: 8),
@@ -418,10 +418,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         _trade(context, room),
       ],
       const SizedBox(height: 20),
-    ]);
-  }
-
-  Widget _statusChip      const SizedBox(height: 20),
     ]);
   }
 
@@ -548,7 +544,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
 
 
   Widget _overview(BuildContext context, CustomerFnoMarket? market,
-      DateTime now, TradingRoomDraft? room) {
+      DateTime now) {
     final theme = Theme.of(context);
     final c = theme.colorScheme;
     final type = theme.textTheme;
@@ -702,8 +698,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 style: type.bodySmall),
           )
         else
-        SingleChildScrollView(        const SizedBox(height: 10),
-        SingleChildScrollView(
+          SingleChildScrollView(
           controller: _chainScroll,
           scrollDirection: Axis.horizontal,
           child: SizedBox(width: _tableWidth, child: Column(children: [
