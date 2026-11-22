@@ -39,6 +39,7 @@ public class AdminFno43HistoricalReplayController {
     private final Fno176VerifiedHistoricalReplayService str176;
     private final Fno177VerifiedHistoricalReplayService str177;
     private final Fno181182VerifiedHistoricalReplayService longOptions;
+    private final Fno183184VerifiedHistoricalReplayService debitSpreads;
     private final Clock clock;
 
     @Autowired
@@ -46,18 +47,21 @@ public class AdminFno43HistoricalReplayController {
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
             Fno177VerifiedHistoricalReplayService str177,
-            Fno181182VerifiedHistoricalReplayService longOptions) {
-        this(str174,str176,str177,longOptions,Clock.systemUTC());
+            Fno181182VerifiedHistoricalReplayService longOptions,
+            Fno183184VerifiedHistoricalReplayService debitSpreads) {
+        this(str174,str176,str177,longOptions,debitSpreads,Clock.systemUTC());
     }
     AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
             Fno177VerifiedHistoricalReplayService str177,
-            Fno181182VerifiedHistoricalReplayService longOptions, Clock clock) {
+            Fno181182VerifiedHistoricalReplayService longOptions,
+            Fno183184VerifiedHistoricalReplayService debitSpreads, Clock clock) {
         this.str174=Objects.requireNonNull(str174);
         this.str176=Objects.requireNonNull(str176);
         this.str177=Objects.requireNonNull(str177);
         this.longOptions=Objects.requireNonNull(longOptions);
+        this.debitSpreads=Objects.requireNonNull(debitSpreads);
         this.clock=Objects.requireNonNull(clock);
     }
 
@@ -120,6 +124,39 @@ public class AdminFno43HistoricalReplayController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
             new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
                 strategyId,asOf,state,reason,rows,sessions,
+                false,false,false,false));
+    }
+
+    /**
+     * Two distinct original-source-listed CE/PE instruments are mandatory.
+     * Read-only only; prices and contract identities never appear in response.
+     */
+    @GetMapping("/historical-debit-spread")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<ReplayReadiness> inspectDebitSpread(
+            @RequestParam("strategyId") String strategyId,
+            @RequestParam("lowerKey") String lowerKey,
+            @RequestParam("higherKey") String higherKey,
+            @RequestParam("asOf") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME)
+            Instant asOf) {
+        if (!(FnoBullCallDebitSpreadV1.STRATEGY_ID.equals(strategyId)
+                || FnoBearPutDebitSpreadV1.STRATEGY_ID.equals(strategyId))
+                || lowerKey == null
+                || !lowerKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || higherKey == null
+                || !higherKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || lowerKey.equals(higherKey)
+                || asOf == null || asOf.isAfter(clock.instant())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "FNO_HISTORICAL_DEBIT_SPREAD_SCOPE_INVALID");
+        }
+        var report=debitSpreads.inspect(strategyId,lowerKey,higherKey,asOf);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+            new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
+                strategyId,asOf,report.state(),report.evaluatorReasonCode(),
+                report.verifiedDailySourceSessions(),
+                report.verifiedOptionContracts() == 2
+                    ? report.verifiedDailySourceSessions() : 0,
                 false,false,false,false));
     }
 }
