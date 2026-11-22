@@ -70,6 +70,23 @@ CustomerFnoMarket _market({bool fresh = true}) => CustomerFnoMarket.decode({
 });
 
 void main() {
+  test('reference spot is decoded for ordering, never treated as live LTP', () {
+    final market = CustomerFnoMarket.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'expiry': '2026-11-23',
+      'status': 'MARKET_CLOSED',
+      'snapshotAt': '2026-11-20T10:00:00Z',
+      'displayRightsVerified': true,
+      'liveOrderEnabled': false,
+      'underlyingReferenceSpot': 25800.60,
+      'strikes': <Object>[],
+    });
+    expect(market.underlyingReferenceSpot, 25800.60);
+    expect(market.hasFreshQuotes, isFalse);
+    expect(MintTickFnoDiscoveryFacts.atmStrike(
+      market, DateTime.now().toUtc()), isNull);
+  });
+
   test('NSE option list splits actual CE/PE without synthetic contracts', () {
     final market = _market();
     final calls = MintTickFnoDiscoveryFacts.optionLegs(market, 'CE');
