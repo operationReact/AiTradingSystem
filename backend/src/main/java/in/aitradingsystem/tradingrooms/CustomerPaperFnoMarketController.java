@@ -60,7 +60,17 @@ public class CustomerPaperFnoMarketController {
     public record Market(String underlyingKey, LocalDate expiry, String source,
                          String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
                          boolean displayRightsVerified, boolean trainingRightsVerified,
-                         boolean liveOrderEnabled, List<Strike> strikes) {}
+                         boolean liveOrderEnabled, List<Strike> strikes,
+                         BigDecimal underlyingReferenceSpot) {
+        public Market(String underlyingKey, LocalDate expiry, String source,
+                String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
+                boolean displayRightsVerified, boolean trainingRightsVerified,
+                boolean liveOrderEnabled, List<Strike> strikes) {
+            this(underlyingKey, expiry, source, status, snapshotAt,
+                    exchangeSpotTimeVerified, displayRightsVerified,
+                    trainingRightsVerified, liveOrderEnabled, strikes, null);
+        }
+    }
 
     private final JdbcClient jdbc;
     private final CustomerIdentityStore identities;
@@ -178,9 +188,18 @@ public class CustomerPaperFnoMarketController {
     static Market marketResponse(LocalDate expiry, Instant snapshotAt,
             String status, boolean displayAllowed, boolean paperAllowed,
             List<Strike> strikes) {
+        return marketResponse(expiry, snapshotAt, status, displayAllowed,
+            paperAllowed, strikes, null);
+    }
+
+    static Market marketResponse(LocalDate expiry, Instant snapshotAt,
+            String status, boolean displayAllowed, boolean paperAllowed,
+            List<Strike> strikes, BigDecimal referenceSpot) {
         return new Market(UNDERLYING, expiry, "UPSTOX_ANALYTICS",
             status, snapshotAt, false, displayAllowed, paperAllowed, false,
-            List.copyOf(strikes));
+            List.copyOf(strikes),
+            referenceSpot != null && referenceSpot.signum() > 0
+                ? referenceSpot : null);
     }
 
     /**
