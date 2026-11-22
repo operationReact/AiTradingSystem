@@ -1,0 +1,68 @@
+name: MintTick F&O - original STR-180 cash-futures expiry-basis historical replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-basis-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno180HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno180HistoricalReplayControllerTest.java'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-basis-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Actual STR-180 original pair evaluator and source fail-closed contract tests
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno180VerifiedHistoricalReplayServiceTest,AdminFno180HistoricalReplayControllerTest,FnoVerifiedExpiryBasisPairStoreTest,FnoExpiryBasisReversionV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno180VerifiedHistoricalReplayServiceTest.xml
+      - name: No original quote generation, broker routes, external exports or fake E2E
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          d=Path('backend/src/main/java/in/aitradingsystem/tradingrooms')
+          s=(d/'Fno180VerifiedHistoricalReplayService.java').read_text()
+          c=(d/'AdminFno180HistoricalReplayController.java').read_text()
+          for needed in ('FnoExpiryBasisReversionV1.evaluate(', 'readExactPair(',
+                         'spotFinalFirstAvailableAt()', 'futuresFinalFirstAvailableAt()',
+                         'contractSourceDigest()', 'carryCostSourceDigest()',
+                         'researchRights','basisRights','discoveryRights'):
+              assert needed in s,needed
+          for needed in ('@PreAuthorize(', 'CacheControl.noStore()',
+                         'acceptedHistoricalE2E', '/historical-basis-replay'):
+              assert needed in c or needed in s,needed
+          for f in (s,c):
+              for forbidden in ('placeOrder(', 'submitOrder(', 'sendOrder(',
+                                'put-parameter', 'with-decryption', 'INSERT INTO fno_',
+                                'UPDATE fno_', 'api.upstox.com'):
+                  assert forbidden not in f,forbidden
+          PY
+      - name: Fixture CI cannot raise any historical E2E acceptance
+        if: always()
+        run: |
+          echo 'STR-180 actual evaluator wired with fictional paired-source input.'
+          echo 'Genuine source availability, rights and after-cost performance unverified: E2E 0/43.'

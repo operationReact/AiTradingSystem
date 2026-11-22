@@ -219,3 +219,35 @@ only the source-specific adapters can read original receipts.
 **Independently accepted after-cost market E2E remains 0/43**
 until original eligible data and walk-forward/transaction cost
 evidence actually pass independent review.
+
+## STR-180: independent original cash+futures basis history
+
+Fno180VerifiedHistoricalReplayService now connects the existing
+V105 fno_verified_expiry_basis_pair_evidence PostgreSQL table
+straight to the actual FnoExpiryBasisReversionV1 evaluator. It uses
+five completed, consecutive NSE cash and futures exchange-session
+near-close paired BID/ASK events from one source, verified distinct
+stock NSE_EQ/future NSE_FO listed contracts, expiry, lot, original
+publication/custody times for both finalized legs, signed
+financing/dividend/carry/delivery assumptions and original rights
+receipts for cash, futures and carry domains.
+
+The existing FnoVerifiedExpiryBasisPairStore requires independently
+VERIFIED as-of MODEL_INFERENCE source rights, retained original
+source-digest evidence, original NSE cash and futures calendar
+receipts, original quote exchange timestamps and finalization
+timestamps. Missing receipts, original observations, expiry suitability,
+trading-session gaps, contract continuity or consistent carry assumptions
+always block source replay. No OHLC substitution or fabricated settlement
+prices.
+
+Operator proof: GET
+/api/admin/research/fno-43/historical-basis-replay with equityKey,
+futuresKey, expiry, lotSize and asOf; returns only fixed reason and
+session counters. It grants no order rights, exports no quote/hash,
+and never declares historical/PAPER/LIVE E2E true.
+
+V105 was empty at schema creation; availability of actual rights-attested
+rows in EC2 has NOT been independently verified by this source adapter.
+A five-session RESEARCH_CANDIDATE on fictional tests is NOT cost-aware
+OOS profit evidence or independent historical end-to-end success.
