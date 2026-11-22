@@ -180,3 +180,42 @@ reproducible after-cost walk-forward/OOS outcomes and independent approval.
 The existing 0/43 real-data E2E, 0/43 PAPER ledger and 0/43 LIVE broker
 execution counters remain unchanged. Never promote routing/compilation or
 fictitious JUnit fixtures to a successfully backtested strategy.
+
+
+## Genuine-source replay access for NIFTY long options STR-181 and STR-182
+
+\`Fno181182VerifiedHistoricalReplayService\` supplies original-custody
+\`fno_verified_nifty_daily_close\` and
+\`fno_verified_nifty_long_option_quote\` V106 rows to the **actual**
+\`FnoLongCallV1\` and \`FnoLongPutV1\` Java evaluators at a historical
+point in time. Both require explicit original rights flags that default
+false. The SQL source enforces independent MODEL_INFERENCE permission
+receipts for completed NIFTY closes, option-chain quotes/depth/OI,
+underlying exchange ticks, contract master, fee and risk sources,
+plus recorded original as-of timestamps and retention. It is not
+the owner-private midnight-labelled futures SQLite dataset.
+
+The source adapter independently rejects missing official completed
+trading sessions (35 minimum), nonconsecutive or multiple providers,
+future-known daily closes, late option/underlying quotes, mixed expiry,
+invalid contract strike/tick/lot, excess quote skew, insufficient
+depth/OI and unverified cost/capital inputs. The original option
+instrument key is an exact parameter; it never selects a convenient
+near-money strike or fabricates expiry metadata. Queries are read-only,
+bounded, and invoked only behind the existing ADMIN/OPERATOR
+\`GET /api/admin/research/fno-43/historical-replay\` route. That
+route returns fixed reason codes and aggregate session counts, with
+Cache-Control no-store; it returns no quote, broker account or source
+hash and does not submit/cancel orders.
+
+This extends genuinely **source-connected historical research** from
+STR-174/176/177 to STR-181/182 where rows and rights actually exist;
+it does NOT mean V106 data is populated on the deployed host.
+The dedicated tests use synthetic source fixtures and never represent
+actual replay against licensed historical market events.
+
+The dispatcher still has 43/43 typed structural evaluator paths, but
+only the source-specific adapters can read original receipts.
+**Independently accepted after-cost market E2E remains 0/43**
+until original eligible data and walk-forward/transaction cost
+evidence actually pass independent review.
