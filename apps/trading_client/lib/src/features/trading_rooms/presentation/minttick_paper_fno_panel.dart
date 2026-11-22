@@ -726,7 +726,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
       Text(statusLabel, key: const ValueKey('paper-fno-status'),
         style: type.labelMedium?.copyWith(color: colors.primary)),
       if (market.snapshotAt != null)
-        Text('Snapshot ${market.snapshotAt!.toIso8601String()}',
+        Text('Snapshot · ${_displayTimestamp(market.snapshotAt)} local',
           style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       const SizedBox(height: 8),
       MintTickFnoQuoteBoard(
@@ -926,7 +926,7 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
           Text('Blockers: ${r.blockerCodes.join(', ')}',
             style: type.labelSmall?.copyWith(color: colors.error)),
         Text('Bookkeeping consistency does not approve trading. Checked '
-            '${r.checkedAt?.toIso8601String() ?? 'unknown'}.',
+            '${_displayTimestamp(r.checkedAt)} local.',
           style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
       ],
     );
@@ -961,6 +961,12 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
           ),
       ],
     );
+  }
+
+  static String _displayTimestamp(DateTime? instant) {
+    if (instant == null) return 'unknown';
+    final d = instant.toLocal();
+    return '${_ymd(d)} ${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
   static String _displayExpiry(DateTime d) {
