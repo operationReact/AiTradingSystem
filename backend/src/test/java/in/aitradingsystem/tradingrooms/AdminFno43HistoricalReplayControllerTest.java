@@ -26,9 +26,11 @@ class AdminFno43HistoricalReplayControllerTest {
         mock(Fno176VerifiedHistoricalReplayService.class);
     private final Fno177VerifiedHistoricalReplayService s177=
         mock(Fno177VerifiedHistoricalReplayService.class);
+    private final Fno181182VerifiedHistoricalReplayService options=
+        mock(Fno181182VerifiedHistoricalReplayService.class);
 
     private AdminFno43HistoricalReplayController route() {
-        return new AdminFno43HistoricalReplayController(s174,s176,s177,CLOCK);
+        return new AdminFno43HistoricalReplayController(s174,s176,s177,options,CLOCK);
     }
 
     @Test
@@ -92,15 +94,48 @@ class AdminFno43HistoricalReplayControllerTest {
     }
 
     @Test
-    void allOther40StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
+    void sourceJoinedHistoricalCallAndPutAreRoutedWithoutPricesOrExecution() {
+        when(options.inspect("strategy.STR-181",KEY,AS_OF)).thenReturn(
+            new Fno181182VerifiedHistoricalReplayService.Report(
+                "strategy.STR-181",
+                "ORIGINAL_SOURCE_RESEARCH_EVALUATOR_RAN_NOT_E2E",
+                "LONG_CALL_BULLISH_SCENARIO_RESEARCH_ONLY",
+                35,1,true,true,false,false,false,false));
+        when(options.inspect("strategy.STR-182",KEY,AS_OF)).thenReturn(
+            new Fno181182VerifiedHistoricalReplayService.Report(
+                "strategy.STR-182","BLOCKED_NOT_HISTORICAL_E2E",
+                "ORIGINAL_OPTION_QUOTE_DEPTH_OI_COSTS_MISSING",
+                35,0,false,false,false,false,false,false));
+        var call=route().inspect("strategy.STR-181",KEY,AS_OF);
+        assertEquals(200,call.getStatusCode().value());
+        assertTrue(call.getHeaders().getCacheControl().contains("no-store"));
+        assertEquals(35,call.getBody().originalSourceRowsObserved());
+        assertEquals(35,call.getBody().originalSessionsEvaluated());
+        assertFalse(call.getBody().independentHistoricalE2EAccepted());
+        assertFalse(call.getBody().paperLedgerE2EValidated());
+        assertFalse(call.getBody().liveBrokerE2EValidated());
+        assertFalse(call.getBody().brokerOrdersPlaced());
+        assertFalse(call.getBody().toString().contains(KEY));
+        var put=route().inspect("strategy.STR-182",KEY,AS_OF);
+        assertEquals(35,put.getBody().originalSourceRowsObserved());
+        assertEquals(0,put.getBody().originalSessionsEvaluated());
+        assertEquals("BLOCKED_NOT_HISTORICAL_E2E",
+            put.getBody().sourceAndEvaluatorState());
+        verify(options).inspect("strategy.STR-181",KEY,AS_OF);
+        verify(options).inspect("strategy.STR-182",KEY,AS_OF);
+        verifyNoInteractions(s174,s176,s177);
+    }
+
+    @Test
+    void allOther38StrategiesAreUnavailableUntilTypedOriginalSourceAdapterExists() {
         for(int n=170;n<=212;n++){
-            if(n==174||n==176||n==177)continue;
+            if(n==174||n==176||n==177||n==181||n==182)continue;
             int strategyNumber=n;
             var err=assertThrows(ResponseStatusException.class,
                 ()->route().inspect("strategy.STR-"+strategyNumber,KEY,AS_OF));
             assertEquals(HttpStatus.BAD_REQUEST,err.getStatusCode());
         }
-        verifyNoInteractions(s174,s176,s177);
+        verifyNoInteractions(s174,s176,s177,options);
     }
 
     @Test
@@ -114,7 +149,7 @@ class AdminFno43HistoricalReplayControllerTest {
         var future=assertThrows(ResponseStatusException.class,()->
             route().inspect("strategy.STR-176",KEY,CLOCK.instant().plusSeconds(1)));
         assertEquals(400,future.getStatusCode().value());
-        verifyNoInteractions(s174,s176,s177);
+        verifyNoInteractions(s174,s176,s177,options);
     }
 
     @Test
