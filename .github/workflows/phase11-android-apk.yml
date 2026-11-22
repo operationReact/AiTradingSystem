@@ -326,6 +326,8 @@ jobs:
             # Try independent caches, accepting bytes only with JetBrains' pinned SHA-256.
             verified=false
             for mirror in \
+              "https://repo.maven.apache.org/maven2/$module_path/$artifact" \
+              "https://maven-central.storage-download.googleapis.com/maven2/$module_path/$artifact" \
               "https://maven.wso2.org/nexus/content/groups/public/$module_path/$artifact" \
               "https://repository.liferay.com/nexus/content/repositories/gradle-plugins/$module_path/$artifact" \
               "https://maven.aliyun.com/repository/central/$module_path/$artifact" \
