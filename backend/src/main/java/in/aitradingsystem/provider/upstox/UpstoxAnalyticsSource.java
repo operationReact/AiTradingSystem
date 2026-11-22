@@ -300,7 +300,7 @@ public final class UpstoxAnalyticsSource {
         if (!enabled || instrumentKeys == null || instrumentKeys.isEmpty()
                 || instrumentKeys.size() > 64
                 || instrumentKeys.stream().anyMatch(k ->
-                    k == null || !k.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+                    k == null || !k.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}"))
                 || instrumentKeys.stream().distinct().count() != instrumentKeys.size()) {
             throw new IllegalArgumentException("UPSTOX_FNO_LAST_QUOTE_INVALID_REQUEST");
         }
