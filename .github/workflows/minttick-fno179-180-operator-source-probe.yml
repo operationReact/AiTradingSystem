@@ -1,0 +1,60 @@
+name: MintTick F&O - protected STR-179 and STR-180 original source probes
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-180-operator-source-probe.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43AdditionalHistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43AdditionalHistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-str179-180-protected-source-probe.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-180-operator-source-probe.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43AdditionalHistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43AdditionalHistoricalReplayControllerTest.java'
+permissions:
+  contents: read
+jobs:
+  protected-get:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Actual V104/V105 strategy source/response tests - fictional SQL objects only
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=AdminFno43AdditionalHistoricalReplayControllerTest,Fno179VerifiedLiquidityReplayServiceTest,Fno180VerifiedExpiryBasisReplayServiceTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno43AdditionalHistoricalReplayControllerTest.xml
+      - name: Prevent public source exposure and order authorization
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43AdditionalHistoricalReplayController.java').read_text()
+          for v in ('@PreAuthorize("hasAnyRole(', '@GetMapping("/liquidity-replay")',
+                    '@GetMapping("/basis-replay")', 'CacheControl.noStore()',
+                    'false,false,false,false',
+                    'Fno179VerifiedLiquidityReplayService',
+                    'Fno180VerifiedExpiryBasisReplayService'):
+              assert v in s,v
+          for v in ('public final class','@PostMapping','@PutMapping',
+                    'placeOrder','submitOrder','put-parameter','market_candle',
+                    'fno_closing_snapshot'):
+              assert v not in s,v
+          PY
+      - name: State source availability and independent evidence limits
+        if: always()
+        run: |
+          echo 'STR179/180 operator endpoints are read-only, role-protected and sanitised.'
+          echo 'Neither V104/V105 populated host source rows nor after-cost real-market OOS E2E is verified by CI.'
