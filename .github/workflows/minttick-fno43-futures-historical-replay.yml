@@ -7,6 +7,10 @@ on:
       - '.github/workflows/minttick-fno43-futures-historical-replay.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
   push:
     branches: [dev]
@@ -14,6 +18,10 @@ on:
       - '.github/workflows/minttick-fno43-futures-historical-replay.yml'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
 
 permissions:
   contents: read
@@ -38,8 +46,9 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=FnoFuturesHistoricalReplayBridgeV1Test,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
+            '-Dtest=FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoFuturesHistoricalReplayBridgeV1Test.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno176VerifiedHistoricalReplayServiceTest.xml
       - name: Assert structural proof cannot authorize trades or claim market E2E
         shell: bash
         run: |
@@ -62,6 +71,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo 'STR-173/176 actual Java evaluator replay path: synthetic CI only.'
+          echo 'STR-173/176 evaluator bridge + STR-176 rights-joined V102 SQL reader: synthetic CI only.'
           echo 'Independently verified historical E2E: still 0/43.'
           echo 'No broker access, licensed original source fetch, PAPER ledger or LIVE orders.'
