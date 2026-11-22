@@ -26,9 +26,14 @@ class AdminFno43HistoricalReplayControllerTest {
         mock(Fno176VerifiedHistoricalReplayService.class);
     private final Fno177VerifiedHistoricalReplayService s177=
         mock(Fno177VerifiedHistoricalReplayService.class);
+    private final Fno179VerifiedHistoricalReplayService s179=
+        mock(Fno179VerifiedHistoricalReplayService.class);
+    private final Fno180VerifiedHistoricalReplayService s180=
+        mock(Fno180VerifiedHistoricalReplayService.class);
 
     private AdminFno43HistoricalReplayController route() {
-        return new AdminFno43HistoricalReplayController(s174,s176,s177,CLOCK);
+        return new AdminFno43HistoricalReplayController(
+            s174,s176,s177,s179,s180,CLOCK);
     }
 
     @Test
@@ -89,6 +94,72 @@ class AdminFno43HistoricalReplayControllerTest {
         verify(s174).inspect(KEY,AS_OF);
         verify(s176).inspect(KEY,AS_OF);
         verify(s177).inspect(KEY,AS_OF);
+    }
+
+
+    @Test
+    void authenticatedOriginalLiquidityAndBasisReadersAreGetOnlyAndNeverPromoteE2E()
+            throws Exception {
+        var expiry=java.time.LocalDate.of(2026,11,27);
+        var lot=250;
+        var spot="NSE_EQ|INE002A01018";
+        var m179=AdminFno43HistoricalReplayController.class.getMethod(
+            "inspectLiquidity",String.class,java.time.LocalDate.class,
+            int.class,Instant.class);
+        var m180=AdminFno43HistoricalReplayController.class.getMethod(
+            "inspectBasis",String.class,String.class,java.time.LocalDate.class,
+            int.class,Instant.class);
+        for(var method:java.util.List.of(m179,m180)){
+            assertEquals("hasAnyRole('ADMIN', 'OPERATOR')",
+                method.getAnnotation(PreAuthorize.class).value());
+            assertNotNull(method.getAnnotation(GetMapping.class));
+        }
+        when(s179.inspect(KEY,expiry,lot,AS_OF)).thenReturn(
+            new Fno179VerifiedHistoricalReplayService.Result(
+                "strategy.STR-179",
+                "ORIGINAL_LIQUIDITY_SOURCE_EVALUATED_RESEARCH_ONLY",
+                "LIQUIDITY_RESEARCH_SCREEN_PASSED",3,3,
+                false,false,false,false));
+        when(s180.inspect(spot,KEY,expiry,lot,AS_OF)).thenReturn(
+            new Fno180VerifiedHistoricalReplayService.Result(
+                "strategy.STR-180","ORIGINAL_PAIR_EVALUATOR_RESEARCH_ONLY",
+                "EXPIRY_BASIS_ABOVE_FAIR_CONVERGENCE_OBSERVED",5,5,
+                false,false,false,false));
+        var a=route().inspectLiquidity(KEY,expiry,lot,AS_OF);
+        var b=route().inspectBasis(spot,KEY,expiry,lot,AS_OF);
+        for(var response:java.util.List.of(a,b)){
+            assertEquals(200,response.getStatusCode().value());
+            assertTrue(response.getHeaders().getCacheControl().contains("no-store"));
+            var data=response.getBody();
+            assertNotNull(data);
+            assertTrue(data.originalSessionsEvaluated()>0);
+            assertFalse(data.independentHistoricalE2EAccepted());
+            assertFalse(data.paperLedgerE2EValidated());
+            assertFalse(data.liveBrokerE2EValidated());
+            assertFalse(data.brokerOrdersPlaced());
+            assertFalse(data.toString().contains(KEY));
+            assertFalse(data.toString().contains(spot));
+        }
+        verify(s179).inspect(KEY,expiry,lot,AS_OF);
+        verify(s180).inspect(spot,KEY,expiry,lot,AS_OF);
+    }
+
+    @Test
+    void originalNewRoutesRejectUntrustedKeysAndFutureDecisionBeforeSourceReads(){
+        var expiry=java.time.LocalDate.of(2026,11,27);
+        var future=CLOCK.instant().plusSeconds(1);
+        assertThrows(ResponseStatusException.class,()->
+            route().inspectLiquidity("NSE_EQ|NOT_FO",expiry,25,AS_OF));
+        assertThrows(ResponseStatusException.class,()->
+            route().inspectLiquidity(KEY,expiry,25,future));
+        assertThrows(ResponseStatusException.class,()->
+            route().inspectBasis("NSE_INDEX|Nifty 50",KEY,expiry,25,AS_OF));
+        assertThrows(ResponseStatusException.class,()->
+            route().inspectBasis("NSE_EQ|ABC","NSE_FO|../../",
+                expiry,25,AS_OF));
+        assertThrows(ResponseStatusException.class,()->
+            route().inspectBasis("NSE_EQ|ABC",KEY,expiry,0,AS_OF));
+        verifyNoInteractions(s179,s180);
     }
 
     @Test
