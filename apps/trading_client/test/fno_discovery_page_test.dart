@@ -37,6 +37,41 @@ class _LiveDiscovery extends Fake implements CustomerFnoDiscoveryRepository {
       ]);
 }
 
+class _RetainedDiscovery extends _LiveDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async {
+    final exchange = DateTime.now().toUtc().subtract(const Duration(days: 1));
+    Map<String, Object?> leg(String side, num price) => {
+      'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
+      'tradingSymbol': 'NIFTY 25300 $side',
+      'side': side,
+      'lotSize': 65,
+      'tickSize': .05,
+      'bid': null,
+      'ask': null,
+      'exchangeAt': exchange.toIso8601String(),
+      'observedAt': exchange.add(const Duration(seconds: 1)).toIso8601String(),
+      'quoteFresh': false,
+      'paperEligible': false,
+      'ltp': price,
+      'previousClose': price - 10,
+      'openInterest': 1800,
+    };
+    return CustomerFnoMarket.decode({
+      'underlyingKey': 'NSE_INDEX|Nifty 50',
+      'expiry': '2026-11-23',
+      'status': 'MARKET_CLOSED',
+      'snapshotAt': exchange.toIso8601String(),
+      'displayRightsVerified': true,
+      'liveOrderEnabled': false,
+      'strikes': [
+        {'strikePrice': 25300,
+         'call': leg('CE', 110), 'put': leg('PE', 93)}
+      ],
+    });
+  }
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -207,6 +242,25 @@ void main() {
       'freshExchangeTimedQuotes': 0,
       'latestFreshExchangeTradeAt': null,
     }), throwsFormatException);
+  });
+
+  testWidgets('closed Options market shows retained actual LTP with Last label',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _RetainedDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('110.00'), findsWidgets);
+    expect(find.textContaining('Last ·'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('empty F&O discover offers room creation, not invented prices',
