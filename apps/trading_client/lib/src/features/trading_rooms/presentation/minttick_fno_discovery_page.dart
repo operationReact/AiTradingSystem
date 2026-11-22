@@ -150,6 +150,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   String _section = 'Overview';
   String _strikeQuery = '';
   bool _showAllStrikes = false;
+  int _strikePage = 0;
   DateTime? _centeredExpiry;
   final ScrollController _chainScroll = ScrollController();
   bool _loading = false;
@@ -393,7 +394,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         style: theme.textTheme.bodySmall?.copyWith(
           color: theme.colorScheme.onSurfaceVariant)),
       const SizedBox(height: 12),
-      _summary(context, market, now, freshCount),
+      _summary(context, market, freshCount),
       const SizedBox(height: 10),
       _navigation(context),
       const SizedBox(height: 10),
@@ -460,29 +461,26 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   }
 
   Widget _summary(BuildContext context, CustomerFnoMarket? market,
-      DateTime now, int freshCount) {
+      int freshCount) {
     final c = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
-    final listed = market == null ? '—' :
-        '${MintTickFnoDiscoveryFacts.optionLegs(market, 'ALL').length}';
-    final items = [
-      ('Listed', listed),
-      ('Fresh', market == null ? '—' : '$freshCount'),
-      ('Last tick', _time(_source?.latestFreshExchangeTradeAt)),
-      ('Stream', _source?.streamState ?? 'UNVERIFIED'),
-    ];
-    return MintTickSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    final count = market == null
+        ? null : MintTickFnoDiscoveryFacts.optionLegs(market, 'ALL').length;
+    final caption = count == null
+        ? 'Verified contract catalog unavailable'
+        : freshCount > 0
+            ? '$count contracts · $freshCount verified fresh quotes'
+            : '$count contracts listed · prices unavailable';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(children: [
-        for (final (label, value) in items)
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-              const SizedBox(height: 2),
-              Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: type.bodySmall?.copyWith(fontWeight: FontWeight.w800)),
-            ])),
+        Icon(freshCount > 0 ? Icons.bolt_rounded
+                : Icons.info_outline_rounded,
+            size: 16, color: freshCount > 0 ? c.primary : c.onSurfaceVariant),
+        const SizedBox(width: 7),
+        Expanded(child: Text(caption, maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: c.onSurfaceVariant))),
       ]),
     );
   }
@@ -904,6 +902,47 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
+    if (!fresh) {
+      showModalBottomSheet<void>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(leg.tradingSymbol,
+                  style: type.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800)),
+                const SizedBox(height: 5),
+                Text('${leg.side == 'CE' ? 'Call' : 'Put'} · '
+                     'Lot ${leg.lotSize} · Tick ${leg.tickSize}',
+                  style: type.bodySmall?.copyWith(
+                    color: c.onSurfaceVariant)),
+                const SizedBox(height: 18),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Icon(Icons.info_outline_rounded,
+                    color: c.onSurfaceVariant, size: 18),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text(
+                    'Price, OI and Greeks are unavailable without '
+                    'a verified fresh exchange quote. No trading signal '
+                    'or order can be inferred from the contract listing.')),
+                ]),
+                const SizedBox(height: 14),
+                Align(alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.of(sheetContext).pop(),
+                    child: const Text('Close'),
+                  )),
+              ],
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
