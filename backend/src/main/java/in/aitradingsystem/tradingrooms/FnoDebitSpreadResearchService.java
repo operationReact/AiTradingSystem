@@ -91,6 +91,41 @@ public final class FnoDebitSpreadResearchService {
         return List.of(one(true, now, closes), one(false, now, closes));
     }
 
+
+    /**
+     * Historical original-source evaluation of exactly one two-leg debit
+     * spread; never query the sibling CE/PE spread or use synthetic quotes.
+     * Existing V107 SQL verifies original source receipt rights, captured
+     * as-of timestamps, both option legs, depth, OI and source cost inputs.
+     */
+    public FnoFuturesResearchService.StrategyStatus evaluateOne(
+            String strategyId, Instant asOf) {
+        if (asOf == null) throw new IllegalArgumentException("DEBIT_SPREAD_ASOF_MISSING");
+        boolean bullish;
+        if (FnoBullCallDebitSpreadV1.STRATEGY_ID.equals(strategyId)) bullish=true;
+        else if (FnoBearPutDebitSpreadV1.STRATEGY_ID.equals(strategyId)) bullish=false;
+        else throw new IllegalArgumentException("HISTORICAL_DEBIT_STRATEGY_UNSUPPORTED");
+        if (!dailyRights || !optionRights || !contractRights || !spreadRights)
+            return blocked(bullish,asOf,"DEBIT_SPREAD_SOURCE_RIGHTS_UNVERIFIED",true,0);
+        if (dailyStore==null || spreadStore==null || calendar==null)
+            return blocked(bullish,asOf,"DEBIT_SPREAD_TYPED_SOURCE_MISSING",false,0);
+        if (!calendar.isInsideCashSession(asOf))
+            return blocked(bullish,asOf,"DEBIT_SPREAD_CASH_EXCHANGE_SESSION_CLOSED",false,0);
+        String lower=bullish?bullLower:bearLower, upper=bullish?bullUpper:bearUpper;
+        if (!validKeys(lower,upper))
+            return blocked(bullish,asOf,"DEBIT_SPREAD_REAL_TWO_LEG_KEYS_NOT_CONFIGURED",false,0);
+        final List<VerifiedClose> closes;
+        try {
+            closes=dailyStore.verifiedRecentCloses(asOf);
+        } catch (RuntimeException unavailable) {
+            return blocked(bullish,asOf,"DEBIT_SPREAD_DAILY_SOURCE_UNAVAILABLE",false,0);
+        }
+        if (!FnoOptionsResearchService.validHistory(closes,calendar,asOf))
+            return blocked(bullish,asOf,"DEBIT_SPREAD_35_COMPLETED_CLOSES_INVALID",
+                false,closes==null?0:closes.size());
+        return one(bullish,asOf,closes);
+    }
+
     private List<FnoFuturesResearchService.StrategyStatus> bothBlocked(
             Instant now, String reason, int sessions) {
         return List.of(blocked(true, now, reason, false, sessions),
