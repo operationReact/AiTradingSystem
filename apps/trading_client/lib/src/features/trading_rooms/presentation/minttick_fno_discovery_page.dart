@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' show FontFeature;
 
 import 'package:flutter/material.dart';
 
@@ -122,7 +121,9 @@ class MintTickFnoDiscoveryFacts {
       calls += ce.openInterest!;
       puts += pe.openInterest!;
     }
-    if (calls == 0) return null; // no valid denominator
+    if (calls == 0) { // no valid denominator
+      return null;
+    }
     return (calls: calls, puts: puts, pcr: puts / calls);
   }
 
