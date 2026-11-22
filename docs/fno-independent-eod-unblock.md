@@ -110,3 +110,27 @@ remain quarantined** until independently authorized, full-cohort source
 reconciliation and provenance verification. The full licensed reconciliation
 tool above continues to require externally reviewed NSE source rights;
 a one-day research probe is not a commercial rights attestation.
+
+## December 15 detailed independent field evidence and volume-unit hypothesis
+
+The successful exact-host private NSE sample receipts
+[#45049747561](https://github.com/operationReact/AiTradingSystem/actions/runs/45049747561)
+and [#45050188470](https://github.com/operationReact/AiTradingSystem/actions/runs/45050188470)
+validated one NSE F&O UDiFF official trading day against the existing
+23-contract December 2025 NIFTY selection, without storing EOD files or
+exporting market data. There were **46 saved candle candidates** (23
+timestamp duplicate pairs; **22 conflicting six-field pairs**) and 23/23
+authenticated NSE instrument identities. For **00:00 IST** Upstox candidates,
+all **23/23** matched NSE **O/H/L/C and open interest** exactly, but **0/23**
+matched NSE raw `TtlTradgVol`. The **09:15 IST** family matched independently
+on open 21, high 21, low 23, close 2, raw volume 0, OI 4.
+
+The next bounded probe compares these *same* one-day saved volume readings
+against **NSE reported traded contracts × authenticated historical Upstox
+`lot_size`** for each of the 23 contracts, and also counts unscaled and
+inverse-lot hypotheses. This is **not** permission to re-scale the cache,
+substitute OHLC, or accept the entire month as repaired: data units and
+point-in-time lot-size provenance need verification across all dates,
+including historical lot-size changes. An original-time rights-approved
+full-cohort reconciliation and 316 December conflicts remain blocked
+until independent evidence is complete.

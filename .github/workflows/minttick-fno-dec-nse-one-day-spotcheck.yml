@@ -16,7 +16,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
+  # Offline PR validation must not be cancelled by unrelated EC2 deployments.
+  # The protected dev push retains the original shared EC2 lifecycle lock.
+  group: ${{ github.event_name == 'pull_request' && format('fno-dec-nse-audit-pr-{0}', github.event.pull_request.number) || 'aitrading-paper-ec2-manual-lifecycle' }}
   cancel-in-progress: false
 
 jobs:
@@ -108,7 +110,7 @@ jobs:
           names=['fno_dec_2025_nse_spotcheck.py','fno_private_partial_gaps.py']
           for name in names:
               source=Path('infra/ec2-paper',name).read_bytes()
-              assert 3500<len(source)<14000
+              assert 3500<len(source)<18000
           commit=os.environ['GITHUB_SHA']
           assert re.fullmatch(r'[0-9a-f]{40}',commit)
           cmds=[
@@ -143,7 +145,7 @@ jobs:
                   stdout=response.get('StandardOutputContent') or ''
                   marker='MINTTICK_FNO_DEC_NSE_ONE_DAY_V1:'
                   lines=[x[len(marker):] for x in stdout.splitlines() if x.startswith(marker)]
-                  if len(lines)!=1 or len(lines[0])>1050:
+                  if len(lines)!=1 or len(lines[0])>1600:
                       raise SystemExit('FNO_DEC_NSE_RECEIPT_INVALID')
                   v=json.loads(lines[0])
                   base={'state','metadataGets','archivesFetched','backtestingApproved','dataRightsVerified'}
@@ -155,6 +157,13 @@ jobs:
                   counters.update(label+'Exact'+field
                                   for label in ('midnight','opening')
                                   for field in ('O','H','L','C','V','OI'))
+                  unit_fields={label+suffix
+                               for label in ('midnight','opening')
+                               for suffix in ('LotMetadataChecked',
+                                              'NseVolumeTimesLotMatches',
+                                              'UnscaledVolumeMatches',
+                                              'InverseLotMatches')}
+                  counters.update(unit_fields)
                   if (set(v)!=base|counters or v['state']!='COMPARED'
                       or v['metadataGets']!=2 or v['archivesFetched']!=1
                       or v['sampleDays']!=1 or v['selectedContracts']!=23
@@ -188,6 +197,15 @@ jobs:
                                   for label in ('midnight','opening')
                                   for field in ('O','H','L','C','V','OI'))+
                         '; valuesOrKeysPublished=false; cacheMutated=false',
+                        flush=True)
+                  print('FNO DEC NSE VOLUME UNIT COUNTS: '+
+                        '; '.join(label+suffix+'='+str(v[label+suffix])
+                                  for label in ('midnight','opening')
+                                  for suffix in ('LotMetadataChecked',
+                                                 'NseVolumeTimesLotMatches',
+                                                 'UnscaledVolumeMatches',
+                                                 'InverseLotMatches'))+
+                        '; lotSizeFromAuthenticatedProvider=true; noRawVolumeExport=true',
                         flush=True)
                   break
               if state not in ('Pending','InProgress','Delayed'):

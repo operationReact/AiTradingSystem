@@ -110,7 +110,7 @@ def parse_eod(blob):
         found[identity]=tuple(decimal(row[k]) for k in DATA_KEYS)
     return found
 
-def map_contracts(keys,futures,options):
+def map_contracts(keys,futures,options,*,include_lots=False):
     """Use authenticated Upstox contract identities; never parse strike from key."""
     from fno_private_bulk_worker import _key
     if len(keys)!=MAX_CONTRACTS or len(set(keys))!=MAX_CONTRACTS:
@@ -118,12 +118,20 @@ def map_contracts(keys,futures,options):
     if not isinstance(futures,list) or not isinstance(options,list):
         raise ValueError("DECEMBER_METADATA_MALFORMED")
     found={}
+    lots={}
+    def source_lot(item):
+        size=item.get("lot_size")
+        if type(size) is not int or not 1<=size<=10000:
+            raise ValueError("DECEMBER_AUTHENTICATED_LOT_SIZE_INVALID")
+        return Decimal(size)
     for item in futures:
         key=_key(item,EXPIRY,"FUT")
         if key in keys:
             if key in found:
                 raise ValueError("DECEMBER_METADATA_DUPLICATE")
             found[key]=(EXPIRY,"FUT",Decimal(0))
+            if include_lots:
+                lots[key]=source_lot(item)
     for item in options:
         for side in ("CE","PE"):
             key=_key(item,EXPIRY,side)
@@ -136,9 +144,46 @@ def map_contracts(keys,futures,options):
             if strike<=0 or key in found:
                 raise ValueError("DECEMBER_STRIKE_OR_KEY_INVALID")
             found[key]=(EXPIRY,side,strike)
+            if include_lots:
+                lots[key]=source_lot(item)
     if len(found)!=MAX_CONTRACTS or len(set(found.values()))!=MAX_CONTRACTS:
         raise ValueError("DECEMBER_CATALOGUE_CROSSWALK_INCOMPLETE")
-    return found
+    if include_lots and len(lots)!=MAX_CONTRACTS:
+        raise ValueError("DECEMBER_LOT_SIZE_CROSSWALK_INCOMPLETE")
+    return (found,lots) if include_lots else found
+
+
+def volume_unit_evidence(rows,catalogue,reference,lots):
+    """Counts volume-unit hypotheses without exporting any raw observation."""
+    if set(catalogue)!=set(lots) or len(catalogue)!=MAX_CONTRACTS:
+        raise ValueError("DECEMBER_LOT_COHORT_INVALID")
+    counts=Counter()
+    for key,stamp,*values in rows:
+        if key not in catalogue or len(values)!=6:
+            raise ValueError("DECEMBER_UNIT_ROW_INVALID")
+        dt=datetime.fromisoformat(stamp)
+        if dt.date()!=DAY or (dt.hour,dt.minute) not in ((0,0),(9,15)):
+            raise ValueError("DECEMBER_UNIT_TIMESTAMP_INVALID")
+        official=reference.get(catalogue[key])
+        if official is None:
+            continue
+        source_volume=decimal(values[4])
+        nse_contract_volume=official[4]
+        lot=lots[key]
+        family="midnight" if dt.hour==0 else "opening"
+        counts[family+"LotMetadataChecked"]+=1
+        if nse_contract_volume*lot==source_volume:
+            counts[family+"NseVolumeTimesLotMatches"]+=1
+        if nse_contract_volume==source_volume:
+            counts[family+"UnscaledVolumeMatches"]+=1
+        if source_volume*lot==nse_contract_volume:
+            counts[family+"InverseLotMatches"]+=1
+    return {k:counts[k] for k in (
+        "midnightLotMetadataChecked","openingLotMetadataChecked",
+        "midnightNseVolumeTimesLotMatches","openingNseVolumeTimesLotMatches",
+        "midnightUnscaledVolumeMatches","openingUnscaledVolumeMatches",
+        "midnightInverseLotMatches","openingInverseLotMatches",
+    )}
 
 def compare_one_day(rows,catalogue,reference):
     """Counts only, 23 selected identities, no choice of original candidate."""
@@ -245,18 +290,20 @@ def main():
         options=api.get("/option/contract"+query)
         if api.calls!=2:
             raise ValueError("DECEMBER_METADATA_BUDGET_MISMATCH")
-        catalogue=map_contracts(keys,futures,options)
+        catalogue,lots=map_contracts(keys,futures,options,include_lots=True)
         state,blob=fetch_nse_archive()
         if state!="FETCHED":
             report={"state":state,"metadataGets":2,"archivesFetched":0,
                     "backtestingApproved":False,"dataRightsVerified":False}
         else:
-            counts=compare_one_day(rows,catalogue,parse_eod(blob))
+            reference=parse_eod(blob)
+            counts=compare_one_day(rows,catalogue,reference)
+            counts.update(volume_unit_evidence(rows,catalogue,reference,lots))
             report={"state":"COMPARED","metadataGets":2,"archivesFetched":1,
                     "sampleDays":1,"selectedContracts":23,**counts,
                     "backtestingApproved":False,"dataRightsVerified":False}
         encoded=json.dumps(report,sort_keys=True,separators=(",",":"))
-        if len(encoded)>1050:
+        if len(encoded)>1600:
             raise ValueError("DECEMBER_RECEIPT_TOO_LARGE")
         print(MARKER+encoded,flush=True)
     finally:
