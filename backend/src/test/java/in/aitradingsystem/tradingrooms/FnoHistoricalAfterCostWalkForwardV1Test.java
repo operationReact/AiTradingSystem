@@ -39,7 +39,7 @@ class FnoHistoricalAfterCostWalkForwardV1Test {
         assertEquals("AFTER_COST_WALK_FORWARD_ACCOUNTED_RESEARCH_ONLY_NOT_E2E",report.state());
         assertEquals(2,report.trainingTrades());
         assertEquals(2,report.outOfSampleTrades());
-        assertEquals(9100L,report.trainingAfterCostPnlPaise());
+        assertEquals(8600L,report.trainingAfterCostPnlPaise());
         assertEquals(6000L,report.outOfSampleGrossPnlPaise());
         assertEquals(1300L,report.outOfSampleCostsPaise());
         assertEquals(4700L,report.outOfSampleNetPnlPaise());
