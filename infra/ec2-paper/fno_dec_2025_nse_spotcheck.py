@@ -212,9 +212,11 @@ def compare_one_day(rows,catalogue,reference):
 
 def main():
     from pathlib import Path
+    # Pin the reviewed read-only helper downloaded alongside this script
+    # before importing host-installed provider code.
+    from fno_private_partial_gaps import read_only
     sys.path.insert(0,"/opt/aitradingsystem-paper/infra/ec2-paper")
     from fno_private_bulk_worker import Discovery,UNDERLYING,grant,ssm_token,today
-    from fno_private_partial_gaps import read_only
     grant().require("day",today())
     journal=read_only(Path(ROOT)/"checkpoints.sqlite")
     cache=read_only(Path(ROOT)/"private-research-cache.sqlite")
