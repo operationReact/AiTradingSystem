@@ -103,6 +103,52 @@ void main() {
         _market(fresh: false), DateTime.parse('2026-11-17T08:00:08Z')), isEmpty);
   });
 
+  test('OI PCR uses only complete fresh CE/PE source rows', () {
+    final now = DateTime.now().toUtc();
+    final complete = _liveMarket([
+      _strike(25200, 300, 100),
+      _strike(25300, 150, 140),
+    ]);
+    final total = MintTickFnoDiscoveryFacts.verifiedOiTotals(complete, now);
+    expect(total, isNotNull);
+    expect(total!.calls, 2400);
+    expect(total.puts, 2400);
+    expect(total.pcr, 1.0);
+
+    final stale = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _staleLeg('CE', 150),
+      'put': _liveLeg('PE', 140),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(stale, now), isNull);
+
+    final missingOi = _liveLeg('PE', 140)..remove('openInterest');
+    final incomplete = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150),
+      'put': missingOi,
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(incomplete, now), isNull);
+
+    final partial = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(partial, now), isNull);
+
+    final zeroCallOi = _liveMarket([{
+      'strikePrice': 25300,
+      'call': _liveLeg('CE', 150)..['openInterest'] = 0,
+      'put': _liveLeg('PE', 140),
+    }]);
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(zeroCallOi, now), isNull);
+
+    final closed = _liveMarket([
+      _strike(25300, 150, 140),
+    ], status: 'MARKET_CLOSED');
+    expect(MintTickFnoDiscoveryFacts.verifiedOiTotals(closed, now), isNull);
+  });
+
   test('close-to-close changes only appear for fresh verified V3 quotes', () {
     final market = _market();
     final changes = MintTickFnoDiscoveryFacts.previousCloseMovers(market);
@@ -239,6 +285,13 @@ void main() {
     expect(find.text('LIVE'), findsOneWidget);
     expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
     expect(find.text('ATM'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-insights')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Options positioning'), findsOneWidget);
+    expect(find.text('OI PCR'), findsOneWidget);
+    expect(find.text('1.00'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-movers')));
     await tester.pump();
