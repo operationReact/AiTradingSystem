@@ -28,7 +28,9 @@ public class FnoVerifiedIntradayLiquidityStore {
                s.bid_depth_units, s.ask_depth_units, s.oi_units,
                s.cumulative_session_volume_units, s.exchange_at,
                s.first_observed_at, s.oi_first_observed_at,
-               s.volume_first_observed_at
+               s.volume_first_observed_at, s.session_source_digest,
+               s.contract_source_digest, s.quote_source_digest,
+               s.oi_source_digest, s.volume_source_digest
         FROM fno_verified_intraday_liquidity_evidence s
         JOIN golden_data_provider p ON p.provider_code = s.provider_code
             AND p.source_kind = 'EXTERNAL'
@@ -51,6 +53,9 @@ public class FnoVerifiedIntradayLiquidityStore {
             AND volume_rights.permitted_use = 'MODEL_INFERENCE'
             AND volume_rights.receipt_status = 'VERIFIED'
         WHERE s.instrument_key = ?
+          AND s.instrument_kind = 'FUTURE'
+          AND s.exchange_session_verified = TRUE
+          AND s.first_observed_at >= s.exchange_at
           AND s.expiry = ?
           AND s.lot_size = ?
           AND s.exchange_at >= ?
@@ -79,6 +84,11 @@ public class FnoVerifiedIntradayLiquidityStore {
         BigDecimal bid, BigDecimal ask, long bidDepthUnits, long askDepthUnits,
         long oiUnits, long cumulativeVolumeUnits, Instant exchangeAt,
         Instant observedAt, Instant oiFirstObservedAt, Instant volumeFirstObservedAt) {}
+
+    /** Original immutable source digests accompany all five distinct domains. */
+    public record ReplayProof(Snapshot snapshot, String sessionSourceSha256,
+                              String contractSourceSha256, String quoteSourceSha256,
+                              String oiSourceSha256, String volumeSourceSha256) {}
 
     private final JdbcTemplate jdbc;
 
@@ -116,6 +126,49 @@ public class FnoVerifiedIntradayLiquidityStore {
         var forward = new ArrayList<>(reverse);
         Collections.reverse(forward);
         return List.copyOf(forward);
+    }
+
+    /**
+     * Historical three-observation replay for STR-179. SQL joins all three
+     * original rights receipts and tests recorded/verified-at against the
+     * supplied historical decision time. These are NOT replayable from daily
+     * OHLCV or from broker snapshots captured after that decision.
+     */
+    public List<ReplayProof> latestThreeReplayFutures(
+            String key, LocalDate expiry, int lotSize, Instant asOf) {
+        if (key == null || !key.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || expiry == null || lotSize < 1 || lotSize > 100000
+                || asOf == null || expiry.isBefore(asOf.atZone(IST).toLocalDate()))
+            throw new IllegalArgumentException("FNO_LIQUIDITY_READ_SCOPE_INVALID");
+        Timestamp cutoff = Timestamp.from(asOf);
+        var latestFirst=jdbc.query(SQL, (rs, i) -> new ReplayProof(
+            new Snapshot(rs.getString("provider_code"),
+                rs.getString("instrument_key"), rs.getString("underlying_key"),
+                rs.getObject("expiry", LocalDate.class),rs.getInt("lot_size"),
+                rs.getString("instrument_kind"),
+                rs.getBigDecimal("bid"),rs.getBigDecimal("ask"),
+                rs.getLong("bid_depth_units"),rs.getLong("ask_depth_units"),
+                rs.getLong("oi_units"),rs.getLong("cumulative_session_volume_units"),
+                rs.getTimestamp("exchange_at").toInstant(),
+                rs.getTimestamp("first_observed_at").toInstant(),
+                rs.getTimestamp("oi_first_observed_at").toInstant(),
+                rs.getTimestamp("volume_first_observed_at").toInstant()),
+            rs.getString("session_source_digest"),
+            rs.getString("contract_source_digest"),
+            rs.getString("quote_source_digest"),
+            rs.getString("oi_source_digest"),
+            rs.getString("volume_source_digest")),
+            key, Date.valueOf(expiry), lotSize,
+            Timestamp.from(asOf.minusSeconds(90)),cutoff,
+            cutoff,cutoff,cutoff,cutoff,
+            Date.valueOf(asOf.atZone(IST).toLocalDate()),
+            cutoff,cutoff,cutoff,cutoff,
+            cutoff,cutoff,cutoff,cutoff,
+            cutoff,cutoff,cutoff,cutoff);
+        if (latestFirst == null || latestFirst.isEmpty()) return List.of();
+        var chronological = new ArrayList<>(latestFirst);
+        Collections.reverse(chronological);
+        return List.copyOf(chronological);
     }
 
     public int purgeExpired(LocalDate today) {
