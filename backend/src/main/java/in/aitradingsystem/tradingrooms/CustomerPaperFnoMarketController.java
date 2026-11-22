@@ -57,11 +57,26 @@ public class CustomerPaperFnoMarketController {
                       BigDecimal iv, BigDecimal delta, BigDecimal theta,
                       BigDecimal gamma, BigDecimal vega) {}
     public record Strike(BigDecimal strikePrice, Leg call, Leg put) {}
+    /** Real Upstox V2 option-chain snapshot, NOT an exchange-timed trade or order quote. */
+    public record ChainSnapshotIndicator(BigDecimal ltp, BigDecimal bid,
+            BigDecimal ask, Long openInterest, BigDecimal iv, BigDecimal delta,
+            BigDecimal theta, BigDecimal gamma, BigDecimal vega) {}
     public record Market(String underlyingKey, LocalDate expiry, String source,
                          String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
                          boolean displayRightsVerified, boolean trainingRightsVerified,
                          boolean liveOrderEnabled, List<Strike> strikes,
-                         BigDecimal underlyingReferenceSpot) {
+                         BigDecimal underlyingReferenceSpot,
+                         Map<String, ChainSnapshotIndicator> chainSnapshotIndicators) {
+        public Market(String underlyingKey, LocalDate expiry, String source,
+                String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
+                boolean displayRightsVerified, boolean trainingRightsVerified,
+                boolean liveOrderEnabled, List<Strike> strikes,
+                BigDecimal underlyingReferenceSpot) {
+            this(underlyingKey, expiry, source, status, snapshotAt,
+                    exchangeSpotTimeVerified, displayRightsVerified,
+                    trainingRightsVerified, liveOrderEnabled, strikes,
+                    underlyingReferenceSpot, Map.of());
+        }
         public Market(String underlyingKey, LocalDate expiry, String source,
                 String status, Instant snapshotAt, boolean exchangeSpotTimeVerified,
                 boolean displayRightsVerified, boolean trainingRightsVerified,

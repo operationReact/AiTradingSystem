@@ -599,7 +599,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               )),
               Expanded(flex: 3, child: Text(
                 market != null && market.displayRightsVerified
-                    ? _count(leg.openInterest) : '—',
+                    ? _count(leg.openInterest ??
+                        _chainSnapshot(market, leg, now)?.openInterest)
+                    : '—',
                 textAlign: TextAlign.right,
                 style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               )),
@@ -607,16 +609,21 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    market != null && _displayQuote(market, leg, now)
-                        ? _amount(leg.ltp) : '—',
+                    market == null ? '—' : _displayQuote(market, leg, now)
+                        ? _amount(leg.ltp)
+                        : _amount(_chainSnapshot(market, leg, now)?.ltp),
                     style: style.bodyLarge?.copyWith(fontWeight: FontWeight.w800,
                       color: _fresh(market!, leg, now)
                           ? (leg.priceChangePct ?? 0) < 0 ? scheme.error : scheme.primary
                           : scheme.onSurfaceVariant)),
-                  if (market != null && _displayQuote(market, leg, now))
+                  if (market != null &&
+                      (_displayQuote(market, leg, now) ||
+                       _chainSnapshot(market, leg, now) != null))
                     Text(_fresh(market, leg, now)
                         ? _changeText(leg.priceChangePct)
-                        : 'Last · ${_shortTime(leg.exchangeAt)}',
+                        : _displayQuote(market, leg, now)
+                          ? 'Last · ${_shortTime(leg.exchangeAt)}'
+                          : 'Chain · ${_shortTime(market.snapshotAt)}',
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
                 ],
@@ -795,6 +802,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
               'are closest. Not a spot price.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        if (market.chainSnapshotIndicators.isNotEmpty) ...[
+          Text('Upstox chain snapshot · read only · not an executable quote',
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          const SizedBox(height: 6),
+        ],
         const SizedBox(height: 10),
         SingleChildScrollView(
           controller: _chainScroll,
@@ -902,9 +914,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final fresh = leg != null && _fresh(market, leg, now);
     final visible = leg != null && _displayQuote(market, leg, now);
     final pct = fresh ? leg.priceChangePct : null;
+    final snapshot = leg == null ? null : _chainSnapshot(market, leg, now);
     final cells = <Widget>[
-      _numCell(context, visible ? _count(leg.openInterest) : '—'),
-      _numCell(context, visible ? _amount(leg.ltp) : '—', bold: true),
+      _numCell(context, visible && leg.openInterest != null
+          ? _count(leg.openInterest) : _count(snapshot?.openInterest)),
+      _numCell(context, visible
+          ? _amount(leg.ltp) : _amount(snapshot?.ltp), bold: true),
       _numCell(context, _changeText(pct),
           color: pct == null ? c.onSurfaceVariant
               : pct >= 0 ? c.primary : c.error),
@@ -933,6 +948,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       CustomerFnoLeg leg, DateTime now) {
     final fresh = _fresh(market, leg, now);
     final visible = _displayQuote(market, leg, now);
+    // Chain snapshot values are separate from verified V3 exchange trades.
+    final chain = _chainSnapshot(market, leg, now);
+    final chainOnly = !visible && chain != null;
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
@@ -954,34 +972,63 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 ? 'Exchange-timed · V3 verified'
                 : visible
                     ? 'Last verified trade · ${_shortTime(leg.exchangeAt)}'
-                    : 'No verified trade available',
+                    : chainOnly
+                        ? 'Upstox chain snapshot · read only'
+                        : 'No verified trade available',
               style: type.labelSmall?.copyWith(
                 color: fresh ? c.primary : c.onSurfaceVariant,
                 fontWeight: FontWeight.w700)),
             const Divider(height: 22),
-            _sheetRow(sheetContext, 'LTP', _price(visible ? leg.ltp : null)),
+            _sheetRow(sheetContext, chainOnly ? 'LTP · chain snapshot' : 'LTP',
+                _price(visible ? leg.ltp : chain?.ltp)),
             _sheetRow(sheetContext, 'Change since previous close',
                 pct == null ? '—' : _changeText(pct)),
-            _sheetRow(sheetContext, 'Bid', _price(fresh ? leg.bid : null)),
-            _sheetRow(sheetContext, 'Ask', _price(fresh ? leg.ask : null)),
+            _sheetRow(sheetContext,
+                fresh && leg.bid != null ? 'Bid' : 'Bid · chain snapshot',
+                _price(fresh && leg.bid != null ? leg.bid : chain?.bid)),
+            _sheetRow(sheetContext,
+                fresh && leg.ask != null ? 'Ask' : 'Ask · chain snapshot',
+                _price(fresh && leg.ask != null ? leg.ask : chain?.ask)),
             _sheetRow(sheetContext, 'Previous close',
                 _price(visible ? leg.previousClose : null)),
-            _sheetRow(sheetContext, 'Open interest',
-                visible ? _count(leg.openInterest) : '—'),
-            _sheetRow(sheetContext, 'IV', fresh ? _decimal(leg.iv) : '—'),
-            _sheetRow(sheetContext, 'Delta', fresh ? _decimal(leg.delta) : '—'),
-            _sheetRow(sheetContext, 'Gamma', fresh ? _decimal(leg.gamma) : '—'),
-            _sheetRow(sheetContext, 'Theta', fresh ? _decimal(leg.theta) : '—'),
-            _sheetRow(sheetContext, 'Vega', fresh ? _decimal(leg.vega) : '—'),
+            _sheetRow(sheetContext,
+                visible && leg.openInterest != null
+                    ? 'Open interest' : 'OI · chain snapshot',
+                visible && leg.openInterest != null
+                    ? _count(leg.openInterest) : _count(chain?.openInterest)),
+            _sheetRow(sheetContext,
+                fresh && leg.iv != null ? 'IV' : 'IV · chain snapshot',
+                _decimal(fresh && leg.iv != null ? leg.iv : chain?.iv)),
+            _sheetRow(sheetContext,
+                fresh && leg.delta != null ? 'Delta' : 'Delta · chain snapshot',
+                _decimal(fresh && leg.delta != null ? leg.delta : chain?.delta, places: 4)),
+            _sheetRow(sheetContext,
+                fresh && leg.gamma != null ? 'Gamma' : 'Gamma · chain snapshot',
+                _decimal(fresh && leg.gamma != null ? leg.gamma : chain?.gamma, places: 6)),
+            _sheetRow(sheetContext,
+                fresh && leg.theta != null ? 'Theta' : 'Theta · chain snapshot',
+                _decimal(fresh && leg.theta != null ? leg.theta : chain?.theta)),
+            _sheetRow(sheetContext,
+                fresh && leg.vega != null ? 'Vega' : 'Vega · chain snapshot',
+                _decimal(fresh && leg.vega != null ? leg.vega : chain?.vega)),
             const Divider(height: 22),
             _sheetRow(sheetContext, 'Exchange time',
                 visible ? _time(leg.exchangeAt) : '—'),
             _sheetRow(sheetContext, 'Observed',
                 visible ? _time(leg.observedAt) : '—'),
+            if (chain != null)
+              _sheetRow(sheetContext, 'Chain retrieved',
+                  _time(market.snapshotAt)),
             const SizedBox(height: 6),
             Text('Instrument ${leg.instrumentKey}',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
             const SizedBox(height: 12),
+            if (chain != null) ...[
+              Text('Chain snapshot values are indicative and cannot be used '
+                  'as executable quotes or proof of a recent trade.',
+                style: type.bodySmall),
+              const SizedBox(height: 8),
+            ],
             Text('Browsing never sends an order. Order entry happens only in '
                 'your trading terminal after risk checks and confirmation.',
               style: type.bodySmall),
@@ -1118,6 +1165,17 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
 
   // The server includes retained prices only when display and snapshot
   // retention rights are verified; these never imply quoteFresh/order readiness.
+  /// Provider HTTP retrieval time is not an exchange trade timestamp.
+  static CustomerFnoChainSnapshotIndicator? _chainSnapshot(
+      CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
+    final at = market.snapshotAt;
+    if (!market.displayRightsVerified || at == null || at.isAfter(now) ||
+        now.difference(at) > const Duration(minutes: 5)) {
+      return null;
+    }
+    return market.chainSnapshotIndicators[leg.instrumentKey];
+  }
+
   static bool _displayQuote(CustomerFnoMarket market, CustomerFnoLeg leg,
           DateTime now) =>
       market.displayRightsVerified && leg.ltp != null && leg.ltp! > 0 &&
@@ -1155,8 +1213,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   static String _price(num? n) =>
       n == null || !n.isFinite || n <= 0 ? '—' : '₹${n.toStringAsFixed(2)}';
 
-  static String _decimal(num? n) =>
-      n == null || !n.isFinite ? '—' : n.toStringAsFixed(2);
+  static String _decimal(num? n, {int places = 2}) =>
+      n == null || !n.isFinite ? '—' : n.toStringAsFixed(places);
 
   static String _ymd(DateTime d) => '${d.day.toString().padLeft(2, '0')} '
       '${_month(d.month)} ${d.year}';

@@ -95,6 +95,38 @@ class _RetainedNoSocketDiscovery extends _RetainedDiscovery {
       });
 }
 
+class _ChainSnapshotDiscovery extends _RetainedNoSocketDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async =>
+      CustomerFnoMarket.decode({
+        'underlyingKey': 'NSE_INDEX|Nifty 50',
+        'expiry': '2026-11-23',
+        'source': 'UPSTOX_ANALYTICS',
+        'status': 'MARKET_CLOSED',
+        'snapshotAt': DateTime.now().toUtc().toIso8601String(),
+        'displayRightsVerified': true,
+        'liveOrderEnabled': false,
+        'strikes': [{
+          'strikePrice': 25300,
+          'call': _leg('CE', fresh: false),
+          'put': _leg('PE', fresh: false),
+        }],
+        'chainSnapshotIndicators': {
+          'NSE_FO|NIFTY_25300_CE': {
+            'ltp': 121.5,
+            'bid': 121.0,
+            'ask': 122.0,
+            'openInterest': 5200,
+            'iv': 0.21,
+            'delta': 0.5,
+            'gamma': 0.002,
+            'theta': -2.5,
+            'vega': 3.2,
+          },
+        },
+      });
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -302,6 +334,34 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('110.00'), findsWidgets);
     expect(find.textContaining('Last ·'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('real Upstox chain snapshot is visible but never a V3 tick',
+      (tester) async {
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms,
+          discovery: _ChainSnapshotDiscovery(),
+        ),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    final contract = find.byKey(
+        const ValueKey('minttick-options-contract-NSE_FO|NIFTY_25300_CE'));
+    await tester.ensureVisible(contract);
+    await tester.tap(contract);
+    await tester.pumpAndSettle();
+    expect(find.text('Upstox chain snapshot · read only'), findsWidgets);
+    expect(find.text('LTP · chain snapshot'), findsWidgets);
+    expect(find.text('₹121.50'), findsWidgets);
+    expect(find.text('IV · chain snapshot'), findsWidgets);
+    expect(find.text('0.21'), findsWidgets);
+    expect(find.text('Chain retrieved'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 
