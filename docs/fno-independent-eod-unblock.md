@@ -11,7 +11,7 @@ The standalone Python utility at infra/ec2-paper/fno_licensed_eod_reconcile.py p
 ## Required operator inputs
 
 1. An actually licensed, permitted NSE F&O EOD CSV with fields BizDt, TckrSymb, FinInstrmTp, XpryDt, StrkPric, OptnTp, OpnPric, HghPric, LwPric, ClsPric, TtlTradgVol, OpnIntrst.
-2. A private 23-row broker-to-exchange map CSV with fields contract_key,underlying,expiry,kind,strike, built from authenticated Upstox metadata and independently checked against the NSE contract master. Contract types: FUT, CE, PE. No guessed key parsing.
+2. A private 23-row broker-to-exchange map CSV with fields contract_key,underlying,expiry,kind,strike,lot_size, built from authenticated, original-date Upstox metadata and independently checked against the NSE contract master. Lot size must be a positive whole number and must match the contract's actual December 2025 specifications; current NIFTY lot sizes must not be silently substituted for historical ones. Contract types: FUT, CE, PE. No guessed key parsing.
 3. A separately approved rights attestation JSON with fields licence_reference, source, permitted_private_reconciliation, may_read_eod_on_host, may_retain_reference_data, may_redistribute, expires_on. Source name: NSE_DATA_AND_ANALYTICS_LICENSED_FO_EOD; private reconciliation and local read must be explicitly permitted, retention and redistribution set false. The digest of this approved JSON must be supplied via MINTTICK_REVIEWED_EOD_RIGHTS_SHA256. This file is not a substitute for an actual licence.
 
 The authorized operator must ensure the files remain confidential on the existing private host and the current seven-day pilot TTL is enforced. Do not upload market-data files, instrument keys or licence documents to GitHub.
@@ -20,7 +20,7 @@ Example invocation (only after approval and licensed files exist):
 
     PYTHONDONTWRITEBYTECODE=1 python3 infra/ec2-paper/fno_licensed_eod_reconcile.py --cache /opt/aitradingsystem-paper/fno-history/private-research-cache.sqlite --catalogue /secure/contract-map.csv --reference /secure/licensed-nse-eod.csv --rights-attestation /secure/rights-approval.json
 
-The utility emits aggregate counts of reference observations, missing reference data, exact all-six-field OHLCV/OI comparisons against midnight and 09:15 bars, and unmatched observations. It does not emit prices, keys or trade dates. It never deletes one source in favor of the other. A licence verification and a **separate reviewed release gate** remain mandatory.
+The utility emits aggregate counts of reference observations, missing reference data, exact all-six-field OHLCV/OI comparisons against midnight and 09:15 bars, and unmatched observations. The official NSE UDiFF F&O `TtlTradgVol` counts **contracts**; the private Upstox historical volume counts **underlying quantity** in the verified 2025-12-15 sample. Before comparing, the utility now multiplies NSE contract volume by the individually authenticated historical `lot_size`. Both original values remain unchanged and the report exposes separate raw/lot-normalized volume matches. A source row lacking verifiable contract lot size fails closed. It does not emit prices, keys or trade dates. It never deletes one source in favor of the other. A licence verification and a **separate reviewed release gate** remain mandatory.
 
 ## External blockers
 
@@ -134,3 +134,31 @@ point-in-time lot-size provenance need verification across all dates,
 including historical lot-size changes. An original-time rights-approved
 full-cohort reconciliation and 316 December conflicts remain blocked
 until independent evidence is complete.
+
+## Full December licensed matcher — volume unit correction (22 November 2026)
+
+The only real-host independent NSE comparison so far was **December 15**.
+The successful protected original-host receipt
+[#45052676114](https://github.com/operationReact/AiTradingSystem/actions/runs/45052676114)
+independently matched 23/23 original daily Upstox midnight candles against
+official NSE O/H/L/C/open interest; the remaining volume field reconciled
+for **all 23/23** only after multiplying official NSE contract count by the
+**per-contract authenticated historical lot size**. This is not evidence
+for the entire month.
+
+The existing **offline licensed full-month matcher** now requires the
+catalogue's `lot_size` field, rejects zero, fractional or invalid values,
+and normalizes contract volume **in memory** before comparing all six
+fields. It emits aggregate-only results and never chooses a preferred
+source candidate or edits stored candles. It **continues to fail closed**
+without a separately reviewed and externally pinned original rights
+attestation and an independently supplied authorized NSE EOD reference.
+
+The remaining original December 2025 **316 conflicting OHLCV/OI candle
+pairs** are still quarantined. Full-month validation is **not performed**
+by synthetic tests or one-day source receipts. Source-first-known evidence,
+data entitlement, historical IV/Greeks/quotes and historical/PAPER/LIVE
+E2E **0/43** remain unchanged. NSE's research-data policies distinguish
+publicly accessible downloads from licensing for trading or profit use;
+personal research use must not be mistaken for commercial redistribution
+rights.
