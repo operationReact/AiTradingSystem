@@ -231,7 +231,8 @@ public final class CustomerFnoDiscoveryController {
         var result = new java.util.HashMap<String,
             CustomerPaperFnoMarketController.ChainSnapshotIndicator>();
         for (var strike : chain.strikes()) {
-            for (var quote : java.util.List.of(strike.call(), strike.put())) {
+            for (var quote : new UpstoxAnalyticsSource.FnoOptionQuote[] {
+                    strike.call(), strike.put()}) {
                 if (quote == null || !verified.contains(quote.instrumentKey())) continue;
                 result.put(quote.instrumentKey(), new
                     CustomerPaperFnoMarketController.ChainSnapshotIndicator(
