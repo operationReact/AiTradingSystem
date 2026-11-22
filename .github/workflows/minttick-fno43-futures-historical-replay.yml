@@ -11,6 +11,12 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
@@ -24,6 +30,12 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
 
@@ -50,10 +62,12 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=Fno43HistoricalReplayDispatchV1Test,FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
+            '-Dtest=Fno43HistoricalReplayDispatchV1Test,FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,Fno179VerifiedHistoricalReplayServiceTest,Fno180VerifiedHistoricalReplayServiceTest,AdminFno43HistoricalReplayControllerTest,FnoContractLiquidityGateV1Test,FnoExpiryBasisReversionV1Test,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoFuturesHistoricalReplayBridgeV1Test.xml
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno176VerifiedHistoricalReplayServiceTest.xml
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno43HistoricalReplayDispatchV1Test.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno179VerifiedHistoricalReplayServiceTest.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno180VerifiedHistoricalReplayServiceTest.xml
       - name: Assert structural proof cannot authorize trades or claim market E2E
         shell: bash
         run: |
@@ -98,6 +112,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          echo '43/43 typed research evaluator dispatch paths compile; synthetic CI only.'
+          echo '43/43 typed research evaluator paths; original V104 STR-179 and V105 STR-180 source adapters tested with FICTIONAL rows only.'
           echo 'Independently verified historical E2E: still 0/43.'
           echo 'No broker access, licensed original source fetch, PAPER ledger or LIVE orders.'
