@@ -250,3 +250,41 @@ that a rights-certified after-cost historical out-of-sample outcome
 has been observed. The historical E2E accepted counter remains 0/43
 until independently validated source/performance/transaction receipts
 qualify, and paper/live broker validation is separate.
+
+
+## Original broker-margin NIFTY credit spreads STR-185/186
+
+\`Fno185186VerifiedHistoricalReplayService\` reuses the unchanged
+\`FnoCreditSpreadResearchService\` and the distinct actual
+\`FnoBullPutCreditSpreadV1\`/\`FnoBearCallCreditSpreadV1\`
+evaluators at exact historical \`asOf\`. It reads only original
+rights-joined V106 NIFTY completed closes and V109 source-listed
+two-option credit spread rows through the existing stores. The
+source requires original research-use rights for both options,
+underlying tick, instrument master, fees/costs and **broker account
+margin/positions**. The broker account scope comes ONLY from the
+server's secured original research config; requesters cannot choose
+or obtain another account scope.
+
+The original evaluator enforces synchronized exchange quote times,
+full-lot authentic depth/OI, listed expiry/strike/lot, completed
+index history and historical account-specific initial margin,
+variation reserve, assignment/settlement buffer, reconciled
+existing positions and risk stress. It does NOT substitute
+today's broker margin for a past decision. Any missing or insufficient
+broker evidence is blocked, not interpreted as the ability to
+short an option.
+
+\`ADMIN/OPERATOR\` \`GET /api/admin/research/fno-43/historical-credit-spread\`
+accepts historical \`asOf\` and two option keys, returns
+no-store sanitised reason codes and aggregate session counts only;
+no confidential broker balances, identities, positions or market
+quotes are returned. Source permission flags default false, no
+customer call or trade execution is possible.
+
+Synthetic unit tests are not real market replays. The V106/V109
+tables may be empty in the deployed database, and historical
+broker source rights, position custody and after-cost OOS
+validation remain unproven. **Independent historical market
+E2E 0/43, PAPER ledger E2E 0/43, LIVE broker E2E 0/43** until
+signed actual source/performance/execution evidence qualifies.
