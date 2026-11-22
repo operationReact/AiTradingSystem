@@ -32,6 +32,12 @@ class AdminFno43HistoricalReplayControllerTest {
     }
 
     @Test
+    void controllerRemainsProxyableForMethodSecurity() {
+        assertFalse(java.lang.reflect.Modifier.isFinal(
+            AdminFno43HistoricalReplayController.class.getModifiers()));
+    }
+
+    @Test
     void endpointRequiresAdminOrOperatorAndIsGetOnly() throws Exception {
         Method method=AdminFno43HistoricalReplayController.class.getMethod(
             "inspect",String.class,String.class,Instant.class);
