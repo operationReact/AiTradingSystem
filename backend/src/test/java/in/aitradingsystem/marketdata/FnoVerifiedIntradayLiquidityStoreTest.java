@@ -50,6 +50,37 @@ class FnoVerifiedIntradayLiquidityStoreTest {
     }
 
     @Test
+    void replayReadRequiresOriginalThreeRightsAndFiveImmutableSourceDigests() {
+        JdbcTemplate jdbc=mock(JdbcTemplate.class);
+        var store=new FnoVerifiedIntradayLiquidityStore(jdbc);
+        assertTrue(store.latestThreeReplayFutures(CONTRACT,EXPIRY,75,NOW).isEmpty());
+        var call=mockingDetails(jdbc).getInvocations().stream()
+            .filter(x->"query".equals(x.getMethod().getName())).findFirst().orElseThrow();
+        Object[] args=call.getArguments();
+        assertEquals(24,args.length);
+        String sql=(String)args[0];
+        assertEquals(22,sql.chars().filter(c->c=='?').count());
+        for(String proof:java.util.List.of("s.session_source_digest",
+                "s.contract_source_digest","s.quote_source_digest",
+                "s.oi_source_digest","s.volume_source_digest",
+                "s.instrument_kind = 'FUTURE'",
+                "s.exchange_session_verified = TRUE",
+                "quote_rights.receipt_status = 'VERIFIED'",
+                "oi_rights.receipt_status = 'VERIFIED'",
+                "volume_rights.receipt_status = 'VERIFIED'",
+                "quote_rights.verified_at <= ?",
+                "oi_rights.verified_at <= ?",
+                "volume_rights.verified_at <= ?",
+                "s.first_observed_at <= ?",
+                "s.oi_first_observed_at <= ?",
+                "s.volume_first_observed_at <= ?",
+                "s.captured_at <= ?","s.retain_until >= ?","LIMIT 3"))
+            assertTrue(sql.contains(proof),proof);
+        assertFalse(sql.toUpperCase().contains("INSERT INTO"));
+        assertFalse(sql.contains("market_candle"));
+    }
+
+    @Test
     void sourceIsNeverInvokedForBadIdentityExpiryOrLot() {
         JdbcTemplate jdbc = mock(JdbcTemplate.class);
         var store = new FnoVerifiedIntradayLiquidityStore(jdbc);
