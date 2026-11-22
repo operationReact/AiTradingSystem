@@ -473,9 +473,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(children: [
-        Icon(freshCount > 0 ? Icons.bolt_rounded
+        Tooltip(
+          message: 'Feed state: ${_source?.streamState ?? 'unverified'}',
+          child: Icon(freshCount > 0 ? Icons.bolt_rounded
                 : Icons.info_outline_rounded,
             size: 16, color: freshCount > 0 ? c.primary : c.onSurfaceVariant),
+        ),
         const SizedBox(width: 7),
         Expanded(child: Text(caption, maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -763,7 +766,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     if (strikes.isEmpty) return const [];
     if (_showAllStrikes) {
       final start = (_strikePage * window).clamp(0,
-          math.max(0, strikes.length - 1));
+          math.max(0, strikes.length - 1)).toInt();
       return strikes.sublist(start,
           math.min(strikes.length, start + window));
     }
