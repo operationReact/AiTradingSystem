@@ -117,6 +117,50 @@ class FnoOptionsResearchServiceTest {
     }
 
     @Test
+    void historicalOriginalCeEvaluatorInvokedWithoutUnnecessaryPutSourceQuery() {
+        var source=store("125");
+        var report=service(source,true,CE,PE).evaluateOne(
+            "strategy.STR-181",NOW);
+        assertEquals("RESEARCH_CANDIDATE",report.status());
+        assertEquals("LONG_CALL_BULLISH_SCENARIO_RESEARCH_ONLY",report.reasonCode());
+        assertEquals(35,report.historySessions());
+        verify(source).verifiedRecentCloses(NOW);
+        verify(source).oneCurrentOption(CE,"CE",NOW);
+        verify(source,never()).oneCurrentOption(eq(PE),any(),any());
+        verifyNoMoreInteractions(source);
+    }
+
+    @Test
+    void historicalOriginalPeEvaluatorInvokedWithoutUnnecessaryCallSourceQuery() {
+        var source=store("75");
+        var report=service(source,true,CE,PE).evaluateOne(
+            "strategy.STR-182",NOW);
+        assertEquals("RESEARCH_CANDIDATE",report.status());
+        assertEquals("LONG_PUT_BEARISH_SCENARIO_RESEARCH_ONLY",report.reasonCode());
+        assertEquals(35,report.historySessions());
+        verify(source).verifiedRecentCloses(NOW);
+        verify(source).oneCurrentOption(PE,"PE",NOW);
+        verify(source,never()).oneCurrentOption(eq(CE),any(),any());
+        verifyNoMoreInteractions(source);
+    }
+
+    @Test
+    void originalHistoricalOneSideHasNoFallbackWhenSourceRightsOrKeyMissing(){
+        var source=store("125");
+        var denied=service(source,false,CE,PE).evaluateOne(
+            "strategy.STR-181",NOW);
+        assertEquals("LONG_CALL_SOURCE_RIGHTS_UNVERIFIED",denied.reasonCode());
+        verifyNoInteractions(source);
+        var source2=store("125");
+        var missing=service(source2,true,"",PE).evaluateOne(
+            "strategy.STR-181",NOW);
+        assertEquals("LONG_OPTION_LISTED_CONTRACT_NOT_CONFIGURED",missing.reasonCode());
+        verifyNoInteractions(source2);
+        assertThrows(IllegalArgumentException.class,()->
+            service(source2,true,CE,PE).evaluateOne("strategy.STR-191",NOW));
+    }
+
+    @Test
     void deniedRightsInvokeBothDistinctEvaluatorsWithoutAccessingDatabase() {
         var source = mock(FnoVerifiedNiftyLongOptionSourceStore.class);
         var rows = report(service(source, false, CE, PE));
