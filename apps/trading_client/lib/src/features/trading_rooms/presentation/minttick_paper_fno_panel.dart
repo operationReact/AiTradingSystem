@@ -696,17 +696,22 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
             _ordersView(colors, type),
           ],
           const SizedBox(height: 8),
-          ExpansionTile(
-            key: const ValueKey('paper-fno-readiness-details'),
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            title: Text('Trading & ledger checks', style: type.titleSmall),
-            subtitle: Text(
-              _receipt == null ? 'Verification unavailable'
-                : _receipt!.tradingApproved ? 'Server approved'
-                : 'Trading not approved',
-              style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
-            children: [_bookkeepingView(colors, type)],
+          // Give the ListTile its own ink surface inside the decorated panel.
+          // A bare ExpansionTile here triggers Material's hidden-ink assertion.
+          Material(
+            type: MaterialType.transparency,
+            child: ExpansionTile(
+              key: const ValueKey('paper-fno-readiness-details'),
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: EdgeInsets.zero,
+              title: Text('Trading & ledger checks', style: type.titleSmall),
+              subtitle: Text(
+                _receipt == null ? 'Verification unavailable'
+                  : _receipt!.tradingApproved ? 'Server approved'
+                  : 'Trading not approved',
+                style: type.labelSmall?.copyWith(color: colors.onSurfaceVariant)),
+              children: [_bookkeepingView(colors, type)],
+            ),
           ),
         ],
       ),
