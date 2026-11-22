@@ -1,0 +1,65 @@
+name: MintTick F&O - STR-180 original EQ/FO basis reversion replay
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-expiry-basis-original-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedExpiryBasisReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedExpiryBasisReplayServiceTest.java'
+      - 'docs/architecture/fno-str180-original-expiry-basis-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno180-expiry-basis-original-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedExpiryBasisReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno180VerifiedExpiryBasisReplayServiceTest.java'
+permissions:
+  contents: read
+jobs:
+  str180-v105-asof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Invoke original STR-180 five-session evaluator on V105 SQL mock fixtures
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno180VerifiedExpiryBasisReplayServiceTest,FnoExpiryBasisReversionV1Test,FnoVerifiedExpiryBasisPairStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno180VerifiedExpiryBasisReplayServiceTest.xml
+      - name: Enforce source rights, calendar and no fake cash/futures quotes
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno180VerifiedExpiryBasisReplayService.java').read_text()
+          source=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedExpiryBasisPairStore.java').read_text()
+          for required in ('readExactPair(', 'FnoExpiryBasisReversionV1.evaluate(',
+                  'spotQuoteFirstObservedAt()', 'futuresQuoteFirstObservedAt()',
+                  'spotFinalFirstAvailableAt()', 'futuresFinalFirstAvailableAt()',
+                  'contractSourceDigest()', 'carryCostSourceDigest()',
+                  'calendar.isTradingDay(', 'false,false,false,false'):
+              assert required in s,required
+          for required in ('nse_eq_near_close_quote','nse_fo_near_close_quote',
+                           'nse_eq_carry_delivery_costs',
+                           "receipt_status = 'VERIFIED'",
+                           'cash_cal.session_close_at','future_cal.session_close_at'):
+              assert required in source,required
+          for invalid in ('placeOrder','submitOrder','@PostMapping','market_candle',
+                          'fno_closing_snapshot','setResearchRights'):
+              assert invalid not in s,invalid
+          PY
+      - name: Report actual source E2E still requiring independent proof
+        if: always()
+        run: |
+          echo 'STR-180 source-gated five original EQ/FO close pairs -> actual Java research evaluator.'
+          echo 'No real V105 source rows, source entitlement or after-cost OOS/performance accepted in CI.'
