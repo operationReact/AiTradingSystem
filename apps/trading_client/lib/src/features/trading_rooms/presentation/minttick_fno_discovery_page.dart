@@ -1170,7 +1170,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
     final at = market.snapshotAt;
     if (!market.displayRightsVerified || at == null || at.isAfter(now) ||
-        now.difference(at) > const Duration(minutes: 5)) return null;
+        now.difference(at) > const Duration(minutes: 5)) {
+      return null;
+    }
     return market.chainSnapshotIndicators[leg.instrumentKey];
   }
 
