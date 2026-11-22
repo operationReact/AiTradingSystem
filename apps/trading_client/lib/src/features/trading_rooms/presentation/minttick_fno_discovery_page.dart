@@ -721,26 +721,27 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           ),
         const SizedBox(height: 4),
         if (_showAllStrikes)
-          Row(children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text('Page ${_strikePage + 1} of $pages',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-            const Spacer(),
-            TextButton(
-              key: const ValueKey('fno-discovery-prev-page'),
-              onPressed: _strikePage == 0
-                  ? null : () => setState(() => _strikePage--),
-              child: const Text('Previous')),
-            TextButton(
-              key: const ValueKey('fno-discovery-next-page'),
-              onPressed: _strikePage + 1 >= pages
-                  ? null : () => setState(() => _strikePage++),
-              child: const Text('Next')),
-            TextButton(
-              onPressed: () => setState(() {
-                _showAllStrikes = false;
-                _strikePage = 0;
-              }),
-              child: const Text('Close')),
+            Row(children: [
+              Expanded(child: TextButton(
+                key: const ValueKey('fno-discovery-prev-page'),
+                onPressed: _strikePage == 0
+                    ? null : () => setState(() => _strikePage--),
+                child: const Text('Previous'))),
+              Expanded(child: TextButton(
+                key: const ValueKey('fno-discovery-next-page'),
+                onPressed: _strikePage + 1 >= pages
+                    ? null : () => setState(() => _strikePage++),
+                child: const Text('Next'))),
+              Expanded(child: TextButton(
+                onPressed: () => setState(() {
+                  _showAllStrikes = false;
+                  _strikePage = 0;
+                }),
+                child: const Text('Close'))),
+            ]),
           ])
         else if (strikes.isEmpty)
           Align(alignment: Alignment.centerRight,
