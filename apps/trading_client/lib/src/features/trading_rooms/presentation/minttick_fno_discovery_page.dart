@@ -612,7 +612,574 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   }
 
   static String _strikeBadge(CustomerFnoLeg leg, num atm) {
-    final match = RegExp(r'(\\d+(?:\\.\\d+)?)\\s*(CE|PE)$').firstMatch(
+    final match = RegExp(r'(\d+(?:\.\d+)?)\s*(CE|PE).firstMatch(
+      leg.tradingSymbol);
+    if (match == null) return '';
+    final strike = num.tryParse(match.group(1)!);
+    if (strike == null) return '';
+    if (strike == atm) return 'ATM';
+    final inMoney = leg.side == 'CE' ? strike < atm : strike > atm;
+    return inMoney ? 'ITM' : 'OTM';
+  }
+
+  Widget _statusChip(BuildContext context, CustomerFnoMarket? market,
+      bool live) {
+    final c = Theme.of(context).colorScheme;
+    String label;
+    IconData icon;
+    Color color;
+    if (market == null) {
+      label = _loading ? 'LOADING' : 'NOT LIVE';
+      icon = Icons.sync_disabled_rounded;
+      color = c.onSurfaceVariant;
+    } else if (market.status == 'MARKET_CLOSED') {
+      label = 'MARKET CLOSED';
+      icon = Icons.nightlight_round;
+      color = c.onSurfaceVariant;
+    } else if (live) {
+      label = 'LIVE';
+      icon = Icons.fiber_manual_record;
+      color = c.primary;
+    } else {
+      label = 'NO FRESH QUOTES';
+      icon = Icons.warning_amber_rounded;
+      color = c.tertiary;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+        borderRadius: BorderRadius.circular(8)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: color),
+        const SizedBox(width: 5),
+        Text(label, style: TextStyle(
+          color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+      ]),
+    );
+  }
+
+  Widget _summary(BuildContext context, CustomerFnoMarket? market,
+      DateTime now, int freshCount) {
+    final c = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    final listed = market == null ? '—' : '${market.strikes.length * 2}';
+    final items = [
+      ('Listed', listed),
+      ('Fresh', market == null ? '—' : '$freshCount'),
+      ('Last tick', _time(_source?.latestFreshExchangeTradeAt)),
+      ('Stream', _source?.streamState ?? 'UNVERIFIED'),
+    ];
+    return MintTickSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(children: [
+        for (final (label, value) in items)
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+              const SizedBox(height: 2),
+              Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: type.bodySmall?.copyWith(fontWeight: FontWeight.w800)),
+            ])),
+      ]),
+    );
+  }
+
+  Widget _roomPicker(BuildContext context, TradingRoomDraft? room) {
+    final type = Theme.of(context).textTheme;
+    return MintTickSurface(
+      padding: const EdgeInsets.all(12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('TRADING TERMINAL · OPTIONAL', style: type.labelSmall),
+        const SizedBox(height: 7),
+        if (_availableRooms.isEmpty)
+          Row(children: [
+            const Expanded(child: Text('Market discovery works without a room.')),
+            TextButton(onPressed: widget.onCreateRoom,
+              child: const Text('Create F&O room')),
+          ])
+        else
+          DropdownButtonHideUnderline(child: DropdownButton<String>(
+            key: const ValueKey('fno-discovery-room'),
+            value: room?.id,
+            isExpanded: true,
+            items: [for (final r in _availableRooms)
+              DropdownMenuItem(value: r.id,
+                child: Text('${r.name} · ${r.mode} · ${r.marketScope}',
+                  maxLines: 1, overflow: TextOverflow.ellipsis))],
+            onChanged: _loading ? null : _selectRoom,
+          )),
+        if (room != null)
+          Text('Open your ${room.mode} terminal for order entry. '
+              'This market feed does not require a broker connection.',
+            style: type.bodySmall),
+      ]),
+    );
+  }
+
+  Widget _navigation(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    return SizedBox(height: 43,
+      child: Row(children: [
+        for (final name in const ['Chain', 'Movers', 'Trade'])
+          Expanded(child: InkWell(
+            key: ValueKey('fno-discovery-tab-${name.toLowerCase()}'),
+            onTap: () => setState(() => _section = name),
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(border: Border(bottom: BorderSide(
+                color: _section == name ? c.primary : c.outlineVariant,
+                width: _section == name ? 2.5 : 1))),
+              child: Text(name, maxLines: 1,
+                style: TextStyle(fontSize: 13,
+                  color: _section == name ? c.onSurface : c.onSurfaceVariant,
+                  fontWeight: _section == name ? FontWeight.w800 : FontWeight.w500)),
+            ),
+          )),
+      ]),
+    );
+  }
+
+  Widget _expiryRow(BuildContext context) {
+    if (_expiries.isEmpty) {
+      return MintTickSurface(child: Text('No verified upcoming expiry calendar.',
+          style: Theme.of(context).textTheme.bodySmall));
+    }
+    return SizedBox(height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _expiries.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final date = _expiries[index];
+          return ChoiceChip(
+            key: ValueKey('fno-discovery-expiry-${_ymd(date)}'),
+            label: Text(_ymd(date)),
+            selected: _expiry == date,
+            onSelected: _loading ? null : (_) => _loadMarket(date),
+          );
+        },
+      ));
+  }
+
+  Widget _chain(BuildContext context, CustomerFnoMarket? market, DateTime now) {
+    final c = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    if (market == null) {
+      return _panel(context, 'NIFTY option chain', 'Source-listed contracts',
+        const Text('No verified option contracts available for this expiry.'));
+    }
+    final atm = MintTickFnoDiscoveryFacts.atmStrike(market, now);
+    final strikes = _visibleStrikes(market.strikes, atm);
+    final hiddenCount = market.strikes.length - strikes.length;
+    if (atm != null && _centeredExpiry != market.expiry) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !_chainScroll.hasClients) return;
+        final position = _chainScroll.position;
+        final target = (_strikeCentreX - position.viewportDimension / 2)
+            .clamp(0.0, position.maxScrollExtent);
+        _chainScroll.jumpTo(target.toDouble());
+        _centeredExpiry = market.expiry;
+      });
+    }
+    return _panel(context, 'NIFTY option chain',
+      '${_ymd(market.expiry)} · ${market.strikes.length} strikes · '
+      'exchange-listed',
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(atm == null
+            ? 'ATM unavailable until CE and PE quotes are both fresh.'
+            : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
+              'are closest. Not a spot price.',
+          style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          controller: _chainScroll,
+          scrollDirection: Axis.horizontal,
+          child: SizedBox(width: _tableWidth, child: Column(children: [
+            _chainHeader(context),
+            for (final strike in strikes)
+              _chainRow(context, market, strike, atm, now),
+          ])),
+        ),
+        const SizedBox(height: 8),
+        if (market.strikes.length > strikes.length || _showAllStrikes)
+          Align(alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
+              child: Text(_showAllStrikes
+                  ? 'Show strikes near ATM'
+                  : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
+            )),
+        if (market.status == 'MARKET_CLOSED')
+          Text('Market closed · no stale contract is labelled LIVE.',
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+      ]));
+  }
+
+  List<CustomerFnoStrike> _visibleStrikes(
+      List<CustomerFnoStrike> strikes, num? atm) {
+    final window = _windowRadius * 2 + 1;
+    if (_showAllStrikes || atm == null || strikes.length <= window) {
+      return strikes;
+    }
+    var centre = 0;
+    for (var i = 1; i < strikes.length; i++) {
+      if ((strikes[i].strikePrice - atm).abs() <
+          (strikes[centre].strikePrice - atm).abs()) {
+        centre = i;
+      }
+    }
+    final start = math.max(0,
+        math.min(centre - _windowRadius, strikes.length - window));
+    return strikes.sublist(start, start + window);
+  }
+
+  Widget _chainHeader(BuildContext context) {
+    final c = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.labelSmall?.copyWith(
+      color: c.onSurfaceVariant, fontWeight: FontWeight.w700);
+    Widget sub(String text) => SizedBox(width: _cellWidth,
+        child: Text(text, textAlign: TextAlign.right, style: style));
+    return Column(children: [
+      Row(children: [
+        SizedBox(width: _cellWidth * 3, child: Text('CALL · CE',
+          textAlign: TextAlign.center,
+          style: style?.copyWith(color: c.onSurface))),
+        SizedBox(width: _strikeWidth, child: Text('STRIKE',
+          textAlign: TextAlign.center,
+          style: style?.copyWith(color: c.onSurface))),
+        SizedBox(width: _cellWidth * 3, child: Text('PUT · PE',
+          textAlign: TextAlign.center,
+          style: style?.copyWith(color: c.onSurface))),
+      ]),
+      const SizedBox(height: 4),
+      Row(children: [
+        sub('OI'), sub('LTP'), sub('Chg'),
+        const SizedBox(width: _strikeWidth),
+        sub('Chg'), sub('LTP'), sub('OI'),
+      ]),
+      Divider(color: c.outlineVariant, height: 10),
+    ]);
+  }
+
+  Widget _chainRow(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoStrike strike, num? atm, DateTime now) {
+    final c = Theme.of(context).colorScheme;
+    final tint = c.primary.withValues(alpha: 0.07);
+    final isAtm = atm != null && strike.strikePrice == atm;
+    final callItm = atm != null && strike.strikePrice < atm;
+    final putItm = atm != null && strike.strikePrice > atm;
+    return Container(
+      decoration: BoxDecoration(
+        color: isAtm ? c.primary.withValues(alpha: 0.14) : null,
+        border: Border(bottom: BorderSide(
+          color: c.outlineVariant.withValues(alpha: 0.5), width: 0.5))),
+      child: Row(children: [
+        _legCells(context, market, strike.call, now, itm: callItm,
+            tint: tint, reverse: false),
+        SizedBox(width: _strikeWidth, child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (isAtm) Text('ATM', style: TextStyle(color: c.primary,
+                fontSize: 9, fontWeight: FontWeight.w800)),
+            Text(_strike(strike.strikePrice), style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w800)),
+          ]))),
+        _legCells(context, market, strike.put, now, itm: putItm,
+            tint: tint, reverse: true),
+      ]),
+    );
+  }
+
+  Widget _legCells(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg? leg, DateTime now, {required bool itm,
+      required Color tint, required bool reverse}) {
+    final c = Theme.of(context).colorScheme;
+    final fresh = leg != null && _fresh(market, leg, now);
+    final pct = fresh ? leg.priceChangePct : null;
+    final cells = <Widget>[
+      _numCell(context, fresh ? _count(leg.openInterest) : '—'),
+      _numCell(context, fresh ? _amount(leg.ltp) : '—', bold: true),
+      _numCell(context, _changeText(pct),
+          color: pct == null ? c.onSurfaceVariant
+              : pct >= 0 ? c.primary : c.error),
+    ];
+    return InkWell(
+      onTap: leg == null ? null : () => _showLeg(context, market, leg, now),
+      child: Container(
+        width: _cellWidth * 3,
+        color: itm ? tint : null,
+        child: Row(children: reverse ? cells.reversed.toList() : cells)),
+    );
+  }
+
+  Widget _numCell(BuildContext context, String text,
+      {bool bold = false, Color? color}) =>
+      SizedBox(width: _cellWidth, child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+        child: Text(text, textAlign: TextAlign.right, maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: _tabular.copyWith(
+            fontSize: 12,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w500,
+            color: color))));
+
+  void _showLeg(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg leg, DateTime now) {
+    final fresh = _fresh(market, leg, now);
+    final type = Theme.of(context).textTheme;
+    final c = Theme.of(context).colorScheme;
+    final pct = fresh ? leg.priceChangePct : null;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(leg.tradingSymbol, style: type.titleMedium
+                ?.copyWith(fontWeight: FontWeight.w800)),
+            Text('${leg.side == 'CE' ? 'Call' : 'Put'} · lot ${leg.lotSize} · '
+                'tick ${leg.tickSize}', style: type.bodySmall),
+            const SizedBox(height: 10),
+            Text(fresh
+                ? 'Exchange-timed · V3 verified'
+                : 'No fresh exchange-timed quote · values hidden',
+              style: type.labelSmall?.copyWith(
+                color: fresh ? c.primary : c.onSurfaceVariant,
+                fontWeight: FontWeight.w700)),
+            const Divider(height: 22),
+            _sheetRow(sheetContext, 'LTP', _price(fresh ? leg.ltp : null)),
+            _sheetRow(sheetContext, 'Change since previous close',
+                pct == null ? '—' : _changeText(pct)),
+            _sheetRow(sheetContext, 'Bid', _price(fresh ? leg.bid : null)),
+            _sheetRow(sheetContext, 'Ask', _price(fresh ? leg.ask : null)),
+            _sheetRow(sheetContext, 'Previous close',
+                _price(fresh ? leg.previousClose : null)),
+            _sheetRow(sheetContext, 'Open interest',
+                fresh ? _count(leg.openInterest) : '—'),
+            _sheetRow(sheetContext, 'IV', fresh ? _decimal(leg.iv) : '—'),
+            _sheetRow(sheetContext, 'Delta', fresh ? _decimal(leg.delta) : '—'),
+            _sheetRow(sheetContext, 'Gamma', fresh ? _decimal(leg.gamma) : '—'),
+            _sheetRow(sheetContext, 'Theta', fresh ? _decimal(leg.theta) : '—'),
+            _sheetRow(sheetContext, 'Vega', fresh ? _decimal(leg.vega) : '—'),
+            const Divider(height: 22),
+            _sheetRow(sheetContext, 'Exchange time',
+                fresh ? _time(leg.exchangeAt) : '—'),
+            _sheetRow(sheetContext, 'Observed',
+                fresh ? _time(leg.observedAt) : '—'),
+            const SizedBox(height: 6),
+            Text('Instrument ${leg.instrumentKey}',
+              style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+            const SizedBox(height: 12),
+            Text('Browsing never sends an order. Order entry happens only in '
+                'your trading terminal after risk checks and confirmation.',
+              style: type.bodySmall),
+          ]),
+      )),
+    );
+  }
+
+  Widget _sheetRow(BuildContext context, String label, String value) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(children: [
+          Expanded(child: Text(label,
+              style: Theme.of(context).textTheme.bodySmall)),
+          Text(value, style: _tabular.copyWith(
+              fontWeight: FontWeight.w700, fontSize: 13)),
+        ]),
+      );
+
+  Widget _movers(BuildContext context, CustomerFnoMarket? market,
+      DateTime now) {
+    final all = market == null
+        ? <CustomerFnoLeg>[]
+        : MintTickFnoDiscoveryFacts.previousCloseMovers(market)
+            .where((leg) => MintTickFnoDiscoveryFacts.recentTick(leg, now))
+            .toList();
+    final gainers = all.where((l) => _pct(l) > 0).toList()
+      ..sort((a, b) => _pct(b).compareTo(_pct(a)));
+    final losers = all.where((l) => _pct(l) < 0).toList()
+      ..sort((a, b) => _pct(a).compareTo(_pct(b)));
+    final c = Theme.of(context).colorScheme;
+    Widget list(List<CustomerFnoLeg> legs) => legs.isEmpty
+        ? Text('None verified yet.',
+            style: Theme.of(context).textTheme.bodySmall)
+        : Column(children: [
+            for (final leg in legs.take(5))
+              _moverRow(context, market!, leg, now),
+          ]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      _panel(context, 'Top gainers', 'Since previous close · fresh only',
+        gainers.isEmpty
+            ? Text('Change data unavailable until fresh V3 LTP and '
+                'previous-close quotes are verified.',
+                style: Theme.of(context).textTheme.bodySmall)
+            : list(gainers)),
+      const SizedBox(height: 14),
+      _panel(context, 'Top losers', 'Since previous close · fresh only',
+        list(losers)),
+      const SizedBox(height: 14),
+      _panel(context, 'Momentum and volume rankings',
+        'Not connected yet',
+        Text('5-min, 15-min, 1-hour momentum and most-traded rankings need '
+            'validated time-series and trading-volume inputs.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: c.onSurfaceVariant))),
+    ]);
+  }
+
+  Widget _moverRow(BuildContext context, CustomerFnoMarket market,
+      CustomerFnoLeg leg, DateTime now) {
+    final c = Theme.of(context).colorScheme;
+    final type = Theme.of(context).textTheme;
+    final pct = _pct(leg);
+    return InkWell(
+      onTap: () => _showLeg(context, market, leg, now),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 9),
+        child: Row(children: [
+          Container(width: 38, height: 26,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(color: c.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8)),
+            child: Text(leg.side, style: TextStyle(color: c.primary,
+                fontWeight: FontWeight.w800, fontSize: 11))),
+          const SizedBox(width: 10),
+          Expanded(child: Text(leg.tradingSymbol, maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: type.bodyMedium?.copyWith(fontWeight: FontWeight.w700))),
+          Text(_price(leg.ltp), style: _tabular.copyWith(
+              fontWeight: FontWeight.w700)),
+          const SizedBox(width: 12),
+          SizedBox(width: 84, child: Text(_changeText(pct),
+            textAlign: TextAlign.right,
+            style: TextStyle(color: pct >= 0 ? c.primary : c.error,
+                fontWeight: FontWeight.w800))),
+        ]),
+      ),
+    );
+  }
+
+  Widget _notConnected(BuildContext context) => _panel(context,
+    'Not connected yet', 'Shown as gaps, never as estimated data',
+    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _gapLine(context, 'Futures chain',
+          'Needs a verified NSE futures feed.'),
+      _gapLine(context, 'Event-driven stock options',
+          'No verified corporate-event feed is connected.'),
+      _gapLine(context, 'Research recommendations',
+          'Only timestamped, independently validated outcomes can appear.'),
+    ]));
+
+  Widget _gapLine(BuildContext context, String title, String detail) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(title, style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w700)),
+          Text(detail, style: Theme.of(context).textTheme.bodySmall),
+        ]),
+      );
+
+  Widget _trade(BuildContext context, TradingRoomDraft? room) =>
+      MintTickSurface(child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _heading('Trade in your F&O room', 'PAPER and LIVE are independent'),
+        const SizedBox(height: 10),
+        const Text('Choose a listed contract in Chain, then open the room '
+            'terminal to review fresh bid/ask, eligible quantity, risk and '
+            'broker confirmation. Browsing never sends an order.'),
+        const SizedBox(height: 14),
+        FilledButton.icon(
+          key: const ValueKey('fno-discovery-open-terminal'),
+          onPressed: room == null ? widget.onCreateRoom
+              : widget.onOpenRoom == null ? null
+              : () => widget.onOpenRoom?.call(room),
+          icon: const Icon(Icons.candlestick_chart_rounded),
+          label: Text(room == null ? 'Create F&O room' : 'Open trading terminal'),
+        ),
+      ]));
+
+  Widget _panel(BuildContext context, String title, String detail,
+      Widget child) =>
+      Padding(padding: const EdgeInsets.only(bottom: 14),
+        child: MintTickSurface(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _heading(title, detail),
+            const SizedBox(height: 10),
+            child,
+          ]),
+        ));
+
+  Widget _unavailable(BuildContext context, String title, String subtitle,
+      {String? action, VoidCallback? onTap}) =>
+      Padding(padding: const EdgeInsets.only(bottom: 14),
+        child: MintTickSurface(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _heading(title, 'Verified sources only'),
+            const SizedBox(height: 9),
+            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
+            if (onTap != null && action != null)
+              Align(alignment: Alignment.centerRight,
+                child: TextButton(onPressed: onTap, child: Text(action))),
+          ]),
+        ));
+
+  Widget _heading(String title, String detail) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: const TextStyle(
+        fontSize: 16, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 2),
+      Text(detail, style: Theme.of(context).textTheme.labelSmall?.copyWith(
+        color: Theme.of(context).colorScheme.onSurfaceVariant)),
+    ]);
+
+  static bool _fresh(CustomerFnoMarket market, CustomerFnoLeg leg,
+          DateTime now) =>
+      market.hasFreshQuotes && market.displayRightsVerified &&
+      MintTickFnoDiscoveryFacts.recentTick(leg, now);
+
+  static num _pct(CustomerFnoLeg leg) => leg.priceChangePct ?? 0;
+
+  static String _changeText(num? pct) => pct == null || !pct.isFinite
+      ? '—'
+      : '${pct >= 0 ? '▲' : '▼'} ${pct.abs().toStringAsFixed(2)}%';
+
+  static String _strike(num n) => n == n.roundToDouble()
+      ? n.toInt().toString()
+      : n.toStringAsFixed(2);
+
+  static String _count(num? n) => n == null || !n.isFinite || n < 0
+      ? '—'
+      : n.toInt().toString();
+
+  static String _amount(num? n) =>
+      n == null || !n.isFinite || n <= 0 ? '—' : n.toStringAsFixed(2);
+
+  static String _price(num? n) =>
+      n == null || !n.isFinite || n <= 0 ? '—' : '₹${n.toStringAsFixed(2)}';
+
+  static String _decimal(num? n) =>
+      n == null || !n.isFinite ? '—' : n.toStringAsFixed(2);
+
+  static String _ymd(DateTime d) => '${d.day.toString().padLeft(2, '0')} '
+      '${_month(d.month)} ${d.year}';
+
+  static String _month(int m) => const [
+    'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'
+  ][m - 1];
+
+  static String _time(DateTime? date) =>
+      date == null ? 'unknown' : '${date.toUtc().hour.toString().padLeft(2, '0')}:'
+          '${date.toUtc().minute.toString().padLeft(2, '0')} UTC';
+}
+).firstMatch(
       leg.tradingSymbol);
     if (match == null) return '';
     final strike = num.tryParse(match.group(1)!);
