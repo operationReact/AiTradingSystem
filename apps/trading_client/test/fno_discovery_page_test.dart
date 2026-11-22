@@ -37,6 +37,15 @@ class _LiveDiscovery extends Fake implements CustomerFnoDiscoveryRepository {
       ]);
 }
 
+class _ClosedDiscovery extends _LiveDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async => _liveMarket([
+        _strike(25200, 300, 100),
+        _strike(25300, 150, 140),
+        _strike(25400, 60, 200),
+      ], status: 'MARKET_CLOSED');
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -258,7 +267,7 @@ void main() {
     await tester.pump();
     expect(find.text('F&O · Discover'), findsOneWidget);
     expect(find.textContaining('Market discovery works without a room.'), findsOneWidget);
-    expect(find.textContaining('No verified'), findsWidgets);
+    expect(find.text('Price leaders unavailable'), findsOneWidget);
     expect(find.text('Create F&O room'), findsWidgets);
     final create = find.text('Create F&O room').first;
     await tester.ensureVisible(create);
@@ -285,6 +294,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(tester.takeException(), isNull);
     expect(find.text('LIVE'), findsOneWidget);
+    expect(find.text('Explore NIFTY options'), findsOneWidget);
+    expect(find.byKey(const ValueKey('fno-discovery-quick-chain')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
     expect(find.textContaining('ATM ≈ 25300'), findsOneWidget);
     expect(find.text('ATM'), findsOneWidget);
 
@@ -299,6 +312,34 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.text('Top gainers'), findsOneWidget);
+  });
+
+  testWidgets('closed market starts with overview and search-first chain',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms, discovery: _ClosedDiscovery()),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(find.text('Price leaders unavailable'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
+    expect(find.textContaining('No strike selected.'), findsOneWidget);
+    expect(find.text('25300'), findsNothing);
+    await tester.enterText(
+        find.byKey(const ValueKey('fno-discovery-strike-search')), '25300');
+    await tester.pump();
+    expect(find.textContaining('Showing listed strikes near 25300'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   group('ATM estimate and freshness', () {
