@@ -16,7 +16,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: aitrading-paper-ec2-manual-lifecycle
+  # Offline PR validation must not be cancelled by unrelated EC2 deployments.
+  # The protected dev push retains the original shared EC2 lifecycle lock.
+  group: ${{ github.event_name == 'pull_request' && format('fno-dec-nse-audit-pr-{0}', github.event.pull_request.number) || 'aitrading-paper-ec2-manual-lifecycle' }}
   cancel-in-progress: false
 
 jobs:
