@@ -196,7 +196,8 @@ public final class CustomerFnoDiscoveryController {
         boolean fresh = liveStrikes.stream().anyMatch(s ->
             s.call().quoteFresh() || s.put().quoteFresh());
         // Order eligibility is never restored by retained snapshots.
-        var strikes = withLastVerifiedTrades(liveStrikes, expiry, now, !open);
+        var strikes = withLastVerifiedTrades(liveStrikes, expiry, now, !open,
+            chain.strikes().getFirst().underlyingSpotPrice());
         String status = !open ? "MARKET_CLOSED" :
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
@@ -208,14 +209,10 @@ public final class CustomerFnoDiscoveryController {
 
     private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
             List<CustomerPaperFnoMarketController.Strike> current,
-            LocalDate expiry, Instant now, boolean marketClosed) {
+            LocalDate expiry, Instant now, boolean marketClosed,
+            java.math.BigDecimal referenceSpot) {
         if (current.isEmpty()) return current;
-        var keys = current.stream()
-            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
-            .filter(java.util.Objects::nonNull)
-            .filter(leg -> !leg.quoteFresh())
-            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
-            .distinct().toList();
+        var keys = prioritizeLastTradeKeys(current, referenceSpot);
         var lastByKey = new java.util.HashMap<String,
             CustomerFnoLastTradeSnapshotStore.LastTrade>();
         var store = lastTrades;
@@ -235,7 +232,7 @@ public final class CustomerFnoDiscoveryController {
                 try {
                     var requestKeys = keys.stream()
                         .filter(key -> !lastByKey.containsKey(key))
-                        .limit(64).toList();
+                        .limit(500).toList();
                     var last = requestKeys.isEmpty()
                         ? java.util.Map.<String, UpstoxAnalyticsSource.ListedLastTrade>of()
                         : source.listedFnoLastTrades(requestKeys);
@@ -259,6 +256,28 @@ public final class CustomerFnoDiscoveryController {
             new CustomerPaperFnoMarketController.Strike(row.strikePrice(),
                 lastVerifiedLeg(row.call(), lastByKey),
                 lastVerifiedLeg(row.put(), lastByKey))).toList();
+    }
+
+    /**
+     * Quote requests have a bounded upstream budget. Choose the strikes nearest
+     * Upstox's underlying spot first, rather than the lowest 32 strikes in the
+     * sorted chain; retain the original chain order in the API response.
+     * Source identity and CE/PE keys have already passed contract validation.
+     */
+    static List<String> prioritizeLastTradeKeys(
+            List<CustomerPaperFnoMarketController.Strike> strikes,
+            java.math.BigDecimal referenceSpot) {
+        var nearest = new java.util.ArrayList<>(strikes);
+        if (referenceSpot != null && referenceSpot.signum() > 0) {
+            nearest.sort(java.util.Comparator.comparing(
+                row -> row.strikePrice().subtract(referenceSpot).abs()));
+        }
+        return nearest.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .filter(leg -> !leg.quoteFresh())
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .distinct().toList();
     }
 
     private static CustomerPaperFnoMarketController.Leg lastVerifiedLeg(

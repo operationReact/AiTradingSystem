@@ -68,6 +68,34 @@ class CustomerFnoDiscoveryOffHoursTest {
             mock(CustomerFnoExpiryCatalog.class), calendar, env);
     }
 
+    private static CustomerPaperFnoMarketController.Leg unpricedLeg(
+            String key, String side) {
+        return new CustomerPaperFnoMarketController.Leg(
+            "NSE_FO|" + key, "NIFTY " + side, side, 65, new BigDecimal(".05"),
+            null, null, null, null, false, false,
+            null, null, null, null, null, null, null, null);
+    }
+
+    private static CustomerPaperFnoMarketController.Strike strike(
+            String price, String callKey, String putKey) {
+        return new CustomerPaperFnoMarketController.Strike(new BigDecimal(price),
+            unpricedLeg(callKey, "CE"), unpricedLeg(putKey, "PE"));
+    }
+
+    @Test
+    void lastTradeLookupPrioritizesNearestSpotInsteadOfLowestStrike() {
+        var rows = List.of(
+            strike("25100", "61001", "61002"),
+            strike("25700", "61003", "61004"),
+            strike("25900", "61005", "61006"));
+        assertThat(CustomerFnoDiscoveryController.prioritizeLastTradeKeys(
+            rows, new BigDecimal("25700"))).containsExactly(
+                "NSE_FO|61003", "NSE_FO|61004",
+                "NSE_FO|61005", "NSE_FO|61006",
+                "NSE_FO|61001", "NSE_FO|61002");
+        assertThat(rows.getFirst().strikePrice()).isEqualByComparingTo("25100");
+    }
+
     @Test
     void closedMarketUsesAuthorizedRestLastTradeWithoutLiveSocket() {
         var expiry = mockListedMetadata();
