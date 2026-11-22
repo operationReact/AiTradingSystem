@@ -438,6 +438,10 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       if (_error != null) Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Text(_error!, style: TextStyle(color: scheme.error))),
+      if (!_readOnlyConfigured && _rightsStatus != null)
+        Text(_rightsStatus!.replaceAll('_', ' '),
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant)),
       const SizedBox(height: 10),
       _optionsList(context, market, trending, now),
       const SizedBox(height: 24),
@@ -516,12 +520,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         children: [
           const ListTile(title: Text('Expiry date')),
           for (final date in _expiries)
-            RadioListTile<DateTime>(
+            ListTile(
               key: ValueKey('minttick-options-expiry-${date.toIso8601String().substring(0,10)}'),
               title: Text(_ymd(date)),
-              groupValue: _expiry,
-              value: date,
-              onChanged: (_) {
+              leading: Icon(_expiry == date
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked),
+              onTap: () {
                 Navigator.pop(sheetContext);
                 _loadMarket(date);
               },
@@ -536,11 +541,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       {String emptyText = 'No verified option contracts available.', bool compact = false}) {
     final scheme = Theme.of(context).colorScheme;
     final style = Theme.of(context).textTheme;
-    if (legs.isEmpty) return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Text(emptyText, style: style.bodyMedium?.copyWith(
-        color: scheme.onSurfaceVariant)),
-    );
+    if (legs.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(emptyText, style: style.bodyMedium?.copyWith(
+          color: scheme.onSurfaceVariant)),
+      );
+    }
     final atm = market == null ? null
         : MintTickFnoDiscoveryFacts.atmStrike(market, now);
     return Column(children: [
@@ -656,33 +663,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         const SizedBox(width: 5),
         Text(label, style: TextStyle(
           color: color, fontSize: 10, fontWeight: FontWeight.w800)),
-      ]),
-    );
-  }
-
-  Widget _summary(BuildContext context, CustomerFnoMarket? market,
-      DateTime now, int freshCount) {
-    final c = Theme.of(context).colorScheme;
-    final type = Theme.of(context).textTheme;
-    final listed = market == null ? '—' : '${market.strikes.length * 2}';
-    final items = [
-      ('Listed', listed),
-      ('Fresh', market == null ? '—' : '$freshCount'),
-      ('Last tick', _time(_source?.latestFreshExchangeTradeAt)),
-      ('Stream', _source?.streamState ?? 'UNVERIFIED'),
-    ];
-    return MintTickSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(children: [
-        for (final (label, value) in items)
-          Expanded(child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-              const SizedBox(height: 2),
-              Text(value, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: type.bodySmall?.copyWith(fontWeight: FontWeight.w800)),
-            ])),
       ]),
     );
   }
@@ -1066,27 +1046,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     );
   }
 
-  Widget _notConnected(BuildContext context) => _panel(context,
-    'Not connected yet', 'Shown as gaps, never as estimated data',
-    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _gapLine(context, 'Futures chain',
-          'Needs a verified NSE futures feed.'),
-      _gapLine(context, 'Event-driven stock options',
-          'No verified corporate-event feed is connected.'),
-      _gapLine(context, 'Research recommendations',
-          'Only timestamped, independently validated outcomes can appear.'),
-    ]));
-
-  Widget _gapLine(BuildContext context, String title, String detail) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(fontWeight: FontWeight.w700)),
-          Text(detail, style: Theme.of(context).textTheme.bodySmall),
-        ]),
-      );
-
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>
       MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1114,20 +1073,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             _heading(title, detail),
             const SizedBox(height: 10),
             child,
-          ]),
-        ));
-
-  Widget _unavailable(BuildContext context, String title, String subtitle,
-      {String? action, VoidCallback? onTap}) =>
-      Padding(padding: const EdgeInsets.only(bottom: 14),
-        child: MintTickSurface(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _heading(title, 'Verified sources only'),
-            const SizedBox(height: 9),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            if (onTap != null && action != null)
-              Align(alignment: Alignment.centerRight,
-                child: TextButton(onPressed: onTap, child: Text(action))),
           ]),
         ));
 
