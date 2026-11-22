@@ -50,6 +50,9 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       'IV': iv == null ? '—' : '${(iv * 100).toStringAsFixed(2)}%',
       'Vega': decimal(metrics?.vega),
     };
+    final hasVerifiedGreeks = metrics != null &&
+        (metrics.delta != null || metrics.theta != null ||
+         metrics.iv != null || metrics.vega != null);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       const SizedBox(height: 8),
       Row(children: [
@@ -137,12 +140,11 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
           ])),
         ]),
       ),
-      const SizedBox(height: 10),
-      _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega'], greeks),
-      const SizedBox(height: 10),
-      _strip(context, 'Market Insight', ['PCR', 'Max Pain', 'IV Rank']),
-      const SizedBox(height: 10),
-
+      // No empty Greeks or analytics cards: the API must supply verified data.
+      if (hasVerifiedGreeks) ...[
+        const SizedBox(height: 8),
+        _strip(context, 'Greeks', ['Delta', 'Theta', 'IV', 'Vega'], greeks),
+      ],
     ]);
   }
 
@@ -296,14 +298,8 @@ class MintTickFnoUnavailableOverview extends StatelessWidget {
             style: t.bodySmall?.copyWith(color: c.onSurfaceVariant))),
         ]),
       ),
-      const SizedBox(height: 9),
-      Container(padding: const EdgeInsets.all(10), decoration: card(),
-        child: const Text('Greeks    Delta —    Theta —    IV —    Vega —',
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
-      const SizedBox(height: 9),
-      Container(padding: const EdgeInsets.all(10), decoration: card(),
-        child: const Text('Market Insight    PCR —    Max Pain —    IV Rank —',
-          maxLines: 1, overflow: TextOverflow.ellipsis)),
+      // With no verified feed, displaying four fake-looking analytics cards
+      // adds noise and is not an actionable trading signal.
       const SizedBox(height: 10),
       Row(children: [
         Expanded(child: FilledButton(
