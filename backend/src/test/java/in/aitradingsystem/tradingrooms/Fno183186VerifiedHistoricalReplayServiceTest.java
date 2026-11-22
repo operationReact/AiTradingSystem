@@ -56,9 +56,10 @@ class Fno183186VerifiedHistoricalReplayServiceTest {
     @Test
     void allFourGenuineTypedSpreadPathsAreRoutedWithoutBrokerOrders(){
         for(int n=183;n<=186;n++){
-            var evaluator=n<185?debit:credit;
-            when(evaluator.evaluateOne(id(n),FIRST)).thenReturn(
-                result(n,FIRST,""+originalState(n),35,"RESEARCH_CANDIDATE"));
+            if(n<185) when(debit.evaluateOne(id(n),FIRST)).thenReturn(
+                result(n,FIRST,originalState(n),35,"RESEARCH_CANDIDATE"));
+            else when(credit.evaluateOne(id(n),FIRST)).thenReturn(
+                result(n,FIRST,originalState(n),35,"RESEARCH_CANDIDATE"));
             var proof=service().inspect(id(n),primary(n),FIRST);
             assertEquals("ORIGINAL_TWO_LEG_EVALUATOR_RESEARCH_ONLY",proof.state());
             assertEquals(35,proof.verifiedCloses());
@@ -69,7 +70,8 @@ class Fno183186VerifiedHistoricalReplayServiceTest {
             assertFalse(proof.liveBrokerE2E());
             assertFalse(proof.brokerOrdersPlaced());
             for(String key:KEYS) assertFalse(proof.toString().contains(key));
-            verify(evaluator).evaluateOne(id(n),FIRST);
+            if(n<185) verify(debit).evaluateOne(id(n),FIRST);
+            else verify(credit).evaluateOne(id(n),FIRST);
         }
     }
     @Test
