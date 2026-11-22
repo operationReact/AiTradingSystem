@@ -104,7 +104,9 @@ void main() {
   });
 
   test('OI PCR uses only complete fresh CE/PE source rows', () {
-    final now = DateTime.now().toUtc();
+    // Quote fixtures are created after this test starts: evaluate one second
+    // later so sub-millisecond construction skew is not mistaken for future data.
+    final now = DateTime.now().toUtc().add(const Duration(seconds: 1));
     final complete = _liveMarket([
       _strike(25200, 300, 100),
       _strike(25300, 150, 140),
