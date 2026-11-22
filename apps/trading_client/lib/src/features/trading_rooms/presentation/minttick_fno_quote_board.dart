@@ -70,7 +70,12 @@ class MintTickFnoQuoteBoard extends StatelessWidget {
       ]),
       Text('Index LTP unavailable from current F&O API',
         style: t.labelSmall?.copyWith(color: c.onSurfaceVariant)),
-      Divider(color: c.outlineVariant, height: 20),
+      Divider(color: c.outlineVariant, height: 12),
+      _OptionsReferenceList(
+        market: market, verified: verified, selected: selected,
+        onLeg: onLeg, onStrike: onStrike,
+      ),
+      const SizedBox(height: 8),
       Row(children: [
         const Text('Strike', style: TextStyle(fontWeight: FontWeight.w700)),
         const SizedBox(width: 12),
@@ -314,6 +319,129 @@ class MintTickFnoUnavailableOverview extends StatelessWidget {
           key: const ValueKey('fno-premium-blocked-sell'),
           onPressed: null, child: const Text('SELL'))),
       ]),
+    ]);
+  }
+}
+
+/// Compact source-backed Options list, following the requested Call/Put table.
+/// The UI uses exchange-listed contracts only; no generated strike or quote.
+class _OptionsReferenceList extends StatefulWidget {
+  const _OptionsReferenceList({
+    required this.market,
+    required this.verified,
+    required this.selected,
+    required this.onLeg,
+    required this.onStrike,
+  });
+
+  final CustomerFnoMarket market;
+  final bool verified;
+  final CustomerFnoLeg? selected;
+  final ValueChanged<CustomerFnoLeg> onLeg;
+  final ValueChanged<num> onStrike;
+
+  @override
+  State<_OptionsReferenceList> createState() => _OptionsReferenceListState();
+}
+
+class _OptionsReferenceListState extends State<_OptionsReferenceList> {
+  String side = 'CE';
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final contracts = <(num, CustomerFnoLeg)>[];
+    for (final strike in widget.market.strikes) {
+      final leg = side == 'CE' ? strike.call : strike.put;
+      if (leg != null) contracts.add((strike.strikePrice, leg));
+    }
+    contracts.sort((a, b) {
+      final lhs = a.$2.openInterest;
+      final rhs = b.$2.openInterest;
+      if (lhs == null && rhs == null) return a.$1.compareTo(b.$1);
+      if (lhs == null) return 1;
+      if (rhs == null) return -1;
+      return rhs.compareTo(lhs);
+    });
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(child: Text('Trending Options', style: text.titleMedium
+            ?.copyWith(fontWeight: FontWeight.w800))),
+        for (final option in const [('CE', 'Call'), ('PE', 'Put')])
+          Padding(padding: const EdgeInsets.only(left: 6),
+            child: ChoiceChip(
+              key: ValueKey('fno-room-option-${option.$1.toLowerCase()}'),
+              label: Text(option.$2),
+              selected: side == option.$1,
+              onSelected: (_) => setState(() => side = option.$1),
+              visualDensity: VisualDensity.compact,
+            )),
+      ]),
+      const SizedBox(height: 6),
+      Row(children: [
+        Expanded(flex: 5, child: Text('Option', style: text.labelSmall
+            ?.copyWith(color: colors.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('OI', textAlign: TextAlign.right,
+            style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant))),
+        Expanded(flex: 3, child: Text('LTP', textAlign: TextAlign.right,
+            style: text.labelSmall?.copyWith(color: colors.onSurfaceVariant))),
+      ]),
+      if (contracts.isEmpty)
+        const Padding(padding: EdgeInsets.symmetric(vertical: 12),
+          child: Text('No listed options for this expiry.')),
+      for (final (strike, leg) in contracts.take(6))
+        InkWell(
+          key: ValueKey('fno-room-listed-${leg.instrumentKey}'),
+          onTap: () {
+            widget.onStrike(strike);
+            widget.onLeg(leg);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              Expanded(flex: 5, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(leg.tradingSymbol, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700)),
+                  Text('NFO', style: text.labelSmall?.copyWith(
+                    color: colors.onSurfaceVariant)),
+                ],
+              )),
+              Expanded(flex: 3, child: Text(
+                widget.market.displayRightsVerified &&
+                    leg.openInterest != null
+                    ? leg.openInterest!.toString() : '—',
+                textAlign: TextAlign.right,
+                style: text.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+              )),
+              Expanded(flex: 3, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    widget.verified && leg.quoteFresh && leg.ltp != null
+                        ? leg.ltp!.toStringAsFixed(2) : '—',
+                    style: text.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: widget.verified && leg.quoteFresh
+                          ? ((leg.priceChangePct ?? 0) >= 0
+                              ? colors.primary : colors.error)
+                          : colors.onSurfaceVariant),
+                  ),
+                  if (widget.verified && leg.quoteFresh &&
+                      leg.priceChangePct != null)
+                    Text(
+                      '${leg.priceChangePct! >= 0 ? '+' : ''}${leg.priceChangePct!.toStringAsFixed(2)}%',
+                      style: text.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant)),
+                ],
+              )),
+            ]),
+          ),
+        ),
     ]);
   }
 }
