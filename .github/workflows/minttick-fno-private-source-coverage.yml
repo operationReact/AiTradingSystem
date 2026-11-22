@@ -150,6 +150,8 @@ jobs:
                   if not isinstance(months,list) or [x.get('month') for x in months]!=expected:
                       raise SystemExit('FNO_COVERAGE_INVALID_CALENDAR')
                   cols=('contracts','expectedWeekdaySlots','missingWeekdayCandidates',
+                        'nsePublishedHolidaySlots','nseHolidayMissingSlots',
+                        'remainingWeekdayGapCandidates',
                         'commonEmptyWeekdays','partialWeekdayGapSlots',
                         'observedUniqueDays','weekendRows','dailyDateDuplicates',
                         'nonMidnightRows')
@@ -158,6 +160,12 @@ jobs:
                           or any(type(month[k]) is not int or not 0<=month[k]<=10000
                                  for k in cols)):
                           raise SystemExit('FNO_COVERAGE_INVALID_MONTH')
+                  for month in months:
+                      if (month['nseHolidayMissingSlots'] > month['nsePublishedHolidaySlots']
+                          or month['nsePublishedHolidaySlots'] > month['expectedWeekdaySlots']
+                          or month['remainingWeekdayGapCandidates'] !=
+                              month['missingWeekdayCandidates']-month['nseHolidayMissingSlots']):
+                          raise SystemExit('FNO_COVERAGE_UNTRUSTED_HOLIDAY_COUNTS')
                   selected=data.get('expirySelected')
                   if not isinstance(selected,list) or len(selected)!=12:
                       raise SystemExit('FNO_COVERAGE_INVALID_METADATA')
@@ -178,6 +186,9 @@ jobs:
                             '; contracts='+str(m['contracts'])+
                             '; weekdays='+str(m['expectedWeekdaySlots'])+
                             '; weekdayGapCandidates='+str(m['missingWeekdayCandidates'])+
+                            '; nsePublishedHolidaySlots='+str(m['nsePublishedHolidaySlots'])+
+                            '; nseHolidayMissingSlots='+str(m['nseHolidayMissingSlots'])+
+                            '; unexplainedWeekdayGapCandidates='+str(m['remainingWeekdayGapCandidates'])+
                             '; commonEmptyWeekdays='+str(m['commonEmptyWeekdays'])+
                             '; partialWeekdayGapSlots='+str(m['partialWeekdayGapSlots'])+
                             '; observedUniqueDays='+str(m['observedUniqueDays'])+

@@ -19,6 +19,16 @@ ROOT=Path("/opt/aitradingsystem-paper/fno-history")
 SOURCE="upstox-expired-nse-fo"
 MARKER="MINTTICK_FNO_COVERAGE_V1:"
 EXPECTED_MONTHS=tuple(["2025-11","2025-12"]+[f"2026-{m:02}" for m in range(1,11)])
+# NSE/FAOP/71777 (12 December 2025) is the published 2026 F&O holiday
+# schedule. These closures narrow weekday gap *candidates*; they are NOT proof
+# of a complete exchange-session calendar, quote provenance or data rights.
+# Ref: https://nsearchives.nseindia.com/content/circulars/FAOP71777.pdf
+NSE_FO_2026_PUBLISHED_HOLIDAYS = frozenset(date.fromisoformat(day) for day in (
+    "2026-01-26", "2026-03-03", "2026-03-26", "2026-03-31",
+    "2026-04-03", "2026-04-14", "2026-05-01", "2026-05-28",
+    "2026-06-26", "2026-09-14", "2026-10-02", "2026-10-20",
+    "2026-11-10", "2026-11-24", "2026-12-25",
+))
 
 
 def ro(path):
@@ -69,6 +79,13 @@ def calendar_candidates(job_rows,candle_rows):
         keys=[k for k,v in months.items() if v==m]
         slots=sum(len(expected[k]) for k in keys)
         missing=sum(len(expected[k]-observed[k]) for k in keys)
+        # Count a published NSE F&O closure separately from an unexplained
+        # weekday gap. Do not erase existing candidate counts or invent bars.
+        official_closed_slots=sum(
+            len(expected[k] & NSE_FO_2026_PUBLISHED_HOLIDAYS) for k in keys)
+        official_closed_missing=sum(
+            len((expected[k]-observed[k]) & NSE_FO_2026_PUBLISHED_HOLIDAYS)
+            for k in keys)
         possible_days=set().union(*(expected[k] for k in keys))
         common_empty=0
         partial_missing=0
@@ -84,6 +101,9 @@ def calendar_candidates(job_rows,candle_rows):
         by_month.append({
             "month":m,"contracts":len(keys),"expectedWeekdaySlots":slots,
             "missingWeekdayCandidates":missing,
+            "nsePublishedHolidaySlots":official_closed_slots,
+            "nseHolidayMissingSlots":official_closed_missing,
+            "remainingWeekdayGapCandidates":missing-official_closed_missing,
             "commonEmptyWeekdays":common_empty,
             "partialWeekdayGapSlots":partial_missing,
             "observedUniqueDays":sum(len(observed[k]) for k in keys),
