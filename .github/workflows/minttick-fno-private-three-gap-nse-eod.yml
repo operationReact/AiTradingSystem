@@ -1,0 +1,185 @@
+name: MintTick F&O - three isolated gaps independent NSE EOD evidence
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-private-three-gap-nse-eod.yml'
+      - 'infra/ec2-paper/fno_private_three_gap_nse_eod.py'
+      - 'scripts/tests/test_fno_private_three_gap_nse_eod.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/fno-private-three-gap-nse-eod.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check synthetic in-memory official NSE F&O gap reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/fno_private_three_gap_nse_eod.py
+          python3 -m unittest discover -s scripts/tests -p 'test_fno_private_three_gap_nse_eod.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('infra/ec2-paper/fno_private_three_gap_nse_eod.py').read_text()
+          assert 'MAX_METADATA_GETS = 4' in src and 'MAX_ARCHIVES = 3' in src
+          assert 'SOURCE_REJECTED' in src and 'EXCHANGE_ROW_ABSENT' in src
+          assert 'read_only' in src and 'identify_partial_gaps' in src
+          assert 'backtestingApproved' in src and 'retainedDataRightsVerified' in src
+          for token in ('placeOrder','submitOrder','INSERT INTO','DELETE FROM',
+                        'UPDATE fno_','put-parameter','with-decryption',
+                        'start-instances'):
+              assert token not in src, token
+          PY
+
+  check:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 9
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Authorize exact read-only 4 metadata GET and 3 NSE archive request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/fno-private-three-gap-nse-eod.json'
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('infra/ec2-paper/requests/fno-private-three-gap-nse-eod.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text())=={
+              "kind":"minttick-owner-private-three-gap-independent-nse-eod-v1",
+              "operation":"read-only-exact-three-gap-independent-exchange-volume-triage",
+              "account":"098859530205",
+              "region":"ap-south-1",
+              "instance_id":"i-09c01b470fb39b85a",
+              "owner_permission_expires":"2026-11-28",
+              "max_metadata_gets":4,
+              "max_nse_archive_gets":3,
+              "no_orders":True,
+              "no_auth_bypass":True,
+              "no_redistribution":True,
+              "no_persistence":True,
+              "private_cache_read_only":True,
+              "no_market_price_export":True,
+          }
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          role-session-name: minttick-fno-three-gap-nse-udiff
+          role-duration-seconds: 900
+          aws-region: ap-south-1
+      - name: Probe NSE official UDiFF in memory from verified exact code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib,json,os,re,sys,time
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from fno_private_bulk_ops import _aws,INSTANCE
+          from verify_ssm_release import verify_aws
+          verify_aws()
+          sources=[
+            'fno_private_three_gap_nse_eod.py',
+            'fno_private_partial_gaps.py',
+          ]
+          for name in sources:
+              content=Path('infra/ec2-paper',name).read_bytes()
+              assert 3500<len(content)<14000
+          commit=os.environ['GITHUB_SHA']
+          assert re.fullmatch('[0-9a-f]{40}',commit)
+          commands=[
+            "set -eu",
+            "umask 077",
+            'tmp=$(mktemp -d /tmp/minttick-fno-nse-eod.XXXXXX)',
+            'trap \'rm -rf "$tmp"\' EXIT',
+          ]
+          for name in sources:
+              content=Path('infra/ec2-paper',name).read_bytes()
+              digest=hashlib.sha256(content).hexdigest()
+              url='https://raw.githubusercontent.com/operationReact/AiTradingSystem/'+commit+'/infra/ec2-paper/'+name
+              commands.append("curl --fail --silent --show-error --max-time 30 --proto '=https' --tlsv1.2 -o \\"$tmp/"+name+"\\" '"+url+"'")
+              commands.append("printf '%s  %s\\\\n' '"+digest+"' \\"$tmp/"+name+"\\" | sha256sum -c - >/dev/null")
+          commands.append('PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$tmp" /usr/bin/python3 "$tmp/fno_private_three_gap_nse_eod.py"')
+          remote="\n".join(commands)+"\n"
+          req=_aws('ssm','send-command','--document-name','AWS-RunShellScript',
+                   '--instance-ids',INSTANCE,'--timeout-seconds','240',
+                   '--comment','MintTick exact three-gap official NSE EOD evidence triage',
+                   '--parameters',json.dumps({'commands':[remote]}))
+          cid=(req.get('Command') or {}).get('CommandId')
+          if not isinstance(cid,str) or not re.fullmatch('[0-9a-f-]{36}',cid):
+              raise SystemExit('FNO_NSE_TRIAGE_COMMAND_INVALID')
+          for _ in range(65):
+              time.sleep(4)
+              status=_aws('ssm','get-command-invocation','--command-id',cid,'--instance-id',INSTANCE)
+              state=status.get('Status')
+              if state in ('Success','Failed','TimedOut','Cancelled'):
+                  if state!='Success':
+                      raise SystemExit('FNO_NSE_TRIAGE_HOST_FAILED')
+                  out=status.get('StandardOutputContent') or ''
+                  marker='MINTTICK_FNO_NSE_GAP_TRIAGE_V1:'
+                  lines=[s[len(marker):] for s in out.splitlines() if s.startswith(marker)]
+                  if len(lines)!=1 or len(lines[0])>600:
+                      raise SystemExit('FNO_NSE_TRIAGE_RECEIPT_INVALID')
+                  values=json.loads(lines[0])
+                  fields={'scope','gaps','may','october','metadataGets',
+                          'archivesAttempted','archivesFetched','exchangeTraded',
+                          'exchangeZeroVolume','exchangeRowAbsent','archiveUnavailable',
+                          'marketPricesExported','privateCacheModified','backtestingApproved',
+                          'exchangeSessionCalendarVerified','retainedDataRightsVerified'}
+                  if set(values)!=fields or values['scope']!='THREE_PRIVATE_UPSTOX_CANDLE_GAPS':
+                      raise SystemExit('FNO_NSE_TRIAGE_RECEIPT_INVALID')
+                  if (any(type(values[k]) is not int or not 0<=values[k]<=4 for k in (
+                          'gaps','may','october','metadataGets','archivesAttempted',
+                          'archivesFetched','exchangeTraded','exchangeZeroVolume',
+                          'exchangeRowAbsent','archiveUnavailable'))
+                      or values['gaps']!=3 or values['may']!=1 or values['october']!=2
+                      or values['metadataGets']!=4 or values['archivesAttempted']>3
+                      or values['archivesFetched']>values['archivesAttempted']
+                      or sum(values[k] for k in ('exchangeTraded','exchangeZeroVolume',
+                               'exchangeRowAbsent','archiveUnavailable'))!=3
+                      or any(values[k] is not False for k in (
+                          'marketPricesExported','privateCacheModified',
+                          'backtestingApproved','exchangeSessionCalendarVerified',
+                          'retainedDataRightsVerified'))):
+                      raise SystemExit('FNO_NSE_TRIAGE_RECEIPT_INVALID')
+                  print('FNO NSE EOD THREE GAPS: metadataGETs=4; archiveAttempts='+str(values['archivesAttempted'])+
+                        '; archivesFetched='+str(values['archivesFetched'])+
+                        '; tradedInOfficialEOD='+str(values['exchangeTraded'])+
+                        '; zeroVolumeOfficial='+str(values['exchangeZeroVolume'])+
+                        '; noOfficialContractRow='+str(values['exchangeRowAbsent'])+
+                        '; archivesUnavailable='+str(values['archiveUnavailable'])+
+                        '; noRawDataExport=true; researchAndLiveApproved=false',flush=True)
+                  break
+              if state not in ('Pending','InProgress','Delayed'):
+                  raise SystemExit('FNO_NSE_TRIAGE_STATE_UNEXPECTED')
+          else:
+              raise SystemExit('FNO_NSE_TRIAGE_SSM_TIMEOUT')
+          PY
+
+# No publication of raw trading data, symbols, strikes, exact gap dates, or broker keys.
+# NSE archive accessibility and zero/no-trade interpretation are distinct evidence.
