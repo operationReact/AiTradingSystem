@@ -36,22 +36,30 @@ public class AdminFno43HistoricalReplayController {
     private final Fno174VerifiedHistoricalReplayService str174;
     private final Fno176VerifiedHistoricalReplayService str176;
     private final Fno177VerifiedHistoricalReplayService str177;
+    private final Fno179VerifiedHistoricalReplayService str179;
+    private final Fno180VerifiedHistoricalReplayService str180;
     private final Clock clock;
 
     @Autowired
     public AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
-            Fno177VerifiedHistoricalReplayService str177) {
-        this(str174,str176,str177,Clock.systemUTC());
+            Fno177VerifiedHistoricalReplayService str177,
+            Fno179VerifiedHistoricalReplayService str179,
+            Fno180VerifiedHistoricalReplayService str180) {
+        this(str174,str176,str177,str179,str180,Clock.systemUTC());
     }
     AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
-            Fno177VerifiedHistoricalReplayService str177, Clock clock) {
+            Fno177VerifiedHistoricalReplayService str177,
+            Fno179VerifiedHistoricalReplayService str179,
+            Fno180VerifiedHistoricalReplayService str180, Clock clock) {
         this.str174=Objects.requireNonNull(str174);
         this.str176=Objects.requireNonNull(str176);
         this.str177=Objects.requireNonNull(str177);
+        this.str179=Objects.requireNonNull(str179);
+        this.str180=Objects.requireNonNull(str180);
         this.clock=Objects.requireNonNull(clock);
     }
 
@@ -107,6 +115,66 @@ public class AdminFno43HistoricalReplayController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
             new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
                 strategyId,asOf,state,reason,rows,sessions,
+                false,false,false,false));
+    }
+
+    /**
+     * STR-179 needs the original instrument expiry and lot size to query
+     * precisely one contract's three genuine rights-joined depth snapshots.
+     * No market quotes, account fields, instrument key, or digest in output.
+     */
+    @GetMapping("/historical-liquidity-replay")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<ReplayReadiness> inspectLiquidity(
+        @RequestParam("contractKey") String contractKey,
+        @RequestParam("expiry") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)
+        java.time.LocalDate expiry,
+        @RequestParam("lotSize") int lotSize,
+        @RequestParam("asOf") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME)
+        Instant asOf) {
+        if(contractKey==null||
+            !contractKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")||
+            expiry==null||lotSize<1||lotSize>100000||
+            asOf==null||asOf.isAfter(clock.instant())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "FNO_ORIGINAL_LIQUIDITY_SCOPE_INVALID");
+        }
+        var result=str179.inspect(contractKey,expiry,lotSize,asOf);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+            new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
+                result.strategyId(),asOf,result.state(),result.reason(),
+                result.originalSourceSnapshots(),result.evaluatorSnapshots(),
+                false,false,false,false));
+    }
+
+    /**
+     * STR-180 uses distinct original NSE_EQ and NSE_FO contracts with
+     * separately verified cash/futures calendars, source and carry cost rights.
+     * This does not model settlement/fills and cannot activate LIVE trading.
+     */
+    @GetMapping("/historical-basis-replay")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<ReplayReadiness> inspectBasis(
+        @RequestParam("spotKey") String spotKey,
+        @RequestParam("contractKey") String contractKey,
+        @RequestParam("expiry") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE)
+        java.time.LocalDate expiry,
+        @RequestParam("lotSize") int lotSize,
+        @RequestParam("asOf") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME)
+        Instant asOf) {
+        if(spotKey==null||!spotKey.matches("NSE_EQ\\|[A-Za-z0-9._-]{1,64}")||
+            contractKey==null||
+            !contractKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")||
+            expiry==null||lotSize<1||lotSize>100000||
+            asOf==null||asOf.isAfter(clock.instant())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "FNO_ORIGINAL_BASIS_REPLAY_SCOPE_INVALID");
+        }
+        var result=str180.inspect(spotKey,contractKey,expiry,lotSize,asOf);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+            new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
+                result.strategyId(),asOf,result.state(),result.reason(),
+                result.sourcePairs(),result.evaluatedPairs(),
                 false,false,false,false));
     }
 }
