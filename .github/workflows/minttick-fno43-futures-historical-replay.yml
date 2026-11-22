@@ -1,0 +1,67 @@
+name: MintTick F&O - bounded STR-173/176 original-as-of replay wiring
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-futures-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
+      - 'docs/architecture/fno-43-historical-e2e-evidence.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno43-futures-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1Test.java'
+
+permissions:
+  contents: read
+
+jobs:
+  structural-replay:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute actual STR-173 and STR-176 evaluator replay fixture with fail-closed rights/as-of
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=FnoFuturesHistoricalReplayBridgeV1Test,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoFuturesHistoricalReplayBridgeV1Test.xml
+      - name: Assert structural proof cannot authorize trades or claim market E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/FnoFuturesHistoricalReplayBridgeV1.java')
+          x=p.read_text()
+          for needed in ("FnoFuturesOpenInterestTrendV1.evaluate(",
+                         "FnoFuturesMomentumV1.evaluate(",
+                         "AFTER_COST_OOS_AND_INDEPENDENT_SOURCE_PROOF_MISSING",
+                         "sourceFirstKnownAt()", "oiFirstKnownAt()",
+                         "EVALUATOR_REPLAY_RESEARCH_ONLY_NOT_E2E"):
+              assert needed in x,needed
+          for forbidden in ("placeOrder", "submitOrder", "aws ssm",
+                            "MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED"):
+              assert forbidden not in x,forbidden
+          PY
+      - name: Report truthful fixture-only result
+        if: always()
+        shell: bash
+        run: |
+          echo 'STR-173/176 actual Java evaluator replay path: synthetic CI only.'
+          echo 'Independently verified historical E2E: still 0/43.'
+          echo 'No broker access, licensed original source fetch, PAPER ledger or LIVE orders.'
