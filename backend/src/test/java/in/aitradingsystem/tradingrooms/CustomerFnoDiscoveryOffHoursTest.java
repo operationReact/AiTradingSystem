@@ -115,6 +115,9 @@ class CustomerFnoDiscoveryOffHoursTest {
         assertThat(call.paperEligible()).isFalse();
         assertThat(call.bid()).isNull();
         assertThat(call.ask()).isNull();
+        // Snapshot values never overwrite V3 trade fields.
+        assertThat(result.chainSnapshotIndicators().get(CE).ltp())
+            .isEqualByComparingTo("999");
         verify(feed).getIfAvailable();
         verifyNoMoreInteractions(feed);
     }
@@ -126,6 +129,14 @@ class CustomerFnoDiscoveryOffHoursTest {
         assertThat(result.status()).isEqualTo("MARKET_CLOSED");
         assertThat(result.strikes()).hasSize(1);
         assertThat(result.strikes().getFirst().call().ltp()).isNull();
+        // Real V2 chain metrics are returned in a distinct, non-executable map.
+        var reference = result.chainSnapshotIndicators().get(CE);
+        assertThat(reference.ltp()).isEqualByComparingTo("999");
+        assertThat(reference.openInterest()).isEqualTo(20L);
+        assertThat(reference.iv()).isEqualByComparingTo(".21");
+        assertThat(reference.bid()).isEqualByComparingTo("998");
+        assertThat(result.strikes().getFirst().call().quoteFresh()).isFalse();
+        assertThat(result.strikes().getFirst().call().paperEligible()).isFalse();
         verify(source, never()).listedFnoLastTrades(anyList());
     }
 
