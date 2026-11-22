@@ -114,3 +114,34 @@ price/volume/OI provenance, actual-first-known data custody, per-strategy IV,
 Greeks, bid/ask/depth, retention/use rights or after-cost E2E acceptance.
 Historical 43-strategy E2E, PAPER and LIVE remain 0/43 until independent
 evidence proves otherwise.
+
+## Final original weekday gap classification — verified 22 November 2026
+
+The chronology above retains the **intermediate** 184/26 and 207/3
+results. The original 210 weekday-absence slots were finally classified
+by **two separate, read-only real-host checks**:
+
+1. Official NSE F&O trading closures: **207** contract-day slots
+   ([calendar run #45040413969](https://github.com/operationReact/AiTradingSystem/actions/runs/45040413969)).
+   Includes the January 15 amendment, where the original annual schedule
+   was incomplete.
+2. Three **contract-specific exchange-confirmed zero-traded-volume days**
+   (May one; October two), independently matched by authenticated provider
+   contract-catalogue identity to NSE F&O UDiFF EOD
+   ([run #45043188940](https://github.com/operationReact/AiTradingSystem/actions/runs/45043188940),
+   merged PR #1704). The protected host fetched **2 official NSE daily ZIP
+   archives**, used **4 bounded metadata GETs**, and returned
+   `exchangeTraded=0`, `exchangeZeroVolume=3`,
+   `exchangeRowAbsent=0`, `archiveUnavailable=0`.
+
+**210/210 original weekday-absence candidate slots now have exchange-calendar
+or zero-executed-trading-volume explanations for this one 276-contract pilot.**
+They must **not** be treated as synthesized candles or as proof of valid
+bid/ask, settlement values, Greeks, IV, OHLC or volume quality across the
+entire F&O universe. The three zero-traded-volume slots should carry explicit
+no-execution semantics, not fabricated close prices or backtest fills.
+
+Independent OHLC/OI source accuracy, original data time provenance, rights,
+the **316 original December 2025 conflicting daily candle payload pairs**,
+and 43-strategy historical/PAPER/LIVE **0/43** verified E2E remain separate
+blockers. Original prices, checkpoint records and retention stayed intact.
