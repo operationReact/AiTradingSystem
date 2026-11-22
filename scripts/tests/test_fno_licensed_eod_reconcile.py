@@ -40,7 +40,7 @@ class LicensedEodGateTests(unittest.TestCase):
             kind=("FUT" if n==0 else "CE" if n<=11 else "PE")
             strike=Decimal(0) if n==0 else Decimal(25000+50*((n-1)%11))
             key=f"NSE_FO|SYN{n:03d}|30-12-2025"
-            self.catalogue[key]=(expiry,kind,strike)
+            self.catalogue[key]=(expiry,kind,strike,Decimal(1))
             for d in range(14):
                 day=day0+timedelta(days=d)
                 identity=(expiry,kind,strike,day)
@@ -77,7 +77,7 @@ class LicensedEodGateTests(unittest.TestCase):
 
     def test_independent_reference_can_disagree_with_midnight(self):
         key=next(iter(self.catalogue))
-        expiry,kind,strike=self.catalogue[key]
+        expiry,kind,strike,lot=self.catalogue[key]
         day=date(2025,12,15)
         self.ref[(expiry,kind,strike,day)]=(Decimal(100),Decimal(105),Decimal(99),
                                            Decimal(103),Decimal(10),Decimal(5))
@@ -105,17 +105,19 @@ class LicensedEodGateTests(unittest.TestCase):
         with p.open("w",newline="") as handle:
             writer=csv.DictWriter(handle,fieldnames=sorted(f.CATALOGUE_HEADER))
             writer.writeheader()
-            for key,(expiry,kind,strike) in self.catalogue.items():
+            for key,(expiry,kind,strike,lot) in self.catalogue.items():
                 writer.writerow({"contract_key":key,"underlying":"NIFTY",
                                  "expiry":expiry.isoformat(),"kind":kind,
-                                 "strike":str(strike) if kind!="FUT" else ""})
+                                 "strike":str(strike) if kind!="FUT" else "",
+                                 "lot_size":str(lot)})
         self.assertEqual(f.load_catalogue(p),self.catalogue)
         with p.open("a",newline="") as handle:
             writer=csv.DictWriter(handle,fieldnames=sorted(f.CATALOGUE_HEADER))
             key=next(iter(self.catalogue))
-            expiry,kind,strike=self.catalogue[key]
+            expiry,kind,strike,lot=self.catalogue[key]
             writer.writerow({"contract_key":key,"underlying":"NIFTY",
-                             "expiry":expiry.isoformat(),"kind":kind,"strike":""})
+                             "expiry":expiry.isoformat(),"kind":kind,"strike":"",
+                             "lot_size":str(lot)})
         with self.assertRaisesRegex(ValueError,"PRIVATE_CONTRACT_CATALOGUE_AMBIGUOUS"):
             f.load_catalogue(p)
 
@@ -142,6 +144,37 @@ class LicensedEodGateTests(unittest.TestCase):
             writer.writerow(sample)
         with self.assertRaisesRegex(ValueError,"PRIVATE_EOD_DUPLICATE_EXCHANGE_KEY"):
             f.load_reference(p)
+
+    def test_true_contract_volume_differs_but_lot_normalized_ohlcvoi_matches(self):
+        # Official NSE UDiFF counts contracts, provider daily source volume
+        # counts underlying units: observed Dec 15 2025 pilot is 23/23.
+        self.catalogue={key:(expiry,kind,strike,Decimal(75))
+                        for key,(expiry,kind,strike,lot) in self.catalogue.items()}
+        self.db.execute("UPDATE fno_historical_candles SET volume=volume*75")
+        result=f.reconcile(self.db,self.catalogue,self.ref)
+        counts=result["counts"]
+        self.assertEqual(counts["midnightExactMatches"],322)
+        self.assertEqual(counts["openingExactMatches"],5)
+        self.assertEqual(counts["midnightScaledVolumeMatches"],322)
+        self.assertEqual(counts["midnightUnscaledVolumeMatches"],0)
+        self.assertEqual(counts["openingScaledVolumeMatches"],321)
+        self.assertEqual(counts["openingUnscaledVolumeMatches"],0)
+        self.assertEqual(result["volumeNormalization"],
+                         "NSE_CONTRACTS_TIMES_AUTHENTICATED_HISTORICAL_LOT")
+        self.assertFalse(result["backtestingApproved"])
+        self.assertFalse(result["commercialRightsVerified"])
+        self.assertFalse(result["mutatedRawCache"])
+
+    def test_invalid_historical_lot_size_cannot_reconcile_or_load(self):
+        key=next(iter(self.catalogue))
+        expiry,kind,strike,lot=self.catalogue[key]
+        self.catalogue[key]=(expiry,kind,strike,Decimal("1.5"))
+        with self.assertRaisesRegex(ValueError,"PRIVATE_CONTRACT_LOT_SIZE_INVALID"):
+            f.reconcile(self.db,self.catalogue,self.ref)
+        self.assertEqual(f.validated_lot(75),Decimal(75))
+        for bad in ("0","-1","NaN","1.5","10001"):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                f.validated_lot(bad)
 
     def test_unverified_rights_fail_closed_even_if_file_claims_approval(self):
         p=self.dir/"attestation.json"
