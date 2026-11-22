@@ -872,9 +872,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('F&O'));
     await tester.pumpAndSettle();
-    expect(find.text('F&O · Discover'), findsOneWidget);
-    expect(find.textContaining('TRADING TERMINAL · OPTIONAL'), findsOneWidget);
-    expect(find.text('Market discovery works without a room.'), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-title')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-index-picker')), findsOneWidget);
+    expect(find.byKey(const ValueKey('minttick-options-search')), findsOneWidget);
     expect(find.textContaining('DISPLAY RIGHTS NOT VERIFIED'), findsWidgets);
     expect(find.textContaining('No verified option contracts available'), findsWidgets);
     expect(tester.takeException(), isNull);
