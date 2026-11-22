@@ -40,6 +40,7 @@ public class AdminFno43HistoricalReplayController {
     private final Fno177VerifiedHistoricalReplayService str177;
     private final Fno181182VerifiedHistoricalReplayService longOptions;
     private final Fno183184VerifiedHistoricalReplayService debitSpreads;
+    private final Fno185186VerifiedHistoricalReplayService creditSpreads;
     private final Clock clock;
 
     @Autowired
@@ -48,20 +49,23 @@ public class AdminFno43HistoricalReplayController {
             Fno176VerifiedHistoricalReplayService str176,
             Fno177VerifiedHistoricalReplayService str177,
             Fno181182VerifiedHistoricalReplayService longOptions,
-            Fno183184VerifiedHistoricalReplayService debitSpreads) {
-        this(str174,str176,str177,longOptions,debitSpreads,Clock.systemUTC());
+            Fno183184VerifiedHistoricalReplayService debitSpreads,
+            Fno185186VerifiedHistoricalReplayService creditSpreads) {
+        this(str174,str176,str177,longOptions,debitSpreads,creditSpreads,Clock.systemUTC());
     }
     AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
             Fno177VerifiedHistoricalReplayService str177,
             Fno181182VerifiedHistoricalReplayService longOptions,
-            Fno183184VerifiedHistoricalReplayService debitSpreads, Clock clock) {
+            Fno183184VerifiedHistoricalReplayService debitSpreads,
+            Fno185186VerifiedHistoricalReplayService creditSpreads, Clock clock) {
         this.str174=Objects.requireNonNull(str174);
         this.str176=Objects.requireNonNull(str176);
         this.str177=Objects.requireNonNull(str177);
         this.longOptions=Objects.requireNonNull(longOptions);
         this.debitSpreads=Objects.requireNonNull(debitSpreads);
+        this.creditSpreads=Objects.requireNonNull(creditSpreads);
         this.clock=Objects.requireNonNull(clock);
     }
 
@@ -157,6 +161,40 @@ public class AdminFno43HistoricalReplayController {
                 report.verifiedDailySourceSessions(),
                 report.verifiedOptionContracts() == 2
                     ? report.verifiedDailySourceSessions() : 0,
+                false,false,false,false));
+    }
+
+    /**
+     * Historical short-credit-spread evidence is strictly account scoped on
+     * the server side. The caller cannot supply or retrieve broker scope,
+     * margin balances, positions, quotes or internal source receipt hashes.
+     */
+    @GetMapping("/historical-credit-spread")
+    @PreAuthorize("hasAnyRole('ADMIN', 'OPERATOR')")
+    public ResponseEntity<ReplayReadiness> inspectCreditSpread(
+            @RequestParam("strategyId") String strategyId,
+            @RequestParam("lowerKey") String lowerKey,
+            @RequestParam("higherKey") String higherKey,
+            @RequestParam("asOf") @DateTimeFormat(iso=DateTimeFormat.ISO.DATE_TIME)
+            Instant asOf) {
+        if (!(FnoBullPutCreditSpreadV1.STRATEGY_ID.equals(strategyId)
+                || FnoBearCallCreditSpreadV1.STRATEGY_ID.equals(strategyId))
+                || lowerKey == null
+                || !lowerKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || higherKey == null
+                || !higherKey.matches("NSE_FO\\|[A-Za-z0-9._-]{1,64}")
+                || lowerKey.equals(higherKey)
+                || asOf == null || asOf.isAfter(clock.instant())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "FNO_HISTORICAL_CREDIT_SPREAD_SCOPE_INVALID");
+        }
+        var report=creditSpreads.inspect(strategyId,lowerKey,higherKey,asOf);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(
+            new ReplayReadiness("minttick.fno43.original-historical-replay-readiness.v1",
+                strategyId,asOf,report.state(),report.reasonCode(),
+                report.verifiedCompletedNiftySessions(),
+                report.verifiedOptionContracts()==2
+                    ? report.verifiedCompletedNiftySessions() : 0,
                 false,false,false,false));
     }
 }
