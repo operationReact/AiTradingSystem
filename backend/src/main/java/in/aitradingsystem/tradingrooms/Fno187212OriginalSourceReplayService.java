@@ -174,12 +174,12 @@ public final class Fno187212OriginalSourceReplayService {
                   "NO_SIGNAL".equals(found.status())) ||
                 found.reasonCode()==null ||
                 !found.reasonCode().matches("[A-Z0-9_]{4,128}") ||
-                found.completedHistorySessions()<0 || found.completedHistorySessions()>512 ||
+                found.historySessions()<0 || found.historySessions()>512 ||
                 found.freshQuotes()<0 || found.freshQuotes()>64) {
             return denied(strategyId,asOf,"ORIGINAL_SOURCE_OR_EVALUATOR_EVIDENCE_UNVERIFIED");
         }
         return new Proof(strategyId,asOf,"SOURCE_RESEARCH_EVALUATOR_RAN_NOT_E2E",
-            found.reasonCode(),found.status(),found.completedHistorySessions(),
+            found.reasonCode(),found.status(),found.historySessions(),
             found.freshQuotes(),false,false,false,false);
     }
 
