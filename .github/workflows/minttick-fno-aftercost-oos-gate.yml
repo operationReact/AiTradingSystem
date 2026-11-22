@@ -1,0 +1,68 @@
+name: MintTick F&O - independent after-cost OOS accounting contract (NO ORDERS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-aftercost-oos-gate.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoHistoricalAfterCostWalkForwardV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoHistoricalAfterCostWalkForwardV1Test.java'
+      - 'docs/architecture/fno-43-aftercost-walkforward.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno-aftercost-oos-gate.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/FnoHistoricalAfterCostWalkForwardV1.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/FnoHistoricalAfterCostWalkForwardV1Test.java'
+
+permissions:
+  contents: read
+
+jobs:
+  aftercost-oos:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute actual Java after-cost walk-forward deterministic arithmetic tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress '-Dtest=FnoHistoricalAfterCostWalkForwardV1Test,Fno43HistoricalReplayDispatchV1Test,Fno43RuntimeSourceAuditServiceTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoHistoricalAfterCostWalkForwardV1Test.xml
+      - name: Assert no original source or broker order authority inferred from a ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          src=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/FnoHistoricalAfterCostWalkForwardV1.java').read_text()
+          for needed in (
+              'SOURCE_RESEARCH_RIGHTS_NOT_ATTESTED',
+              'TRAIN_OOS_TRADE_CROSSES_BOUNDARY',
+              'AFTER_COST_ACCOUNTING_OVERFLOW',
+              'INDEPENDENT_ORIGINAL_SOURCE_AND_FILL_ACCEPTANCE_STILL_REQUIRED',
+              'false, false, false, false',
+              'entrySourceFirstKnownAt().isAfter(t.entryDecisionAt())',
+              'exitSourceFirstKnownAt().isAfter(t.exitDecisionAt())',
+          ):
+              assert needed in src,needed
+          for forbidden in ('placeOrder','submitOrder','@PostMapping','http://','https://',
+                  'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED', 'aws ssm',
+                  'jdbc','@Service','@Scheduled','getBrokerToken'):
+              assert forbidden not in src,forbidden
+          PY
+      - name: Explicitly distinguish accounting from accepted real market E2E
+        if: always()
+        run: |
+          echo 'COST ACCOUNTING: static fixture result only; original source/actual fills NOT independently accepted.'
+          echo 'Research evaluator paths: 43/43; independently verified market historical/PAPER/LIVE: not advanced by this gate.'
