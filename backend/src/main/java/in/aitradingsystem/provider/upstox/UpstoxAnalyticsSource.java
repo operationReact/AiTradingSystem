@@ -286,6 +286,63 @@ public final class UpstoxAnalyticsSource {
                 .map(java.util.Map.Entry::getKey).toList();
     }
 
+    /**
+     * Exchange-sourced read-only last trades from the official V3 full quote API.
+     * Caller MUST verify distinct REST display rights, user ownership and expiry
+     * identity before returning any value; these are never execution quotes.
+     */
+    public record ListedLastTrade(String instrumentKey, BigDecimal ltp,
+            BigDecimal previousClose, Long openInterest,
+            Instant exchangeAt, Instant observedAt) {}
+
+    public java.util.Map<String, ListedLastTrade> listedFnoLastTrades(
+            List<String> instrumentKeys) {
+        if (!enabled || instrumentKeys == null || instrumentKeys.isEmpty()
+                || instrumentKeys.size() > 64
+                || instrumentKeys.stream().anyMatch(k ->
+                    k == null || !k.matches("NSE_FO\\\\|[A-Za-z0-9._-]{1,64}"))
+                || instrumentKeys.stream().distinct().count() != instrumentKeys.size()) {
+            throw new IllegalArgumentException("UPSTOX_FNO_LAST_QUOTE_INVALID_REQUEST");
+        }
+        // REST is used only for last-display snapshots, NEVER PAPER or LIVE.
+        var rows = get("/v3/market-quote/quotes?instrument_key={keys}",
+                String.join(",", instrumentKeys)).path("data");
+        if (!rows.isObject() || rows.size() > instrumentKeys.size()) {
+            throw unavailable("UPSTOX_FNO_LAST_QUOTE_INVALID_DATA");
+        }
+        var expected = Set.copyOf(instrumentKeys);
+        var mapped = new java.util.HashMap<String, ListedLastTrade>();
+        Instant now = Instant.now();
+        for (var values = rows.elements(); values.hasNext();) {
+            var quote = values.next();
+            try {
+                String key = quote.path("instrument_token").asText();
+                if (!expected.contains(key) || mapped.containsKey(key)) continue;
+                var price = quote.path("last_price").decimalValue();
+                if (price == null || price.signum() <= 0) continue;
+                var tradeMs = Long.parseLong(quote.path("last_trade_time").asText());
+                Instant traded = Instant.ofEpochMilli(tradeMs);
+                if (traded.isAfter(now.plusSeconds(2))
+                        || traded.isBefore(now.minusSeconds(7 * 86400L))) continue;
+                Instant observed = java.time.OffsetDateTime.parse(
+                    quote.path("timestamp").asText()).toInstant();
+                if (observed.isBefore(traded) || observed.isAfter(now.plusSeconds(10))) continue;
+                var previous = quote.path("prev_close_price");
+                BigDecimal previousClose = previous.isNumber()
+                    && previous.decimalValue().signum() > 0
+                    ? previous.decimalValue() : null;
+                var oiNode = quote.path("oi");
+                Long oi = oiNode.isIntegralNumber() && oiNode.canConvertToLong()
+                    && oiNode.longValue() >= 0 ? oiNode.longValue() : null;
+                mapped.put(key, new ListedLastTrade(key, price, previousClose,
+                    oi, traded, observed));
+            } catch (RuntimeException invalidQuote) {
+                // Drop malformed provider rows rather than fabricate a quote.
+            }
+        }
+        return java.util.Map.copyOf(mapped);
+    }
+
     /** Bound current contract metadata; expiry and lot size come from Upstox. */
     public List<FnoOptionContract> currentFnoOptionContracts(String underlyingKey,
                                                               LocalDate expiry) {
