@@ -78,6 +78,42 @@ public final class FnoOptionsResearchService {
         return List.of(one(true, now, closes), one(false, now, closes));
     }
 
+
+    /**
+     * One historically scoped research evaluation, with no sibling CE/PE
+     * query, no live feed, and no broker orders. The original V106 source
+     * store rejects quote rows whose captured/first-known/rights times
+     * exceed the historical decision as-of. Do not treat a successful
+     * result as source custody signoff or after-cost out-of-sample E2E.
+     */
+    public FnoFuturesResearchService.StrategyStatus evaluateOne(
+            String strategyId, Instant asOf) {
+        if (asOf == null) throw new IllegalArgumentException("NIFTY_OPTION_ASOF_MISSING");
+        boolean call;
+        if (FnoLongCallV1.STRATEGY_ID.equals(strategyId)) call=true;
+        else if (FnoLongPutV1.STRATEGY_ID.equals(strategyId)) call=false;
+        else throw new IllegalArgumentException("HISTORICAL_OPTION_STRATEGY_UNSUPPORTED");
+        if (!indexResearchRights || !optionResearchRights || !discoveryRights)
+            return blocked(call,asOf,"LONG_OPTION_SOURCE_RIGHTS_UNVERIFIED",true,0);
+        if (store == null || calendar == null)
+            return blocked(call,asOf,"LONG_OPTION_SOURCE_UNAVAILABLE",false,0);
+        if (!calendar.isInsideCashSession(asOf))
+            return blocked(call,asOf,"LONG_OPTION_EXCHANGE_SESSION_CLOSED",false,0);
+        String key=call?ceKey:peKey;
+        if (!validKey(key))
+            return blocked(call,asOf,"LONG_OPTION_LISTED_CONTRACT_NOT_CONFIGURED",false,0);
+        final List<VerifiedClose> bars;
+        try {
+            bars=store.verifiedRecentCloses(asOf);
+        } catch (RuntimeException sourceUnavailable) {
+            return blocked(call,asOf,"LONG_OPTION_DAILY_SOURCE_READ_UNAVAILABLE",false,0);
+        }
+        if (!validHistory(bars,calendar,asOf))
+            return blocked(call,asOf,"LONG_OPTION_35_COMPLETED_SOURCE_CLOSES_MISSING",
+                false,bars==null?0:bars.size());
+        return one(call,asOf,bars);
+    }
+
     private List<FnoFuturesResearchService.StrategyStatus> bothBlocked(
             Instant now, String reason, int bars) {
         return List.of(blocked(true, now, reason, false, bars),
