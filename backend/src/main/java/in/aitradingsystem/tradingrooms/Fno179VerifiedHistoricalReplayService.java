@@ -96,8 +96,7 @@ public class Fno179VerifiedHistoricalReplayService {
                     row.underlyingKey()==null||
                     !row.underlyingKey().matches(
                         "(?:NSE_EQ\\|[A-Za-z0-9._-]{1,64}|NSE_INDEX\\|[A-Za-z0-9 ._-]{1,64})")||
-                    !List.of("UPSTOX_ANALYTICS","ANGEL_ONE_SMARTAPI")
-                        .contains(row.provider())||
+                    !"UPSTOX_V3".equals(row.provider())||
                     (provider!=null&&!provider.equals(row.provider()))||
                     (underlying!=null&&!underlying.equals(row.underlyingKey()))||
                     row.exchangeAt()==null||row.observedAt()==null||
