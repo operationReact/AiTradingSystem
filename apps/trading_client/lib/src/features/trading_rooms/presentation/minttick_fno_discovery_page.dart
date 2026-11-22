@@ -933,6 +933,13 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       CustomerFnoLeg leg, DateTime now) {
     final fresh = _fresh(market, leg, now);
     final visible = _displayQuote(market, leg, now);
+    // HTTP option-chain snapshot time is retrieval, never V3 exchange trade time.
+    final chain = market.displayRightsVerified && market.snapshotAt != null &&
+            !market.snapshotAt!.isAfter(now) &&
+            now.difference(market.snapshotAt!) <= const Duration(minutes: 5)
+        ? market.chainSnapshotIndicators[leg.instrumentKey]
+        : null;
+    final chainOnly = !visible && chain != null;
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
@@ -954,34 +961,56 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 ? 'Exchange-timed · V3 verified'
                 : visible
                     ? 'Last verified trade · ${_shortTime(leg.exchangeAt)}'
-                    : 'No verified trade available',
+                    : chainOnly
+                        ? 'Upstox chain snapshot · read only'
+                        : 'No verified trade available',
               style: type.labelSmall?.copyWith(
                 color: fresh ? c.primary : c.onSurfaceVariant,
                 fontWeight: FontWeight.w700)),
             const Divider(height: 22),
-            _sheetRow(sheetContext, 'LTP', _price(visible ? leg.ltp : null)),
+            _sheetRow(sheetContext, chainOnly ? 'LTP · chain snapshot' : 'LTP',
+                _price(visible ? leg.ltp : chain?.ltp)),
             _sheetRow(sheetContext, 'Change since previous close',
                 pct == null ? '—' : _changeText(pct)),
-            _sheetRow(sheetContext, 'Bid', _price(fresh ? leg.bid : null)),
-            _sheetRow(sheetContext, 'Ask', _price(fresh ? leg.ask : null)),
+            _sheetRow(sheetContext, fresh ? 'Bid' : 'Bid · chain snapshot',
+                _price(fresh ? leg.bid : chain?.bid)),
+            _sheetRow(sheetContext, fresh ? 'Ask' : 'Ask · chain snapshot',
+                _price(fresh ? leg.ask : chain?.ask)),
             _sheetRow(sheetContext, 'Previous close',
                 _price(visible ? leg.previousClose : null)),
-            _sheetRow(sheetContext, 'Open interest',
-                visible ? _count(leg.openInterest) : '—'),
-            _sheetRow(sheetContext, 'IV', fresh ? _decimal(leg.iv) : '—'),
-            _sheetRow(sheetContext, 'Delta', fresh ? _decimal(leg.delta) : '—'),
-            _sheetRow(sheetContext, 'Gamma', fresh ? _decimal(leg.gamma) : '—'),
-            _sheetRow(sheetContext, 'Theta', fresh ? _decimal(leg.theta) : '—'),
-            _sheetRow(sheetContext, 'Vega', fresh ? _decimal(leg.vega) : '—'),
+            _sheetRow(sheetContext,
+                visible && leg.openInterest != null
+                    ? 'Open interest' : 'OI · chain snapshot',
+                visible && leg.openInterest != null
+                    ? _count(leg.openInterest) : _count(chain?.openInterest)),
+            _sheetRow(sheetContext, fresh ? 'IV' : 'IV · chain snapshot',
+                _decimal(fresh ? leg.iv : chain?.iv)),
+            _sheetRow(sheetContext, fresh ? 'Delta' : 'Delta · chain snapshot',
+                _decimal(fresh ? leg.delta : chain?.delta)),
+            _sheetRow(sheetContext, fresh ? 'Gamma' : 'Gamma · chain snapshot',
+                _decimal(fresh ? leg.gamma : chain?.gamma)),
+            _sheetRow(sheetContext, fresh ? 'Theta' : 'Theta · chain snapshot',
+                _decimal(fresh ? leg.theta : chain?.theta)),
+            _sheetRow(sheetContext, fresh ? 'Vega' : 'Vega · chain snapshot',
+                _decimal(fresh ? leg.vega : chain?.vega)),
             const Divider(height: 22),
             _sheetRow(sheetContext, 'Exchange time',
                 visible ? _time(leg.exchangeAt) : '—'),
             _sheetRow(sheetContext, 'Observed',
                 visible ? _time(leg.observedAt) : '—'),
+            if (chain != null)
+              _sheetRow(sheetContext, 'Chain retrieved',
+                  _time(market.snapshotAt)),
             const SizedBox(height: 6),
             Text('Instrument ${leg.instrumentKey}',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
             const SizedBox(height: 12),
+            if (chain != null) ...[
+              Text('Chain snapshot values are indicative and cannot be used '
+                  'as executable quotes or proof of a recent trade.',
+                style: type.bodySmall),
+              const SizedBox(height: 8),
+            ],
             Text('Browsing never sends an order. Order entry happens only in '
                 'your trading terminal after risk checks and confirmation.',
               style: type.bodySmall),
