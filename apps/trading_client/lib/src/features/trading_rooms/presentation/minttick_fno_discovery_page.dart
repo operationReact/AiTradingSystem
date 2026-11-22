@@ -119,6 +119,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     with WidgetsBindingObserver {
   String? _roomId;
   String _section = 'Chain';
+  String _optionSide = 'CE';
+  String _smartlistKind = 'Most active';
+  String _search = '';
   bool _showAllStrikes = false;
   DateTime? _centeredExpiry;
   final ScrollController _chainScroll = ScrollController();
@@ -339,63 +342,284 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final room = _room;
+    final scheme = Theme.of(context).colorScheme;
     final market = _market;
     final now = DateTime.now().toUtc();
-    final freshCount = market == null
-        ? 0
+    final all = market == null || !market.displayRightsVerified
+        ? <CustomerFnoLeg>[]
+        : MintTickFnoDiscoveryFacts.optionLegs(market, _optionSide)
+            .where((leg) => leg.tradingSymbol.toLowerCase()
+                .contains(_search.toLowerCase().trim()))
+            .toList();
+    final ranked = [...all]..sort((a, b) {
+      final ao = a.openInterest;
+      final bo = b.openInterest;
+      if (ao == null && bo == null) return a.tradingSymbol.compareTo(b.tradingSymbol);
+      if (ao == null) return 1;
+      if (bo == null) return -1;
+      return bo.compareTo(ao);
+    });
+    final trending = ranked.take(8).toList();
+    final topSmartlist = _smartlistKind == 'Most active'
+        ? ranked.take(6).toList()
+        : <CustomerFnoLeg>[];
+    final freshCount = market == null ? 0
         : MintTickFnoDiscoveryFacts.freshLegs(market, now).length;
+
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      const SizedBox(height: 7),
+      const SizedBox(height: 6),
       Row(children: [
-        const Expanded(child: Text('F&O · Discover',
+        const Expanded(child: Text('Options',
+          key: ValueKey('minttick-options-title'),
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800))),
         _statusChip(context, market, freshCount > 0),
         IconButton(
           key: const ValueKey('fno-discovery-refresh'),
-          tooltip: 'Refresh F&O source',
+          tooltip: 'Refresh options',
           onPressed: _loading ? null : _refresh,
           icon: const Icon(Icons.refresh_rounded),
         ),
       ]),
-      Text('Real NSE contracts · no indicative or synthetic prices',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: theme.colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 10),
+      TextField(
+        key: const ValueKey('minttick-options-search'),
+        onChanged: (value) => setState(() => _search = value),
+        decoration: InputDecoration(
+          isDense: true,
+          prefixIcon: const Icon(Icons.search_rounded),
+          hintText: 'Search F&O',
+          filled: true,
+          fillColor: scheme.surfaceContainerLow,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        ),
+      ),
       const SizedBox(height: 12),
-      _summary(context, market, now, freshCount),
-      const SizedBox(height: 14),
-      _roomPicker(context, room),
-      const SizedBox(height: 12),
+      Text('Trending Options', style: Theme.of(context).textTheme.titleLarge
+          ?.copyWith(fontWeight: FontWeight.w800)),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(flex: 4, child: OutlinedButton(
+          key: const ValueKey('minttick-options-index-picker'),
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            builder: (ctx) => SafeArea(child: ListTile(
+              title: const Text('Choose index'),
+              subtitle: const Text('NIFTY 50'),
+              trailing: const Icon(Icons.check_circle_outline),
+              onTap: () => Navigator.pop(ctx),
+            )),
+          ),
+          child: const Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(child: Text('NIFTY 50', overflow: TextOverflow.ellipsis)),
+              Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+            ]),
+        )),
+        const SizedBox(width: 7),
+        Expanded(flex: 4, child: OutlinedButton(
+          key: const ValueKey('minttick-options-expiry-picker'),
+          onPressed: _expiries.isEmpty ? null : () => _showExpirySheet(),
+          child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Flexible(child: Text(_expiry == null ? 'Expiry' : _ymd(_expiry!),
+                overflow: TextOverflow.ellipsis)),
+              const Icon(Icons.keyboard_arrow_down_rounded, size: 18),
+            ]),
+        )),
+        const SizedBox(width: 7),
+        _sideToggle('CE', 'Call'),
+        const SizedBox(width: 5),
+        _sideToggle('PE', 'Put'),
+      ]),
+      if (_loading) const Padding(
+        padding: EdgeInsets.only(top: 5),
+        child: LinearProgressIndicator(minHeight: 2)),
+      if (_error != null) Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Text(_error!, style: TextStyle(color: scheme.error))),
+      const SizedBox(height: 10),
+      _optionsList(context, market, trending, now),
+      const SizedBox(height: 24),
+      Row(children: [
+        Icon(Icons.candlestick_chart_rounded, size: 20, color: scheme.primary),
+        const SizedBox(width: 8),
+        Expanded(child: Text('Options Smartlists',
+          style: Theme.of(context).textTheme.titleLarge
+              ?.copyWith(fontWeight: FontWeight.w800))),
+      ]),
+      const SizedBox(height: 10),
+      SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: [
+        for (final kind in const ['Most active', 'Top traded', 'OI gainers'])
+          Padding(padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              key: ValueKey('minttick-options-smartlist-${kind.toLowerCase().replaceAll(' ', '-')}'),
+              label: Text(kind),
+              selected: _smartlistKind == kind,
+              onSelected: (_) => setState(() => _smartlistKind = kind),
+            )),
+      ])),
+      const SizedBox(height: 8),
+      _optionsList(context, market, topSmartlist, now,
+          emptyText: _smartlistKind == 'Most active'
+              ? 'No verified open-interest data.'
+              : _smartlistKind == 'Top traded'
+                  ? 'Trading volume not available from the option feed.'
+                  : 'Open-interest change not available from the option feed.',
+          compact: true),
+      const SizedBox(height: 18),
+      // Retain the full exchange-listed chain and its navigation for traders.
       _navigation(context),
       const SizedBox(height: 12),
-      if (_loading) const LinearProgressIndicator(minHeight: 2),
-      if (_error != null) Padding(
-        padding: const EdgeInsets.only(top: 7, bottom: 9),
-        child: Text(_error!,
-            style: TextStyle(color: theme.colorScheme.error))),
-      if (!_readOnlyConfigured || market == null) _unavailable(context,
-          'NIFTY options data',
-          'Market discovery uses the independent Upstox source. '
-          '${_rightsStatus == 'CONTRACTS_LISTED_PRICES_NOT_AUTHORIZED'
-              ? 'Expiries and contract identities are listed from the verified source. '
-                'Live prices, OI and Greeks are not authorized for display.'
-              : '${(_rightsStatus ?? 'Data not yet verified').replaceAll('_', ' ')}.'}',
-          action: room == null || widget.onOpenRoom == null ? null : 'Open terminal',
-          onTap: room == null ? null : () => widget.onOpenRoom?.call(room)),
       if (_section == 'Chain') ...[
-        _expiryRow(context),
-        const SizedBox(height: 12),
+        if (_expiries.isNotEmpty) _expiryRow(context),
         _chain(context, market, now),
-        const SizedBox(height: 14),
-        _notConnected(context),
       ] else if (_section == 'Movers') ...[
         _movers(context, market, now),
       ] else ...[
-        _trade(context, room),
+        _roomPicker(context, _room),
+        const SizedBox(height: 8),
+        _trade(context, _room),
       ],
-      const SizedBox(height: 20),
+      if (_availableRooms.isNotEmpty && widget.onOpenRoom != null)
+        Align(alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () => widget.onOpenRoom?.call(_room ?? _availableRooms.first),
+            child: const Text('Open trading room'),
+          )),
+      if (_availableRooms.isEmpty && widget.onCreateRoom != null)
+        Align(alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: widget.onCreateRoom,
+            child: const Text('Create F&O room'),
+          )),
+      const SizedBox(height: 12),
     ]);
+  }
+
+  Widget _sideToggle(String side, String label) {
+    return ChoiceChip(
+      key: ValueKey('minttick-options-${side.toLowerCase()}'),
+      label: Text(label),
+      selected: _optionSide == side,
+      onSelected: (_) => setState(() => _optionSide = side),
+      visualDensity: VisualDensity.compact,
+      labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+    );
+  }
+
+  void _showExpirySheet() {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(child: ListView(
+        shrinkWrap: true,
+        children: [
+          const ListTile(title: Text('Expiry date')),
+          for (final date in _expiries)
+            RadioListTile<DateTime>(
+              key: ValueKey('minttick-options-expiry-${date.toIso8601String().substring(0,10)}'),
+              title: Text(_ymd(date)),
+              groupValue: _expiry,
+              value: date,
+              onChanged: (_) {
+                Navigator.pop(sheetContext);
+                _loadMarket(date);
+              },
+            ),
+        ],
+      )),
+    );
+  }
+
+  Widget _optionsList(BuildContext context, CustomerFnoMarket? market,
+      List<CustomerFnoLeg> legs, DateTime now,
+      {String emptyText = 'No verified option contracts available.', bool compact = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme;
+    if (legs.isEmpty) return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Text(emptyText, style: style.bodyMedium?.copyWith(
+        color: scheme.onSurfaceVariant)),
+    );
+    final atm = market == null ? null
+        : MintTickFnoDiscoveryFacts.atmStrike(market, now);
+    return Column(children: [
+      if (!compact) Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Row(children: [
+          const Expanded(flex: 5, child: Text('Option')),
+          Expanded(flex: 3, child: Text('OI', textAlign: TextAlign.right,
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
+          Expanded(flex: 3, child: Text('LTP', textAlign: TextAlign.right,
+            style: style.bodySmall?.copyWith(color: scheme.onSurfaceVariant))),
+        ]),
+      ),
+      for (final leg in legs)
+        InkWell(
+          key: ValueKey('minttick-options-contract-${leg.instrumentKey}'),
+          onTap: market == null ? null : () => _showLeg(context, market, leg, now),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(border: Border(bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: .52)))),
+            child: Row(children: [
+              Expanded(flex: 5, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(leg.tradingSymbol, maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Row(children: [
+                    Text('NFO', style: style.labelSmall?.copyWith(
+                      color: scheme.onSurfaceVariant)),
+                    if (atm != null) ...[
+                      const SizedBox(width: 5),
+                      Text(_strikeBadge(leg, atm),
+                        style: style.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant)),
+                    ],
+                  ]),
+                ],
+              )),
+              Expanded(flex: 3, child: Text(
+                market != null && market.displayRightsVerified
+                    ? _count(leg.openInterest) : '—',
+                textAlign: TextAlign.right,
+                style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+              )),
+              Expanded(flex: 3, child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    market != null && _fresh(market, leg, now)
+                        ? _amount(leg.ltp) : '—',
+                    style: style.bodyLarge?.copyWith(fontWeight: FontWeight.w800,
+                      color: _fresh(market!, leg, now)
+                          ? (leg.priceChangePct ?? 0) < 0 ? scheme.error : scheme.primary
+                          : scheme.onSurfaceVariant)),
+                  if (market != null && _fresh(market, leg, now) &&
+                      leg.priceChangePct != null)
+                    Text(_changeText(leg.priceChangePct),
+                      style: style.labelSmall?.copyWith(
+                        color: scheme.onSurfaceVariant)),
+                ],
+              )),
+            ]),
+          ),
+        ),
+    ]);
+  }
+
+  static String _strikeBadge(CustomerFnoLeg leg, num atm) {
+    final match = RegExp(r'(\\d+(?:\\.\\d+)?)\\s*(CE|PE)$').firstMatch(
+      leg.tradingSymbol);
+    if (match == null) return '';
+    final strike = num.tryParse(match.group(1)!);
+    if (strike == null) return '';
+    if (strike == atm) return 'ATM';
+    final inMoney = leg.side == 'CE' ? strike < atm : strike > atm;
+    return inMoney ? 'ITM' : 'OTM';
   }
 
   Widget _statusChip(BuildContext context, CustomerFnoMarket? market,
