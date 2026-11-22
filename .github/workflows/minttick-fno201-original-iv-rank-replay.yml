@@ -1,0 +1,72 @@
+name: MintTick F&O STR-201 original historical 30d IV rank replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno201-original-iv-rank-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno201VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno201HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno201VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno201HistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-str201-original-historical-iv-rank.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno201-original-iv-rank-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno201VerifiedHistoricalReplayService.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno201HistoricalReplayController.java'
+
+permissions:
+  contents: read
+
+jobs:
+  verified-str201-research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute original 252-session IV-rank source/evaluator and protected route tests
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno201VerifiedHistoricalReplayServiceTest,AdminFno201HistoricalReplayControllerTest,FnoIvRankResearchServiceTest,FnoIvRankMeanReversionV1Test,FnoVerifiedNiftyIvRankSourceStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno201VerifiedHistoricalReplayServiceTest.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.AdminFno201HistoricalReplayControllerTest.xml
+      - name: Assert real as-of rights join and no E2E or order escalation
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root=Path('backend/src/main/java/in/aitradingsystem')
+          a=(root/'tradingrooms/Fno201VerifiedHistoricalReplayService.java').read_text()
+          b=(root/'tradingrooms/AdminFno201HistoricalReplayController.java').read_text()
+          source=(root/'marketdata/FnoVerifiedNiftyIvRankSourceStore.java').read_text()
+          for t in ("FnoIvRankResearchService","research.evaluate(asOf)","false,false,false,false"):
+              assert t in a,t
+          for t in ('@GetMapping("/iv-rank-replay")','@PreAuthorize("hasAnyRole(',
+                    'CacheControl.noStore()','false,false,false,false'):
+              assert t in b,t
+          for t in ('MODEL_INFERENCE','first_known_at','captured_at',
+                    'LICENSED_ATM_30D_INTERPOLATION','h.session_date'):
+              assert t in source,t
+          for forbidden in ('submitOrder','placeOrder','@PostMapping',
+                            'with-decryption','MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert forbidden not in a+b,forbidden
+          PY
+      - name: Evidence classification
+        if: always()
+        run: |
+          echo 'STR-201 actual evaluator with mocked original licensed source: CI synthetic only.'
+          echo '200+ original rows not independently confirmed on deployed host.'
+          echo 'Historical E2E independently accepted stays 0/43; PAPER and LIVE order count unchanged.'
