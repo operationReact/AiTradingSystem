@@ -689,6 +689,9 @@ class _MintTickPaperFnoPanelState extends State<MintTickPaperFnoPanel>
           if (!_positionsLoading && _positionsError != null) ...[
             const SizedBox(height: 10),
             _positionsView(colors, type),
+            // An unverified inventory must never look like zero orders.
+            const SizedBox(height: 6),
+            _ordersView(colors, type),
           ],
           if (!_positionsLoading && _positionsError == null &&
               _orders.isNotEmpty) ...[
