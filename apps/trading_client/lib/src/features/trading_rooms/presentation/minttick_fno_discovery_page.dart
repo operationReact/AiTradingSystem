@@ -795,7 +795,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             priceCell(strike.call),
             Expanded(child: Column(mainAxisSize: MainAxisSize.min, children: [
               if (atm != null && atm == strike.strikePrice)
-                Text('ATM ≈', style: TextStyle(
+                Text('ATM', style: TextStyle(
                   fontSize: 9, color: c.primary, fontWeight: FontWeight.w700)),
               Text(_strike(strike.strikePrice),
                 textAlign: TextAlign.center,
