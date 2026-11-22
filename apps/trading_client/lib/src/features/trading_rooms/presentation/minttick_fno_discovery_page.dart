@@ -106,7 +106,9 @@ class MintTickFnoDiscoveryFacts {
   static ({int calls, int puts, double pcr})? verifiedOiTotals(
       CustomerFnoMarket market, DateTime now) {
     if (!market.displayRightsVerified || !market.hasFreshQuotes ||
-        market.strikes.isEmpty) return null;
+        market.strikes.isEmpty) {
+      return null;
+    }
     var calls = 0;
     var puts = 0;
     for (final strike in market.strikes) {
