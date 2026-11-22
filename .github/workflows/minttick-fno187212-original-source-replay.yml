@@ -1,0 +1,74 @@
+name: MintTick F&O - 26 original-source STR-187..212 historical evaluator replay (NO ORDERS)
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno187212-original-source-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187212OriginalSourceReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno187212OriginalSourceReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFnoRemainingHistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFnoRemainingHistoricalReplayControllerTest.java'
+      - 'docs/architecture/fno-187-212-original-source-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno187212-original-source-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187212OriginalSourceReplayService.java'
+
+permissions:
+  contents: read
+
+jobs:
+  original-source-replay-matrix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 17
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute 26 typed original research adapter source tests
+        shell: bash
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno187212OriginalSourceReplayServiceTest,AdminFnoRemainingHistoricalReplayControllerTest,FnoOwnedEquityOptionsResearchServiceTest,FnoRatioSpreadResearchServiceTest,FnoStraddleResearchServiceTest,FnoGammaScalpingResearchServiceTest,FnoPutSpreadCollarResearchServiceTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno187212OriginalSourceReplayServiceTest.xml
+      - name: Exact 26 source adapters plus research-only output and no order path
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno187212OriginalSourceReplayService.java').read_text()
+          c=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFnoRemainingHistoricalReplayController.java').read_text()
+          for n in range(187,213):
+              assert 'Map.entry(%d,' % n in s,n
+          assert s.count('Map.entry(') == 52
+          for gate in ('SOURCE_STATES.get(n).equals(found.inputState())',
+                       'at -> s1.evaluateAll(at)', 'at -> List.of(s24.evaluate(at))',
+                       'independentlyValidatedHistoricalE2E',
+                       'INDEPENDENT_AFTER_COST_OOS_PROOF_MISSING',
+                       'MAX_WINDOWS = 16'):
+              assert gate in s,gate
+          assert "hasAnyRole('ADMIN', 'OPERATOR')" in c
+          assert "CacheControl.noStore()" in c
+          for forbidden in ('placeOrder','submitOrder','brokerOrderService',
+                            'aws ssm','start-instances','with-decryption',
+                            'MINTTICK_UPSTOX_FNO_LIVE_ORDER_ENABLED'):
+              assert forbidden not in s,forbidden
+          PY
+      - name: Explicit independent acceptance boundary
+        if: always()
+        shell: bash
+        run: |
+          echo 'STR-187..212 original-source Java adapters: synthetic/mock CI only.'
+          echo '43/43 typed evaluators do not mean 43/43 independent after-cost market historical E2E.'
+          echo 'No original broker orders, trade confirmations, data export, new rights or source retention.'
