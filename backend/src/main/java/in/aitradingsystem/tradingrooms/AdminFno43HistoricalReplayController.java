@@ -18,7 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Protected, read-only original rights-joined futures historical replay
- * diagnostics. Invokes actual Java evaluators for STR-174/176/177 only where
+ * diagnostics. Invokes actual Java evaluators for STR-174/176/177/181/182 only where
  * existing V100/V102 source entitlements and historical custody permit it.
  *
  * The response is counts and fixed reason codes only: no private prices,
@@ -31,27 +31,34 @@ public class AdminFno43HistoricalReplayController {
     private static final List<String> ENABLED = List.of(
         FnoFuturesPriceOiDivergenceV1.STRATEGY_ID,
         FnoFuturesMomentumV1.STRATEGY_ID,
-        FnoFuturesMeanReversionV1.STRATEGY_ID
+        FnoFuturesMeanReversionV1.STRATEGY_ID,
+        FnoLongCallV1.STRATEGY_ID,
+        FnoLongPutV1.STRATEGY_ID
     );
     private final Fno174VerifiedHistoricalReplayService str174;
     private final Fno176VerifiedHistoricalReplayService str176;
     private final Fno177VerifiedHistoricalReplayService str177;
+    private final Fno181182VerifiedHistoricalReplayService options;
     private final Clock clock;
 
     @Autowired
     public AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
-            Fno177VerifiedHistoricalReplayService str177) {
-        this(str174,str176,str177,Clock.systemUTC());
+            Fno177VerifiedHistoricalReplayService str177,
+            Fno181182VerifiedHistoricalReplayService options) {
+        this(str174,str176,str177,options,Clock.systemUTC());
     }
     AdminFno43HistoricalReplayController(
             Fno174VerifiedHistoricalReplayService str174,
             Fno176VerifiedHistoricalReplayService str176,
-            Fno177VerifiedHistoricalReplayService str177, Clock clock) {
+            Fno177VerifiedHistoricalReplayService str177,
+            Fno181182VerifiedHistoricalReplayService options,
+            Clock clock) {
         this.str174=Objects.requireNonNull(str174);
         this.str176=Objects.requireNonNull(str176);
         this.str177=Objects.requireNonNull(str177);
+        this.options=Objects.requireNonNull(options);
         this.clock=Objects.requireNonNull(clock);
     }
 
@@ -100,6 +107,13 @@ public class AdminFno43HistoricalReplayController {
                 reason=result.evaluatorReasonCode();
                 rows=result.originalRowsObserved();
                 sessions=result.verifiedCompletedSessions();
+            }
+            case FnoLongCallV1.STRATEGY_ID, FnoLongPutV1.STRATEGY_ID -> {
+                var result = options.inspect(strategyId,contractKey,asOf);
+                state=result.state();
+                reason=result.reason();
+                rows=result.originalCompletedCloses();
+                sessions=result.originalCompletedCloses();
             }
             default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                 "FNO_HISTORICAL_REPLAY_STRATEGY_UNSUPPORTED");
