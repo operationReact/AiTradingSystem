@@ -137,7 +137,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   bool _appActive = true;
   bool _polling = false;
   int _tickCount = 0;
-  CustomerFnoDiscoveryCapability? _source;
 
   List<TradingRoomDraft> get _availableRooms => widget.rooms?.drafts
       .where((r) => (r.marketScope == 'FNO' || r.marketScope == 'ALL') &&
@@ -230,7 +229,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       _expiry = null;
       _expiries = const [];
       _readOnlyConfigured = false;
-      _source = null;
       _centeredExpiry = null;
     });
     try {
@@ -244,7 +242,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               capability.contractDiscoveryVerified) &&
           capability.sourceReady;
       setState(() {
-        _source = capability;
         _rightsStatus = capability.status;
         _readOnlyConfigured = readEnabled;
       });
