@@ -395,6 +395,46 @@ class CustomerFnoStrike {
   final CustomerFnoLeg? put;
 }
 
+/// Upstox V2 option-chain values, fetched at market.snapshotAt.
+/// They are read-only observations, not exchange-timed or order-eligible V3 ticks.
+class CustomerFnoChainSnapshotIndicator {
+  const CustomerFnoChainSnapshotIndicator({
+    this.ltp, this.bid, this.ask, this.openInterest,
+    this.iv, this.delta, this.theta, this.gamma, this.vega,
+  });
+
+  final num? ltp, bid, ask, iv, delta, theta, gamma, vega;
+  final int? openInterest;
+
+  static CustomerFnoChainSnapshotIndicator decode(Object? raw) {
+    if (raw is! Map<String, dynamic>) {
+      throw const FormatException('Invalid Upstox option-chain snapshot');
+    }
+    num? metric(String key, {bool positive = false, bool nonnegative = false}) {
+      final v = raw[key];
+      if (v == null) return null;
+      if (v is! num || !v.isFinite ||
+          (positive && v <= 0) || (nonnegative && v < 0)) {
+        throw const FormatException('Invalid read-only option-chain value');
+      }
+      return v;
+    }
+    final oi = raw['openInterest'];
+    if (oi != null && (oi is! int || oi < 0)) {
+      throw const FormatException('Invalid option-chain OI');
+    }
+    return CustomerFnoChainSnapshotIndicator(
+      ltp: metric('ltp', positive: true),
+      bid: metric('bid', positive: true),
+      ask: metric('ask', positive: true),
+      openInterest: oi as int?,
+      iv: metric('iv', nonnegative: true),
+      delta: metric('delta'), theta: metric('theta'),
+      gamma: metric('gamma'), vega: metric('vega'),
+    );
+  }
+}
+
 class CustomerFnoMarket {
   const CustomerFnoMarket({
     required this.underlyingKey,
@@ -405,6 +445,7 @@ class CustomerFnoMarket {
     required this.liveOrderEnabled,
     required this.strikes,
     this.underlyingReferenceSpot,
+    this.chainSnapshotIndicators = const {},
   });
 
   final String underlyingKey;
@@ -417,6 +458,8 @@ class CustomerFnoMarket {
   final List<CustomerFnoStrike> strikes;
   /// REST chain reference spot used only for contract ordering, never live LTP.
   final num? underlyingReferenceSpot;
+  /// Separate read-only V2 chain snapshots; never part of V3 quote freshness.
+  final Map<String, CustomerFnoChainSnapshotIndicator> chainSnapshotIndicators;
 
   bool get hasFreshQuotes => status == 'FRESH_QUOTES';
 
@@ -452,6 +495,29 @@ class CustomerFnoMarket {
         put: put == null ? null : CustomerFnoLeg.decode(put),
       );
     }).toList(growable: false);
+    final indicatorsRaw = value['chainSnapshotIndicators'];
+    if (indicatorsRaw != null && indicatorsRaw is! Map<String, dynamic>) {
+      throw const FormatException('Invalid option-chain snapshot map');
+    }
+    final validKeys = <String>{
+      for (final strike in strikes)
+        if (strike.call != null) strike.call!.instrumentKey,
+      for (final strike in strikes)
+        if (strike.put != null) strike.put!.instrumentKey,
+    };
+    final snapshots = <String, CustomerFnoChainSnapshotIndicator>{};
+    if (indicatorsRaw != null) {
+      if (indicatorsRaw.length > 512) {
+        throw const FormatException('Oversized option-chain snapshot map');
+      }
+      for (final entry in indicatorsRaw.entries) {
+        if (!validKeys.contains(entry.key)) {
+          throw const FormatException('Unlisted option-chain snapshot key');
+        }
+        snapshots[entry.key] =
+            CustomerFnoChainSnapshotIndicator.decode(entry.value);
+      }
+    }
     return CustomerFnoMarket(
       underlyingKey: underlying,
       expiry: expiry,
@@ -461,6 +527,7 @@ class CustomerFnoMarket {
       liveOrderEnabled: live == true,
       strikes: strikes,
       underlyingReferenceSpot: referenceSpot as num?,
+      chainSnapshotIndicators: Map.unmodifiable(snapshots),
     );
   }
 }
