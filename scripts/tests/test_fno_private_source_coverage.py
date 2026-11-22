@@ -88,6 +88,39 @@ class SourceCoverageTests(unittest.TestCase):
             self.assertEqual(unexpected["nseHolidayMissingSlots"],0)
             self.assertEqual(unexpected["remainingWeekdayGapCandidates"],1)
 
+    def test_2026_jan_15_emergency_nse_fno_holiday_amendment(self):
+        # Exchange circular NSE/FAOP/72262 (2026-01-12) amended the annual
+        # NSE/FAOP/71777 F&O calendar for the civic election.
+        jan15=date(2026,1,15)
+        self.assertNotIn(jan15,c.NSE_FO_2026_PUBLISHED_HOLIDAYS)
+        self.assertIn(jan15,c.NSE_FO_2026_AMENDED_HOLIDAYS)
+        self.assertIn(jan15,c.NSE_FO_PUBLISHED_CLOSED_DAYS)
+        expiry=date(2026,1,27)
+        first=expiry-timedelta(days=20)
+        jobs=[]
+        rows=[]
+        for n in range(23):
+            key=f"NSE_FO|JAN{n:03d}|27-01-2026"
+            jobs.append((key,first.isoformat(),expiry.isoformat()))
+            for i in range(21):
+                day=first+timedelta(days=i)
+                if day.weekday()<5 and day not in (jan15,date(2026,1,26)):
+                    rows.append((key,day.isoformat()+"T00:00:00+05:30"))
+        report=next(x for x in c.calendar_candidates(jobs,rows)
+                    if x["month"]=="2026-01")
+        self.assertEqual(report["missingWeekdayCandidates"],46)
+        self.assertEqual(report["nsePublishedHolidaySlots"],46)
+        self.assertEqual(report["nseHolidayMissingSlots"],46)
+        self.assertEqual(report["remainingWeekdayGapCandidates"],0)
+        # Any unexpectedly present candle on exchange-closed Jan 15 remains
+        # visible as a source anomaly rather than silently 'reconciled'.
+        rows.append((jobs[0][0],jan15.isoformat()+"T00:00:00+05:30"))
+        suspicious=next(x for x in c.calendar_candidates(jobs,rows)
+                        if x["month"]=="2026-01")
+        self.assertEqual(suspicious["nsePublishedHolidaySlots"],46)
+        self.assertEqual(suspicious["nseHolidayMissingSlots"],45)
+        self.assertEqual(suspicious["remainingWeekdayGapCandidates"],0)
+
     def test_december_2025_nse_holiday_is_not_a_missing_session(self):
         # NSE/FAOP/65588 lists Christmas as an F&O trading closure. The old
         # 2026-only classifier left 23 December pilot slots unexplained.

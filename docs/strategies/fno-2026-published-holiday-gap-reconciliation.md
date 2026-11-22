@@ -86,3 +86,31 @@ session-by-session calendar proof, original-first-known and 43-strategy real
 historical after-cost E2E are **still not accepted**. The original December
 2025 321 duplicate keys (316 conflicting payloads) remain preserved under
 quarantine. No paper/live trading authorization or backtest acceptance changes.
+
+## January 15, 2026 — later NSE F&O calendar amendment
+
+**NSE/FAOP/72262**, dated **12 January 2026**:
+https://nsearchives.nseindia.com/content/circulars/FAOP72262.pdf
+
+This official NSE Futures & Options circular explicitly **amends**
+NSE/FAOP/71777 and declares **Thursday, January 15, 2026** a trading holiday
+for municipal elections in Maharashtra. The annual 2026 F&O calendar alone
+omits that later-announced closure. The original owner-private calendar
+audit on 22 November 2026 had **23 remaining January contract-day gaps in one
+common-empty weekday**, consistent with the missing Jan 15 closure. This
+amendment is kept separate from the original annual calendar and is not
+treated as information publicly available before **2026-01-12**.
+
+The offline source-coverage diagnostics should now explain these 23 January
+contract slots as exchange closure, leaving the 3 previously observed
+contract-specific partial gaps (May: 1, October: 2) *if* the same original
+276-contract pilot data and source remain unchanged. The latter count must
+be confirmed by a fresh restricted AWS/SSM host receipt; do **not** claim
+success based solely on fixture tests or holiday arithmetic.
+
+The amendment is a calendar correction **only**. It does not alter original
+December source duplicates (321, including 316 conflicting payloads),
+price/volume/OI provenance, actual-first-known data custody, per-strategy IV,
+Greeks, bid/ask/depth, retention/use rights or after-cost E2E acceptance.
+Historical 43-strategy E2E, PAPER and LIVE remain 0/43 until independent
+evidence proves otherwise.

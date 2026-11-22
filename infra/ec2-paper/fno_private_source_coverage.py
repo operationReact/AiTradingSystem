@@ -38,8 +38,15 @@ NSE_FO_2026_PUBLISHED_HOLIDAYS = frozenset(date.fromisoformat(day) for day in (
     "2026-06-26", "2026-09-14", "2026-10-02", "2026-10-20",
     "2026-11-10", "2026-11-24", "2026-12-25",
 ))
+# Original annual schedule NSE/FAOP/71777 was amended by NSE/FAOP/72262
+# dated 2026-01-12. NSE F&O was CLOSED on 2026-01-15 because of the
+# Maharashtra municipal corporation election. For historical as-of decisions,
+# do not imply the amendment was public before 2026-01-12.
+# Ref: https://nsearchives.nseindia.com/content/circulars/FAOP72262.pdf
+NSE_FO_2026_AMENDED_HOLIDAYS = frozenset({date(2026, 1, 15)})
 NSE_FO_PUBLISHED_CLOSED_DAYS = (NSE_FO_2025_PUBLISHED_HOLIDAYS
-                                | NSE_FO_2026_PUBLISHED_HOLIDAYS)
+                                | NSE_FO_2026_PUBLISHED_HOLIDAYS
+                                | NSE_FO_2026_AMENDED_HOLIDAYS)
 
 
 def ro(path):
