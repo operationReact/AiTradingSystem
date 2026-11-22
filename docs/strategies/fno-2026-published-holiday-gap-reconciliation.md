@@ -45,3 +45,20 @@ is separately required to measure the remaining private cache cohort;
 merging this code alone cannot fill missing bars or establish 43-strategy E2E.
 
 Tracking: https://github.com/operationReact/AiTradingSystem/issues/1661
+
+## 2025 December pilot coverage
+NSE F&O circular **NSE/FAOP/65588** dated 13 December 2024:
+https://nsearchives.nseindia.com/content/circulars/FAOP65588.pdf
+
+The November/December 2025 private pilot was previously outside the 2026
+calendar lookup. **December 25, 2025** is explicitly an NSE F&O closure,
+so a missing candle for that exchange-closed date is not an unexplained
+missing trading session. The 2025 circular also lists **November 5**, but
+the selected November contract window starts later, so November gaps are
+not automatically reclassified. **October 21, 2025** is excluded from
+all-day closure classification because the same circular announces a
+special Muhurat trading session on that day.
+
+This source adjustment does NOT reconcile the December duplicate provider
+OHLCV/OI observations, nor does it supply the missing original first-known
+publication receipts, verify dataset rights or authorize historical replay.
