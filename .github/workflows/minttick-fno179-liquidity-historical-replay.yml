@@ -1,0 +1,78 @@
+name: MintTick F&O - original L1/volume/OI STR-179 historical research replay
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-liquidity-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java'
+      - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStoreTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno179HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno179HistoricalReplayControllerTest.java'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-liquidity-historical-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedHistoricalReplayServiceTest.java'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Execute real STR-179 evaluator with original-source SQL mock and denied-rights regressions
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno179VerifiedHistoricalReplayServiceTest,AdminFno179HistoricalReplayControllerTest,FnoVerifiedIntradayLiquidityStoreTest,FnoContractLiquidityGateV1Test' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno179VerifiedHistoricalReplayServiceTest.xml
+      - name: Check code cannot export quotes, submit orders or promote fixture E2E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          base=Path('backend/src/main/java/in/aitradingsystem/tradingrooms')
+          svc=(base/'Fno179VerifiedHistoricalReplayService.java').read_text()
+          ctrl=(base/'AdminFno179HistoricalReplayController.java').read_text()
+          store=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java').read_text()
+          for expected in ('FnoContractLiquidityGateV1.evaluate(', 'latestThreeReplayFutures',
+                           'quoteSourceSha256()', 'oiSourceSha256()', 'volumeSourceSha256()'):
+              assert expected in svc,expected
+          for expected in ("@PreAuthorize(", "CacheControl.noStore()",
+                           "independentHistoricalE2E", "/historical-liquidity-replay"):
+              assert expected in ctrl,expected
+          for expected in ("quote_rights.receipt_status = 'VERIFIED'",
+                           "oi_rights.receipt_status = 'VERIFIED'",
+                           "volume_rights.receipt_status = 'VERIFIED'",
+                           "s.exchange_session_verified = TRUE",
+                           "s.first_observed_at <= ?",
+                           "s.captured_at <= ?"):
+              assert expected in store,expected
+          for s in (svc,ctrl):
+              for forbidden in ("placeOrder(","submitOrder(","sendOrder(",
+                                "with-decryption", "aws ssm","UPDATE fno_",
+                                "INSERT INTO fno_", "sourceInputDigest()"):
+                  assert forbidden not in s,forbidden
+          PY
+      - name: Never confuse fictional CI with genuine market-data E2E
+        if: always()
+        run: |
+          echo 'STR-179 original-source adapter tested with fictional input only.'
+          echo 'No independent source rights or historical fills proved; accepted E2E = 0/43.'
