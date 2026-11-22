@@ -92,6 +92,12 @@ services:
       MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED: ${MINTTICK_UPSTOX_FNO_CONTRACT_DISCOVERY_VERIFIED:-false}
       # Customer F&O display usage rights are a separate source-license gate.
       MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_DISPLAY_RIGHTS_VERIFIED:-false}
+      # Each read-only last-price path requires independent provider authorization.
+      # Never infer either entitlement from general display, feed, PAPER or LIVE flags.
+      # These values are opt-in and stay disabled unless owner/provider verification
+      # has already installed the corresponding host-local permission.
+      MINTTICK_UPSTOX_FNO_REST_LAST_PRICE_DISPLAY_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_REST_LAST_PRICE_DISPLAY_RIGHTS_VERIFIED:-false}
+      MINTTICK_UPSTOX_FNO_RETAINED_DISPLAY_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_RETAINED_DISPLAY_RIGHTS_VERIFIED:-false}
       MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED: ${MINTTICK_UPSTOX_FNO_PAPER_USAGE_RIGHTS_VERIFIED:-false}
       # Separate bounded read-only source health scheduler; off unless explicitly approved.
       MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED: ${MINTTICK_UPSTOX_PROGRESS_SOURCE_PROBE_ENABLED:-true}
