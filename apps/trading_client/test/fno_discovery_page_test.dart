@@ -46,6 +46,14 @@ class _ClosedDiscovery extends _LiveDiscovery {
       ], status: 'MARKET_CLOSED');
 }
 
+class _ManyClosedDiscovery extends _LiveDiscovery {
+  @override
+  Future<CustomerFnoMarket> market(DateTime expiry) async => _liveMarket(
+    List.generate(28, (index) =>
+      _strike(20000 + index * 50, 100 + index, 90 + index)),
+    status: 'MARKET_CLOSED');
+}
+
 Map<String, Object?> _leg(String side, {bool fresh = true, num? ltp = 110}) => {
   'instrumentKey': 'NSE_FO|NIFTY_25300_$side',
   'tradingSymbol': 'NIFTY 25300 $side',
@@ -343,6 +351,46 @@ void main() {
     expect(find.textContaining('Showing listed strikes near 25300'), findsOneWidget);
     expect(find.text('CALL · CE'), findsOneWidget);
     expect(find.text('PUT · PE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('closed session browsing stays limited and detail has no dash wall',
+      (tester) async {
+    tester.view.physicalSize = const Size(360, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    final rooms = TradingRoomDraftStore();
+    addTearDown(rooms.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SingleChildScrollView(
+        child: MintTickFnoDiscoveryPage(
+          rooms: rooms, discovery: _ManyClosedDiscovery()),
+      )),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-tab-chain')));
+    await tester.pump();
+    expect(find.textContaining('No strike selected.'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(
+      const ValueKey('fno-discovery-browse-strikes')));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-browse-strikes')));
+    await tester.pump();
+    expect(find.text('20000'), findsOneWidget);
+    expect(find.text('20400'), findsOneWidget);
+    expect(find.text('20450'), findsNothing);
+    await tester.ensureVisible(find.byKey(
+      const ValueKey('fno-discovery-next-page')));
+    await tester.tap(find.byKey(const ValueKey('fno-discovery-next-page')));
+    await tester.pump();
+    expect(find.text('20450'), findsOneWidget);
+    expect(find.text('20000'), findsNothing);
+    await tester.ensureVisible(find.text('View PE').first);
+    await tester.tap(find.text('View PE').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Price, OI and Greeks are unavailable'),
+        findsOneWidget);
+    expect(find.text('LTP'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
