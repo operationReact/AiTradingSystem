@@ -25,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
 @RequestMapping("/api/admin/market-data/upstox-analytics/fno")
 @ConditionalOnProperty(name = "minttick.upstox-fno.display-rights-verified",
         havingValue = "true")
-public final class AdminFnoCustomerBoardAuditController {
+public class AdminFnoCustomerBoardAuditController {
     private static final String CONTRACT = "NSE_FO|47821";
     private static final LocalDate EXPIRY = LocalDate.of(2026, 12, 1);
     private static final Duration COOLDOWN = Duration.ofSeconds(90);
