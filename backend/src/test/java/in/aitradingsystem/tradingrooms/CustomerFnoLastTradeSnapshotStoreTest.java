@@ -16,6 +16,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 class CustomerFnoLastTradeSnapshotStoreTest {
     @Test
+    void validContractKeysUseALiteralPipeAndDeduplicate() {
+        org.assertj.core.api.Assertions.assertThat(
+            CustomerFnoLastTradeSnapshotStore.validInstrumentKeys(List.of(
+                "NSE_FO|61001", "BSE_FO|61002", "NSE_FO|61001",
+                "NSE_FO/61003", "NSE_FO\\61004", "INVALID|61005")))
+            .containsExactly("NSE_FO|61001", "BSE_FO|61002");
+    }
+
+    @Test
     void disabledRetentionNeverReadsStreamOrDatabase() {
         JdbcTemplate db = mock(JdbcTemplate.class);
         @SuppressWarnings("unchecked")
