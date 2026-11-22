@@ -79,3 +79,34 @@ limits and fail-closed malformed or duplicate rows. The synthetic fixtures
 are **not** market verification. Only an actual protected host run can
 demonstrate access and source evidence; its receipts must be reported
 separately and transparently.
+
+## December 15, 2025 — one-day original duplicate-candidate spotcheck
+
+A narrowly scoped, read-only independent pilot at
+`infra/ec2-paper/fno_dec_2025_nse_spotcheck.py` now compares both existing
+Upstox daily timestamp families (00:00 and 09:15 IST) against **one official
+NSE FO UDiFF EOD archive for 2025-12-15**, but **only** for the 23 NIFTY
+contracts in the existing private source pilot. It uses exactly **two
+authenticated Upstox metadata catalogue requests** to map contract keys to
+actual expiry, CE/PE/FUT type and strike. It does **not** guess mapping from
+contract keys, fetch a full month, retain or redistribute the archive, or
+write to the private cache.
+
+The aggregate-only receipt separately counts full six-field exact matches
+(OHLC/volume/OI) for midnight and 09:15 provider candidates, exact close
+price matches, missing NSE identities, identical and conflicting duplicate
+pairs, and cases where neither source candidate matches. A missing NSE
+archive or identity is **not** a price-validation success. A matched price
+for one day is **not** evidence of original-first-known timestamps, licensed
+historical usage or reliability for other dates.
+
+The exact one-file deployment trigger
+`infra/ec2-paper/requests/fno-dec-nse-one-day-spotcheck.json` is bounded
+to one archive, one date, two broker GETs, 23 private contracts and the
+current owner research scope expiring on **2026-11-28**. The GitHub Action
+prints only aggregate results; no raw exchange rows, strikes, prices,
+timestamps, keys or credentials. The original **316 December conflicts
+remain quarantined** until independently authorized, full-cohort source
+reconciliation and provenance verification. The full licensed reconciliation
+tool above continues to require externally reviewed NSE source rights;
+a one-day research probe is not a commercial rights attestation.
