@@ -183,6 +183,12 @@ jobs:
                         '; openingPriceC='+str(v['openingExactC'])+
                         '; noRawDataExport=true; monthReconciled=false; backtestingApproved=false',
                         flush=True)
+                  print('FNO DEC NSE FIELD MATCH COUNTS: '+
+                        '; '.join(label+'Exact'+field+'='+str(v[label+'Exact'+field])
+                                  for label in ('midnight','opening')
+                                  for field in ('O','H','L','C','V','OI'))+
+                        '; valuesOrKeysPublished=false; cacheMutated=false',
+                        flush=True)
                   break
               if state not in ('Pending','InProgress','Delayed'):
                   raise SystemExit('FNO_DEC_NSE_SSM_UNEXPECTED')
