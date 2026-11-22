@@ -88,6 +88,31 @@ class SourceCoverageTests(unittest.TestCase):
             self.assertEqual(unexpected["nseHolidayMissingSlots"],0)
             self.assertEqual(unexpected["remainingWeekdayGapCandidates"],1)
 
+    def test_december_2025_nse_holiday_is_not_a_missing_session(self):
+        # NSE/FAOP/65588 lists Christmas as an F&O trading closure. The old
+        # 2026-only classifier left 23 December pilot slots unexplained.
+        self.assertIn(date(2025,12,25),c.NSE_FO_2025_PUBLISHED_HOLIDAYS)
+        self.assertIn(date(2025,11,5),c.NSE_FO_2025_PUBLISHED_HOLIDAYS)
+        # The same circular separately announces Muhurat trading on Oct 21;
+        # treating the entire date as closed would misclassify genuine trades.
+        self.assertNotIn(date(2025,10,21),c.NSE_FO_PUBLISHED_CLOSED_DAYS)
+        expiry=date(2025,12,30)
+        first=expiry-timedelta(days=20)
+        key="NSE_FO|DECAL001|30-12-2025"
+        ordinary_gap=date(2025,12,24)
+        rows=[]
+        for offset in range(21):
+            day=first+timedelta(days=offset)
+            if day.weekday()<5 and day not in (date(2025,12,25),ordinary_gap):
+                rows.append((key,day.isoformat()+"T00:00:00+05:30"))
+        report=next(x for x in c.calendar_candidates(
+            [(key,first.isoformat(),expiry.isoformat())],rows)
+            if x["month"]=="2025-12")
+        self.assertEqual(report["missingWeekdayCandidates"],2)
+        self.assertEqual(report["nsePublishedHolidaySlots"],1)
+        self.assertEqual(report["nseHolidayMissingSlots"],1)
+        self.assertEqual(report["remainingWeekdayGapCandidates"],1)
+
     def test_contract_plan_counts_one_future_eleven_strike_pairs(self):
         expiries=[date(2025,11,26),date(2025,12,30)]+[date(2026,m,28) for m in range(1,11)]
         data={}
