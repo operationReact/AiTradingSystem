@@ -606,15 +606,16 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    market != null && _fresh(market, leg, now)
+                    market != null && _displayQuote(market, leg, now)
                         ? _amount(leg.ltp) : '—',
                     style: style.bodyLarge?.copyWith(fontWeight: FontWeight.w800,
                       color: _fresh(market!, leg, now)
                           ? (leg.priceChangePct ?? 0) < 0 ? scheme.error : scheme.primary
                           : scheme.onSurfaceVariant)),
-                  if (market != null && _fresh(market, leg, now) &&
-                      leg.priceChangePct != null)
-                    Text(_changeText(leg.priceChangePct),
+                  if (market != null && _displayQuote(market, leg, now))
+                    Text(_fresh(market, leg, now)
+                        ? _changeText(leg.priceChangePct)
+                        : 'Last · ${_shortTime(leg.exchangeAt)}',
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
                 ],
@@ -898,10 +899,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       required Color tint, required bool reverse}) {
     final c = Theme.of(context).colorScheme;
     final fresh = leg != null && _fresh(market, leg, now);
+    final visible = leg != null && _displayQuote(market, leg, now);
     final pct = fresh ? leg.priceChangePct : null;
     final cells = <Widget>[
-      _numCell(context, fresh ? _count(leg.openInterest) : '—'),
-      _numCell(context, fresh ? _amount(leg.ltp) : '—', bold: true),
+      _numCell(context, visible ? _count(leg.openInterest) : '—'),
+      _numCell(context, visible ? _amount(leg.ltp) : '—', bold: true),
       _numCell(context, _changeText(pct),
           color: pct == null ? c.onSurfaceVariant
               : pct >= 0 ? c.primary : c.error),
@@ -929,6 +931,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
   void _showLeg(BuildContext context, CustomerFnoMarket market,
       CustomerFnoLeg leg, DateTime now) {
     final fresh = _fresh(market, leg, now);
+    final visible = _displayQuote(market, leg, now);
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
     final pct = fresh ? leg.priceChangePct : null;
@@ -948,20 +951,22 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             const SizedBox(height: 10),
             Text(fresh
                 ? 'Exchange-timed · V3 verified'
-                : 'No fresh exchange-timed quote · values hidden',
+                : visible
+                    ? 'Last verified trade · ${_shortTime(leg.exchangeAt)}'
+                    : 'No verified trade available',
               style: type.labelSmall?.copyWith(
                 color: fresh ? c.primary : c.onSurfaceVariant,
                 fontWeight: FontWeight.w700)),
             const Divider(height: 22),
-            _sheetRow(sheetContext, 'LTP', _price(fresh ? leg.ltp : null)),
+            _sheetRow(sheetContext, 'LTP', _price(visible ? leg.ltp : null)),
             _sheetRow(sheetContext, 'Change since previous close',
                 pct == null ? '—' : _changeText(pct)),
             _sheetRow(sheetContext, 'Bid', _price(fresh ? leg.bid : null)),
             _sheetRow(sheetContext, 'Ask', _price(fresh ? leg.ask : null)),
             _sheetRow(sheetContext, 'Previous close',
-                _price(fresh ? leg.previousClose : null)),
+                _price(visible ? leg.previousClose : null)),
             _sheetRow(sheetContext, 'Open interest',
-                fresh ? _count(leg.openInterest) : '—'),
+                visible ? _count(leg.openInterest) : '—'),
             _sheetRow(sheetContext, 'IV', fresh ? _decimal(leg.iv) : '—'),
             _sheetRow(sheetContext, 'Delta', fresh ? _decimal(leg.delta) : '—'),
             _sheetRow(sheetContext, 'Gamma', fresh ? _decimal(leg.gamma) : '—'),
@@ -969,9 +974,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             _sheetRow(sheetContext, 'Vega', fresh ? _decimal(leg.vega) : '—'),
             const Divider(height: 22),
             _sheetRow(sheetContext, 'Exchange time',
-                fresh ? _time(leg.exchangeAt) : '—'),
+                visible ? _time(leg.exchangeAt) : '—'),
             _sheetRow(sheetContext, 'Observed',
-                fresh ? _time(leg.observedAt) : '—'),
+                visible ? _time(leg.observedAt) : '—'),
             const SizedBox(height: 6),
             Text('Instrument ${leg.instrumentKey}',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
@@ -1109,6 +1114,25 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           DateTime now) =>
       market.hasFreshQuotes && market.displayRightsVerified &&
       MintTickFnoDiscoveryFacts.recentTick(leg, now);
+
+  // The server includes retained prices only when display and snapshot
+  // retention rights are verified; these never imply quoteFresh/order readiness.
+  static bool _displayQuote(CustomerFnoMarket market, CustomerFnoLeg leg,
+          DateTime now) =>
+      market.displayRightsVerified && leg.ltp != null && leg.ltp! > 0 &&
+      (_fresh(market, leg, now) ||
+       (!leg.quoteFresh && leg.exchangeAt != null &&
+        !leg.exchangeAt!.isAfter(now) &&
+        now.difference(leg.exchangeAt!) <= const Duration(days: 7)));
+
+  static String _shortTime(DateTime? value) {
+    if (value == null) return '—';
+    final local = value.toLocal();
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
+  }
 
   static num _pct(CustomerFnoLeg leg) => leg.priceChangePct ?? 0;
 

@@ -100,6 +100,41 @@ class UpstoxAnalyticsSourceTest {
     }
 
     @Test
+    void readsActualLastOptionLtpWithExactInstrumentIdentityAndExchangeTime() {
+        token();
+        Instant traded = Instant.now().minusSeconds(3600).truncatedTo(java.time.temporal.ChronoUnit.MILLIS);
+        Instant observed = Instant.now().minusSeconds(3500);
+        server.expect(requestTo(org.hamcrest.Matchers.containsString(
+                "/v3/market-quote/quotes?instrument_key=")))
+            .andExpect(header("Authorization", "Bearer unit-test-only"))
+            .andRespond(withSuccess(("""
+                {"status":"success","data":{"NSE_FO:NIFTY25400CE":{
+                  "instrument_token":"NSE_FO|61001",
+                  "last_price":120.50,
+                  "prev_close_price":110.25,
+                  "oi":5000,
+                  "last_trade_time":"%d",
+                  "timestamp":"%s"
+                }}}
+                """).formatted(traded.toEpochMilli(), observed),
+                MediaType.APPLICATION_JSON));
+        var result = source.listedFnoLastTrades(java.util.List.of("NSE_FO|61001"));
+        assertThat(result).containsOnlyKeys("NSE_FO|61001");
+        assertThat(result.get("NSE_FO|61001").ltp()).isEqualByComparingTo("120.50");
+        assertThat(result.get("NSE_FO|61001").openInterest()).isEqualTo(5000L);
+        assertThat(result.get("NSE_FO|61001").exchangeAt()).isEqualTo(traded);
+        server.verify();
+    }
+
+    @Test
+    void rejectedDerivativeKeysNeverReachProviderOrSsm() {
+        assertThatThrownBy(() -> source.listedFnoLastTrades(
+            java.util.List.of("NSE_EQ|INE002A01018")))
+            .isInstanceOf(IllegalArgumentException.class);
+        verifyNoInteractions(ssm);
+    }
+
+    @Test
     void readsCurrentRatiosButNeverGrantsPointInTimeHistory() {
         token();
         server.expect(requestTo("https://api.upstox.com/v2/fundamentals/INE002A01018/key-ratios"))

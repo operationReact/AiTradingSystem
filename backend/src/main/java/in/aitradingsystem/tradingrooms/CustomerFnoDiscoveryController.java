@@ -46,8 +46,18 @@ public final class CustomerFnoDiscoveryController {
     private final boolean feedConfigured;
     private final boolean displayRightsVerified;
     private final boolean contractDiscoveryVerified;
+    private final boolean restLastPriceRightsVerified;
+    private volatile RestPriceCache restPriceCache;
+    private record RestPriceCache(LocalDate expiry, Instant obtainedAt,
+        java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> values) {}
     private static final Duration CONTRACT_CACHE_TTL = Duration.ofSeconds(60);
     private volatile ContractMetadata cachedMetadata;
+    private volatile CustomerFnoLastTradeSnapshotStore lastTrades;
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    void setLastTrades(CustomerFnoLastTradeSnapshotStore snapshotStore) {
+        this.lastTrades = snapshotStore;
+    }
 
     private record ContractMetadata(LocalDate expiry, Instant receivedAt,
         List<UpstoxAnalyticsSource.FnoOptionContract> contracts,
@@ -72,6 +82,9 @@ public final class CustomerFnoDiscoveryController {
         // imply it; prices, OI, IV and Greeks still require displayRightsVerified.
         this.contractDiscoveryVerified = displayRightsVerified || env.getProperty(
             "minttick.upstox-fno.contract-discovery-verified", Boolean.class, false);
+        this.restLastPriceRightsVerified = displayRightsVerified && env.getProperty(
+            "minttick.upstox-fno.rest-last-price-display-rights-verified",
+            Boolean.class, false);
     }
 
     public record Capability(boolean displayRightsVerified, boolean feedConfigured,
@@ -176,10 +189,12 @@ public final class CustomerFnoDiscoveryController {
                 "F&O source provenance unavailable");
         }
         boolean open = sessionCalendar.isInsideFnoSession(now);
-        var strikes = CustomerPaperFnoMarketController.selectDiscovery(
+        var liveStrikes = CustomerPaperFnoMarketController.selectDiscovery(
             contracts, chain, stream, open);
-        boolean fresh = strikes.stream().anyMatch(s ->
+        boolean fresh = liveStrikes.stream().anyMatch(s ->
             s.call().quoteFresh() || s.put().quoteFresh());
+        // Order eligibility is never restored by retained snapshots.
+        var strikes = withLastVerifiedTrades(liveStrikes, expiry, now, !open);
         String status = !open ? "MARKET_CLOSED" :
             fresh ? "FRESH_QUOTES" : "NO_FRESH_QUOTES";
         // This market board has NO execution capability and NO paper rights.
@@ -187,6 +202,75 @@ public final class CustomerFnoDiscoveryController {
             expiry, chain.retrievedAt(), status, true, false, strikes,
             chain.strikes().isEmpty() ? null
                 : chain.strikes().getFirst().underlyingSpotPrice());
+    }
+
+    private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
+            List<CustomerPaperFnoMarketController.Strike> current,
+            LocalDate expiry, Instant now, boolean marketClosed) {
+        if (current.isEmpty()) return current;
+        var keys = current.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .filter(leg -> !leg.quoteFresh())
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .distinct().toList();
+        var lastByKey = new java.util.HashMap<String,
+            CustomerFnoLastTradeSnapshotStore.LastTrade>();
+        var store = lastTrades;
+        if (store != null) lastByKey.putAll(store.latestAll(keys));
+
+        // REST full quotes contain actual last-trade times, including previous
+        // session values. Independent permission is mandatory, and REST data
+        // NEVER becomes a fill/order bid, ask or quoteFresh=true.
+        if (marketClosed && restLastPriceRightsVerified) {
+            var cached = restPriceCache;
+            java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> rest;
+            if (cached != null && cached.expiry().equals(expiry)
+                    && !now.isBefore(cached.obtainedAt())
+                    && now.isBefore(cached.obtainedAt().plusSeconds(60))) {
+                rest = cached.values();
+            } else {
+                try {
+                    var requestKeys = keys.stream()
+                        .filter(key -> !lastByKey.containsKey(key))
+                        .limit(64).toList();
+                    var last = requestKeys.isEmpty()
+                        ? java.util.Map.<String, UpstoxAnalyticsSource.ListedLastTrade>of()
+                        : source.listedFnoLastTrades(requestKeys);
+                    var converted = new java.util.HashMap<String,
+                        CustomerFnoLastTradeSnapshotStore.LastTrade>();
+                    last.forEach((key, quote) -> converted.put(key,
+                        new CustomerFnoLastTradeSnapshotStore.LastTrade(
+                            quote.ltp(), quote.previousClose(), quote.openInterest(),
+                            quote.exchangeAt(), quote.observedAt())));
+                    rest = java.util.Map.copyOf(converted);
+                    restPriceCache = new RestPriceCache(expiry, now, rest);
+                } catch (RuntimeException notAvailable) {
+                    // No synthetic fallback and no upstream secrets in UI.
+                    rest = java.util.Map.of();
+                }
+            }
+            rest.forEach(lastByKey::putIfAbsent);
+        }
+        if (lastByKey.isEmpty()) return current;
+        return current.stream().map(row ->
+            new CustomerPaperFnoMarketController.Strike(row.strikePrice(),
+                lastVerifiedLeg(row.call(), lastByKey),
+                lastVerifiedLeg(row.put(), lastByKey))).toList();
+    }
+
+    private static CustomerPaperFnoMarketController.Leg lastVerifiedLeg(
+            CustomerPaperFnoMarketController.Leg leg,
+            java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> lastByKey) {
+        if (leg == null || leg.quoteFresh()) return leg;
+        var last = lastByKey.get(leg.instrumentKey());
+        if (last == null) return leg;
+        return new CustomerPaperFnoMarketController.Leg(
+            leg.instrumentKey(), leg.tradingSymbol(), leg.side(), leg.lotSize(),
+            leg.tickSize(), null, null,
+            last.exchangeAt(), last.observedAt(), false, false,
+            last.ltp(), last.previousClose(), last.openInterest(),
+            null, null, null, null, null);
     }
 
     /**

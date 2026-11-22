@@ -350,6 +350,21 @@ public class UpstoxFnoV3LiveFeedService {
                 tick.bid(), tick.ask(), exchange, received));
     }
 
+    /**
+     * Bounded exchange-timed display quotes for the separate customer snapshot
+     * collector. This exposes no rights and never grants execution eligibility.
+     */
+    public List<DisplayQuote> eligibleDisplaySnapshot() {
+        if (!wanted || destroyed || !"CONNECTED".equals(state)
+                || !regularNseSession(clock.instant())) return List.of();
+        return subscribed.stream()
+            .filter(UpstoxFnoV3FeedCodec::validKey)
+            .limit(MAX_SUBSCRIPTIONS)
+            .map(this::eligibleDisplayQuote)
+            .flatMap(java.util.Optional::stream)
+            .toList();
+    }
+
     /** A frame is observation evidence only; never a trade or permission grant. */
     private void consume(byte[] frame) {
         try {
