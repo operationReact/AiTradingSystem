@@ -1,0 +1,62 @@
+name: MintTick F&O - STR-179 V104 rights-attested original liquidity replay
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-original-liquidity-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedLiquidityReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedLiquidityReplayServiceTest.java'
+      - 'docs/architecture/fno-str179-original-liquidity-replay.md'
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-fno179-original-liquidity-replay.yml'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedLiquidityReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno179VerifiedLiquidityReplayServiceTest.java'
+permissions:
+  contents: read
+jobs:
+  str179-v104-asof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Invoke actual original Level-1, OI, volume Java evaluator with synthetic SQL fixtures
+        working-directory: backend
+        run: |
+          set -euo pipefail
+          mvn --batch-mode --no-transfer-progress \
+            '-Dtest=Fno179VerifiedLiquidityReplayServiceTest,FnoContractLiquidityGateV1Test,FnoVerifiedIntradayLiquidityStoreTest' test
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno179VerifiedLiquidityReplayServiceTest.xml
+      - name: Audit original source gate and no rights bypass or broker order calls
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('backend/src/main/java/in/aitradingsystem/tradingrooms/Fno179VerifiedLiquidityReplayService.java').read_text()
+          store=Path('backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedIntradayLiquidityStore.java').read_text()
+          for required in ('latestThreeFutures(', 'FnoContractLiquidityGateV1.evaluate(',
+                           'oiFirstObservedAt()', 'volumeFirstObservedAt()',
+                           'calendar.isTradingDay(', 'false,false,false,false'):
+              assert required in s, required
+          for source in ('nse_fo_intraday_l1_depth','nse_fo_intraday_oi',
+                         'nse_fo_intraday_volume', 'MODEL_INFERENCE',
+                         "receipt_status = 'VERIFIED'",'s.captured_at <= ?'):
+              assert source in store,source
+          for blocked in ('placeOrder','submitOrder','setResearchRights','market_candle',
+                          'fno_closing_snapshot','@PostMapping'):
+              assert blocked not in s,blocked
+          PY
+      - name: Disclose independent market E2E acceptance limitation
+        if: always()
+        run: |
+          echo 'STR-179 read-only V104 original L1 data source to real Java evaluator: synthetic CI ONLY.'
+          echo 'No actual eligible V104 market data, broker trades or independent OOS/fills evidence is certified.'
