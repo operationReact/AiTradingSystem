@@ -200,20 +200,28 @@ public final class CustomerFnoDiscoveryController {
     private List<CustomerPaperFnoMarketController.Strike> withLastVerifiedTrades(
             List<CustomerPaperFnoMarketController.Strike> current) {
         var store = lastTrades;
-        if (store == null) return current;
+        if (store == null || current.isEmpty()) return current;
+        // One rights-gated lookup for listed symbols, not a query per strike.
+        var keys = current.stream()
+            .flatMap(row -> java.util.stream.Stream.of(row.call(), row.put()))
+            .filter(java.util.Objects::nonNull)
+            .filter(leg -> !leg.quoteFresh())
+            .map(CustomerPaperFnoMarketController.Leg::instrumentKey)
+            .distinct().toList();
+        var lastByKey = store.latestAll(keys);
+        if (lastByKey.isEmpty()) return current;
         return current.stream().map(row ->
             new CustomerPaperFnoMarketController.Strike(row.strikePrice(),
-                lastVerifiedLeg(row.call(), store),
-                lastVerifiedLeg(row.put(), store))).toList();
+                lastVerifiedLeg(row.call(), lastByKey),
+                lastVerifiedLeg(row.put(), lastByKey))).toList();
     }
 
     private static CustomerPaperFnoMarketController.Leg lastVerifiedLeg(
             CustomerPaperFnoMarketController.Leg leg,
-            CustomerFnoLastTradeSnapshotStore store) {
+            java.util.Map<String, CustomerFnoLastTradeSnapshotStore.LastTrade> lastByKey) {
         if (leg == null || leg.quoteFresh()) return leg;
-        var retained = store.latest(leg.instrumentKey());
-        if (retained.isEmpty()) return leg;
-        var last = retained.orElseThrow();
+        var last = lastByKey.get(leg.instrumentKey());
+        if (last == null) return leg;
         return new CustomerPaperFnoMarketController.Leg(
             leg.instrumentKey(), leg.tradingSymbol(), leg.side(), leg.lotSize(),
             leg.tickSize(), null, null,
