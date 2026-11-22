@@ -1,0 +1,89 @@
+name: MintTick - guarded restore of last verified healthy PAPER runtime
+
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/minttick-paper-recover-last-healthy.yml'
+      - 'infra/ec2-paper/restore_last_healthy_paper.py'
+      - 'scripts/tests/test_restore_last_healthy_paper.py'
+  push:
+    branches: [dev]
+    paths:
+      - 'infra/ec2-paper/requests/restore-last-healthy-paper.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aitrading-paper-ec2-manual-lifecycle
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify fail-closed exact-host rollback contract
+        run: |
+          set -euo pipefail
+          python3 -m py_compile infra/ec2-paper/restore_last_healthy_paper.py
+          python3 -m unittest discover -s scripts/tests -p 'test_restore_last_healthy_paper.py' -v
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('infra/ec2-paper/restore_last_healthy_paper.py').read_text()
+          assert 5000<len(s)<12000
+          for marker in ('bc792b8e21e024190cfc553044c50719da8f8743',
+                         'e99b1e604584d16422b67065df14127d59bb016d',
+                         '--no-deps','--no-build','ROLLED_BACK',
+                         'ALREADY_HEALTHY','IMAGE_UNAVAILABLE',
+                         'POSTGRES_UNAVAILABLE','TRADING_MODE: PAPER'):
+              assert marker in s,marker
+          for forbidden in ('--with-decryption','put-parameter','placeOrder',
+                   'submitOrder','start-instances','stop-instances',
+                   'docker system prune','docker volume rm',
+                   'print(lines)','print(current)','print(p.stdout)',
+                   'docker compose down'):
+              assert forbidden not in s,forbidden
+          PY
+
+  restore:
+    needs: validate
+    if: github.event_name == 'push' && github.repository == 'operationReact/AiTradingSystem' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - name: Require exact reviewed recovery request only
+        run: |
+          set -euo pipefail
+          test "$(git diff-tree --no-commit-id --name-only -r HEAD)" = 'infra/ec2-paper/requests/restore-last-healthy-paper.json'
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'infra/ec2-paper')
+          from restore_last_healthy_paper import expected_request
+          p=Path('infra/ec2-paper/requests/restore-last-healthy-paper.json')
+          assert p.is_file() and not p.is_symlink() and p.stat().st_size<1024
+          assert json.loads(p.read_text()) == expected_request()
+          PY
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::098859530205:role/aitrading-paper-ec2-ssm-deploy
+          aws-region: ap-south-1
+          role-session-name: minttick-paper-last-healthy-rollback
+      - name: Restore only existing last-healthy backend/web images on exact EC2
+        run: |
+          set -euo pipefail
+          python3 infra/ec2-paper/restore_last_healthy_paper.py runner
+
+# Rollback cannot change broker orders/SSM secrets, restart database, or create AWS resources.
