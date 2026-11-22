@@ -180,3 +180,34 @@ reproducible after-cost walk-forward/OOS outcomes and independent approval.
 The existing 0/43 real-data E2E, 0/43 PAPER ledger and 0/43 LIVE broker
 execution counters remain unchanged. Never promote routing/compilation or
 fictitious JUnit fixtures to a successfully backtested strategy.
+
+
+## STR-179: original intraday liquidity historical replay
+
+Fno179VerifiedHistoricalReplayService connects the existing V104
+fno_verified_intraday_liquidity_evidence table to the ACTUAL
+FnoContractLiquidityGateV1.evaluate source-research evaluator.
+
+It requires distinct original quoted L1 BID/ASK/depth, finalized OI and
+monotonic cumulative volume across three source-timestamped intraday
+events for one provider-listed futures contract and verified NSE session.
+All source fields must be known at historical asOf. The source SQL still
+requires separate VERIFIED MODEL_INFERENCE rights receipts for quote,
+OI and volume, as-of verified/captured rights, retention and five
+original immutable custody hashes. Missing rights, source identity,
+contract expiry/lot or source timestamps reject before evaluation.
+The original source provides no options strike mapping, so this version
+covers NSE_FO FUTURE only. No synthetic depth from daily candles.
+
+Private operator route: GET
+/api/admin/research/fno-43/historical-liquidity-replay with
+contractKey, expiry, lotSize and asOf. No customer route, no market
+prices, contract identifiers or source digests are returned. All output
+continues to explicitly declare independent historical, paper and
+LIVE broker E2E false.
+
+The original V104 retention is only one day. As a result, a three-tick
+source replay is not a multi-month or walk-forward performance test.
+The database may contain zero qualifying V104 rows. Synthetic CI
+only proves the code path and that source/custody failures block;
+source availability and independent acceptance are not assumed.
