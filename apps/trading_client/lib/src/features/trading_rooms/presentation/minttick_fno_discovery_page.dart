@@ -557,7 +557,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
           .compareTo(a.priceChangePct!.abs()));
     Widget shortcut(String label, IconData icon, String target) =>
       OutlinedButton.icon(
-        key: ValueKey('fno-discovery-quick-' + target.toLowerCase()),
+        key: ValueKey('fno-discovery-quick-${target.toLowerCase()}'),
         onPressed: () => setState(() => _section = target),
         icon: Icon(icon, size: 16),
         label: Text(label),
@@ -609,6 +609,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             for (final leg in movers.take(5))
               _moverRow(context, market!, leg, now),
           ])),
+      if (_rightsStatus != null && !_readOnlyConfigured)
+        Text('Source status: ${_rightsStatus!.replaceAll('_', ' ')}',
+          style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
       Text('Futures, basket execution and event-driven recommendations '
            'require separate verified integrations.',
            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
@@ -665,8 +668,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         Text(atm == null
             ? 'ATM unavailable without fresh CE and PE quotes. '
               'Search a listed strike or choose Show all.'
-            : 'ATM ≈ ' + _strike(atm) +
-              ' · estimated from fresh CE/PE prices, not spot.',
+            : 'ATM ≈ ${_strike(atm)} · estimated from fresh CE/PE prices, '
+              'not spot.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
         const SizedBox(height: 8),
         TextField(
@@ -685,8 +688,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
         ),
         if (searchedStrike != null) ...[
           const SizedBox(height: 6),
-          Text('Showing listed strikes near ' + _strike(searchedStrike) +
-              ' · search selection is not an ATM estimate.',
+          Text('Showing listed strikes near ${_strike(searchedStrike)} · '
+              'search selection is not an ATM estimate.',
               style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
         ],
         const SizedBox(height: 10),
@@ -713,7 +716,7 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             child: TextButton(
               onPressed: () => setState(() => _showAllStrikes = !_showAllStrikes),
               child: Text(_showAllStrikes
-                  ? 'Show strikes near ATM'
+                  ? 'Collapse full chain'
                   : 'Show all ${market.strikes.length} strikes ($hiddenCount more)'),
             )),
         if (market.status == 'MARKET_CLOSED')
@@ -1016,27 +1019,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     );
   }
 
-  Widget _notConnected(BuildContext context) => _panel(context,
-    'Not connected yet', 'Shown as gaps, never as estimated data',
-    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _gapLine(context, 'Futures chain',
-          'Needs a verified NSE futures feed.'),
-      _gapLine(context, 'Event-driven stock options',
-          'No verified corporate-event feed is connected.'),
-      _gapLine(context, 'Research recommendations',
-          'Only timestamped, independently validated outcomes can appear.'),
-    ]));
-
-  Widget _gapLine(BuildContext context, String title, String detail) =>
-      Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: Theme.of(context).textTheme.bodyMedium
-              ?.copyWith(fontWeight: FontWeight.w700)),
-          Text(detail, style: Theme.of(context).textTheme.bodySmall),
-        ]),
-      );
-
   Widget _trade(BuildContext context, TradingRoomDraft? room) =>
       MintTickSurface(child: Column(
         crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1064,20 +1046,6 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             _heading(title, detail),
             const SizedBox(height: 10),
             child,
-          ]),
-        ));
-
-  Widget _unavailable(BuildContext context, String title, String subtitle,
-      {String? action, VoidCallback? onTap}) =>
-      Padding(padding: const EdgeInsets.only(bottom: 14),
-        child: MintTickSurface(child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _heading(title, 'Verified sources only'),
-            const SizedBox(height: 9),
-            Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            if (onTap != null && action != null)
-              Align(alignment: Alignment.centerRight,
-                child: TextButton(onPressed: onTap, child: Text(action))),
           ]),
         ));
 
