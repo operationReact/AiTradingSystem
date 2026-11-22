@@ -599,7 +599,9 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
               )),
               Expanded(flex: 3, child: Text(
                 market != null && market.displayRightsVerified
-                    ? _count(leg.openInterest) : '—',
+                    ? _count(leg.openInterest ??
+                        _chainSnapshot(market, leg, now)?.openInterest)
+                    : '—',
                 textAlign: TextAlign.right,
                 style: style.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
               )),
@@ -607,16 +609,21 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    market != null && _displayQuote(market, leg, now)
-                        ? _amount(leg.ltp) : '—',
+                    market == null ? '—' : _displayQuote(market, leg, now)
+                        ? _amount(leg.ltp)
+                        : _amount(_chainSnapshot(market, leg, now)?.ltp),
                     style: style.bodyLarge?.copyWith(fontWeight: FontWeight.w800,
                       color: _fresh(market!, leg, now)
                           ? (leg.priceChangePct ?? 0) < 0 ? scheme.error : scheme.primary
                           : scheme.onSurfaceVariant)),
-                  if (market != null && _displayQuote(market, leg, now))
+                  if (market != null &&
+                      (_displayQuote(market, leg, now) ||
+                       _chainSnapshot(market, leg, now) != null))
                     Text(_fresh(market, leg, now)
                         ? _changeText(leg.priceChangePct)
-                        : 'Last · ${_shortTime(leg.exchangeAt)}',
+                        : _displayQuote(market, leg, now)
+                          ? 'Last · ${_shortTime(leg.exchangeAt)}'
+                          : 'Chain · ${_shortTime(market.snapshotAt)}',
                       style: style.labelSmall?.copyWith(
                         color: scheme.onSurfaceVariant)),
                 ],
@@ -795,6 +802,11 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
             : 'ATM ≈ ${_strike(atm)} · estimated where CE and PE last prices '
               'are closest. Not a spot price.',
           style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+        if (market.chainSnapshotIndicators.isNotEmpty) ...[
+          Text('Upstox chain snapshot · read only · not an executable quote',
+            style: type.labelSmall?.copyWith(color: c.onSurfaceVariant)),
+          const SizedBox(height: 6),
+        ],
         const SizedBox(height: 10),
         SingleChildScrollView(
           controller: _chainScroll,
@@ -902,9 +914,12 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
     final fresh = leg != null && _fresh(market, leg, now);
     final visible = leg != null && _displayQuote(market, leg, now);
     final pct = fresh ? leg.priceChangePct : null;
+    final snapshot = leg == null ? null : _chainSnapshot(market, leg, now);
     final cells = <Widget>[
-      _numCell(context, visible ? _count(leg.openInterest) : '—'),
-      _numCell(context, visible ? _amount(leg.ltp) : '—', bold: true),
+      _numCell(context, visible && leg.openInterest != null
+          ? _count(leg.openInterest) : _count(snapshot?.openInterest)),
+      _numCell(context, visible
+          ? _amount(leg.ltp) : _amount(snapshot?.ltp), bold: true),
       _numCell(context, _changeText(pct),
           color: pct == null ? c.onSurfaceVariant
               : pct >= 0 ? c.primary : c.error),
@@ -933,12 +948,8 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
       CustomerFnoLeg leg, DateTime now) {
     final fresh = _fresh(market, leg, now);
     final visible = _displayQuote(market, leg, now);
-    // HTTP option-chain snapshot time is retrieval, never V3 exchange trade time.
-    final chain = market.displayRightsVerified && market.snapshotAt != null &&
-            !market.snapshotAt!.isAfter(now) &&
-            now.difference(market.snapshotAt!) <= const Duration(minutes: 5)
-        ? market.chainSnapshotIndicators[leg.instrumentKey]
-        : null;
+    // Chain snapshot values are separate from verified V3 exchange trades.
+    final chain = _chainSnapshot(market, leg, now);
     final chainOnly = !visible && chain != null;
     final type = Theme.of(context).textTheme;
     final c = Theme.of(context).colorScheme;
@@ -1147,6 +1158,15 @@ class _MintTickFnoDiscoveryPageState extends State<MintTickFnoDiscoveryPage>
 
   // The server includes retained prices only when display and snapshot
   // retention rights are verified; these never imply quoteFresh/order readiness.
+  /// Provider HTTP retrieval time is not an exchange trade timestamp.
+  static CustomerFnoChainSnapshotIndicator? _chainSnapshot(
+      CustomerFnoMarket market, CustomerFnoLeg leg, DateTime now) {
+    final at = market.snapshotAt;
+    if (!market.displayRightsVerified || at == null || at.isAfter(now) ||
+        now.difference(at) > const Duration(minutes: 5)) return null;
+    return market.chainSnapshotIndicators[leg.instrumentKey];
+  }
+
   static bool _displayQuote(CustomerFnoMarket market, CustomerFnoLeg leg,
           DateTime now) =>
       market.displayRightsVerified && leg.ltp != null && leg.ltp! > 0 &&
