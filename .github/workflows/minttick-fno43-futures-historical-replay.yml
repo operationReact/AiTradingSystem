@@ -11,6 +11,10 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
       - 'docs/architecture/fno-43-historical-e2e-evidence.md'
@@ -24,6 +28,10 @@ on:
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno176VerifiedHistoricalReplayServiceTest.java'
       - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1.java'
       - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno43HistoricalReplayDispatchV1Test.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayService.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/Fno181182VerifiedHistoricalReplayServiceTest.java'
+      - 'backend/src/main/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayController.java'
+      - 'backend/src/test/java/in/aitradingsystem/tradingrooms/AdminFno43HistoricalReplayControllerTest.java'
       - 'backend/src/main/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStore.java'
       - 'backend/src/test/java/in/aitradingsystem/marketdata/FnoVerifiedCompletedOhlcvOiStoreTest.java'
 
@@ -50,10 +58,11 @@ jobs:
         run: |
           set -euo pipefail
           mvn --batch-mode --no-transfer-progress \
-            '-Dtest=Fno43HistoricalReplayDispatchV1Test,FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
+            '-Dtest=Fno181182VerifiedHistoricalReplayServiceTest,AdminFno43HistoricalReplayControllerTest,Fno43HistoricalReplayDispatchV1Test,FnoFuturesHistoricalReplayBridgeV1Test,Fno176VerifiedHistoricalReplayServiceTest,FnoVerifiedCompletedOhlcvOiStoreTest,FnoFuturesOpenInterestTrendV1Test,FnoFuturesMomentumV1Test' test
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.FnoFuturesHistoricalReplayBridgeV1Test.xml
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno176VerifiedHistoricalReplayServiceTest.xml
           test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno43HistoricalReplayDispatchV1Test.xml
+          test -s target/surefire-reports/TEST-in.aitradingsystem.tradingrooms.Fno181182VerifiedHistoricalReplayServiceTest.xml
       - name: Assert structural proof cannot authorize trades or claim market E2E
         shell: bash
         run: |
