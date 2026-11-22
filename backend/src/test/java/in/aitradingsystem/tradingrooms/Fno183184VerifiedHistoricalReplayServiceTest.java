@@ -103,7 +103,7 @@ class Fno183184VerifiedHistoricalReplayServiceTest {
         assertEquals("ORIGINAL_SOURCE_RESEARCH_EVALUATOR_RAN_NOT_E2E",report.state());
         assertEquals(35,report.verifiedDailySourceSessions());
         assertEquals(2,report.verifiedOptionContracts());
-        assertEquals("BULL_CALL_DEBIT_REWARD_RISK_RESEARCH_ONLY",report.evaluatorReasonCode());
+        assertEquals("BULL_CALL_SPREAD_RESEARCH_SETUP_ONLY",report.evaluatorReasonCode());
         assertFalse(report.independentHistoricalE2E());
         assertFalse(report.paperLedgerE2E());
         assertFalse(report.liveBrokerE2E());
